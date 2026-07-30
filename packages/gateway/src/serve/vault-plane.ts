@@ -142,6 +142,7 @@ import type {
 
 import { canWrite } from "./enrollment-store.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
+import { InboxNoticeStore } from "./inbox-notices.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { replicaIntentContext } from "./replica-intent-context.js";
 import { vaultContext } from "./vault-context.js";
@@ -269,6 +270,8 @@ export interface VaultPlaneOptions {
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
+  /** Inbox projection changed; `wake` requests the existing content-free relay. */
+  onInboxChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
   synchronous?: "FULL" | "NORMAL";
   /** Global event-loop pressure gate for detached maintenance. */
@@ -494,6 +497,7 @@ export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
   readonly boot: HostBootstrap;
+  readonly inbox: InboxNoticeStore;
   /** The vault's directory — the registry deletes it on vault removal. */
   readonly dir: string;
   /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
@@ -530,6 +534,10 @@ export class VaultPlane {
     | undefined;
   private readonly onReplicationPass:
     | ((info: { bytesReplicated: number; durationMs: number }) => void)
+    | undefined;
+  /** Content-free Inbox doorbell; persisted projections own correctness. */
+  private readonly onInboxChanged:
+    | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private sweepTimer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
@@ -632,12 +640,24 @@ export class VaultPlane {
       );
     }
     this.displayName = this.boot.displayName;
-    this.gateway = options.onProvenanceCommitted
-      ? createGateway(this.db, {
-          onProvenanceCommitted: (entityTypes?: readonly string[]) =>
-            options.onProvenanceCommitted?.(this.boot.vaultId, entityTypes),
-        })
-      : createGateway(this.db);
+    this.onInboxChanged = options.onInboxChanged;
+    this.inbox = new InboxNoticeStore(this.db.vault, ({ wake }) =>
+      this.ringInboxChanged(wake)
+    );
+    this.gateway = createGateway(this.db, {
+      ...(options.onProvenanceCommitted
+        ? {
+            onProvenanceCommitted: (entityTypes?: readonly string[]) =>
+              options.onProvenanceCommitted?.(this.boot.vaultId, entityTypes),
+          }
+        : {}),
+      ...(options.onInboxChanged
+        ? {
+            onDecisionChanged: (created: boolean) =>
+              this.ringInboxChanged(created),
+          }
+        : {}),
+    });
     this.groupCommitQueue = new GroupCommitQueue(
       options.synchronous === "NORMAL" ? 8 : 5,
       (runs) => this.gateway.invokeBatchSettled(runs)
@@ -692,6 +712,12 @@ export class VaultPlane {
     // the automations gap (see vault-quarantine.ts header for why that
     // part stays manual).
     this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
+    if ((this.quarantine?.outboxParked ?? 0) > 0) {
+      // Restore quarantine turns formerly approved work back into a new
+      // owner-decision episode. Ring both the live Inbox and the opaque wake
+      // relay just like any other newly created decision.
+      this.ringInboxChanged(true);
+    }
     // WAL shipper (issue #408). A restored-and-adopted directory has no
     // wal-ship state, so its first tick mints a fresh generation — which is
     // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
@@ -909,6 +935,9 @@ export class VaultPlane {
    * Model rows and receipts remain — §11's success test.
    */
   revokeApp(appId: string): { grantsRevoked: number } {
+    const hadOpenScopeRequest = this.listScopeRequests().some(
+      (request) => request.appId === appId
+    );
     let revoked = 0;
     const app = lookupAppByName(this.db, appId);
     if (app) {
@@ -977,6 +1006,7 @@ export class VaultPlane {
       clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
     closeObsoleteScopeRequest(this.db, "app", appId);
     closeObsoleteScopeRequest(this.db, "agent", appId);
+    if (hadOpenScopeRequest) this.ringInboxChanged(false);
     return { grantsRevoked: revoked };
   }
 
@@ -1096,6 +1126,10 @@ export class VaultPlane {
     approve: (request: GrantRequest) => void;
   }): void {
     const purpose = input.block.purpose ?? "dpv:ServiceProvision";
+    const existingRequest = this.listScopeRequests().find(
+      (request) =>
+        request.plane === input.plane && request.appId === input.appId
+    );
     const tombstoned = listScopeTombstones(this.db, input.grantee);
     const missing = missingScopes(input.grants, input.block.scopes, tombstoned);
     if (missing.length === 0) {
@@ -1103,6 +1137,7 @@ export class VaultPlane {
       // decided, or everything asked-for is tombstoned) — a stale open
       // request must not keep blocking the owner.
       closeObsoleteScopeRequest(this.db, input.plane, input.appId);
+      if (existingRequest) this.ringInboxChanged(false);
       return;
     }
     if (!hasGrantHistory(this.db, input.grantee)) {
@@ -1114,18 +1149,25 @@ export class VaultPlane {
       return;
     }
     // Widened beyond the last owner consent (issue #308 A3): park the ask.
+    const nextScopes = missing.map((s) => ({
+      schema: s.schema,
+      ...(s.table === undefined ? {} : { table: s.table }),
+      verbs: s.verbs,
+      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
+    }));
     openScopeRequest(this.db, {
       plane: input.plane,
       appId: input.appId,
       purpose,
-      scopes: missing.map((s) => ({
-        schema: s.schema,
-        ...(s.table === undefined ? {} : { table: s.table }),
-        verbs: s.verbs,
-        ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
-        ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
-      })),
+      scopes: nextScopes,
     });
+    if (
+      !existingRequest ||
+      JSON.stringify(existingRequest.scopes) !== JSON.stringify(nextScopes)
+    ) {
+      this.ringInboxChanged(existingRequest === undefined);
+    }
     this.logger.info(
       `vault plane: ${input.plane} "${input.appId}" asks for ${missing.length} scope(s) beyond its last consent — parked for the owner`
     );
@@ -1169,10 +1211,19 @@ export class VaultPlane {
       requestId,
       approve ? "approved" : "denied"
     );
+    this.ringInboxChanged(false);
     this.logger.info(
       `vault plane: owner ${approve ? "approved" : "denied"} the ${request.plane} "${request.appId}" scope request (${request.scopes.length} scope(s))`
     );
     return request;
+  }
+
+  private ringInboxChanged(wake: boolean): void {
+    try {
+      this.onInboxChanged?.(this.boot.vaultId, wake);
+    } catch {
+      // Doorbells are hints; clients refetch the persisted Inbox projection.
+    }
   }
 
   /** Resolve a request's grantee key on its identity plane. */
@@ -1464,6 +1515,8 @@ export class VaultPlane {
       kind: string;
       label: string;
       note: string | null;
+      /** Canonical start of this needs-auth episode; notification dedupe key. */
+      attentionAt: string;
     }>;
     parked: ParkedSummary[];
     /** Manifest scope-widening asks awaiting the owner (issue #308 A3). */
@@ -1471,7 +1524,8 @@ export class VaultPlane {
   } {
     const needsAuth = this.db.vault
       .prepare(
-        `SELECT c.connection_id, c.kind, c.label, h.auth_note
+        `SELECT c.connection_id, c.kind, c.label, h.auth_note,
+                coalesce(h.updated_at, c.created_at) AS attention_at
            FROM sync_connection c
            LEFT JOIN sync_connection_health h ON h.connection_id = c.connection_id
           WHERE c.status = 'needs-auth' ORDER BY c.kind, c.label`
@@ -1481,6 +1535,7 @@ export class VaultPlane {
       kind: string;
       label: string;
       auth_note: string | null;
+      attention_at: string;
     }[];
     return {
       outbox: this.listOutbox(["pending"]),
@@ -1489,9 +1544,32 @@ export class VaultPlane {
         kind: r.kind,
         label: r.label,
         note: r.auth_note,
+        attentionAt: r.attention_at,
       })),
       parked: this.listParked(),
       scopeRequests: this.listScopeRequests(),
+    };
+  }
+
+  /** Unified Inbox projection: decisions stay canonical; notices are durable. */
+  inboxSummary(includeArchived = false): {
+    decisions: ReturnType<VaultPlane["blocking"]> & { count: number };
+    notices: ReturnType<InboxNoticeStore["list"]>;
+    unreadNoticeCount: number;
+  } {
+    const decisions = this.blocking();
+    const count =
+      decisions.outbox.length +
+      decisions.needsAuth.length +
+      decisions.parked.length +
+      decisions.scopeRequests.length;
+    const notices = this.inbox.list({ includeArchived });
+    return {
+      decisions: { ...decisions, count },
+      notices,
+      unreadNoticeCount: notices.filter(
+        (notice) => !notice.archivedAt && !notice.readAt
+      ).length,
     };
   }
 

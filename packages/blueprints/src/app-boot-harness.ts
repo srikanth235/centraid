@@ -69,7 +69,6 @@ const SHARED = [
   "assistant-rich.js",
   "gfm.js",
   "code-highlight.js",
-  "consent-cards.js",
   "conversation-client.js",
 ];
 

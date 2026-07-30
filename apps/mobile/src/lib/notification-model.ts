@@ -2,6 +2,7 @@ export const TASK_CATEGORY = "CENTRAID_TASK_REMINDER";
 export const EVENT_CATEGORY = "CENTRAID_EVENT_REMINDER";
 export const TALLY_CATEGORY = "CENTRAID_TALLY_SETTLE";
 export const INVITE_CATEGORY = "CENTRAID_HOUSEHOLD_INVITE";
+export const INBOX_CATEGORY = "CENTRAID_INBOX";
 export const COMPLETE_TASK = "COMPLETE_TASK";
 export const SNOOZE_TASK = "SNOOZE_TASK";
 export const OPEN_ITEM = "OPEN_ITEM";
@@ -79,7 +80,8 @@ export type NotificationActionPlan =
   | { kind: "snooze" }
   | { kind: "open-event"; eventId: string }
   | { kind: "open-app"; appId: "tasks" | "tally" }
-  | { kind: "open-home" };
+  | { kind: "open-home" }
+  | { kind: "open-inbox" };
 
 export function notificationActionPlan(
   action: string,
@@ -93,5 +95,6 @@ export function notificationActionPlan(
   if (data.kind === "tally" || action === SETTLE_BALANCE)
     return { kind: "open-app", appId: "tally" };
   if (data.kind === "invite") return { kind: "open-home" };
+  if (data.kind === "inbox") return { kind: "open-inbox" };
   return { kind: "open-app", appId: "tasks" };
 }

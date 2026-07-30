@@ -8,23 +8,36 @@ import type * as TypeImport_qcp7vy from "../actions.js";
 import type * as TypeImport_1lvx9zk from "./ApprovalsRoute.js";
 
 type OutboxModule = typeof import("../../../gateway-client-outbox.js");
+type PushModule = typeof import("../../../gateway-client-push.js");
 type VaultModule = typeof import("../../../gateway-client-vault.js");
 
-const getBlocking = vi.fn<OutboxModule["getBlocking"]>();
+const getInbox = vi.fn<OutboxModule["getInbox"]>();
 const listOutboxGrants = vi.fn<OutboxModule["listOutboxGrants"]>();
 const getReview = vi.fn<OutboxModule["getReview"]>();
+const subscribeInboxChanges = vi.fn<OutboxModule["subscribeInboxChanges"]>();
 const decideOutboxItem =
   vi.fn<(input: unknown) => ReturnType<OutboxModule["decideOutboxItem"]>>();
+const enableWebPushWake = vi.fn<PushModule["enableWebPushWake"]>();
+const syncWebInboxNotifications =
+  vi.fn<PushModule["syncWebInboxNotifications"]>();
 vi.mock(import("../../../gateway-client-outbox.js"), () => ({
-  getBlocking: () => getBlocking(),
+  getInbox: (includeArchived?: boolean) => getInbox(includeArchived),
   listOutboxGrants: () => listOutboxGrants(),
   getReview: () => getReview(),
+  subscribeInboxChanges: (onChange: () => void, signal?: AbortSignal) =>
+    subscribeInboxChanges(onChange, signal),
+  updateInboxNotice: vi.fn<OutboxModule["updateInboxNotice"]>(),
   decideOutboxItem: (input: unknown) => decideOutboxItem(input),
   decideScopeRequest: vi.fn<OutboxModule["decideScopeRequest"]>(),
   revokeOutboxGrant: vi.fn<OutboxModule["revokeOutboxGrant"]>(),
 }));
 vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
+}));
+vi.mock(import("../../../gateway-client-push.js"), () => ({
+  enableWebPushWake: (requestPermission: boolean) =>
+    enableWebPushWake(requestPermission),
+  syncWebInboxNotifications: () => syncWebInboxNotifications(),
 }));
 
 let ApprovalsRoute: typeof TypeImport_1lvx9zk.default;
@@ -53,15 +66,23 @@ describe("ApprovalsRoute", () => {
   beforeEach(async () => {
     ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
     ({ ShellActionsProvider } = await import("../actions.js"));
-    getBlocking.mockReset().mockResolvedValue({
-      outbox: [],
-      needsAuth: [],
-      parked: [],
-      scopeRequests: [],
+    getInbox.mockReset().mockResolvedValue({
+      decisions: {
+        outbox: [],
+        needsAuth: [],
+        parked: [],
+        scopeRequests: [],
+        count: 0,
+      },
+      notices: [],
+      unreadNoticeCount: 0,
     });
+    subscribeInboxChanges.mockReset().mockResolvedValue(undefined);
     listOutboxGrants.mockReset().mockResolvedValue([]);
     getReview.mockReset().mockResolvedValue([]);
     decideOutboxItem.mockReset();
+    enableWebPushWake.mockReset().mockResolvedValue(false);
+    syncWebInboxNotifications.mockReset().mockResolvedValue(undefined);
     confirm.mockClear().mockResolvedValue(true);
     showToast.mockClear();
     navigate.mockClear();
@@ -92,49 +113,89 @@ describe("ApprovalsRoute", () => {
     it("shows a loading state, then the empty state once the blocking inbox resolves empty", async () => {
       const el = await render();
       expect(el.textContent).toContain("Nothing waiting on you.");
+      expect(enableWebPushWake).toHaveBeenCalledWith(true);
     });
 
     it("surfaces a fetch error", async () => {
-      getBlocking.mockRejectedValue(new Error("offline"));
+      getInbox.mockRejectedValue(new Error("offline"));
       const el = await render();
       expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
     });
 
-    it("approves an outbox item and reloads the inbox", async () => {
-      getBlocking.mockResolvedValueOnce({
-        outbox: [
-          {
-            itemId: "item1",
-            connection: { kind: "pull.gmail", label: "personal" },
-            actor: "gmail-send",
-            actorId: "agent-1",
-            actorKind: "ai_agent",
-            verb: "gmail.send",
-            target: "ravi@example.com",
-            artifact: {
-              to: "ravi@example.com",
-              subject: "Hi",
-              body: "See you at 6.",
+    it("opens Connectors from a needs-auth decision", async () => {
+      getInbox.mockResolvedValue({
+        decisions: {
+          outbox: [],
+          needsAuth: [
+            {
+              connectionId: "conn-1",
+              kind: "pull.gmail",
+              label: "personal",
+              note: "token expired",
+              attentionAt: "2026-07-30T10:00:00.000Z",
             },
-            status: "pending",
-            grantId: null,
-            stagedAt: new Date().toISOString(),
-            decidedAt: null,
-            drainedAt: null,
-            result: null,
-            note: null,
-            canEdit: false,
-          },
-        ],
-        needsAuth: [],
-        parked: [],
-        scopeRequests: [],
+          ],
+          parked: [],
+          scopeRequests: [],
+          count: 1,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
       });
-      getBlocking.mockResolvedValueOnce({
-        outbox: [],
-        needsAuth: [],
-        parked: [],
-        scopeRequests: [],
+      const el = await render();
+      const reconnect = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Reconnect"
+      );
+      expect(reconnect).toBeDefined();
+      act(() => reconnect?.click());
+      expect(navigate).toHaveBeenCalledWith({ kind: "connectors" });
+    });
+
+    it("approves an outbox item and reloads the inbox", async () => {
+      getInbox.mockResolvedValueOnce({
+        decisions: {
+          outbox: [
+            {
+              itemId: "item1",
+              connection: { kind: "pull.gmail", label: "personal" },
+              actor: "gmail-send",
+              actorId: "agent-1",
+              actorKind: "ai_agent",
+              verb: "gmail.send",
+              target: "ravi@example.com",
+              artifact: {
+                to: "ravi@example.com",
+                subject: "Hi",
+                body: "See you at 6.",
+              },
+              status: "pending",
+              grantId: null,
+              stagedAt: new Date().toISOString(),
+              decidedAt: null,
+              drainedAt: null,
+              result: null,
+              note: null,
+              canEdit: false,
+            },
+          ],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 1,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
+      });
+      getInbox.mockResolvedValueOnce({
+        decisions: {
+          outbox: [],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 0,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
       });
       decideOutboxItem.mockResolvedValue({
         status: "executed",
@@ -159,44 +220,54 @@ describe("ApprovalsRoute", () => {
         decision: "approve",
         alwaysAllow: false,
       });
-      expect(getBlocking).toHaveBeenCalledTimes(2);
+      expect(getInbox).toHaveBeenCalledTimes(2);
     });
 
     it("edits an editable outbox item and approves with the revised artifact", async () => {
-      getBlocking.mockResolvedValueOnce({
-        outbox: [
-          {
-            itemId: "item1",
-            connection: { kind: "pull.gmail", label: "personal" },
-            actor: "gmail-send",
-            actorId: "agent-1",
-            actorKind: "ai_agent",
-            verb: "gmail.send",
-            target: "ravi@example.com",
-            artifact: {
-              to: "ravi@example.com",
-              subject: "Hi",
-              body: "See you at 6.",
+      getInbox.mockResolvedValueOnce({
+        decisions: {
+          outbox: [
+            {
+              itemId: "item1",
+              connection: { kind: "pull.gmail", label: "personal" },
+              actor: "gmail-send",
+              actorId: "agent-1",
+              actorKind: "ai_agent",
+              verb: "gmail.send",
+              target: "ravi@example.com",
+              artifact: {
+                to: "ravi@example.com",
+                subject: "Hi",
+                body: "See you at 6.",
+              },
+              status: "pending",
+              grantId: null,
+              stagedAt: new Date().toISOString(),
+              decidedAt: null,
+              drainedAt: null,
+              result: null,
+              note: null,
+              canEdit: true,
             },
-            status: "pending",
-            grantId: null,
-            stagedAt: new Date().toISOString(),
-            decidedAt: null,
-            drainedAt: null,
-            result: null,
-            note: null,
-            canEdit: true,
-          },
-        ],
-        needsAuth: [],
-        parked: [],
-        scopeRequests: [],
+          ],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 1,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
       });
-      getBlocking.mockResolvedValueOnce({
-        outbox: [],
-        needsAuth: [],
-        parked: [],
-        scopeRequests: [],
+      getInbox.mockResolvedValueOnce({
+        decisions: {
+          outbox: [],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 0,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
       });
       decideOutboxItem.mockResolvedValue({
         status: "executed",
@@ -245,7 +316,101 @@ describe("ApprovalsRoute", () => {
           body: "See you at 6.",
         },
       });
-      expect(getBlocking).toHaveBeenCalledTimes(2);
+      expect(getInbox).toHaveBeenCalledTimes(2);
+    });
+
+    it("opens each notice at its exact action surface", async () => {
+      const at = "2026-07-30T10:00:00.000Z";
+      getInbox.mockResolvedValue({
+        decisions: {
+          outbox: [],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 0,
+        },
+        notices: [
+          {
+            noticeId: "automation-notice",
+            kind: "automation",
+            sourceRef: "daily/digest",
+            headline: "Digest finished",
+            detail: {
+              sourceType: "automation",
+              automationRef: "daily/digest",
+            },
+            severity: "info",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+          {
+            noticeId: "gateway-notice",
+            kind: "gateway-health",
+            sourceRef: "gateway-1",
+            headline: "Gateway degraded",
+            detail: { sourceType: "app" },
+            severity: "high",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+          {
+            noticeId: "app-notice",
+            kind: "app",
+            sourceRef: "tasks",
+            headline: "Tasks imported",
+            detail: { sourceType: "app", appId: "tasks" },
+            severity: "info",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+          {
+            noticeId: "outbox-notice",
+            kind: "outbox",
+            sourceRef: "item-1",
+            headline: "Message needs approval again",
+            detail: { sourceType: "agent", itemId: "item-1" },
+            severity: "warning",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+        ],
+        unreadNoticeCount: 4,
+      });
+      const el = await render();
+      const clickHeadline = (headline: string): void => {
+        const button = [...el.querySelectorAll("button")].find((candidate) =>
+          candidate.textContent?.includes(headline)
+        );
+        expect(button).toBeDefined();
+        act(() => button?.click());
+      };
+
+      clickHeadline("Digest finished");
+      expect(navigate).toHaveBeenLastCalledWith({
+        kind: "automation-view",
+        automationId: "daily/digest",
+      });
+      clickHeadline("Gateway degraded");
+      expect(navigate).toHaveBeenLastCalledWith({
+        kind: "gateway",
+        tab: "alerts",
+      });
+      clickHeadline("Tasks imported");
+      expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
+      clickHeadline("Message needs approval again");
+      expect(navigate).toHaveBeenLastCalledWith({ kind: "approvals" });
     });
   });
 });

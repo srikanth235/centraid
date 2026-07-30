@@ -75,6 +75,11 @@ async function handleNotificationResponse(
       if (rootNavigationRef.isReady()) rootNavigationRef.navigate("Home");
       return;
     }
+    if (plan.kind === "open-inbox") {
+      if (rootNavigationRef.isReady())
+        rootNavigationRef.navigate("Settings", { screen: "Approvals" });
+      return;
+    }
     if (plan.kind === "open-app") {
       if (rootNavigationRef.isReady())
         rootNavigationRef.navigate(plan.appId === "tasks" ? "Tasks" : "Tally");

@@ -29,6 +29,9 @@
  *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
  *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
  *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked + scope requests)
+ *   GET    /centraid/_vault/inbox                      — unified decisions + durable notices projection
+ *   GET    /centraid/_vault/inbox/events               — `inbox-changed` SSE doorbell
+ *   POST   /centraid/_vault/inbox/notices/<id>         — mark a notice read or archived
  *   GET    /centraid/_vault/scope-requests             — open manifest scope-widening asks (issue #308)
  *   POST   /centraid/_vault/scope-requests/<requestId> — {approve: boolean} → decided request
  *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
@@ -79,6 +82,7 @@ import { ensureProviderCasTarget } from "../backup/storage-credentials.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
+import type { InboxEventBus } from "../serve/inbox-events.js";
 import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
@@ -97,8 +101,10 @@ import { VaultRegistryError } from "../serve/vault-registry.js";
 import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
 import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
 import { readJson, sendJson } from "./route-helpers.js";
+import { SseSubscriberCap } from "./sse-cap.js";
 
 const PREFIX = "/centraid/_vault";
+const defaultInboxSubscriberCap = new SseSubscriberCap();
 
 export interface VaultRouteOptions {
   /**
@@ -150,6 +156,10 @@ export interface VaultRouteOptions {
   fenceVaultForErase?: (vaultId: string) => Promise<void>;
   /** Crash-injection seam after durable state commit and before file unlink. */
   afterEraseStateCommitted?: (vaultId: string) => void;
+  /** Per-gateway Inbox doorbell used by the owner SSE stream. */
+  inboxEvents?: InboxEventBus;
+  /** Overridable in route tests. */
+  inboxSubscriberCap?: SseSubscriberCap;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -175,6 +185,8 @@ export function makeVaultRouteHandler(
   vaults: VaultRegistry,
   options: VaultRouteOptions = {}
 ): RouteHandler {
+  const inboxSubscriberCap =
+    options.inboxSubscriberCap ?? defaultInboxSubscriberCap;
   /** The vaults the calling device may see — all of them for keyless transports. */
   const visibleVaults = (): VaultInfo[] => {
     const deviceKey = vaultContext()?.deviceKey;
@@ -896,6 +908,144 @@ export function makeVaultRouteHandler(
           ...blocking,
           outbox: withCanEdit(blocking.outbox),
         });
+      }
+
+      if (
+        method === "GET" &&
+        segments[0] === "inbox" &&
+        segments.length === 1
+      ) {
+        const inbox = plane.inboxSummary(
+          url.searchParams.get("include_archived") === "true"
+        );
+        if (vaultContext()?.grantProfile !== undefined) {
+          return sendJson(res, 200, { count: inbox.decisions.count });
+        }
+        return sendJson(res, 200, {
+          ...inbox,
+          decisions: {
+            ...inbox.decisions,
+            outbox: withCanEdit(inbox.decisions.outbox),
+          },
+        });
+      }
+
+      if (
+        method === "GET" &&
+        segments[0] === "inbox" &&
+        segments[1] === "events" &&
+        segments.length === 2
+      ) {
+        if (!options.inboxEvents) {
+          return sendJson(res, 503, {
+            error: "inbox_events_unavailable",
+            message: "Inbox events are not configured on this gateway",
+          });
+        }
+        const releaseSlot = inboxSubscriberCap.admit(res);
+        if (!releaseSlot) return true;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        const write = (): void => {
+          if (!res.writableEnded)
+            res.write(
+              'event: inbox-changed\ndata: {"type":"inbox-changed"}\n\n'
+            );
+        };
+        write();
+        const unsubscribe = options.inboxEvents.subscribe(
+          plane.boot.vaultId,
+          write
+        );
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) res.write(": ping\n\n");
+        }, 30_000);
+        heartbeat.unref?.();
+        let closed = false;
+        const cleanup = (): void => {
+          if (closed) return;
+          closed = true;
+          clearInterval(heartbeat);
+          unsubscribe();
+          releaseSlot();
+          if (!res.writableEnded) res.end();
+        };
+        req.on("close", cleanup);
+        res.on("error", cleanup);
+        return true;
+      }
+
+      if (
+        method === "POST" &&
+        segments[0] === "inbox" &&
+        segments[1] === "notices" &&
+        segments.length === 3
+      ) {
+        const body = await readJson(req);
+        const action = body.action;
+        if (action !== "read" && action !== "archive") {
+          return sendJson(res, 400, {
+            error: "bad_request",
+            message: 'notice action must be "read" or "archive"',
+          });
+        }
+        const notice =
+          action === "read"
+            ? plane.inbox.markRead(segments[2] ?? "")
+            : plane.inbox.archive(segments[2] ?? "");
+        return notice
+          ? sendJson(res, 200, { notice })
+          : sendJson(res, 404, {
+              error: "notice_not_found",
+              message: "Inbox notice not found",
+            });
+      }
+
+      if (
+        method === "POST" &&
+        segments[0] === "inbox" &&
+        segments[1] === "gateway-health" &&
+        segments.length === 2
+      ) {
+        const body = await readJson(req);
+        const events = Array.isArray(body.events) ? body.events : undefined;
+        if (!events || events.length === 0 || events.length > 100) {
+          return sendJson(res, 400, {
+            error: "bad_request",
+            message: "gateway-health body needs 1–100 events",
+          });
+        }
+        const notices = [];
+        for (const value of events) {
+          if (
+            !isRecord(value) ||
+            typeof value.sourceRef !== "string" ||
+            typeof value.headline !== "string" ||
+            !["info", "warning", "high"].includes(String(value.severity)) ||
+            (value.at !== undefined && typeof value.at !== "string") ||
+            (value.detail !== undefined && !isRecord(value.detail))
+          ) {
+            return sendJson(res, 400, {
+              error: "bad_request",
+              message: "invalid gateway-health event",
+            });
+          }
+          notices.push(
+            plane.inbox.putIfAbsent({
+              kind: "gateway-health",
+              sourceRef: value.sourceRef,
+              headline: value.headline,
+              severity: value.severity as "info" | "warning" | "high",
+              ...(value.detail ? { detail: value.detail } : {}),
+              ...(value.at ? { at: value.at } : {}),
+            })
+          );
+        }
+        return sendJson(res, 200, { notices });
       }
 
       // Manifest scope-widening requests (issue #308 A3): a published

@@ -36,6 +36,11 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **served app** | An app rendered as an **opaque, same-origin iframe document** the gateway bakes and serves, under the blueprint CSP. Builder preview + mobile WebViews only since #505. | `packages/app-engine/src/http/static-server.ts`; `AppFrame.tsx` |
 | **blueprint** | Shipped template: UI app under `packages/blueprints/apps/` (install-in-place) or automation under `automations/` (clone). | `packages/blueprints` |
 | **automation** | Headless conversation + manifest + handler that fires on schedule, webhook, condition, or vault data change. | `packages/automation` |
+| **Inbox** | The owner-facing projection that unifies open **decisions** with informational **notices**. It owns no second copy of decision state. | `GET /centraid/_vault/inbox`; `VaultPlane.inboxSummary()` |
+| **decision** | An item that needs the owner to act. Outbox, needs-auth, parked invocation, and scope-request tables remain canonical; Inbox projects them and only these count in its badge. | `VaultPlane.blocking()` |
+| **notice** | A durable, non-decision Inbox update. Repeats collapse by `(kind, source_ref)` and carry read/archive state. | `inbox_notice`; `InboxNoticeStore` |
+| **reminder** | A due task/event/tally/invite notification with its own schedule and action model. Reminders are not Inbox notices. | `/_reminders/due`; reminder monitors |
+| **wake** | Content-free APNs/FCM/Web Push signal that tells a client to fetch locally. A wake never carries an Inbox headline or vault content. | `PushWakeRelay` |
 | **handler** | Declared query (read) or action (write) in `app.json`, validated by Ajv, run in a worker with `ctx.vault`. | `packages/app-engine/src/handlers/` |
 | **consent / grant** | Owner-signed permission for an app or device to touch vault scopes. | `packages/vault` consent gateway |
 | **journal** | `journal.db` — audit/receipt stream **and** conversation ledger bands. | vault package + app-engine `gateway-db.ts` |
@@ -107,6 +112,7 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 | "token" for the pairing artifact | **ticket** — one-time, burns on redemption (#555 removed bearer redemption) |
 | "founding ticket" / "founding ceremony" / "recovery-kit ceremony" / "uninitialized gateway" | **auto-found** — #603 deleted the founding plane entirely. A gateway is never zero-vault, and "ticket" now means the **pair ticket**, unqualified |
 | "found a vault" as something a **user** does | the user **creates** a vault (an admin act on a running gateway); only the **gateway** founds — itself, once, on a fresh data dir |
+| "Approvals" for the unified owner surface | **Inbox**. Use **decision** when referring specifically to an item waiting on the owner. |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
 
 ## Inconsistencies (known dual vocabulary)

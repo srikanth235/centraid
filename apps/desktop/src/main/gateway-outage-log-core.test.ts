@@ -6,6 +6,7 @@ import {
   capOutageLog,
   deriveOutageEvents,
   formatOutageLogLine,
+  gatewayInboxEvent,
   OUTAGE_LOG_CAP,
   parseOutageLogLines,
 } from "./gateway-outage-log-core.js";
@@ -81,6 +82,31 @@ describe(capOutageLog, () => {
 
   it("the shipped cap is 500", () => {
     expect(OUTAGE_LOG_CAP).toBe(500);
+  });
+});
+
+describe(gatewayInboxEvent, () => {
+  it("keeps down and recovery as distinct idempotent Inbox events", () => {
+    const down = gatewayInboxEvent(
+      event({ kind: "down", at: T0, detail: "connection refused" })
+    );
+    const recovered = gatewayInboxEvent(
+      event({ kind: "recovered", at: T0 + 60_000, durationMs: 60_000 })
+    );
+
+    expect(down).toMatchObject({
+      sourceRef: `local:down:${T0}:connection refused`,
+      headline: "Local is unreachable",
+      severity: "high",
+      detail: { outcome: "down" },
+    });
+    expect(recovered).toMatchObject({
+      sourceRef: `local:recovered:${T0 + 60_000}:`,
+      headline: "Local recovered",
+      severity: "info",
+      detail: { outcome: "recovered", durationMs: 60_000 },
+    });
+    expect(down.sourceRef).not.toBe(recovered.sourceRef);
   });
 });
 

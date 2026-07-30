@@ -439,6 +439,12 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
           `UPDATE sync_connection SET status = 'needs-auth' WHERE connection_id = ?`
         )
         .run(connectionId);
+      setAuthNote(
+        ctx,
+        connectionId,
+        `reconnect ${identity.label}: the provider did not report the pinned principal`,
+        { preserveUpdatedAt: connection.status === "needs-auth" }
+      );
       ctx.wrote("sync.connection", connectionId);
       return {
         connection_id: connectionId,
@@ -452,6 +458,12 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
           `UPDATE sync_connection SET status = 'needs-auth' WHERE connection_id = ?`
         )
         .run(connectionId);
+      setAuthNote(
+        ctx,
+        connectionId,
+        `reconnect ${identity.label}: authenticated principal does not match the pinned account`,
+        { preserveUpdatedAt: connection.status === "needs-auth" }
+      );
       ctx.wrote("sync.connection", connectionId);
       return {
         connection_id: connectionId,
@@ -467,6 +479,7 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       `UPDATE sync_connection SET status = 'active' WHERE connection_id = ?`
     )
     .run(connectionId);
+  setAuthNote(ctx, connectionId, null);
   const runId = ctx.newId();
   ctx.db
     .prepare(
@@ -712,6 +725,9 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
     status: string;
     note?: string;
   };
+  const previous = ctx.db
+    .prepare("SELECT status FROM sync_connection WHERE connection_id = ?")
+    .get(input.connection_id) as { status: string };
   ctx.db
     .prepare("UPDATE sync_connection SET status = ? WHERE connection_id = ?")
     .run(input.status, input.connection_id);
@@ -721,7 +737,10 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
   if (input.status === "active") {
     setAuthNote(ctx, input.connection_id, null);
   } else if (input.note !== undefined) {
-    setAuthNote(ctx, input.connection_id, input.note);
+    setAuthNote(ctx, input.connection_id, input.note, {
+      preserveUpdatedAt:
+        previous.status === "needs-auth" && input.status === "needs-auth",
+    });
   }
   ctx.wrote("sync.connection", input.connection_id);
   return { connection_id: input.connection_id, status: input.status };
@@ -904,13 +923,22 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
 function setAuthNote(
   ctx: HandlerCtx,
   connectionId: string,
-  note: string | null
+  note: string | null,
+  options: { preserveUpdatedAt?: boolean } = {}
 ): void {
   if (note === null) {
     ctx.db
       .prepare("DELETE FROM sync_connection_health WHERE connection_id = ?")
       .run(connectionId);
     return;
+  }
+  if (options.preserveUpdatedAt) {
+    const updated = ctx.db
+      .prepare(
+        "UPDATE sync_connection_health SET auth_note = ? WHERE connection_id = ?"
+      )
+      .run(note, connectionId);
+    if (Number(updated.changes) > 0) return;
   }
   ctx.db
     .prepare(

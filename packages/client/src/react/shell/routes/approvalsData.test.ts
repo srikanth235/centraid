@@ -131,8 +131,14 @@ describe(buildNeedsAuthRow, () => {
       kind: "pull.gmail",
       label: "personal",
       note: "token expired",
+      attentionAt: "2026-07-30T10:00:00.000Z",
     };
-    expect(buildNeedsAuthRow(row)).toStrictEqual(row);
+    expect(buildNeedsAuthRow(row)).toStrictEqual({
+      connectionId: "c1",
+      kind: "pull.gmail",
+      label: "personal",
+      note: "token expired",
+    });
   });
 });
 

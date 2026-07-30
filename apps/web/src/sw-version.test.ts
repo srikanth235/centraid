@@ -20,5 +20,13 @@ describe("SERVICE_WORKER_VERSION (K8 single source)", () => {
     );
     expect(stamp).toContain("sw-version.ts");
     expect(stamp).toContain("public/sw.js");
+    const workerBuild = readFileSync(
+      path.join(root, "scripts/build-iroh-worker.mjs"),
+      "utf8"
+    );
+    expect(workerBuild).toContain("centraid-worker-iroh.wasm");
+    expect(sw).toContain(
+      ["importScripts(`/centraid-worker-iroh.js?v=$", "{VERSION}`)"].join("")
+    );
   });
 });

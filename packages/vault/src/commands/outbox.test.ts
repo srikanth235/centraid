@@ -289,6 +289,15 @@ describe("outbox", () => {
       const third = invoke(agent, "outbox.stage", stageInput());
       if (second.status !== "executed" || third.status !== "executed")
         throw new Error("stage failed");
+      const previousEpisode = "2025-12-31T23:59:59.000Z";
+      for (const outcome of [first, second, third]) {
+        db.vault
+          .prepare("UPDATE outbox_item SET staged_at = ? WHERE item_id = ?")
+          .run(
+            previousEpisode,
+            (outcome.output as { item_id: string }).item_id
+          );
+      }
       const revoked = invoke(owner, "outbox.revoke_grant", {
         grant_id: grantId,
       });
@@ -301,6 +310,7 @@ describe("outbox", () => {
         expect(row.status).toBe("pending");
         expect(row.decided_at).toBeNull();
         expect(row.grant_id).toBeNull();
+        expect(row.staged_at).not.toBe(previousEpisode);
         expect(String(row.note)).toContain("revoked");
       }
     });
@@ -343,6 +353,9 @@ describe("outbox", () => {
         note: "nope",
       });
       expect(forged.status).toBe("failed");
+      db.vault
+        .prepare("UPDATE outbox_item SET staged_at = ? WHERE item_id = ?")
+        .run("2026-07-28T00:00:00.000Z", itemId);
       const real = invoke(owner, "outbox.repark", {
         item_id: itemId,
         note: "approval expired undrained after 24h — approve again to send",
@@ -351,6 +364,7 @@ describe("outbox", () => {
       const row = itemRow(itemId);
       expect(row.status).toBe("pending");
       expect(row.decided_at).toBeNull();
+      expect(row.staged_at).not.toBe("2026-07-28T00:00:00.000Z");
       expect(String(row.note)).toContain("expired");
       const again = invoke(owner, "outbox.repark", { item_id: itemId });
       expect(again.status).toBe("failed");

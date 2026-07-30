@@ -5,13 +5,6 @@
 // @ts-nocheck
 import { richAnswerHtml, hydrateRefs, wireCodeCopy } from "./assistant-rich.js";
 import {
-  outcomeOf,
-  fetchParkedEntry,
-  describeParked,
-  confirmParked as confirmParkedShared,
-  normalizeApproveOutcome,
-} from "./consent-cards.js";
-import {
   conversationsPath,
   conversationPath,
   blobsPath,
@@ -271,7 +264,7 @@ export function outcomeMessage(
     );
   }
   if (outcome?.status === "parked") {
-    return "Waiting for your approval — it lands once you confirm it in vault settings.";
+    return "Waiting for your approval — open Inbox to review it.";
   }
   if (outcome?.status === "failed") {
     const detail =
@@ -1224,11 +1217,8 @@ export function wireThemeToggle(
 //    - POST  <app>/_turn                        — the app's declared-handler
 //      agent (SSE stream). Writes the agent makes flow through the same
 //      dispatcher + vault consent gates as every other caller.
-//    - GET   /centraid/_vault/parked            — when a turn's write parks,
-//      the matching invocation is looked up and rendered as a proposed-write
-//      card. Nothing is written without the owner's say-so.
-//    - POST  /centraid/_vault/parked/<id>       — Approve/Discard post the
-//      real {approve} decision and render the actual InvokeOutcome.
+//      A parked write is acknowledged here and reviewed only in Inbox, the
+//      single owner decision surface.
 //    - GET   /centraid/_vault/status + /apps    — the context chip reflects
 //      the app's true grant state instead of a hardcoded label.
 //  An app can take over the conversation with:
@@ -2242,11 +2232,8 @@ export function wireThemeToggle(
    * Default conversation driver: POST the question to the app's `_turn`
    * agent and translate its SSE stream into panel bubbles. Writes the agent
    * makes flow through the dispatcher + vault consent gates like any other
-   * caller; one that PARKS surfaces here as a proposed-write card whose
-   * Approve/Discard post the owner's real decision to
-   * `/centraid/_vault/parked/<invocationId>`. Nothing is fabricated: every
-   * bubble is agent text, every card a real parked invocation, and every
-   * failure is surfaced as the error it was.
+   * caller. A write that PARKS appears in the canonical Inbox; this panel
+   * renders the conversation only and never forks a second decision surface.
    *
    * `_turn` keys a turn on a real conversation-history row and 404s on any
    * id it doesn't own (same contract the vault assistant's shell-level
@@ -2290,37 +2277,6 @@ export function wireThemeToggle(
       const stored = session.get();
       if (stored) return Promise.resolve(stored);
       return createConversation();
-    }
-
-    /**
-     * Look up a freshly-parked invocation on the consent surface and render its
-     * card. The lookup / describe / decision-post / outcome-normalize flow is
-     * the shared one (consent-cards.js, #420); the card chrome is `api.propose`.
-     */
-    function renderParked(invocationId) {
-      return fetchParkedEntry(invocationId, { fetchJson }).then((entry) => {
-        if (!entry) {
-          api.ai(
-            esc(
-              "A write parked for your approval but is no longer pending — it may have been handled from another surface."
-            )
-          );
-          return;
-        }
-        const d = describeParked(entry);
-        api.propose({
-          title: d.title,
-          detail: d.detail,
-          onApprove() {
-            return confirmParkedShared(invocationId, true, { fetchJson }).then(
-              normalizeApproveOutcome
-            );
-          },
-          onDiscard() {
-            return confirmParkedShared(invocationId, false, { fetchJson });
-          },
-        });
-      });
     }
 
     return function ask(text, attachments, signal) {
@@ -2372,10 +2328,16 @@ export function wireThemeToggle(
             if (typeof ev.delta === "string") append(ev.delta);
             return;
           case "tool.result": {
-            const o = outcomeOf(ev.result);
-            if (o && o.status === "parked" && o.invocationId)
-              void renderParked(o.invocationId);
-            else if (o && o.status === "denied") {
+            // The conversation acknowledges a parked outcome, but the owner
+            // decides it only in Inbox. Keeping this content-free of decision
+            // controls prevents a second consent surface from drifting.
+            const o =
+              ev.result && typeof ev.result === "object"
+                ? ev.result.outcome
+                : undefined;
+            if (o && o.status === "parked") {
+              say("That decision is waiting in Inbox.");
+            } else if (o && o.status === "denied") {
               say(
                 "The vault denied that write" +
                   (o.reason ? ": " + o.reason : ".") +

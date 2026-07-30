@@ -57,13 +57,20 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       windowDays: 30,
       generatedAt: 0,
     }),
-  getBlocking: () =>
+  getInbox: () =>
     Promise.resolve({
-      outbox: [],
-      needsAuth: [],
-      parked: [],
-      scopeRequests: [],
+      decisions: {
+        outbox: [],
+        needsAuth: [],
+        parked: [],
+        scopeRequests: [],
+        count: 0,
+      },
+      notices: [],
+      unreadNoticeCount: 0,
     }),
+  subscribeInboxChanges: () => Promise.resolve(),
+  syncWebInboxNotifications: () => Promise.resolve(),
 }));
 
 // The renderer's client-local store is a plain module now; back it with an

@@ -1,7 +1,7 @@
 /**
  * Single SW generation token (issue #468 K8).
- * Consumed by iroh-transport (script URL ?v=) and mirrored into public/sw.js
- * VERSION. Bump this when either the worker protocol or shell cache buckets
- * need a hard refresh.
+ * Consumed by iroh-transport (script URL ?v=), mirrored into public/sw.js
+ * VERSION, and inherited by the worker-owned Iroh JS/WASM URLs. Bump this when
+ * the worker protocol, Iroh binding, or shell cache buckets need a hard refresh.
  */
-export const SERVICE_WORKER_VERSION = "v12";
+export const SERVICE_WORKER_VERSION = "v13";

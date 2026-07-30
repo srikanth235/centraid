@@ -59,8 +59,21 @@ describe(validateManifest, () => {
     expect(m.name).toBe("Daily digest");
     expect(m.version).toBe("0.1.0");
     expect(m.enabled).toBe(true);
+    expect(m.notify).toBe("failures");
     expect(m.triggers).toHaveLength(1);
     expect(m.triggers[0]).toStrictEqual({ kind: "cron", expr: "0 9 * * *" });
+  });
+
+  it("validates the automation Inbox notification policy", () => {
+    expect(validateManifest(baseManifest({ notify: "always" })).notify).toBe(
+      "always"
+    );
+    expect(validateManifest(baseManifest({ notify: "never" })).notify).toBe(
+      "never"
+    );
+    expect(() =>
+      validateManifest(baseManifest({ notify: "sometimes" }))
+    ).toThrow(/manifest\.notify/u);
   });
 
   it("reads a plural triggers list with multiple crons", () => {

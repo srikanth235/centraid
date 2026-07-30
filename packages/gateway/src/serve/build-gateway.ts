@@ -240,6 +240,11 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
+import {
+  createInboxDecisionWakeTracker,
+  InboxEventBus,
+} from "./inbox-events.js";
+import { shouldWriteAutomationNotice } from "./inbox-notices.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
@@ -967,6 +972,15 @@ export async function buildGateway(
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void = () => {};
+  const inboxEvents = new InboxEventBus();
+  const inboxDecisionWake = createInboxDecisionWakeTracker();
+  // Restore quarantine can create a fresh decision while the registry mounts,
+  // before the relay exists. Hold those content-free wakes until the relay is
+  // constructed instead of dropping the boot-time doorbell.
+  const pendingInboxWakes = new Set<string>();
+  let requestInboxWake: (vaultId: string) => void = (vaultId) => {
+    pendingInboxWakes.add(vaultId);
+  };
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
@@ -1000,6 +1014,10 @@ export async function buildGateway(
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
+    onInboxChanged: (vaultId, wake) => {
+      inboxEvents.publish(vaultId, wake);
+      if (wake) requestInboxWake(vaultId);
+    },
     // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
     // derivatives here leaks nothing to the provider. One shared stateless
@@ -1972,6 +1990,60 @@ export async function buildGateway(
     const runId =
       opts.runId ??
       `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+    let noticeContext:
+      | {
+          name: string;
+          policy: automation.Manifest["notify"];
+          appId: string;
+          automationId: string;
+        }
+      | undefined;
+    const recordAutomationNotice = (
+      outcome: "success" | "failure",
+      error?: string
+    ): void => {
+      const plane = vaultRegistry.current();
+      const prior = plane.inbox.getBySource("automation", automationRef);
+      const previousOutcome =
+        prior?.detail.outcome === "success" ||
+        prior?.detail.outcome === "failure"
+          ? prior.detail.outcome
+          : undefined;
+      if (
+        !shouldWriteAutomationNotice(
+          noticeContext?.policy,
+          outcome,
+          previousOutcome
+        )
+      )
+        return;
+      const name = noticeContext?.name ?? automationRef;
+      plane.inbox.put({
+        kind: "automation",
+        sourceRef: automationRef,
+        headline:
+          outcome === "failure"
+            ? `${name} failed`
+            : previousOutcome === "failure"
+              ? `${name} recovered`
+              : `${name} completed`,
+        severity: outcome === "failure" ? "high" : "info",
+        detail: {
+          sourceType: "automation",
+          outcome,
+          automationRef,
+          runId,
+          ...(noticeContext
+            ? {
+                appId: noticeContext.appId,
+                automationId: noticeContext.automationId,
+              }
+            : {}),
+          ...(error ? { error } : {}),
+          deepLink: `/automations/${encodeURIComponent(automationRef)}`,
+        },
+      });
+    };
     try {
       // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
       // reconciliation. The host is already mounted in `settledHosts` at that
@@ -1979,6 +2051,22 @@ export async function buildGateway(
       // and deadlock restart catch-up.
       const host = currentSettledHost();
       const ws = currentWorkspace();
+      const parsedAutomation = automation.parseRef(automationRef);
+      const automationRow = parsedAutomation
+        ? await automation.readAppOwned(
+            host.codeAppsDir(),
+            parsedAutomation.appId,
+            parsedAutomation.automationId
+          )
+        : undefined;
+      if (automationRow && parsedAutomation) {
+        noticeContext = {
+          name: automationRow.name,
+          policy: automationRow.manifest.notify,
+          appId: parsedAutomation.appId,
+          automationId: parsedAutomation.automationId,
+        };
+      }
       if (opts.idempotent && opts.runId) {
         // The MEMOIZED per-journal store: a webhook/event/data-triggered
         // automation can fire every few seconds, and a fresh
@@ -2005,7 +2093,7 @@ export async function buildGateway(
         "automations",
         agent.runner
       );
-      await runAutomation({
+      const result = await runAutomation({
         automationRef,
         runId,
         appsDir: ws.appsDir,
@@ -2072,12 +2160,17 @@ export async function buildGateway(
         },
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
+      recordAutomationNotice(
+        result.outcome.ok ? "success" : "failure",
+        result.outcome.error
+      );
       // Grant-matched outbox items the fire just staged drain now, not
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      recordAutomationNotice("failure", message);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
       runEventBus.publish(runId, {
         type: "turn.end",
@@ -3225,6 +3318,14 @@ export async function buildGateway(
   };
 
   provenanceDoorbell = (vaultId, entityTypes) => {
+    inboxEvents.publish(vaultId);
+    const decisionCount = vaultRegistry.get(vaultId)?.inboxSummary()
+      .decisions.count;
+    if (
+      decisionCount !== undefined &&
+      inboxDecisionWake.observe(vaultId, decisionCount)
+    )
+      requestInboxWake(vaultId);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -3959,6 +4060,7 @@ export async function buildGateway(
         enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
+        inboxEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
         // fix (this session): agent-grant approval can be the FIRST enrollment
@@ -4190,6 +4292,9 @@ export async function buildGateway(
     enrollmentStore,
     gatewayDatabase
   );
+  requestInboxWake = (vaultId) => pushWakeRelay.requestWake(vaultId);
+  for (const vaultId of pendingInboxWakes) pushWakeRelay.requestWake(vaultId);
+  pendingInboxWakes.clear();
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");

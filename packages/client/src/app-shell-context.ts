@@ -82,7 +82,10 @@ export type ShellRoute =
   // destination; previously Settings → Account → Connections.
   | { kind: "connectors" }
   | { kind: "approvals" }
-  | { kind: "gateway" }
+  | {
+      kind: "gateway";
+      tab?: "overview" | "components" | "storage" | "logs" | "alerts";
+    }
   // The people side of this installation (issue #599, Decision 14): the member
   // roster, the devices acting for each person, and every space this member can
   // reach. Sits under the sidebar's Operations section beside Gateway — which

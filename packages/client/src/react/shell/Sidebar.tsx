@@ -110,8 +110,10 @@ export interface SidebarProps {
   onAutomations?: () => void;
   onConnectors?: () => void;
   onApprovals?: () => void;
-  /** Count badge next to "Approvals" — omitted (no live count source yet) shows no badge. */
+  /** Count badge next to Inbox — decisions only. */
   approvalsCount?: number;
+  /** Notices are informational and use a dot instead of inflating the badge. */
+  inboxHasUnreadNotices?: boolean;
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: "up" | "down" | "unknown";
@@ -542,11 +544,19 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       />
       <SbItem
         icon={<Icon name="CheckCircle" size={15} />}
-        label="Approvals"
+        label="Inbox"
         meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
         active={props.activePage === "approvals"}
         disabled={!props.onApprovals}
         onClick={() => props.onApprovals?.()}
+        trailing={
+          props.inboxHasUnreadNotices ? (
+            <span
+              className={chrome.inboxUnreadDot}
+              aria-label="Unread updates"
+            />
+          ) : undefined
+        }
       />
       <SbSection label="Operations" />
       <SbItem

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   cloneAutomationTemplate,
+  listAutomationTurns,
   listAutomationTemplates,
   runAutomation,
 } from "./automations";
@@ -33,6 +34,28 @@ describe("automations", () => {
       {
         headers: { authorization: "Bearer paired" },
         method: "POST",
+      }
+    );
+  });
+
+  test("loads the exact automation conversation thread", async () => {
+    const turns = [
+      {
+        turnId: "brief/main:manual:1",
+        triggerKind: "manual",
+        startedAt: 1,
+        ok: true,
+      },
+    ];
+    fetchJson.mockResolvedValue({ turns });
+    await expect(listAutomationTurns("brief/main")).resolves.toStrictEqual(
+      turns
+    );
+    expect(fetchJson).toHaveBeenCalledWith(
+      "https://gateway.example/centraid/_automations/turns?ref=brief%2Fmain&limit=50",
+      {
+        headers: { authorization: "Bearer paired" },
+        method: "GET",
       }
     );
   });

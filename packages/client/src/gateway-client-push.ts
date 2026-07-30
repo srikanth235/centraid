@@ -1,4 +1,10 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
+import { composeWebInboxNotifications } from "./inbox-notification-model.js";
+import type { InboxNotificationPull } from "./inbox-notification-model.js";
+
+const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
+const INBOX_DELIVERY_KEY = "/__centraid_notifications__/inbox";
+const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
 
 /** Register the PWA only after the user has created reminder value. */
 export async function enableWebPushWake(
@@ -110,7 +116,10 @@ export async function syncWebDueNotifications(): Promise<void> {
       // canonical and will safely re-emit the bounded reminder window.
     }
   }
-  const delivered = new Set(deliveredValues);
+  const delivered = new Set([
+    ...deliveredValues,
+    ...(await readNotificationCache(REMINDER_DELIVERY_KEY)),
+  ]);
   const registration = await navigator.serviceWorker.ready;
   const pending = (reminders ?? []).filter(
     (reminder) => !delivered.has(reminder.key)
@@ -139,6 +148,107 @@ export async function syncWebDueNotifications(): Promise<void> {
     storageKey,
     JSON.stringify([...delivered].slice(-2_000))
   );
+  await writeNotificationCache(REMINDER_DELIVERY_KEY, delivered);
+}
+
+/** Fetch private Inbox content locally after an opaque wake/SSE doorbell. */
+export async function syncWebInboxNotifications(): Promise<void> {
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  )
+    return;
+  const { baseUrl, token, vaultId } = await auth();
+  const response = await doFetch(baseUrl, "/centraid/_vault/inbox", {
+    headers: authHeaders(token),
+  });
+  const inbox = await readJson<InboxNotificationPull>(
+    response,
+    "load Inbox notifications"
+  );
+  const storageKey = `centraid:web-inbox:v1:${encodeURIComponent(
+    `${baseUrl} ${vaultId ?? ""}`
+  )}`;
+  let prior: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(storageKey) ?? "[]"
+    );
+    if (Array.isArray(parsed))
+      prior = parsed.filter(
+        (value): value is string => typeof value === "string"
+      );
+  } catch {
+    // Disposable delivery cache; the gateway Inbox is canonical.
+  }
+  const delivered = new Set([
+    ...prior,
+    ...(await readNotificationCache(INBOX_DELIVERY_KEY)),
+  ]);
+  const rows = composeWebInboxNotifications(inbox, delivered);
+  const registration =
+    "serviceWorker" in navigator
+      ? await navigator.serviceWorker.ready.catch(() => undefined)
+      : undefined;
+  await Promise.all(
+    rows.map(async (row) => {
+      if (registration) {
+        await registration.showNotification(row.title, {
+          body: row.body,
+          tag: row.key,
+          data: { url: "/?inbox=1" },
+        });
+        return;
+      }
+      const notification = new Notification(row.title, {
+        body: row.body,
+        tag: row.key,
+      });
+      notification.addEventListener("click", () => {
+        window.focus();
+        window.location.assign("/?inbox=1");
+      });
+    })
+  );
+  for (const row of rows) delivered.add(row.key);
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify([...delivered].slice(-2_000))
+  );
+  await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+}
+
+async function readNotificationCache(key: string): Promise<string[]> {
+  if (typeof caches === "undefined") return [];
+  try {
+    const cache = await caches.open(NOTIFICATION_CACHE);
+    const response = await cache.match(key);
+    const parsed: unknown = response ? await response.json() : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeNotificationCache(
+  key: string,
+  delivered: ReadonlySet<string>
+): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const cache = await caches.open(NOTIFICATION_CACHE);
+    await cache.put(
+      key,
+      new Response(JSON.stringify([...delivered].slice(-2_000)), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+  } catch {
+    // A delivery cache is disposable; authenticated gateway state is canonical.
+  }
 }
 
 function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> {

@@ -18,8 +18,8 @@ const BRIDGE_STORAGE = "centraid.web.v1.iroh-bridge";
 const VIRTUAL_PREFIX = "/__centraid_iroh__/";
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
-// exists in this worker generation. VERSION is shared with public/sw.js via
-// sw-version.ts (issue #468 K8).
+// exists in this worker generation. VERSION is shared with public/sw.js and
+// its derived Iroh worker binding via sw-version.ts (issue #468 K8).
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
 // Transient tunnel failures (a redialed-then-still-dead connection, a stream
@@ -349,6 +349,7 @@ export function purgeIrohDeviceState(): void {
     }
   };
   clear();
+  void syncIrohWakeConfiguration();
   void current
     ?.then(async (node) => {
       await node.close().catch(() => undefined);
@@ -356,6 +357,43 @@ export function purgeIrohDeviceState(): void {
       clear();
     })
     .catch(() => undefined);
+}
+
+interface IrohWakeConfiguration {
+  deviceKey: string;
+  endpointTicket: string;
+  vaultId: string;
+}
+
+function currentIrohWakeConfiguration(): IrohWakeConfiguration | undefined {
+  const connection = loadConnection();
+  const deviceKey = adoptDurableIrohDeviceKey();
+  if (!deviceKey || !connection.endpointTicket || !connection.vaultId)
+    return undefined;
+  return {
+    deviceKey,
+    endpointTicket: connection.endpointTicket,
+    vaultId: connection.vaultId,
+  };
+}
+
+/**
+ * Mirror the minimum paired transport state into private service-worker
+ * storage. A closed PWA has no WindowClient to own the normal Iroh bridge, so
+ * the worker must be able to authenticate its canonical Inbox pull itself.
+ */
+export async function syncIrohWakeConfiguration(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  const registration = await navigator.serviceWorker.ready;
+  const worker = registration.active ?? navigator.serviceWorker.controller;
+  // ServiceWorker.postMessage's second argument is a transfer list, not a
+  // target origin; the generic browser rule does not model this overload.
+  const message = {
+    type: "centraid:configure-iroh-wake",
+    configuration: currentIrohWakeConfiguration(),
+  };
+  // eslint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker has no targetOrigin argument (#647)
+  worker?.postMessage(message);
 }
 
 function isIrohWorker(worker: ServiceWorker | null): boolean {
@@ -369,7 +407,10 @@ export async function ensureIrohServiceWorker(): Promise<void> {
     await navigator.serviceWorker.register(SERVICE_WORKER_URL);
   await registration.update();
   await navigator.serviceWorker.ready;
-  if (isIrohWorker(navigator.serviceWorker.controller)) return;
+  if (isIrohWorker(navigator.serviceWorker.controller)) {
+    await syncIrohWakeConfiguration();
+    return;
+  }
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(
       () => reject(new Error("Iroh PWA worker did not activate.")),
@@ -386,6 +427,7 @@ export async function ensureIrohServiceWorker(): Promise<void> {
       { once: true }
     );
   });
+  await syncIrohWakeConfiguration();
 }
 
 export async function irohVirtualUrl(target: string): Promise<string> {

@@ -12,6 +12,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
+import { InboxEventBus } from "../serve/inbox-events.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import { makeVaultRouteHandler } from "./vault-routes.js";
@@ -240,6 +241,149 @@ describe("vault-routes", () => {
     // The raw request never rides either read surface.
     expect(JSON.stringify(listed)).not.toContain("request_json");
     expect(JSON.stringify(listed)).not.toContain("{{connection:access_token}}");
+  });
+
+  test("Inbox projects canonical decisions beside collapsed notices and supports read/archive", async () => {
+    const dir = await tempDir();
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    registry.create("Personal");
+    cleanups.push(() => registry.stop());
+    const plane = registry.current();
+    configureConnection(plane);
+    const itemId = stageGmailSend(plane);
+    const notice = plane.inbox.put({
+      kind: "automation",
+      sourceRef: "mail/digest",
+      headline: "Digest failed",
+      severity: "high",
+      detail: { sourceType: "automation", outcome: "failure" },
+    });
+    const base = await startHandlerServer(
+      makeVaultRouteHandler(registry, { inboxEvents: new InboxEventBus() })
+    );
+
+    const inbox = (await (
+      await fetch(`${base}/centraid/_vault/inbox?include_archived=true`)
+    ).json()) as {
+      decisions: {
+        count: number;
+        outbox: Array<{ itemId: string; canEdit: boolean }>;
+      };
+      notices: Array<{ noticeId: string; headline: string }>;
+      unreadNoticeCount: number;
+    };
+    expect(inbox.decisions.count).toBe(1);
+    expect(inbox.decisions.outbox).toContainEqual(
+      expect.objectContaining({ itemId, canEdit: true })
+    );
+    expect(inbox.notices).toContainEqual(
+      expect.objectContaining({
+        noticeId: notice.noticeId,
+        headline: "Digest failed",
+      })
+    );
+    expect(inbox.unreadNoticeCount).toBe(1);
+
+    const read = await fetch(
+      `${base}/centraid/_vault/inbox/notices/${notice.noticeId}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action: "read" }),
+      }
+    );
+    expect(read.status).toBe(200);
+    const archived = await fetch(
+      `${base}/centraid/_vault/inbox/notices/${notice.noticeId}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action: "archive" }),
+      }
+    );
+    expect(archived.status).toBe(200);
+    expect(plane.inbox.list()).toStrictEqual([]);
+  });
+
+  test("Inbox SSE emits its content-free doorbell immediately after a canonical change", async () => {
+    const dir = await tempDir();
+    const events = new InboxEventBus();
+    const wakeSignals: boolean[] = [];
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+      onInboxChanged: (vaultId, wake) => {
+        wakeSignals.push(wake);
+        events.publish(vaultId, wake);
+      },
+    });
+    registry.create("Personal");
+    cleanups.push(() => registry.stop());
+    const plane = registry.current();
+    const base = await startHandlerServer(
+      makeVaultRouteHandler(registry, { inboxEvents: events })
+    );
+    const controller = new AbortController();
+    const response = await fetch(`${base}/centraid/_vault/inbox/events`, {
+      signal: controller.signal,
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Inbox SSE response has no body");
+    const decoder = new TextDecoder();
+    const initial = await reader.read();
+    expect(decoder.decode(initial.value)).toContain("event: inbox-changed");
+
+    plane.ensureAppInstallGrant("planner", {
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
+    plane.db.vault
+      .prepare(
+        `INSERT INTO schedule_calendar
+           (calendar_id, owner_party_id, name, default_tz, visibility)
+         VALUES ('calendar-inbox-sse', ?, 'Personal', 'Asia/Kolkata', 'private')`
+      )
+      .run(plane.boot.ownerPartyId);
+    plane.db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (
+            SELECT command_id FROM agent_command
+            WHERE name='schedule.propose_event'
+          )`
+      )
+      .run();
+    const parked = await plane.bridgeFor("planner")({
+      op: "invoke",
+      payload: {
+        command: "schedule.propose_event",
+        input: {
+          summary: "Inbox delivery check",
+          dtstart: "2026-07-30T09:00:00Z",
+          dtend: "2026-07-30T09:30:00Z",
+          calendar_id: "calendar-inbox-sse",
+        },
+        purpose: "dpv:ServiceProvision",
+      },
+    });
+    expect(parked.result).toMatchObject({ status: "parked" });
+    expect(wakeSignals.at(-1)).toBe(true);
+    const changed = await Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(
+          () => reject(new Error("Inbox SSE exceeded 1 second")),
+          1_000
+        );
+      }),
+    ]);
+    expect(decoder.decode(changed.value)).toBe(
+      'event: inbox-changed\ndata: {"type":"inbox-changed"}\n\n'
+    );
+    controller.abort();
   });
 
   test("approve-with-edit rebuilds the gmail.send request server-side from the edited artifact", async () => {

@@ -2,10 +2,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 
 import { authHeader } from "./gateway";
+import { composeMobileInboxNotifications } from "./inbox-notification-model";
+import type { MobileInboxNotificationPull } from "./inbox-notification-model";
 import * as NotificationModel from "./notification-model";
 import type { DueReminder } from "./notification-model";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
+const DELIVERED_INBOX_KEYS = "centraid:delivered-inbox-keys:v1";
 
 export async function installNotificationCategories(): Promise<void> {
   await Promise.all([
@@ -64,7 +67,77 @@ export async function installNotificationCategories(): Promise<void> {
         },
       ]
     ),
+    Notifications.setNotificationCategoryAsync(
+      NotificationModel.INBOX_CATEGORY,
+      [
+        {
+          identifier: NotificationModel.OPEN_ITEM,
+          buttonTitle: "Open Inbox",
+          options: { opensAppToForeground: true },
+        },
+      ]
+    ),
   ]);
+}
+
+/**
+ * Inbox itself is the contextual owner gesture for notification consent.
+ * Boot/background paths only inspect existing permission and never prompt.
+ */
+export async function requestInboxNotificationPermission(): Promise<boolean> {
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  if (current.canAskAgain === false) return false;
+  return (await Notifications.requestPermissionsAsync()).granted;
+}
+
+/** Compose decision/high-severity Inbox notifications only after local fetch. */
+export async function syncInboxNotifications(
+  baseUrl: string,
+  vaultId: string
+): Promise<void> {
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return;
+  const response = await fetch(new URL("/centraid/_vault/inbox", baseUrl), {
+    headers: { ...authHeader(), "x-centraid-vault": vaultId },
+  });
+  if (!response.ok) return;
+  const inbox = (await response.json()) as MobileInboxNotificationPull;
+  const raw = await AsyncStorage.getItem(DELIVERED_INBOX_KEYS).catch(
+    () => null
+  );
+  let prior: string[] = [];
+  if (raw) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed))
+        prior = parsed.filter(
+          (value): value is string => typeof value === "string"
+        );
+    } catch {
+      // Device bookkeeping is disposable; the authenticated Inbox is truth.
+    }
+  }
+  const delivered = new Set(prior);
+  const decisionRows = composeMobileInboxNotifications(inbox, delivered);
+  await Promise.all(
+    decisionRows.map((row) =>
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: row.title,
+          body: row.body,
+          categoryIdentifier: NotificationModel.INBOX_CATEGORY,
+          data: { kind: "inbox", url: "centraid://settings/inbox" },
+        },
+        trigger: null,
+      })
+    )
+  );
+  for (const row of decisionRows) delivered.add(row.key);
+  await AsyncStorage.setItem(
+    DELIVERED_INBOX_KEYS,
+    JSON.stringify([...delivered].slice(-2_000))
+  ).catch(() => undefined);
 }
 
 /**

@@ -308,6 +308,15 @@
   font-size: 11px;
 }
 
+.inboxUnreadDot {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: none;
+}
+
 /* The sidebar foot: who you are, with Settings and Log out behind it. Sits a
    little heavier than a nav item — it is a person, not a destination — and
    gets a hairline separator so it reads as the end of the column. */

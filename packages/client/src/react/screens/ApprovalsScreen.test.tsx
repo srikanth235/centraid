@@ -13,6 +13,7 @@ import type {
   ApprovalsParkedRowDTO,
   ApprovalsScopeRequestRowDTO,
   ApprovalsScreenProps,
+  InboxNoticeRowDTO,
 } from "./ApprovalsScreen.js";
 
 const outboxRow: ApprovalsOutboxRowDTO = {
@@ -83,6 +84,26 @@ const grantRow: ApprovalsGrantRowDTO = {
   target: "ravi@example.com",
   createdAgo: "3d ago",
 };
+
+function noticeRow(over: Partial<InboxNoticeRowDTO> = {}): InboxNoticeRowDTO {
+  return {
+    noticeId: "notice-1",
+    kind: "automation",
+    sourceRef: "brief/digest",
+    headline: "Digest failed",
+    detail: { sourceType: "automation" },
+    detailText: "Three messages were not imported.",
+    sourceLabel: "brief/digest",
+    severity: "high",
+    sourceType: "automation",
+    count: 2,
+    firstAt: "2026-07-29T01:00:00.000Z",
+    lastAt: "2026-07-30T01:00:00.000Z",
+    readAt: null,
+    archivedAt: null,
+    ...over,
+  };
+}
 
 function activityRow(
   over: Partial<ApprovalsActivityRowDTO> = {}
@@ -168,16 +189,22 @@ describe("screens/ApprovalsScreen", () => {
     if (!btn) throw new Error(`no button with text "${text}"`);
     return btn as HTMLButtonElement;
   }
+  function openArchived(el: HTMLElement): void {
+    act(() => {
+      findButton(el, "Archived").click();
+    });
+  }
 
   describe(ApprovalsScreen, () => {
-    it("shows the honest empty state when nothing is waiting, but still renders the grants section", () => {
+    it("shows the honest empty state and keeps retained grants under Archived", () => {
       const el = mount(makeProps());
       expect(el.textContent).toContain("Nothing waiting on you.");
+      openArchived(el);
       expect(el.textContent).toContain("Standing grants");
       expect(el.textContent).toContain("No standing grants yet");
     });
 
-    it("groups the inbox by kind with counts", () => {
+    it("renders every decision type in one pinned Needs me stream", () => {
       const el = mount(
         makeProps({
           outbox: [outboxRow],
@@ -186,11 +213,71 @@ describe("screens/ApprovalsScreen", () => {
           scopeRequests: [scopeRow],
         })
       );
-      expect(el.textContent).toContain("Outbox");
-      expect(el.textContent).toContain("Needs auth");
-      expect(el.textContent).toContain("Parked");
-      expect(el.textContent).toContain("Scope requests");
+      expect(el.textContent).toContain("Hi");
+      expect(el.textContent).toContain("work gmail");
+      expect(el.textContent).toContain("social.send_message");
+      expect(el.textContent).toContain("invoicer");
+      expect(el.querySelectorAll("section")).toHaveLength(1);
       expect(el.textContent).toContain("4 waiting on you");
+    });
+
+    it("keeps notices non-blocking while exposing read and archive actions", () => {
+      const onReadNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onReadNotice"]>>();
+      const onArchiveNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onArchiveNotice"]>>();
+      const el = mount(
+        makeProps({
+          outbox: [outboxRow],
+          notices: [noticeRow()],
+          onReadNotice,
+          onArchiveNotice,
+        })
+      );
+      expect(el.textContent).toContain("1 waiting on you");
+      expect(el.textContent).toContain("Digest failed ×2");
+      expect(el.textContent).toContain("brief/digest");
+      act(() => findButton(el, "Mark read").click());
+      act(() => {
+        (
+          [...el.querySelectorAll("button")].find(
+            (button) => button.textContent === "Archive"
+          ) as HTMLButtonElement
+        ).click();
+      });
+      expect(onReadNotice).toHaveBeenCalledWith("notice-1");
+      expect(onArchiveNotice).toHaveBeenCalledWith("notice-1");
+    });
+
+    it("filters active notices by source and retains archived notices in history", () => {
+      const el = mount(
+        makeProps({
+          notices: [
+            noticeRow(),
+            noticeRow({
+              noticeId: "app-notice",
+              sourceRef: "app-1",
+              headline: "Export sent",
+              sourceType: "app",
+              detail: { sourceType: "app" },
+              sourceLabel: "Exports",
+            }),
+            noticeRow({
+              noticeId: "archived-notice",
+              sourceRef: "old",
+              headline: "Old failure",
+              archivedAt: "2026-07-30T02:00:00.000Z",
+            }),
+          ],
+        })
+      );
+      act(() => findButton(el, "Automations").click());
+      expect(el.textContent).toContain("Digest failed");
+      expect(el.textContent).not.toContain("Export sent");
+      expect(el.textContent).not.toContain("Old failure");
+      openArchived(el);
+      expect(el.textContent).toContain("Old failure");
+      expect(el.textContent).not.toContain("Digest failed");
     });
 
     it("expands an outbox row on click to reveal the readable artifact fields + actions", () => {
@@ -269,7 +356,6 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       expect(el.querySelector("[data-kind]")).toBeNull();
-      expect(el.textContent).not.toContain("Automation");
       expect(el.textContent).toContain("owner");
     });
 
@@ -329,7 +415,7 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       expect(el.textContent).toContain("Assistant");
-      expect(el.textContent).not.toContain("Automation");
+      expect(el.querySelector('[data-kind="automation"]')).toBeNull();
     });
 
     it("fires onDecideScopeRequest inline (no expansion needed)", () => {
@@ -347,6 +433,7 @@ describe("screens/ApprovalsScreen", () => {
     it("renders standing grants with a Revoke action", () => {
       const onRevokeGrant = vi.fn<ApprovalsScreenProps["onRevokeGrant"]>();
       const el = mount(makeProps({ grants: [grantRow], onRevokeGrant }));
+      openArchived(el);
       expect(el.textContent).toContain("gmail-send");
       expect(el.textContent).toContain("ravi@example.com");
       act(() => {
@@ -357,6 +444,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("shows the origin of a recent Locker fill in review activity", () => {
       const el = mount(makeProps({ activity: [fillActivity] }));
+      openArchived(el);
       expect(el.textContent).toContain("Recent activity");
       expect(el.textContent).toContain("Locker filled a login");
       expect(el.textContent).toContain("https://example.test");
@@ -379,6 +467,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       const badges = [
         ...el.querySelectorAll('[data-testid="activity-decision-badge"]'),
       ].map((n) => n.textContent);
@@ -407,6 +496,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelectorAll('[data-testid="activity-risk-marker"]')
       ).toHaveLength(1);
@@ -438,6 +528,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.textContent).toContain("App");
       expect(el.textContent).toContain("Briefing");
       expect(el.textContent).toContain("Automation");
@@ -461,6 +552,7 @@ describe("screens/ApprovalsScreen", () => {
           onRevokeGrant,
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-attribution-grant"]')
           ?.textContent
@@ -486,6 +578,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-attribution-owner"]')
           ?.textContent
@@ -504,6 +597,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-count"]')?.textContent
       ).toBe("×3");
@@ -522,6 +616,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.querySelector('[data-testid="activity-detail"]')).toBeNull();
       act(() => {
         findButton(el, "Remove connection").click();
@@ -551,6 +646,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.textContent).toContain("Allowed row");
       expect(el.textContent).toContain("Denied row");
       act(() => {
@@ -574,6 +670,7 @@ describe("screens/ApprovalsScreen", () => {
           onSeeAllActivity,
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-see-all"]')
       ).not.toBeNull();
@@ -589,6 +686,7 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(
         makeProps({ activity: [activityRow()], activityTruncated: false })
       );
+      openArchived(el);
       expect(el.querySelector('[data-testid="activity-see-all"]')).toBeNull();
     });
 

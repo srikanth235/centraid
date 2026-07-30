@@ -16,6 +16,7 @@ export const WEB_SESSION_REDEEM_PATH = "/centraid/_web/session";
 export const WEB_CONTROL_PATH = "/centraid/_web/control";
 export const WEB_APP_HEADER = "x-centraid-web-app";
 export const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
+export const WEB_SERVICE_WORKER_HEADER = "x-centraid-service-worker";
 
 const CONTROL_COOKIE = "__centraid_control";
 const MINT_RE = /^\/centraid\/_apps\/(?<appId>[^/]+)\/web-session$/u;
@@ -27,6 +28,10 @@ const REPLICA_APP_PATHS = new Set([
   "/centraid/_vault/replica/row",
   "/centraid/_vault/replica/checkpoint",
   "/centraid/_vault/replica/intents",
+]);
+const SERVICE_WORKER_WAKE_PATHS = new Set([
+  "/centraid/_vault/inbox",
+  "/centraid/_reminders/due",
 ]);
 
 export interface WebAppSessionsOptions {
@@ -254,21 +259,29 @@ export class WebAppSessions {
     const presented = cookies(req);
     if (pathname === WEB_CONTROL_PATH) {
       const origin = safeOrigin(req.headers.origin);
+      const target = new URL(
+        req.url ?? "/",
+        "http://gateway.invalid"
+      ).searchParams.get("path");
       const presentedToken = presented.get(CONTROL_COOKIE);
       const control =
         presentedToken === undefined
           ? undefined
           : this.controlStore.find(hashControlToken(presentedToken));
-      if (!control || origin !== control.shellOrigin) return undefined;
+      const serviceWorkerWake =
+        origin === undefined &&
+        (req.method ?? "GET").toUpperCase() === "GET" &&
+        req.headers[WEB_SERVICE_WORKER_HEADER] === "inbox-wake" &&
+        req.headers["sec-fetch-site"] === "same-origin" &&
+        target !== null &&
+        SERVICE_WORKER_WAKE_PATHS.has(target);
+      if (!control || (origin !== control.shellOrigin && !serviceWorkerWake))
+        return undefined;
       // A revoked device's cookie stops working immediately — evict the row.
       if (this.revoked(control.deviceKey)) {
         this.controlStore.remove(control.tokenHash);
         return undefined;
       }
-      const target = new URL(
-        req.url ?? "/",
-        "http://gateway.invalid"
-      ).searchParams.get("path");
       // A DELETE straight to the control endpoint (no proxied `?path=`) is a
       // logout: leave the URL intact so `handler` performs the deletion and
       // expires the cookie; just clear the bearer gate here. A DELETE that

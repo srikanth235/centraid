@@ -198,6 +198,11 @@ function provenanceScopeFailure(
 export interface GatewayDeps {
   /** Best-effort hint emitted only after journal.db provenance is durable. */
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
+  /**
+   * Best-effort hint emitted after the canonical parked-decision projection
+   * changes. `created` is true only when a new owner decision was added.
+   */
+  onDecisionChanged?: (created: boolean) => void;
 }
 
 export type InvocationBatchResult<T> =
@@ -209,6 +214,7 @@ export class Gateway {
   private readonly commands = new Map<string, RegisteredCommand>();
   private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
+  private activeBatchDecisionChanges: boolean[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
@@ -278,7 +284,9 @@ export class Gateway {
       throw new Error("gateway invocation batch cannot nest");
     }
     const invocationIds: string[] = [];
+    const decisionChanges: boolean[] = [];
     this.activeBatchInvocationIds = invocationIds;
+    this.activeBatchDecisionChanges = decisionChanges;
     try {
       this.db.vault.exec("BEGIN IMMEDIATE");
       this.db.journal.exec("BEGIN IMMEDIATE");
@@ -301,6 +309,9 @@ export class Gateway {
       // A rejected run may still have crossed the canonical boundary and left
       // a pending marker. Publish only once journal proof is also durable.
       notifyReplicaCommit(this.db.vault);
+      if (decisionChanges.length > 0) {
+        this.emitDecisionChanged(decisionChanges.some(Boolean));
+      }
       return results;
     } catch (error) {
       if (this.db.journal.isTransaction) this.db.journal.exec("ROLLBACK");
@@ -308,6 +319,7 @@ export class Gateway {
       throw error;
     } finally {
       this.activeBatchInvocationIds = undefined;
+      this.activeBatchDecisionChanges = undefined;
     }
   }
 
@@ -1100,6 +1112,7 @@ export class Gateway {
         reason,
         parkedAt,
       });
+      this.ringDecisionChanged(true);
       return {
         status: "parked",
         invocationId,
@@ -1183,6 +1196,7 @@ export class Gateway {
               }
             : undefined
         );
+        this.ringDecisionChanged(false);
       }
       return { status: "denied", ...priorDenial };
     }
@@ -1204,6 +1218,7 @@ export class Gateway {
             }
           : undefined
       );
+      this.ringDecisionChanged(false);
       return replayed;
     }
     const command = lookupCommand(this.db.vault, entry.commandName);
@@ -1254,6 +1269,7 @@ export class Gateway {
             }
           : undefined
       );
+      this.ringDecisionChanged(false);
       return { status: "denied", ...denial };
     }
     const consent: ConsentAllow = {
@@ -1290,6 +1306,7 @@ export class Gateway {
           }
         : undefined
     );
+    this.ringDecisionChanged(false);
     return outcome;
   }
 
@@ -1333,6 +1350,7 @@ export class Gateway {
       this.deregisterExtCommands(result.appId);
     }
     this.ringProvenance();
+    if (result.parkedDropped > 0) this.ringDecisionChanged(false);
     return result;
   }
 
@@ -2004,6 +2022,22 @@ export class Gateway {
       this.deps.onProvenanceCommitted?.(entityTypes);
     } catch {
       // Doorbells are hints; the persisted cursor + cron poll own correctness.
+    }
+  }
+
+  private ringDecisionChanged(created: boolean): void {
+    if (this.activeBatchDecisionChanges) {
+      this.activeBatchDecisionChanges.push(created);
+      return;
+    }
+    this.emitDecisionChanged(created);
+  }
+
+  private emitDecisionChanged(created: boolean): void {
+    try {
+      this.deps.onDecisionChanged?.(created);
+    } catch {
+      // Doorbells are hints; the persisted Inbox projection owns correctness.
     }
   }
 }

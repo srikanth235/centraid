@@ -195,7 +195,7 @@
     "agent-runtime.correctness": "packages/agent-runtime/src/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases.",
     "agent-runtime.security": "packages/agent-runtime/src/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases.",
     "agent-runtime.compat": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures.",
-    "blueprints.security": "packages/blueprints/src/consent-cards.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases.",
     "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion.",
     "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases.",
     "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases.",
@@ -517,7 +517,7 @@
       "tier": "scale"
     },
     "blueprints.security": {
-      "owner": "packages/blueprints/src/consent-cards.test.ts",
+      "owner": "packages/blueprints/src/untrusted-rendering.test.ts",
       "tier": "unit"
     },
     "blueprints.offline": {

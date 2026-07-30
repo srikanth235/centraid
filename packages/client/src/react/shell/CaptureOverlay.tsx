@@ -190,7 +190,7 @@ export function CaptureOverlay({
         );
         window.setTimeout(onClose, 550);
       } else if (outcome.status === "parked") {
-        setStatus("Saved for owner approval in Approvals.");
+        setStatus("Saved for owner approval in Inbox.");
       } else {
         setFailed(true);
         setStatus(outcome.reason ?? "The vault did not apply this capture.");

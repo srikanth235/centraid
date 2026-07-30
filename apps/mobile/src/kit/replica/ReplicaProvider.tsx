@@ -18,7 +18,10 @@ import type {
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
-import { syncDueNotifications } from "../../lib/notifications-core";
+import {
+  syncDueNotifications,
+  syncInboxNotifications,
+} from "../../lib/notifications-core";
 import { getDesktopName } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
@@ -306,6 +309,8 @@ export function ReplicaProvider({
           void scheduleDailyBriefNotification();
           for (const scope of scopes)
             void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
+          for (const scope of scopes)
+            void syncInboxNotifications(identity.auth.baseUrl, scope.vaultId);
         }
         if (cancelled) return;
         let connected = identity.online;

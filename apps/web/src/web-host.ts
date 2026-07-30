@@ -4,7 +4,11 @@ import type {
   CentraidSettings,
   CentraidTestConnectionInput,
 } from "../../../packages/client/src/centraid-api.js";
-import { pairGatewayOverIroh, purgeIrohDeviceState } from "./iroh-transport.js";
+import {
+  pairGatewayOverIroh,
+  purgeIrohDeviceState,
+  syncIrohWakeConfiguration,
+} from "./iroh-transport.js";
 import {
   isUpdateAvailable,
   onSwUpdateAvailable,
@@ -108,6 +112,7 @@ export function installWebHost(): void {
         endpointId: input.endpointId,
         rememberDevice: input.rememberDevice === true,
       });
+      void syncIrohWakeConfiguration();
       if (!next.rememberDevice) purgeTunnelCaches();
       const gatewayId = webGatewayId(next);
       publish(GATEWAY_EVENT, {
@@ -220,6 +225,7 @@ export function installWebHost(): void {
           label: response.gatewayName ?? "Web gateway",
           rememberDevice: input.rememberDevice ?? false,
         });
+        void syncIrohWakeConfiguration();
         if (input.rememberDevice !== true) purgeTunnelCaches();
         saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
         if (input.rememberDevice) void requestPersistentStorage();
@@ -364,6 +370,7 @@ export function installWebHost(): void {
       const connection = loadConnection();
       const previous = connection.vaultId;
       const next = saveConnection({ vaultId });
+      void syncIrohWakeConfiguration();
       if (previous !== vaultId) purgeTunnelCaches();
       publish(VAULT_EVENT, {
         activeGatewayId: "web",
@@ -454,5 +461,6 @@ export function installWebHost(): void {
   };
 
   window.CentraidApi = api as unknown as typeof window.CentraidApi;
+  void syncIrohWakeConfiguration();
   watchServiceWorkerUpdates();
 }

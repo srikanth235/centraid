@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
+import { scaffoldAppFiles } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.ts";
@@ -40,6 +41,23 @@ async function directoryBytes(dir: string): Promise<number> {
       })
     )
   ).reduce((total, size) => total + size, 0);
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 3_000
+): Promise<void> {
+  const startedAt = Date.now();
+  const waitForNext = async (): Promise<void> => {
+    if (predicate()) return;
+    if (Date.now() - startedAt > timeoutMs)
+      throw new Error("timed out waiting for gateway state");
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
+    });
+    return waitForNext();
+  };
+  return waitForNext();
 }
 
 /** Mount a handler on a bare loopback server with no auth in front. */
@@ -94,6 +112,87 @@ describe("build-gateway scenarios", () => {
     expect(
       (gateway as unknown as Record<string, unknown>).token
     ).toBeUndefined();
+  });
+
+  test("a failed automation fire writes and collapses its Inbox notice", async () => {
+    const appId = "broken-run";
+    const automationId = "nightly";
+    const automationRef = `${appId}/${automationId}`;
+    const store = await gateway.appsStore();
+    const sessionId = "inbox-failure";
+    const session = await store.openSession(sessionId);
+    await Promise.all(
+      scaffoldAppFiles(appId, {
+        automationId,
+        name: "Broken nightly",
+        triggers: [],
+      }).map(async (file) => {
+        const target = path.join(
+          session.worktreePath,
+          "apps",
+          appId,
+          file.path
+        );
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.writeFile(
+          target,
+          file.path.endsWith("/handler.js")
+            ? "export default async () => { throw new Error('expected automation failure'); };\n"
+            : file.content,
+          "utf8"
+        );
+      })
+    );
+    await store.publish({
+      sessionId,
+      appId,
+      message: "seed failing automation",
+    });
+    await store.closeSession(sessionId);
+    await gateway.syncApps();
+    await gateway.start("http://127.0.0.1:0");
+    const mounted = await mountUnauthed(gateway.composedHandler);
+    const fire = (): Promise<Response> =>
+      fetch(
+        `${mounted.url}/centraid/_automations/turn-now?ref=${automationRef}`,
+        { method: "POST" }
+      );
+    try {
+      expect((await fire()).status).toBe(202);
+      await waitFor(
+        () =>
+          gateway.vaults
+            .current()
+            .inbox.getBySource("automation", automationRef) !== undefined
+      );
+      expect(
+        gateway.vaults.current().inbox.getBySource("automation", automationRef)
+      ).toMatchObject({
+        headline: "Broken nightly failed",
+        count: 1,
+        severity: "high",
+        detail: {
+          outcome: "failure",
+          error: expect.stringContaining("expected automation failure"),
+          appId,
+          automationId,
+        },
+      });
+
+      expect((await fire()).status).toBe(202);
+      await waitFor(
+        () =>
+          gateway.vaults
+            .current()
+            .inbox.getBySource("automation", automationRef)?.count === 2
+      );
+      expect(
+        gateway.vaults.current().inbox.getBySource("automation", automationRef)
+          ?.count
+      ).toBe(2);
+    } finally {
+      await mounted.close();
+    }
   });
 
   test("a fresh data dir auto-founds Shared then Personal, and a second boot is a no-op (#603)", async () => {

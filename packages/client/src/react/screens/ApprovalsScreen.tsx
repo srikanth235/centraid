@@ -135,6 +135,23 @@ export interface ApprovalsActivityRowDTO {
   action: string;
 }
 
+export interface InboxNoticeRowDTO {
+  noticeId: string;
+  kind: string;
+  sourceRef: string;
+  headline: string;
+  detail: Record<string, unknown>;
+  detailText: string | null;
+  sourceLabel: string | null;
+  severity: "info" | "warning" | "high";
+  sourceType: "automation" | "agent" | "app";
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  readAt: string | null;
+  archivedAt: string | null;
+}
+
 export interface ApprovalsScreenProps {
   outbox: readonly ApprovalsOutboxRowDTO[];
   needsAuth: readonly ApprovalsNeedsAuthRowDTO[];
@@ -142,6 +159,7 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   activity: readonly ApprovalsActivityRowDTO[];
+  notices?: readonly InboxNoticeRowDTO[];
   /**
    * Whether the review feed was truncated at the current limit — drives the
    * in-place "See all" affordance (issue #552; no separate audit screen).
@@ -163,6 +181,9 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
+  onReadNotice?: (noticeId: string) => void;
+  onArchiveNotice?: (noticeId: string) => void;
+  onOpenNotice?: (notice: InboxNoticeRowDTO) => void;
   /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
 }
@@ -770,6 +791,63 @@ function InboxEmpty(): JSX.Element {
   );
 }
 
+function NoticeRow({
+  row,
+  busy,
+  onRead,
+  onArchive,
+  onOpen,
+}: {
+  row: InboxNoticeRowDTO;
+  busy: boolean;
+  onRead: () => void;
+  onArchive: () => void;
+  onOpen: () => void;
+}): JSX.Element {
+  return (
+    <article
+      className={styles.noticeRow}
+      data-severity={row.severity}
+      data-unread={row.readAt === null ? "true" : undefined}
+    >
+      <button type="button" className={styles.noticeBody} onClick={onOpen}>
+        <span className={styles.noticeHeadline}>
+          {row.headline}
+          {row.count > 1 ? ` ×${row.count}` : ""}
+        </span>
+        <span className={styles.noticeMeta}>
+          {row.kind.replaceAll("-", " ")}
+          {row.sourceLabel ? ` · ${row.sourceLabel}` : ""} ·{" "}
+          {new Date(row.lastAt).toLocaleString()}
+        </span>
+        {row.detailText ? (
+          <span className={styles.noticeDetail}>{row.detailText}</span>
+        ) : null}
+      </button>
+      <div className={styles.noticeActions}>
+        {row.readAt === null && row.archivedAt === null ? (
+          <Button
+            label="Mark read"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onRead}
+          />
+        ) : null}
+        {row.archivedAt === null ? (
+          <Button
+            label="Archive"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onArchive}
+          />
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function ApprovalsScreen(
   props: ApprovalsScreenProps
 ): JSX.Element {
@@ -780,6 +858,7 @@ export default function ApprovalsScreen(
     scopeRequests,
     grants,
     activity,
+    notices = [],
     activityTruncated = false,
     busyId,
     onApproveOutbox,
@@ -788,12 +867,18 @@ export default function ApprovalsScreen(
     onConfirmParked,
     onDecideScopeRequest,
     onRevokeGrant,
+    onReadNotice = () => undefined,
+    onArchiveNotice = () => undefined,
+    onOpenNotice = () => undefined,
     onSeeAllActivity,
   } = props;
   const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
+  const [inboxFilter, setInboxFilter] = useState<
+    "needs" | "automations" | "agents" | "apps" | "archived"
+  >("needs");
 
   const filteredActivity = useMemo(() => {
     if (activityFilter === "denied") {
@@ -802,11 +887,31 @@ export default function ApprovalsScreen(
     return activity;
   }, [activity, activityFilter]);
 
+  const activeNotices = notices.filter((notice) => notice.archivedAt === null);
+  const archivedNotices = notices.filter(
+    (notice) => notice.archivedAt !== null
+  );
+  const filteredNotices =
+    inboxFilter === "archived"
+      ? archivedNotices
+      : inboxFilter === "needs"
+        ? activeNotices
+        : activeNotices.filter(
+            (notice) =>
+              notice.sourceType ===
+              (inboxFilter === "automations"
+                ? "automation"
+                : inboxFilter === "agents"
+                  ? "agent"
+                  : "app")
+          );
+  const showDecisions = inboxFilter === "needs";
   const inboxEmpty =
     outbox.length === 0 &&
     needsAuth.length === 0 &&
     parked.length === 0 &&
-    scopeRequests.length === 0;
+    scopeRequests.length === 0 &&
+    activeNotices.length === 0;
   const totalCount =
     outbox.length + needsAuth.length + parked.length + scopeRequests.length;
 
@@ -817,25 +922,49 @@ export default function ApprovalsScreen(
           <span className={styles.titleIcon}>
             <Icon name="CheckCircle" size={18} strokeWidth={2} />
           </span>
-          <h1>Approvals</h1>
+          <h1>Inbox</h1>
         </div>
         <p className={styles.subtitle}>
           {totalCount > 0
             ? `${totalCount} waiting on you`
-            : "Everything the vault has staged or parked for your say-so."}
+            : activeNotices.length > 0
+              ? `${activeNotices.length} recent update${activeNotices.length === 1 ? "" : "s"}`
+              : "Decisions and updates from your automations, agents, and apps."}
         </p>
       </div>
 
-      {inboxEmpty ? (
+      <fieldset className={styles.inboxFilters} aria-label="Inbox filter">
+        {(
+          [
+            ["needs", "Needs me"],
+            ["automations", "Automations"],
+            ["agents", "Agents"],
+            ["apps", "Apps"],
+            ["archived", "Archived"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={styles.filterChip}
+            data-active={inboxFilter === value ? "true" : undefined}
+            onClick={() => setInboxFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </fieldset>
+
+      {inboxEmpty && inboxFilter === "needs" ? (
         <InboxEmpty />
       ) : (
         <div className={styles.groups}>
-          {outbox.length > 0 ? (
+          {showDecisions && totalCount > 0 ? (
             <section>
               <GroupHead
-                icon={<Icon name="Send" size={13} />}
-                label="Outbox"
-                count={outbox.length}
+                icon={<Icon name="CheckCircle" size={13} />}
+                label="Needs me"
+                count={totalCount}
               />
               <div className={styles.list}>
                 {outbox.map((row) => (
@@ -857,18 +986,6 @@ export default function ApprovalsScreen(
                     onDeny={() => onDenyOutbox(row.itemId)}
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {needsAuth.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="AlertTriangle" size={13} />}
-                label="Needs auth"
-                count={needsAuth.length}
-              />
-              <div className={styles.list}>
                 {needsAuth.map((row) => (
                   <NeedsAuthRow
                     key={row.connectionId}
@@ -876,18 +993,6 @@ export default function ApprovalsScreen(
                     onOpenSettings={onOpenSettings}
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {parked.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="Clock" size={13} />}
-                label="Parked"
-                count={parked.length}
-              />
-              <div className={styles.list}>
                 {parked.map((row) => (
                   <ParkedRow
                     key={row.invocationId}
@@ -906,18 +1011,6 @@ export default function ApprovalsScreen(
                     }
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {scopeRequests.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="Key" size={13} />}
-                label="Scope requests"
-                count={scopeRequests.length}
-              />
-              <div className={styles.list}>
                 {scopeRequests.map((row) => (
                   <ScopeRequestRow
                     key={row.requestId}
@@ -931,35 +1024,61 @@ export default function ApprovalsScreen(
               </div>
             </section>
           ) : null}
+
+          {filteredNotices.length > 0 ? (
+            <section>
+              <GroupHead
+                icon={<Icon name="Bell" size={13} />}
+                label={inboxFilter === "archived" ? "Archived" : "Updates"}
+                count={filteredNotices.length}
+              />
+              <div className={styles.list}>
+                {filteredNotices.map((notice) => (
+                  <NoticeRow
+                    key={notice.noticeId}
+                    row={notice}
+                    busy={busyId === notice.noticeId}
+                    onRead={() => onReadNotice(notice.noticeId)}
+                    onArchive={() => onArchiveNotice(notice.noticeId)}
+                    onOpen={() => onOpenNotice(notice)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : inboxFilter === "needs" ? null : (
+            <InboxEmpty />
+          )}
         </div>
       )}
 
-      <section className={styles.grantsSection}>
-        <GroupHead
-          icon={<Icon name="Key" size={13} />}
-          label="Standing grants"
-          count={grants.length}
-        />
-        {grants.length > 0 ? (
-          <div className={styles.grantsList}>
-            {grants.map((row) => (
-              <GrantRow
-                key={row.grantId}
-                row={row}
-                busy={busyId === row.grantId}
-                onRevoke={() => onRevokeGrant(row.grantId)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={styles.grantsEmpty}>
-            No standing grants yet — “always allow” on an outbox approval mints
-            one.
-          </p>
-        )}
-      </section>
+      {inboxFilter === "archived" ? (
+        <section className={styles.grantsSection}>
+          <GroupHead
+            icon={<Icon name="Key" size={13} />}
+            label="Standing grants"
+            count={grants.length}
+          />
+          {grants.length > 0 ? (
+            <div className={styles.grantsList}>
+              {grants.map((row) => (
+                <GrantRow
+                  key={row.grantId}
+                  row={row}
+                  busy={busyId === row.grantId}
+                  onRevoke={() => onRevokeGrant(row.grantId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className={styles.grantsEmpty}>
+              No standing grants yet — “always allow” on an outbox approval
+              mints one.
+            </p>
+          )}
+        </section>
+      ) : null}
 
-      {activity.length > 0 ? (
+      {inboxFilter === "archived" && activity.length > 0 ? (
         <section className={styles.grantsSection} data-testid="recent-activity">
           <div className={styles.activityHead}>
             <GroupHead

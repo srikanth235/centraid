@@ -648,10 +648,11 @@ const REVOKE_GRANT: CommandDefinition = {
         .prepare(
           `UPDATE outbox_item
               SET status = 'pending', decided_at = NULL, grant_id = NULL,
+                  staged_at = ?,
                   note = 'standing grant revoked before drain — awaiting a fresh decision'
             WHERE grant_id = ? AND status = 'approved'`
         )
-        .run(input.grant_id);
+        .run(ctx.now, input.grant_id);
       for (const item of undrained) ctx.wrote("outbox.item", item.item_id);
       ctx.cite({
         claim: `standing grant revoked; ${undrained.length} approved-but-undrained item(s) parked back to pending`,
@@ -714,10 +715,11 @@ const REPARK: CommandDefinition = {
     ctx.db
       .prepare(
         `UPDATE outbox_item
-            SET status = 'pending', decided_at = NULL, grant_id = NULL, note = coalesce(?, note)
+            SET status = 'pending', staged_at = ?, decided_at = NULL,
+                grant_id = NULL, note = coalesce(?, note)
           WHERE item_id = ?`
       )
-      .run(input.note ?? null, input.item_id);
+      .run(ctx.now, input.note ?? null, input.item_id);
     ctx.wrote("outbox.item", input.item_id);
     ctx.cite({
       claim: `approved outbox item parked back to pending${input.note ? ` — ${input.note}` : ""}`,

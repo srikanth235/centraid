@@ -16,9 +16,9 @@
  * supervised auto-restart (local-gateway.ts) gives up.
  *
  * It lives in main, not the renderer, so the watch survives navigation and
- * alerts land even when the window is backgrounded. State is in-memory and
- * per-launch; switching the active gateway resets tracking (the history
- * belongs to the gateway it was recorded against).
+ * alerts land even when the window is backgrounded. Live transition tracking
+ * is per-launch, while the alert history is durable and doubles as the Inbox
+ * projection queue for events observed while the gateway was unreachable.
  *
  * Wave 2 of #351 adds a fourth alert: the version handshake (previously
  * dead code — see version-handshake.ts) is now judged every tick for a
@@ -50,7 +50,10 @@ import type {
   GatewayVersionSkewAction,
 } from "./gateway-monitor-core.js";
 import { probeGateway } from "./gateway-monitor-probe.js";
-import { deriveOutageEvents } from "./gateway-outage-log-core.js";
+import {
+  deriveOutageEvents,
+  gatewayInboxEvent,
+} from "./gateway-outage-log-core.js";
 import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 import { loadOutageLog, persistOutageEvents } from "./gateway-outage-log.js";
 import {
@@ -114,6 +117,37 @@ const crashLoopNotified = new Set<string>();
  */
 let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
+/** Health events waiting for a reachable gateway's durable Inbox projection. */
+const pendingInboxEvents = new Map<string, OutageLogEvent[]>();
+/** Which durable histories have been queued for idempotent replay this launch. */
+const replayedInboxGateways = new Set<string>();
+
+async function flushGatewayInboxEvents(
+  gatewayId: string,
+  baseUrl: string,
+  token: string | undefined,
+  vaultId: string
+): Promise<void> {
+  const events = pendingInboxEvents.get(gatewayId);
+  if (!events?.length) return;
+  const response = await fetch(
+    new URL("/centraid/_vault/inbox/gateway-health", baseUrl),
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-centraid-vault": vaultId,
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ events: events.map(gatewayInboxEvent) }),
+    }
+  );
+  if (!response.ok)
+    throw new Error(
+      `Inbox gateway-health write returned HTTP ${response.status}`
+    );
+  pendingInboxEvents.delete(gatewayId);
+}
 
 function notify(action: GatewayAlertAction, label: string): void {
   if (!Notification.isSupported()) return;
@@ -350,6 +384,18 @@ async function tick(): Promise<void> {
     outageHistory = loadOutageLog();
     historyBootAt = Date.now();
   }
+  // The outage log is the durable queue while the gateway is unreachable.
+  // Rehydrate its bounded tail once per gateway each launch; the HTTP writer
+  // is idempotent by sourceRef, so already-projected history is a no-op.
+  const monitoredGatewayId = state.gatewayId;
+  if (!replayedInboxGateways.has(monitoredGatewayId)) {
+    const replay = outageHistory.filter(
+      (event) => event.gatewayId === monitoredGatewayId
+    );
+    if (replay.length > 0)
+      pendingInboxEvents.set(monitoredGatewayId, replay.slice(-100));
+    replayedInboxGateways.add(monitoredGatewayId);
+  }
   const newOutageEvents = deriveOutageEvents({
     prevStatus,
     prevHealthStatus,
@@ -361,6 +407,30 @@ async function tick(): Promise<void> {
     now: Date.now(),
   });
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
+  if (newOutageEvents.length > 0) {
+    const pending = pendingInboxEvents.get(state.gatewayId) ?? [];
+    pending.push(...newOutageEvents);
+    pendingInboxEvents.set(state.gatewayId, pending.slice(-100));
+  }
+  // Dual-write the already-derived monitor events into Inbox (#647). An
+  // outage event naturally waits until the gateway recovers, then lands with
+  // its original timestamp; the existing OS alert remains unchanged.
+  if (
+    probe.ok &&
+    settings?.gatewayUrl &&
+    settings.activeVaultId !== undefined
+  ) {
+    await flushGatewayInboxEvents(
+      state.gatewayId,
+      settings.gatewayUrl,
+      settings.gatewayToken,
+      settings.activeVaultId
+    ).catch((error) => {
+      process.stdout.write(
+        `[gateway-monitor] Inbox dual-write deferred: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    });
+  }
 
   // `componentAlerts`/`versionSkewAlertedAt` are internal dedupe bookkeeping
   // — not part of the wire snapshot (see GatewayRuntimeSnapshot's doc comment).

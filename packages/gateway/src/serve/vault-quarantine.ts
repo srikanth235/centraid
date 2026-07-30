@@ -72,18 +72,19 @@ export function applyRestoreQuarantine(
     typeof marker.restoredAt === "string" ? marker.restoredAt : "unknown";
   const sourceSeq =
     typeof marker.sourceSeq === "number" ? marker.sourceSeq : -1;
+  const quarantineAt = new Date().toISOString();
 
   const parked = db.vault
     .prepare(
       `UPDATE outbox_item
-         SET status = 'pending', decided_at = NULL, grant_id = NULL,
+         SET status = 'pending', decided_at = NULL, grant_id = NULL, staged_at = ?,
              note = 'restored from backup (source seq ${sourceSeq}) — reconfirm before it drains'
        WHERE status = 'approved'`
     )
-    .run();
+    .run(quarantineAt);
   const revoked = db.vault
     .prepare(`UPDATE outbox_grant SET revoked_at = ? WHERE revoked_at IS NULL`)
-    .run(new Date().toISOString());
+    .run(quarantineAt);
   const outboxParked = Number(parked.changes ?? 0);
   const outboxGrantsRevoked = Number(revoked.changes ?? 0);
 

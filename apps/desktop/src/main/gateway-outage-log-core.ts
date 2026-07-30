@@ -49,6 +49,60 @@ export interface OutageLogEvent {
   durationMs?: number;
 }
 
+export interface GatewayInboxEvent {
+  sourceRef: string;
+  headline: string;
+  severity: "info" | "warning" | "high";
+  at: string;
+  detail: Record<string, unknown>;
+}
+
+/**
+ * Project one durable monitor event into an idempotently replayable Inbox
+ * write. The event timestamp is part of the source identity: a recovery
+ * cannot overwrite the preceding high-severity outage before another client
+ * fetches it, and replaying alert history after a desktop restart is harmless.
+ */
+export function gatewayInboxEvent(event: OutageLogEvent): GatewayInboxEvent {
+  const headline =
+    event.kind === "recovered"
+      ? `${event.gatewayLabel} recovered`
+      : event.kind === "down"
+        ? `${event.gatewayLabel} is unreachable`
+        : event.kind === "degraded"
+          ? `${event.gatewayLabel} is degraded`
+          : event.kind === "version-skew"
+            ? `${event.gatewayLabel} has a version mismatch`
+            : `${event.gatewayLabel} has an unhealthy component`;
+  return {
+    sourceRef: [
+      event.gatewayId,
+      event.kind,
+      String(event.at),
+      event.detail ?? "",
+    ].join(":"),
+    headline,
+    severity:
+      event.kind === "recovered"
+        ? "info"
+        : event.kind === "degraded"
+          ? "warning"
+          : "high",
+    at: new Date(event.at).toISOString(),
+    detail: {
+      sourceType: "app",
+      gatewayId: event.gatewayId,
+      gatewayLabel: event.gatewayLabel,
+      outcome: event.kind,
+      ...(event.detail ? { detail: event.detail } : {}),
+      ...(event.durationMs === undefined
+        ? {}
+        : { durationMs: event.durationMs }),
+      deepLink: "/gateway/alerts",
+    },
+  };
+}
+
 /** Bound on the persisted log — a chatty gateway can't grow this file forever. */
 export const OUTAGE_LOG_CAP = 500;
 

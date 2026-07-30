@@ -60,6 +60,18 @@ export interface AutomationTemplate {
   triggerLabel?: string;
 }
 
+export interface AutomationTurnRow {
+  turnId: string;
+  triggerKind: string;
+  startedAt: number;
+  endedAt?: number;
+  ok: boolean;
+  error?: string;
+  summary?: string;
+  stepCount?: number;
+  toolCount?: number;
+}
+
 const V0_TEMPLATE_IDS = new Set([
   "google-gmail-pull",
   "google-calendar-pull",
@@ -209,6 +221,19 @@ export async function runAutomation(ref: string): Promise<string> {
     { headers: authHeader(), method: "POST" }
   );
   return body.turnId;
+}
+
+/** Native automation conversation turns, newest first. */
+export async function listAutomationTurns(
+  ref: string,
+  limit = 50
+): Promise<AutomationTurnRow[]> {
+  const base = await requireGatewayBase();
+  const body = await fetchJson<{ turns?: AutomationTurnRow[] }>(
+    `${base}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}&limit=${limit}`,
+    { headers: authHeader(), method: "GET" }
+  );
+  return body.turns ?? [];
 }
 
 /**

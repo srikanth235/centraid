@@ -18,6 +18,7 @@ import {
   setConversationArchived,
   setConversationPinned,
   syncWebDueNotifications,
+  syncWebInboxNotifications,
 } from "../../gateway-client.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
@@ -87,7 +88,7 @@ import { showUndoToast } from "./undoToast.js";
 import { useAppearance } from "./useAppearance.js";
 import { useAssistantConversations } from "./useAssistantConversations.js";
 import { useAsyncData } from "./useAsyncData.js";
-import { useBlockingCount } from "./useBlockingCount.js";
+import { useInboxCounts } from "./useBlockingCount.js";
 import { useBuilderEnabled } from "./useBuilderEnabled.js";
 import { useGatewayRuntime } from "./useGatewayRuntime.js";
 import { useMemberScopes } from "./useMemberScopes.js";
@@ -227,7 +228,8 @@ export default function App(): JSX.Element {
   >(() => new Set());
   const { isStarred, toggleStar } = useStarred();
   const memberScopes = useMemberScopes();
-  const blockingCount = useBlockingCount();
+  const inboxCounts = useInboxCounts();
+  const blockingCount = inboxCounts.decisionCount;
   const updateStatus = useUpdateStatus();
   // I12 / #501 — What's new re-wired to GitHub release notes (main changelog.ts).
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
@@ -324,6 +326,13 @@ export default function App(): JSX.Element {
   // here, and to redirect the builder routes below.
   const builderEnabled = useBuilderEnabled();
   const navRef = useRef<ShellNav | null>(null);
+  const initialShellRoute = useMemo<ShellRoute>(
+    () =>
+      new URL(window.location.href).searchParams.has("inbox")
+        ? { kind: "approvals" }
+        : { kind: "home" },
+    []
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(() =>
     new URL(window.location.href).searchParams.has("capture")
@@ -439,7 +448,10 @@ export default function App(): JSX.Element {
       if (
         (event.data as { type?: unknown } | null)?.type === "centraid:push-wake"
       )
-        void syncWebDueNotifications();
+        void Promise.all([
+          syncWebDueNotifications(),
+          syncWebInboxNotifications(),
+        ]);
     };
     navigator.serviceWorker?.addEventListener(
       "message",
@@ -800,6 +812,7 @@ export default function App(): JSX.Element {
           onConnectors={go({ kind: "connectors" })}
           onApprovals={go({ kind: "approvals" })}
           approvalsCount={blockingCount}
+          inboxHasUnreadNotices={inboxCounts.hasUnreadNotices}
           onGateway={go({ kind: "gateway" })}
           gatewayStatus={gatewayStatus}
           onHousehold={go({ kind: "household" })}
@@ -839,6 +852,7 @@ export default function App(): JSX.Element {
       memberScopes,
       gatewaySwitcherOpen,
       blockingCount,
+      inboxCounts.hasUnreadNotices,
       updateStatus,
       gatewayStatus,
       assistantConversations,
@@ -877,7 +891,7 @@ export default function App(): JSX.Element {
         case "approvals":
           return <ApprovalsRoute />;
         case "gateway":
-          return <GatewayRoute />;
+          return <GatewayRoute initialTab={nav.route.tab} />;
         case "household":
           return <HouseholdRoute />;
         case "storage":
@@ -1037,7 +1051,7 @@ export default function App(): JSX.Element {
   return (
     <>
       <ShellApp
-        initialRoute={{ kind: "home" }}
+        initialRoute={initialShellRoute}
         sidebarOpen={prefs.sidebarOpen}
         onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
         renderSidebar={renderSidebar}

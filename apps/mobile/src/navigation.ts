@@ -85,8 +85,8 @@ export type RootStackParamList = {
   Tally: undefined;
   AppDetail: { appId: string };
   Assistant: undefined;
-  Automations: undefined;
-  Insights: undefined;
+  Automations: { automationRef?: string } | undefined;
+  Insights: { initialTab?: "overview" | "alerts" } | undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList>;
 };
 

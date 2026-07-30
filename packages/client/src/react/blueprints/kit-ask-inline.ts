@@ -3,9 +3,8 @@ import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 // The inline "Ask your <app>" panel — the shell-side replacement for the served
 // kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
-// `streamTurn(appId, …, register:'ask')`, and any write the agent parks is
-// surfaced as an Approve/Discard consent card driven by the shell's
-// `vaultParked` / `confirmVaultParked`.
+// `streamTurn(appId, …, register:'ask')`. Any write the agent parks belongs to
+// the canonical Inbox; this conversational surface never forks decision state.
 //
 // Strictly online-only and lazy: `installInlineAsk` performs NO network on the
 // mount path (it only builds DOM + click handlers), so the route host can fire
@@ -13,14 +12,9 @@ import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 // to the gateway happens on user interaction.
 //
 // Scope note (issue #505 pilot): this is the single-conversation core — send,
-// stream, parked-write consent. Conversation history, the model picker and turn
+// stream. Conversation history, the model picker and turn
 // attachments (all present in the served panel) are follow-ups for the rollout.
-import {
-  confirmVaultParked,
-  createConversation,
-  streamTurn,
-  vaultParked,
-} from "../../gateway-client.js";
+import { createConversation, streamTurn } from "../../gateway-client.js";
 import type { TurnStreamEvent } from "../../gateway-client.js";
 import {
   providerConsentWire,
@@ -53,13 +47,11 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
   const panel = elFrom(
     '<div class="kit-ask-panel" role="dialog" aria-label="Ask" hidden>' +
       '<div class="kit-ask-log" aria-live="polite"></div>' +
-      '<div class="kit-ask-pending" hidden></div>' +
       '<form class="kit-ask-compose"><textarea class="kit-ask-input" rows="2"></textarea>' +
       '<button type="submit" class="kit-ask-send">Send</button></form>' +
       "</div>"
   );
   const log = panel.querySelector<HTMLElement>(".kit-ask-log")!;
-  const pending = panel.querySelector<HTMLElement>(".kit-ask-pending")!;
   const form = panel.querySelector<HTMLFormElement>(".kit-ask-compose")!;
   const input = panel.querySelector<HTMLTextAreaElement>(".kit-ask-input")!;
   if (config.placeholder) input.placeholder = config.placeholder;
@@ -78,38 +70,6 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
     return el;
-  };
-
-  const refreshParked = async (): Promise<void> => {
-    try {
-      const entries = (await vaultParked()).filter(
-        (entry) => entry.callerKind === "app"
-      );
-      pending.innerHTML = "";
-      pending.hidden = entries.length === 0;
-      for (const entry of entries) {
-        const card = elFrom(
-          '<div class="kit-ask-consent"><span></span>' +
-            '<button type="button" data-approve="1">Approve</button>' +
-            '<button type="button" data-approve="0">Discard</button></div>'
-        );
-        card.querySelector("span")!.textContent =
-          entry.command ?? "Proposed change";
-        for (const btn of card.querySelectorAll<HTMLButtonElement>("button")) {
-          btn.addEventListener("click", () => {
-            void confirmVaultParked({
-              approve: btn.dataset.approve === "1",
-              invocationId: entry.invocationId,
-            })
-              .then(() => refreshParked())
-              .catch(() => undefined);
-          });
-        }
-        pending.appendChild(card);
-      }
-    } catch {
-      /* offline / no vault plane — leave the pending strip as-is */
-    }
   };
 
   const onEvent =
@@ -186,7 +146,6 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
         error instanceof Error ? error.message : String(error)
       );
     }
-    await refreshParked();
   };
 
   form.addEventListener("submit", (event) => {
@@ -202,7 +161,6 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
     panel.hidden = !opening;
     if (opening) {
       input.focus();
-      void refreshParked();
     }
   });
 

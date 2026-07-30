@@ -6,6 +6,9 @@
 //       token here is only used for RN-side API fetches (listing apps,
 //       approvals); WebView loads against an authed gateway need the tunnel.
 
+import * as Crypto from "expo-crypto";
+import { fetch as expoFetch } from "expo/fetch";
+
 import { apps as BUILTIN_APPS, icons, palette } from "@centraid/design-tokens";
 import type {
   AppMetaResolved,
@@ -20,6 +23,7 @@ import { getActiveVaultId } from "./spaces";
 
 export const SETTINGS_KEY = "settings.gatewayUrl";
 export const SETTINGS_TOKEN_KEY = "settings.gatewayToken";
+const OAUTH_CLIENT_SESSION_KEY = "oauth.clientSession";
 
 /**
  * One row of `GET /centraid/_apps` — the worktree-store listing
@@ -47,6 +51,57 @@ export interface ParkedInvocation {
   /** Display name of the caller (consent.app.name for apps), or null. */
   caller: string | null;
   input: Record<string, unknown>;
+}
+
+export interface MobileInboxNotice {
+  noticeId: string;
+  kind: string;
+  sourceRef: string;
+  headline: string;
+  detail: Record<string, unknown>;
+  severity: "info" | "warning" | "high";
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  readAt: string | null;
+  archivedAt: string | null;
+}
+
+export interface MobileInbox {
+  decisions: {
+    count: number;
+    outbox: MobileInboxOutbox[];
+    needsAuth: Array<{
+      connectionId: string;
+      kind: string;
+      label: string;
+      note: string | null;
+      attentionAt: string;
+    }>;
+    parked: ParkedInvocation[];
+    scopeRequests: Array<{
+      requestId: string;
+      plane: "app" | "agent";
+      appId: string;
+      purpose: string;
+      requestedAt: string;
+      scopes: Array<{ schema: string; table?: string; verbs: string }>;
+    }>;
+  };
+  notices: MobileInboxNotice[];
+  unreadNoticeCount: number;
+}
+
+export interface MobileInboxOutbox {
+  itemId: string;
+  actor: string | null;
+  actorKind: string;
+  verb: string;
+  target: string;
+  artifact: Record<string, unknown>;
+  stagedAt: string;
+  connection: { kind: string; label: string };
+  canEdit: boolean;
 }
 
 export class GatewayError extends Error {
@@ -241,6 +296,130 @@ export async function listParked(): Promise<ParkedInvocation[]> {
     }
   );
   return body.parked;
+}
+
+export async function getInbox(includeArchived = false): Promise<MobileInbox> {
+  const base = await requireGatewayBase();
+  return fetchJson<MobileInbox>(
+    `${base}/centraid/_vault/inbox${includeArchived ? "?include_archived=true" : ""}`,
+    { headers: apiHeaders(), method: "GET" }
+  );
+}
+
+/** Content-free Inbox SSE doorbell; callers re-fetch the canonical payload. */
+export async function subscribeMobileInboxChanges(
+  onChange: () => void,
+  signal: AbortSignal
+): Promise<void> {
+  const base = await requireGatewayBase();
+  const response = await expoFetch(`${base}/centraid/_vault/inbox/events`, {
+    headers: apiHeaders({ accept: "text/event-stream" }),
+    method: "GET",
+    signal,
+  });
+  if (!response.ok || !response.body)
+    throw new Error(`Inbox events returned HTTP ${response.status}`);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const readNext = async (): Promise<void> => {
+    if (signal.aborted) return;
+    const next = await reader.read();
+    if (next.done) return;
+    buffer += decoder
+      .decode(next.value, { stream: true })
+      .replaceAll("\r\n", "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      if (frame.split("\n").some((line) => line === "event: inbox-changed"))
+        onChange();
+      boundary = buffer.indexOf("\n\n");
+    }
+    return readNext();
+  };
+  await readNext();
+}
+
+export async function decideInboxOutbox(
+  itemId: string,
+  decision: "approve" | "discard",
+  options: {
+    artifact?: Record<string, unknown>;
+    alwaysAllow?: boolean;
+  } = {}
+): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson(
+    `${base}/centraid/_vault/outbox/${encodeURIComponent(itemId)}`,
+    {
+      body: JSON.stringify({
+        decision,
+        ...(options.artifact ? { artifact: options.artifact } : {}),
+        ...(options.alwaysAllow ? { always_allow: true } : {}),
+      }),
+      headers: apiHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }
+  );
+}
+
+export async function decideInboxScope(
+  requestId: string,
+  approve: boolean
+): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson(
+    `${base}/centraid/_vault/scope-requests/${encodeURIComponent(requestId)}`,
+    {
+      body: JSON.stringify({ approve }),
+      headers: apiHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }
+  );
+}
+
+/** Begin the canonical connection re-authorization flow from a needs-auth row. */
+export async function beginInboxConnectionAuthorization(
+  connectionId: string
+): Promise<string> {
+  const base = await requireGatewayBase();
+  let clientSessionId = await Store.hydrate<string>(
+    OAUTH_CLIENT_SESSION_KEY,
+    ""
+  );
+  if (!/^[A-Za-z0-9_-]{32,128}$/u.test(clientSessionId)) {
+    clientSessionId = Crypto.randomUUID();
+    Store.set(OAUTH_CLIENT_SESSION_KEY, clientSessionId);
+  }
+  const body = await fetchJson<{ auth_url: string }>(
+    `${base}/centraid/_vault/connections/${encodeURIComponent(connectionId)}/authorize`,
+    {
+      body: JSON.stringify({ surface: "web" }),
+      headers: apiHeaders({
+        "content-type": "application/json",
+        "x-centraid-client-session": clientSessionId,
+      }),
+      method: "POST",
+    }
+  );
+  return body.auth_url;
+}
+
+export async function updateMobileInboxNotice(
+  noticeId: string,
+  action: "read" | "archive"
+): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson(
+    `${base}/centraid/_vault/inbox/notices/${encodeURIComponent(noticeId)}`,
+    {
+      body: JSON.stringify({ action }),
+      headers: apiHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }
+  );
 }
 
 /** Approve or deny one parked invocation. */

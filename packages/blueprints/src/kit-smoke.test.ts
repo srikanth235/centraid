@@ -296,6 +296,51 @@ describe("kit smoke", () => {
     expect(updates).toStrictEqual([]);
   });
 
+  it("routes parked tool outcomes to Inbox without rendering consent controls", async () => {
+    window.centraid = { appId: "todo" };
+    document.querySelector(".kit-ask-history-new").click();
+    const stream = [
+      'event: tool.result\ndata: {"type":"tool.result","result":{"outcome":{"status":"parked","invocationId":"inv-1"}}}',
+      'event: tool.result\ndata: {"type":"tool.result","result":{"outcome":{"status":"denied","reason":"scope missing"}}}',
+      "event: end\ndata: {}",
+      "",
+    ].join("\n\n");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) =>
+        String(input).includes("/sessions")
+          ? new Response(JSON.stringify({ id: "conversation-1" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
+          : new Response(stream, {
+              status: 200,
+              headers: { "content-type": "text/event-stream" },
+            })
+      );
+    try {
+      const input = document.querySelector(".kit-ask-input");
+      const compose = document.querySelector(".kit-ask-compose");
+      input.value = "Send the update";
+      compose.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true })
+      );
+      expect(compose.dataset.busy).toBe("true");
+      await vi.waitFor(() => {
+        expect(compose.dataset.busy).toBe("false");
+      });
+      const log = document.querySelector(".kit-ask-log");
+      expect(log.textContent).toContain("That decision is waiting in Inbox.");
+      expect(log.textContent).toContain(
+        "The vault denied that write: scope missing"
+      );
+      expect(log.querySelector(".kit-ask-action")).toBeNull();
+    } finally {
+      fetchMock.mockRestore();
+      delete window.centraid;
+    }
+  });
+
   it("KitElement subclasses render light DOM and stamp data-kit-host", () => {
     class SmokeCard extends KitElement {
       static readonly properties = { label: { type: String } };
