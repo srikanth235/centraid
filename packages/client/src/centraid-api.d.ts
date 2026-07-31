@@ -877,6 +877,15 @@ interface CentraidApi {
    */
   restartGateway: () => Promise<{ ok: boolean; error?: string }>;
   /**
+   * Clear the local gateway supervisor's give-up state and re-attempt the
+   * START (issue #660). Backs the startup error screen's "Try again", which
+   * is shown before any navigation exists — `restartGateway` cannot serve it,
+   * because that call resolves the active gateway first and resolving it is
+   * exactly what fails. Optional: only a host that OWNS a local gateway has
+   * anything to retry, so the web host does not define it.
+   */
+  retryGatewayStart?: () => Promise<{ ok: boolean; error?: string }>;
+  /**
    * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
    * it through a native save dialog (issue #351). `canceled` when the user
    * dismissed the dialog.
