@@ -51,35 +51,29 @@ test.afterEach(async () => {
 
 // ─────────────────────────── §12 Settings ───────────────────────────
 
-test("12.1 — picking an accent in Appearance applies it live and saves to the gateway", async () => {
+test("12.1 — picking a theme in Appearance applies it live and saves to the gateway", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
 
-    const before = await page.evaluate(() =>
-      document.documentElement.style.getPropertyValue("--accent")
-    );
-    // Click an accent swatch that isn't the current one. The swatches are the
-    // radios of the "Accent" radiogroup (SettingsAppearanceScreen.tsx:134-152);
-    // index 2 is Violet, never the default (teal, appearance.ts:14).
-    const swatches = page
-      .getByRole("radiogroup", { name: "Accent" })
-      .getByRole("radio");
-    await swatches.nth(2).click();
+    // Accent swatches were removed in the #608 consolidation. Theme is a
+    // three-position Segmented control (role=tablist "Appearance") with
+    // Light / Dark / Match system — default is dark (appearance.ts).
+    const appearance = page.getByRole("tablist", { name: "Appearance" });
+    await appearance.getByRole("tab", { name: "Light" }).click();
     await expect
-      .poll(() =>
-        page.evaluate(() =>
-          document.documentElement.style.getPropertyValue("--accent")
-        )
-      )
-      .not.toBe(before);
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe("light");
     // The change is persisted to the gateway prefs store.
     await expect
       .poll(() =>
         gateway.calls.some(
-          (c) => c.method === "PUT" && c.pathname === "/_centraid-user/prefs"
+          (c) =>
+            c.method === "PUT" &&
+            c.pathname === "/_centraid-user/prefs" &&
+            /"themeMode"\s*:\s*"light"/u.test(c.body ?? "")
         )
       )
       .toBe(true);
@@ -94,20 +88,19 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    await page
-      .getByRole("radiogroup", { name: "Accent" })
-      .getByRole("radio")
-      .nth(3)
-      .click();
-    const accent = await page.evaluate(() =>
-      document.documentElement.style.getPropertyValue("--accent")
-    );
+    // Density is a standing control on the same page (folded in from Layout);
+    // compact is never the default (regular), so a reload that restores it
+    // proves the prefs write path rather than the shipped default.
+    const density = page.getByRole("tablist", { name: "Density" });
+    await density.getByRole("tab", { name: "compact" }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.density))
+      .toBe("compact");
     await page.reload();
     await waitForHome(page);
-    const after = await page.evaluate(() =>
-      document.documentElement.style.getPropertyValue("--accent")
-    );
-    expect(after).toBe(accent);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.density))
+      .toBe("compact");
   } finally {
     await closeApp(app);
   }
@@ -121,20 +114,20 @@ test("12.6 — an explicit dark theme survives a full Electron restart", async (
     await launched.page
       .getByTestId("settings-page")
       .waitFor({ state: "visible" });
-    // The theme presets are the radios of the "Color theme" radiogroup
-    // (SettingsAppearanceScreen.tsx:76-102); `dark` is also the shipped default
-    // (appearance.ts:13-21), so pass through Centraid Light first — otherwise
-    // "survives a restart" would be satisfied by the default alone.
-    const themes = launched.page.getByRole("radiogroup", {
-      name: "Color theme",
+    // Theme is the "Appearance" Segmented tablist (SettingsAppearanceScreen);
+    // `dark` is also the shipped default (appearance.ts), so pass through
+    // Light first — otherwise "survives a restart" would be satisfied by the
+    // default alone.
+    const themes = launched.page.getByRole("tablist", {
+      name: "Appearance",
     });
-    await themes.getByRole("radio", { name: "Centraid Light" }).click();
+    await themes.getByRole("tab", { name: "Light" }).click();
     await expect
       .poll(() =>
         launched.page.evaluate(() => document.documentElement.dataset.theme)
       )
       .toBe("light");
-    await themes.getByRole("radio", { name: "Centraid Dark" }).click();
+    await themes.getByRole("tab", { name: "Dark" }).click();
     await expect
       .poll(() =>
         launched.page.evaluate(() => document.documentElement.dataset.theme)
@@ -165,19 +158,24 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
 
-    await page.getByRole("button", { name: "Match system" }).click();
+    // Match system is a standing position on the Appearance Segmented control,
+    // not a one-shot button (#608).
+    await page
+      .getByRole("tablist", { name: "Appearance" })
+      .getByRole("tab", { name: "Match system" })
+      .click();
     // A concrete theme is applied to the document root…
     await expect
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
       .toMatch(/^(?:light|dark)$/u);
-    // …and the choice is mirrored to the gateway prefs store with a theme key.
+    // …and the choice is mirrored to the gateway prefs store with the mode.
     await expect
       .poll(() =>
         gateway.calls.some(
           (c) =>
             c.method === "PUT" &&
             c.pathname === "/_centraid-user/prefs" &&
-            /"theme"/u.test(c.body ?? "")
+            /"themeMode"\s*:\s*"system"/u.test(c.body ?? "")
         )
       )
       .toBe(true);

@@ -32,11 +32,22 @@ describe("embedded-gateway-layout scenarios", () => {
     };
   }
 
-  async function seedFreshPricingCache(root: string): Promise<void> {
-    // The live pricing warmer is deliberately background/non-blocking. Pin the
-    // same fresh cache in both fixture roots so this layout test measures
-    // desktop/headless ownership rather than racing an unrelated network fetch
-    // (or letting that fetch write after teardown).
+  /**
+   * Quiet the boot warmers so this suite never depends on network or on local
+   * coding-agent CLIs being present.
+   *
+   * - PricingWarmer (#445) refreshes LiteLLM into `model-pricing.json` when the
+   *   host pins a cache path and the on-disk table is stale/absent. A fresh
+   *   fixture file skips the fetch entirely.
+   * - CatalogWarmer enumerates runner models into `model-catalog.json` after a
+   *   successful CLI probe; an empty seeded catalog is still a valid file so a
+   *   later merge only rewrites contents.
+   *
+   * Tree comparison still *excludes* both paths (see `treeShape`): a warm that
+   * finishes after `close()` can create the catalog file on only one side, and
+   * layout parity is about desktop/headless ownership, not warmer timing.
+   */
+  async function seedWarmerCaches(root: string): Promise<void> {
     const cacheDir = path.join(root, "cache");
     await fs.mkdir(cacheDir, { recursive: true });
     await fs.writeFile(
@@ -51,7 +62,17 @@ describe("embedded-gateway-layout scenarios", () => {
         },
       })}\n`
     );
+    await fs.writeFile(
+      path.join(cacheDir, "model-catalog.json"),
+      `${JSON.stringify({ version: 2, runners: {} }, null, 2)}\n`
+    );
   }
+
+  /** Cache files whose presence is a warmer race, not a layout ownership signal. */
+  const WARMER_CACHE_FILES = new Set([
+    path.join("cache", "model-catalog.json"),
+    path.join("cache", "model-pricing.json"),
+  ]);
 
   async function treeShape(root: string, relative = ""): Promise<string[]> {
     const entries = await fs.readdir(path.join(root, relative), {
@@ -60,6 +81,7 @@ describe("embedded-gateway-layout scenarios", () => {
     const result = await Promise.all(
       entries.map(async (entry) => {
         const child = path.join(relative, entry.name);
+        if (WARMER_CACHE_FILES.has(child)) return [];
         const row = `${entry.isDirectory() ? "d" : "f"}:${child}`;
         return entry.isDirectory()
           ? [row, ...(await treeShape(root, child))]
@@ -101,8 +123,8 @@ describe("embedded-gateway-layout scenarios", () => {
     const headlessRoot = await tempDir("headless-layout-");
     roots.push(desktopRoot, headlessRoot);
     await Promise.all([
-      seedFreshPricingCache(desktopRoot),
-      seedFreshPricingCache(headlessRoot),
+      seedWarmerCaches(desktopRoot),
+      seedWarmerCaches(headlessRoot),
     ]);
     const protector = aesGcmKeyProtector(Buffer.alloc(32, 0x42));
     const desktop = await startDesktopEmbeddedGateway({
@@ -136,7 +158,7 @@ describe("embedded-gateway-layout scenarios", () => {
     // and expect the two auto-founded vaults with no ceremony in between.
     const root = await tempDir("desktop-embedded-autofound-");
     roots.push(root);
-    await seedFreshPricingCache(root);
+    await seedWarmerCaches(root);
     const gateway = await startDesktopEmbeddedGateway({
       dataDir: root,
       paths: pathsFor(root),

@@ -82,15 +82,23 @@ A five-slice adversarial review of the first snapshot surfaced two blockers, fou
 - **Visual pass from the approved mock:** palette-hued correspondent tiles and kind icons on notice rows, severity pills and an unread dot replacing the off-system colored left rail, a failure-streak strip with duration phrasing ("failing for 6 days") replacing the bare `×N`, and flat-notice/elevated-decision surface contrast (also fixing the undefined `--surface` token).
 - **Glossary:** the Approvals→Inbox identifier dual is recorded in the known-dual-vocabulary table.
 
+### Main-CI baseline fixes (observed on this PR, pre-existing on main)
+
+- **Stale Appearance desktop e2e.** Four `settings-gateways.spec.ts` cases still targeted the pre-#608 Accent radiogroup and "Centraid Light/Dark" radios / Match-system button. Updated to the shipped Appearance Segmented control (`tablist` "Appearance", Light/Dark/Match system) and density persistence; refreshed `SCENARIOS.md` §12 rows.
+- **Non-deterministic embedded-gateway layout tree.** `embedded-gateway-layout.test.ts` tree comparison raced boot warmers: PricingWarmer (#445) and CatalogWarmer can write `cache/model-pricing.json` / `cache/model-catalog.json` after `close()` on only one side. Seed both warmer caches and exclude those two paths from `treeShape` so layout parity is network- and CLI-independent.
+
 ### Changed files
 
 ```text
 .gitignore
 CHANGELOG.md
+apps/desktop/src/main/embedded-gateway-layout.test.ts
 apps/desktop/src/main/gateway-monitor.ts
 apps/desktop/src/main/gateway-outage-log-core.test.ts
 apps/desktop/src/main/gateway-outage-log-core.ts
 apps/desktop/src/main/gateway-outage-log.ts
+apps/desktop/tests/e2e/SCENARIOS.md
+apps/desktop/tests/e2e/settings-gateways.spec.ts
 apps/mobile/ios/Podfile.lock
 apps/mobile/native-fingerprints.json
 apps/mobile/package.json
@@ -257,17 +265,24 @@ bun run check:full
 - Gateway, vault, client, mobile, desktop, and blueprints typechecks passed.
 - `bun run coverage`: passed 811 test files / 6,833 tests; the blueprints-kit branch group is 40.57% (37% floor).
 - `bun run check:pr`: passed on the final code snapshot — 730 test files passed (1 skipped), 5,982 tests passed (7 skipped), and changed-line coverage was 86.6% (1,057/1,220).
-- `bun run check:full`: install/static gates, the repeated PR gate, full affected-dependent tests, repository coverage, mutation selection, and all low-end performance budgets passed. Its desktop e2e lane passed 50 tests (4 skipped) but then failed four stale Appearance tests that still query the Accent radiogroup and old theme labels; `origin/main` already requires exactly two themes and no accent controls, and none of the three Appearance/e2e source files is changed here.
-- `bun run --cwd apps/web e2e`: passed all 14 tests after the desktop baseline failure prevented `check:full` from reaching this final lane.
+- `bun run check:full`: install/static gates, the repeated PR gate, full affected-dependent tests, repository coverage, mutation selection, and all low-end performance budgets passed. Desktop e2e originally failed four stale Appearance tests (Accent radiogroup / old theme labels leftover from #608); those specs are fixed on this branch (see below) so the lane is green end-to-end.
+- `bun run --cwd apps/web e2e`: passed all 14 tests.
 - Manual desktop/mobile-simulator notification interaction was not run in this headless worktree; the delivery, local composition, dedupe, action, SSE, and opaque-payload paths are covered by automated client and route gates.
 
 ### Review-fix round verification (2026-07-31)
 
 - Per-slice suites after the fixes: gateway 182 files / 1,254 tests passed (6 skipped); automation 25 files / 376 passed; blueprints 48 files / 659 passed; client full suite 193 files / 1,488 passed; mobile 58 files / 326 passed; desktop 27 files / 244 passed. Typecheck clean on all six packages.
 - Sabotage checks: each behavioral fix (kit outcome shapes, D3 pinning, keepPreviousData + focus, notification seeding/visibility, paused-skip suppression, doorbell coalescing) was reverted in isolation and made its new tests fail, then restored.
-- `bun run check:pr` re-run on the combined snapshot: every static gate green (format, lint, lint:types after two switch-exhaustiveness fixes, knip, css/design-token/protocol lints, matrix, ratchets, native-state); `test:affected` green except `apps/desktop/src/main/embedded-gateway-layout.test.ts`, which fails identically on unmodified `origin/main` in network-connected environments (the #445 model-catalog warmer races test shutdown and adds `cache/model-catalog.json` to one tree) — pre-existing, environment-dependent, green in CI, and filed for a deterministic fix.
+- `bun run check:pr` re-run on the combined snapshot: every static gate green (format, lint, lint:types after two switch-exhaustiveness fixes, knip, css/design-token/protocol lints, matrix, ratchets, native-state).
 - `check:diff-coverage` (the local preview of CI's authoritative `verify` coverage job, per its own header) ran 5,689 tests with 3 failures under the full 10-project instrumented sweep — `wal.integration.test.ts` G5 ×2 and `install-over-http.test.ts` union listing — all timing-sensitive suites that pass 24/24 in isolation both with and without `--coverage` on this snapshot; consistent with the documented local concurrency-saturation flakes. CI `verify` on the pushed snapshot is the arbiter.
 - `expo-web-browser@~57.0.2` added for the mobile reconnect fix; `pod install` delta is the six ExpoWebBrowser lines, and `verify-native-state` reports pod lock, project paths, and iOS/Android fingerprints in agreement.
+
+### Main-CI baseline fixes landed on this branch (2026-07-31)
+
+Pre-existing reds on `main` (and therefore on this PR's gate) that were observed during review, not caused by the Inbox work:
+
+- **Appearance e2e staleness (#608 residual).** Updated `apps/desktop/tests/e2e/settings-gateways.spec.ts` (and `SCENARIOS.md`) to the consolidated Appearance UI: no Accent radiogroup, theme is a Segmented `tablist` labelled "Appearance" with Light / Dark / Match system. Full desktop e2e lane: **54 passed, 4 skipped**.
+- **Layout tree non-determinism (#445 warmer race).** `embedded-gateway-layout.test.ts` now seeds both warmer caches and excludes `cache/model-catalog.json` + `cache/model-pricing.json` from `treeShape`, so desktop vs headless tree comparison is network- and CLI-independent. Focused suite: **2 passed**.
 
 ## Audit
 
