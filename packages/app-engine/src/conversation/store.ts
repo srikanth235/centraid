@@ -1066,9 +1066,13 @@ export class ConversationStore {
       1,
       Math.min(options.limit ?? MAX_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS)
     );
+    const beforeSeq = options.beforeSeq ?? null;
     const rows = stmts.listTurnsWindow.all(
       conversationId,
-      options.beforeSeq ?? null,
+      // Bound twice: the SQL tests the cursor for NULL and then compares
+      // against it, and anonymous placeholders take one value each.
+      beforeSeq,
+      beforeSeq,
       // One past the window: its presence IS `hasMore`.
       limit + 1
     ) as unknown as RawTurn[];
@@ -1093,10 +1097,14 @@ export class ConversationStore {
     range: TurnSeqRange = {}
   ): Map<string, Item[]> {
     const { stmts } = this.ensureReady();
+    const fromSeq = range.fromSeq ?? null;
+    const toSeq = range.toSeq ?? null;
     const rows = stmts.listItemsForConversation.all(
       conversationId,
-      range.fromSeq ?? null,
-      range.toSeq ?? null
+      fromSeq,
+      fromSeq,
+      toSeq,
+      toSeq
     ) as unknown as RawItem[];
     const byTurn = new Map<string, Item[]>();
     for (const raw of rows) {
@@ -1118,10 +1126,14 @@ export class ConversationStore {
     range: TurnSeqRange = {}
   ): Map<string, Attachment[]> {
     const { stmts } = this.ensureReady();
+    const fromSeq = range.fromSeq ?? null;
+    const toSeq = range.toSeq ?? null;
     const rows = stmts.listAttachmentsForConversation.all(
       conversationId,
-      range.fromSeq ?? null,
-      range.toSeq ?? null
+      fromSeq,
+      fromSeq,
+      toSeq,
+      toSeq
     ) as unknown as RawAttachment[];
     const byItem = new Map<string, Attachment[]>();
     for (const raw of rows) {

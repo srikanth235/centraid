@@ -503,15 +503,22 @@ export function prepare(db: DatabaseSync): PreparedStatements {
      * the beginning of their conversation and silently hidden the recent part.
      * A transcript opens to its tail; that is the end the limit must keep.
      *
-     * `?2 IS NULL` means "from the live end". One row past the limit is fetched
-     * so `hasMore` is answered by the same query rather than a second COUNT.
+     * A NULL cursor means "from the live end". One row past the limit is
+     * fetched so `hasMore` is answered by the same query rather than a second
+     * COUNT.
+     *
+     * Anonymous `?` with the cursor bound TWICE, matching every other statement
+     * in this file (see `listTurnsFiltered`). Numbered `?N` placeholders are not
+     * positionally bindable on the pinned Node's `node:sqlite` — it throws
+     * "column index out of range" — so the repeated value is the portable form,
+     * not a stylistic preference.
      */
     listTurnsWindow: db.prepare(`
       SELECT * FROM (
         SELECT * FROM turns
-         WHERE conversation_id = ?1 AND (?2 IS NULL OR seq < ?2)
+         WHERE conversation_id = ? AND (? IS NULL OR seq < ?)
          ORDER BY seq DESC
-         LIMIT ?3
+         LIMIT ?
       ) ORDER BY seq ASC
     `),
     listTurnsFiltered: db.prepare(`
@@ -607,9 +614,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // within a turn, so the folded transcript is byte-identical either way.
     listItemsForConversation: db.prepare(`
       SELECT i.* FROM items i JOIN turns t ON t.id = i.turn_id
-      WHERE t.conversation_id = ?1
-        AND (?2 IS NULL OR t.seq >= ?2)
-        AND (?3 IS NULL OR t.seq <= ?3)
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
       ORDER BY t.seq ASC, i.ordinal ASC, i.started_at ASC
     `),
     messageInText: db.prepare(
@@ -635,9 +642,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT a.* FROM attachments a
         JOIN items i ON a.item_id = i.id
         JOIN turns t ON t.id = i.turn_id
-      WHERE t.conversation_id = ?1
-        AND (?2 IS NULL OR t.seq >= ?2)
-        AND (?3 IS NULL OR t.seq <= ?3)
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
       ORDER BY a.created_at ASC
     `),
     // The blob-GC live set (issue #190) UNIONED with every hash an archived

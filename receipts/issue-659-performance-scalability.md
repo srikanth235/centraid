@@ -511,6 +511,7 @@ Full paths, for the file-coverage rule.
 - `tests/experience-budgets/gateway.json`
 - `tests/experience-budgets/mobile.json`
 - `tests/experience-budgets/web.json`
+- `scripts/accessibility-contract.test.mjs`
 
 ## Decisions
 
@@ -583,6 +584,30 @@ list runs at half the display's refresh rate, which is broken on any device and
 needs no measurement — with the intended 5% parked until a device run produces a
 distribution. The alternative, inventing plausible numbers and labelling them
 measured, is the failure this issue exists to end.
+
+**Two defects were found by the pre-push gate, not by the package suites, and
+both are worth recording.** First, `listTurnsWindow` and its two sibling
+statements used numbered `?N` placeholders. `node:sqlite` accepts positional
+binding for those on Node 22 but rejects it on Node 24 — the version this repo
+pins — so the same SQL with the same three arguments returned rows locally and
+threw `column index out of range` under the pin. The argument count was never
+wrong; the placeholder style was. They now use the anonymous `?` house pattern
+with the value repeated, matching every other statement in `store-sql.ts`, and a
+comment records why so nobody "tidies" it back. A sweep confirmed these three
+were the only numbered-placeholder SQL in the tree.
+
+The reason this survived four green reports is the more useful finding: a
+package-scoped `bun run test` does **not** enforce the Node pin — only
+`lint:node-version` does, and that is not part of any package's `test` script.
+So a suite can pass against a runtime the product does not ship on. Second, the
+accessibility contract test greps source text for `cachePolicy="memory-disk"` in
+`PhotoTimeline.tsx`, which the photo-grid extraction moved behind
+`gridImageProps()` — and deliberately made conditional, since device-addressed
+sources now use `memory` rather than writing a disk copy of a photo the device
+already stores. Restoring the literal would have reintroduced the duplicate
+writes, so the contract test was rewritten to assert the tier in `grid-image.ts`
+and the spread at every grid surface, which also brought `PhotosLibrary.tsx`
+under the check for the first time.
 
 **A repo-wide `oxfmt` ran by accident mid-session** and reformatted 19 files
 outside the lane that triggered it (`docs/coding-standards.md` and files under
@@ -755,6 +780,7 @@ The session transcript contains:
 | claude-code-f31b02a1-75f-1785525860-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 574 | 257347 | 148 | 724 | 0.1360 | 432 | 937128 | 39249352 | 256708 | x (#659) |
 | claude-code-f31b02a1-75f-1785525907-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 163 | 257921 | 152 | 317 | 0.1338 | 434 | 937291 | 39507273 | 256860 | x (#659) |
 | claude-code-f31b02a1-75f-1785525967-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 4 | 446 | 516168 | 956 | 1406 | 0.2848 | 438 | 937737 | 40023441 | 257816 | test(perf): experience budgets, drift gating, year-3 scale rigs and probes (#659 |
+| claude-code-f31b02a1-75f-1785529822-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 102 | 63800 | 15364551 | 32313 | 96215 | 8.8894 | 582 | 1017300 | 61665573 | 300446 | fix(app-engine): bind transcript window with anonymous placeholders for the pinn |
 
 ### Steering
 

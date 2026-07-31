@@ -462,6 +462,55 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     store.close();
   });
 
+  // Every binding shape of the three windowed statements, in one place.
+  // `listTurnsWindow` and the two range-scoped reads bind a value TWICE per
+  // nullable filter; a wrong argument count throws "column index out of range"
+  // only on the paths that actually reach the statement, so an unwindowed-only
+  // test would have missed it. This is the regression that shipped: numbered
+  // `?N` placeholders bound positionally work on Node 22 and throw on Node 24.
+  it("binds every window and range shape without a parameter mismatch", () => {
+    const store = newStore();
+    const conversationId = seedTurns(store, 8);
+
+    // listTurnsWindow — cursor absent, cursor present, and limit at the cap.
+    expect(() => store.listTurnWindow(conversationId)).not.toThrow();
+    expect(() =>
+      store.listTurnWindow(conversationId, { limit: 3 })
+    ).not.toThrow();
+    expect(() =>
+      store.listTurnWindow(conversationId, { limit: 3, beforeSeq: 5 })
+    ).not.toThrow();
+    // …and the unwindowed listTurns, which now routes through the same SQL.
+    expect(store.listTurns(conversationId).map((t) => t.seq)).toStrictEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+
+    // The two range reads: no bounds, both bounds, and each bound alone —
+    // the partial shapes are expressible even though `seqRangeOf` never emits
+    // them, so they are bound and must not throw.
+    const ranges = [
+      {},
+      { fromSeq: 2, toSeq: 5 },
+      { fromSeq: 4 },
+      { toSeq: 3 },
+    ] as const;
+    for (const range of ranges) {
+      expect(() => store.listItemsByTurn(conversationId, range)).not.toThrow();
+      expect(() =>
+        store.listAttachmentsByItem(conversationId, range)
+      ).not.toThrow();
+    }
+
+    // And the bounds actually filter, rather than being silently ignored.
+    expect(store.listItemsByTurn(conversationId, {}).size).toBe(8);
+    expect(
+      store.listItemsByTurn(conversationId, { fromSeq: 2, toSeq: 5 }).size
+    ).toBe(4);
+    expect(store.listItemsByTurn(conversationId, { fromSeq: 6 }).size).toBe(2);
+    expect(store.listItemsByTurn(conversationId, { toSeq: 1 }).size).toBe(2);
+    store.close();
+  });
+
   it("scopes the batched item read to the window, not the whole thread", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 20);
