@@ -245,6 +245,51 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
     store.close();
   });
 
+  it("every message across many turns stays searchable, and a deleted one stops matching", () => {
+    const provider = newProvider();
+    const store = new ConversationStore(provider);
+    const conv = store.createConversation({
+      kind: "chat",
+      userId: "u1",
+      appId: "_assistant",
+      title: "Long thread",
+    });
+    // Issue #659 G4 made the FTS body incremental. The law it must not break:
+    // the searchable body is still every inbound message in the thread, in
+    // order — not just the newest one and not a stale prefix.
+    const words = ["alpha", "bravo", "charlie", "delta", "echo"];
+    words.forEach((word, index) => {
+      const turnId = `${conv.id}-t${index}`;
+      store.insertTurn({
+        turnId,
+        conversationId: conv.id,
+        triggerKind: "interactive",
+        startedAt: index + 1,
+      });
+      store.insertMessageIn({
+        turnId,
+        role: "user",
+        text: `message about ${word}`,
+        startedAt: index + 1,
+      });
+    });
+    for (const word of words) {
+      expect(
+        store.searchConversations("u1", word).map((h) => h.id)
+      ).toStrictEqual([conv.id]);
+    }
+
+    // Deleting a turn (prune) must retire that turn's words from the index.
+    provider().prepare("DELETE FROM turns WHERE id = ?").run(`${conv.id}-t2`);
+    expect(store.searchConversations("u1", "charlie")).toStrictEqual([]);
+    for (const word of ["alpha", "bravo", "delta", "echo"]) {
+      expect(
+        store.searchConversations("u1", word).map((h) => h.id)
+      ).toStrictEqual([conv.id]);
+    }
+    store.close();
+  });
+
   it("the FTS index survives a store reopen and backfills pre-existing rows", () => {
     const provider = newProvider();
     const s1 = new ConversationStore(provider);

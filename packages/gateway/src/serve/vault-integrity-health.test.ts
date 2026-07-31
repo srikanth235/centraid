@@ -2,7 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createVaultIntegrityHealthProbe } from "./vault-integrity-health.js";
+import {
+  createVaultIntegrityHealthProbe,
+  integrityIntervalFor,
+} from "./vault-integrity-health.js";
 
 const dbs: DatabaseSync[] = [];
 function memDb(): DatabaseSync {
@@ -19,6 +22,67 @@ describe("vault-integrity-health", () => {
   });
 
   describe(createVaultIntegrityHealthProbe, () => {
+    // Issue #659 L6: an hourly full-file scan per vault does not scale with the
+    // vault or with the number of vaults, and it must not land during boot.
+    it("scans at most one vault per tick, so N vaults never line up into one scan", async () => {
+      const scanned: string[] = [];
+      const traced = (id: string): DatabaseSync => {
+        const db = memDb();
+        const original = db.prepare.bind(db);
+        db.prepare = ((sql: string) => {
+          if (sql === "PRAGMA quick_check") scanned.push(id);
+          return original(sql);
+        }) as typeof db.prepare;
+        return db;
+      };
+      let now = 0;
+      const probe = createVaultIntegrityHealthProbe({
+        vaults: () => [
+          { vaultId: "vault-a", vault: traced("a"), journal: memDb() },
+          { vaultId: "vault-b", vault: traced("b"), journal: memDb() },
+          { vaultId: "vault-c", vault: traced("c"), journal: memDb() },
+        ],
+        intervalMs: 60_000,
+        now: () => now,
+      });
+      await probe();
+      expect(scanned).toHaveLength(1);
+      now = 1;
+      await probe();
+      expect(scanned).toHaveLength(2);
+    });
+
+    it("does not scan anything inside the startup grace", async () => {
+      let now = 0;
+      let scans = 0;
+      const db = memDb();
+      const original = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (sql === "PRAGMA quick_check") scans += 1;
+        return original(sql);
+      }) as typeof db.prepare;
+      const probe = createVaultIntegrityHealthProbe({
+        vaults: () => [{ vaultId: "vault-a", vault: db, journal: memDb() }],
+        intervalMs: 60_000,
+        startupGraceMs: 300_000,
+        now: () => now,
+      });
+      await probe();
+      expect(scans).toBe(0);
+      now = 300_001;
+      await probe();
+      expect(scans).toBe(1);
+    });
+
+    it("stretches the cadence with vault size and floors it for a small one", () => {
+      const hour = 3_600_000;
+      expect(integrityIntervalFor(1024, hour)).toBe(hour);
+      expect(integrityIntervalFor(64 * 1024 * 1024, hour)).toBe(hour);
+      expect(integrityIntervalFor(256 * 1024 * 1024, hour)).toBe(4 * hour);
+      // Never rarer than daily, however large the vault gets.
+      expect(integrityIntervalFor(500 * 1024 ** 3, hour)).toBe(24 * hour);
+    });
+
     it("reports ok with no vaults mounted", async () => {
       const probe = createVaultIntegrityHealthProbe({ vaults: () => [] });
       const result = await probe();

@@ -127,7 +127,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
         "fts_conversation_conv_ad",
         "fts_conversation_conv_ai",
         "fts_conversation_conv_au",
+        "fts_conversation_item_ad",
         "fts_conversation_item_ai",
+        "fts_conversation_turn_ad",
       ]);
     } finally {
       db.close();
@@ -273,6 +275,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
     const pathLocal = freshDbPath();
     const legacy = openJournalDb(pathLocal);
     legacy.exec("DROP VIEW run_summary");
+    // A file old enough to lack items.effort also predates every index that
+    // names it (#659 G8's run-rollup covering index).
+    legacy.exec("DROP INDEX IF EXISTS idx_items_run_rollup");
     legacy.exec("ALTER TABLE items DROP COLUMN effort");
     legacy.exec("ALTER TABLE conversation_digest DROP COLUMN efforts_json");
     legacy.close();

@@ -749,6 +749,12 @@ The session transcript contains:
 | claude-code-f31b02a1-75f-1785525553-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 241 | 252727 | 156 | 399 | 0.1318 | 409 | 927234 | 35930413 | 251571 | x (#659) |
 | claude-code-f31b02a1-75f-1785525597-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 171 | 252968 | 161 | 334 | 0.1316 | 411 | 927405 | 36183381 | 251732 | x (#659) |
 | claude-code-f31b02a1-75f-1785525660-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 10 | 6361 | 1269901 | 2735 | 9106 | 0.7431 | 421 | 933766 | 37453282 | 254467 | perf(mobile): SQL pushdown, lazy screens, AppState-gated polling, windowed lists |
+| claude-code-f31b02a1-75f-1785525708-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 4 | 502 | 512288 | 434 | 940 | 0.2702 | 425 | 934268 | 37965570 | 254901 | test(perf): experience budgets, drift gating, year-3 scale rigs and probes (#659 |
+| claude-code-f31b02a1-75f-1785525758-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 285 | 256395 | 159 | 446 | 0.1340 | 427 | 934553 | 38221965 | 255060 | x (#659) |
+| claude-code-f31b02a1-75f-1785525812-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 3 | 2001 | 770040 | 1500 | 3504 | 0.4350 | 430 | 936554 | 38992005 | 256560 | test(perf): experience budgets, drift gating, year-3 scale rigs and probes (#659 |
+| claude-code-f31b02a1-75f-1785525860-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 574 | 257347 | 148 | 724 | 0.1360 | 432 | 937128 | 39249352 | 256708 | x (#659) |
+| claude-code-f31b02a1-75f-1785525907-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 163 | 257921 | 152 | 317 | 0.1338 | 434 | 937291 | 39507273 | 256860 | x (#659) |
+| claude-code-f31b02a1-75f-1785525967-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 4 | 446 | 516168 | 956 | 1406 | 0.2848 | 438 | 937737 | 40023441 | 257816 | test(perf): experience budgets, drift gating, year-3 scale rigs and probes (#659 |
 
 ### Steering
 

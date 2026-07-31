@@ -1,0 +1,88 @@
+{
+  "_comment": "Perceived-latency budgets for gateway-backed flows, stated from the vault owner's seat. The gateway's MACHINE-cost budgets (request p99, RSS, event-loop lag, fsyncs per write, idle churn) already live in packages/gateway/benchmarks/low-end-budgets.json and stay there — this file is the symptom layer above them. See README.md for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
+  "surface": "gateway",
+  "metrics": {
+    "sendToFirstToken": {
+      "status": "unmeasured",
+      "volume": "n/a — no deterministic provider stub exists",
+      "probe": "NONE TODAY. This is the single most-felt latency in the product and the repo cannot measure it: every runner path in tests/perf/agent-turn.perf.test.ts measures DISPATCH throughput (2,000 runner dispatches), not the interval between the owner pressing send and the first token rendering. Closing it needs a stub ACP runner that emits its first token after a fixed delay, so the measurement is the gateway's + client's dead time with the provider held constant."
+    },
+    "reconnectToFresh": {
+      "status": "unmeasured",
+      "volume": "50,000 replica rows",
+      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures a windowed bootstrap with an in-flight deletion, which is the closest existing signal; the perceived number needs the change-stream resume path timed from disconnect to first correct frame."
+    },
+    "requestToFirstByte": {
+      "status": "measured",
+      "volume": "empty vault, 60 serial GETs of /centraid/_apps",
+      "probe": "tests/perf/gateway-request.perf.test.ts",
+      "ceilingP95Ms": 120,
+      "_provenance": {
+        "at": "2026-07-19",
+        "host": "darwin arm64, gateway in a forked child (tests/perf/fixtures/gateway-idle-server.mjs)",
+        "observedP95Ms": 40,
+        "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/gateway/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile.",
+        "headroom": "~3x observed"
+      }
+    },
+    "year3RestoreSeconds": {
+      "status": "measured",
+      "volume": "10 GiB of CAS bytes + 95,640 FK-checked rows (90,640 core_content_item + 5,000 core_party)",
+      "probe": "tests/scale/restore-10gib.scale.test.ts (opt-in: CENTRAID_SCALE_RESTORE_GIB=10, own nightly job)",
+      "ceilingSeconds": 180,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64 (local NVMe), LocalBackupProvider",
+        "observedRestoreSeconds": 55.4,
+        "observedSnapshotSeconds": 152.4,
+        "note": "MEASURED — this replaces a guess. Before #659 the largest restore the repo had ever executed was ~160 MiB, and the year-3 restore time was unmeasured. A 10 GiB vault comes back in 55 s on local NVMe. CI disks and a network provider are materially slower, hence a ceiling of ~3x observed. NOTE the asymmetry: taking the snapshot costs 152 s, nearly 3x the restore — chunking + AEAD on the way in is the expensive direction.",
+        "headroom": "~3.2x observed (local-disk measurement, CI/network provider will be slower)"
+      }
+    },
+    "restoreForeignKeyCheckMs": {
+      "status": "measured",
+      "volume": "95,640 rows in the restored vault.db (73 MB file), year-3 row counts",
+      "probe": "tests/scale/restore-10gib.scale.test.ts — timed alone on a freshly opened connection so neither pragma warms the other's page cache",
+      "ceilingMs": 2000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64",
+        "observedForeignKeyCheckMs": 21.2,
+        "observedIntegrityCheckMs": 784.9,
+        "note": "MEASURED, and the answer is reassuring: foreign_key_check — the O(rows) full-table walk that packages/backup/src/wal-restore.ts runs inside every restore, and the suspected year-3 cliff — costs 21 ms at year-3 row volume. integrity_check is 37x more expensive at 785 ms, and BOTH together are ~1.5% of the 55 s restore. The honesty check in the restore path is not the thing to optimise. Ceiling is generous on purpose: it fences a genuine cliff (a missing parent index turning the walk quadratic), not runner jitter."
+      }
+    },
+    "fiveVaultFootprint": {
+      "status": "measured",
+      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Shared + Personal auto-founded per #603, plus one personal vault per member)",
+      "probe": "tests/scale/multi-vault-footprint.scale.test.ts",
+      "maxSummedPageCacheBytes": 32768000,
+      "maxSummedMmapBytes": 134217728,
+      "minPerFileCacheBytes": 524288,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64",
+        "observedSummedPageCacheBytes": 32768000,
+        "observedSummedMmapBytes": 134217720,
+        "observedSmallestPerFileCacheBytes": 3276800,
+        "observedPageCacheIfStillPerFile": 163840000,
+        "observedRssPerAdditionalVaultBytes": 10104832,
+        "note": "MEASURED. The reservations are now FLAT in vault count: five vaults under one host budget reserve 32,768,000 B of page cache — exactly one default vault's worth — where the pre-#659 per-file constants would have reserved 163,840,000 B, a 5x reduction. Every one of the 10 handles still gets 3.28 MB, well above the 512 KiB floor. THE CAVEAT THAT MATTERS: reservations are not residency. Each additional mounted vault still costs ~10.1 MB of RSS at idle (connection state + bootstrap DDL, not the page cache, which SQLite fills lazily), so resident memory is still linear in vault count even though the budget is not. Measured on idle, freshly bootstrapped vaults that were never read — treat 10.1 MB as a floor.",
+        "headroom": "none — the ceilings ARE the host totals (DEFAULT_VAULT_FOOTPRINT), not observed + slack"
+      }
+    },
+    "perceptualHashSweepAtYear3": {
+      "status": "measured",
+      "volume": "90,000 photo assets, 3,000 near-duplicate families",
+      "probe": "tests/scale/phash-clustering.scale.test.ts",
+      "ceilingMs": 30000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64",
+        "observedColdSweepMs": 9000,
+        "observedIdleSweepMs": 145,
+        "note": "MEASURED by the #659 vault agent on a real run; cited, not re-derived. This is the audit's worst find (an hourly O(n^2) clustering pass) now bounded at the declared year-3 photo volume. It is a background sweep, so the owner-facing symptom is battery and a hot fan rather than a stalled screen — but at O(n^2) it was a stalled gateway."
+      }
+    }
+  }
+}

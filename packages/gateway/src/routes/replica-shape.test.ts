@@ -843,6 +843,12 @@ describe("replica-shape suite", () => {
     });
 
     vault.start();
+    // The first sweep is deferred one immediate off the mount critical path
+    // (issue #659 G10) — it must still RUN, just not inside start(). Queueing
+    // behind it is what "shortly after startup" means now.
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
 
     expect(
       currentReplicaLogState(vault.db.vault).floor.seq

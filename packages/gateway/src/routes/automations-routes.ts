@@ -44,7 +44,11 @@ import type {
   TurnStreamEvent,
   RunnerKind,
 } from "@centraid/app-engine";
-import { isRunnerKind, parseTurnAttachmentRefs } from "@centraid/app-engine";
+import {
+  isRunnerKind,
+  parseTurnAttachmentRefs,
+  SseStream,
+} from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
 import { journalConversationStore } from "../journal-stores.js";
@@ -227,9 +231,11 @@ export function makeAutomationsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.write(`: turn ${turnId}\n\n`);
+    // Bounded writer (issue #659 G6) — a paused viewer is dropped, not buffered.
+    const stream = new SseStream(res);
+    stream.comment(`turn ${turnId}`);
     const heartbeat = setInterval(() => {
-      if (!res.writableEnded) res.write(`: ping\n\n`);
+      stream.comment("ping");
     }, 30_000);
     heartbeat.unref?.();
 
@@ -250,9 +256,7 @@ export function makeAutomationsRouteHandler(
       ev: AutomationTurnStreamEvent,
       serialized = JSON.stringify(ev)
     ): void => {
-      if (res.writableEnded) return;
-      res.write(`event: ${ev.type}\n`);
-      res.write(`data: ${serialized}\n\n`);
+      stream.event(ev.type, serialized);
     };
 
     // Buffer live events that land during replay; drain once the snapshot is
@@ -522,15 +526,15 @@ export function makeAutomationsRouteHandler(
           "X-Accel-Buffering": "no",
           "X-Centraid-Turn-Id": turnId,
         });
-        res.write(`: automation ${row.ref} turn ${turnId}\n\n`);
+        // Bounded writer (issue #659 G6).
+        const stream = new SseStream(res);
+        stream.comment(`automation ${row.ref} turn ${turnId}`);
         const heartbeat = setInterval(() => {
-          if (!res.writableEnded) res.write(`: ping\n\n`);
+          stream.comment("ping");
         }, 30_000);
         heartbeat.unref?.();
         const onEvent = (event: TurnStreamEvent): void => {
-          if (res.writableEnded) return;
-          res.write(`event: ${event.type}\n`);
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          stream.event(event.type, JSON.stringify(event));
         };
         try {
           await opts.runInteractiveTurn({
@@ -555,10 +559,8 @@ export function makeAutomationsRouteHandler(
           req.off("close", onClose);
           req.off("error", onClose);
           releaseSlot();
-          if (!res.writableEnded) {
-            res.write("event: end\ndata: {}\n\n");
-            res.end();
-          }
+          stream.event("end", "{}");
+          stream.end();
         }
         return true;
       }

@@ -376,6 +376,11 @@ jobs:
           node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
+          # #659 R3c — per-launch cold start (volume-proof times 20 launches as
+          # one sum, which is unreadable as an experience) and the Photos
+          # scroll-settle proxy.
+          node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()
@@ -694,7 +699,7 @@ jobs:
   # rigs cannot consume the report job's 35-minute budget or prevent coverage
   # and report rendering from starting when this lane is red.
   quality-performance-scale:
-    needs: [web-e2e]
+    needs: [web-e2e, desktop-e2e]
     if: >
       always() && (
         github.event_name != 'workflow_dispatch' ||
@@ -713,6 +718,16 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: nightly-evidence-web
+          path: artifacts
+      # #659 R3b — the REAL Electron launch is measured in the desktop-e2e job
+      # (vitest cannot start Electron on a display-less runner) and consumed
+      # here by tests/perf/desktop-launch.perf.test.ts, exactly as the PWA
+      # waterfall report is.
+      - name: Restore desktop launch evidence
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-evidence-desktop
           path: artifacts
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -746,6 +761,42 @@ jobs:
             exit 1
           fi
 
+  # #659 S3 — year-3 restore. Backup honesty is a product promise and the
+  # restore time at 10 GiB was a guess until this job ran it. Its own job
+  # because 10 GiB of chunk + AEAD + restore does not fit the 30-minute
+  # quality-performance-scale budget, and it must never touch the PR lane.
+  restore-year3:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/scale
+          key: quality-history-restore-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: quality-history-restore-${{ runner.os }}-
+      - run: bun run build
+      # ~25 GiB of scratch is needed for the source vault, the provider store
+      # and the restore destination. A runner that cannot spare it fails here
+      # with a clear message rather than mid-restore.
+      - name: Report free disk before the run
+        run: df -h .
+      - name: Restore a 10 GiB year-3 vault
+        env:
+          CENTRAID_SCALE_RESTORE_GIB: "10"
+        run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-restore
+          path: artifacts/
+          retention-days: 14
+
   test-health-report:
     needs:
       [
@@ -758,6 +809,7 @@ jobs:
         pairing-cross-network-relay,
         mutation-testing,
         quality-performance-scale,
+        restore-year3,
       ]
     if: >
       always() && (
@@ -998,6 +1050,7 @@ jobs:
         pairing-cross-network-relay,
         mutation-testing,
         quality-performance-scale,
+        restore-year3,
         test-health-report,
       ]
     # #557 — `cancelled` counts as red. A runner that dies or a job aborted

@@ -240,6 +240,32 @@ export function conversationMatchExpression(query: string): string | null {
  * producer can forget; producers capping their own output is defense in depth,
  * not a substitute.
  */
+/**
+ * Hard ceilings on the two unbounded ORDER BYs the request path used to run
+ * (issue #659 G11). Neither is a page size — they are the point past which a
+ * single response stops being renderable at all, so raising them is a product
+ * decision and not a tuning knob. Real pagination for transcripts is tracked as
+ * the client-side half of #659 G5.
+ */
+export const MAX_TRANSCRIPT_TURNS = 2000;
+
+/** One page of a transcript — see `ConversationStore.listTurnWindow`. */
+export interface TurnWindow {
+  /** The page's turns, oldest-first. */
+  turns: Turn[];
+  /** An older turn exists before this page. */
+  hasMore: boolean;
+  /** `seq` of the page's oldest turn — the cursor for the next page. */
+  oldestSeq?: number;
+}
+
+/** Inclusive `turns.seq` bounds for the batched conversation-wide reads. */
+export interface TurnSeqRange {
+  fromSeq?: number;
+  toSeq?: number;
+}
+export const MAX_LISTED_CONVERSATIONS = 500;
+
 const RAW_JSON_MAX_BYTES = 64 * 1024;
 
 /** A value this short is an identifier, not a payload — worth keeping. */
@@ -451,7 +477,8 @@ export class ConversationStore {
     const rows = stmts.listConversations.all(
       userId,
       appId ?? null,
-      appId ?? null
+      appId ?? null,
+      MAX_LISTED_CONVERSATIONS
     ) as unknown as (RawConversation & {
       msg_count: number;
     })[];
@@ -1007,11 +1034,103 @@ export class ConversationStore {
     );
   }
 
-  /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */
-  listTurns(conversationId: string): Turn[] {
+  /**
+   * The NEWEST turns of a conversation, oldest-first (seq ASC) — a transcript
+   * opens to its tail, so that is the end the ceiling keeps (issue #659 G5).
+   *
+   * `limit` is a real ceiling, not a hint: the read is on the transcript
+   * request path and a thread grows without bound. The default is the
+   * whole-transcript cap rather than a page size, so a caller that asks for no
+   * window still gets the whole thread of any realistic conversation.
+   */
+  listTurns(conversationId: string, limit = MAX_TRANSCRIPT_TURNS): Turn[] {
+    return this.listTurnWindow(conversationId, { limit }).turns;
+  }
+
+  /**
+   * One page of a transcript, newest-first by window and oldest-first within
+   * it (issue #659 G5).
+   *
+   * `beforeSeq` walks strictly backwards: a page returns only turns with
+   * `seq < beforeSeq`, so successive pages never overlap and never skip.
+   * `hasMore` says whether an older turn exists before this page — answered by
+   * over-fetching one row rather than a second COUNT — and `oldestSeq` is the
+   * cursor for the next page.
+   */
+  listTurnWindow(
+    conversationId: string,
+    options: { limit?: number; beforeSeq?: number } = {}
+  ): TurnWindow {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listTurnsAsc.all(conversationId) as unknown as RawTurn[];
-    return rows.map(turnFromRaw);
+    const limit = Math.max(
+      1,
+      Math.min(options.limit ?? MAX_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS)
+    );
+    const rows = stmts.listTurnsWindow.all(
+      conversationId,
+      options.beforeSeq ?? null,
+      // One past the window: its presence IS `hasMore`.
+      limit + 1
+    ) as unknown as RawTurn[];
+    // The over-fetched row is the OLDEST of the descending pick, so it lands
+    // first once the subquery re-sorts ascending.
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(1) : rows;
+    const turns = page.map(turnFromRaw);
+    return {
+      turns,
+      hasMore,
+      ...(turns.length > 0 ? { oldestSeq: turns[0]!.seq } : {}),
+    };
+  }
+
+  /**
+   * Every item of a conversation, grouped by turn — ONE query (issue #659 G5).
+   * Replaces `listItems` called once per turn while folding a transcript.
+   */
+  listItemsByTurn(
+    conversationId: string,
+    range: TurnSeqRange = {}
+  ): Map<string, Item[]> {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listItemsForConversation.all(
+      conversationId,
+      range.fromSeq ?? null,
+      range.toSeq ?? null
+    ) as unknown as RawItem[];
+    const byTurn = new Map<string, Item[]>();
+    for (const raw of rows) {
+      const item = itemFromRaw(raw);
+      const bucket = byTurn.get(item.turnId);
+      if (bucket) bucket.push(item);
+      else byTurn.set(item.turnId, [item]);
+    }
+    return byTurn;
+  }
+
+  /**
+   * Every attachment of a conversation, grouped by item — ONE query (#659 G5).
+   * Most threads have none, so the per-item lookup it replaces was pure
+   * overhead paid once per rendered message.
+   */
+  listAttachmentsByItem(
+    conversationId: string,
+    range: TurnSeqRange = {}
+  ): Map<string, Attachment[]> {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listAttachmentsForConversation.all(
+      conversationId,
+      range.fromSeq ?? null,
+      range.toSeq ?? null
+    ) as unknown as RawAttachment[];
+    const byItem = new Map<string, Attachment[]>();
+    for (const raw of rows) {
+      const attachment = attachmentFromRaw(raw);
+      const bucket = byItem.get(attachment.itemId);
+      if (bucket) bucket.push(attachment);
+      else byItem.set(attachment.itemId, [attachment]);
+    }
+    return byItem;
   }
 
   /** Newest-first, filtered turns of a conversation — the activity feed. */

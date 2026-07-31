@@ -3,6 +3,7 @@
 // isn't exported, and these are small + handler-shaped, so they live
 // here rather than reaching across packages.
 
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -152,7 +153,14 @@ export function sendJson(
   status: number,
   body: unknown
 ): true {
-  const bytes = Buffer.from(JSON.stringify(body));
+  return sendJsonBytes(res, status, Buffer.from(JSON.stringify(body)));
+}
+
+function sendJsonBytes(
+  res: ServerResponse,
+  status: number,
+  bytes: Buffer
+): true {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   const encoding =
@@ -174,6 +182,53 @@ export function sendJson(
   compressor.once("error", (error) => res.destroy(error));
   Readable.from(bytes).pipe(compressor).pipe(res);
   return true;
+}
+
+/**
+ * Conditional-GET flavour of {@link sendJson} — the server half of the client's
+ * `If-None-Match` revalidation (issue #659 M5's gateway counterpart).
+ *
+ * The ETag is a strong validator over the SERIALIZED RESPONSE, mirroring
+ * blob-read-route.ts, which tags a blob with its content sha256. Deriving it
+ * from the payload is the point: a timestamp or a poll counter would change
+ * without the content changing (defeating the 304) or, worse, stay the same
+ * while the content changed (serving a stale body forever). Hashing costs a
+ * few microseconds on responses of this size and saves the whole body.
+ *
+ * A request with no `If-None-Match` gets exactly the bytes `sendJson` would
+ * have sent, plus the `ETag` header it needs to revalidate next time.
+ */
+export function sendJsonConditional(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  body: unknown
+): true {
+  const bytes = Buffer.from(JSON.stringify(body));
+  const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
+  res.setHeader("ETag", etag);
+  const presented = req.headers["if-none-match"];
+  const header = Array.isArray(presented) ? presented.join(",") : presented;
+  if (header !== undefined && matchesEtag(header, etag)) {
+    res.statusCode = 304;
+    res.removeHeader("Content-Type");
+    res.end();
+    return true;
+  }
+  return sendJsonBytes(res, status, bytes);
+}
+
+/**
+ * RFC 9110 If-None-Match: `*`, or any member of the comma-separated list. Our
+ * etags are quoted hex, so a split+trim parse is exact — and a `W/` prefix is
+ * accepted because the weak comparison function is the one this header uses.
+ */
+function matchesEtag(header: string, etag: string): boolean {
+  const trimmed = header.trim();
+  if (trimmed === "*") return true;
+  return trimmed
+    .split(",")
+    .some((token) => token.trim().replace(/^W\//u, "") === etag);
 }
 
 /** Generic 500 for an unexpected error (route-specific senders wrap this). */

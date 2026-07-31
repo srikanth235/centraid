@@ -255,6 +255,49 @@ describe(validateManifest, () => {
     const m: Manifest = validateManifest(raw);
     expect(m.history.keep).toStrictEqual({ count: 100 });
   });
+
+  // Issue #659 L9: `keep: "all"` disabled retention entirely, so a per-minute
+  // automation grew the vault's journal without any bound at all.
+  it('rejects history.keep "all" — run history may not be unbounded', () => {
+    // Capture in the branch, assert outside it: every assertion below runs on
+    // every execution, so a validator that stopped throwing fails loudly at
+    // `toBeInstanceOf` instead of silently skipping the catch block.
+    let thrown: unknown;
+    try {
+      validateManifest(baseManifest({ history: { keep: "all" } }));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ManifestError);
+    expect((thrown as ManifestError).code).toBe("invalid_history");
+    // The error names the bounded alternatives rather than just refusing.
+    expect((thrown as ManifestError).message).toContain("{count:N}");
+  });
+
+  it("rejects a numeric retention large enough to mean the same thing", () => {
+    expect(() =>
+      validateManifest(baseManifest({ history: { keep: { count: 10_001 } } }))
+    ).toThrow(/count may not exceed/u);
+    expect(() =>
+      validateManifest(baseManifest({ history: { keep: { days: 366 } } }))
+    ).toThrow(/days may not exceed/u);
+    // The ceilings themselves are legal.
+    expect(
+      validateManifest(baseManifest({ history: { keep: { count: 10_000 } } }))
+        .history.keep
+    ).toStrictEqual({ count: 10_000 });
+    expect(
+      validateManifest(baseManifest({ history: { keep: { days: 365 } } }))
+        .history.keep
+    ).toStrictEqual({ days: 365 });
+  });
+
+  it('still accepts the bounded "errors" mode', () => {
+    expect(
+      validateManifest(baseManifest({ history: { keep: "errors" } })).history
+        .keep
+    ).toBe("errors");
+  });
 });
 
 describe(parseManifest, () => {

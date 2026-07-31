@@ -34,12 +34,17 @@ import type {
   VaultBridge,
   VaultWorkspace,
 } from "@centraid/app-engine";
-import { uuidv7, VaultSchemaAheadError } from "@centraid/vault";
+import {
+  uuidv7,
+  VaultSchemaAheadError,
+  applyVaultFootprint,
+} from "@centraid/vault";
 import type {
   BlobStoreSettings,
   S3Credentials,
   PreviewCodec,
   KeyStore,
+  VaultFootprintBudget,
 } from "@centraid/vault";
 
 import { vaultContext } from "./vault-context.js";
@@ -120,6 +125,14 @@ export interface VaultRegistryOptions {
   shouldDeferBackgroundWork?: () => boolean;
   /** Concurrent remote pushes selected by the gateway hardware profile. */
   replicationConcurrency?: number;
+  /**
+   * The HOST's total memory ceiling for mounted vault planes (issue #659 L8),
+   * divided evenly across them. Before this, mmap window and page cache were
+   * per-file constants, so N mounted vaults cost N times the memory of one and
+   * the only way to host a household was to buy RAM per vault. Omitted leaves
+   * every plane on the pre-#659 per-file pragmas.
+   */
+  footprintBudget?: VaultFootprintBudget;
   /** Resource-actuals sweep hook (#528 Phase C), forwarded to every plane. */
   onSweepPass?: (info: { durationMs: number }) => void;
   /** Resource-actuals replication hook (#528 Phase C), forwarded to every plane. */
@@ -184,6 +197,7 @@ export class VaultRegistry {
   private readonly synchronous: "FULL" | "NORMAL" | undefined;
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
+  private readonly footprintBudget: VaultFootprintBudget | undefined;
   private readonly onSweepPass:
     | ((info: { durationMs: number }) => void)
     | undefined;
@@ -223,6 +237,7 @@ export class VaultRegistry {
     this.synchronous = options.synchronous;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
     this.replicationConcurrency = options.replicationConcurrency;
+    this.footprintBudget = options.footprintBudget;
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
     this.journalLimitBytes = options.journalLimitBytes;
@@ -287,6 +302,7 @@ export class VaultRegistry {
           continue;
         }
         this.planes.set(plane.boot.vaultId, plane);
+        this.rebalanceFootprints();
         this.scannedDirs.add(dir);
         this.failedMountsByDir.delete(dir);
         if (this.started) plane.start();
@@ -380,6 +396,72 @@ export class VaultRegistry {
     return this.info(plane);
   }
 
+  /**
+   * A plane's opening share of the host ceiling (issue #659 L8): the total
+   * divided by the number of vault directories under the root, so a plane is
+   * never opened at the full budget even momentarily. Counting directories
+   * rather than open planes matters because `scan()` opens them one at a time —
+   * dividing by `planes.size` would hand the first vault everything.
+   */
+  private planeFootprint(): Partial<VaultFootprintBudget> {
+    const budget = this.footprintBudget;
+    if (!budget) return {};
+    const planes = Math.max(1, this.mountableVaultCount());
+    return {
+      mmapBytes: Math.floor(budget.mmapBytes / planes),
+      cacheBytes: Math.floor(budget.cacheBytes / planes),
+    };
+  }
+
+  /** Vault directories under the root — mounted or about to be. */
+  private mountableVaultCount(): number {
+    if (!existsSync(this.rootDir)) return this.planes.size;
+    let count = 0;
+    for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      if (!existsSync(path.join(this.rootDir, entry.name, "vault.db")))
+        continue;
+      count += 1;
+    }
+    // A vault being CREATED has no vault.db on disk yet but is about to become
+    // a plane, so never divide by fewer than the planes already open.
+    return Math.max(count, this.planes.size);
+  }
+
+  /**
+   * Re-divide the ceiling across every plane whenever the set of them changes
+   * (issue #659 L8).
+   *
+   * The opening share alone is not enough: a household grows one vault at a
+   * time, so vault 1 opens at the whole budget, vault 2 at a half, and the SUM
+   * lands well over the ceiling — the linear cost this was meant to remove,
+   * just with a smaller constant. `cache_size` and `mmap_size` are settable on
+   * a live connection, so the honest fix is to rebalance rather than to
+   * document a caveat that describes the normal case.
+   *
+   * How a per-vault total splits between `vault.db` and `journal.db` — and the
+   * per-file cache floor — belong to `applyVaultFootprint`, which `openVaultDb`
+   * also routes through. So this divides the host ceiling by the plane count
+   * and stops: open-time and rebalance cannot drift apart, because there is
+   * only one division policy to change.
+   *
+   * Both divisions floor, so a rebalanced household lands at or just under the
+   * ceiling, never over it.
+   */
+  private rebalanceFootprints(): void {
+    const budget = this.footprintBudget;
+    if (!budget || this.planes.size === 0) return;
+    const perVault: VaultFootprintBudget = {
+      mmapBytes: Math.floor(budget.mmapBytes / this.planes.size),
+      cacheBytes: Math.floor(budget.cacheBytes / this.planes.size),
+    };
+    for (const plane of this.planes.values()) {
+      for (const db of [plane.db.vault, plane.db.journal]) {
+        applyVaultFootprint(db, perVault);
+      }
+    }
+  }
+
   private openPlane(
     dir: string,
     boot: { vaultId?: string; vaultName?: string }
@@ -418,6 +500,7 @@ export class VaultRegistry {
       ...(this.replicationConcurrency === undefined
         ? {}
         : { replicationConcurrency: this.replicationConcurrency }),
+      ...(this.footprintBudget ? { footprint: this.planeFootprint() } : {}),
       ...(this.onSweepPass ? { onSweepPass: this.onSweepPass } : {}),
       ...(this.onReplicationPass
         ? { onReplicationPass: this.onReplicationPass }
@@ -573,6 +656,8 @@ export class VaultRegistry {
     if (options?.personal) plane.markPersonal();
     this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
+    // A new vault takes its share from the others, not from the host (#659 L8).
+    this.rebalanceFootprints();
     if (this.started) plane.start();
     this.notifyMounted(plane);
     this.logger.info(
@@ -623,6 +708,8 @@ export class VaultRegistry {
     const purge = plane.db.blobs.purgeRemote();
     plane.stop();
     this.planes.delete(vaultId);
+    // A removed vault hands its share back to the survivors (#659 L8).
+    this.rebalanceFootprints();
     this.scannedDirs.delete(plane.dir);
     this.failedMountsByDir.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });

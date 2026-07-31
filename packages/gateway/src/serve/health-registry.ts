@@ -33,6 +33,7 @@ import {
   formatLoadShedDeferringDetail,
   formatLoadShedForcedPassDetail,
 } from "./resource-mode.js";
+import type { RouteLatencySummary } from "./route-latency.js";
 
 /** Owner-triggered background-pause window (#528 Phase B) — in-memory only. */
 export interface BackgroundPauseState {
@@ -85,6 +86,14 @@ export interface HealthMetrics {
    * that lands (see `build-gateway.ts`'s `setMetricsSource` call).
    */
   sseClients?: number;
+  /**
+   * Mounted vault planes (issue #659 L8). Present so `rssBytes` has a
+   * denominator: the per-plane memory RESERVATION is now flat in vault count,
+   * but each mounted plane still costs real resident memory (connection state,
+   * bootstrap DDL) that the pragmas do not bound. Without this, a household
+   * that grows from one vault to five looks like a leak.
+   */
+  mountedVaults?: number;
   /** Rolling event-loop delay window from `perf_hooks.monitorEventLoopDelay`. */
   eventLoopLagP50Ms?: number;
   eventLoopLagP99Ms?: number;
@@ -94,6 +103,12 @@ export interface HealthMetrics {
   eventLoopLagSamples?: number;
   /** Boot-time durability-barrier latency for one 4 KiB write. */
   storageFsyncMs?: number;
+  /**
+   * Per-route request-duration percentiles (issue #659 R5) — fixed-bucket
+   * histograms, so "which route is slow on THIS gateway" is answerable from a
+   * production health snapshot instead of only from a bench rig.
+   */
+  routeLatency?: RouteLatencySummary[];
   /**
    * Resolved hardware class (`constrained` | `standard`) and owner Resource
    * mode (`auto` | `conserve` | `balanced` | `performance`) — issue #521.
@@ -135,6 +150,7 @@ export type MetricsSourceResult = Partial<
     HealthMetrics,
     | "outboxPending"
     | "sseClients"
+    | "mountedVaults"
     | "hardwareProfileClass"
     | "resourceMode"
     | "resourceProfile"
@@ -153,6 +169,7 @@ export type PerformanceMetricsSourceResult = Partial<
     | "eventLoopLagPeakP99Ms"
     | "eventLoopLagSamples"
     | "storageFsyncMs"
+    | "routeLatency"
   >
 >;
 export type PerformanceMetricsSource = () => PerformanceMetricsSourceResult;
@@ -449,6 +466,9 @@ export class HealthRegistry {
         ...(sourced.sseClients === undefined
           ? {}
           : { sseClients: sourced.sseClients }),
+        ...(sourced.mountedVaults === undefined
+          ? {}
+          : { mountedVaults: sourced.mountedVaults }),
         ...(sourced.hardwareProfileClass === undefined
           ? {}
           : { hardwareProfileClass: sourced.hardwareProfileClass }),

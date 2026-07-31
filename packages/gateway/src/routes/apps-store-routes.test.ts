@@ -83,6 +83,51 @@ describe("apps-store-routes scenarios", () => {
     expect(res.status).toBe(200);
   }
 
+  // Issue #659 M5 (gateway half): the mobile client sends If-None-Match and
+  // handles 304, which is inert unless the registry list is tagged.
+  test("GET /_apps revalidates with an ETag and re-tags when the registry changes", async () => {
+    const list = (headers: Record<string, string> = {}): Promise<Response> =>
+      fetch(`${handle.url}/centraid/_apps`, {
+        headers: { ...auth(), ...headers },
+      });
+
+    const first = await list();
+    expect(first.status).toBe(200);
+    const etag = first.headers.get("etag");
+    expect(etag).toBeTruthy();
+    const firstBody = await first.text();
+
+    // Unchanged registry → 304 with no body, and the SAME validator.
+    const revalidated = await list({ "If-None-Match": etag! });
+    expect(revalidated.status).toBe(304);
+    await expect(revalidated.text()).resolves.toBe("");
+    expect(revalidated.headers.get("etag")).toBe(etag);
+
+    // A caller that does not revalidate still gets the identical payload.
+    await expect(list().then((r) => r.text())).resolves.toBe(firstBody);
+
+    // Publishing an app changes the list → fresh 200 with a different ETag.
+    await openSession("etag-1");
+    await putFile("etag-1", "app.json", MANIFEST);
+    await putFile(
+      "etag-1",
+      "queries/ping.js",
+      "export default async () => ({ pong: 1 });\n"
+    );
+    await putFile("etag-1", "index.html", "<!doctype html><title>todo</title>");
+    const published = await fetch(`${handle.url}/centraid/_apps/todo/publish`, {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "etag-1", message: "etag" }),
+    });
+    expect(published.status).toBe(201);
+
+    const afterChange = await list({ "If-None-Match": etag! });
+    expect(afterChange.status).toBe(200);
+    expect(afterChange.headers.get("etag")).not.toBe(etag);
+    await expect(afterChange.text()).resolves.toContain("todo");
+  }, 60_000);
+
   test("session → write → publish → serve → rollback round-trip", async () => {
     await openSession("s1");
     await putFile("s1", "app.json", MANIFEST);

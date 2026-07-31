@@ -103,8 +103,12 @@ import {
   jitterDelayMs,
   scopeCovers,
   sweepLocalOrphans,
+  decideVaultMaintenance,
+  runVaultMaintenance,
+  vaultFileBytes,
 } from "@centraid/vault";
 import type {
+  VaultFootprintBudget,
   InstalledAppRow,
   ScopeRequestSummary,
   ScopeTriple,
@@ -301,6 +305,20 @@ export interface VaultPlaneOptions {
    * `journal-limit.ts` for the whole policy. Omit for today's time-only cadence.
    */
   journalLimitBytes?: () => number | null;
+  /**
+   * The owner's `vault.db` size limit in bytes (issue #659 L3), or `null` when
+   * unset — which is today's shipped state, since no owner-facing setting
+   * exists yet. `null` means "daily gate, widest retention window", exactly the
+   * behaviour before the ladder was wired.
+   */
+  vaultLimitBytes?: () => number | null;
+  /**
+   * This plane's share of the host's memory ceiling (issue #659 L8). A TOTAL
+   * across the vault's two databases — `openVaultDb` splits it — so the host
+   * divides one ceiling by the mounted-plane count and does no other
+   * arithmetic. Omitted reproduces the pre-#659 per-file pragmas exactly.
+   */
+  footprint?: Partial<VaultFootprintBudget>;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -464,6 +482,20 @@ async function asVaultCallResultAsync(
 const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Vault-side retention cadence (issue #659 L1/L3/L4). Same daily gate as
+ * journal archival — these collectors reclaim expired undo snapshots and
+ * terminal operational rows, neither of which anyone waits on.
+ */
+const VAULT_MAINTENANCE_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * CAS entries one local-orphan pass may examine (issue #659 L5). Sized so a
+ * pass is a bounded amount of stat+membership work on the constrained host; a
+ * larger CAS simply takes more passes.
+ */
+const LOCAL_ORPHAN_SWEEP_MAX_ENTRIES = 2_000;
+
+/**
  * Strip the two caller-supplied identity fields from an invoke payload (issue
  * #599 decision 8). Both are HOST-resolved from the authenticated request —
  * `actingMemberId` from the device's member binding, `intentDeviceId` from the
@@ -540,6 +572,8 @@ export class VaultPlane {
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private sweepTimer: NodeJS.Timeout | undefined;
+  /** Deferred first sweep (#659 G10); cleared on stop so it cannot outlive the plane. */
+  private firstSweep: NodeJS.Immediate | undefined;
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
@@ -548,6 +582,18 @@ export class VaultPlane {
   /** Ladder position for the size-triggered archive (#544, journal-limit.ts) —
    *  in-memory by design: a restart re-derives it from the file size. */
   private journalArchiveRung = 0;
+  private lastVaultMaintenanceAt = 0;
+  /** The owner's `vault.db` size limit (#659 L3), read fresh each sweep. */
+  private readonly vaultLimitBytes: () => number | null;
+  /** Ladder position for the size-triggered vault sweep — in-memory, like the
+   *  journal's, for the same reason. */
+  private vaultMaintenanceRung = 0;
+  /**
+   * Resume point for the bounded local-orphan sweep (#659 L5); `null` starts
+   * from the beginning of the CAS listing. In memory by design — restarting at
+   * the top costs one extra pass, never correctness.
+   */
+  private localOrphanCursor: string | null = null;
   // Resume point for the bounded repricing pass (#445); wraps to 0 at the tail.
   private repriceCursor = 0;
   private closed = false;
@@ -596,6 +642,7 @@ export class VaultPlane {
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
     this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
+    this.vaultLimitBytes = options.vaultLimitBytes ?? (() => null);
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
@@ -620,6 +667,7 @@ export class VaultPlane {
         ? {}
         : { replicationConcurrency: options.replicationConcurrency }),
       ...(options.synchronous ? { synchronous: options.synchronous } : {}),
+      ...(options.footprint ? { footprint: options.footprint } : {}),
     });
     const recovered = recoverVaultBootstrap(this.db);
     if (recovered) {
@@ -2134,6 +2182,28 @@ export class VaultPlane {
           )
         );
       }
+      if (call.op === "authenticate") {
+        // Locker unlock (issue #659 G11): the vault's scrypt now runs on the
+        // threadpool, so this returns a promise and MUST be awaited. It cannot
+        // stay in the synchronous switch below — `asVaultCallResult` takes a
+        // `() => unknown`, so an unawaited promise typechecks and is wrapped as
+        // `{ ok: true, result: <Promise> }`, which reaches the Locker app as an
+        // empty object. A silent wrong answer on an auth path, with no compile
+        // error. Same async lane as `content` above.
+        if (appId !== "locker") {
+          return asVaultCallResult(() => {
+            throw new GatewayError(
+              "identity",
+              "Locker authentication is available only to Locker"
+            );
+          });
+        }
+        return asVaultCallResultAsync(() =>
+          this.gateway.authenticateLocker(
+            call.payload as unknown as LockerAuthRequest
+          )
+        );
+      }
       if (call.op === "invoke") {
         return this.invokeQueued(cred, {
           ...withoutForgedIdentity(call.payload as unknown as InvokeRequest),
@@ -2198,15 +2268,10 @@ export class VaultPlane {
               call.payload as unknown as RevealRequest
             );
           case "authenticate":
-            if (appId !== "locker") {
-              throw new GatewayError(
-                "identity",
-                "Locker authentication is available only to Locker"
-              );
-            }
-            return this.gateway.authenticateLocker(
-              call.payload as unknown as LockerAuthRequest
-            );
+            // Unreachable: the async lane above returns first (issue #659 G11
+            // moved locker scrypt off the event loop). Listed so the switch
+            // stays exhaustive, exactly like `content`.
+            throw new Error("authenticate is handled on the async path above");
           case "changes":
             throw new GatewayError(
               "consent",
@@ -2521,10 +2586,20 @@ export class VaultPlane {
     this.scheduleWalCapture();
   }
 
-  /** Begin the standing-duty clocks: a sweep now, then one per interval;
+  /** Begin the standing-duty clocks: a sweep shortly, then one per interval;
    *  WAL capture (issue #408/#414) now, then at the current policy RPO. */
   start(): void {
-    this.runSweep();
+    // The first sweep is DEFERRED off the mount critical path (issue #659 G10),
+    // exactly as the first WAL tick below already is. `start()` is awaited by
+    // the boot sequence, and the sweep is a synchronous pass over blob custody,
+    // retention, and (on the daily gate) archival — a vault with any real
+    // amount of data turned "the gateway is listening" into "the gateway is
+    // listening and busy". Nothing here is time-critical at second zero.
+    this.firstSweep = setImmediate(() => {
+      this.firstSweep = undefined;
+      if (!this.closed) this.runSweep();
+    });
+    this.firstSweep.unref();
     this.scheduleSweep();
     if (!this.walLifecycleEnabled) return;
     // Issue #411 action 3: defer the first configured capture off the mount critical
@@ -2648,6 +2723,17 @@ export class VaultPlane {
                 `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`
             );
           }
+          // The pass is row-capped (issue #659 L2), so a vault with a backlog
+          // needs more than one. Re-opening the daily gate — rather than
+          // looping here — drains it over successive HOURLY sweeps: the point
+          // of the cap is that no single tick blocks the event loop for long,
+          // and a loop would hand that right back.
+          if (archived.capped) {
+            this.lastJournalArchivalAt = 0;
+            this.logger.info(
+              "vault plane: journal archival hit its row cap — resuming next sweep"
+            );
+          }
           // Conversation-ledger archival (issue #438) rides the SAME daily block:
           // the ledger band grows at machine speed and is the file that reaches
           // gigabytes. The gateway composes the engine's seams — the vault blob
@@ -2714,6 +2800,45 @@ export class VaultPlane {
             `vault plane: journal archival failed: ${error instanceof Error ? error.message : String(error)}`
           );
         }
+      }
+
+      // Vault-side retention (issue #659 L1/L3/L4). `vault.db` is the sovereign
+      // asset and is meant to stay small, but two things accreted in it without
+      // a collector: expired undo snapshots (`core_entity_revision` rows past
+      // their `undo_until`, which no reader will return) and terminal
+      // operational rows (finished connection runs, drained enrichment
+      // requests, settled outbox items). `decideVaultMaintenance` is the same
+      // ladder shape as the journal's — pure policy, so this block only
+      // measures, calls, and logs.
+      const maintenanceDecision = decideVaultMaintenance({
+        vaultBytes: vaultFileBytes(this.dir),
+        limitBytes: this.vaultLimitBytes(),
+        rung: this.vaultMaintenanceRung,
+        dailyGateElapsed:
+          Date.now() - this.lastVaultMaintenanceAt >=
+          VAULT_MAINTENANCE_MIN_INTERVAL_MS,
+      });
+      this.vaultMaintenanceRung = maintenanceDecision.nextRung;
+      if (maintenanceDecision.run) {
+        this.lastVaultMaintenanceAt = Date.now();
+        const maintained = runVaultMaintenance(this.db.vault, {
+          now: new Date().toISOString(),
+          keepDays: maintenanceDecision.keepDays,
+        });
+        const retained = Object.values(maintained.retention).reduce(
+          (sum, table) => sum + table.deleted,
+          0
+        );
+        if (maintained.revisions.deleted > 0 || retained > 0) {
+          this.logger.info(
+            `vault plane: vault maintenance revisions=${maintained.revisions.deleted} ` +
+              `retention=${retained} keepDays=${maintained.keepDays}` +
+              (maintenanceDecision.overLimit ? " (over limit)" : "")
+          );
+        }
+        // Row-capped like the journal pass: re-open the gate so the backlog
+        // drains across sweeps instead of over days.
+        if (maintained.capped) this.lastVaultMaintenanceAt = 0;
       }
     } catch (error) {
       this.logger.warn(
@@ -2810,16 +2935,26 @@ export class VaultPlane {
     graceWindowMs: number | undefined;
   }): void {
     if (options.skipOrphanDelete) return;
+    // Bounded window + carried cursor (issue #659 L5). A CAS with 100k objects
+    // used to make every hourly tick a 100k-entry walk; now each tick examines
+    // a fixed slice and the NEXT tick resumes where this one stopped, so sweep
+    // cost per tick is constant and total cadence scales with CAS size instead
+    // of the tick doing so.
     const result = sweepLocalOrphans(this.db, {
       graceWindowMs: options.graceWindowMs ?? LOCAL_ORPHAN_GRACE_MS,
+      maxEntries: LOCAL_ORPHAN_SWEEP_MAX_ENTRIES,
+      ...(this.localOrphanCursor === null
+        ? {}
+        : { cursor: this.localOrphanCursor }),
       ...(options.extraLiveRoots
         ? { extraLiveRoots: options.extraLiveRoots }
         : {}),
     });
+    this.localOrphanCursor = result.nextCursor;
     if (result.deleted.length + result.graceHeld.length > 0) {
       this.logger.info(
         `vault plane: local orphan sweep reclaimed=${result.deleted.length} ` +
-          `graceHeld=${result.graceHeld.length}`
+          `graceHeld=${result.graceHeld.length} examined=${result.examined}`
       );
     }
   }
@@ -2876,6 +3011,7 @@ export class VaultPlane {
     this.closed = true;
     this.groupCommitQueue.flush();
     if (this.sweepTimer) clearTimeout(this.sweepTimer);
+    if (this.firstSweep) clearImmediate(this.firstSweep);
     if (this.walTimer) clearTimeout(this.walTimer);
     if (this.firstWalTick) clearImmediate(this.firstWalTick);
     if (

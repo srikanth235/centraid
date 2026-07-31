@@ -24,7 +24,7 @@ import {
   ReplicaIndex,
   archivedSegmentShas,
   conversationArchiveShas,
-  liveBlobShas,
+  liveBlobShasCached,
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
@@ -403,7 +403,8 @@ export async function runBackupReconciliation(opts: {
 
   let cas = unavailableStore(casResult.configured, casResult.error);
   if (casResult.collection) {
-    const live = liveBlobShas(opts.db.vault);
+    // Shared, read-only base set + this caller's own extra roots (#659 L5).
+    const live = new Set(liveBlobShasCached(opts.db.vault));
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);

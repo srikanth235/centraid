@@ -182,6 +182,76 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     f = fixture();
   });
 
+  // Issue #659 G5: the window has to hold ACROSS the archive boundary. Live
+  // rows can be windowed in SQL, archived turns cannot — if the window applied
+  // only to the live half, `hasMore` would describe a partial picture and a
+  // reader paging back would stop at the archive edge.
+  it("windows and pages across the archive boundary, not just the live rows", async () => {
+    const store = f.store();
+    seedConversation(f.journal, "c1", "automation");
+    // Four old turns (which will be archived + pruned) and two live ones.
+    for (let index = 0; index < 4; index += 1) {
+      seedTurn(f.journal, {
+        conversationId: "c1",
+        turnId: `t${index}`,
+        seq: index,
+        startedAt: daysAgo(120 - index),
+        reply: `answer ${index}`,
+      });
+    }
+    seedTurn(f.journal, {
+      conversationId: "c1",
+      turnId: "t4",
+      seq: 4,
+      startedAt: daysAgo(2),
+      reply: "answer 4",
+    });
+    seedTurn(f.journal, {
+      conversationId: "c1",
+      turnId: "t5",
+      seq: 5,
+      startedAt: daysAgo(1),
+      reply: "answer 5",
+    });
+    const archival = runConversationArchival(
+      { journal: f.journal, blobSink: f.sink, custodyProven: () => true },
+      { nowMs: now }
+    );
+    expect(archival.turnsPruned).toBeGreaterThan(0);
+
+    // A 2-turn window opens on the LIVE tail and still knows older turns exist.
+    const newest = await store.getSessionRehydrated(APP, "c1", { limit: 2 });
+    expect(newest?.messages).toHaveLength(4); // 2 turns × (user + ai)
+    expect(newest?.hasMore).toBe(true);
+    expect(newest?.oldestSeq).toBe(4);
+
+    // Paging back reaches turns that live only in the archive.
+    const older = await store.getSessionRehydrated(APP, "c1", {
+      limit: 2,
+      beforeSeq: newest!.oldestSeq,
+    });
+    expect(older?.oldestSeq).toBe(2);
+    expect(older?.hasMore).toBe(true);
+    expect(
+      older!.messages.some(
+        (m) => (m.payload as { fromArchive?: boolean }).fromArchive
+      )
+    ).toBe(true);
+
+    // …and the oldest page reports the end of the thread.
+    const oldest = await store.getSessionRehydrated(APP, "c1", {
+      limit: 2,
+      beforeSeq: older!.oldestSeq,
+    });
+    expect(oldest?.oldestSeq).toBe(0);
+    expect(oldest?.hasMore).toBe(false);
+
+    // No parameters still serves the whole merged thread.
+    const whole = await store.getSessionRehydrated(APP, "c1");
+    expect(whole?.messages).toHaveLength(12);
+    expect(whole?.hasMore).toBe(false);
+  });
+
   it("rehydrated read merges archived + live in seq order, byte-equal to pre-archive", async () => {
     const store = f.store();
     seedConversation(f.journal, "c1", "automation");
@@ -386,11 +456,16 @@ async function getViaRoute(
   } as unknown as IncomingMessage;
   let bodyText = "";
   const res = {
+    statusCode: 200,
     writeHead(): unknown {
       return res;
     },
-    end(text?: string): void {
-      if (text) bodyText = text;
+    // The transcript route negotiates compression (#659 G5).
+    setHeader(): void {
+      /* headers are not asserted here */
+    },
+    end(text?: string | Buffer): void {
+      if (text) bodyText = Buffer.isBuffer(text) ? text.toString("utf8") : text;
     },
   } as unknown as ServerResponse;
   await handler(req, res);

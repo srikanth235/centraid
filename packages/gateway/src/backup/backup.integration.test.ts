@@ -324,7 +324,7 @@ describe("backup", () => {
     });
     const lockerItemId = lockerOut["item_id"] as string;
     const lockerPassphrase = "a second horse guards this vault";
-    const lockerAuth = h.plane.gateway.authenticateLocker({
+    const lockerAuth = await h.plane.gateway.authenticateLocker({
       operation: "configure",
       secret: lockerPassphrase,
     });
@@ -641,19 +641,19 @@ describe("backup", () => {
       // The #630 user-presence boundary is durable, while its capabilities
       // are not: the verifier restores with the vault DEK, but the source
       // gateway's live session was memory-only and must not survive.
-      expect(
+      await expect(
         plane.gateway.authenticateLocker({ operation: "status" })
-      ).toMatchObject({
+      ).resolves.toMatchObject({
         ok: true,
         configured: true,
         authenticated: false,
       });
-      expect(
+      await expect(
         plane.gateway.authenticateLocker({
           operation: "unlock",
           secret: h.seeded.lockerPassphrase,
         })
-      ).toMatchObject({
+      ).resolves.toMatchObject({
         ok: true,
         configured: true,
         authenticated: true,

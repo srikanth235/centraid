@@ -1,7 +1,10 @@
 {
   "_comment": "Issue #587 C1 initial budgets, completed in #656 Layer 1F. EVERY rig under tests/perf and tests/scale must be registered here — scripts/test-report/validate-nightly-wiring.mjs fails when a rig file has no entry (or an entry names a rig that no longer exists), so a new rig cannot land unbudgeted and a deleted one cannot rot here. Each rig records wall-clock nightly; after `minimumSamples` observations it fails above `regressionMultiplier` x the trailing median. `budgetMs` is the optional ABSOLUTE catastrophic-failure ceiling a rig enforces before that distribution exists; it lives here rather than as a constant inside the rig so `bun run test:ratchet` can hold it tighten-only (this file is a PERF_BUDGET_SOURCE). A rig with no `budgetMs` either carries per-measurement budgets in its own body or has no absolute ceiling by design — no absolute latency budget is invented before the distribution exists.",
+  "_drift": "Issue #659 R4. `minimumSamples`/`regressionMultiplier` describe the LEGACY catastrophe gate in @centraid/test-kit's qualityRegressionBudget (10 samples, 3x median) — a 3x median only fires on a collapse, and until #659 the rigs with a fixed absolute ceiling did not consume history at ALL, so a rig could drift from 40 ms to 110 ms under a 120 ms ceiling with nothing to say. `minimumDriftSamples`/`driftMultiplier` are the sustained-drift gate every rig now also consumes via rigDriftBudgetMs() in tests/helpers/rig-budgets.ts: once 30 durable nightly observations exist, a measurement above 1.5x the trailing median fails. 30 samples ≈ a month of nightlies, which is long enough that a single slow runner cannot move the median and short enough that a real regression is caught in a release cycle. Both multipliers are CEILINGS under the tighten-only ratchet; both sample counts are min* FLOORS and may only rise.",
   "minimumSamples": 10,
   "regressionMultiplier": 3,
+  "minimumDriftSamples": 30,
+  "driftMultiplier": 1.5,
   "rigs": {
     "tests/perf/agent-turn.perf.test.ts": {
       "lane": "perf",
@@ -27,6 +30,11 @@
       "lane": "perf",
       "volume": "1 desktop main-core cold module import",
       "budgetMs": 3000
+    },
+    "tests/perf/desktop-launch.perf.test.ts": {
+      "lane": "perf",
+      "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",
+      "_noBudgetMs": "Deliberate. A cold Electron launch on a shared CI runner has no distribution yet; the gate is the 30-sample/1.5x drift budget. An absolute ceiling lands in tests/experience-budgets/desktop.json once ~10 green nightlies justify one."
     },
     "tests/perf/gateway-request.perf.test.ts": {
       "lane": "perf",
@@ -69,7 +77,8 @@
     },
     "tests/scale/blob-gc.scale.test.ts": {
       "lane": "scale",
-      "volume": "5,000 mixed-custody CAS objects"
+      "volume": "5,000 mixed-custody CAS objects on a real FS tier + 100,000 on an in-memory tier",
+      "budgetMs": 60000
     },
     "tests/scale/blueprint-clones.scale.test.ts": {
       "lane": "scale",
@@ -92,9 +101,28 @@
       "lane": "scale",
       "volume": "10,000 photos + 5,000 contacts + 1,000 notes, then daily-use queries"
     },
+    "tests/scale/phash-clustering.scale.test.ts": {
+      "lane": "scale",
+      "volume": "90,000 photo assets, 3,000 near-duplicate families — cold sweep + idle sweep",
+      "budgetMs": 30000
+    },
+    "tests/scale/multi-vault-footprint.scale.test.ts": {
+      "lane": "scale",
+      "volume": "5 mounted vaults = 10 SQLite handles (year-3 household: Shared + Personal auto-founded per #603, plus one personal vault per additional member) under ONE host footprint budget",
+      "_noBudgetMs": "Not a duration rig. The ceilings are the host footprint totals themselves, read from DEFAULT_VAULT_FOOTPRINT, and the drift series is summed page cache in bytes rather than wall clock."
+    },
     "tests/scale/ontology.scale.test.ts": {
       "lane": "scale",
       "volume": "10,000 entities paged through Atlas kinds + relations"
+    },
+    "tests/scale/backup-manifest-size.scale.test.ts": {
+      "lane": "scale",
+      "volume": "manifests at 25k / 50k / 100k chunk-index entries — size growth bound"
+    },
+    "tests/scale/restore-10gib.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 10 GiB of CAS bytes (CENTRAID_SCALE_RESTORE_GIB, default 10) across 4 MiB objects + 5,000 core_party rows + one content row per object — backup, restore, then foreign_key_check and integrity_check timed in ISOLATION on the restored vault.db",
+      "_noBudgetMs": "Deliberate. Restore duration at this size has never been observed on CI hardware; inventing an absolute ceiling would be the guess this rig exists to replace. Gated by the 30-sample/1.5x drift budget once a distribution exists. The rig SKIPS unless CENTRAID_SCALE_RESTORE_GIB is set, so it cannot slow the normal nightly scale job or the PR lane."
     },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",
@@ -111,6 +139,16 @@
     "tests/agent-e2e-mobile/flows/volume-proof.mjs": {
       "lane": "scale",
       "volume": "20 on-device relaunches"
+    },
+    "tests/agent-e2e-mobile/flows/cold-start.mjs": {
+      "lane": "scale",
+      "volume": "8 per-launch on-device cold starts against an EMPTY device replica (year-3 is 50,000 replica rows — see tests/experience-budgets/README.md)",
+      "_noBudgetMs": "Deliberate. Simulator launch times have no distribution yet; the 30-sample/1.5x drift gate is the only gate until one exists."
+    },
+    "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
+      "lane": "scale",
+      "volume": "8 flings each on the Photos grid and the People directory, holding whatever the CI gateway fixture seeded (year-3 is 90,000 photo assets / 5,000 contacts). The flow publishes `people rows observed` — a real lower bound it can see — rather than guessing the seeded total.",
+      "_noBudgetMs": "Not a duration rig. It measures dropped-frame PERCENT via apps/mobile's rAF sampler (arm with centraid://perf-frames, read testID perf-frame-report); the ceiling lives in tests/experience-budgets/mobile.json and the drift series is the worst dropped-frame percentage across the two surfaces. NOTE the denominator is per-device — targetHz is recorded beside every percentage — and the sampler sees the JS thread only."
     }
   }
 }
