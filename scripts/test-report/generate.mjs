@@ -24,6 +24,7 @@ import {
   mergeLaneMarkers,
   reconcileJobConclusions,
   resolvePlaywrightOwner,
+  scopeMatcher,
   sustainedRatchetCandidates,
   summarizeCellStates,
 } from "./report-signals.mjs";
@@ -803,10 +804,14 @@ function collectCoverage(summaryLocal, floorConfig) {
   // Skip `_comment` / meta keys — same filter mutation rows already use (#535).
   return filterFloorConfigEntries(floorConfig).map(([scope, floor]) => {
     const target = typeof floor === "number" ? { lines: floor } : floor;
-    const prefix = scope.replace("/**", "");
+    // Match the way vitest resolves threshold globs (picomatch, `*` does not
+    // cross `/`), not a prefix. A prefix matcher silently renders any scope
+    // narrower than a directory — `packages/client/src/*.{ts,tsx}` (#656
+    // Layer 1B) — as an empty row, so a real gate looks unmeasured here.
+    const matches = scopeMatcher(scope);
     const entries = summaryLocal
       ? Object.entries(summaryLocal).filter(
-          ([file]) => file !== "total" && normalizeFile(file).startsWith(prefix)
+          ([file]) => file !== "total" && matches(normalizeFile(file))
         )
       : [];
     const source =

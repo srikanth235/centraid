@@ -9,9 +9,10 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/perf/replica-sync-io.perf.test.ts";
-const BUDGET_MS = 2_500;
+const BUDGET_MS = rigBudgetMs(OWNER);
 
 describe("replica-sync-io.perf", () => {
   beforeEach(() => vi.stubGlobal("IDBKeyRange", IDBKeyRange));

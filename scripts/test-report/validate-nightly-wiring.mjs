@@ -6,7 +6,7 @@
  * This is the real shipped wiring (the YAML GHA executes), not a reimplementation
  * of the flows themselves.
  */
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -141,6 +141,88 @@ try {
   );
 } catch {
   // expected — file deleted
+}
+
+// --- Rig budget registry completeness (#656 Layer 1F) ----------------------
+// `tests/quality-rig-budgets.json` documented 9 of the 24 committed rigs and
+// nothing read it, so it drifted silently for two milestones. Making it
+// exhaustive is only durable if something fails when it stops being
+// exhaustive — that is this block. A new rig must declare its lane and volume;
+// a deleted rig must not leave a phantom entry behind.
+const LANES = [
+  { lane: "perf", suffix: ".perf.test.ts" },
+  { lane: "scale", suffix: ".scale.test.ts" },
+];
+
+const budgets = JSON.parse(
+  await readFile(path.join(root, "tests/quality-rig-budgets.json"), "utf8")
+);
+const registered = new Set(Object.keys(budgets.rigs ?? {}));
+
+// Read every lane directory and every rig source up front: the checks below are
+// pure over that snapshot, so no I/O sits inside a loop.
+const laneListings = await Promise.all(
+  LANES.map(async ({ lane, suffix }) => ({
+    lane,
+    names: (await readdir(path.join(root, "tests", lane))).filter((name) =>
+      name.endsWith(suffix)
+    ),
+  }))
+);
+const rigs = await Promise.all(
+  laneListings.flatMap(({ lane, names }) =>
+    names.map(async (name) => ({
+      lane,
+      key: `tests/${lane}/${name}`,
+      source: await readFile(path.join(root, "tests", lane, name), "utf8"),
+    }))
+  )
+);
+const orphanChecks = await Promise.all(
+  [...registered].map(async (rig) => {
+    const present = await access(path.join(root, rig)).then(
+      () => true,
+      () => false
+    );
+    return { rig, present };
+  })
+);
+
+for (const { lane, key, source } of rigs) {
+  const entry = budgets.rigs?.[key];
+  if (entry) {
+    registered.delete(key);
+    if (entry.lane !== lane)
+      errors.push(
+        `tests/quality-rig-budgets.json entry ${key} declares lane "${entry.lane}" but lives in tests/${lane}`
+      );
+    if (typeof entry.volume !== "string" || entry.volume.trim() === "")
+      errors.push(
+        `tests/quality-rig-budgets.json entry ${key} needs a non-empty volume descriptor`
+      );
+    if ("budgetMs" in entry && !(entry.budgetMs > 0))
+      errors.push(
+        `tests/quality-rig-budgets.json entry ${key} has a non-positive budgetMs`
+      );
+  } else {
+    errors.push(
+      `tests/quality-rig-budgets.json has no entry for rig ${key} (declare its lane and volume)`
+    );
+  }
+  // A rig that inlines its own absolute ceiling is invisible to test:ratchet.
+  if (/^const BUDGET_MS\s*=\s*[\d_]+/mu.test(source))
+    errors.push(
+      `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/quality-rig-budgets.json and read it with rigBudgetMs(OWNER) so the ratchet sees it`
+    );
+}
+
+// Non-vitest rigs (the mobile on-device flow) may stay registered as long as
+// the file they name still exists.
+for (const { rig, present } of orphanChecks) {
+  if (!present && registered.has(rig))
+    errors.push(
+      `tests/quality-rig-budgets.json registers ${rig}, which no longer exists`
+    );
 }
 
 if (errors.length) {

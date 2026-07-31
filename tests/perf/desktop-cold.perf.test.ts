@@ -11,8 +11,10 @@ import { describe, expect, test } from "vitest";
  */
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
+
 const OWNER = "tests/perf/desktop-cold.perf.test.ts";
-const BUDGET_MS = 3_000;
+const BUDGET_MS = rigBudgetMs(OWNER);
 
 describe("desktop-cold.perf", () => {
   test("desktop gateway-supervisor-core first import stays under budget", async () => {

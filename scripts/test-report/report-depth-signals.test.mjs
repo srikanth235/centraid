@@ -6,6 +6,7 @@ import {
   filterFloorConfigEntries,
   findAbsoluteWeaknesses,
   mergeLaneMarkers,
+  scopeMatcher,
 } from "./report-depth-signals.mjs";
 import { validateMatrix } from "./validate-matrix.mjs";
 
@@ -122,6 +123,37 @@ describe("filterFloorConfigEntries", () => {
       "lines",
       "packages/gateway/**",
     ]);
+  });
+});
+
+describe("scopeMatcher", () => {
+  test("`*` stays inside one path segment so sibling trees keep their own floor", () => {
+    const match = scopeMatcher("packages/client/src/*.{ts,tsx}");
+    expect(match("packages/client/src/gateway-client-atlas.ts")).toBe(true);
+    expect(match("packages/client/src/core.tsx")).toBe(true);
+    expect(match("packages/client/src/react/HomeRoute.tsx")).toBe(false);
+    expect(match("packages/client/src/replica/store.ts")).toBe(false);
+  });
+
+  test("`**` crosses segments and also matches zero of them", () => {
+    const match = scopeMatcher("packages/gateway/src/**");
+    expect(match("packages/gateway/src/serve/vault-plane-wal.test.ts")).toBe(
+      true
+    );
+    expect(match("packages/gateway/src/index.ts")).toBe(true);
+    expect(match("packages/vault/src/index.ts")).toBe(false);
+  });
+
+  test("a suffix glob selects only the files that carry the suffix", () => {
+    const match = scopeMatcher("apps/desktop/src/main/*-core.ts");
+    expect(match("apps/desktop/src/main/preload-core.ts")).toBe(true);
+    expect(match("apps/desktop/src/main/settings.ts")).toBe(false);
+    expect(match("apps/desktop/src/main/nested/x-core.ts")).toBe(false);
+  });
+
+  test("dots are literal, not wildcards", () => {
+    const match = scopeMatcher("packages/protocol/src/**");
+    expect(match("packagesXprotocol/src/a.ts")).toBe(false);
   });
 });
 

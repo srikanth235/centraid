@@ -34,6 +34,12 @@ const root = path.resolve(import.meta.dirname, "../..");
 export const PERF_BUDGET_SOURCES = [
   { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
   { path: "packages/gateway/benchmarks/low-end-budgets.json" },
+  // #656 Layer 1F — the nightly rig registry. `regressionMultiplier` and each
+  // rig's `budgetMs` are ceilings (tighten-only); `minimumSamples` is a min*
+  // floor and may only rise. Before this the absolute ceilings lived as
+  // `const BUDGET_MS` inside five rig files, where widening one to make a slow
+  // rig green was an unreviewed one-line edit.
+  { path: "tests/quality-rig-budgets.json" },
 ];
 
 /**
