@@ -32,15 +32,17 @@ import type {
 } from "../../screen-contracts.js";
 import AssistantScreen from "../../screens/AssistantScreen.js";
 import { useShellActions } from "../actions.js";
+import { createFrameBatch } from "../frameBatch.js";
+import type { FrameBatch } from "../frameBatch.js";
 import { openPrompt } from "../prompt.js";
 import { useMemberScopes } from "../useMemberScopes.js";
 import { catchUpAfterDrop } from "./assistantCatchUp.js";
+import { createTranscriptProjection } from "./assistantProjection.js";
 import { hydrateRefs, wireCodeCopy } from "./assistantRich.js";
 import { DEFAULT_STARTERS, resolveStarters } from "./assistantStarters.js";
 import {
   activeAttemptOf,
   hydrateMessages,
-  msgToDTO,
   toolOutputText,
 } from "./assistantTranscript.js";
 import type {
@@ -69,6 +71,14 @@ type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
 /** Wall clock for live transcript rows, at module scope (render-purity rule). */
 const nowMs = (): number => Date.now();
+
+/**
+ * Turns fetched per request (issue #659 G5). The gateway used to materialize an
+ * entire thread — every turn, every item, every attachment — to render the last
+ * screenful. This is the page; "Show earlier messages" walks backwards from
+ * `oldestSeq` one page at a time, and the screen renders a smaller window still.
+ */
+const TRANSCRIPT_PAGE_TURNS = 40;
 
 interface AssistantRouteProps {
   /** The open conversation's id, from the shell route (`{kind:'assistant',
@@ -101,6 +111,14 @@ export default function AssistantRoute({
     additionalDirectories: [] as string[],
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
+    /** Older turns exist on the server before the oldest one held (#659 G5). */
+    hasMore: false,
+    /** `seq` of the oldest turn held — the cursor for the previous page. */
+    oldestSeq: undefined as number | undefined,
+    /** A previous page is in flight; the control says so and stays disabled. */
+    loadingEarlier: false,
+    /** Turns currently covered, so a post-turn reload restores the same view. */
+    loadedTurns: TRANSCRIPT_PAGE_TURNS,
   });
   // The vault this conversation addresses (issue #599). Chosen once, before the
   // first message; from then on the recorded scope is authoritative and every
@@ -118,6 +136,8 @@ export default function AssistantRoute({
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
   const modelPickerRunnerRef = useRef<AgentRunnerKind>("codex");
+  // Row identity + reference-stable DTOs for the transcript (issue #659).
+  const projectionRef = useRef(createTranscriptProjection());
 
   const buildSnapshot = (): AssistantSnapshot => {
     // The last final AI answer gates the Regenerate control — but only when
@@ -135,7 +155,7 @@ export default function AssistantRoute({
     return {
       empty: m.current.msgs.length === 0,
       busy: m.current.busy,
-      messages: m.current.msgs.map((msg, i) => msgToDTO(msg, i === lastAnswer)),
+      messages: projectionRef.current.project(m.current.msgs, lastAnswer),
       pendingAttachments: m.current.pendingAttachments.map((a) => ({
         id: a.localId,
         filename: a.filename,
@@ -150,21 +170,42 @@ export default function AssistantRoute({
       ...(m.current.additionalDirectories.length
         ? { additionalDirectories: [...m.current.additionalDirectories] }
         : {}),
+      canLoadEarlier: m.current.hasMore,
+      loadingEarlier: m.current.loadingEarlier,
     };
   };
-  const push = (): void => updateRef.current?.(buildSnapshot());
+  // A streamed turn fires an event per token, and each one used to re-project
+  // the whole transcript and re-render synchronously — hundreds of times more
+  // often than the display can paint (issue #659). Coalesce to one projection
+  // per frame; the batched callback reads the live model when it runs, so the
+  // latest state always wins and nothing is dropped.
+  const pushNow = (): void => updateRef.current?.(buildSnapshot());
+  const pushBatchRef = useRef<FrameBatch | null>(null);
+  pushBatchRef.current ??= createFrameBatch(() => pushNow());
+  const push = (): void => pushBatchRef.current?.schedule();
+  /** Deliver the current model now, superseding anything the frame batch held. */
+  const pushSync = (): void => {
+    pushBatchRef.current?.cancel();
+    pushNow();
+  };
   const setBusy = (b: boolean): void => {
     m.current.busy = b;
-    push();
+    // Busy gates the composer and the Stop button, so it is never allowed to
+    // wait a frame behind the model — this is the flush seam, not an exception.
+    pushSync();
   };
 
   /** Re-fetch the transcript so answers carry turn ids + retry pagers (#420). */
   const reloadTranscript = async (id: string): Promise<void> => {
     try {
+      // Re-request the coverage the reader currently has, not just the newest
+      // page — otherwise finishing a turn would silently discard the older
+      // history they explicitly asked for.
       const loaded = await loadConversation(
         ASSISTANT_APP_ID,
         id,
-        conversationScope(id)
+        conversationScope(id),
+        { turns: m.current.loadedTurns }
       );
       if (m.current.disposed || m.current.currentId !== id || m.current.busy)
         return;
@@ -172,6 +213,8 @@ export default function AssistantRoute({
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
       });
+      m.current.hasMore = loaded.hasMore ?? false;
+      m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
       if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
       if (loaded.workspace) {
@@ -180,7 +223,7 @@ export default function AssistantRoute({
           ...loaded.workspace.additionalDirectories,
         ];
       }
-      push();
+      pushSync();
     } catch {
       /* keep the live model if the reload fails */
     }
@@ -194,23 +237,35 @@ export default function AssistantRoute({
     m.current.msgs = [];
     m.current.pendingAttachments = [];
     m.current.turnCount = 0;
+    m.current.hasMore = false;
+    m.current.oldestSeq = undefined;
+    m.current.loadingEarlier = false;
+    m.current.loadedTurns = TRANSCRIPT_PAGE_TURNS;
     m.current.context = null;
     m.current.runnerKind = null;
     m.current.workspaceKind = "vault-data";
     m.current.additionalDirectories = [];
-    push();
+    // A thread switch must clear the old transcript in this frame, not the
+    // next: a stale answer flashing under a new conversation's header is worse
+    // than a frame of blank.
+    pushSync();
     if (!id) return;
     try {
+      // The newest page only — a reader opens to the END of a thread, and the
+      // rest is one "Show earlier messages" away (issue #659 G5).
       const loaded = await loadConversation(
         ASSISTANT_APP_ID,
         id,
-        conversationScope(id)
+        conversationScope(id),
+        { turns: TRANSCRIPT_PAGE_TURNS }
       );
       if (m.current.disposed || m.current.currentId !== id) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
       });
+      m.current.hasMore = loaded.hasMore ?? false;
+      m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
       if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
       if (loaded.workspace) {
@@ -225,7 +280,56 @@ export default function AssistantRoute({
         { kind: "ai", text: `Failed to load: ${String(error)}`, error: true },
       ];
     }
-    push();
+    pushSync();
+  };
+
+  /**
+   * Fetch the page of turns before the oldest one held and PREPEND it
+   * (issue #659 G5).
+   *
+   * Prepending — rather than replacing the array with page+existing — is the
+   * whole contract. The transcript projection keys each row on its message
+   * OBJECT (a WeakMap), so every already-rendered row keeps its id, its cached
+   * DTO and its DOM as long as its object survives. Rebuilding the array would
+   * re-key the entire transcript at the exact moment the reader is scrolling
+   * through it. The gateway guarantees a `beforeSeq` response carries only that
+   * page (see `oldestSeq`'s doc comment), which is what makes this safe.
+   */
+  const loadEarlier = (): void => {
+    const id = m.current.currentId;
+    const cursor = m.current.oldestSeq;
+    if (!id || cursor === undefined || m.current.loadingEarlier) return;
+    m.current.loadingEarlier = true;
+    pushSync();
+    void (async () => {
+      try {
+        const page = await loadConversation(
+          ASSISTANT_APP_ID,
+          id,
+          conversationScope(id),
+          { turns: TRANSCRIPT_PAGE_TURNS, beforeSeq: cursor }
+        );
+        if (m.current.disposed || m.current.currentId !== id) return;
+        const older = hydrateMessages(page.messages);
+        // New objects in front, existing objects untouched.
+        m.current.msgs = [...older, ...m.current.msgs];
+        m.current.hasMore = page.hasMore ?? false;
+        // An empty page cannot advance the cursor — keep the old one rather
+        // than setting `undefined`, which would silently retire the control.
+        if (page.oldestSeq !== undefined) m.current.oldestSeq = page.oldestSeq;
+        m.current.loadedTurns += TRANSCRIPT_PAGE_TURNS;
+      } catch (error) {
+        if (m.current.disposed) return;
+        showToast(
+          `Couldn't load earlier messages: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        if (!m.current.disposed) {
+          m.current.loadingEarlier = false;
+          pushSync();
+        }
+      }
+    })();
   };
 
   const attachFiles = (files: File[]): void => {
@@ -694,7 +798,7 @@ export default function AssistantRoute({
           level: "info",
           text: `Nothing was sent to ${requiredProvider}.`,
         });
-        push();
+        pushSync();
       }
       return;
     }
@@ -756,7 +860,7 @@ export default function AssistantRoute({
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
         });
       }
-      push();
+      pushSync();
       refreshAssistantThreads?.();
       return;
     }
@@ -789,7 +893,7 @@ export default function AssistantRoute({
       errored = true;
     }
     setBusy(false);
-    push();
+    pushSync();
     refreshAssistantThreads?.();
     // On a clean turn, re-fetch so answers gain turn ids + retry pagers.
     if (!errored && !aborted) void reloadTranscript(conversationIdLocal);
@@ -948,10 +1052,13 @@ export default function AssistantRoute({
 
   useEffect(() => {
     const model = m.current;
+    const batch = pushBatchRef.current;
     model.disposed = false;
     return () => {
       model.disposed = true;
       model.abort?.abort();
+      // A queued frame would land after the screen is gone.
+      batch?.cancel();
     };
   }, []);
 
@@ -1082,6 +1189,7 @@ export default function AssistantRoute({
           m.current.abort?.abort();
           setBusy(false);
         }}
+        onLoadEarlier={loadEarlier}
         onAttachFiles={attachFiles}
         onRemovePendingAttachment={removePendingAttachment}
         onAddWorkspace={() => {

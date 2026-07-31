@@ -8,6 +8,7 @@ import type {
   GatewayDeviceWorkDepth,
   GatewayMember,
 } from "../../gateway-client.js";
+import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
@@ -136,10 +137,11 @@ export default function DevicesCard({
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    const timer = setInterval(refresh, POLL_MS);
+    // Suspended while the tab is hidden and caught up on return (issue #659).
+    const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
-      clearInterval(timer);
+      stop();
     };
   }, [refresh]);
 

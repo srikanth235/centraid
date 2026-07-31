@@ -115,14 +115,31 @@ export const approvedDeviation =
 
 export const perfBudgets: PerfBudgets = {
   shell: {
-    // MEASURED cold shell (same-origin, 4173): 12 requests under Vite 8 with
+    // MEASURED cold shell (same-origin, 4173): 11 requests under Vite 8 with
     // the `shell-common` group (boot js+css, index js+css, src, shell-common,
     // the gateway info fetch, two workers, and the rolldown/preload runtimes).
     // Ceiling = measured + 1. If chunking work reduces this, tighten.
-    maxRequests: 13,
-    // MEASURED cold same-origin shell transfer 387,990 B under Vite 8 (Vite 7
-    // like-for-like: 402,997 B). Ceiling = measured + ~20%. If a future
-    // bundling change pushes this down again, re-measure and tighten.
+    //
+    // TIGHTENED 13 -> 12 (issue #659): re-measured at 11 after the #659 client
+    // work settled. Route-level code splitting was tried here and REVERTED —
+    // see the byte note below.
+    maxRequests: 12,
+    // MEASURED cold same-origin shell transfer 421,956 B (issue #659,
+    // re-measured; was 387,990 B under Vite 8, Vite 7 like-for-like 402,997 B).
+    // The ceiling is UNCHANGED — the measurement moved up inside it, and
+    // widening a budget to fit a number is what this file exists to prevent.
+    //
+    // The +34 KB is the #659 shell infrastructure now in the eager bundle: the
+    // shared stale-while-revalidate cache, the optimistic-mutation contract,
+    // the transcript projection + memo, and the skeleton styles. It buys the
+    // streaming-transcript and route-re-entry wins measured elsewhere.
+    //
+    // MEASURE IT THE SAME WAY OR THE NUMBER IS MEANINGLESS: `transferSize` is
+    // the COMPRESSED size, and `scripts/perf/run-waterfall.mjs` runs a bare
+    // `vite build`, which skips `scripts/precompress.mjs` while `emptyOutDir`
+    // deletes any sidecars a previous full build left. Measuring that way reads
+    // ~1.79 MB here — uncompressed serving, not a regression. Run
+    // `bun run --cwd apps/web build` first, then the spec.
     maxTransferBytes: 470_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.

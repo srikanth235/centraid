@@ -15,6 +15,7 @@ import {
 import type { AssistantRichClassOverrides } from "@centraid/blueprints/kit/assistant-rich.js";
 
 import { resolveAssistantRefs } from "../../../gateway-client.js";
+import { boundedMemo } from "../boundedMemo.js";
 
 import asstPreCss from "../../styles/asstPre.module.css";
 import styles from "./assistantRich.module.css";
@@ -53,9 +54,26 @@ const CLASSES: AssistantRichClassOverrides = {
   asstCopyBtn: styles.asstCopyBtn,
 };
 
-/** Full answer → prose + typed blocks + code fences, as an HTML string. */
+// Answers are re-projected on every streamed token and on every re-render of
+// the transcript, but an answer's text→HTML mapping is pure and an ALREADY
+// FINISHED answer's text never changes. Without a cache a 900-token turn
+// re-parsed every earlier answer in the thread 900 times (issue #659). The cap
+// is generous enough to cover a long visible transcript and bounded so a long
+// session cannot grow it without limit.
+const RICH_ANSWER_CACHE_ENTRIES = 200;
+const richAnswerCache = boundedMemo(
+  (text: string) => sharedRichAnswerHtml(text, CLASSES),
+  RICH_ANSWER_CACHE_ENTRIES
+);
+
+/**
+ * Full answer → prose + typed blocks + code fences, as an HTML string.
+ *
+ * Memoized: identical text yields the identical string reference, which is what
+ * lets the transcript projection compare answers in O(1) instead of by content.
+ */
 export function richAnswerHtml(text: string): string {
-  return sharedRichAnswerHtml(text, CLASSES);
+  return richAnswerCache(text);
 }
 
 /** Resolve every ref chip under `host` to a live card title, batched. */

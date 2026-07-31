@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { colorForIcon, tileVisualFromListing } from "../../app-format.js";
 import { listApps, listVaults } from "../../gateway-client.js";
+import { optimisticUpdate } from "./optimisticUpdate.js";
 import { Store } from "./store.js";
 
 // Pins are per-vault state: the reconcile below prunes them against the
@@ -21,8 +22,9 @@ async function activeVaultKey(): Promise<string> {
   }
 }
 
-/** What a reconcile pass produces; `null` means the listing itself failed. */
-interface ShellAppsSnapshot {
+/** What a reconcile pass produces; `null` means the listing itself failed.
+ *  Also the unit an optimistic app mutation edits (issue #659). */
+export interface ShellAppsSnapshot {
   userApps: UserAppMeta[];
   drafts: DraftAppMeta[];
 }
@@ -107,6 +109,16 @@ export interface ShellAppsController {
   refresh: () => Promise<void>;
   /** Replace the installed-apps list (used by CRUD paths) and persist it. */
   setUserApps: (next: UserAppMeta[]) => void;
+  /**
+   * Apply a local edit to both lists, run the wire call, then reconcile against
+   * the gateway (issue #659). A rejection restores the pre-edit lists and
+   * rethrows, so a delete or rename lands on the tile immediately and only
+   * un-lands if the gateway actually refused.
+   */
+  mutateApps: (
+    apply: (snapshot: ShellAppsSnapshot) => ShellAppsSnapshot,
+    commit: () => Promise<unknown>
+  ) => Promise<void>;
 }
 
 // The shell's live app state, ported from the vanilla app.ts `hydrateDrafts`
@@ -149,5 +161,39 @@ export function useShellApps(): ShellAppsController {
     };
   }, [apply]);
 
-  return { userApps, drafts, refresh, setUserApps: updateUserApps };
+  // Read through refs so the mutation does not have to re-create itself (and
+  // re-render every consumer) each time the lists change.
+  const latest = useRef<ShellAppsSnapshot>({ userApps, drafts });
+  useEffect(() => {
+    latest.current = { userApps, drafts };
+  });
+
+  const mutateApps = useCallback(
+    (
+      edit: (snapshot: ShellAppsSnapshot) => ShellAppsSnapshot,
+      commit: () => Promise<unknown>
+    ) =>
+      optimisticUpdate<ShellAppsSnapshot>({
+        read: () => latest.current,
+        // The guess is NOT persisted to the Store — `refresh` reconciles
+        // against the gateway and that reconcile owns what gets written.
+        write: (next) => {
+          latest.current = next;
+          setUserApps(next.userApps);
+          setDrafts(next.drafts);
+        },
+        apply: edit,
+        commit,
+        settle: refresh,
+      }),
+    [refresh]
+  );
+
+  return {
+    userApps,
+    drafts,
+    refresh,
+    setUserApps: updateUserApps,
+    mutateApps,
+  };
 }

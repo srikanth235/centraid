@@ -2,7 +2,7 @@
 // of AssistantScreen so that screen stays under the file-size cap while gaining
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import type { AsstAttachmentDTO, AsstMsgDTO } from "../screen-contracts.js";
@@ -111,8 +111,14 @@ function ThinkingRow({
   );
 }
 
+/** Intrinsic size of the thumbnail box, so the row reserves its space before
+ *  the bytes land — an unsized `<img>` reflows the transcript as it decodes. */
+const ATTACHMENT_THUMB_PX = 96;
+
 /** An inline image-attachment thumbnail (issue #420, Wave 2). Fetches the bytes
- *  auth-aware into an object URL and revokes it on unmount. */
+ *  auth-aware into an object URL owned by the client's shared attachment cache
+ *  (issue #659) — scrolling a thumbnail out of view and back must not
+ *  re-download it, so nothing here revokes. */
 function AttachmentImage({
   attachment,
   load,
@@ -124,21 +130,12 @@ function AttachmentImage({
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
-    let objectUrl: string | null = null;
     void load(attachment.hash, attachment.mime).then(
-      (u) => {
-        if (live) {
-          objectUrl = u;
-          setUrl(u);
-        } else {
-          URL.revokeObjectURL(u);
-        }
-      },
+      (u) => live && setUrl(u),
       () => live && setFailed(true)
     );
     return () => {
       live = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [attachment.hash, attachment.mime, load]);
   if (failed)
@@ -148,6 +145,10 @@ function AttachmentImage({
       className={styles.msgAttachThumb}
       src={url ?? undefined}
       alt={attachment.filename}
+      width={ATTACHMENT_THUMB_PX}
+      height={ATTACHMENT_THUMB_PX}
+      loading="lazy"
+      decoding="async"
       data-loading={url ? undefined : "true"}
     />
   );
@@ -329,7 +330,7 @@ function AiActions({
   );
 }
 
-export default function Message({
+function MessageRow({
   m,
   index,
   cb,
@@ -447,3 +448,18 @@ export default function Message({
     </div>
   );
 }
+
+/**
+ * Memoized (issue #659). A transcript is re-rendered on every streamed token
+ * and every keystroke in the composer, but a row only changes when its own DTO
+ * does. The projections that feed this hand back the PREVIOUS object when the
+ * derived value is unchanged (assistantProjection.ts, automationLiveMessages),
+ * so the default shallow prop compare is enough — and the callbacks bag must be
+ * memoized by the caller for the same reason.
+ *
+ * Re-rendering a row is not free here: the answer body is injected via
+ * `dangerouslySetInnerHTML` and re-hydrated with ref chips and copy buttons on
+ * every commit.
+ */
+const Message = memo(MessageRow);
+export default Message;

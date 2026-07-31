@@ -104,6 +104,11 @@ if (gotSingleInstanceLock) {
       minWidth: 1100,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
+      // Deferred until the renderer has something to paint (issue #659).
+      // Showing at construction meant the first thing launch put on screen was
+      // an empty `backgroundColor` rectangle that sat there for the whole of
+      // module init + first render — a flash of nothing, read as a slow app.
+      show: false,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -113,6 +118,17 @@ if (gotSingleInstanceLock) {
     });
     if (state.isMaximized) win.maximize();
     flushWindowState = trackWindowState(win);
+
+    // `ready-to-show` is the paint-ready signal, but a window that never fires
+    // it is invisible forever — a far worse failure than a flash. `did-finish-
+    // load` is the backstop, and `show()` is idempotent, so whichever lands
+    // first wins.
+    const reveal = (): void => {
+      if (win.isDestroyed() || win.isVisible()) return;
+      win.show();
+    };
+    win.once("ready-to-show", reveal);
+    win.webContents.once("did-finish-load", reveal);
 
     void win.loadFile(path.join(__dirname, "renderer", "index.html"));
 

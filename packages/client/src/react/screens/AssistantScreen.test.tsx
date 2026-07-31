@@ -11,6 +11,7 @@ import type {
   AsstModelPickerDTO,
 } from "../screen-contracts.js";
 import AssistantScreen from "./AssistantScreen.js";
+import { TRANSCRIPT_WINDOW } from "./transcriptWindow.js";
 
 function emptySnap(over: Partial<AssistantSnapshot> = {}): AssistantSnapshot {
   return {
@@ -479,6 +480,159 @@ describe("AssistantScreen suite", () => {
           retry.dispatchEvent(new MouseEvent("click", { bubbles: true }))
         );
         expect(props.onRetryError).toHaveBeenCalledWith(1);
+      });
+    });
+
+    // Long-transcript windowing (issue #659). The control is the safety
+    // property: history is deferred, never dropped, and the reader is told how
+    // much is above them.
+    describe("transcript windowing (#659)", () => {
+      const longTranscript = (n: number): AssistantSnapshot =>
+        emptySnap({
+          empty: false,
+          messages: Array.from({ length: n }, (_unused, index) => ({
+            kind: "user" as const,
+            text: `message ${index}`,
+            msgId: `m${index}`,
+          })),
+        });
+
+      it("mounts only the newest window and says how many are above", async () => {
+        const el = await mount(makeProps());
+        push(longTranscript(200));
+        expect(el.querySelectorAll(".msgUser")).toHaveLength(TRANSCRIPT_WINDOW);
+        expect(el.textContent).toContain("message 199");
+        expect(el.textContent).not.toContain("message 0");
+        const earlier = el.querySelector(".showEarlier");
+        expect(earlier?.textContent).toContain(
+          `${200 - TRANSCRIPT_WINDOW} above`
+        );
+      });
+
+      it("offers the control as a real button, so it is keyboard reachable", async () => {
+        const el = await mount(makeProps());
+        push(longTranscript(200));
+        const earlier = el.querySelector<HTMLElement>(".showEarlier");
+        expect(earlier?.tagName).toBe("BUTTON");
+        // Not removed from the tab order, and not a div wearing a role.
+        expect(earlier?.getAttribute("tabindex")).toBeNull();
+        expect(earlier?.hasAttribute("disabled")).toBe(false);
+      });
+
+      it("reveals older messages a window at a time, keeping the newest mounted", async () => {
+        const el = await mount(makeProps());
+        push(longTranscript(200));
+        const earlier = el.querySelector<HTMLButtonElement>(".showEarlier");
+        void act(() =>
+          earlier!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        );
+        expect(el.querySelectorAll(".msgUser")).toHaveLength(
+          TRANSCRIPT_WINDOW * 2
+        );
+        expect(el.textContent).toContain("message 199");
+      });
+
+      it("stops offering the control once the whole transcript is mounted", async () => {
+        const el = await mount(makeProps());
+        push(longTranscript(TRANSCRIPT_WINDOW + 1));
+        void act(() =>
+          el
+            .querySelector<HTMLButtonElement>(".showEarlier")!
+            .dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        );
+        expect(el.querySelector(".showEarlier")).toBeNull();
+        expect(el.textContent).toContain("message 0");
+      });
+
+      it("never shows the control for a transcript that already fits", async () => {
+        const el = await mount(makeProps());
+        push(longTranscript(5));
+        expect(el.querySelector(".showEarlier")).toBeNull();
+      });
+
+      it("keeps offering the control when the local window is exhausted but the server has more", async () => {
+        const el = await mount(makeProps());
+        push({ ...longTranscript(5), canLoadEarlier: true });
+        // Nothing is hidden locally, yet older turns exist server-side — the
+        // control must still be there.
+        const earlier = el.querySelector<HTMLButtonElement>(".showEarlier");
+        expect(earlier).not.toBeNull();
+        expect(earlier?.textContent).toBe("Show earlier messages");
+      });
+
+      it("expands the local window BEFORE asking the server", async () => {
+        const onLoadEarlier = vi.fn<() => void>();
+        const el = await mount(makeProps({ onLoadEarlier }));
+        push({ ...longTranscript(200), canLoadEarlier: true });
+        void act(() =>
+          el
+            .querySelector<HTMLButtonElement>(".showEarlier")!
+            .dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        );
+        // Rows it already holds are free; the fetch is the last resort.
+        expect(onLoadEarlier).not.toHaveBeenCalled();
+        expect(el.querySelectorAll(".msgUser")).toHaveLength(
+          TRANSCRIPT_WINDOW * 2
+        );
+      });
+
+      it("asks the server once the local window is exhausted", async () => {
+        const onLoadEarlier = vi.fn<() => void>();
+        const el = await mount(makeProps({ onLoadEarlier }));
+        push({ ...longTranscript(5), canLoadEarlier: true });
+        void act(() =>
+          el
+            .querySelector<HTMLButtonElement>(".showEarlier")!
+            .dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        );
+        expect(onLoadEarlier).toHaveBeenCalledOnce();
+      });
+
+      it("disables the control and says so while a page is in flight", async () => {
+        const onLoadEarlier = vi.fn<() => void>();
+        const el = await mount(makeProps({ onLoadEarlier }));
+        push({
+          ...longTranscript(5),
+          canLoadEarlier: true,
+          loadingEarlier: true,
+        });
+        const earlier = el.querySelector<HTMLButtonElement>(".showEarlier");
+        expect(earlier?.disabled).toBe(true);
+        expect(earlier?.textContent).toBe("Loading earlier messages…");
+      });
+
+      it("retires the control once neither source has more", async () => {
+        const el = await mount(makeProps());
+        push({ ...longTranscript(5), canLoadEarlier: false });
+        expect(el.querySelector(".showEarlier")).toBeNull();
+      });
+
+      it("re-collapses the window when the open conversation changes", async () => {
+        const props = makeProps({ conversationId: "c-1" });
+        const el = await mount(props);
+        push(longTranscript(200));
+        void act(() =>
+          el
+            .querySelector<HTMLButtonElement>(".showEarlier")!
+            .dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        );
+        expect(el.querySelectorAll(".msgUser")).toHaveLength(
+          TRANSCRIPT_WINDOW * 2
+        );
+        await act(async () => {
+          root!.render(
+            <AssistantScreen
+              {...props}
+              conversationId="c-2"
+              onReady={(u) => {
+                update = u;
+              }}
+            />
+          );
+          await Promise.resolve();
+        });
+        push(longTranscript(200));
+        expect(el.querySelectorAll(".msgUser")).toHaveLength(TRANSCRIPT_WINDOW);
       });
     });
 

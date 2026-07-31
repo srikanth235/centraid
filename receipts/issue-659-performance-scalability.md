@@ -733,6 +733,10 @@ The session transcript contains:
 | claude-code-f31b02a1-75f-1785524783-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 360 | 888382 | 29546359 | 238581 | 1127323 | 26.2919 | 360 | 888382 | 29546359 | 238581 | docs(perf): constitutional performance principle and D1-D6 doctrine (#659) |
 | claude-code-f31b02a1-75f-1785525192-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 24 | 24061 | 2897576 | 8368 | 32453 | 1.8085 | 384 | 912443 | 32443935 | 246949 | docs(perf): constitutional performance principle and D1-D6 doctrine (#659) |
 | claude-code-f31b02a1-75f-1785525257-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 1156 | 492970 | 372 | 1530 | 0.2630 | 386 | 913599 | 32936905 | 247321 | perf(vault): incremental phash clustering, bounded retention, footprint budget ( |
+| claude-code-f31b02a1-75f-1785525302-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 344 | 247063 | 189 | 535 | 0.1304 | 388 | 913943 | 33183968 | 247510 | perf(gateway): request-path sweeps, SSE backpressure, transcript paging, route l |
+| claude-code-f31b02a1-75f-1785525344-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 259 | 247407 | 183 | 444 | 0.1299 | 390 | 914202 | 33431375 | 247693 | perf(gateway): request-path sweeps, SSE backpressure, transcript paging, route l |
+| claude-code-f31b02a1-75f-1785525385-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 297 | 247666 | 152 | 451 | 0.1295 | 392 | 914499 | 33679041 | 247845 | x (#659) |
+| claude-code-f31b02a1-75f-1785525462-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 14 | 12042 | 1746370 | 3364 | 15420 | 1.0326 | 406 | 926541 | 35425411 | 251209 | perf(client): SWR cache, optimistic mutations, memoized transcript, windowed log |
 
 ### Steering
 
