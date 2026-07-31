@@ -104,6 +104,16 @@ Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
 
+## Unattended desktop runs: `CENTRAID_INSECURE_DEVICE_SECRETS`
+
+Every read of the desktop's device credentials decrypts through Electron `safeStorage`, i.e. the OS keychain. A dev build is ad-hoc signed, so macOS does not durably trust it and **re-prompts for the login password on every restart**. That makes restart-heavy scenarios — fresh gateway, warm boot, crash recovery, credential desync — impossible to drive unattended by a test harness or agent.
+
+Set `CENTRAID_INSECURE_DEVICE_SECRETS=1` to opt into the same 0600 plaintext device-secrets file that Linux hosts without libsecret already use (`apps/desktop/src/main/gateway-secrets.ts`). One format, one code path.
+
+- **Never takes effect in a packaged build.** The guard is `env === "1" && !app.isPackaged`, so a shipped Centraid ignores the variable outright and a real user's custody can never be downgraded by their environment.
+- **Give the run its own `--user-data-dir`.** The flag refuses to touch the keychain, so it cannot read an existing _encrypted_ `connection-secrets.bin` and will throw telling you so. Reusing your real profile is the one way to make it fail confusingly.
+- Switching back is automatic: run without the variable and the next read adopts the plaintext file back into keychain custody.
+
 ## `.claude/launch.json`
 
 If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for Claude/desktop launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.

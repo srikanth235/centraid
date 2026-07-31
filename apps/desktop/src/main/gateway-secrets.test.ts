@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import fs, { readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -16,10 +16,18 @@ import {
 
 const mocked = vi.hoisted(() => ({
   encryptionAvailable: false,
+  isPackaged: false,
   secretsFile: "",
 }));
 
 vi.mock(import("electron"), () => ({
+  // gateway-secrets.ts only reads `app.isPackaged` (the insecure-hatch guard);
+  // the real Electron.App type is enormous, so mock the one property and cast.
+  app: {
+    get isPackaged(): boolean {
+      return mocked.isPackaged;
+    },
+  } as unknown as Electron.App,
   safeStorage: {
     decryptString: (value: Buffer) => value.toString("utf8"),
     encryptString: (value: string) => Buffer.from(value, "utf8"),
@@ -49,7 +57,9 @@ vi.mock(import("./gateway-paths.js"), () => ({
 describe("gateway-secrets", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     mocked.encryptionAvailable = false;
+    mocked.isPackaged = false;
   });
 
   test("Linux without libsecret warns and falls back to a 0600 device-local file", async () => {
@@ -116,6 +126,41 @@ describe("gateway-secrets", () => {
     expect(getOrCreateGatewayWrappingKey("fallback")).toStrictEqual(
       fallbackKey
     );
+    expect(readFileSync(mocked.secretsFile, "utf8")).not.toMatch(
+      /^CENTRAID-DEVICE-SECRETS-V1\n/u
+    );
+  });
+
+  test("the dev hatch bypasses the keychain, without rewrites, and only unpackaged", async () => {
+    const root = await tempDir("gateway-secrets-hatch-");
+    mocked.secretsFile = path.join(root, "connection-secrets.bin");
+    // A dev Mac: the keychain is perfectly available. The hatch exists to stop
+    // the app from *using* it, because an ad-hoc-signed dev build re-prompts for
+    // the login password on every restart.
+    mocked.encryptionAvailable = true;
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    vi.stubEnv("CENTRAID_INSECURE_DEVICE_SECRETS", "1");
+
+    const key = getOrCreateGatewayWrappingKey("local");
+    expect(readFileSync(mocked.secretsFile, "utf8")).toMatch(
+      /^CENTRAID-DEVICE-SECRETS-V1\n/u
+    );
+    expect(statSync(mocked.secretsFile).mode & 0o777).toBe(0o600);
+
+    // The adopt-back-into-custody branch fires whenever custody is available,
+    // which on macOS is ALWAYS. It cannot corrupt the store (writeSecrets
+    // honours the hatch too), so assert what does regress if that branch asks
+    // isEncryptionAvailable instead of shouldUseFileFallback: a plain read
+    // rewriting the file, temp + rename, on every single access.
+    const write = vi.spyOn(fs, "writeFileSync");
+    expect(getOrCreateGatewayWrappingKey("local")).toStrictEqual(key);
+    expect(write).not.toHaveBeenCalled();
+
+    // A shipped build must not be talked out of the keychain by an environment
+    // variable — `app.isPackaged` is the hard stop, not the variable's absence.
+    mocked.secretsFile = path.join(root, "packaged-secrets.bin");
+    mocked.isPackaged = true;
+    getOrCreateGatewayWrappingKey("local");
     expect(readFileSync(mocked.secretsFile, "utf8")).not.toMatch(
       /^CENTRAID-DEVICE-SECRETS-V1\n/u
     );
