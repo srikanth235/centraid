@@ -475,6 +475,7 @@ restore the credential, press again:
 | claude-code-62298c7b-4a8-1785489194-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 718 | 224808 | 600 | 1320 | 0.1319 | 3048 | 2118439 | 109560004 | 572467 | fix(client): keep the background service installable after a dismissal (#660)Gat |
 | claude-code-62298c7b-4a8-1785489245-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 1052 | 225526 | 615 | 1669 | 0.1347 | 3050 | 2119491 | 109785530 | 573082 | fix(client): take the friction out of first run (#660)A failed fresh dial showed |
 | claude-code-62298c7b-4a8-1785492698-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2322 | 1239083 | 54900321 | 261433 | 1502838 | 41.7419 | 5372 | 3358574 | 164685851 | 834515 |  |
+| claude-code-62298c7b-4a8-1785492874-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 35 | 18959 | 1641817 | 5216 | 24210 | 1.0700 | 5407 | 3377533 | 166327668 | 839731 | test(desktop): adopt the shared fake clock in the retry suite (#660)PR #661 land |
 
 ### Steering
 

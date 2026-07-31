@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { FakeClock } from "@centraid/test-kit/fake-clock";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type * as TypeImport_detached from "./detached-gateway.js";
 
@@ -84,6 +87,8 @@ vi.mock(import("./app-sessions.js"), () => ({
 
 const LOCKED = "a process is holding gateway.db and is not answering";
 
+let clock: FakeClock;
+
 /** Fail until the supervisor latches `loopBroken`, driving its own retry timers. */
 async function failUntilGivenUp(
   ensure: (id: string) => Promise<unknown>
@@ -91,8 +96,8 @@ async function failUntilGivenUp(
   await expect(ensure("local")).rejects.toThrow(LOCKED);
   // The 1st and 2nd failures each schedule one automatic retry (1s, then 5s);
   // the 3rd failure inside the window is what trips the loop breaker.
-  await vi.advanceTimersByTimeAsync(1000);
-  await vi.advanceTimersByTimeAsync(5000);
+  await clock.advance(1000);
+  await clock.advance(5000);
 }
 
 /** The rejection message, or `""` when the call unexpectedly succeeded. */
@@ -106,13 +111,12 @@ async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
 describe("local gateway manual retry suite", () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.useFakeTimers();
+    // Installed per test, and restored per test by the helper itself — the
+    // supervisor's give-up latch is driven entirely by these timers, so a
+    // clock leaking past a failing test would hang every test after it.
+    clock = useFakeClock();
     fixture.failWith = LOCKED;
     fixture.attempts = 0;
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it("gives up on repeated start failures without pointing at unreachable Settings", async () => {
