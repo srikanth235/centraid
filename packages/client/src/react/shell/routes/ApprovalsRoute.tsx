@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
   decideOutboxItem,
   decideScopeRequest,
-  getBlocking,
+  getInbox,
   getReview,
   listOutboxGrants,
   revokeOutboxGrant,
+  subscribeInboxChanges,
+  updateInboxNotice,
 } from "../../../gateway-client-outbox.js";
+import {
+  enableWebPushWake,
+  syncWebInboxNotifications,
+} from "../../../gateway-client-push.js";
 import { confirmVaultParked } from "../../../gateway-client-vault.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
 import { useShellActions } from "../actions.js";
@@ -29,7 +35,18 @@ import {
 const REVIEW_LIMIT_DEFAULT = 20;
 const REVIEW_LIMIT_SEE_ALL = 200;
 
-// React-owned Approvals route (issues #306/#308) — the desktop UI over the
+/** The route's whole payload — one fetch triple, so the last-good copy the
+ *  route holds across refetches has a name. */
+async function loadApprovals(reviewLimit: number) {
+  const [inbox, grants, review] = await Promise.all([
+    getInbox(true),
+    listOutboxGrants(),
+    getReview(reviewLimit),
+  ]);
+  return { inbox, grants, review };
+}
+
+// React-owned Inbox route (issues #306/#308/#647) — the desktop UI over the
 // vault's outbox/blocking/scope-request/grant surface, which shipped with no
 // renderer consumer at all. Loads `GET /_vault/blocking` (the unified inbox)
 // + `GET /_vault/outbox-grants` (standing rules), maps the wire rows to the
@@ -39,21 +56,47 @@ const REVIEW_LIMIT_SEE_ALL = 200;
 export default function ApprovalsRoute(): JSX.Element {
   const { confirm, showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Bumping this forces useAsyncData to re-fetch — there's no gateway push
-  // channel for the vault plane yet, so every decision reloads explicitly.
+  // Bumping this forces useAsyncData to re-fetch. SSE rings this same doorbell;
+  // explicit decisions still reload immediately.
   const [refreshTick, setRefreshTick] = useState(0);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
 
-  const state = useAsyncData(async () => {
-    const [blocking, grants, review] = await Promise.all([
-      getBlocking(),
-      listOutboxGrants(),
-      getReview(reviewLimit),
-    ]);
-    return { blocking, grants, review };
-  }, [refreshTick, reviewLimit]);
+  // The outbox decision an `outbox` notice deep-links to (#647 D10). The
+  // nonce makes a repeat tap a fresh request; the screen owns the resulting
+  // chip/expansion move.
+  const [focusOutbox, setFocusOutbox] = useState<{
+    itemId: string | null;
+    nonce: number;
+  } | null>(null);
+
+  // Every inbox-changed doorbell bumps `refreshTick`, which is a deps change —
+  // so without `keepPreviousData` the route would swap to PageLoading on every
+  // SSE event, UNMOUNTING ApprovalsScreen and discarding whatever the owner
+  // was in the middle of: half-edited outbox artifact text, the expanded row,
+  // the "always allow" checkbox, the active chip. The loader is for the FIRST
+  // load only.
+  const state = useAsyncData(
+    () => loadApprovals(reviewLimit),
+    [refreshTick, reviewLimit],
+    { keepPreviousData: true }
+  );
 
   const reload = (): void => setRefreshTick((t) => t + 1);
+  useEffect(() => {
+    const controller = new AbortController();
+    void subscribeInboxChanges(reload, controller.signal).catch(() => {
+      // The sidebar's shared 60s poll is the fallback when SSE is unavailable.
+    });
+    // Opening Inbox is the relevant owner gesture for notification consent.
+    // Never prompt at app launch; once granted, register the opaque wake relay
+    // and compose any current content locally from the authenticated payload.
+    void enableWebPushWake(true)
+      .then((enabled) =>
+        enabled ? syncWebInboxNotifications() : Promise.resolve()
+      )
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   const runDecision = async (
     id: string,
@@ -184,22 +227,32 @@ export default function ApprovalsRoute(): JSX.Element {
     });
   };
 
+  const handleNoticeAction = (
+    noticeId: string,
+    action: "read" | "archive"
+  ): void => {
+    void runDecision(noticeId, async () => {
+      await updateInboxNotice(noticeId, action);
+    });
+  };
+
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageLoading label="Loading approvals…" />
+        <PageLoading label="Loading Inbox…" />
       </PageScroll>
     );
   }
   if (state.status === "error") {
     return (
       <PageScroll>
-        <PageEmpty message={`Couldn’t load approvals: ${state.error}`} />
+        <PageEmpty message={`Couldn’t load Inbox: ${state.error}`} />
       </PageScroll>
     );
   }
 
-  const { blocking, grants, review } = state.data;
+  const { inbox, grants, review } = state.data;
+  const blocking = inbox.decisions;
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
   // Truncated when the wire returned a full page at the current limit —
   // "See all" raises the cap in place (no separate audit-log screen).
@@ -214,15 +267,64 @@ export default function ApprovalsRoute(): JSX.Element {
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
         activity={activity}
+        notices={inbox.notices.map((notice) => ({
+          ...notice,
+          sourceType:
+            notice.detail.sourceType === "automation" ||
+            notice.detail.sourceType === "agent" ||
+            notice.detail.sourceType === "app"
+              ? notice.detail.sourceType
+              : "app",
+          detailText:
+            typeof notice.detail.error === "string"
+              ? notice.detail.error
+              : typeof notice.detail.detail === "string"
+                ? notice.detail.detail
+                : null,
+          sourceLabel:
+            typeof notice.detail.automationRef === "string"
+              ? notice.detail.automationRef
+              : typeof notice.detail.actor === "string"
+                ? notice.detail.actor
+                : typeof notice.detail.gatewayLabel === "string"
+                  ? notice.detail.gatewayLabel
+                  : null,
+        }))}
         activityTruncated={activityTruncated}
         busyId={busyId}
         onApproveOutbox={handleApproveOutbox}
         onDenyOutbox={handleDenyOutbox}
-        onOpenSettings={() => navigate({ kind: "settings" })}
+        onOpenSettings={() => navigate({ kind: "connectors" })}
         onConfirmParked={handleConfirmParked}
         onDecideScopeRequest={handleDecideScopeRequest}
         onRevokeGrant={handleRevokeGrant}
+        onReadNotice={(id) => handleNoticeAction(id, "read")}
+        onArchiveNotice={(id) => handleNoticeAction(id, "archive")}
+        onOpenNotice={(notice) => {
+          const ref = notice.detail.automationRef;
+          const appId = notice.detail.appId;
+          if (typeof ref === "string") {
+            navigate({ kind: "automation-view", automationId: ref });
+          } else if (notice.kind === "gateway-health") {
+            navigate({ kind: "gateway", tab: "alerts" });
+          } else if (typeof appId === "string") {
+            navigate({ kind: "app", id: appId });
+          } else if (notice.kind === "outbox") {
+            // We are already ON Inbox, so navigating here was a no-op. The
+            // gateway ships the staged item's id (outbox-executor.ts) — use
+            // it to put that decision in front of the owner instead.
+            const itemId = notice.detail.itemId;
+            setFocusOutbox((prev) => ({
+              itemId:
+                typeof itemId === "string" && itemId !== "" ? itemId : null,
+              nonce: (prev?.nonce ?? 0) + 1,
+            }));
+          } else {
+            navigate({ kind: "approvals" });
+          }
+        }}
         onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}
+        focusOutbox={focusOutbox}
       />
     </PageScroll>
   );

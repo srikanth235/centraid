@@ -981,6 +981,12 @@ describe("gateway", () => {
     }
 
     test("agent invoking a confirm-gated command parks; owner approval executes it", () => {
+      const decisionChanges: boolean[] = [];
+      const deps = {
+        onDecisionChanged: (created: boolean) => decisionChanges.push(created),
+      };
+      gw = createGateway(db, deps);
+      registerScheduleCommands(gw);
       // Mark the command loud-on-purpose (issue #306): confirmation is a
       // property of the command's capability row, not of its risk.
       db.vault
@@ -1005,6 +1011,7 @@ describe("gateway", () => {
         intentId: "offline-intent-1",
       });
       expect(parked.status).toBe("parked");
+      expect(decisionChanges).toStrictEqual([true]);
       if (parked.status !== "parked") return;
       const listed = gw.listParked();
       expect(listed).toHaveLength(1);
@@ -1019,11 +1026,12 @@ describe("gateway", () => {
       });
       // The approval payload is vault state, not process memory: a daemon
       // restart must leave the same review surface and resumable invocation.
-      gw = createGateway(db);
+      gw = createGateway(db, deps);
       registerScheduleCommands(gw);
       expect(gw.listParked()).toMatchObject(listed);
       const outcome = gw.confirm(owner, parked.invocationId, true);
       expect(outcome.status).toBe("executed");
+      expect(decisionChanges).toStrictEqual([true, false]);
       if (outcome.status !== "executed") return;
       const receipt = db.journal
         .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")

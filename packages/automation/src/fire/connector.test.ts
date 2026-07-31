@@ -164,6 +164,9 @@ describe("connector runtime gates", () => {
       { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(false);
+    // Distinguishable from a run that failed: hosts must not report an
+    // owner-paused connection as an automation failure (#647).
+    expect(outcome.skipped).toBe(true);
     expect(outcome.error).toMatch(/paused/u);
     expect(record.ok).toBe(false);
     expect(outcome.value).toBeUndefined(); // the handler never executed

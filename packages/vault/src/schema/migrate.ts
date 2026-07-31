@@ -34,6 +34,7 @@ import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL } from "./fts.js";
+import { INBOX_NOTICE_DDL } from "./inbox.js";
 import { JOURNAL_DDL } from "./journal.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
@@ -104,6 +105,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // After soft people.merge_people was folded into core.merge_party (#630/#638),
   // drop the unused people_merge residual without rewriting the organize band.
   DROP_PEOPLE_MERGE_DDL,
+  // Inbox is a projection: decisions stay canonical and only durable notices
+  // gain a new table (#647).
+  INBOX_NOTICE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

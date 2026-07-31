@@ -20,8 +20,6 @@ const {
   appModelPath,
   assistantTurnPath,
   resolvePath,
-  parkedListPath,
-  parkedDecisionPath,
   vaultStatusPath,
   vaultAppsPath,
   normalizeModelState,
@@ -42,8 +40,6 @@ describe("route builders", () => {
     expect(appModelPath("todo")).toBe("/centraid/todo/_turn/model");
     expect(assistantTurnPath()).toBe("/centraid/_vault/assistant/_turn");
     expect(resolvePath()).toBe("/centraid/_vault/assistant/resolve");
-    expect(parkedListPath()).toBe("/centraid/_vault/parked");
-    expect(parkedDecisionPath("inv 1")).toBe("/centraid/_vault/parked/inv%201");
     expect(vaultStatusPath()).toBe("/centraid/_vault/status");
     expect(vaultAppsPath()).toBe("/centraid/_vault/apps");
     // Turn-settle poll for reconnect catch-up (#420).

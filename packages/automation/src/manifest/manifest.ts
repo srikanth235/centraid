@@ -402,6 +402,11 @@ export interface Manifest {
   readonly version: string;
   readonly description?: string;
   readonly enabled: boolean;
+  /**
+   * Inbox delivery policy for fire outcomes. `failures` includes the first
+   * success after a failure so the owner sees recovery, then goes quiet.
+   */
+  readonly notify?: "always" | "failures" | "never";
   readonly prompt: string;
   /**
    * Trigger list. Empty is legal — an automation with no triggers fires
@@ -1139,6 +1144,19 @@ export function validateManifest(raw: unknown): Manifest {
     description = r.description;
   }
   const enabled = r.enabled === undefined ? true : r.enabled === true;
+  const notify =
+    r.notify === undefined
+      ? "failures"
+      : r.notify === "always" || r.notify === "failures" || r.notify === "never"
+        ? r.notify
+        : undefined;
+  if (!notify) {
+    throw new ManifestError(
+      "invalid_field",
+      'manifest.notify must be "always", "failures", or "never"',
+      "notify"
+    );
+  }
   const prompt = requireString(r.prompt, "prompt");
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
@@ -1214,6 +1232,7 @@ export function validateManifest(raw: unknown): Manifest {
     version,
     ...(description === undefined ? {} : { description }),
     enabled,
+    notify,
     prompt,
     triggers,
     requires,

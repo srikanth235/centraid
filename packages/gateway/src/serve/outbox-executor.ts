@@ -33,6 +33,7 @@ import type { ConnectionAuth } from "@centraid/automation";
 
 import type { ConnectionBroker } from "./connection-broker.js";
 import { timeoutSignal } from "./fetch-timeout.js";
+import { noticeGist } from "./inbox-notices.js";
 import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
@@ -222,7 +223,9 @@ export class OutboxExecutor {
       this.logger.warn(
         `outbox: stale item ${itemId} did not repark (${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"})`
       );
+      return;
     }
+    this.writeOutcomeNotice(plane, itemId, "reparked", note);
   }
 
   private async drainItem(
@@ -353,7 +356,76 @@ export class OutboxExecutor {
       this.logger.warn(
         `outbox: result for ${itemId} did not record (${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"})`
       );
+      return;
     }
+    this.writeOutcomeNotice(plane, itemId, disposition, detail);
+  }
+
+  private writeOutcomeNotice(
+    plane: VaultPlane,
+    itemId: string,
+    disposition: "sent" | "failed" | "reparked",
+    detail?: string
+  ): void {
+    const item = plane
+      .listOutbox()
+      .find((candidate) => candidate.itemId === itemId);
+    const artifact =
+      item?.artifact ?? plane.rawOutboxItem(itemId)?.artifact ?? {};
+    const artifactLabel = ["title", "subject", "name", "text"]
+      .map((key) => artifact[key])
+      .find(
+        (value): value is string =>
+          typeof value === "string" && value.trim() !== ""
+      );
+    const target = artifactLabel?.trim() ?? item?.target ?? "External write";
+    // D4: a failure headline names the reason, not just the disposition —
+    // "… — failed: 403 forbidden" beats a wall of identical "failed" cards.
+    // The full record stays in `detail`.
+    const gist = disposition === "sent" ? undefined : noticeGist(detail);
+    const suffix =
+      disposition === "sent"
+        ? "sent"
+        : disposition === "failed"
+          ? gist
+            ? `failed: ${gist}`
+            : "failed"
+          : gist
+            ? `needs approval again: ${gist}`
+            : "needs approval again";
+    plane.inbox.put({
+      kind: "outbox",
+      sourceRef: itemId,
+      headline: `${target} — ${suffix}`,
+      severity:
+        disposition === "sent"
+          ? "info"
+          : disposition === "failed"
+            ? "high"
+            : "warning",
+      detail: {
+        sourceType:
+          item?.actorKind === "app"
+            ? "app"
+            : item?.actorKind === "agent" ||
+                item?.actorKind === "assistant" ||
+                item?.actorKind === "ai_agent"
+              ? "agent"
+              : "app",
+        outcome: disposition,
+        itemId,
+        ...(item
+          ? {
+              actor: item.actor,
+              actorKind: item.actorKind,
+              verb: item.verb,
+              target: item.target,
+            }
+          : {}),
+        ...(detail ? { detail } : {}),
+        deepLink: "/inbox",
+      },
+    });
   }
 }
 

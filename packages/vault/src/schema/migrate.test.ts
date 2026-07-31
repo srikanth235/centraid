@@ -51,6 +51,9 @@ function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
     DROP INDEX IF EXISTS schedule_task_organize_idx;
     DROP INDEX IF EXISTS schedule_section_project_idx;
     DROP INDEX IF EXISTS schedule_project_owner_idx;
+    DROP INDEX IF EXISTS inbox_notice_active_idx;
+    DROP INDEX IF EXISTS inbox_notice_retention_idx;
+    DROP TABLE IF EXISTS inbox_notice;
     DROP TABLE IF EXISTS tally_recurring_expense;
     DROP TABLE IF EXISTS people_merge;
     DROP TABLE IF EXISTS social_contact_channel;
@@ -254,6 +257,7 @@ describe("schema/migrate", () => {
     const file = path.join(dir, "vault.db");
     const raw = new DatabaseSync(file);
     raw.exec(`
+      DROP TABLE inbox_notice;
       CREATE TABLE people_merge (
         merge_id        TEXT PRIMARY KEY,
         source_party_id TEXT NOT NULL,
@@ -262,7 +266,7 @@ describe("schema/migrate", () => {
         merged_at       TEXT NOT NULL,
         undone_at       TEXT
       ) STRICT;
-      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 1};
+      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 2};
     `);
     raw.close();
     expect(
@@ -531,10 +535,8 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  // These two tests exercise migrate() generically against JOURNAL_MIGRATIONS
-  // rather than VAULT_MIGRATIONS: the vault DDL's FTS triggers call a custom
-  // SQL function (vault_content_text) that only openVaultDb registers, so a
-  // bare DatabaseSync can't run VAULT_MIGRATIONS directly.
+  // Use JOURNAL_MIGRATIONS: vault FTS needs openVaultDb's custom SQL function,
+  // so a bare DatabaseSync cannot run VAULT_MIGRATIONS directly.
   test("migrate: no-op guard does not fire for a fresh (behind) or already-migrated (equal) db", () => {
     const db = new DatabaseSync(":memory:");
     // behind: fresh file, version 0 < migrations.length
@@ -617,8 +619,7 @@ describe("schema/migrate", () => {
 
     expect(() => openVaultDb({ dir })).toThrow(VaultSchemaAheadError);
 
-    // The failed open must not have touched the file: the artificially bumped
-    // version (and hence the rest of the schema) is exactly as it was left.
+    // A refused downgrade must leave the artificially bumped file untouched.
     expect(userVersionOf(vaultFile)).toBe(bumped);
   });
 });

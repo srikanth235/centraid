@@ -278,11 +278,11 @@ export default function SettingsScreen({
           )}
         </SettingsSection>
 
-        <SettingsSection label="Approvals">
+        <SettingsSection label="Inbox">
           <Pressable
             onPress={() => navigation.navigate("Approvals")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-            accessibilityLabel="Approvals"
+            accessibilityLabel="Inbox"
           >
             <Icon
               name="CheckCircle"
@@ -290,7 +290,7 @@ export default function SettingsScreen({
               color={colors.ink2}
               strokeWidth={1.75}
             />
-            <Text style={styles.rowLabel}>Pending approvals</Text>
+            <Text style={styles.rowLabel}>Decisions and updates</Text>
             <Icon
               name="ChevronRight"
               size={16}

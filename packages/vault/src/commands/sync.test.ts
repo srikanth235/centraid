@@ -786,12 +786,35 @@ describe("sync", () => {
       expect(
         (
           db.vault
-            .prepare("SELECT auth_note FROM sync_connection_health")
+            .prepare("SELECT auth_note, updated_at FROM sync_connection_health")
             .get() as {
             auth_note: string;
+            updated_at: string;
           }
         ).auth_note
       ).toMatch(/invalid_grant/u);
+      db.vault
+        .prepare(
+          "UPDATE sync_connection_health SET updated_at = ? WHERE connection_id = ?"
+        )
+        .run("2026-01-02T03:04:05.000Z", connectionId);
+      gw.invoke(owner, {
+        command: "sync.set_connection_status",
+        input: {
+          connection_id: connectionId,
+          status: "needs-auth",
+          note: "refresh still refused (invalid_grant)",
+        },
+        purpose: "dpv:ServiceProvision",
+      });
+      expect({
+        ...(db.vault
+          .prepare("SELECT auth_note, updated_at FROM sync_connection_health")
+          .get() as Record<string, unknown>),
+      }).toStrictEqual({
+        auth_note: "refresh still refused (invalid_grant)",
+        updated_at: "2026-01-02T03:04:05.000Z",
+      });
       gw.invoke(owner, {
         command: "sync.set_connection_status",
         input: { connection_id: connectionId, status: "active" },
@@ -806,6 +829,24 @@ describe("sync", () => {
       expect(
         db.vault.prepare("SELECT auth_note FROM sync_connection_health").get()
       ).toBeUndefined();
+      gw.invoke(owner, {
+        command: "sync.set_connection_status",
+        input: {
+          connection_id: connectionId,
+          status: "needs-auth",
+          note: "a new reconnect episode",
+        },
+        purpose: "dpv:ServiceProvision",
+      });
+      expect(
+        (
+          db.vault
+            .prepare(
+              "SELECT updated_at FROM sync_connection_health WHERE connection_id = ?"
+            )
+            .get(connectionId) as { updated_at: string }
+        ).updated_at
+      ).not.toBe("2026-01-02T03:04:05.000Z");
     });
   });
 

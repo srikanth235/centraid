@@ -206,7 +206,7 @@ describe("push-wake-routes", () => {
     expect(webRegistrationRows(database)).toStrictEqual([]);
   });
 
-  test("PushWakeRelay debounces vault commits and posts only opaque wake payloads", async () => {
+  test("PushWakeRelay debounces vault and Inbox wakes into opaque-only payloads", async () => {
     vi.useFakeTimers();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     const deviceId = "wake-phone";
@@ -272,6 +272,17 @@ describe("push-wake-routes", () => {
     // Opacity: no vault id or content identity in the Expo payload.
     expect(JSON.stringify(body)).not.toContain(plane.boot.vaultId);
     expect(JSON.stringify(body)).not.toContain("revoked");
+
+    send.mockClear();
+    relay.requestWake(plane.boot.vaultId);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushMicrotasks();
+    expect(send).toHaveBeenCalledOnce();
+    const explicitBody = JSON.parse(
+      String(send.mock.calls[0]?.[1]?.body)
+    ) as Array<Record<string, unknown>>;
+    expect(explicitBody).toStrictEqual(body);
+    expect(JSON.stringify(explicitBody)).not.toContain(plane.boot.vaultId);
 
     relay.attach(plane); // idempotent second attach
     relay.stop();

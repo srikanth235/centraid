@@ -240,6 +240,16 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
+import {
+  createInboxDecisionWakeTracker,
+  inboxDecisionKeys,
+  InboxEventBus,
+} from "./inbox-events.js";
+import {
+  humanizeAutomationRef,
+  noticeGist,
+  shouldWriteAutomationNotice,
+} from "./inbox-notices.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
@@ -399,6 +409,14 @@ export interface BuildGatewayOptions {
    * (defaults to a `backup` sibling of `paths.vaultDir`).
    */
   backup?: BackupConfig;
+  /**
+   * Coalescing window for the Inbox doorbell (#647). Every journalled write
+   * commit could otherwise recompute the whole Inbox projection and ring SSE
+   * to every subscriber; a bulk connector sync would pay that per batch. The
+   * first commit after idle fires promptly, the rest of the burst collapses
+   * into one trailing recomputation. Tests shorten it; hosts leave it alone.
+   */
+  inboxDoorbellWindowMs?: number;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the turn-now route. */
@@ -967,6 +985,20 @@ export async function buildGateway(
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void = () => {};
+  const inboxEvents = new InboxEventBus();
+  const inboxDecisionWake = createInboxDecisionWakeTracker();
+  const inboxDoorbellWindowMs = options.inboxDoorbellWindowMs ?? 250;
+  const inboxDoorbellWindows = new Map<
+    string,
+    { timer: NodeJS.Timeout; pending: boolean }
+  >();
+  // Restore quarantine can create a fresh decision while the registry mounts,
+  // before the relay exists. Hold those content-free wakes until the relay is
+  // constructed instead of dropping the boot-time doorbell.
+  const pendingInboxWakes = new Set<string>();
+  let requestInboxWake: (vaultId: string) => void = (vaultId) => {
+    pendingInboxWakes.add(vaultId);
+  };
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
@@ -1000,6 +1032,10 @@ export async function buildGateway(
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
+    onInboxChanged: (vaultId, wake) => {
+      inboxEvents.publish(vaultId, wake);
+      if (wake) requestInboxWake(vaultId);
+    },
     // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
     // derivatives here leaks nothing to the provider. One shared stateless
@@ -1972,6 +2008,72 @@ export async function buildGateway(
     const runId =
       opts.runId ??
       `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+    let noticeContext:
+      | {
+          name: string;
+          policy: automation.Manifest["notify"];
+          appId: string;
+          automationId: string;
+        }
+      | undefined;
+    const recordAutomationNotice = (
+      outcome: "success" | "failure" | "skipped",
+      error?: string
+    ): void => {
+      // Skips are silent (#647 D6 quiet-by-default). A paused or needs-auth
+      // connection is owner-chosen state, already carried by its own Inbox
+      // decision; minting a high-severity notice per cron tick would reset
+      // read state and wake devices forever. A skip also never becomes the
+      // stored "failure" a later success would announce a recovery from.
+      if (outcome === "skipped") return;
+      const plane = vaultRegistry.current();
+      const prior = plane.inbox.getBySource("automation", automationRef);
+      const previousOutcome =
+        prior?.detail.outcome === "success" ||
+        prior?.detail.outcome === "failure"
+          ? prior.detail.outcome
+          : undefined;
+      if (
+        !shouldWriteAutomationNotice(
+          noticeContext?.policy,
+          outcome,
+          previousOutcome
+        )
+      )
+        return;
+      // The manifest is the source of the display name; without it, humanize
+      // the ref rather than putting `<app>/<automation>` in front of the owner.
+      const name = noticeContext?.name ?? humanizeAutomationRef(automationRef);
+      // D4: the headline says WHICH failure, not just that one happened.
+      const gist = outcome === "failure" ? noticeGist(error) : undefined;
+      plane.inbox.put({
+        kind: "automation",
+        sourceRef: automationRef,
+        headline:
+          outcome === "failure"
+            ? gist
+              ? `${name} failed — ${gist}`
+              : `${name} failed`
+            : previousOutcome === "failure"
+              ? `${name} recovered`
+              : `${name} completed`,
+        severity: outcome === "failure" ? "high" : "info",
+        detail: {
+          sourceType: "automation",
+          outcome,
+          automationRef,
+          runId,
+          ...(noticeContext
+            ? {
+                appId: noticeContext.appId,
+                automationId: noticeContext.automationId,
+              }
+            : {}),
+          ...(error ? { error } : {}),
+          deepLink: `/automations/${encodeURIComponent(automationRef)}`,
+        },
+      });
+    };
     try {
       // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
       // reconciliation. The host is already mounted in `settledHosts` at that
@@ -1979,6 +2081,22 @@ export async function buildGateway(
       // and deadlock restart catch-up.
       const host = currentSettledHost();
       const ws = currentWorkspace();
+      const parsedAutomation = automation.parseRef(automationRef);
+      const automationRow = parsedAutomation
+        ? await automation.readAppOwned(
+            host.codeAppsDir(),
+            parsedAutomation.appId,
+            parsedAutomation.automationId
+          )
+        : undefined;
+      if (automationRow && parsedAutomation) {
+        noticeContext = {
+          name: automationRow.name,
+          policy: automationRow.manifest.notify,
+          appId: parsedAutomation.appId,
+          automationId: parsedAutomation.automationId,
+        };
+      }
       if (opts.idempotent && opts.runId) {
         // The MEMOIZED per-journal store: a webhook/event/data-triggered
         // automation can fire every few seconds, and a fresh
@@ -2005,7 +2123,7 @@ export async function buildGateway(
         "automations",
         agent.runner
       );
-      await runAutomation({
+      const result = await runAutomation({
         automationRef,
         runId,
         appsDir: ws.appsDir,
@@ -2072,12 +2190,21 @@ export async function buildGateway(
         },
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
+      recordAutomationNotice(
+        result.outcome.skipped
+          ? "skipped"
+          : result.outcome.ok
+            ? "success"
+            : "failure",
+        result.outcome.error
+      );
       // Grant-matched outbox items the fire just staged drain now, not
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      recordAutomationNotice("failure", message);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
       runEventBus.publish(runId, {
         type: "turn.end",
@@ -3224,7 +3351,44 @@ export async function buildGateway(
     return created;
   };
 
+  // The Inbox doorbell is coalesced per vault (#647 review). Recomputing the
+  // projection costs a listOutbox scan plus three queries, and each SSE ring
+  // makes every subscribed client refetch the whole Inbox — a bulk connector
+  // sync commits far too often to pay that per commit. A burst therefore
+  // collapses to one recomputation per window instead of one per commit;
+  // the leading edge still fires immediately so a lone write feels instant.
+  const fireInboxDoorbell = (vaultId: string): void => {
+    inboxEvents.publish(vaultId);
+    const decisions = vaultRegistry.get(vaultId)?.inboxSummary().decisions;
+    if (
+      decisions &&
+      inboxDecisionWake.observe(vaultId, inboxDecisionKeys(decisions))
+    )
+      requestInboxWake(vaultId);
+  };
+  const armInboxDoorbellWindow = (vaultId: string): void => {
+    const timer = setTimeout(() => {
+      const open = inboxDoorbellWindows.get(vaultId);
+      inboxDoorbellWindows.delete(vaultId);
+      if (!open?.pending) return;
+      fireInboxDoorbell(vaultId);
+      armInboxDoorbellWindow(vaultId);
+    }, inboxDoorbellWindowMs);
+    timer.unref();
+    inboxDoorbellWindows.set(vaultId, { timer, pending: false });
+  };
+  const ringInboxDoorbell = (vaultId: string): void => {
+    const open = inboxDoorbellWindows.get(vaultId);
+    if (open) {
+      open.pending = true;
+      return;
+    }
+    fireInboxDoorbell(vaultId);
+    armInboxDoorbellWindow(vaultId);
+  };
+
   provenanceDoorbell = (vaultId, entityTypes) => {
+    ringInboxDoorbell(vaultId);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -3959,6 +4123,7 @@ export async function buildGateway(
         enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
+        inboxEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
         // fix (this session): agent-grant approval can be the FIRST enrollment
@@ -4190,6 +4355,9 @@ export async function buildGateway(
     enrollmentStore,
     gatewayDatabase
   );
+  requestInboxWake = (vaultId) => pushWakeRelay.requestWake(vaultId);
+  for (const vaultId of pendingInboxWakes) pushWakeRelay.requestWake(vaultId);
+  pendingInboxWakes.clear();
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
@@ -4464,6 +4632,9 @@ export async function buildGateway(
     await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearTimeout(outboxTimer);
+    // A trailing Inbox doorbell must not outlive the registry it samples.
+    for (const open of inboxDoorbellWindows.values()) clearTimeout(open.timer);
+    inboxDoorbellWindows.clear();
     // Await the in-flight backup run (if any): its post-registration steps
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.

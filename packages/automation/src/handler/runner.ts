@@ -327,6 +327,14 @@ function bindConnectorVaultPayload(
 
 export interface HandlerOutcome {
   ok: boolean;
+  /**
+   * The fire ended BEFORE the handler ran, on owner-chosen or already-surfaced
+   * state — a paused / needs-auth connection, an unavailable secret, a broker
+   * refusal. Not a failure of the automation: hosts must not report a skip as
+   * one (it would spam a fresh high-severity notice every cron tick for as
+   * long as the owner leaves the connection paused — #647 review).
+   */
+  skipped?: boolean;
   value?: unknown;
   summary?: string;
   output?: unknown;

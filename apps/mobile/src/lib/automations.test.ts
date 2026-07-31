@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   cloneAutomationTemplate,
+  listAutomations,
+  listAutomationTurns,
   listAutomationTemplates,
   runAutomation,
+  setAutomationEnabled,
 } from "./automations";
 
 const { fetchJson } = vi.hoisted(() => ({
@@ -13,10 +16,22 @@ const { fetchJson } = vi.hoisted(() => ({
 }));
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({
-  authHeader: () => ({ authorization: "Bearer paired" }),
+  // Mirrors the real `apiHeaders()`: bearer + the active Space's vault. Every
+  // automation call must carry BOTH, or a deep link from an Inbox notice runs
+  // in whichever vault the gateway happens to consider default (#647 review).
+  apiHeaders: (extra?: Record<string, string>) => ({
+    authorization: "Bearer paired",
+    "x-centraid-vault": "vault-active",
+    ...extra,
+  }),
   fetchJson,
   requireGatewayBase: async () => "https://gateway.example",
 }));
+
+const AUTHED = {
+  authorization: "Bearer paired",
+  "x-centraid-vault": "vault-active",
+};
 
 describe("automations", () => {
   beforeEach(() => {
@@ -31,8 +46,30 @@ describe("automations", () => {
     expect(fetchJson).toHaveBeenCalledWith(
       "https://gateway.example/centraid/_automations/turn-now?ref=brief%2Fmain",
       {
-        headers: { authorization: "Bearer paired" },
+        headers: AUTHED,
         method: "POST",
+      }
+    );
+  });
+
+  test("loads the exact automation conversation thread", async () => {
+    const turns = [
+      {
+        turnId: "brief/main:manual:1",
+        triggerKind: "manual",
+        startedAt: 1,
+        ok: true,
+      },
+    ];
+    fetchJson.mockResolvedValue({ turns });
+    await expect(listAutomationTurns("brief/main")).resolves.toStrictEqual(
+      turns
+    );
+    expect(fetchJson).toHaveBeenCalledWith(
+      "https://gateway.example/centraid/_automations/turns?ref=brief%2Fmain&limit=50",
+      {
+        headers: AUTHED,
+        method: "GET",
       }
     );
   });
@@ -69,7 +106,7 @@ describe("automations", () => {
     expect(fetchJson).toHaveBeenCalledWith(
       "https://gateway.example/centraid/_templates",
       {
-        headers: { authorization: "Bearer paired" },
+        headers: AUTHED,
         method: "GET",
       }
     );
@@ -85,12 +122,36 @@ describe("automations", () => {
           templateId: "obligation-extractor",
           publish: true,
         }),
-        headers: {
-          authorization: "Bearer paired",
-          "content-type": "application/json",
-        },
+        headers: { ...AUTHED, "content-type": "application/json" },
         method: "POST",
       }
     );
+  });
+
+  // Regression for the #647 review: a failure notice raised in one Space used
+  // to deep-link into another vault's thread, and "Run now" fired there,
+  // because those two calls sent only the bearer.
+  test("every automation call is scoped to the active vault", async () => {
+    const calls: Array<[string, Record<string, string>]> = [];
+    fetchJson.mockImplementation(async (href, init) => {
+      calls.push([href, (init?.headers ?? {}) as Record<string, string>]);
+      return href.includes("/_templates")
+        ? []
+        : { rows: [], turns: [], turnId: "t", ok: true };
+    });
+    await listAutomations();
+    await listAutomationTurns("brief/main");
+    await runAutomation("brief/main");
+    await setAutomationEnabled("brief/main", true);
+    await cloneAutomationTemplate("obligation-extractor");
+    await listAutomationTemplates();
+    expect(calls).toHaveLength(6);
+    for (const [href, headers] of calls) {
+      expect([href, headers["x-centraid-vault"]]).toStrictEqual([
+        href,
+        "vault-active",
+      ]);
+      expect(headers.authorization).toBe("Bearer paired");
+    }
   });
 });

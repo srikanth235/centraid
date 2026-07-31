@@ -29,12 +29,16 @@ describe("vault-quarantine", () => {
       cleanup()
     );
   });
-  function openPlane(dir: string): VaultPlane {
+  function openPlane(
+    dir: string,
+    onInboxChanged?: (vaultId: string, wake: boolean) => void
+  ): VaultPlane {
     const plane = openVaultPlane({
       bootstrap: true,
       dir,
       logger: silentLogger,
       ownerName: "Priya",
+      ...(onInboxChanged ? { onInboxChanged } : {}),
     });
     cleanups.push(() => plane.stop());
     return plane;
@@ -104,6 +108,10 @@ describe("vault-quarantine", () => {
     const dir = await tempDir();
     const first = openPlane(dir);
     const { itemId, grantId } = seedApprovedOutboxItem(first);
+    const previousEpisode = "2025-12-31T23:59:59.000Z";
+    first.db.vault
+      .prepare("UPDATE outbox_item SET staged_at = ? WHERE item_id = ?")
+      .run(previousEpisode, itemId);
     first.stop();
 
     // Simulate `restoreSnapshot`'s marker having been adopted as a live vault.
@@ -112,7 +120,8 @@ describe("vault-quarantine", () => {
       JSON.stringify({ restoredAt: "2026-01-01T00:00:00.000Z", sourceSeq: 7 })
     );
 
-    const second = openPlane(dir);
+    const inboxChanges: boolean[] = [];
+    const second = openPlane(dir, (_vaultId, wake) => inboxChanges.push(wake));
     expect(second.quarantine).toMatchObject({
       sourceSeq: 7,
       restoredAt: "2026-01-01T00:00:00.000Z",
@@ -123,16 +132,19 @@ describe("vault-quarantine", () => {
 
     const item = second.db.vault
       .prepare(
-        "SELECT status, grant_id, decided_at FROM outbox_item WHERE item_id = ?"
+        "SELECT status, grant_id, decided_at, staged_at FROM outbox_item WHERE item_id = ?"
       )
       .get(itemId) as {
       status: string;
       grant_id: string | null;
       decided_at: string | null;
+      staged_at: string;
     };
     expect(item.status).toBe("pending");
     expect(item.grant_id).toBeNull();
     expect(item.decided_at).toBeNull();
+    expect(item.staged_at).not.toBe(previousEpisode);
+    expect(inboxChanges).toContain(true);
 
     const grant = second.db.vault
       .prepare("SELECT revoked_at FROM outbox_grant WHERE grant_id = ?")

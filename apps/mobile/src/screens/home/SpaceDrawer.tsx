@@ -201,7 +201,7 @@ export default function SpaceDrawer({
             <Pressable style={styles.row} onPress={go(onApprovals)}>
               <Feather name="bell" size={19} color={colors.ink3} />
               <Text style={[styles.rowLabel, { color: colors.ink }]}>
-                Approvals
+                Inbox
               </Text>
               {approvals > 0 ? (
                 <View

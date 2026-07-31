@@ -3,13 +3,19 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type * as TypeImport_lorinj from "./iroh-transport.js";
 import { installWebHost } from "./web-host.js";
 
-const { pairGatewayOverIroh, purgeIrohDeviceState } = vi.hoisted(() => ({
-  pairGatewayOverIroh: vi.fn<typeof TypeImport_lorinj.pairGatewayOverIroh>(),
-  purgeIrohDeviceState: vi.fn<typeof TypeImport_lorinj.purgeIrohDeviceState>(),
-}));
+const { pairGatewayOverIroh, purgeIrohDeviceState, syncIrohWakeConfiguration } =
+  vi.hoisted(() => ({
+    pairGatewayOverIroh: vi.fn<typeof TypeImport_lorinj.pairGatewayOverIroh>(),
+    purgeIrohDeviceState:
+      vi.fn<typeof TypeImport_lorinj.purgeIrohDeviceState>(),
+    syncIrohWakeConfiguration: vi.fn<
+      typeof TypeImport_lorinj.syncIrohWakeConfiguration
+    >(async () => undefined),
+  }));
 vi.mock(import("./iroh-transport.js"), () => ({
   pairGatewayOverIroh,
   purgeIrohDeviceState,
+  syncIrohWakeConfiguration,
 }));
 
 function ticket(): string {

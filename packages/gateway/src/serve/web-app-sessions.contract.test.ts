@@ -324,6 +324,41 @@ describe("web-app-sessions.contract scenarios", () => {
     );
   }
 
+  test("a closed same-origin PWA can fetch only private wake surfaces", async () => {
+    const cookie = await establishControl();
+    const wakeHeaders = {
+      Cookie: cookie,
+      "sec-fetch-site": "same-origin",
+      "x-centraid-service-worker": "inbox-wake",
+    };
+    const inbox = await fetch(
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/inbox")}`,
+      { headers: wakeHeaders }
+    );
+    expect(inbox.status).toBe(200);
+    await expect(inbox.json()).resolves.toMatchObject({
+      decisions: expect.any(Object),
+      notices: expect.any(Array),
+    });
+
+    const missingPurpose = await fetch(
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/inbox")}`,
+      {
+        headers: {
+          Cookie: cookie,
+          "sec-fetch-site": "same-origin",
+        },
+      }
+    );
+    expect(missingPurpose.status).toBe(401);
+
+    const widerControlSurface = await fetch(
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { headers: wakeHeaders }
+    );
+    expect(widerControlSurface.status).toBe(401);
+  });
+
   test("a persisted control session still authorizes after a gateway restart", async () => {
     const controlsFile = path.join(dataDir, "web-sessions.json");
     // Re-serve the same dataDir WITH persistence wired.

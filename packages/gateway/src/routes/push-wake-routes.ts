@@ -177,6 +177,11 @@ export class PushWakeRelay {
     this.armDue(plane);
   }
 
+  /** Request the same content-free, debounced wake used by replica commits. */
+  requestWake(vaultId: string): void {
+    this.schedule(vaultId);
+  }
+
   stop(): void {
     this.#stopped = true;
     for (const unsubscribe of this.#unsubscribes.values()) unsubscribe();

@@ -29,10 +29,26 @@ import {
 import type { AutomationRow, AutomationTemplate } from "../../lib/automations";
 import type { AutomationsScreenProps } from "../../navigation";
 import { makeStyles } from "./Automations.styles";
+import AutomationThread from "./AutomationThread";
 import { useAutomations } from "./useAutomations";
 import type { AutomationsState } from "./useAutomations";
 
 export default function AutomationsScreen({
+  navigation,
+  route,
+}: AutomationsScreenProps): React.JSX.Element {
+  const focusedRef = route.params?.automationRef;
+  return focusedRef ? (
+    <AutomationThread
+      automationRef={focusedRef}
+      onLeave={() => navigation.goBack()}
+    />
+  ) : (
+    <AutomationsList navigation={navigation} route={route} />
+  );
+}
+
+function AutomationsList({
   navigation,
 }: AutomationsScreenProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -76,7 +92,10 @@ export default function AutomationsScreen({
     [installing, refresh]
   );
 
-  const rows = state.kind === "ready" ? state.rows : [];
+  const rows = useMemo(
+    () => (state.kind === "ready" ? state.rows : []),
+    [state]
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -123,6 +142,7 @@ export default function AutomationsScreen({
         renderItem={({ item }) => (
           <AutomationCard
             row={item}
+            focused={false}
             toggle={toggle}
             styles={styles}
             colors={colors}
@@ -246,11 +266,13 @@ type RunState = "idle" | "running" | "started";
 
 function AutomationCard({
   row,
+  focused,
   toggle,
   styles,
   colors,
 }: {
   row: AutomationRow;
+  focused: boolean;
   toggle: (ref: string, next: boolean) => Promise<void>;
   styles: Styles;
   colors: Colors;
@@ -306,7 +328,12 @@ function AutomationCard({
     run === "running" ? "Running…" : run === "started" ? "Started" : "Run now";
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[styles.card, focused && { borderColor: colors.accent }]}
+      accessibilityLabel={
+        focused ? `${row.name}, opened from Inbox` : undefined
+      }
+    >
       <View style={styles.cardHead}>
         <Text style={styles.cardName} numberOfLines={1}>
           {row.name}
@@ -337,6 +364,12 @@ function AutomationCard({
         <Feather name="clock" size={12} color={colors.ink3} />
         <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
       </View>
+
+      {focused ? (
+        <Text style={[styles.scheduleText, { color: colors.accent }]}>
+          Opened from Inbox
+        </Text>
+      ) : null}
 
       {row.description ? (
         <Text style={styles.description} numberOfLines={3}>

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   BlockingSummary,
+  InboxSummary,
   OutboxItem,
   OutboxNeedsAuth,
 } from "../../gateway-client-outbox.js";
@@ -12,9 +13,16 @@ import type { VaultParkedEntry } from "../../gateway-client-vault.js";
 import type * as TypeImport_bmsl46 from "../../gateway-client.js";
 import type * as TypeImport_6f8n6u from "./useBlockingCount.js";
 
-const getBlocking = vi.fn<typeof TypeImport_bmsl46.getBlocking>();
+const getInbox = vi.fn<typeof TypeImport_bmsl46.getInbox>();
+const subscribeInboxChanges =
+  vi.fn<typeof TypeImport_bmsl46.subscribeInboxChanges>();
+const syncWebInboxNotifications =
+  vi.fn<typeof TypeImport_bmsl46.syncWebInboxNotifications>();
 vi.mock(import("../../gateway-client.js"), () => ({
-  getBlocking: () => getBlocking(),
+  getInbox: () => getInbox(),
+  subscribeInboxChanges: (onChange: () => void, signal?: AbortSignal) =>
+    subscribeInboxChanges(onChange, signal),
+  syncWebInboxNotifications: () => syncWebInboxNotifications(),
 }));
 
 let useBlockingCount: typeof TypeImport_6f8n6u.useBlockingCount;
@@ -44,6 +52,7 @@ const needsAuthItem: OutboxNeedsAuth = {
   kind: "service",
   label: "Service",
   note: null,
+  attentionAt: "2026-01-01T00:00:00.000Z",
 };
 const parkedItem: VaultParkedEntry = {
   invocationId: "invocation-1",
@@ -70,9 +79,26 @@ function blockingSummary({
   };
 }
 
+function inboxSummary(decisions = blockingSummary()): InboxSummary {
+  return {
+    decisions: {
+      ...decisions,
+      count:
+        decisions.outbox.length +
+        decisions.needsAuth.length +
+        decisions.parked.length +
+        decisions.scopeRequests.length,
+    },
+    notices: [],
+    unreadNoticeCount: 0,
+  };
+}
+
 describe("useBlockingCount", () => {
   beforeEach(async () => {
-    getBlocking.mockReset();
+    getInbox.mockReset();
+    subscribeInboxChanges.mockReset().mockResolvedValue(undefined);
+    syncWebInboxNotifications.mockReset().mockResolvedValue(undefined);
     ({ useBlockingCount } = await import("./useBlockingCount.js"));
   });
 
@@ -102,24 +128,24 @@ describe("useBlockingCount", () => {
 
   describe("useBlockingCount", () => {
     it("sums all four blocking groups", async () => {
-      getBlocking.mockResolvedValue(
-        blockingSummary({ outbox: 2, needsAuth: 1, parked: 3 })
+      getInbox.mockResolvedValue(
+        inboxSummary(blockingSummary({ outbox: 2, needsAuth: 1, parked: 3 }))
       );
       await mount();
       expect(count()).toBe(6);
     });
 
     it("stays at the last known count when the gateway is unreachable", async () => {
-      getBlocking.mockRejectedValue(new Error("offline"));
+      getInbox.mockRejectedValue(new Error("offline"));
       await mount();
       expect(count()).toBe(0);
     });
 
     it("refreshes on window focus", async () => {
-      getBlocking.mockResolvedValue(blockingSummary());
+      getInbox.mockResolvedValue(inboxSummary());
       await mount();
       expect(count()).toBe(0);
-      getBlocking.mockResolvedValue(blockingSummary({ outbox: 1 }));
+      getInbox.mockResolvedValue(inboxSummary(blockingSummary({ outbox: 1 })));
       await act(async () => {
         window.dispatchEvent(new Event("focus"));
       });

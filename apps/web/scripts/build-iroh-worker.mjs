@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+/**
+ * Build the browser Iroh wasm-bindgen module as a classic worker script.
+ *
+ * public/sw.js is deliberately a classic service worker because it predates
+ * module-worker support in Centraid's browser floor. wasm-bindgen emits ESM,
+ * so this small deterministic adapter removes only its export syntax and
+ * publishes the two bindings the worker needs. The tracked generated source
+ * and WASM remain the source of truth.
+ */
+import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+const root = path.resolve(import.meta.dirname, "..");
+const generated = path.join(root, "src/generated");
+const sourcePath = path.join(generated, "centraid_web_iroh.js");
+const wasmPath = path.join(generated, "centraid_web_iroh_bg.wasm");
+const publicDir = path.join(root, "public");
+const outputPath = path.join(publicDir, "centraid-worker-iroh.js");
+const outputWasmPath = path.join(publicDir, "centraid-worker-iroh.wasm");
+
+const source = readFileSync(sourcePath, "utf8");
+const classic = source
+  .replace(
+    "module_or_path = new URL('centraid_web_iroh_bg.wasm', import.meta.url);",
+    "module_or_path = new URL('/centraid-worker-iroh.wasm' + self.location.search, self.location.origin);"
+  )
+  .replace(
+    "export { initSync, __wbg_init as default };",
+    "self.CentraidIrohWorkerBindings = Object.freeze({ BrowserEndpoint, initWasm: __wbg_init });"
+  )
+  .replace(/^export (?=(?:class|function) )/gmu, "");
+
+if (
+  classic === source ||
+  classic.includes("import.meta.url") ||
+  /^export /gmu.test(classic) ||
+  !classic.includes("self.CentraidIrohWorkerBindings")
+) {
+  throw new Error(
+    "build-iroh-worker: wasm-bindgen output shape changed; update the classic-worker adapter"
+  );
+}
+
+writeFileSync(outputPath, classic);
+copyFileSync(wasmPath, outputWasmPath);
+process.stdout.write("[web] emitted public/centraid-worker-iroh.{js,wasm}\n");

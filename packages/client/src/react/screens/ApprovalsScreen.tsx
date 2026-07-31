@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import Button from "../ui/Button.js";
 import { cx } from "../ui/cx.js";
@@ -135,6 +137,23 @@ export interface ApprovalsActivityRowDTO {
   action: string;
 }
 
+export interface InboxNoticeRowDTO {
+  noticeId: string;
+  kind: string;
+  sourceRef: string;
+  headline: string;
+  detail: Record<string, unknown>;
+  detailText: string | null;
+  sourceLabel: string | null;
+  severity: "info" | "warning" | "high";
+  sourceType: "automation" | "agent" | "app";
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  readAt: string | null;
+  archivedAt: string | null;
+}
+
 export interface ApprovalsScreenProps {
   outbox: readonly ApprovalsOutboxRowDTO[];
   needsAuth: readonly ApprovalsNeedsAuthRowDTO[];
@@ -142,6 +161,7 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   activity: readonly ApprovalsActivityRowDTO[];
+  notices?: readonly InboxNoticeRowDTO[];
   /**
    * Whether the review feed was truncated at the current limit — drives the
    * in-place "See all" affordance (issue #552; no separate audit screen).
@@ -163,8 +183,19 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
+  onReadNotice?: (noticeId: string) => void;
+  onArchiveNotice?: (noticeId: string) => void;
+  onOpenNotice?: (notice: InboxNoticeRowDTO) => void;
   /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
+  /**
+   * A request to bring one outbox decision into view — what tapping an
+   * `outbox` notice means (#647 D10). `nonce` makes a repeat tap on the SAME
+   * item a new request; the screen switches to "Needs me", expands that row
+   * and scrolls it into view. A null itemId — or one that is no longer open
+   * (already decided, drained) — lands on "Needs me" with nothing focused.
+   */
+  focusOutbox?: { itemId: string | null; nonce: number } | null;
 }
 
 function GroupHead({
@@ -224,6 +255,7 @@ function OutboxRow({
   row,
   busy,
   expanded,
+  focused = false,
   onToggle,
   onApprove,
   onDeny,
@@ -231,11 +263,22 @@ function OutboxRow({
   row: ApprovalsOutboxRowDTO;
   busy: boolean;
   expanded: boolean;
+  /** Deep-link target from an outbox notice — highlight and scroll into view. */
+  focused?: boolean;
   onToggle: () => void;
   onApprove: (alwaysAllow: boolean, artifact?: Record<string, unknown>) => void;
   onDeny: () => void;
 }): JSX.Element {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    // `scrollIntoView` is absent under jsdom — the highlight is the assertable
+    // half of the behaviour, the scroll is the browser-only nicety.
+    if (focused && el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "nearest" });
+    }
+  }, [focused]);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState<Record<string, string>>({});
 
@@ -274,7 +317,13 @@ function OutboxRow({
   };
 
   return (
-    <div className={styles.row} data-expanded={expanded ? "true" : undefined}>
+    <div
+      ref={rootRef}
+      className={styles.row}
+      data-expanded={expanded ? "true" : undefined}
+      data-focused={focused ? "true" : undefined}
+      data-testid={`outbox-row-${row.itemId}`}
+    >
       <button type="button" className={styles.rowMain} onClick={onToggle}>
         <span className={styles.rowIcon}>
           <Icon name="Send" size={14} />
@@ -758,15 +807,227 @@ function ActivityRow({
   );
 }
 
-/** Empty state for the inbox groups — the grants section renders regardless. */
-function InboxEmpty(): JSX.Element {
+/**
+ * Empty state for the inbox groups — the grants section renders regardless.
+ * `text` defaults to the inbox-zero claim, which is only honest when NOTHING
+ * is waiting; a chip that filters the notice stream passes neutral copy so an
+ * empty notice list never implies the pinned decisions are gone too.
+ */
+function InboxEmpty({
+  text = "Nothing waiting on you.",
+}: {
+  text?: string;
+}): JSX.Element {
   return (
     <div className={emptyCss.pageEmpty}>
       <div className={emptyCss.pageEmptyIcon}>
         <Icon name="CheckCircle" size={22} />
       </div>
-      <div className={emptyCss.pageEmptyText}>Nothing waiting on you.</div>
+      <div className={emptyCss.pageEmptyText}>{text}</div>
     </div>
+  );
+}
+
+/**
+ * The eight app-icon palette hues (`--c-<hue>` in design-tokens). A notice's
+ * correspondent tile borrows one so the same source always looks the same —
+ * scan-level "who is talking" identity, the way an app icon works.
+ */
+const NOTICE_HUES = [
+  "amber",
+  "forest",
+  "indigo",
+  "ochre",
+  "rose",
+  "slate",
+  "teal",
+  "violet",
+] as const;
+
+export type NoticeHue = (typeof NOTICE_HUES)[number];
+
+/** Deterministic hue for a correspondent — stable across renders and reloads. */
+export function noticeHue(source: string): NoticeHue {
+  let h = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    h = (h * 31 + source.charCodeAt(i)) % 100003;
+  }
+  return NOTICE_HUES[h % NOTICE_HUES.length] ?? "slate";
+}
+
+/** Correspondent glyph — kind wins (gateway health isn't an "app"), else source type. */
+function noticeIcon(
+  kind: string,
+  sourceType: InboxNoticeRowDTO["sourceType"]
+): IconName {
+  if (kind === "gateway-health") return "Cpu";
+  switch (sourceType) {
+    case "automation":
+      return "Bolt";
+    case "agent":
+      return "Sparkle";
+    case "app":
+      return "Command";
+  }
+}
+
+/**
+ * Severity as a WORD, not a coloured rail — the pill replaces the off-system
+ * `border-left` treatment. `info` gets nothing: a quiet update needs no label.
+ */
+export function noticeSeverityLabel(
+  kind: string,
+  severity: InboxNoticeRowDTO["severity"]
+): string | null {
+  if (severity === "info") return null;
+  if (kind === "gateway-health")
+    return severity === "high" ? "Down" : "Degraded";
+  return severity === "high" ? "Failed" : "Warning";
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+function spanWords(ms: number): string {
+  if (ms >= DAY_MS) {
+    const d = Math.round(ms / DAY_MS);
+    return `${d} day${d === 1 ? "" : "s"}`;
+  }
+  if (ms >= HOUR_MS) {
+    const h = Math.round(ms / HOUR_MS);
+    return `${h} hour${h === 1 ? "" : "s"}`;
+  }
+  const m = Math.max(1, Math.round(ms / MINUTE_MS));
+  return `${m} minute${m === 1 ? "" : "s"}`;
+}
+
+/**
+ * Collapsed-notice duration phrase (#647). A day-plus run of failures reads as
+ * "failing for 6 days" — the thing the owner actually needs to know; anything
+ * shorter, or merely informational, keeps the neutral "×6 over 3 hours".
+ * Returns null for an uncollapsed notice (count 1), which has no span to tell.
+ */
+export function noticeSpanPhrase(
+  row: Pick<InboxNoticeRowDTO, "count" | "firstAt" | "lastAt" | "severity">
+): string | null {
+  if (row.count <= 1) return null;
+  const first = Date.parse(row.firstAt);
+  const last = Date.parse(row.lastAt);
+  // Unparseable or non-advancing timestamps: state the multiplicity only,
+  // never invent a duration.
+  if (Number.isNaN(first) || Number.isNaN(last) || last <= first) {
+    return `×${row.count}`;
+  }
+  const span = last - first;
+  if (row.severity !== "info" && span >= DAY_MS) {
+    return `failing for ${spanWords(span)}`;
+  }
+  return `×${row.count} over ${spanWords(span)}`;
+}
+
+/** Attempt-strip bars are capped; the remainder becomes a leading "+N". */
+export const NOTICE_BAR_MAX = 8;
+
+export function noticeBarCount(count: number): number {
+  if (!Number.isFinite(count) || count <= 1) return 0;
+  return Math.min(Math.floor(count), NOTICE_BAR_MAX);
+}
+
+function NoticeRow({
+  row,
+  busy,
+  onRead,
+  onArchive,
+  onOpen,
+}: {
+  row: InboxNoticeRowDTO;
+  busy: boolean;
+  onRead: () => void;
+  onArchive: () => void;
+  onOpen: () => void;
+}): JSX.Element {
+  const hue = noticeHue(row.sourceRef || row.sourceLabel || row.kind);
+  const severityLabel = noticeSeverityLabel(row.kind, row.severity);
+  const spanPhrase = noticeSpanPhrase(row);
+  const bars = noticeBarCount(row.count);
+  const overflow = row.count - NOTICE_BAR_MAX;
+  return (
+    <article
+      className={styles.noticeRow}
+      data-severity={row.severity}
+      data-unread={row.readAt === null ? "true" : undefined}
+    >
+      <span
+        className={styles.noticeTile}
+        data-hue={hue}
+        data-testid="notice-tile"
+        aria-hidden="true"
+      >
+        <Icon name={noticeIcon(row.kind, row.sourceType)} size={14} />
+      </span>
+      <button type="button" className={styles.noticeBody} onClick={onOpen}>
+        <span className={styles.noticeHeadline}>
+          {row.readAt === null ? (
+            <span
+              className={styles.unreadDot}
+              data-testid="notice-unread-dot"
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className={styles.noticeHeadlineText}>{row.headline}</span>
+        </span>
+        <span className={styles.noticeMeta}>
+          {severityLabel ? (
+            <span
+              className={styles.severityPill}
+              data-testid="notice-severity-pill"
+            >
+              {severityLabel}
+            </span>
+          ) : null}
+          {row.kind.replaceAll("-", " ")}
+          {row.sourceLabel ? ` · ${row.sourceLabel}` : ""} ·{" "}
+          {new Date(row.lastAt).toLocaleString()}
+          {spanPhrase ? ` · ${spanPhrase}` : ""}
+        </span>
+        {bars > 0 ? (
+          <span className={styles.streak} data-testid="notice-streak">
+            {overflow > 0 ? (
+              <span className={styles.streakOverflow}>+{overflow}</span>
+            ) : null}
+            <span className={styles.streakBars} aria-hidden="true">
+              {Array.from({ length: bars }, (_, i) => (
+                <span key={i} className={styles.streakBar} />
+              ))}
+            </span>
+          </span>
+        ) : null}
+        {row.detailText ? (
+          <span className={styles.noticeDetail}>{row.detailText}</span>
+        ) : null}
+      </button>
+      <div className={styles.noticeActions}>
+        {row.readAt === null && row.archivedAt === null ? (
+          <Button
+            label="Mark read"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onRead}
+          />
+        ) : null}
+        {row.archivedAt === null ? (
+          <Button
+            label="Archive"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onArchive}
+          />
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -780,6 +1041,7 @@ export default function ApprovalsScreen(
     scopeRequests,
     grants,
     activity,
+    notices = [],
     activityTruncated = false,
     busyId,
     onApproveOutbox,
@@ -788,12 +1050,38 @@ export default function ApprovalsScreen(
     onConfirmParked,
     onDecideScopeRequest,
     onRevokeGrant,
+    onReadNotice = () => undefined,
+    onArchiveNotice = () => undefined,
+    onOpenNotice = () => undefined,
     onSeeAllActivity,
+    focusOutbox = null,
   } = props;
   const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
+  const [inboxFilter, setInboxFilter] = useState<
+    "needs" | "automations" | "agents" | "apps" | "archived"
+  >("needs");
+  const [focusedOutbox, setFocusedOutbox] = useState<string | null>(null);
+  const [seenFocusNonce, setSeenFocusNonce] = useState<number | null>(null);
+
+  // Honor a deep link from an outbox notice (#647 D10). Adjusting state while
+  // rendering (React's documented "derived from props" escape) rather than in
+  // an effect: the move must be part of the same paint as the tap, and a
+  // nonce-keyed effect would cascade an extra render. Keyed on the nonce so
+  // tapping the same notice twice re-focuses; an item that is no longer open
+  // (decided or drained since the notice) lands on "Needs me" with nothing
+  // highlighted rather than pointing at a row that isn't there.
+  if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
+    const { itemId } = focusOutbox;
+    const stillOpen =
+      itemId !== null && outbox.some((row) => row.itemId === itemId);
+    setSeenFocusNonce(focusOutbox.nonce);
+    setInboxFilter("needs");
+    setFocusedOutbox(stillOpen ? itemId : null);
+    setExpandedOutbox(stillOpen ? itemId : null);
+  }
 
   const filteredActivity = useMemo(() => {
     if (activityFilter === "denied") {
@@ -802,13 +1090,37 @@ export default function ApprovalsScreen(
     return activity;
   }, [activity, activityFilter]);
 
+  const activeNotices = notices.filter((notice) => notice.archivedAt === null);
+  const archivedNotices = notices.filter(
+    (notice) => notice.archivedAt !== null
+  );
+  const filteredNotices =
+    inboxFilter === "archived"
+      ? archivedNotices
+      : inboxFilter === "needs"
+        ? activeNotices
+        : activeNotices.filter(
+            (notice) =>
+              notice.sourceType ===
+              (inboxFilter === "automations"
+                ? "automation"
+                : inboxFilter === "agents"
+                  ? "agent"
+                  : "app")
+          );
+  const totalCount =
+    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
+  // Open decisions are pinned at the top under EVERY chip (Archived
+  // included): the chips filter the notice stream, they never hide something
+  // that is blocking the owner. Hiding them behind "Needs me" made a decision
+  // vanish the moment the owner tapped any other chip (#647 D3).
+  const showDecisions = totalCount > 0;
   const inboxEmpty =
     outbox.length === 0 &&
     needsAuth.length === 0 &&
     parked.length === 0 &&
-    scopeRequests.length === 0;
-  const totalCount =
-    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
+    scopeRequests.length === 0 &&
+    activeNotices.length === 0;
 
   return (
     <div className={styles.page}>
@@ -817,25 +1129,49 @@ export default function ApprovalsScreen(
           <span className={styles.titleIcon}>
             <Icon name="CheckCircle" size={18} strokeWidth={2} />
           </span>
-          <h1>Approvals</h1>
+          <h1>Inbox</h1>
         </div>
         <p className={styles.subtitle}>
           {totalCount > 0
             ? `${totalCount} waiting on you`
-            : "Everything the vault has staged or parked for your say-so."}
+            : activeNotices.length > 0
+              ? `${activeNotices.length} recent update${activeNotices.length === 1 ? "" : "s"}`
+              : "Decisions and updates from your automations, agents, and apps."}
         </p>
       </div>
 
-      {inboxEmpty ? (
+      <fieldset className={styles.inboxFilters} aria-label="Inbox filter">
+        {(
+          [
+            ["needs", "Needs me"],
+            ["automations", "Automations"],
+            ["agents", "Agents"],
+            ["apps", "Apps"],
+            ["archived", "Archived"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={styles.filterChip}
+            data-active={inboxFilter === value ? "true" : undefined}
+            onClick={() => setInboxFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </fieldset>
+
+      {inboxEmpty && inboxFilter === "needs" ? (
         <InboxEmpty />
       ) : (
         <div className={styles.groups}>
-          {outbox.length > 0 ? (
+          {showDecisions && totalCount > 0 ? (
             <section>
               <GroupHead
-                icon={<Icon name="Send" size={13} />}
-                label="Outbox"
-                count={outbox.length}
+                icon={<Icon name="CheckCircle" size={13} />}
+                label="Needs me"
+                count={totalCount}
               />
               <div className={styles.list}>
                 {outbox.map((row) => (
@@ -844,6 +1180,7 @@ export default function ApprovalsScreen(
                     row={row}
                     busy={busyId === row.itemId}
                     expanded={expandedOutbox === row.itemId}
+                    focused={focusedOutbox === row.itemId}
                     onToggle={() =>
                       setExpandedOutbox(
                         expandedOutbox === row.itemId ? null : row.itemId
@@ -857,18 +1194,6 @@ export default function ApprovalsScreen(
                     onDeny={() => onDenyOutbox(row.itemId)}
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {needsAuth.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="AlertTriangle" size={13} />}
-                label="Needs auth"
-                count={needsAuth.length}
-              />
-              <div className={styles.list}>
                 {needsAuth.map((row) => (
                   <NeedsAuthRow
                     key={row.connectionId}
@@ -876,18 +1201,6 @@ export default function ApprovalsScreen(
                     onOpenSettings={onOpenSettings}
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {parked.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="Clock" size={13} />}
-                label="Parked"
-                count={parked.length}
-              />
-              <div className={styles.list}>
                 {parked.map((row) => (
                   <ParkedRow
                     key={row.invocationId}
@@ -906,18 +1219,6 @@ export default function ApprovalsScreen(
                     }
                   />
                 ))}
-              </div>
-            </section>
-          ) : null}
-
-          {scopeRequests.length > 0 ? (
-            <section>
-              <GroupHead
-                icon={<Icon name="Key" size={13} />}
-                label="Scope requests"
-                count={scopeRequests.length}
-              />
-              <div className={styles.list}>
                 {scopeRequests.map((row) => (
                   <ScopeRequestRow
                     key={row.requestId}
@@ -931,35 +1232,63 @@ export default function ApprovalsScreen(
               </div>
             </section>
           ) : null}
+
+          {filteredNotices.length > 0 ? (
+            <section>
+              <GroupHead
+                icon={<Icon name="Bell" size={13} />}
+                label={inboxFilter === "archived" ? "Archived" : "Updates"}
+                count={filteredNotices.length}
+              />
+              <div className={styles.list}>
+                {filteredNotices.map((notice) => (
+                  <NoticeRow
+                    key={notice.noticeId}
+                    row={notice}
+                    busy={busyId === notice.noticeId}
+                    onRead={() => onReadNotice(notice.noticeId)}
+                    onArchive={() => onArchiveNotice(notice.noticeId)}
+                    onOpen={() => onOpenNotice(notice)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : inboxFilter === "needs" ? null : (
+            // A notice-filtering chip with no matches says only that: the
+            // pinned decisions above are still waiting.
+            <InboxEmpty text="No notices here." />
+          )}
         </div>
       )}
 
-      <section className={styles.grantsSection}>
-        <GroupHead
-          icon={<Icon name="Key" size={13} />}
-          label="Standing grants"
-          count={grants.length}
-        />
-        {grants.length > 0 ? (
-          <div className={styles.grantsList}>
-            {grants.map((row) => (
-              <GrantRow
-                key={row.grantId}
-                row={row}
-                busy={busyId === row.grantId}
-                onRevoke={() => onRevokeGrant(row.grantId)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={styles.grantsEmpty}>
-            No standing grants yet — “always allow” on an outbox approval mints
-            one.
-          </p>
-        )}
-      </section>
+      {inboxFilter === "archived" ? (
+        <section className={styles.grantsSection}>
+          <GroupHead
+            icon={<Icon name="Key" size={13} />}
+            label="Standing grants"
+            count={grants.length}
+          />
+          {grants.length > 0 ? (
+            <div className={styles.grantsList}>
+              {grants.map((row) => (
+                <GrantRow
+                  key={row.grantId}
+                  row={row}
+                  busy={busyId === row.grantId}
+                  onRevoke={() => onRevokeGrant(row.grantId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className={styles.grantsEmpty}>
+              No standing grants yet — “always allow” on an outbox approval
+              mints one.
+            </p>
+          )}
+        </section>
+      ) : null}
 
-      {activity.length > 0 ? (
+      {inboxFilter === "archived" && activity.length > 0 ? (
         <section className={styles.grantsSection} data-testid="recent-activity">
           <div className={styles.activityHead}>
             <GroupHead

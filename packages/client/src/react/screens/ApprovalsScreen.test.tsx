@@ -4,7 +4,13 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ApprovalsScreen from "./ApprovalsScreen.js";
+import ApprovalsScreen, {
+  NOTICE_BAR_MAX,
+  noticeBarCount,
+  noticeHue,
+  noticeSeverityLabel,
+  noticeSpanPhrase,
+} from "./ApprovalsScreen.js";
 import type {
   ApprovalsActivityRowDTO,
   ApprovalsGrantRowDTO,
@@ -13,6 +19,7 @@ import type {
   ApprovalsParkedRowDTO,
   ApprovalsScopeRequestRowDTO,
   ApprovalsScreenProps,
+  InboxNoticeRowDTO,
 } from "./ApprovalsScreen.js";
 
 const outboxRow: ApprovalsOutboxRowDTO = {
@@ -83,6 +90,26 @@ const grantRow: ApprovalsGrantRowDTO = {
   target: "ravi@example.com",
   createdAgo: "3d ago",
 };
+
+function noticeRow(over: Partial<InboxNoticeRowDTO> = {}): InboxNoticeRowDTO {
+  return {
+    noticeId: "notice-1",
+    kind: "automation",
+    sourceRef: "brief/digest",
+    headline: "Digest failed",
+    detail: { sourceType: "automation" },
+    detailText: "Three messages were not imported.",
+    sourceLabel: "brief/digest",
+    severity: "high",
+    sourceType: "automation",
+    count: 2,
+    firstAt: "2026-07-29T01:00:00.000Z",
+    lastAt: "2026-07-30T01:00:00.000Z",
+    readAt: null,
+    archivedAt: null,
+    ...over,
+  };
+}
 
 function activityRow(
   over: Partial<ApprovalsActivityRowDTO> = {}
@@ -168,16 +195,27 @@ describe("screens/ApprovalsScreen", () => {
     if (!btn) throw new Error(`no button with text "${text}"`);
     return btn as HTMLButtonElement;
   }
+  function rerender(props: ApprovalsScreenProps): void {
+    act(() => {
+      root?.render(<ApprovalsScreen {...props} />);
+    });
+  }
+  function openArchived(el: HTMLElement): void {
+    act(() => {
+      findButton(el, "Archived").click();
+    });
+  }
 
   describe(ApprovalsScreen, () => {
-    it("shows the honest empty state when nothing is waiting, but still renders the grants section", () => {
+    it("shows the honest empty state and keeps retained grants under Archived", () => {
       const el = mount(makeProps());
       expect(el.textContent).toContain("Nothing waiting on you.");
+      openArchived(el);
       expect(el.textContent).toContain("Standing grants");
       expect(el.textContent).toContain("No standing grants yet");
     });
 
-    it("groups the inbox by kind with counts", () => {
+    it("renders every decision type in one pinned Needs me stream", () => {
       const el = mount(
         makeProps({
           outbox: [outboxRow],
@@ -186,11 +224,139 @@ describe("screens/ApprovalsScreen", () => {
           scopeRequests: [scopeRow],
         })
       );
-      expect(el.textContent).toContain("Outbox");
-      expect(el.textContent).toContain("Needs auth");
-      expect(el.textContent).toContain("Parked");
-      expect(el.textContent).toContain("Scope requests");
+      expect(el.textContent).toContain("Hi");
+      expect(el.textContent).toContain("work gmail");
+      expect(el.textContent).toContain("social.send_message");
+      expect(el.textContent).toContain("invoicer");
+      expect(el.querySelectorAll("section")).toHaveLength(1);
       expect(el.textContent).toContain("4 waiting on you");
+    });
+
+    it("keeps notices non-blocking while exposing read and archive actions", () => {
+      const onReadNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onReadNotice"]>>();
+      const onArchiveNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onArchiveNotice"]>>();
+      const el = mount(
+        makeProps({
+          outbox: [outboxRow],
+          notices: [noticeRow()],
+          onReadNotice,
+          onArchiveNotice,
+        })
+      );
+      expect(el.textContent).toContain("1 waiting on you");
+      expect(el.textContent).toContain("Digest failed");
+      // The collapsed multiplicity now rides the meta line as a duration
+      // phrase + attempt strip, not a `×N` suffix on the headline.
+      expect(el.textContent).toContain("failing for 1 day");
+      expect(
+        el.querySelector('[data-testid="notice-severity-pill"]')?.textContent
+      ).toBe("Failed");
+      expect(
+        el.querySelectorAll('[data-testid="notice-streak"] span span')
+      ).toHaveLength(2);
+      expect(el.querySelector('[data-testid="notice-tile"]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid="notice-unread-dot"]')
+      ).not.toBeNull();
+      expect(el.textContent).toContain("brief/digest");
+      act(() => findButton(el, "Mark read").click());
+      act(() => {
+        (
+          [...el.querySelectorAll("button")].find(
+            (button) => button.textContent === "Archive"
+          ) as HTMLButtonElement
+        ).click();
+      });
+      expect(onReadNotice).toHaveBeenCalledWith("notice-1");
+      expect(onArchiveNotice).toHaveBeenCalledWith("notice-1");
+    });
+
+    it("filters active notices by source and retains archived notices in history", () => {
+      const el = mount(
+        makeProps({
+          notices: [
+            noticeRow(),
+            noticeRow({
+              noticeId: "app-notice",
+              sourceRef: "app-1",
+              headline: "Export sent",
+              sourceType: "app",
+              detail: { sourceType: "app" },
+              sourceLabel: "Exports",
+            }),
+            noticeRow({
+              noticeId: "archived-notice",
+              sourceRef: "old",
+              headline: "Old failure",
+              archivedAt: "2026-07-30T02:00:00.000Z",
+            }),
+          ],
+        })
+      );
+      act(() => findButton(el, "Automations").click());
+      expect(el.textContent).toContain("Digest failed");
+      expect(el.textContent).not.toContain("Export sent");
+      expect(el.textContent).not.toContain("Old failure");
+      openArchived(el);
+      expect(el.textContent).toContain("Old failure");
+      expect(el.textContent).not.toContain("Digest failed");
+    });
+
+    it("keeps open decisions pinned under every chip, including Archived", () => {
+      // The chips filter the NOTICE stream. A decision that is blocking the
+      // owner must not disappear because they tapped "Apps" (#647 D3).
+      const el = mount(
+        makeProps({
+          outbox: [outboxRow],
+          parked: [parkedRow],
+          notices: [noticeRow()],
+        })
+      );
+      for (const chip of ["Automations", "Agents", "Apps", "Archived"]) {
+        act(() => findButton(el, chip).click());
+        expect(el.textContent).toContain("Hi");
+        expect(el.textContent).toContain("social.send_message");
+        expect(el.textContent).toContain("2 waiting on you");
+      }
+    });
+
+    it("says only that a notice filter is empty, never that the inbox is clear", () => {
+      const el = mount(makeProps({ outbox: [outboxRow], notices: [] }));
+      act(() => findButton(el, "Apps").click());
+      expect(el.textContent).toContain("No notices here.");
+      expect(el.textContent).not.toContain("Nothing waiting on you.");
+      expect(el.textContent).toContain("Hi");
+    });
+
+    it("focuses the outbox decision an outbox notice deep-links to", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      openArchived(el);
+      rerender({ ...props, focusOutbox: { itemId: "item1", nonce: 1 } });
+
+      expect(findButton(el, "Needs me").dataset.active).toBe("true");
+      expect(findButton(el, "Archived").dataset.active).toBeUndefined();
+      expect(
+        (
+          el.querySelector(
+            '[data-testid="outbox-row-item1"]'
+          ) as HTMLElement | null
+        )?.dataset.focused
+      ).toBe("true");
+      // Expanded, so the owner lands on the artifact rather than a collapsed row.
+      expect(el.textContent).toContain("See you at 6.");
+    });
+
+    it("falls back to Needs me with nothing focused when the item is gone", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      openArchived(el);
+      rerender({ ...props, focusOutbox: { itemId: "decided", nonce: 1 } });
+
+      expect(findButton(el, "Needs me").dataset.active).toBe("true");
+      expect(el.querySelector('[data-focused="true"]')).toBeNull();
     });
 
     it("expands an outbox row on click to reveal the readable artifact fields + actions", () => {
@@ -269,7 +435,6 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       expect(el.querySelector("[data-kind]")).toBeNull();
-      expect(el.textContent).not.toContain("Automation");
       expect(el.textContent).toContain("owner");
     });
 
@@ -329,7 +494,7 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       expect(el.textContent).toContain("Assistant");
-      expect(el.textContent).not.toContain("Automation");
+      expect(el.querySelector('[data-kind="automation"]')).toBeNull();
     });
 
     it("fires onDecideScopeRequest inline (no expansion needed)", () => {
@@ -347,6 +512,7 @@ describe("screens/ApprovalsScreen", () => {
     it("renders standing grants with a Revoke action", () => {
       const onRevokeGrant = vi.fn<ApprovalsScreenProps["onRevokeGrant"]>();
       const el = mount(makeProps({ grants: [grantRow], onRevokeGrant }));
+      openArchived(el);
       expect(el.textContent).toContain("gmail-send");
       expect(el.textContent).toContain("ravi@example.com");
       act(() => {
@@ -357,6 +523,7 @@ describe("screens/ApprovalsScreen", () => {
 
     it("shows the origin of a recent Locker fill in review activity", () => {
       const el = mount(makeProps({ activity: [fillActivity] }));
+      openArchived(el);
       expect(el.textContent).toContain("Recent activity");
       expect(el.textContent).toContain("Locker filled a login");
       expect(el.textContent).toContain("https://example.test");
@@ -379,6 +546,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       const badges = [
         ...el.querySelectorAll('[data-testid="activity-decision-badge"]'),
       ].map((n) => n.textContent);
@@ -407,6 +575,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelectorAll('[data-testid="activity-risk-marker"]')
       ).toHaveLength(1);
@@ -438,6 +607,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.textContent).toContain("App");
       expect(el.textContent).toContain("Briefing");
       expect(el.textContent).toContain("Automation");
@@ -461,6 +631,7 @@ describe("screens/ApprovalsScreen", () => {
           onRevokeGrant,
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-attribution-grant"]')
           ?.textContent
@@ -486,6 +657,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-attribution-owner"]')
           ?.textContent
@@ -504,6 +676,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-count"]')?.textContent
       ).toBe("×3");
@@ -522,6 +695,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.querySelector('[data-testid="activity-detail"]')).toBeNull();
       act(() => {
         findButton(el, "Remove connection").click();
@@ -551,6 +725,7 @@ describe("screens/ApprovalsScreen", () => {
           ],
         })
       );
+      openArchived(el);
       expect(el.textContent).toContain("Allowed row");
       expect(el.textContent).toContain("Denied row");
       act(() => {
@@ -574,6 +749,7 @@ describe("screens/ApprovalsScreen", () => {
           onSeeAllActivity,
         })
       );
+      openArchived(el);
       expect(
         el.querySelector('[data-testid="activity-see-all"]')
       ).not.toBeNull();
@@ -589,6 +765,7 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(
         makeProps({ activity: [activityRow()], activityTruncated: false })
       );
+      openArchived(el);
       expect(el.querySelector('[data-testid="activity-see-all"]')).toBeNull();
     });
 
@@ -723,5 +900,100 @@ describe("screens/ApprovalsScreen", () => {
       expect(findButton(el, "Approve").disabled).toBe(true);
       expect(findButton(el, "Deny").disabled).toBe(true);
     });
+  });
+});
+
+describe("notice presentation helpers", () => {
+  const HUES = [
+    "amber",
+    "forest",
+    "indigo",
+    "ochre",
+    "rose",
+    "slate",
+    "teal",
+    "violet",
+  ];
+
+  it("hashes a correspondent to a stable palette hue", () => {
+    expect(noticeHue("brief/digest")).toBe(noticeHue("brief/digest"));
+    expect(HUES).toContain(noticeHue("brief/digest"));
+    expect(HUES).toContain(noticeHue(""));
+    // Different correspondents should not all collapse onto one hue.
+    const spread = new Set(
+      ["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => noticeHue(s))
+    );
+    expect(spread.size).toBeGreaterThan(1);
+  });
+
+  it("labels only warning and high severities", () => {
+    expect(noticeSeverityLabel("automation", "info")).toBeNull();
+    expect(noticeSeverityLabel("automation", "high")).toBe("Failed");
+    expect(noticeSeverityLabel("automation", "warning")).toBe("Warning");
+    expect(noticeSeverityLabel("gateway-health", "high")).toBe("Down");
+    expect(noticeSeverityLabel("gateway-health", "warning")).toBe("Degraded");
+  });
+
+  it("phrases a collapsed span as a failure duration or a neutral count", () => {
+    const at = (iso: string): string => iso;
+    expect(
+      noticeSpanPhrase({
+        count: 1,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBeNull();
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("failing for 6 days");
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-01T03:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("×6 over 3 hours");
+    // Informational notices never claim to be "failing", however long the run.
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "info",
+      })
+    ).toBe("×6 over 6 days");
+    // Unparseable / non-advancing timestamps state multiplicity only.
+    expect(
+      noticeSpanPhrase({
+        count: 3,
+        firstAt: "nope",
+        lastAt: "nope",
+        severity: "high",
+      })
+    ).toBe("×3");
+    expect(
+      noticeSpanPhrase({
+        count: 3,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-01T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("×3");
+  });
+
+  it("clamps the attempt strip and leaves the remainder to a +N label", () => {
+    expect(noticeBarCount(0)).toBe(0);
+    expect(noticeBarCount(1)).toBe(0);
+    expect(noticeBarCount(3)).toBe(3);
+    expect(noticeBarCount(NOTICE_BAR_MAX)).toBe(NOTICE_BAR_MAX);
+    expect(noticeBarCount(40)).toBe(NOTICE_BAR_MAX);
+    expect(noticeBarCount(Number.POSITIVE_INFINITY)).toBe(0);
   });
 });

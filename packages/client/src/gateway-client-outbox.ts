@@ -75,6 +75,8 @@ export interface OutboxNeedsAuth {
   kind: string;
   label: string;
   note: string | null;
+  /** Canonical start of the current reconnect episode. */
+  attentionAt: string;
 }
 
 /** One scope triple of a manifest's declared access. */
@@ -102,6 +104,27 @@ export interface BlockingSummary {
   needsAuth: OutboxNeedsAuth[];
   parked: VaultParkedEntry[];
   scopeRequests: OutboxScopeRequest[];
+}
+
+export interface InboxNotice {
+  noticeId: string;
+  kind: string;
+  sourceRef: string;
+  headline: string;
+  detail: Record<string, unknown>;
+  severity: "info" | "warning" | "high";
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  readAt: string | null;
+  archivedAt: string | null;
+}
+
+/** The one Inbox wire contract shared by desktop, web, and mobile. */
+export interface InboxSummary {
+  decisions: BlockingSummary & { count: number };
+  notices: InboxNotice[];
+  unreadNoticeCount: number;
 }
 
 /**
@@ -163,6 +186,75 @@ export async function getBlocking(): Promise<BlockingSummary> {
     headers: authHeaders(token),
   });
   return readJson<BlockingSummary>(res, "fetch blocking inbox");
+}
+
+export async function getInbox(includeArchived = false): Promise<InboxSummary> {
+  const { baseUrl, token } = await auth();
+  const suffix = includeArchived ? "?include_archived=true" : "";
+  const res = await doFetch(baseUrl, `/centraid/_vault/inbox${suffix}`, {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  return readJson<InboxSummary>(res, "fetch Inbox");
+}
+
+export async function updateInboxNotice(
+  noticeId: string,
+  action: "read" | "archive"
+): Promise<InboxNotice> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/inbox/notices/${enc(noticeId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ action }),
+    }
+  );
+  const body = await readJson<{ notice: InboxNotice }>(
+    res,
+    `${action} Inbox notice`
+  );
+  return body.notice;
+}
+
+/**
+ * Subscribe to the content-free Inbox doorbell. The returned cleanup aborts
+ * the authenticated stream; callers keep the 60s polling fallback.
+ */
+export async function subscribeInboxChanges(
+  onChange: () => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/inbox/events", {
+    method: "GET",
+    headers: authHeaders(token),
+    ...(signal ? { signal } : {}),
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`subscribe to Inbox changes: HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const readNext = async (): Promise<void> => {
+    if (signal?.aborted) return;
+    const next = await reader.read();
+    if (next.done) return;
+    buffer += decoder.decode(next.value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const event = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      if (event.split("\n").some((line) => line === "event: inbox-changed"))
+        onChange();
+      boundary = buffer.indexOf("\n\n");
+    }
+    return readNext();
+  };
+  await readNext();
 }
 
 export interface ReviewEntry {

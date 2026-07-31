@@ -42,6 +42,7 @@ import type {
   InsightsSummary,
 } from "../../lib/insights";
 import type { InsightsScreenProps } from "../../navigation";
+import GatewayAlerts from "./GatewayAlerts";
 import { makeStyles } from "./Insights.styles";
 import { useInsights } from "./useInsights";
 import type { InsightsState } from "./useInsights";
@@ -66,6 +67,17 @@ const STATUS_WORD: Record<ComponentStatus, string> = {
 };
 
 export default function InsightsScreen({
+  navigation,
+  route,
+}: InsightsScreenProps): React.JSX.Element {
+  return route.params?.initialTab === "alerts" ? (
+    <GatewayAlerts onLeave={() => navigation.goBack()} />
+  ) : (
+    <InsightsOverview navigation={navigation} route={route} />
+  );
+}
+
+function InsightsOverview({
   navigation,
 }: InsightsScreenProps): React.JSX.Element {
   const { colors } = useTheme();

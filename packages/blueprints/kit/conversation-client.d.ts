@@ -16,8 +16,6 @@ export function appTurnPath(appId: string): string;
 export function appModelPath(appId: string): string;
 export function assistantTurnPath(): string;
 export function resolvePath(): string;
-export function parkedListPath(): string;
-export function parkedDecisionPath(invocationId: string): string;
 export function vaultStatusPath(): string;
 export function vaultAppsPath(): string;
 

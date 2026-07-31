@@ -24,6 +24,10 @@ packages/tunnel/native/native-platforms.manifest.json
 # Generated from the pinned Wrangler/workerd runtime during OAuth Worker
 # typecheck. Keeping it out of git avoids a ~16k-line vendored declaration.
 apps/oauth-worker/worker-configuration.d.ts
+# Derived classic-worker wrapper around the tracked browser Iroh bindings.
+# apps/web/scripts/build-iroh-worker.mjs regenerates both before web builds.
+apps/web/public/centraid-worker-iroh.js
+apps/web/public/centraid-worker-iroh.wasm
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__

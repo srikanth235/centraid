@@ -30,9 +30,10 @@ import {
   GatewayError,
   isOpenableApp,
   listAppRegistry,
-  listParked,
+  getInbox,
   resolveAppMeta,
   resolveGatewayBase,
+  subscribeMobileInboxChanges,
 } from "../lib/gateway";
 import { getProfileColor, getProfileName } from "../lib/profile";
 import { subscribeSpaces } from "../lib/spaces";
@@ -95,9 +96,9 @@ async function loadHome(
       .filter((app) => !NATIVE_APP_IDS.has(app.id));
     const automations = rows.filter((row) => row.kind === "automation").length;
     setState({ apps, automations, brief, kind: "ready" });
-    // Approvals are secondary — never fail the whole load over them.
+    // Inbox is secondary — never fail the whole load over it.
     try {
-      setApprovals((await listParked()).length);
+      setApprovals((await getInbox()).decisions.count);
     } catch {
       setApprovals(0);
     }
@@ -154,6 +155,23 @@ export default function HomeScreen({
 
   useEffect(() => {
     void loadHome(setState, setApprovals);
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refreshInboxCount = (): void => {
+      void getInbox()
+        .then((inbox) => setApprovals(inbox.decisions.count))
+        .catch(() => undefined);
+    };
+    void subscribeMobileInboxChanges(
+      refreshInboxCount,
+      controller.signal
+    ).catch(() => undefined);
+    const timer = setInterval(refreshInboxCount, 60_000);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
   }, []);
   // Switching / adding / forgetting a Space re-points the whole app at a new
   // vault — reload the grid so it reflects the now-active space's apps.

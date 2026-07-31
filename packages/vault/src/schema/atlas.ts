@@ -50,6 +50,7 @@ export const MACHINERY_BANDS: readonly string[] = [
   "sync",
   "enrich",
   "outbox",
+  "inbox",
   "blob",
 ];
 
@@ -72,6 +73,7 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   sync: "Sync",
   enrich: "Enrichment",
   outbox: "Outbox",
+  inbox: "Inbox",
   blob: "Blobs",
 };
 

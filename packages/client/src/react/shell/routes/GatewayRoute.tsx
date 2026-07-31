@@ -52,7 +52,7 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
 export default function GatewayRoute({
   initialTab,
 }: {
-  initialTab?: "overview" | "storage";
+  initialTab?: "overview" | "components" | "storage" | "logs" | "alerts";
 } = {}): JSX.Element {
   const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();

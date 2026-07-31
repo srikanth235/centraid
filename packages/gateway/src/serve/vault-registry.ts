@@ -112,6 +112,8 @@ export interface VaultRegistryOptions {
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
+  /** Forwarded to each plane for the unified Inbox event/wake channel. */
+  onInboxChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
   synchronous?: "FULL" | "NORMAL";
   /** Global event-loop pressure gate forwarded to mounted planes. */
@@ -176,6 +178,9 @@ export class VaultRegistry {
   private readonly onProvenanceCommitted:
     | ((vaultId: string, entityTypes?: readonly string[]) => void)
     | undefined;
+  private readonly onInboxChanged:
+    | ((vaultId: string, wake: boolean) => void)
+    | undefined;
   private readonly synchronous: "FULL" | "NORMAL" | undefined;
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
@@ -214,6 +219,7 @@ export class VaultRegistry {
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
     this.onProvenanceCommitted = options.onProvenanceCommitted;
+    this.onInboxChanged = options.onInboxChanged;
     this.synchronous = options.synchronous;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
     this.replicationConcurrency = options.replicationConcurrency;
@@ -402,6 +408,7 @@ export class VaultRegistry {
       ...(this.onProvenanceCommitted
         ? { onProvenanceCommitted: this.onProvenanceCommitted }
         : {}),
+      ...(this.onInboxChanged ? { onInboxChanged: this.onInboxChanged } : {}),
       ...(this.synchronous ? { synchronous: this.synchronous } : {}),
       ...(this.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }

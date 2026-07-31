@@ -3,11 +3,38 @@
 // `bun run build` runs scripts/stamp-sw-version.mjs which rewrites this line
 // (issue #468 K8). Do not hand-bump here.
 (() => {
-  const VERSION = 'v12';
+  const VERSION = 'v13';
   const SHELL_CACHE = `centraid-shell-${VERSION}`;
   const ASSET_CACHE = 'centraid-tunnel-assets-' + VERSION;
   const BLOB_CACHE = 'centraid-tunnel-blobs-' + VERSION;
-  const CURRENT_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, BLOB_CACHE]);
+  // Contains only the paired browser's own Iroh device key, current relay
+  // ticket and addressed vault. This is the service worker equivalent of the
+  // shell's durable localStorage connection record, not a vault-content cache.
+  const IROH_CONFIG_CACHE = 'centraid-worker-iroh-config-v1';
+  // Shared with gateway-client-push.ts so an open page and a closed PWA use
+  // one bounded delivery ledger and never double-notify the same private row.
+  const NOTIFICATION_CACHE = 'centraid-private-notification-delivery-v1';
+  const CURRENT_CACHES = new Set([
+    SHELL_CACHE,
+    ASSET_CACHE,
+    BLOB_CACHE,
+    IROH_CONFIG_CACHE,
+    NOTIFICATION_CACHE,
+  ]);
+  const IROH_CONFIG_KEY = '/__centraid_notifications__/iroh-config';
+  const INBOX_DELIVERY_KEY = '/__centraid_notifications__/inbox';
+  const REMINDER_DELIVERY_KEY = '/__centraid_notifications__/reminders';
+  const WAKE_CONNECT_TIMEOUT_MS = 15000;
+
+  // wasm-bindgen emits ESM while this long-lived worker is intentionally
+  // classic. The build derives this versioned classic wrapper from the tracked
+  // bindings. Failure leaves ordinary shell/offline behavior intact; a closed
+  // wake then falls back to the direct-HTTP control session or a generic alert.
+  try {
+    importScripts(`/centraid-worker-iroh.js?v=${VERSION}`);
+  } catch {
+    /* a dev server may not have built the optional worker transport yet */
+  }
 
   // Static shell entries that never change name across builds. Hashed Vite
   // assets are also precached at install by parsing index.html for /assets/*
@@ -35,6 +62,7 @@
   const appCookies = new Map();
   const bridgeOwners = new Map();
   let cacheGeneration = 0;
+  let wakeEndpointPromise;
 
   /** Extract same-origin /assets/* URLs referenced by the built index.html. */
   async function assetUrlsFromIndex() {
@@ -134,9 +162,235 @@
     );
   });
 
+  async function deliveredKeys(key) {
+    try {
+      const cache = await caches.open(NOTIFICATION_CACHE);
+      const response = await cache.match(key);
+      const values = response ? await response.json() : [];
+      return new Set(Array.isArray(values) ? values.filter((value) => typeof value === 'string') : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  async function saveDeliveredKeys(key, delivered) {
+    const cache = await caches.open(NOTIFICATION_CACHE);
+    await cache.put(
+      key,
+      new Response(JSON.stringify([...delivered].slice(-2000)), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+
+  function decodeBase64(raw) {
+    return Uint8Array.from(atob(raw), (char) => char.charCodeAt(0));
+  }
+
+  async function loadIrohConfiguration() {
+    try {
+      const cache = await caches.open(IROH_CONFIG_CACHE);
+      const response = await cache.match(IROH_CONFIG_KEY);
+      const value = response ? await response.json() : undefined;
+      if (
+        !value ||
+        typeof value.deviceKey !== 'string' ||
+        typeof value.endpointTicket !== 'string' ||
+        typeof value.vaultId !== 'string'
+      )
+        return undefined;
+      return value;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function closeWakeEndpoint() {
+    const current = wakeEndpointPromise;
+    wakeEndpointPromise = undefined;
+    await current?.then((node) => node.close()).catch(() => undefined);
+  }
+
+  async function saveIrohConfiguration(configuration) {
+    await closeWakeEndpoint();
+    if (!configuration) {
+      await caches.delete(IROH_CONFIG_CACHE);
+      return;
+    }
+    const cache = await caches.open(IROH_CONFIG_CACHE);
+    await cache.put(
+      IROH_CONFIG_KEY,
+      new Response(JSON.stringify(configuration), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+
+  async function wakeEndpoint(configuration) {
+    const bindings = self.CentraidIrohWorkerBindings;
+    if (!bindings) throw new Error('worker Iroh bindings are unavailable');
+    if (!wakeEndpointPromise) {
+      wakeEndpointPromise = (async () => {
+        await bindings.initWasm();
+        return bindings.BrowserEndpoint.spawn(
+          decodeBase64(configuration.deviceKey),
+          undefined,
+        );
+      })().catch((error) => {
+        wakeEndpointPromise = undefined;
+        throw error;
+      });
+    }
+    return wakeEndpointPromise;
+  }
+
+  async function fetchPrivateOverIroh(path) {
+    const configuration = await loadIrohConfiguration();
+    if (!configuration) throw new Error('worker Iroh configuration is unavailable');
+    const node = await wakeEndpoint(configuration);
+    let timer;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error('private Iroh wake fetch timed out')),
+        WAKE_CONNECT_TIMEOUT_MS,
+      );
+    });
+    let response;
+    try {
+      response = await Promise.race([
+        node.request(
+          configuration.endpointTicket,
+          'GET',
+          path,
+          JSON.stringify({
+            accept: 'application/json',
+            origin: self.location.origin,
+            'x-centraid-vault': configuration.vaultId,
+          }),
+          new Uint8Array(),
+        ),
+        timeout,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await new Response(response.take_body()).text();
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`private Iroh wake fetch returned ${response.status}`);
+    }
+    return JSON.parse(text);
+  }
+
+  // Production app.centraid.dev reaches its sovereign gateway through Iroh,
+  // including when no WindowClient exists. A directly hosted same-origin shell
+  // can instead reuse its purpose-bound HttpOnly control session.
+  async function fetchPrivate(path) {
+    try {
+      return await fetchPrivateOverIroh(path);
+    } catch (irohError) {
+      const response = await fetch(
+        `/centraid/_web/control?path=${encodeURIComponent(path)}`,
+        {
+          credentials: 'include',
+          headers: { 'x-centraid-service-worker': 'inbox-wake' },
+        },
+      );
+      if (!response.ok) throw irohError;
+      return response.json();
+    }
+  }
+
+  // Mirrors packages/client/src/inbox-notification-model.ts. Content is built
+  // only after the authenticated local fetch; the push provider still receives
+  // exactly the opaque `replica-wake` marker.
+  function composeInboxNotifications(inbox, delivered) {
+    const decisions = inbox?.decisions || {};
+    return [
+      ...(decisions.outbox || []).map((row) => ({
+        key: `outbox:${row.itemId}:${row.stagedAt}`,
+        title:
+          ['title', 'subject', 'name']
+            .map((field) => row.artifact?.[field])
+            .find((value) => typeof value === 'string') || row.target,
+        body: 'External write needs your approval',
+      })),
+      ...(decisions.needsAuth || []).map((row) => ({
+        key: `auth:${row.connectionId}:${row.attentionAt}`,
+        title: `${row.label} needs reconnection`,
+        body: 'Open Inbox to reconnect',
+      })),
+      ...(decisions.parked || []).map((row) => ({
+        key: `parked:${row.invocationId}`,
+        title: row.command,
+        body: 'A decision is waiting in Inbox',
+      })),
+      ...(decisions.scopeRequests || []).map((row) => ({
+        key: `scope:${row.requestId}`,
+        title: `${row.appId} requests access`,
+        body: 'Review the requested scope in Inbox',
+      })),
+      ...(inbox?.notices || [])
+        .filter(
+          (notice) =>
+            notice.severity === 'high' &&
+            notice.readAt === null &&
+            notice.archivedAt === null,
+        )
+        .map((notice) => ({
+          key: `notice:${notice.noticeId}:${notice.lastAt}`,
+          title: notice.headline,
+          body: 'Open Inbox for details',
+        })),
+    ].filter((row) => !delivered.has(row.key));
+  }
+
+  async function notifyClosedInbox() {
+    const inbox = await fetchPrivate('/centraid/_vault/inbox');
+    const delivered = await deliveredKeys(INBOX_DELIVERY_KEY);
+    const rows = composeInboxNotifications(inbox, delivered);
+    await Promise.all(
+      rows.map((row) =>
+        self.registration.showNotification(row.title, {
+          body: row.body,
+          tag: row.key,
+          data: { url: '/?inbox=1' },
+        }),
+      ),
+    );
+    for (const row of rows) delivered.add(row.key);
+    await saveDeliveredKeys(INBOX_DELIVERY_KEY, delivered);
+  }
+
+  async function notifyClosedReminders() {
+    const body = await fetchPrivate('/centraid/_reminders/due');
+    const delivered = await deliveredKeys(REMINDER_DELIVERY_KEY);
+    const rows = (body?.reminders || []).filter((row) => !delivered.has(row.key));
+    await Promise.all(
+      rows.map((row) =>
+        self.registration.showNotification(row.title, {
+          body:
+            row.kind === 'event'
+              ? row.minutesBefore === 0
+                ? 'Starting now'
+                : `Starts in ${row.minutesBefore} minutes`
+              : 'Task reminder',
+          tag: row.key,
+          data: {
+            url:
+              row.kind === 'event'
+                ? `/?agendaEvent=${encodeURIComponent(row.id)}`
+                : '/?app=tasks',
+          },
+        }),
+      ),
+    );
+    for (const row of rows) delivered.add(row.key);
+    await saveDeliveredKeys(REMINDER_DELIVERY_KEY, delivered);
+  }
+
   // Web Push carries only an opaque wake marker. An open client performs its
-  // authenticated replica pull; a closed PWA gets a generic notification that
-  // reveals no vault, entity, title, balance, or secret to the push service.
+  // authenticated pull. A closed PWA uses its HttpOnly control session to fetch
+  // the canonical Inbox/reminder rows and composes private OS content locally.
   self.addEventListener('push', (event) => {
     let wake = false;
     try {
@@ -159,11 +413,25 @@
           client.postMessage({ type: 'centraid:push-wake' });
         }
         if (clients.length === 0) {
-          await self.registration.showNotification('Centraid has updates', {
-            body: 'Open Centraid to sync your private reminders.',
-            tag: 'centraid-replica-wake',
-            data: { url: '/' },
-          });
+          let results;
+          try {
+            results = await Promise.allSettled([
+              notifyClosedInbox(),
+              notifyClosedReminders(),
+            ]);
+          } finally {
+            // The next foreground shell will spawn the same enrolled endpoint
+            // identity. Release the worker copy after this bounded pull so two
+            // live relay registrations never compete for that identity.
+            await closeWakeEndpoint();
+          }
+          if (results.every((result) => result.status === 'rejected')) {
+            await self.registration.showNotification('Centraid has updates', {
+              body: 'Open Centraid to finish syncing private updates.',
+              tag: 'centraid-replica-wake',
+              data: { url: '/' },
+            });
+          }
         }
       })(),
     );
@@ -186,6 +454,10 @@
   });
 
   self.addEventListener('message', (event) => {
+    if (event.data?.type === 'centraid:configure-iroh-wake') {
+      event.waitUntil(saveIrohConfiguration(event.data.configuration));
+      return;
+    }
     // Sent by web-host.ts when the gateway is unpaired: the tunnel caches may
     // hold another gateway/vault's assets, so drop them. Shell cache is generic
     // and stays. This is a separate channel from the iroh-request bridge.
@@ -193,7 +465,13 @@
       cacheGeneration += 1;
       appCookies.clear();
       bridgeOwners.clear();
-      event.waitUntil(Promise.all([caches.delete(ASSET_CACHE), caches.delete(BLOB_CACHE)]));
+      event.waitUntil(
+        Promise.all([
+          caches.delete(ASSET_CACHE),
+          caches.delete(BLOB_CACHE),
+          saveIrohConfiguration(undefined),
+        ]),
+      );
     }
   });
 

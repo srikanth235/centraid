@@ -294,6 +294,10 @@ export async function runFire(
     const endedAt = Date.now();
     const outcomeSkipped: HandlerOutcome = {
       ok: false,
+      // A skip is distinguishable from a run that failed: the handler never
+      // executed, and the state that blocked it is already the owner's to
+      // see (paused/needs-auth connection, missing secret).
+      skipped: true,
       error,
       logs: [],
       toolBatches: 0,

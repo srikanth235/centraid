@@ -1,4 +1,16 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
+import { composeWebInboxNotifications } from "./inbox-notification-model.js";
+import type { InboxNotificationPull } from "./inbox-notification-model.js";
+
+const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
+const INBOX_DELIVERY_KEY = "/__centraid_notifications__/inbox";
+const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
+/**
+ * Ledger member recording that the inbox delivery baseline has been taken for
+ * this (gateway, vault). Not a notification key — never composed, never
+ * matched by the service worker's membership test.
+ */
+const DELIVERY_SEEDED = "__seeded__";
 
 /** Register the PWA only after the user has created reminder value. */
 export async function enableWebPushWake(
@@ -110,7 +122,10 @@ export async function syncWebDueNotifications(): Promise<void> {
       // canonical and will safely re-emit the bounded reminder window.
     }
   }
-  const delivered = new Set(deliveredValues);
+  const delivered = new Set([
+    ...deliveredValues,
+    ...(await readNotificationCache(REMINDER_DELIVERY_KEY)),
+  ]);
   const registration = await navigator.serviceWorker.ready;
   const pending = (reminders ?? []).filter(
     (reminder) => !delivered.has(reminder.key)
@@ -139,6 +154,143 @@ export async function syncWebDueNotifications(): Promise<void> {
     storageKey,
     JSON.stringify([...delivered].slice(-2_000))
   );
+  await writeNotificationCache(REMINDER_DELIVERY_KEY, delivered);
+}
+
+/**
+ * Fetch private Inbox content locally after an opaque wake/SSE doorbell.
+ *
+ * Two guards keep this from banner-blasting the owner, because the callers
+ * (useInboxCounts, the Inbox route) ring it on every load, poll, SSE event and
+ * focus tick:
+ *
+ *  - A FOCUSED page composes nothing. The owner is looking at these rows in
+ *    the UI; OS banners for what is already on screen are noise, and closed /
+ *    backgrounded delivery is the service worker's job.
+ *  - A page with NO delivery ledger yet (first run, or the moment permission
+ *    is granted) seeds the ledger from the current payload silently. Without
+ *    it, every already-open decision counts as newly delivered and fires at
+ *    once.
+ */
+export async function syncWebInboxNotifications(): Promise<void> {
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  )
+    return;
+  if (typeof document !== "undefined" && document.visibilityState === "visible")
+    return;
+  const { baseUrl, token, vaultId } = await auth();
+  const response = await doFetch(baseUrl, "/centraid/_vault/inbox", {
+    headers: authHeaders(token),
+  });
+  const inbox = await readJson<InboxNotificationPull>(
+    response,
+    "load Inbox notifications"
+  );
+  const storageKey = `centraid:web-inbox:v1:${encodeURIComponent(
+    `${baseUrl} ${vaultId ?? ""}`
+  )}`;
+  let prior: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(storageKey) ?? "[]"
+    );
+    if (Array.isArray(parsed))
+      prior = parsed.filter(
+        (value): value is string => typeof value === "string"
+      );
+  } catch {
+    // Disposable delivery cache; the gateway Inbox is canonical.
+  }
+  const cached = await readNotificationCache(INBOX_DELIVERY_KEY);
+  const delivered = new Set([...prior, ...cached]);
+  // Deliver-silently baseline: no ledger means "we have never notified for
+  // this (gateway, vault)", not "everything currently open is brand new". The
+  // sentinel is what makes that a one-time decision — an EMPTY inbox would
+  // otherwise leave the ledger empty and re-arm the blast for the next
+  // payload. It rides in the same array of strings the service worker reads
+  // (membership only), so the shared ledger format is unchanged, and it can
+  // never collide with a composed key (all of which are `prefix:…`).
+  const seeding = !delivered.has(DELIVERY_SEEDED);
+  const rows = composeWebInboxNotifications(inbox, delivered);
+  if (seeding) {
+    delivered.add(DELIVERY_SEEDED);
+    for (const row of rows) delivered.add(row.key);
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify([...delivered].slice(-2_000))
+    );
+    await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+    return;
+  }
+  const registration =
+    "serviceWorker" in navigator
+      ? await navigator.serviceWorker.ready.catch(() => undefined)
+      : undefined;
+  await Promise.all(
+    rows.map(async (row) => {
+      if (registration) {
+        await registration.showNotification(row.title, {
+          body: row.body,
+          tag: row.key,
+          data: { url: "/?inbox=1" },
+        });
+        return;
+      }
+      const notification = new Notification(row.title, {
+        body: row.body,
+        tag: row.key,
+      });
+      notification.addEventListener("click", () => {
+        window.focus();
+        window.location.assign("/?inbox=1");
+      });
+    })
+  );
+  for (const row of rows) delivered.add(row.key);
+  // Keep the sentinel at the tail so the bounded slice can never evict it and
+  // silently re-arm the seeding path.
+  delivered.delete(DELIVERY_SEEDED);
+  delivered.add(DELIVERY_SEEDED);
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify([...delivered].slice(-2_000))
+  );
+  await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+}
+
+async function readNotificationCache(key: string): Promise<string[]> {
+  if (typeof caches === "undefined") return [];
+  try {
+    const cache = await caches.open(NOTIFICATION_CACHE);
+    const response = await cache.match(key);
+    const parsed: unknown = response ? await response.json() : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeNotificationCache(
+  key: string,
+  delivered: ReadonlySet<string>
+): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const cache = await caches.open(NOTIFICATION_CACHE);
+    await cache.put(
+      key,
+      new Response(JSON.stringify([...delivered].slice(-2_000)), {
+        headers: { "content-type": "application/json" },
+      })
+    );
+  } catch {
+    // A delivery cache is disposable; authenticated gateway state is canonical.
+  }
 }
 
 function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> {

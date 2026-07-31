@@ -139,6 +139,15 @@ describe("outbox-executor", () => {
     const row = itemRow(plane, itemId);
     expect(row.status).toBe("sent");
     expect(JSON.parse(String(row.result_json)).status_code).toBe(200);
+    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+      headline: expect.stringContaining("sent"),
+      detail: expect.objectContaining({
+        outcome: "sent",
+        itemId,
+        sourceType: "app",
+      }),
+      severity: "info",
+    });
     // The drain is receipted through outbox.record_result.
     const receipts = plane.db.journal
       .prepare(
@@ -147,6 +156,41 @@ describe("outbox-executor", () => {
       )
       .get() as { n: number };
     expect(receipts.n).toBe(1);
+  });
+
+  test("raw ai_agent outcome notices stay in the Agents Inbox filter", () => {
+    let written: Record<string, unknown> | undefined;
+    const plane = {
+      listOutbox: () => [
+        {
+          itemId: "item-agent",
+          actor: "Digest agent",
+          actorKind: "ai_agent",
+          verb: "gmail.send",
+          target: "ravi@example.com",
+          artifact: { subject: "Digest" },
+        },
+      ],
+      rawOutboxItem: () => undefined,
+      inbox: {
+        put: (input: Record<string, unknown>) => {
+          written = input;
+        },
+      },
+    } as unknown as VaultPlane;
+    const executor = executorFor(plane, fetchDouble());
+    (
+      executor as unknown as {
+        writeOutcomeNotice: (
+          current: VaultPlane,
+          itemId: string,
+          disposition: "sent"
+        ) => void;
+      }
+    ).writeOutcomeNotice(plane, "item-agent", "sent");
+    expect(written).toMatchObject({
+      detail: { sourceType: "agent", itemId: "item-agent" },
+    });
   });
 
   test("a locally edited Google event writes back and survives revoke/reconnect", async () => {
@@ -307,6 +351,12 @@ describe("outbox-executor", () => {
     expect(JSON.parse(String(row.result_json)).detail).toContain(
       "allowed_hosts"
     );
+    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+      // D4: the reason rides the headline; the full detail stays in the card.
+      headline: expect.stringContaining("failed: "),
+      detail: expect.objectContaining({ outcome: "failed", itemId }),
+      severity: "high",
+    });
   });
 
   test("a 401 gets one forced refresh, then the drain succeeds (oauth2 lane)", async () => {
@@ -455,6 +505,11 @@ describe("outbox-executor", () => {
     expect(row.status).toBe("pending");
     expect(row.decided_at).toBeNull();
     expect(row.note).toContain("expired");
+    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+      headline: expect.stringContaining("needs approval again"),
+      detail: expect.objectContaining({ outcome: "reparked", itemId }),
+      severity: "warning",
+    });
     // A fresh approval within the window drains normally.
     await plane.decideOutbox({ itemId, decision: "approve" });
     api.respond(200, '{"id":"msg-9"}');

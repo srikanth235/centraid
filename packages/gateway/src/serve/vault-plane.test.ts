@@ -563,7 +563,15 @@ describe("vault-plane", () => {
 
   test("install-time scopes: enrolling grants the declared block, idempotently (issue #306)", async () => {
     const dir = await tempDir();
-    const plane = openPlane(dir);
+    const inboxChanges: boolean[] = [];
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+      onInboxChanged: (_vaultId, wake) => inboxChanges.push(wake),
+    });
+    cleanups.push(() => plane.stop());
     const calendarId = seedCalendar(plane);
 
     // Installing IS the consent: no owner grant ceremony precedes the invoke.
@@ -571,6 +579,7 @@ describe("vault-plane", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
+    expect(inboxChanges).toStrictEqual([]);
     const outcome = await plane.bridgeFor("planner")({
       op: "invoke",
       payload: {
@@ -614,9 +623,11 @@ describe("vault-plane", () => {
       scopes: [{ schema: "knowledge", verbs: "read" }],
     });
     expect(plane.blocking().scopeRequests).toHaveLength(1);
+    expect(inboxChanges).toStrictEqual([true]);
 
     // The owner's approval mints exactly the asked scopes and closes the ask.
     plane.decideScopeRequest(requests[0]!.requestId, true);
+    expect(inboxChanges).toStrictEqual([true, false]);
     const approved = plane.listApps().find((a) => a.name === "planner");
     expect(approved?.grants.flatMap((g) => g.scopes) ?? []).toHaveLength(2);
     expect(plane.listScopeRequests()).toHaveLength(0);
@@ -628,6 +639,7 @@ describe("vault-plane", () => {
       ],
     });
     expect(plane.listScopeRequests()).toHaveLength(0);
+    expect(inboxChanges).toStrictEqual([true, false]);
 
     // The agent-plane mirror covers automations.
     plane.ensureAgentInstallGrant("gmail-send", {

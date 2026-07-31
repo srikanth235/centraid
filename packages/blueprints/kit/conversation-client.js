@@ -63,16 +63,6 @@ export function resolvePath() {
   return `/centraid/_vault/assistant/resolve`;
 }
 
-/** The consent surface: parked invocations awaiting the owner's decision. */
-export function parkedListPath() {
-  return `/centraid/_vault/parked`;
-}
-
-/** Post the owner's Approve/Discard on one parked invocation. */
-export function parkedDecisionPath(invocationId) {
-  return `/centraid/_vault/parked/${enc(invocationId)}`;
-}
-
 /** The vault owner status surface (context-chip "connected" signal). */
 export function vaultStatusPath() {
   return `/centraid/_vault/status`;
