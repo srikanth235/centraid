@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -30,6 +30,12 @@ import type { ObjectStore } from "./object-store.js";
 import { partBuffer } from "./parts.js";
 import type { BackupProvider, StoreClass } from "./provider.js";
 
+/**
+ * Ceiling on object puts for the second (incremental) run of the fixture tree:
+ * the new manifest plus the re-chunked 3 MiB vault.db (max chunk 4 MiB). Every
+ * other entry is byte-identical and must contribute ZERO puts.
+ */
+const MAX_INCREMENTAL_PUTS = 3;
 const CURRENT = {
   gatewayVersion: "0.1.0",
   vaultUserVersion: "1",
@@ -227,7 +233,7 @@ async function buildFixture(): Promise<Fixture> {
 }
 
 describe("createSnapshot / restoreSnapshot roundtrip", () => {
-  test("restores byte-identical files and the directory tree, plus a quarantine marker", async () => {
+  test("[law:backup-round-trip] restores byte-identical files and the directory tree, plus a quarantine marker", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row = await createSnapshot({
       provider,
@@ -284,7 +290,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(marker.restoredAt).toBeTypeOf("string");
   });
 
-  test("incremental second snapshot after a 1-byte change uploads far fewer chunks than the first", async () => {
+  test("[law:backup-incremental] incremental second snapshot after a 1-byte change uploads far fewer chunks than the first", async () => {
     const { provider, targetId, keyring, sourceDir, entries } =
       await buildFixture();
     await createSnapshot({
@@ -332,9 +338,18 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     // Second run uploads its own manifest (+1) plus only the changed chunk(s)
     // of vault.db — strictly fewer object puts than the full first upload.
     expect(secondPutCount).toBeLessThan(firstPutCount);
+    // …and not merely fewer: journal.db, the blob, the git bundle and the seal
+    // key are byte-identical, so NONE of their chunks may be re-uploaded. The
+    // only puts allowed are the manifest plus the re-chunked vault.db (3 MiB,
+    // max chunk 4 MiB ⇒ a small handful). A regression that re-shipped the
+    // whole tree would still satisfy `toBeLessThan` alone.
+    expect(secondPutCount).toBeLessThanOrEqual(MAX_INCREMENTAL_PUTS);
+    expect(
+      provider.lastStore!.putKeys.filter((k) => k.startsWith("chunks/")).length
+    ).toBeLessThanOrEqual(MAX_INCREMENTAL_PUTS - 1);
   });
 
-  test("no-change run registers nothing (returns null, uploads only the previous unmodified state)", async () => {
+  test("[law:backup-no-change] no-change run registers nothing (returns null, uploads only the previous unmodified state)", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row1 = await createSnapshot({
       provider,
@@ -362,7 +377,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(rows).toHaveLength(1); // the no-change run registered nothing
   });
 
-  test("restoreSnapshot refuses a non-empty destDir", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses a non-empty destDir", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -387,7 +402,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     ).rejects.toThrow(/not empty/u);
   });
 
-  test("restoreSnapshot refuses a newer vaultUserVersion than the running code", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses a newer vaultUserVersion BEFORE fetching or materializing anything", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -396,10 +411,28 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
       vaultId: "vault-1",
       entries,
       generation: 1,
-      appMeta: { ...APP_META, vaultUserVersion: "99" },
+      appMeta: APP_META,
     });
-    const destDir = await tempDir("backup-engine-newver-");
-    await fs.rm(destDir, { recursive: true, force: true });
+    // Register the doctored row THROUGH the real provider API with a manifestKey
+    // that does not exist on the data plane: if restoreSnapshot ever tried to
+    // download it we would see a read error instead of the compatibility-gate
+    // message — which is what proves the gate runs before the first byte. The
+    // format is the CURRENT one, so the refusal can only come from the version
+    // gate, not the format gate.
+    await provider.registerSnapshot(targetId, {
+      idempotencyKey: "doctored-newer-version",
+      manifestKey: "manifests/does-not-exist-on-disk.json",
+      manifestHash: "f".repeat(64),
+      totalBytes: 1,
+      objectCount: 1,
+      generation: 2,
+      format: SNAPSHOT_FORMAT_V2,
+      appMeta: { ...APP_META, vaultUserVersion: "99999" },
+    });
+    const destDir = path.join(
+      await tempDir("backup-engine-newver-"),
+      "restore-dest"
+    );
     await expect(
       restoreSnapshot({
         provider,
@@ -410,9 +443,11 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
         current: CURRENT,
       })
     ).rejects.toThrow(/newer/u);
+    // Nothing was materialized — the gate ran before any directory creation.
+    expect(existsSync(destDir)).toBe(false);
   });
 
-  test("restoreSnapshot refuses an unknown format", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses an unknown format", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -449,7 +484,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     ).rejects.toThrow(/unknown format/u);
   });
 
-  test("restoreSnapshot rejects a snapshot whose manifest hash does not verify", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot rejects a snapshot whose manifest hash does not verify", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row = await createSnapshot({
       provider,
@@ -486,7 +521,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
 });
 
 describe(verifySnapshot, () => {
-  test("detects a deliberately deleted chunk object", async () => {
+  test("[law:backup-verify] detects a deliberately deleted chunk object", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -518,7 +553,7 @@ describe(verifySnapshot, () => {
     expect(result.missing).toContain(listed[0]!.slice("chunks/".length));
   });
 
-  test("detects a corrupted chunk object via the sample pass", async () => {
+  test("[law:backup-verify] detects a corrupted chunk object via the sample pass", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -555,7 +590,7 @@ describe(verifySnapshot, () => {
     expect(result.corrupt).toContain(target.slice("chunks/".length));
   });
 
-  test("a clean snapshot verifies with no missing or corrupt objects", async () => {
+  test("[law:backup-verify] a clean snapshot verifies with no missing or corrupt objects", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,

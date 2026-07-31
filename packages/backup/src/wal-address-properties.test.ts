@@ -3,6 +3,16 @@ import { describe, expect, test } from "vitest";
 import { fc } from "@centraid/test-kit/fast-check";
 
 import {
+  closerAddr,
+  corruptSegmentAddr,
+  dbName,
+  emitted,
+  hex32,
+  notGeneration,
+  notNonNegativeInt,
+  segmentAddr,
+} from "./wal-address.test-fixtures.js";
+import {
   isWalGeneration,
   parseWalCloserKey,
   parseWalPairMarkerKey,
@@ -11,42 +21,7 @@ import {
   walPairMarkerKey,
   walSegmentKey,
 } from "./wal-format.js";
-import type {
-  WalDbName,
-  WalGroupCloser,
-  WalSegmentAddress,
-} from "./wal-format.js";
-
-const hex32: fc.Arbitrary<string> = fc
-  .uint8Array({ minLength: 16, maxLength: 16 })
-  .map((b) => Buffer.from(b).toString("hex"));
-
-const dbName: fc.Arbitrary<WalDbName> = fc.constantFrom("vault", "journal");
-
-const segmentAddr: fc.Arbitrary<WalSegmentAddress> = fc
-  .record({
-    db: dbName,
-    generation: hex32,
-    group: fc.integer({ min: 0, max: 999 }),
-    startOffset: fc.integer({ min: 0, max: 1_000_000 }),
-    length: fc.integer({ min: 1, max: 1_000_000 }),
-    tickMs: fc.integer({ min: 0, max: 9_999_999_999_999 }),
-  })
-  .map(({ db, generation, group, startOffset, length, tickMs }) => ({
-    db,
-    generation,
-    group,
-    startOffset,
-    endOffset: startOffset + length,
-    tickMs,
-  }));
-
-const closerAddr: fc.Arbitrary<WalGroupCloser> = fc.record({
-  db: dbName,
-  generation: hex32,
-  group: fc.integer({ min: 0, max: 999 }),
-  endOffset: fc.integer({ min: 1, max: 1_000_000 }),
-});
+import type { WalGroupCloser, WalSegmentAddress } from "./wal-format.js";
 
 /**
  * WAL addressing properties (#532 core expansion).
@@ -153,6 +128,247 @@ describe("WAL address property", () => {
         expect(parseWalPairMarkerKey(s)).toBeNull();
       }),
       { numRuns: 32, seed: 53257 }
+    );
+  });
+});
+
+describe("WAL encoder totality (L1)", () => {
+  test("a segment key that is emitted always parses back to the same address", () => {
+    fc.assert(
+      fc.property(fc.oneof(segmentAddr, corruptSegmentAddr), (addr) => {
+        const key = emitted(walSegmentKey, addr);
+        // Refused ⇒ nothing was published. Emitted ⇒ it names exactly `addr`.
+        expect(key === null ? addr : parseWalSegmentKey(key)).toStrictEqual(
+          addr
+        );
+      }),
+      { numRuns: 200, seed: 53260 }
+    );
+  });
+
+  test("a closer key that is emitted always parses back to the same closer", () => {
+    fc.assert(
+      fc.property(
+        fc.tuple(
+          closerAddr,
+          fc.constantFrom("none", "generation", "group", "endOffset"),
+          notGeneration,
+          notNonNegativeInt,
+          notNonNegativeInt
+        ),
+        ([closer, field, badGen, badGroup, badEnd]) => {
+          const subject: WalGroupCloser =
+            field === "generation"
+              ? { ...closer, generation: badGen }
+              : field === "group"
+                ? { ...closer, group: badGroup }
+                : field === "endOffset"
+                  ? { ...closer, endOffset: badEnd }
+                  : closer;
+          const key = emitted(walGroupCloserKey, subject);
+          expect(
+            key === null ? { ...subject } : { ...parseWalCloserKey(key) }
+          ).toStrictEqual({ ...subject });
+        }
+      ),
+      { numRuns: 120, seed: 53261 }
+    );
+  });
+
+  test("a pair-marker key that is emitted always parses back to the same address", () => {
+    fc.assert(
+      fc.property(
+        fc.tuple(
+          hex32,
+          hex32,
+          fc.integer({ min: 0, max: 9_999_999_999_999 }),
+          fc.constantFrom("none", "vault", "journal", "tick"),
+          notGeneration,
+          notNonNegativeInt
+        ),
+        ([
+          vaultGeneration,
+          journalGeneration,
+          tickMs,
+          field,
+          badGen,
+          badTick,
+        ]) => {
+          const subject = {
+            vaultGeneration: field === "vault" ? badGen : vaultGeneration,
+            journalGeneration: field === "journal" ? badGen : journalGeneration,
+            tickMs: field === "tick" ? badTick : tickMs,
+          };
+          const key = emitted(walPairMarkerKey, subject);
+          expect(
+            key === null ? subject : parseWalPairMarkerKey(key)
+          ).toStrictEqual(subject);
+        }
+      ),
+      { numRuns: 120, seed: 53262 }
+    );
+  });
+
+  test("parsers refuse a well-formed key that names an empty byte range", () => {
+    // The encoder can never produce this, but a provider can serve it. A
+    // zero-or-negative-length segment names no bytes, so replay must treat it
+    // as "not a segment" rather than as a zero-byte hole in the stream.
+    fc.assert(
+      fc.property(
+        dbName,
+        hex32,
+        fc.integer({ min: 0, max: 999 }),
+        fc.integer({ min: 0, max: 1_000_000 }),
+        fc.integer({ min: 0, max: 1000 }),
+        (db, generation, group, offset, back) => {
+          const pad = (n: number, w: number) => String(n).padStart(w, "0");
+          const keyFor = (end: number) =>
+            `wal/${db}/${generation}/${pad(group, 8)}/` +
+            `${pad(offset, 12)}-${pad(end, 12)}-${pad(0, 13)}`;
+          // end === start: zero bytes. Not "an empty segment" — not a segment.
+          expect(parseWalSegmentKey(keyFor(offset))).toBeNull();
+          // end < start: a negative-length range, always nonsense.
+          expect(
+            parseWalSegmentKey(keyFor(Math.max(0, offset - back - 1)))
+          ).toBeNull();
+          // end > start by one byte: the smallest real segment there is.
+          expect(parseWalSegmentKey(keyFor(offset + 1))).not.toBeNull();
+        }
+      ),
+      { numRuns: 40, seed: 53263 }
+    );
+  });
+});
+
+describe("WAL address domain boundaries", () => {
+  // The zero end of each domain is legal and must round-trip: group 0 is the
+  // first group of every generation, startOffset 0 is the first byte of every
+  // group, and tick 0 is a legal (if unlikely) epoch. An encoder that refused
+  // them would make the very first segment of a fresh stream unaddressable.
+  const generation = "0".repeat(32);
+
+  test("group 0, startOffset 0 and tickMs 0 are addressable", () => {
+    const addr: WalSegmentAddress = {
+      db: "vault",
+      generation,
+      group: 0,
+      startOffset: 0,
+      endOffset: 1,
+      tickMs: 0,
+    };
+    expect(parseWalSegmentKey(walSegmentKey(addr))).toStrictEqual(addr);
+  });
+
+  test("a closer at group 0 is addressable but one at offset 0 is refused", () => {
+    const closer: WalGroupCloser = {
+      db: "journal",
+      generation,
+      group: 0,
+      endOffset: 1,
+    };
+    expect({ ...parseWalCloserKey(walGroupCloserKey(closer)) }).toStrictEqual({
+      ...closer,
+    });
+    // A closer says "this group is durably captured up to N bytes". N = 0 is
+    // not a closed group, it is an untouched one — the two must not share a key.
+    expect(() => walGroupCloserKey({ ...closer, endOffset: 0 })).toThrow(
+      /closer end/u
+    );
+  });
+
+  test("a pair marker at tick 0 is addressable", () => {
+    const marker = {
+      vaultGeneration: generation,
+      journalGeneration: "f".repeat(32),
+      tickMs: 0,
+    };
+    expect(parseWalPairMarkerKey(walPairMarkerKey(marker))).toStrictEqual(
+      marker
+    );
+  });
+});
+
+describe("WAL refusals name the field they refused (L3)", () => {
+  const generation = "a".repeat(32);
+  const base: WalSegmentAddress = {
+    db: "vault",
+    generation,
+    group: 3,
+    startOffset: 10,
+    endOffset: 20,
+    tickMs: 7,
+  };
+
+  test("segment refusals identify generation, group, range and tick", () => {
+    expect(() => walSegmentKey({ ...base, generation: "nope" })).toThrow(
+      /wal generation/u
+    );
+    expect(() => walSegmentKey({ ...base, group: -1 })).toThrow(/wal group/u);
+    expect(() => walSegmentKey({ ...base, group: 1.5 })).toThrow(/wal group/u);
+    expect(() => walSegmentKey({ ...base, startOffset: -1 })).toThrow(
+      /segment range/u
+    );
+    expect(() => walSegmentKey({ ...base, startOffset: 0.5 })).toThrow(
+      /segment range/u
+    );
+    expect(() => walSegmentKey({ ...base, endOffset: 10 })).toThrow(
+      /segment range/u
+    );
+    expect(() => walSegmentKey({ ...base, endOffset: 20.5 })).toThrow(
+      /segment range/u
+    );
+    expect(() => walSegmentKey({ ...base, tickMs: -1 })).toThrow(
+      /segment tick/u
+    );
+    expect(() => walSegmentKey({ ...base, tickMs: 1.5 })).toThrow(
+      /segment tick/u
+    );
+  });
+
+  test("closer refusals identify generation, group and end", () => {
+    const closer: WalGroupCloser = {
+      db: "vault",
+      generation,
+      group: 3,
+      endOffset: 20,
+    };
+    expect(() => walGroupCloserKey({ ...closer, generation: "x" })).toThrow(
+      /wal generation/u
+    );
+    expect(() => walGroupCloserKey({ ...closer, group: -1 })).toThrow(
+      /wal group/u
+    );
+    expect(() => walGroupCloserKey({ ...closer, group: 1.5 })).toThrow(
+      /wal group/u
+    );
+    expect(() => walGroupCloserKey({ ...closer, endOffset: -1 })).toThrow(
+      /closer end/u
+    );
+    expect(() => walGroupCloserKey({ ...closer, endOffset: 1.5 })).toThrow(
+      /closer end/u
+    );
+  });
+
+  test("pair-marker refusals identify the generation pair and the tick", () => {
+    const marker = {
+      vaultGeneration: generation,
+      journalGeneration: "b".repeat(32),
+      tickMs: 5,
+    };
+    // Either generation alone is enough to refuse the pair: a marker naming a
+    // generation that cannot exist would be listed under a base pair no
+    // restore can ever match.
+    expect(() => walPairMarkerKey({ ...marker, vaultGeneration: "x" })).toThrow(
+      /generation pair/u
+    );
+    expect(() =>
+      walPairMarkerKey({ ...marker, journalGeneration: "x" })
+    ).toThrow(/generation pair/u);
+    expect(() => walPairMarkerKey({ ...marker, tickMs: -1 })).toThrow(
+      /marker tick/u
+    );
+    expect(() => walPairMarkerKey({ ...marker, tickMs: 1.5 })).toThrow(
+      /marker tick/u
     );
   });
 });

@@ -6,8 +6,10 @@ import { describe, expect, test } from "vitest";
 
 import { useFakeClock } from "./fake-clock.js";
 import { fc } from "./fast-check.js";
+import { flushMacrotasks } from "./flush.js";
 import { recordQualityResult, regressionBudget } from "./quality-result.js";
 import { forEachSequentially } from "./sequential.js";
+import { plainSqliteRow, plainSqliteRows } from "./sqlite.js";
 import { tempDir, tempDirSync } from "./temp-dir.js";
 import { jsdomProject, nodeProject } from "./vitest.js";
 import { generateVolumeFixture } from "./volume-fixture.js";
@@ -166,5 +168,37 @@ describe("test-kit", () => {
       process.chdir(cwd);
       await rm(scratch, { recursive: true, force: true });
     }
+  });
+
+  // #656 Layer 1F: these normalizers stand between driver rows and every
+  // `toStrictEqual` in the repo. A normalizer that dropped or renamed a column
+  // would make thousands of assertions quietly weaker, not red.
+  test("plainSqliteRow keeps every column and drops only the driver prototype", () => {
+    const driverRow = Object.assign(Object.create(null), {
+      id: "row-1",
+      count: 3,
+      missing: null,
+    }) as { id: string; count: number; missing: null };
+    const plain = plainSqliteRow(driverRow);
+    expect(plain).toStrictEqual({ id: "row-1", count: 3, missing: null });
+    expect(Object.getPrototypeOf(plain!)).toBe(Object.prototype);
+  });
+
+  test("plainSqliteRow passes a missing row through as undefined", () => {
+    expect(plainSqliteRow(undefined)).toBeUndefined();
+  });
+
+  test("plainSqliteRows normalizes every row and preserves order", () => {
+    const rows = [{ n: 1 }, { n: 2 }, { n: 3 }].map((row) =>
+      Object.assign(Object.create(null), row)
+    ) as Array<{ n: number }>;
+    expect(plainSqliteRows(rows)).toStrictEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
+  });
+
+  test("flushMacrotasks resolves after already-queued macrotask work", async () => {
+    const order: string[] = [];
+    setTimeout(() => order.push("queued"), 0);
+    await flushMacrotasks();
+    expect(order).toStrictEqual(["queued"]);
   });
 });

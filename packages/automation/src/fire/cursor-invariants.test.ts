@@ -1,8 +1,10 @@
 /*
  * The cursor invariants themselves (issue #541 review): a committed position
  * never runs ahead of a delivered element, a disable never destroys a
- * watermark, a failed batch never swallows a doorbell, a quiet minute never
- * costs a write, and one automation is one cron schedule.
+ * watermark, a failed batch never swallows a doorbell, and a quiet minute
+ * never costs a write. Cron enumeration and gap collapse belong to
+ * cron-cursor.test.ts; the one-registration-per-automation collapse belongs to
+ * cursor-engine-support.test.ts.
  */
 
 import path from "node:path";
@@ -276,31 +278,5 @@ describe("VaultCursorEngine cursor invariants", () => {
     expect(errors).toStrictEqual([
       { ref: "<scheduler-dormancy>", message: "ledger write failed" },
     ]);
-  });
-
-  it("fires an automation once per minute however many crons it declares", async () => {
-    const fired: string[] = [];
-    let clock = new Date(2026, 0, 1, 8, 0);
-    const s = new VaultCursorEngine({
-      fire: (ref) => void fired.push(ref),
-      now: () => clock,
-    });
-    // Two expressions that both match 08:00 are one schedule, not two streams.
-    await s.reconcile([
-      row("a/multi", [
-        { kind: "cron", expr: "0 8 * * *" },
-        { kind: "cron", expr: "*/30 * * * *" },
-      ]),
-    ]);
-
-    s.tick();
-    await settle();
-    expect(fired).toStrictEqual(["a/multi"]);
-
-    // 08:30 matches only the half-hourly expression — still exactly one fire.
-    clock = new Date(2026, 0, 1, 8, 30);
-    s.tick();
-    await settle();
-    expect(fired).toStrictEqual(["a/multi", "a/multi"]);
   });
 });

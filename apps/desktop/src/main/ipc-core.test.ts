@@ -21,11 +21,11 @@ describe("Channel map", () => {
     }
   });
 
-  it("is imported by both ipc.ts and preload.ts (parity)", () => {
+  it("is imported by both ipc.ts and preload-core.ts (parity)", () => {
     const ipc = readFileSync(path.join(here, "ipc.ts"), "utf8");
-    const preload = readFileSync(path.join(here, "..", "preload.ts"), "utf8");
+    const preload = readFileSync(path.join(here, "preload-core.ts"), "utf8");
     expect(ipc).toMatch(/from ['"]\.\/ipc-core\.js['"]/u);
-    expect(preload).toMatch(/from ['"]\.\/main\/ipc-core\.js['"]/u);
+    expect(preload).toMatch(/from ['"]\.\/ipc-core\.js['"]/u);
     // Neither file re-declares the channel map inline.
     expect(ipc).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);
     expect(preload).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);

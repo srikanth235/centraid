@@ -9,6 +9,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type { AutomationThreadBridgeProps } from "../screen-contracts.js";
@@ -24,70 +25,62 @@ installThreadHarness();
 
 describe("AutomationThreadScreen — live turn watch", () => {
   it("rejoins a dropped turn stream instead of spinning forever, then gives up with a retry", async () => {
-    vi.useFakeTimers();
-    try {
-      // Every join is refused (the gateway's SSE subscriber cap answers 503,
-      // or the socket just dies) — the screen must keep trying, bounded.
-      const watchTurn = vi
-        .fn<AutomationThreadBridgeProps["watchTurn"]>()
-        .mockRejectedValue(new Error("HTTP 503"));
-      const props = makeProps({ watchTurn }, newestFirst());
-      const el = await mount(props);
-      // The auto-watch effect joins the still-running latest turn (r3).
-      expect(watchTurn).toHaveBeenCalledOnce();
-      expect(watchTurn.mock.calls[0]?.[0]).toBe("r3");
+    const clock = useFakeClock();
+    // Every join is refused (the gateway's SSE subscriber cap answers 503,
+    // or the socket just dies) — the screen must keep trying, bounded.
+    const watchTurn = vi
+      .fn<AutomationThreadBridgeProps["watchTurn"]>()
+      .mockRejectedValue(new Error("HTTP 503"));
+    const props = makeProps({ watchTurn }, newestFirst());
+    const el = await mount(props);
+    // The auto-watch effect joins the still-running latest turn (r3).
+    expect(watchTurn).toHaveBeenCalledOnce();
+    expect(watchTurn.mock.calls[0]?.[0]).toBe("r3");
 
-      // Four bounded rejoins, each after its backoff.
-      await forEachSequentially([500, 1500, 4000, 10_000], async (delay) => {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(delay);
-        });
-      });
-      expect(watchTurn).toHaveBeenCalledTimes(5);
-
-      // Bounded: it stops rather than hammering, and says so.
+    // Four bounded rejoins, each after its backoff.
+    await forEachSequentially([500, 1500, 4000, 10_000], async (delay) => {
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(60_000);
+        await clock.advance(delay);
       });
-      expect(watchTurn).toHaveBeenCalledTimes(5);
-      const lost = el.querySelector<HTMLElement>(
-        '[data-testid="turn-watch-lost"]'
-      );
-      expect(lost?.textContent).toContain("Lost the live connection");
+    });
+    expect(watchTurn).toHaveBeenCalledTimes(5);
 
-      // The reader can rejoin explicitly.
-      const rejoin = el.querySelector<HTMLButtonElement>(
-        '[data-testid="rejoin-turn"]'
-      );
-      await act(async () =>
-        rejoin?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-      );
-      expect(watchTurn).toHaveBeenCalledTimes(6);
-    } finally {
-      vi.useRealTimers();
-    }
+    // Bounded: it stops rather than hammering, and says so.
+    await act(async () => {
+      await clock.advance(60_000);
+    });
+    expect(watchTurn).toHaveBeenCalledTimes(5);
+    const lost = el.querySelector<HTMLElement>(
+      '[data-testid="turn-watch-lost"]'
+    );
+    expect(lost?.textContent).toContain("Lost the live connection");
+
+    // The reader can rejoin explicitly.
+    const rejoin = el.querySelector<HTMLButtonElement>(
+      '[data-testid="rejoin-turn"]'
+    );
+    await act(async () =>
+      rejoin?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(watchTurn).toHaveBeenCalledTimes(6);
   });
 
   it("stops rejoining as soon as the ledger says the turn settled", async () => {
-    vi.useFakeTimers();
-    try {
-      const watchTurn = vi
-        .fn<AutomationThreadBridgeProps["watchTurn"]>()
-        .mockRejectedValueOnce(new Error("stream closed"))
-        .mockResolvedValue(true);
-      const el = await mount(makeProps({ watchTurn }, newestFirst()));
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-      });
-      expect(watchTurn).toHaveBeenCalledTimes(2);
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(60_000);
-      });
-      expect(watchTurn).toHaveBeenCalledTimes(2);
-      expect(el.querySelector('[data-testid="turn-watch-lost"]')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    const clock = useFakeClock();
+    const watchTurn = vi
+      .fn<AutomationThreadBridgeProps["watchTurn"]>()
+      .mockRejectedValueOnce(new Error("stream closed"))
+      .mockResolvedValue(true);
+    const el = await mount(makeProps({ watchTurn }, newestFirst()));
+    await act(async () => {
+      await clock.advance(500);
+    });
+    expect(watchTurn).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await clock.advance(60_000);
+    });
+    expect(watchTurn).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('[data-testid="turn-watch-lost"]')).toBeNull();
   });
 
   it("re-reads nothing extra once a watch settles — the watcher owns that read", async () => {

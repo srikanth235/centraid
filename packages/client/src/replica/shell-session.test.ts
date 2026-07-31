@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import type {
   ReplicaShellSessionOptions,
   ShellReplicaCoordinator,
@@ -432,56 +434,52 @@ describe("shell-session", () => {
     });
 
     test("retries a transient bootstrap failure without waiting for an online event", async () => {
-      vi.useFakeTimers();
-      try {
-        const coordinator = fakeCoordinator();
-        const fetcher = vi
-          .fn<ReplicaFetcher>()
-          .mockResolvedValueOnce(
-            new Response(JSON.stringify({ error: "gateway_error" }), {
-              status: 503,
-              headers: { "content-type": "application/json" },
-            })
+      const clock = useFakeClock();
+      const coordinator = fakeCoordinator();
+      const fetcher = vi
+        .fn<ReplicaFetcher>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: "gateway_error" }), {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              vaultId: "vault",
+              schemaEpoch: "schema",
+              cursor: { epoch: "epoch", seq: 7 },
+              shapes: [],
+              rows: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
           )
-          .mockResolvedValueOnce(
-            new Response(
-              JSON.stringify({
-                protocolVersion: 1,
-                vaultId: "vault",
-                schemaEpoch: "schema",
-                cursor: { epoch: "epoch", seq: 7 },
-                shapes: [],
-                rows: [],
-              }),
-              { status: 200, headers: { "content-type": "application/json" } }
-            )
-          );
-        const session = new ReplicaShellSession(
-          { baseUrl: "https://gateway.example", vaultId: "vault" },
-          coordinator,
-          {
-            fetcher,
-            eventTarget: new EventTarget(),
-            isOnline: () => true,
-            retryDelayMs: 10,
-          }
         );
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        {
+          fetcher,
+          eventTarget: new EventTarget(),
+          isOnline: () => true,
+          retryDelayMs: 10,
+        }
+      );
 
-        await session.start({
-          mode: "memory",
-          cursor: null,
-          schemaEpoch: null,
-        });
-        expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
-        await vi.advanceTimersByTimeAsync(10);
-        await vi.waitFor(() =>
-          expect(coordinator.bootstrap).toHaveBeenCalledOnce()
-        );
-        expect(fetcher).toHaveBeenCalledTimes(2);
-        await session.close();
-      } finally {
-        vi.useRealTimers();
-      }
+      await session.start({
+        mode: "memory",
+        cursor: null,
+        schemaEpoch: null,
+      });
+      expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
+      await clock.advance(10);
+      await vi.waitFor(() =>
+        expect(coordinator.bootstrap).toHaveBeenCalledOnce()
+      );
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await session.close();
     });
 
     test("ships an idempotent intent and keeps its overlay until canonical execution arrives", async () => {

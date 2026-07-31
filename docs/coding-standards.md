@@ -71,6 +71,39 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 - Tools and checks: **repo scripts only** — `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
 - Quality ownership and safe-fix policy live in [toolchain.md](toolchain.md). Fix code before suppressing a diagnostic; never weaken policy only to make a gate green.
 
+## Test seams (mechanically enforced)
+
+Three hand-rolled test constructs are **oxlint errors** inside vitest test files. Each one leaked something when a test failed, and each has a shorter kit replacement — see the `TEST_SEAM_PROPERTIES` block in [oxlint.config.ts](../oxlint.config.ts) for the rule and its message.
+
+| Banned in tests | Use | Why it is a rule and not advice |
+| --- | --- | --- |
+| `mkdtemp` / `mkdtempSync` (called or imported from `node:fs*`) | `tempDir()` / `tempDirSync()` from `@centraid/test-kit/temp-dir` | The kit registers removal at creation, so a throwing test cannot leak the directory. `photos-asset-key.test.ts` leaked one per run from module top level. |
+| `vi.useFakeTimers` / `vi.useRealTimers` / `vi.setSystemTime` | `useFakeClock()` from `@centraid/test-kit/fake-clock` | A fake clock installed by a test that then throws stays installed for the rest of the file, and the later failures report as timeouts, not as the leak. `useFakeClock` registers the restore at install time. |
+| `Math.random()` | `seededRandom(<literal>)` from `@centraid/test-kit/random` | A failure found from an unseeded draw is not reproducible from the failing run's own output. |
+
+Two things to know about `useFakeClock`:
+
+- It uses `onTestFinished`, so it is callable from a test body or `beforeEach` — **not** from `beforeAll` or a bare `describe` body. A file-lifetime clock is out of scope by design; if you think you need one, the fixture probably belongs in `beforeEach`.
+- The `use` prefix makes `react-hooks/rules-of-hooks` treat it as a React hook, so it must be called directly in the test body, never from a lowercase-named local helper. Inline the helper rather than renaming the kit export.
+
+`bootstrappedVault()` from `@centraid/test-kit/vault` is the same idea for vault fixtures: it opens, bootstraps, and registers the close in one call, and it takes `{ openVaultDb, bootstrapVault }` by injection so `packages/vault`'s own suites (which import `../db.js` relatively) can use it without a package cycle.
+
+**Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of the repo's 162 call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
+
+Playwright's `apps/*/tests/e2e/**` are exempt: different runner, no `onTestFinished`, none of these helpers exist there.
+
+## One law, one home (mechanically enforced)
+
+A named product law gets a machine-readable tag in its test title:
+
+```ts
+test("[law:backup-no-change] no-change run registers nothing", async () => { … });
+```
+
+`bun run lint:law-registry` (in `check:pr`) fails when the same tag appears in more than one file. Several tests in the **owning** file are fine — that is one home. A second file asserting the same law is a restatement, and Layer 1D of #656 deleted a batch of exactly those; the tag is what stops them coming back.
+
+The registry lives in `tests/matrix.json#laws` as `{ [tag]: { statement, owner, flow? } }`. Once a tag is registered the linter also fails an unregistered tag, an owner file that does not exist, and a registered law whose owner carries no such tag.
+
 ## Store atomicity
 
 **Store APIs own atomicity.** Callers do not orchestrate read → merge → write against prefs, device tokens, enrollment, or session files.

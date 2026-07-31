@@ -234,7 +234,10 @@ persisted settings only and refuses remote gateways.
 contract: that an explicit retry clears the give-up latch and re-attempts the
 start, that the recovery path resolves once the cause is cleared, and that the
 refusal message no longer names Settings.
-`apps/desktop/src/preload.ts` exposes `retryGatewayStart` and
+`apps/desktop/src/main/preload-core.ts` exposes `retryGatewayStart` (added to
+`apps/desktop/src/preload.ts` first; moved when the merge with `main` picked up
+PR #661's extraction of the preload body into the Electron-free core, and
+covered by that core's `apps/desktop/src/main/preload-core.test.ts`) and
 `packages/client/src/centraid-api.d.ts` types it as optional, so a web host that
 owns no local gateway is unaffected. `packages/client/src/react/boot.tsx` calls
 it before re-running `start()`.
@@ -471,6 +474,7 @@ restore the credential, press again:
 | claude-code-62298c7b-4a8-1785489142-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 1118 | 223690 | 613 | 1733 | 0.1342 | 3046 | 2117721 | 109335196 | 571867 | fix(client): never offer a fresh start when settings fail to read (#660)boot.tsx |
 | claude-code-62298c7b-4a8-1785489194-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 718 | 224808 | 600 | 1320 | 0.1319 | 3048 | 2118439 | 109560004 | 572467 | fix(client): keep the background service installable after a dismissal (#660)Gat |
 | claude-code-62298c7b-4a8-1785489245-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 1052 | 225526 | 615 | 1669 | 0.1347 | 3050 | 2119491 | 109785530 | 573082 | fix(client): take the friction out of first run (#660)A failed fresh dial showed |
+| claude-code-62298c7b-4a8-1785492698-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2322 | 1239083 | 54900321 | 261433 | 1502838 | 41.7419 | 5372 | 3358574 | 164685851 | 834515 |  |
 
 ### Steering
 

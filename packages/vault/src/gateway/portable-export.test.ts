@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import { blobUriFor } from "../blob/store.js";
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
@@ -25,8 +27,10 @@ let owner: Credential;
 
 describe("portable export", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gateway = createGateway(db);
     owner = {
       kind: "device",

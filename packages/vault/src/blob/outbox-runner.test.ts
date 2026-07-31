@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { openVaultDb } from "../db.js";
 import { BlobCache } from "./cache.js";
@@ -8,8 +10,6 @@ import { sha256OfBytes } from "./store.js";
 import { BlobTransferState } from "./transfer-state.js";
 
 describe("outbox-runner", () => {
-  afterEach(() => vi.useRealTimers());
-
   test("custody drain never exceeds the configured replication concurrency", async () => {
     const db = openVaultDb();
     await db.blobTransfers.close();
@@ -71,7 +71,7 @@ describe("outbox-runner", () => {
   });
 
   test("an unconfigured remote tier performs no fast polling (#456 I1)", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const state = new BlobTransferState(db.vault);
@@ -88,7 +88,7 @@ describe("outbox-runner", () => {
     try {
       // The one-minute backstop is jittered ±10% (timer-jitter.ts), so the
       // earliest possible fire is 54s — stay strictly below it.
-      await vi.advanceTimersByTimeAsync(53_000);
+      await clock.advance(53_000);
       expect(due).not.toHaveBeenCalled();
     } finally {
       await runner.close();
@@ -97,7 +97,7 @@ describe("outbox-runner", () => {
   });
 
   test("an unconfigured remote still reaps expired local sessions and resources", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const state = new BlobTransferState(db.vault);
@@ -122,7 +122,7 @@ describe("outbox-runner", () => {
     try {
       // The backstop is jittered ±10%, so the latest possible fire is 66s —
       // advance past it (65s used to lose the draw ~8% of the time).
-      await vi.advanceTimersByTimeAsync(70_000);
+      await clock.advance(70_000);
       expect(expired).toStrictEqual(["expired-local"]);
       expect(state.session("expired-local")).toBeNull();
     } finally {
@@ -132,7 +132,7 @@ describe("outbox-runner", () => {
   });
 
   test("a pressured host defers timer-driven replication but keeps its durable row", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const local = new MemoryBlobStore();
@@ -154,7 +154,7 @@ describe("outbox-runner", () => {
       intervalMs: 1,
     });
     try {
-      await vi.advanceTimersByTimeAsync(2);
+      await clock.advance(2);
       expect(state.status().pendingCount).toBe(1);
       await expect(remote.has(sha)).resolves.toBe(false);
     } finally {

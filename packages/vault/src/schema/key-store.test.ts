@@ -2,17 +2,16 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   KEY_STORE_ENVELOPE_MAGIC,
@@ -22,19 +21,11 @@ import {
 } from "./key-store.js";
 import type { KeyProtector } from "./key-store.js";
 
-const roots: string[] = [];
-
 describe("key-store", () => {
-  afterEach(() => {
-    for (const root of roots.splice(0))
-      rmSync(root, { recursive: true, force: true });
-  });
-
   function store(
     options: ConstructorParameters<typeof KeyStore>[1] = {}
   ): KeyStore {
-    const root = mkdtempSync(path.join(os.tmpdir(), "centraid-key-store-"));
-    roots.push(root);
+    const root = tempDirSync("centraid-key-store-");
     return new KeyStore(path.join(root, "keys"), options);
   }
 

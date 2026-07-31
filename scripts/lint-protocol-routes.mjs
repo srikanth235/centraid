@@ -51,40 +51,54 @@ function walk(dir, out = []) {
   return out;
 }
 
-const violations = [];
-for (const scope of SCOPES) {
-  const dir = path.join(root, scope);
-  let files;
-  try {
-    files = walk(dir);
-  } catch {
-    continue;
-  }
-  for (const file of files) {
-    const text = readFileSync(file, "utf8");
-    // Files that import ROUTES from protocol are allowed to only use ROUTES.*
-    // — any remaining string literal matching a known path is a violation.
-    for (const route of ROUTE_PATHS) {
-      // Match quoted string literals exactly equal to the route (or route + query).
-      const re = new RegExp(
-        `['"\`]${route.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\?[^'"\`]*)?['"\`]`,
-        "u"
-      );
-      if (re.test(text)) {
-        violations.push(
-          `${path.relative(root, file)}: hard-coded ${route} (import ROUTES from @centraid/protocol)`
+/**
+ * Scan `scopes` under `scanRoot` for hard-coded route literals. Pure over the
+ * filesystem tree it is given — exported so the fail path is testable.
+ */
+export function findRouteLiterals(scanRoot = root, scopes = SCOPES) {
+  const violations = [];
+  for (const scope of scopes) {
+    const dir = path.join(scanRoot, scope);
+    let files;
+    try {
+      files = walk(dir);
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      const text = readFileSync(file, "utf8");
+      // Files that import ROUTES from protocol are allowed to only use ROUTES.*
+      // — any remaining string literal matching a known path is a violation.
+      for (const route of ROUTE_PATHS) {
+        // Match quoted string literals exactly equal to the route (or route + query).
+        const re = new RegExp(
+          `['"\`]${route.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\?[^'"\`]*)?['"\`]`,
+          "u"
         );
+        if (re.test(text)) {
+          violations.push(
+            `${path.relative(scanRoot, file)}: hard-coded ${route} (import ROUTES from @centraid/protocol)`
+          );
+        }
       }
     }
   }
+  return violations;
 }
 
-if (violations.length > 0) {
-  process.stderr.write(
-    `protocol route-literal drift (#504):\n${violations.join("\n")}\n`
+function main() {
+  const violations = findRouteLiterals();
+  if (violations.length > 0) {
+    process.stderr.write(
+      `protocol route-literal drift (#504):\n${violations.join("\n")}\n`
+    );
+    process.exit(1);
+  }
+  process.stdout.write(
+    `protocol routes: ok (${ROUTE_PATHS.length} paths, scopes ${SCOPES.join(", ")})\n`
   );
-  process.exit(1);
 }
-process.stdout.write(
-  `protocol routes: ok (${ROUTE_PATHS.length} paths, scopes ${SCOPES.join(", ")})\n`
-);
+
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  main();
+}

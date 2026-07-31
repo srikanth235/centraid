@@ -10,7 +10,7 @@ import { promises as fs } from "node:fs";
  */
 import path from "node:path";
 
-import { describe, afterEach, expect, test, vi } from "vitest";
+import { describe, afterEach, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -27,7 +27,6 @@ import {
 const cleanups: Array<() => Promise<void> | void> = [];
 describe("device-plane scenarios", () => {
   afterEach(async () => {
-    vi.useRealTimers();
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
       cleanup()
     );

@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { notifyReplicaCommit } from "@centraid/vault";
 
@@ -36,7 +37,6 @@ const relays: PushWakeRelay[] = [];
 
 describe("push-wake-routes", () => {
   afterEach(async () => {
-    vi.useRealTimers();
     for (const relay of relays.splice(0)) relay.stop();
     for (const server of servers.splice(0)) server.close();
     for (const plane of planes.splice(0)) plane.stop();
@@ -207,7 +207,7 @@ describe("push-wake-routes", () => {
   });
 
   test("PushWakeRelay debounces vault and Inbox wakes into opaque-only payloads", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     const deviceId = "wake-phone";
     enrollments.enroll({
@@ -244,7 +244,7 @@ describe("push-wake-routes", () => {
     notifyReplicaCommit(plane.db.vault); // second ring still one debounce timer
     expect(send).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await clock.advance(10_000);
     await flushMicrotasks();
 
     expect(send).toHaveBeenCalledOnce();
@@ -275,7 +275,7 @@ describe("push-wake-routes", () => {
 
     send.mockClear();
     relay.requestWake(plane.boot.vaultId);
-    await vi.advanceTimersByTimeAsync(10_000);
+    await clock.advance(10_000);
     await flushMicrotasks();
     expect(send).toHaveBeenCalledOnce();
     const explicitBody = JSON.parse(
@@ -289,7 +289,7 @@ describe("push-wake-routes", () => {
   });
 
   test("PushWakeRelay swallows Expo delivery failures and skips empty audiences", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     enrollments.enroll({
       endpointId: "silent-phone",
@@ -306,7 +306,7 @@ describe("push-wake-routes", () => {
 
     // Enrolled device but no push registration → wake is a no-op.
     notifyReplicaCommit(plane.db.vault);
-    await vi.advanceTimersByTimeAsync(10_000);
+    await clock.advance(10_000);
     await flushMicrotasks();
     expect(send).not.toHaveBeenCalled();
 
@@ -318,14 +318,13 @@ describe("push-wake-routes", () => {
       "ios"
     );
     notifyReplicaCommit(plane.db.vault);
-    await vi.advanceTimersByTimeAsync(10_000);
+    await clock.advance(10_000);
     await flushMicrotasks();
     expect(send).toHaveBeenCalledOnce();
   });
 
   test("PushWakeRelay arms the exact next reminder instead of relying on a poll", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-29T12:00:00.000Z"));
+    const clock = useFakeClock(new Date("2026-07-29T12:00:00.000Z"));
     const { plane, enrollments, database, vaults } = await wakeFixture();
     const deviceId = "timer-phone";
     enrollments.enroll({
@@ -366,16 +365,16 @@ describe("push-wake-routes", () => {
     relays.push(relay);
     relay.start();
 
-    await vi.advanceTimersByTimeAsync(4_999);
+    await clock.advance(4_999);
     expect(send).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    await clock.advance(1);
     await flushMicrotasks();
 
     expect(send).toHaveBeenCalledOnce();
   });
 
   test("PushWakeRelay stop clears due-arm debounce so closed vaults do not throw", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     enrollments.enroll({
       endpointId: "closed-phone",
@@ -396,14 +395,13 @@ describe("push-wake-routes", () => {
     notifyReplicaCommit(plane.db.vault);
     plane.stop();
     relay.stop();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await clock.advance(10_000);
     await flushMicrotasks();
     expect(send).not.toHaveBeenCalled();
   });
 
   test("PushWakeRelay armDue swallows closed-database errors after plane.stop", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-29T12:00:00.000Z"));
+    const clock = useFakeClock(new Date("2026-07-29T12:00:00.000Z"));
     const { plane, enrollments, database, vaults } = await wakeFixture();
     enrollments.enroll({
       endpointId: "race-phone",
@@ -435,7 +433,7 @@ describe("push-wake-routes", () => {
     // Close the vault while the next-fire timer is still armed, without
     // stop()ing the relay — exercises the closed-DB catch in armDue.
     plane.stop();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await clock.advance(5_000);
     await flushMicrotasks();
     // No unhandled rejection; wake must not fire against a dead plane.
     expect(send).not.toHaveBeenCalled();

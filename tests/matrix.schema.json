@@ -47,6 +47,11 @@
         "additionalProperties": false,
         "properties": {
           "glob": { "type": "string", "minLength": 1 },
+          "contains": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Regex the globbed files must NOT contain. Without it the trigger fires on mere existence, which is why a glob must always match at least one real file."
+          },
           "trackingIssue": { "type": "integer", "minimum": 1 }
         }
       }
@@ -78,14 +83,33 @@
     },
     "surfaces": {
       "type": "array",
-      "items": { "type": "object", "required": ["id", "label", "assessment"] }
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "assessment"],
+        "description": "`assessment` is a DECLARED EXPECTATION, not a grade: scripts/test-report/matrix-grades.mjs computes the ceiling the evidence supports and test:matrix fails when a cell claims more than that."
+      }
     },
     "flows": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "surface", "dimension", "tier", "owner"],
-        "properties": { "owner": { "type": "string", "minLength": 1 } }
+        "required": [
+          "id",
+          "name",
+          "surface",
+          "dimension",
+          "tier",
+          "owner",
+          "minimumTests"
+        ],
+        "properties": {
+          "owner": { "type": "string", "minLength": 1 },
+          "minimumTests": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "The contract floor for this law. null opts a rig out of the floor and makes the cell it backs uncomputable as solid."
+          }
+        }
       }
     }
   }

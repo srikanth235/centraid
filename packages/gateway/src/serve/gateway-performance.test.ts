@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { GatewayPerformanceMonitor } from "./gateway-performance.js";
 
@@ -29,8 +31,6 @@ class FakeHistogram {
 }
 
 describe(GatewayPerformanceMonitor, () => {
-  afterEach(() => vi.useRealTimers());
-
   it("surfaces event-loop delay in milliseconds and the boot fsync sample", () => {
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({
@@ -88,7 +88,7 @@ describe(GatewayPerformanceMonitor, () => {
   });
 
   it("keeps collection enabled continuously between rolling snapshots", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({
       histogram,
@@ -97,10 +97,10 @@ describe(GatewayPerformanceMonitor, () => {
     });
 
     expect(histogram.enabled).toBe(true);
-    await vi.advanceTimersByTimeAsync(10);
+    await clock.advance(10);
     expect(histogram.enabled).toBe(true);
     expect(histogram.resetCount).toBe(1);
-    await vi.advanceTimersByTimeAsync(20);
+    await clock.advance(20);
     expect(histogram.enabled).toBe(true);
     expect(histogram.resetCount).toBe(2);
     monitor.close();

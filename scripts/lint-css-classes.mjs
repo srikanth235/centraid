@@ -65,82 +65,115 @@ function scannableBody(src) {
     .join("\n");
 }
 
-const findings = [];
-const dynamic = [];
-let filesScanned = 0;
-let modulesResolved = 0;
+/**
+ * Scan `targets` under `root` for className reads with no backing CSS rule.
+ * Pure over the tree it is given (returns, never exits) — exported so the
+ * fail path is testable. `missingTarget` is the non-existent TARGETS entry.
+ */
+export function lintCssClasses(root = ROOT, targets = TARGETS) {
+  const findings = [];
+  const dynamic = [];
+  let filesScanned = 0;
+  let modulesResolved = 0;
 
-for (const target of TARGETS) {
-  const dir = path.resolve(ROOT, target);
-  if (!existsSync(dir)) {
-    console.error(`FAIL — target does not exist: ${target}`);
-    process.exit(1);
-  }
-  for (const file of walk(dir)) {
-    filesScanned += 1;
-    const src = readFileSync(file, "utf8");
-    const imports = [
-      ...src.matchAll(
-        /^import\s+(?<alias>\w+)\s+from\s+['"](?<spec>[^'"]+\.module\.css)['"]/gmu
-      ),
-    ];
-    if (imports.length === 0) continue;
-    const body = scannableBody(src);
-    const rel = path.relative(ROOT, file);
+  for (const target of targets) {
+    const dir = path.resolve(root, target);
+    if (!existsSync(dir)) {
+      return {
+        findings,
+        dynamic,
+        filesScanned,
+        modulesResolved,
+        missingTarget: target,
+      };
+    }
+    for (const file of walk(dir)) {
+      filesScanned += 1;
+      const src = readFileSync(file, "utf8");
+      const imports = [
+        ...src.matchAll(
+          /^import\s+(?<alias>\w+)\s+from\s+['"](?<spec>[^'"]+\.module\.css)['"]/gmu
+        ),
+      ];
+      if (imports.length === 0) continue;
+      const body = scannableBody(src);
+      const rel = path.relative(root, file);
 
-    for (const imported of imports) {
-      const alias = imported.groups?.alias ?? "";
-      const spec = imported.groups?.spec ?? "";
-      const cssPath = path.resolve(path.dirname(file), spec);
-      if (!existsSync(cssPath)) {
-        findings.push(`${rel} — import '${spec}' does not resolve`);
-        continue;
-      }
-      modulesResolved += 1;
-      const defined = definedClasses(readFileSync(cssPath, "utf8"));
+      for (const imported of imports) {
+        const alias = imported.groups?.alias ?? "";
+        const spec = imported.groups?.spec ?? "";
+        const cssPath = path.resolve(path.dirname(file), spec);
+        if (!existsSync(cssPath)) {
+          findings.push(`${rel} — import '${spec}' does not resolve`);
+          continue;
+        }
+        modulesResolved += 1;
+        const defined = definedClasses(readFileSync(cssPath, "utf8"));
 
-      // Dynamic access defeats static analysis. Report it so the check can
-      // never quietly become partial; there are zero today.
-      if (new RegExp(`\\b${alias}\\[`, "u").test(body)) {
-        dynamic.push(`${rel} — ${alias}[…] computed access is unverifiable`);
-      }
+        // Dynamic access defeats static analysis. Report it so the check can
+        // never quietly become partial; there are zero today.
+        if (new RegExp(`\\b${alias}\\[`, "u").test(body)) {
+          dynamic.push(`${rel} — ${alias}[…] computed access is unverifiable`);
+        }
 
-      for (const [, name] of body.matchAll(
-        new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, "gu")
-      )) {
-        if (!defined.has(name)) {
-          findings.push(
-            `${rel}:${alias}.${name} — no .${name} rule in ${path.basename(cssPath)}`
-          );
+        for (const [, name] of body.matchAll(
+          new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, "gu")
+        )) {
+          if (!defined.has(name)) {
+            findings.push(
+              `${rel}:${alias}.${name} — no .${name} rule in ${path.basename(cssPath)}`
+            );
+          }
         }
       }
     }
   }
+  return {
+    findings,
+    dynamic,
+    filesScanned,
+    modulesResolved,
+    missingTarget: null,
+  };
 }
 
-// Silent-no-op guard (see header): a pass that checked nothing is a failure.
-if (filesScanned === 0 || modulesResolved === 0) {
-  console.error(
-    `FAIL — scanned ${filesScanned} file(s), resolved ${modulesResolved} CSS module(s). ` +
-      `The check matched nothing; its import pattern or TARGETS are stale.`
+function main() {
+  const { findings, dynamic, filesScanned, modulesResolved, missingTarget } =
+    lintCssClasses();
+
+  if (missingTarget) {
+    console.error(`FAIL — target does not exist: ${missingTarget}`);
+    process.exit(1);
+  }
+
+  // Silent-no-op guard (see header): a pass that checked nothing is a failure.
+  if (filesScanned === 0 || modulesResolved === 0) {
+    console.error(
+      `FAIL — scanned ${filesScanned} file(s), resolved ${modulesResolved} CSS module(s). ` +
+        `The check matched nothing; its import pattern or TARGETS are stale.`
+    );
+    process.exit(1);
+  }
+
+  for (const d of [...new Set(dynamic)].sort()) console.warn(`warn  ${d}`);
+
+  if (findings.length > 0) {
+    console.error(
+      `\nFAIL — ${findings.length} className(s) with no backing CSS rule:\n`
+    );
+    for (const f of [...new Set(findings)].sort()) console.error(`  ${f}`);
+    console.error(
+      `\nEach renders as class="" at runtime. Either write the rule, or drop the\n` +
+        `reference if the intended layout already comes from elsewhere.\n`
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    `ok   css-classes — ${modulesResolved} module import(s) across ${filesScanned} file(s), no dead classNames`
   );
-  process.exit(1);
 }
 
-for (const d of [...new Set(dynamic)].sort()) console.warn(`warn  ${d}`);
-
-if (findings.length > 0) {
-  console.error(
-    `\nFAIL — ${findings.length} className(s) with no backing CSS rule:\n`
-  );
-  for (const f of [...new Set(findings)].sort()) console.error(`  ${f}`);
-  console.error(
-    `\nEach renders as class="" at runtime. Either write the rule, or drop the\n` +
-      `reference if the intended layout already comes from elsewhere.\n`
-  );
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  main();
 }
-
-console.log(
-  `ok   css-classes — ${modulesResolved} module import(s) across ${filesScanned} file(s), no dead classNames`
-);

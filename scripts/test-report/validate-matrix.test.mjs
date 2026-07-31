@@ -1,6 +1,8 @@
+import path from "node:path";
+
 import { describe, expect, test } from "vitest";
 
-import { validateMatrix } from "./validate-matrix.mjs";
+import { fireRevisitTrigger, validateMatrix } from "./validate-matrix.mjs";
 
 function baseMatrix(overrides = {}) {
   return {
@@ -106,5 +108,85 @@ describe("validateMatrix", () => {
     });
     expect(errors).toEqual([]);
     expect(warnings.some((w) => w.includes("minimumTests"))).toBe(true);
+  });
+
+  // #656 Layer 1E — a partial cell is standing debt; it must name a live issue.
+  test("rejects a partial cell that cites no open tracking issue", async () => {
+    const matrix = baseMatrix();
+    matrix.surfaces[0].assessment.correctness = "partial";
+    matrix.notes["vault.correctness"] = "Missing the negative cases (#470).";
+    matrix.trackingIssues = {
+      470: { url: "https://example.test/470", state: "closed" },
+    };
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(errors.some((e) => e.includes("cites no open tracking issue"))).toBe(
+      true
+    );
+
+    matrix.trackingIssues[656] = {
+      url: "https://example.test/656",
+      state: "open",
+    };
+    matrix.notes["vault.correctness"] =
+      "Missing the negative cases (#470). Tracked under #656.";
+    const fixed = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(fixed.errors).toEqual([]);
+  });
+
+  test("rejects a note citing an issue that is not in the ledger", async () => {
+    const matrix = baseMatrix();
+    matrix.notes["vault.skipdim"] = "deliberate skip note (#4242)";
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(errors.some((e) => e.includes("unregistered issue #4242"))).toBe(
+      true
+    );
+  });
+
+  test("rejects a revisit trigger on a cell that is no longer skip", async () => {
+    const matrix = baseMatrix();
+    matrix.revisitTriggers = {
+      "vault.correctness": { glob: "packages/**/*.ts", trackingIssue: 656 },
+    };
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      errors.some((e) => e.includes("is not a skip cell; remove the trigger"))
+    ).toBe(true);
+  });
+});
+
+describe("fireRevisitTrigger", () => {
+  test("a glob that matches nothing is itself the failure", async () => {
+    const fired = await fireRevisitTrigger(
+      { glob: "packages/**/migrations/**/*", trackingIssue: 656 },
+      { cwd: path.join(import.meta.dirname, "..", "..") }
+    );
+    expect(fired.error).toContain("matches no file");
+  });
+
+  test("contains turns existence into a content tripwire", async () => {
+    const cwd = path.join(import.meta.dirname, "..", "..");
+    const glob = "scripts/test-report/matrix-grades.mjs";
+    const quiet = await fireRevisitTrigger(
+      { glob, contains: "THIS_MARKER_DOES_NOT_EXIST", trackingIssue: 656 },
+      { cwd }
+    );
+    expect(quiet).toEqual({});
+    const fired = await fireRevisitTrigger(
+      { glob, contains: "computeCellGrade", trackingIssue: 656 },
+      { cwd }
+    );
+    expect(fired.match).toBe(glob);
   });
 });

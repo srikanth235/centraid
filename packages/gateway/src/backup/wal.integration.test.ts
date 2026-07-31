@@ -13,7 +13,7 @@ import crypto from "node:crypto";
  * stands in for "the network is down", not for any provider behavior.
  */
 import { existsSync, statSync, promises as fs } from "node:fs";
-import type * as TypeImport_g9tn66 from "node:fs";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -259,7 +259,7 @@ describe("wal", () => {
     const root = path.join(f.providerDir, "objects", targetId, "backup", "wal");
     const out: string[] = [];
     const walk = async (dir: string): Promise<void> => {
-      let entries: TypeImport_g9tn66.Dirent[];
+      let entries: Dirent[];
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch {

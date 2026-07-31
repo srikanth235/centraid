@@ -1,11 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { createPaletteConversationSearch } from "./paletteConversationSearch.js";
 import type { PaletteConversationSearchOptions } from "./paletteConversationSearch.js";
 
 describe("paletteConversationSearch", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  beforeEach(() => {
+    useFakeClock();
+  });
 
   describe(createPaletteConversationSearch, () => {
     it("debounces, caches, and notifies when results arrive", async () => {

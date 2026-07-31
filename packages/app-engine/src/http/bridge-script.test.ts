@@ -7,7 +7,9 @@
 
 import { runInNewContext } from "node:vm";
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { changeBridgeScript } from "./bridge-script.js";
 
@@ -85,8 +87,6 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
 }
 
 describe("bridge-script", () => {
-  afterEach(() => vi.useRealTimers());
-
   /** Load the bridge into a sandbox; returns the wired `centraid` API + fetch log. */
   function loadBridge(): { centraid: Centraid; calls: FetchCall[] } {
     const src = changeBridgeScript()
@@ -352,7 +352,7 @@ describe("bridge-script", () => {
   }
 
   test("a parent handshake suppresses the per-app EventSource and delivers vault changes", () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const bridge = loadChangeHandshake(true);
     const received: unknown[] = [];
     bridge.centraid.onChange((detail) => received.push(detail));
@@ -392,7 +392,7 @@ describe("bridge-script", () => {
   });
 
   test("a managed iframe with no acknowledgement falls back, and a late acknowledgement closes it", () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const bridge = loadChangeHandshake(false);
 
     vi.advanceTimersByTime(499);

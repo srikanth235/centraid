@@ -8,6 +8,7 @@ import path from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
@@ -25,8 +26,10 @@ let owner: Credential;
 
 describe("duties", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     owner = {
       kind: "device",

@@ -10,6 +10,8 @@ import { describe, expect, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
+
 const OWNER = "tests/perf/tunnel-native.perf.test.ts";
 const nativeCandidates = [
   "packages/tunnel/native/centraid-tunnel-native.linux-x64.node",
@@ -24,7 +26,7 @@ const hasNative = Boolean(nativePath);
 
 // Cold dylib load on nightly runners routinely exceeds 500 ms; 5 s still
 // catches a catastrophic hang without flaking cold boots.
-const BUDGET_MS = 5_000;
+const BUDGET_MS = rigBudgetMs(OWNER);
 
 describe("tunnel-native.perf", () => {
   test.skipIf(!hasNative)(

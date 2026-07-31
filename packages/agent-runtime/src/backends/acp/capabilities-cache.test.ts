@@ -4,8 +4,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test, afterEach, vi } from "vitest";
+import { describe, expect, test, afterEach } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
@@ -19,7 +20,6 @@ import { FAKE_AGENT } from "./test-fixtures.js";
 describe("capabilities-cache suite", () => {
   afterEach(() => {
     clearCapabilitiesCache();
-    vi.useRealTimers();
   });
 
   test("probeAcpCapabilities reports reachable + advertised caps from fake agent", async () => {
@@ -90,8 +90,8 @@ describe("capabilities-cache suite", () => {
 
     // Age the cached snapshot past the TTL. Only `Date` is faked — the probe
     // still spawns a real child on real timers.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(Date.now() + CAPABILITIES_TTL_MS + 1));
+    const clock = useFakeClock(undefined, { toFake: ["Date"] });
+    clock.set(new Date(Date.now() + CAPABILITIES_TTL_MS + 1));
     const stale = await resolveAcpCapabilities("acp", { binPath: FAKE_AGENT });
     // Still displayable…
     expect(stale?.reachable).toBe(true);

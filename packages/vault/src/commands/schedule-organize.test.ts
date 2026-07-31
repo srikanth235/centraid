@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -36,8 +38,6 @@ describe("schedule organization commands", () => {
       )
       .run(calendarId, boot.ownerPartyId);
   });
-  afterEach(() => vi.useRealTimers());
-
   function invoke(command: string, input: Record<string, unknown>) {
     return gateway.invoke(owner, {
       command,
@@ -266,8 +266,7 @@ describe("schedule organization commands", () => {
       }).status
     ).toBe("executed");
 
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-29T12:15:00.000Z"));
+    useFakeClock(new Date("2026-07-29T12:15:00.000Z"));
     const completed = invoke("schedule.set_task_status", {
       task_id: taskId,
       status: "completed",

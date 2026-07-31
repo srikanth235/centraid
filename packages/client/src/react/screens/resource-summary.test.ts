@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import {
   formatBudgetSummary,
@@ -30,10 +32,6 @@ const sample: ResourceProfileDTO = {
 };
 
 describe("resource-summary", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   describe("byte + duration formatting", () => {
     it("formats GB with one decimal", () => {
       expect(formatGb(16 * 1024 ** 3)).toBe("16.0 GB");
@@ -76,14 +74,12 @@ describe("resource-summary", () => {
 
   describe(msUntilTonight, () => {
     it("counts to 20:00 the same day when before", () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date(2026, 6, 23, 10, 0, 0));
+      useFakeClock(new Date(2026, 6, 23, 10, 0, 0));
       expect(msUntilTonight(Date.now())).toBe(10 * 3_600_000);
     });
 
     it("counts to 20:00 tomorrow when already past", () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date(2026, 6, 23, 21, 0, 0));
+      useFakeClock(new Date(2026, 6, 23, 21, 0, 0));
       expect(msUntilTonight(Date.now())).toBe(23 * 3_600_000);
     });
   });

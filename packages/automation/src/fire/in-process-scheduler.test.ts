@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type { Row } from "../scaffold/app.js";
 import { InProcessScheduler } from "./in-process-scheduler.js";
@@ -42,9 +44,11 @@ describe("InProcessScheduler.reconcile", () => {
 });
 
 describe("InProcessScheduler.tick", () => {
-  it("fires each due cron once and catches the latest missed instant", async () => {
+  // Catch-up across a slept window (which instant, how many skipped) is owned
+  // by cron-cursor.test.ts — this owns the scheduler wiring around it.
+  it("fires each due cron once per minute", async () => {
     const fired: string[] = [];
-    let clock = at(8, 0);
+    const clock = at(8, 0);
     const s = new InProcessScheduler({
       fire: (ref) => void fired.push(ref),
       now: () => clock,
@@ -67,13 +71,6 @@ describe("InProcessScheduler.tick", () => {
     s.tick();
     await settle();
     expect(fired).toStrictEqual(["a/morning"]);
-
-    // The scheduler slept across 20:00. Its cursor catches the latest due
-    // instant on the first wake minute instead of losing the evening run.
-    clock = at(20, 1);
-    s.tick();
-    await settle();
-    expect(fired).toStrictEqual(["a/morning", "a/evening"]);
   });
 
   it("fires every registered automation whose cron matches the minute", async () => {
@@ -187,12 +184,6 @@ describe("condition-trigger watches", () => {
 });
 
 describe("InProcessScheduler.nudge", () => {
-  // Fake-timer tests call vi.useFakeTimers(); always restore so real-timer
-  // suites (bootstrap / cron backstop) never inherit a stuck clock.
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   function dataRow(ref: string, entities: readonly string[]): Row {
     const [ownerApp, id] = ref.split("/") as [string, string];
     const triggers = [{ kind: "data" as const, entities }];
@@ -209,7 +200,7 @@ describe("InProcessScheduler.nudge", () => {
   }
 
   it("coalesces a burst into one filtered data-trigger evaluation pass", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -239,7 +230,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("bypasses the minute gate while leaving condition triggers poll-only", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -274,7 +265,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("bootstraps a fresh data watcher during reconcile before its first write", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -319,7 +310,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("serializes a doorbell that races the minute tick and performs one dirty rerun", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -390,7 +381,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("routes rejected off-cycle evaluations without rejecting the caller", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const errors: string[] = [];
     const s = new InProcessScheduler({
       fire: () => {},

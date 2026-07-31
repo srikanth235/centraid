@@ -1,0 +1,221 @@
+// What an installed app can actually do through `bridgeFor(appId)`: reveal a
+// sealed secret only behind a fresh user-presence permit, invoke a granted
+// command without parking (risk is salience, not a gate), and reach the canon
+// from a real handler file dispatched by the app engine.
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { describe, expect, test } from "vitest";
+
+import { Dispatcher, Registry } from "@centraid/app-engine";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { ensureAppEnrolled } from "@centraid/vault";
+
+import { seedCalendar, usePlaneFixture } from "./vault-plane.test-fixtures.js";
+
+describe("vault-plane app bridge", () => {
+  const fixture = usePlaneFixture();
+
+  test("Locker app reveals require an expiring one-time user-presence permit", async () => {
+    const plane = fixture.openPlane(await tempDir("locker-auth-plane-"));
+    plane.installApp("locker", "Locker");
+    plane.approveGrant("locker", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "locker", table: "item", verbs: "reveal" }],
+    });
+    const added = plane.gateway.invoke(plane.ownerCredential, {
+      command: "locker.add_item",
+      input: {
+        type: "login",
+        title: "example.com",
+        password: "permit-protected-secret",
+        url: "https://example.com",
+      },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(added.status).toBe("executed");
+    const itemId = (added as { output: { item_id: string } }).output.item_id;
+    const bridge = plane.bridgeFor("locker");
+    const reveal = (authentication?: {
+      sessionToken?: string;
+      itemToken?: string;
+    }) =>
+      bridge({
+        op: "reveal",
+        payload: {
+          entity: "locker.item",
+          entityId: itemId,
+          columns: ["password"],
+          authentication,
+          purpose: "dpv:ServiceProvision",
+        },
+      });
+
+    // Presence is opt-in until a credential is configured; after that, every
+    // UI reveal needs a one-time item permit (fill only needs an unlock session).
+    const configured = await bridge({
+      op: "authenticate",
+      payload: {
+        operation: "configure",
+        secret: "correct horse battery staple",
+      },
+    });
+    expect(configured.ok).toBe(true);
+    const sessionToken = (configured.result as { sessionToken: string })
+      .sessionToken;
+    await expect(reveal()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/locked/u),
+    });
+    const authorized = await bridge({
+      op: "authenticate",
+      payload: {
+        operation: "authorize-item",
+        sessionToken,
+        secret: "correct horse battery staple",
+        itemId,
+      },
+    });
+    const itemToken = (authorized.result as { itemToken: string }).itemToken;
+    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
+      ok: true,
+      result: {
+        values: { password: "permit-protected-secret" },
+      },
+    });
+    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/authorization expired/u),
+    });
+  });
+
+  test("a granted app invoke executes without parking; the risk marker rides the receipt (issue #306)", async () => {
+    const plane = fixture.openPlane(await tempDir());
+    const calendarId = seedCalendar(plane);
+    plane.enrollApp("planner");
+    plane.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
+
+    const bridge = plane.bridgeFor("planner");
+    const outcome = await bridge({
+      op: "invoke",
+      payload: {
+        command: "schedule.propose_event",
+        input: {
+          summary: "Design review",
+          dtstart: "2026-07-04T09:00:00Z",
+          dtend: "2026-07-04T09:30:00Z",
+          calendar_id: calendarId,
+        },
+        purpose: "dpv:ServiceProvision",
+      },
+    });
+    // propose_event is medium risk — installing granted the scope, so it
+    // executes; risk is a salience marker in the journal, not a park trigger.
+    expect(outcome.ok).toBe(true);
+    const executed = outcome.result as { status: string; receiptId: string };
+    expect(executed.status).toBe("executed");
+    expect(plane.listParked()).toHaveLength(0);
+    const receipt = plane.db.journal
+      .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+      .get(executed.receiptId) as { detail_json: string };
+    expect(JSON.parse(receipt.detail_json).risk).toBe("medium");
+    const events = plane.db.vault
+      .prepare("SELECT summary, status FROM core_event")
+      .all();
+    // node:sqlite hands back null-prototype rows; spreading compares the column
+    // data (which is the contract) without asserting the driver's prototype.
+    expect(events.map((row) => ({ ...row }))).toStrictEqual([
+      { summary: "Design review", status: "tentative" },
+    ]);
+  });
+
+  test("full stack: a real handler file reaches the canon through ctx.vault", async () => {
+    const plane = fixture.openPlane(await tempDir());
+    const calendarId = seedCalendar(plane);
+    ensureAppEnrolled(plane.db, "planner", { riskCeiling: "medium" });
+    plane.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", verbs: "read+act" }],
+    });
+
+    // App code on disk, dispatched exactly as the runtime would.
+    const codeRoot = await tempDir();
+    const dataRoot = await tempDir();
+    const appDir = path.join(codeRoot, "planner");
+    await fs.mkdir(path.join(appDir, "actions"), { recursive: true });
+    await fs.writeFile(
+      path.join(appDir, "app.json"),
+      JSON.stringify({
+        manifestVersion: 1,
+        id: "planner",
+        name: "Planner",
+        version: "0.1.0",
+        actions: [
+          {
+            name: "propose",
+            confirmation: "none",
+            input: {
+              type: "object",
+              properties: { summary: { type: "string" } },
+            },
+          },
+        ],
+        queries: [],
+        vault: {
+          purpose: "dpv:ServiceProvision",
+          scopes: [{ schema: "schedule", verbs: "read+act" }],
+        },
+      }),
+      "utf8"
+    );
+    await fs.writeFile(
+      path.join(appDir, "actions", "propose.js"),
+      `export default async ({ body, ctx }) => {
+       const outcome = await ctx.vault.invoke({
+         command: 'schedule.propose_event',
+         input: {
+           summary: body?.summary,
+           dtstart: '2026-07-07T09:00:00Z',
+           dtend: '2026-07-07T09:30:00Z',
+           calendar_id: ${JSON.stringify(calendarId)},
+         },
+         purpose: 'dpv:ServiceProvision',
+       });
+       return { status: 200, body: outcome };
+     };\n`,
+      "utf8"
+    );
+    const registry = new Registry(dataRoot);
+    await registry.load();
+    await registry.ensureUploaded("planner");
+    const dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async (appId) => path.join(codeRoot, appId),
+      vaultFor: (appId) => plane.bridgeFor(appId),
+    });
+
+    const out = await dispatcher.write({
+      app: "planner",
+      action: "propose",
+      input: { summary: "Cross-plane standup" },
+    });
+    expect(out.isError).toBe(false);
+    expect(out.structuredContent).toMatchObject({ status: "executed" });
+    const events = plane.db.vault
+      .prepare("SELECT summary FROM core_event")
+      .all();
+    expect(events.map((row) => ({ ...row }))).toStrictEqual([
+      { summary: "Cross-plane standup" },
+    ]);
+    // The write is receipted and attributed to the app, not the owner.
+    const receipts = plane.db.journal
+      .prepare(
+        `SELECT decision FROM consent_receipt WHERE action = 'act schedule.propose_event' AND decision = 'allow'`
+      )
+      .all();
+    expect(receipts).toHaveLength(1);
+  });
+});

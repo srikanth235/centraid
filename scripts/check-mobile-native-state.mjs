@@ -66,24 +66,31 @@ function changedPaths() {
     .filter(Boolean);
 }
 
-function mobileAffected(paths) {
+/** Does a changed-path list touch the mobile app? Pure — exported for tests. */
+export function mobileAffected(paths) {
   return paths.some((p) => p === "apps/mobile" || p.startsWith("apps/mobile/"));
 }
 
-const paths = changedPaths();
-if (!mobileAffected(paths)) {
+function main() {
+  const paths = changedPaths();
+  if (!mobileAffected(paths)) {
+    console.log(
+      `check-mobile-native-state: skip (no apps/mobile/** changes vs ${baseRef})`
+    );
+    process.exit(0);
+  }
+
   console.log(
-    `check-mobile-native-state: skip (no apps/mobile/** changes vs ${baseRef})`
+    "check-mobile-native-state: apps/mobile/** affected — running ci:native-state"
   );
-  process.exit(0);
+  const result = spawnSync(
+    "bun",
+    ["run", "--cwd", "apps/mobile", "ci:native-state"],
+    { cwd: root, stdio: "inherit", env: process.env }
+  );
+  process.exit(result.status === null ? 1 : result.status);
 }
 
-console.log(
-  "check-mobile-native-state: apps/mobile/** affected — running ci:native-state"
-);
-const result = spawnSync(
-  "bun",
-  ["run", "--cwd", "apps/mobile", "ci:native-state"],
-  { cwd: root, stdio: "inherit", env: process.env }
-);
-process.exit(result.status === null ? 1 : result.status);
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  main();
+}

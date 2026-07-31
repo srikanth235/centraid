@@ -15,18 +15,13 @@
 // stubs (`kit.ts`, `outcomes.ts`) and imported from there. The modules UNDER
 // TEST are byte-identical copies, so this is still testing the real code — only
 // the two effect boundaries are replaced.
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 interface ActCall {
   action: string;
@@ -92,7 +87,7 @@ const COPIED = [
   "selection-actions.ts",
 ];
 
-const dir = mkdtempSync(path.join(os.tmpdir(), "photos-asset-key-"));
+const dir = tempDirSync("photos-asset-key-");
 mkdirSync(dir, { recursive: true });
 for (const file of COPIED)
   copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
@@ -175,8 +170,6 @@ describe("photos-asset-key suite", () => {
   beforeEach(() => {
     acts.length = 0;
   });
-
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   describe("assetKey", () => {
     it("separates two scopes carrying the same asset id", () => {
