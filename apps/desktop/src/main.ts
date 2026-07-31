@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
+import { app, BrowserWindow, nativeImage, shell } from "electron";
 
 import {
   installApplicationMenu,
@@ -138,17 +138,39 @@ if (gotSingleInstanceLock) {
     }
     installApplicationMenu();
     installTray(ICON_PATH);
-    void installAuthInjector();
+    // `installAuthInjector` reads settings, so it rejects for exactly the same
+    // reasons the gateway boot below does. Bare `void` left that rejection
+    // unhandled, which meant every locked-data-dir / missing-credential launch
+    // wrote a `kind:"unhandledRejection"` row into crash.log — a startup
+    // diagnosis, filed as a crash, in the log used to triage real crashes. The
+    // header injector simply has no headers to inject until a gateway resolves,
+    // and it is reinstalled on every gateway change (`refreshAuthInjector`).
+    installAuthInjector().catch((error: unknown) => {
+      process.stdout.write(
+        `[auth-injector] not installed yet: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    });
     registerIpcHandlers();
-    // Boot the active gateway before showing the window (issue #351). Before
-    // this, a `serve()` failure during lazy startup only surfaced as a failed
-    // IPC invoke the FIRST time the renderer called `getSettings()` — no
-    // dialog, and (pre-supervision) every subsequent settings read just
-    // retried the same failing start immediately. `loadSettings()` resolves
-    // the active gateway (starting the embedded local runtime when it's the
-    // active one) and local-gateway.ts's supervisor now owns backed-off
-    // background retries — this is just the "tell the user something's
-    // wrong" surface for a launch-time failure, not itself a retry loop.
+    // The window comes FIRST, before the gateway boot below can fail.
+    //
+    // This used to be the other way round, with a `dialog.showErrorBox` in the
+    // catch: a modal NSAlert with no window behind it. Every failure mode that
+    // needs the user to *do* something — a locked data dir, missing device
+    // credentials — therefore parked the app on a system alert that only a
+    // human at the keyboard could dismiss, and unattended relaunch (a login
+    // item, an automated run) simply hung. Startup failures are rendered
+    // in-window instead: the renderer's boot path already calls `getSettings()`,
+    // whose IPC rejects with the same message this catch logs, so the error
+    // reaches a surface the user can read, retry, and copy from.
+    createWindow();
+    // Boot the active gateway (issue #351). Before this, a `serve()` failure
+    // during lazy startup only surfaced as a failed IPC invoke the FIRST time
+    // the renderer called `getSettings()`, and (pre-supervision) every
+    // subsequent settings read just retried the same failing start
+    // immediately. `loadSettings()` resolves the active gateway (starting the
+    // local runtime when it's the active one) and local-gateway.ts's
+    // supervisor owns backed-off background retries — this is just the
+    // "get the gateway up at launch" call, not itself a retry loop.
     //
     // On a TRUE first run `loadSettings()` deliberately does NOT start the
     // local gateway (issue #603 — no keychain prompt before the user has
@@ -162,14 +184,13 @@ if (gotSingleInstanceLock) {
       applyLaunchAtLogin(settings.launchAtLogin);
       setTrayGatewayRunning(settings.gatewayUrl.length > 0);
     } catch (error) {
+      // Log-and-continue is the whole point: the renderer is already up and
+      // will surface this same failure through its own `getSettings()` call.
       setTrayGatewayRunning(false);
-      dialog.showErrorBox(
-        "Centraid gateway failed to start",
-        `The embedded gateway could not start:\n\n${error instanceof Error ? error.message : String(error)}\n\n` +
-          "Centraid will keep retrying automatically in the background."
+      process.stdout.write(
+        `[startup] gateway did not start: ${error instanceof Error ? error.message : String(error)}\n`
       );
     }
-    createWindow();
     // Relaunch-to-update: watch the built dist for a newer build landing while
     // the app runs; the sidebar shows a "Relaunch to update" pill when one does.
     startUpdateWatcher();

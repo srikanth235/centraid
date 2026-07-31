@@ -48,6 +48,7 @@ import {
   revokePhoneDevice,
 } from "./phone-link.js";
 import {
+  loadPersistedSettings,
   loadSettings,
   requestLocalGatewayStart,
   saveSettings,
@@ -513,6 +514,50 @@ export function registerIpcHandlers(): void {
       await invalidateGatewayCaches();
       const next = await loadSettings();
       broadcastGatewayChanged(next);
+      nudgeGatewayMonitor();
+      return { ok: true };
+    }
+  );
+
+  // Retry a local gateway START from a renderer that has no Settings to go to.
+  //
+  // GATEWAY_RESTART above cannot serve this case: its first statement is
+  // `loadSettings()`, and `loadSettings()` is the very call that is failing —
+  // it resolves the active gateway, which boots the local runtime, which is
+  // what would not start. So this handler reads the PERSISTED settings only
+  // (no gateway boot) and goes straight at the supervisor's give-up latch.
+  // Rate-limiting and the retry-vs-hammering tradeoff live in
+  // `gateway-supervisor-core.ts` (`claimManualRetry`).
+  ipcMain.handle(
+    Channel.GATEWAY_START_RETRY,
+    async (): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        const persisted = await loadPersistedSettings();
+        const profile = (await listGateways()).find(
+          (row) => row.id === persisted.activeGatewayId
+        );
+        if (profile && profile.kind !== "local") {
+          return { ok: false, error: "remote gateways restart server-side" };
+        }
+        // Same reasoning as the manual restart: an explicit user act lifts the
+        // first-run keychain deferral for the rest of this process.
+        requestLocalGatewayStart();
+        const { retryLocalGatewayStart } = await import("./local-gateway.js");
+        await retryLocalGatewayStart(persisted.activeGatewayId);
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+      // Non-fatal: the injector refresh re-reads settings, and the caller's own
+      // next read is what decides whether the retry actually recovered.
+      await invalidateGatewayCaches().catch((error: unknown) => {
+        console.warn(
+          "[gateway] cache refresh after a start retry failed",
+          error
+        );
+      });
       nudgeGatewayMonitor();
       return { ok: true };
     }

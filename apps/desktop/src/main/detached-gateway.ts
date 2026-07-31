@@ -22,7 +22,9 @@
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { createRequire } from "node:module";
+import net from "node:net";
 import path from "node:path";
 
 import { landlordBearerForDataDir } from "@centraid/gateway";
@@ -30,13 +32,20 @@ import { endpointIdForSecret } from "@centraid/tunnel";
 
 import {
   buildDetachedSpawnOptions,
+  classifyLockStatus,
   decideControl,
+  describeDeviceCustodyGap,
+  describeLockRefusal,
+  describePortConflict,
+  deviceCustodyGap,
+  lockViewFor,
   resolveListenPort as resolveConfiguredListenPort,
 } from "./detached-gateway-core.js";
-import type { ControlDecision } from "./detached-gateway-core.js";
+import type { ControlDecision, LockProbe } from "./detached-gateway-core.js";
 import { LOCAL_GATEWAY_ID } from "./gateway-paths.js";
 import {
   getOrCreateGatewayWrappingKey,
+  hasGatewayWrappingKey,
   readLocalLoopbackToken,
   storeLocalLoopbackToken,
 } from "./gateway-secrets.js";
@@ -385,24 +394,27 @@ async function waitUntilReady(input: {
   return pollUntilReady();
 }
 
-interface LockSnapshot {
-  held: boolean;
-  answering: boolean;
-  holderPid?: number;
-}
+const LOCK_STATUS_TIMEOUT_MS = 5_000;
 
-function lockSnapshot(
+/**
+ * Run `lock-status` and classify the outcome (never throws).
+ *
+ * `spawnSync` reports a timeout as `error.code === 'ETIMEDOUT'` after killing
+ * the child — the ONLY way to tell "the CLI blocked on the holder's SQLite
+ * lock" apart from "the CLI failed fast", and previously discarded.
+ */
+function probeLockStatus(
   dataDir: string,
   cliPath: string,
   nodeBin: string,
   wrappingKey?: Buffer
-): LockSnapshot {
+): LockProbe {
   const result = spawnSync(
     nodeBin,
     [cliPath, "lock-status", "--data-dir", dataDir, "--json"],
     {
       encoding: "utf8",
-      timeout: 5_000,
+      timeout: LOCK_STATUS_TIMEOUT_MS,
       env: {
         ...process.env,
         ...(wrappingKey
@@ -411,26 +423,66 @@ function lockSnapshot(
       },
     }
   );
-  const line = (result.stdout || "").trim().split("\n").pop() ?? "";
-  try {
-    const parsed = JSON.parse(line) as Partial<LockSnapshot> & { ok?: boolean };
-    if (
-      parsed.ok === true &&
-      typeof parsed.held === "boolean" &&
-      typeof parsed.answering === "boolean"
-    ) {
-      return {
-        held: parsed.held,
-        answering: parsed.answering,
-        ...(typeof parsed.holderPid === "number"
-          ? { holderPid: parsed.holderPid }
-          : {}),
-      };
-    }
-  } catch {
-    // Fall through to the fail-closed result below.
-  }
-  return { held: true, answering: false };
+  return classifyLockStatus({
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    status: result.status,
+    timedOut:
+      (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
+  });
+}
+
+/**
+ * Ask the OS which process holds `file`, without opening it.
+ *
+ * This is the fallback for exactly the case where the CLI cannot tell us —
+ * it blocks on the same lock we are asking about — so it must not go through
+ * SQLite. `lsof -t` is the portable-enough POSIX answer (the gateway CLI uses
+ * it for the same purpose); best-effort and diagnostic only, never a decision
+ * input. Returns `undefined` where lsof is absent (Windows) or says nothing.
+ */
+function osLockHolderPid(file: string): number | undefined {
+  const result = spawnSync("lsof", ["-t", file], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  if (result.status !== 0) return undefined;
+  const pid = Number((result.stdout || "").trim().split(/\s+/u)[0]);
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+/** Whether `<dataDir>/keys` already holds key-store envelopes (E2 detection). */
+function gatewayKeysPresent(dataDir: string): boolean {
+  const keysDir = path.join(dataDir, "keys");
+  if (!fs.existsSync(keysDir)) return false;
+  return fs
+    .readdirSync(keysDir, { withFileTypes: true })
+    .some((entry) => entry.isFile());
+}
+
+/** Whether anything is listening on host:port right now (EADDRINUSE pre-check). */
+function portListenerPid(port: number): number | undefined {
+  const result = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  if (result.status !== 0) return undefined;
+  const pid = Number((result.stdout || "").trim().split(/\s+/u)[0]);
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+function portInUse(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const settle = (inUse: boolean): void => {
+      socket.destroy();
+      resolve(inUse);
+    };
+    socket.setTimeout(1_000);
+    socket.once("connect", () => settle(true));
+    socket.once("timeout", () => settle(false));
+    socket.once("error", () => settle(false));
+  });
 }
 
 /**
@@ -448,11 +500,31 @@ export async function ensureDetachedGateway(
   const nodeBin = options.nodeBin ?? resolveNodeBin();
   const readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const candidateUrl = `http://${host}:${port}`;
+  // E2 — check custody BEFORE minting. `getOrCreateGatewayWrappingKey` mints a
+  // fresh key whenever this device holds none, which is right for a new gateway
+  // and silently fatal for an existing one: the new key cannot open the
+  // envelopes already in `<dataDir>/keys`, and every downstream symptom (the
+  // CLI's KeyStoreError, the refusal below) points somewhere else.
+  if (
+    options.gatewayWrappingKey === undefined &&
+    deviceCustodyGap({
+      hasStoredWrappingKey: hasGatewayWrappingKey(LOCAL_GATEWAY_ID),
+      gatewayKeysPresent: gatewayKeysPresent(dataDir),
+    })
+  ) {
+    throw new Error(describeDeviceCustodyGap(dataDir));
+  }
   const gatewayWrappingKey =
     options.gatewayWrappingKey ??
     getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
   const existingToken = readLocalLoopbackToken(LOCAL_GATEWAY_ID);
-  const lock = lockSnapshot(dataDir, cliPath, nodeBin, gatewayWrappingKey);
+  const lockProbe = probeLockStatus(
+    dataDir,
+    cliPath,
+    nodeBin,
+    gatewayWrappingKey
+  );
+  const lock = lockViewFor(lockProbe);
   // A gateway the user installed as an OS service was not spawned by this
   // desktop, so it never received `CENTRAID_GATEWAY_TOKEN` and derives its
   // landlord bearer from the endpoint key instead. The desktop holds the same
@@ -472,9 +544,18 @@ export async function ensureDetachedGateway(
   });
 
   if (decision === "probe-failed-refuse") {
+    // Refusing is still correct — we will not open a second writer against a
+    // db we could not read the lock of. The pid comes from the OS when the CLI
+    // could not name the holder, which is precisely the case where the user
+    // needs it (the CLI was blocked by that very holder).
+    const holderPid =
+      lock.holderPid ?? osLockHolderPid(path.join(dataDir, "gateway.db"));
     throw new Error(
-      "gateway.db is locked but the daemon is not answering — refusing to start " +
-        `a second writer${lock.holderPid ? ` (OS holder pid ${lock.holderPid})` : ""}`
+      describeLockRefusal({
+        probe: lockProbe,
+        dataDir,
+        ...(holderPid === undefined ? {} : { holderPid }),
+      })
     );
   }
 
@@ -503,6 +584,23 @@ export async function ensureDetachedGateway(
   // Prefer the configured/default port for a fresh bind (H4), not a stale status port.
   const listenPort = port;
   const listenHost = host;
+
+  // Pre-spawn port identity check. Reaching here means the lock on OUR data dir
+  // is free — which says nothing about the port, and a leftover daemon bound to
+  // a DIFFERENT data dir still owns it. The child is spawned detached with
+  // `stdio: 'ignore'` (H2), so its EADDRINUSE exit is invisible and the only
+  // symptom is the ready-poll timing out 30s later against a stranger's gateway.
+  if (await portInUse(listenHost, listenPort)) {
+    const pid = portListenerPid(listenPort);
+    throw new Error(
+      describePortConflict({
+        host: listenHost,
+        port: listenPort,
+        dataDir,
+        ...(pid === undefined ? {} : { pid }),
+      })
+    );
+  }
   const spawnOpts = buildDetachedSpawnOptions();
   const args = [
     cliPath,

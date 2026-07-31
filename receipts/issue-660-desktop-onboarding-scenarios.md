@@ -467,6 +467,7 @@ restore the credential, press again:
 | claude-code-62298c7b-4a8-1785488586-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 117 | 95832 | 12209322 | 42945 | 138894 | 7.7778 | 3015 | 2083728 | 105893195 | 559307 | feat(desktop): unattended device secrets for restart-heavy tests (#660)An ad-hoc |
 | claude-code-62298c7b-4a8-1785488631-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 4 | 9668 | 415044 | 808 | 10480 | 0.2882 | 3019 | 2093396 | 106308239 | 560115 | feat(desktop): unattended device secrets for restart-heavy tests (#660)An ad-hoc |
 | claude-code-62298c7b-4a8-1785489035-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 21 | 15101 | 2363993 | 9125 | 24247 | 1.5046 | 3040 | 2108497 | 108672232 | 569240 | feat(desktop): unattended device secrets for restart-heavy tests (#660)An ad-hoc |
+| claude-code-62298c7b-4a8-1785489092-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 4 | 8106 | 439274 | 2014 | 10124 | 0.3207 | 3044 | 2116603 | 109111506 | 571254 | fix(desktop): tell gateway lock, custody, and port failures apart (#660)The lock |
 
 ### Steering
 

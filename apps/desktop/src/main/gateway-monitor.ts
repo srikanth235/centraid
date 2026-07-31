@@ -72,7 +72,10 @@ import {
   CRASH_LOOP_THRESHOLD,
   CRASH_LOOP_WINDOW_MS,
 } from "./gateway-supervisor-core.js";
-import { getLocalGatewaySupervisorState } from "./local-gateway.js";
+import {
+  getLocalGatewaySupervisorState,
+  reviveLocalGatewayIfDead,
+} from "./local-gateway.js";
 import { pushPowerContext } from "./power-context-push.js";
 import { loadSettings } from "./settings.js";
 
@@ -318,6 +321,14 @@ async function tick(): Promise<void> {
         ok: false,
         detail: settingsError ?? "settings unavailable",
       };
+  // A failed heartbeat against a LOCAL gateway is the one place the desktop
+  // learns that its own detached daemon died after starting cleanly — the
+  // supervisor only ever sees start failures. Hand it to the (rate-limited)
+  // revival path, which respawns only when the pid is genuinely gone. Awaited
+  // so a revival lands before the next tick reads settings again.
+  if (!probe.ok && activeGatewayKind === "local") {
+    await reviveLocalGatewayIfDead(trackedState.gatewayId);
+  }
   // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
   // window while the desktop runs. Best-effort and independent of the probe
