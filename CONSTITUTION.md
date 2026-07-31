@@ -20,6 +20,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - The repo is its own system of record. Decisions, costs, steering events, and quality observations belong in tracked files, not in chat history.
 - Docs are load-bearing. Stale docs are bugs; broken internal links are bugs; missing baseline docs (constitution, agents, readme, license, security, architecture) are bugs.
 - Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
+- Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring.
+- Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design.
 
 ## Directives
 
@@ -243,6 +245,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-06-12 — @srikanth235 — Migrate off the retired monolithic `governance-kit/core` pack onto the 0.6.0 concern-scoped packs (foundation, security, docs, commits, audit) (#241). Renames `version-consistency`→`kit-version-sync` and `no-broken-internal-doc-links`→`internal-doc-links`; splits `workflows-hardened`→`pinned-dependencies`+`token-permissions`. Held back the 0.6.0 net-new / changed-model directives (`toolchain-config-protection`, `no-unjustified-suppressions`, and the receipts-based `agent-token-accounting`/`agent-steering-accounting`) for deliberate adoption; `COSTS.md`/`STEERING.md` kept append-only via the doc-integrity overlay.
 - 2026-06-13 — @srikanth235 — Modify `gateway-engine-mode-agnostic` + `handler-uses-ctx-primitives`: update the rationale wording from "same code, two modes" to "same code, three hosts" (desktop embed, centraid-gateway daemon, OpenClaw plugin), reflecting the standalone daemon as a third gateway host. Rules unchanged — rationale text only (#243).
 - 2026-07-29 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate the co-located blueprint app and kit runtime roots, require matching Vitest instrumentation, and restore the directive's missing constitutional policy record (#630).
+- 2026-07-31 — @srikanth235 — Add the performance principle: every user-facing interaction owns a perceived-latency budget, an unmeasured hot path is an incomplete feature, and nothing O(vault-size) runs synchronously on the request path or the event loop. Principle only, no new mechanical directive — the full-stack audit found the failures are shape-level (sync SQLite on the loop, per-subscriber recompute, ungated pollers) and not `grep`-decidable; the reviewable doctrine lives in [docs/coding-standards.md](docs/coding-standards.md) (#659).
 
 ## Escape hatches
 
