@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -69,7 +70,18 @@ export default function AutomationThread(props: {
       .finally(() => setRunning(false));
   };
 
-  const turns = state.kind === "ready" ? state.turns : [];
+  const turns = useMemo(
+    () => (state.kind === "ready" ? state.turns : []),
+    [state]
+  );
+
+  const renderTurn = useCallback(
+    ({ item }: ListRenderItemInfo<AutomationTurnRow>): React.JSX.Element => (
+      <TurnCard turn={item} styles={styles} colors={colors} />
+    ),
+    [colors, styles]
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
@@ -89,7 +101,7 @@ export default function AutomationThread(props: {
       </View>
       <FlatList
         data={turns}
-        keyExtractor={(turn) => turn.turnId}
+        keyExtractor={turnKey}
         contentContainerStyle={[
           styles.list,
           { paddingBottom: insets.bottom + spacing[5] },
@@ -105,32 +117,49 @@ export default function AutomationThread(props: {
           />
         }
         ListEmptyComponent={<Empty state={state} styles={styles} />}
-        renderItem={({ item }) => (
-          <View style={styles.turn}>
-            <View style={styles.turnHead}>
-              <Feather
-                name={item.ok ? "check-circle" : "alert-circle"}
-                size={16}
-                color={item.ok ? colors.accent : colors.danger}
-              />
-              <Text style={styles.turnTitle}>
-                {item.summary ?? `${item.triggerKind} turn`}
-              </Text>
-            </View>
-            <Text style={styles.turnMeta}>
-              {new Date(item.startedAt).toLocaleString()}
-              {item.stepCount === undefined ? "" : ` · ${item.stepCount} steps`}
-              {item.toolCount === undefined ? "" : ` · ${item.toolCount} tools`}
-            </Text>
-            {item.error ? (
-              <Text style={styles.turnError}>{item.error}</Text>
-            ) : null}
-          </View>
-        )}
+        // No getItemLayout and no windowing overrides: `listAutomationTurns`
+        // caps the thread at 50 turns, and a card's height varies with the
+        // summary wrap and the optional error line, so any fixed height would
+        // mis-place cells for no gain on a bounded list.
+        renderItem={renderTurn}
       />
     </SafeAreaView>
   );
 }
+
+const turnKey = (turn: AutomationTurnRow): string => turn.turnId;
+
+const TurnCard = memo(
+  ({
+    turn,
+    styles,
+    colors,
+  }: {
+    turn: AutomationTurnRow;
+    styles: ReturnType<typeof makeStyles>;
+    colors: ThemeColors;
+  }): React.JSX.Element => (
+    <View style={styles.turn}>
+      <View style={styles.turnHead}>
+        <Feather
+          name={turn.ok ? "check-circle" : "alert-circle"}
+          size={16}
+          color={turn.ok ? colors.accent : colors.danger}
+        />
+        <Text style={styles.turnTitle}>
+          {turn.summary ?? `${turn.triggerKind} turn`}
+        </Text>
+      </View>
+      <Text style={styles.turnMeta}>
+        {new Date(turn.startedAt).toLocaleString()}
+        {turn.stepCount === undefined ? "" : ` · ${turn.stepCount} steps`}
+        {turn.toolCount === undefined ? "" : ` · ${turn.toolCount} tools`}
+      </Text>
+      {turn.error ? <Text style={styles.turnError}>{turn.error}</Text> : null}
+    </View>
+  )
+);
+TurnCard.displayName = "TurnCard";
 
 function Empty(props: {
   state: State;

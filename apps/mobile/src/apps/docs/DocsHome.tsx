@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
@@ -29,6 +30,8 @@ import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
+import { driveItemKey, FILTERS } from "./docs-library-shelves";
+import type { LibraryFilter, ViewMode } from "./docs-library-shelves";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";
 import DocsItemActions from "./DocsItemActions";
@@ -36,18 +39,16 @@ import { GridItem, ListItem } from "./DocsLibraryItems";
 import type { DriveItem } from "./DocsLibraryItems";
 import { useDocsLibrary } from "./useDocsLibrary";
 
-type LibraryFilter = "all" | "recent" | "starred" | "trash";
-type ViewMode = "list" | "grid";
-const FILTERS: readonly {
-  key: LibraryFilter;
-  label: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
-}[] = [
-  { key: "all", label: "All", icon: "file-text" },
-  { key: "recent", label: "Recent", icon: "clock" },
-  { key: "starred", label: "Starred", icon: "star" },
-  { key: "trash", label: "Trash", icon: "trash-2" },
-];
+// One shared identity for the "vault unavailable" case: a fresh `[]` per render
+// would make FlatList re-diff a list it already knows is empty.
+const NO_ITEMS: DriveItem[] = [];
+// GridItem/ListItem are plain function components shared with other Docs
+// screens; memoising them here is what stops every cell re-rendering when only
+// the search box or the refresh flag changed.
+const MemoGridItem = memo(GridItem);
+MemoGridItem.displayName = "MemoGridItem";
+const MemoListItem = memo(ListItem);
+MemoListItem.displayName = "MemoListItem";
 
 export default function DocsHome({
   route,
@@ -139,18 +140,23 @@ export default function DocsHome({
     () => new Map(drive.folders.map((folder) => [folder.id, folder])),
     [drive.folders]
   );
-  const folderPathOf = (document: NativeDocument): string => {
-    if (!document.folderId) return "Docs";
-    const names: string[] = [];
-    const seen = new Set<string>();
-    let current: NativeFolder | undefined = folderById.get(document.folderId);
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id);
-      names.unshift(current.name);
-      current = current.parentId ? folderById.get(current.parentId) : undefined;
-    }
-    return names.length ? names.join(" / ") : "Docs";
-  };
+  const folderPathOf = useCallback(
+    (document: NativeDocument): string => {
+      if (!document.folderId) return "Docs";
+      const names: string[] = [];
+      const seen = new Set<string>();
+      let current: NativeFolder | undefined = folderById.get(document.folderId);
+      while (current && !seen.has(current.id)) {
+        seen.add(current.id);
+        names.unshift(current.name);
+        current = current.parentId
+          ? folderById.get(current.parentId)
+          : undefined;
+      }
+      return names.length ? names.join(" / ") : "Docs";
+    },
+    [folderById]
+  );
 
   // Results only count while they still describe what is in the box.
   const current = searched?.query === query.trim() ? searched : undefined;
@@ -177,20 +183,29 @@ export default function DocsHome({
     );
     return filter === "recent" ? sorted.slice(0, 8) : sorted;
   }, [drive.documents, filter, folderId, matches, searching]);
-  const folders = drive.folders.filter(
-    (folder) =>
-      filter === "all" &&
-      !searching &&
-      (folderId ? folder.parentId === folderId : !folder.parentId)
+  const folders = useMemo(
+    () =>
+      drive.folders.filter(
+        (folder) =>
+          filter === "all" &&
+          !searching &&
+          (folderId ? folder.parentId === folderId : !folder.parentId)
+      ),
+    [drive.folders, filter, folderId, searching]
   );
-  const items: DriveItem[] = [
-    ...folders.map((folder) => ({ kind: "folder" as const, folder })),
-    ...documents.map((document) => ({
-      kind: "document" as const,
-      document,
-      ...(searching ? { location: folderPathOf(document) } : {}),
-    })),
-  ];
+  // Memoised: this array is the list's `data`, and rebuilding it inline gave
+  // FlatList a new identity on every keystroke and refresh toggle.
+  const items = useMemo<DriveItem[]>(
+    () => [
+      ...folders.map((folder) => ({ kind: "folder" as const, folder })),
+      ...documents.map((document) => ({
+        kind: "document" as const,
+        document,
+        ...(searching ? { location: folderPathOf(document) } : {}),
+      })),
+    ],
+    [documents, folderPathOf, folders, searching]
+  );
   const parent = folderId
     ? drive.folders.find((folder) => folder.id === folderId)
     : undefined;
@@ -287,6 +302,27 @@ export default function DocsHome({
     void Haptics.selectionAsync();
     setFilter(next);
   };
+  const grid = view === "grid";
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<DriveItem>): React.JSX.Element =>
+      grid ? (
+        <MemoGridItem
+          item={item}
+          navigation={navigation}
+          colors={colors}
+          onMenu={setSelectedItem}
+        />
+      ) : (
+        <MemoListItem
+          item={item}
+          navigation={navigation}
+          colors={colors}
+          onMenu={setSelectedItem}
+        />
+      ),
+    [colors, grid, navigation]
+  );
+  const listData = drive.connection === "unavailable" ? NO_ITEMS : items;
 
   return (
     <SafeAreaView
@@ -428,18 +464,22 @@ export default function DocsHome({
 
       <FlatList
         key={view}
-        data={drive.connection === "unavailable" ? [] : items}
-        numColumns={view === "grid" ? 2 : 1}
-        columnWrapperStyle={view === "grid" ? styles.gridRow : undefined}
-        keyExtractor={(item) =>
-          item.kind === "folder"
-            ? `f:${item.folder.id}`
-            : `d:${item.document.id}`
-        }
-        contentContainerStyle={[
-          styles.list,
-          view === "grid" && styles.gridList,
-        ]}
+        data={listData}
+        numColumns={grid ? 2 : 1}
+        columnWrapperStyle={grid ? styles.gridRow : undefined}
+        keyExtractor={driveItemKey}
+        contentContainerStyle={[styles.list, grid && styles.gridList]}
+        // No getItemLayout: styles.row and styles.gridCard set minHeight, not
+        // height — a wrapped metadata line or a two-line grid title makes a
+        // cell taller, and a wrong offset here would misplace every row below.
+        // ~550pt of list is left below the header, search box, filter strip and
+        // library header. List rows are 68pt → 8 visible, so 9 covers the first
+        // paint; grid cards are 164 + 10pt gap → ~3 rows, and initialNumToRender
+        // counts items, so 3 rows × 2 columns = 8 (rounded to a full row + one).
+        initialNumToRender={grid ? 8 : 9}
+        maxToRenderPerBatch={grid ? 8 : 9}
+        windowSize={7}
+        removeClippedSubviews
         refreshing={refreshing}
         onRefresh={() => void refreshLibrary()}
         ListHeaderComponent={
@@ -482,23 +522,7 @@ export default function DocsHome({
             </View>
           )
         }
-        renderItem={({ item }) =>
-          view === "grid" ? (
-            <GridItem
-              item={item}
-              navigation={navigation}
-              colors={colors}
-              onMenu={setSelectedItem}
-            />
-          ) : (
-            <ListItem
-              item={item}
-              navigation={navigation}
-              colors={colors}
-              onMenu={setSelectedItem}
-            />
-          )
-        }
+        renderItem={renderItem}
       />
 
       <Modal

@@ -1,5 +1,12 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FlatList,
   Alert,
@@ -11,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -87,6 +95,13 @@ export default function AssistantScreen({
       { cancelable: true, onDismiss: declineConsent }
     );
   }, [approveConsent, declineConsent, pendingConsent]);
+
+  const renderBubble = useCallback(
+    ({ item }: ListRenderItemInfo<Bubble>): React.JSX.Element => (
+      <BubbleRow bubble={item} styles={styles} />
+    ),
+    [styles]
+  );
 
   const submit = (): void => {
     const text = draft.trim();
@@ -190,7 +205,7 @@ export default function AssistantScreen({
           <FlatList
             ref={listRef}
             data={bubbles}
-            keyExtractor={(b) => b.key}
+            keyExtractor={bubbleKey}
             contentContainerStyle={styles.list}
             onContentSizeChange={() =>
               listRef.current?.scrollToEnd({ animated: true })
@@ -218,9 +233,12 @@ export default function AssistantScreen({
                 )}
               </View>
             }
-            renderItem={({ item }) => (
-              <BubbleRow bubble={item} styles={styles} />
-            )}
+            // No getItemLayout and no windowing overrides: bubble height is
+            // whatever the prose wraps to, and this transcript scrolls itself
+            // to the end on every content-size change — trimming the render
+            // window (or clipping subviews, which misbehaves on Android
+            // transcripts) would fight that scroll and blank the newest turn.
+            renderItem={renderBubble}
           />
 
           <View style={[styles.composerWrap, { paddingBottom: composerPad }]}>
@@ -378,33 +396,40 @@ export default function AssistantScreen({
   );
 }
 
-function BubbleRow({
-  bubble,
-  styles,
-}: {
-  bubble: Bubble;
-  styles: ReturnType<typeof makeStyles>;
-}): React.JSX.Element {
-  if (bubble.role === "user") {
+const bubbleKey = (bubble: Bubble): string => bubble.key;
+
+const BubbleRow = memo(
+  ({
+    bubble,
+    styles,
+  }: {
+    bubble: Bubble;
+    styles: ReturnType<typeof makeStyles>;
+  }): React.JSX.Element => {
+    if (bubble.role === "user") {
+      return (
+        <View style={styles.rowRight}>
+          <View style={styles.userBubble}>
+            <Text style={styles.userText}>{bubble.text}</Text>
+          </View>
+        </View>
+      );
+    }
     return (
-      <View style={styles.rowRight}>
-        <View style={styles.userBubble}>
-          <Text style={styles.userText}>{bubble.text}</Text>
+      <View style={styles.rowLeft}>
+        <View style={styles.assistantBubble}>
+          {bubble.pending ? (
+            <Text style={styles.pendingText}>Thinking…</Text>
+          ) : (
+            <Text
+              style={bubble.error ? styles.errorText : styles.assistantText}
+            >
+              {bubble.text}
+            </Text>
+          )}
         </View>
       </View>
     );
   }
-  return (
-    <View style={styles.rowLeft}>
-      <View style={styles.assistantBubble}>
-        {bubble.pending ? (
-          <Text style={styles.pendingText}>Thinking…</Text>
-        ) : (
-          <Text style={bubble.error ? styles.errorText : styles.assistantText}>
-            {bubble.text}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
+);
+BubbleRow.displayName = "BubbleRow";

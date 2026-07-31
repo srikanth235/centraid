@@ -1,5 +1,5 @@
 /*! governance: allow-repo-hygiene file-size-limit — this native Tally cover keeps fixed-point currency input, offline ledger writes, and recurring occurrence controls together so their monetary invariants remain reviewable. */
-import React, { useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { formatCurrencyMinor } from "@centraid/client/capture";
@@ -41,6 +42,45 @@ const money = (minor: number, currency: string): string =>
   formatCurrencyMinor(minor, currency);
 const convert = (original: number, scaled: number): number =>
   Number((BigInt(original) * BigInt(scaled) + 500_000n) / 1_000_000n);
+// `expense_id` is the primary key of tally.expense, unique across groups.
+const expenseKey = (row: ReplicaRow): string => asString(row.expense_id);
+
+// The group label is resolved by the screen and handed down as a string so the
+// row never has to reach into the groups/circles tables to render itself.
+const ExpenseRow = memo(
+  ({
+    row,
+    groupLabel,
+    currency,
+    colors,
+  }: {
+    row: ReplicaRow;
+    groupLabel: string;
+    currency: string;
+    colors: ReturnType<typeof useTheme>["colors"];
+  }): React.JSX.Element => (
+    <View
+      style={[
+        styles.expense,
+        { backgroundColor: colors.bgElev, borderColor: colors.line },
+      ]}
+    >
+      <View style={styles.expenseCopy}>
+        <Text style={[styles.personName, { color: colors.ink }]}>
+          {asString(row.description)}
+        </Text>
+        <Text style={[styles.meta, { color: colors.ink3 }]}>
+          {groupLabel} · {asString(row.spent_on)}
+          {row.rate_source ? ` · ${asString(row.rate_source)}` : ""}
+        </Text>
+      </View>
+      <Text style={[styles.amount, { color: colors.ink }]}>
+        {money(Number(row.amount_minor ?? 0), currency)}
+      </Text>
+    </View>
+  )
+);
+ExpenseRow.displayName = "ExpenseRow";
 
 export default function TallyHome({
   navigation,
@@ -112,13 +152,20 @@ export default function TallyHome({
     const group = groups.rows.find((row) => row.group_id === id);
     return asString(group?.circle_id);
   };
-  const groupName = (id: string): string => {
-    const circleId = circleByGroup(id);
-    return (
-      asString(circles.rows.find((row) => row.circle_id === circleId)?.name) ||
-      "Group"
+  // group_id → circle name. A map, because the previous per-call pair of
+  // linear scans ran once for every rendered expense row.
+  const groupNameById = useMemo(() => {
+    const circleNames = new Map(
+      circles.rows.map((row) => [asString(row.circle_id), asString(row.name)])
     );
-  };
+    return new Map(
+      groups.rows.map((row) => [
+        asString(row.group_id),
+        circleNames.get(asString(row.circle_id)) || "Group",
+      ])
+    );
+  }, [circles.rows, groups.rows]);
+  const groupName = (id: string): string => groupNameById.get(id) ?? "Group";
   const activeMemberIds = (() => {
     const circleId = circleByGroup(activeGroupId);
     const ids = members.rows
@@ -126,9 +173,28 @@ export default function TallyHome({
       .map((row) => asString(row.party_id));
     return ids.length > 0 ? ids : ([ownerId].filter(Boolean) as string[]);
   })();
-  const expenseRows = expenses.rows
-    .filter((row) => !row.deleted_at)
-    .sort((a, b) => asString(b.spent_on).localeCompare(asString(a.spent_on)));
+  // Memoised: a fresh filtered+sorted array each render gives FlatList a new
+  // data identity and forces a full re-diff of an unchanged ledger.
+  const expenseRows = useMemo(
+    () =>
+      expenses.rows
+        .filter((row) => !row.deleted_at)
+        .sort((a, b) =>
+          asString(b.spent_on).localeCompare(asString(a.spent_on))
+        ),
+    [expenses.rows]
+  );
+  const renderExpense = useCallback(
+    ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => (
+      <ExpenseRow
+        row={item}
+        groupLabel={groupNameById.get(asString(item.group_id)) ?? "Group"}
+        currency={asString(item.settlement_currency) || baseCurrency}
+        colors={colors}
+      />
+    ),
+    [baseCurrency, colors, groupNameById]
+  );
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
     if (!session) return undefined;
@@ -548,38 +614,25 @@ export default function TallyHome({
       ) : null}
       <FlatList
         data={expenseRows}
-        keyExtractor={(row) => asString(row.expense_id)}
+        keyExtractor={expenseKey}
         contentContainerStyle={styles.list}
+        // No getItemLayout: styles.expense is padding-based and the expense
+        // description wraps, so 62pt holds only for single-line descriptions.
+        // The ledger sits under the entry form and the recurring-template
+        // carousel — roughly 260pt of a ~800pt screen — so ~4 of the 70pt
+        // (62 + 8 gap) rows are visible; 5 covers the first paint.
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        // Ledgers grow without bound, so keep the retained window tight:
+        // ±4 viewports ≈ 36 rows.
+        windowSize={9}
+        removeClippedSubviews
         ListEmptyComponent={
           <Text style={[styles.empty, { color: colors.ink3 }]}>
             No expenses yet. Your offline queue is shown above.
           </Text>
         }
-        renderItem={({ item }) => {
-          const currency = asString(item.settlement_currency) || baseCurrency;
-          return (
-            <View
-              style={[
-                styles.expense,
-                { backgroundColor: colors.bgElev, borderColor: colors.line },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.personName, { color: colors.ink }]}>
-                  {asString(item.description)}
-                </Text>
-                <Text style={[styles.meta, { color: colors.ink3 }]}>
-                  {groupName(asString(item.group_id))} ·{" "}
-                  {asString(item.spent_on)}
-                  {item.rate_source ? ` · ${asString(item.rate_source)}` : ""}
-                </Text>
-              </View>
-              <Text style={[styles.amount, { color: colors.ink }]}>
-                {money(Number(item.amount_minor ?? 0), currency)}
-              </Text>
-            </View>
-          );
-        }}
+        renderItem={renderExpense}
       />
       <Modal
         visible={Boolean(editing)}
@@ -672,6 +725,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
   },
+  expenseCopy: { flex: 1 },
   form: {
     borderRadius: radii.lg,
     borderWidth: 1,

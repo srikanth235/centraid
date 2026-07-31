@@ -61,14 +61,14 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     appId: string,
     request: NativeReadRequest
   ): Promise<ReplicaReadWireResult> {
-    return Promise.resolve(this.#reader.read(appId, request));
+    return this.#reader.read(appId, request);
   }
 
   search(
     appId: string,
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
-    return Promise.resolve(this.#reader.search(appId, request));
+    return this.#reader.search(appId, request);
   }
 
   write(appId: string, input: NativeWriteInput): Promise<NativeWriteResult> {

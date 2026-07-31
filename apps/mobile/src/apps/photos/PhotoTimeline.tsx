@@ -23,6 +23,7 @@ import { runOnJS } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
 import { family, useTheme } from "../../kit/theme";
+import { gridImageProps } from "./grid-image";
 import { imageSource } from "./media-source";
 import { addDragSelection } from "./timeline-model";
 import type { PhotoAsset, PhotoSection } from "./timeline-source";
@@ -258,13 +259,17 @@ const AssetCell = memo(
         onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
         style={{ height, width }}
       >
+        {/* `gridImageProps` carries the decode contract (container-sized
+          pixels, 16-bit decode, low priority, cache tier by source) — see
+          grid-image.ts for why each prop is there. `recyclingKey` stays
+          explicit: FlashList recycles these views, and without it a cell shows
+          the previous asset until the new one decodes. */}
         <Image
           source={imageSource(asset.uri)}
-          cachePolicy="memory-disk"
+          {...gridImageProps(asset.uri)}
           placeholder={
             asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
           }
-          contentFit="cover"
           transition={120}
           recyclingKey={asset.id}
           style={[styles.image, { backgroundColor: colors.bgSunken }]}

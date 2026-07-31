@@ -503,6 +503,14 @@ Full paths, for the file-coverage rule.
 - `tests/scale/replica-bootstrap.scale.test.ts`
 - `tests/scale/restore-10gib.scale.test.ts`
 - `tests/skips.json`
+- `apps/mobile/src/kit/perf/FrameProbe.tsx`
+- `apps/mobile/src/lib/perf/frame-sampler.test.ts`
+- `apps/mobile/src/lib/perf/frame-sampler.ts`
+- `tests/experience-budgets/README.md`
+- `tests/experience-budgets/desktop.json`
+- `tests/experience-budgets/gateway.json`
+- `tests/experience-budgets/mobile.json`
+- `tests/experience-budgets/web.json`
 
 ## Decisions
 
@@ -737,6 +745,10 @@ The session transcript contains:
 | claude-code-f31b02a1-75f-1785525344-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 259 | 247407 | 183 | 444 | 0.1299 | 390 | 914202 | 33431375 | 247693 | perf(gateway): request-path sweeps, SSE backpressure, transcript paging, route l |
 | claude-code-f31b02a1-75f-1785525385-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 297 | 247666 | 152 | 451 | 0.1295 | 392 | 914499 | 33679041 | 247845 | x (#659) |
 | claude-code-f31b02a1-75f-1785525462-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 14 | 12042 | 1746370 | 3364 | 15420 | 1.0326 | 406 | 926541 | 35425411 | 251209 | perf(client): SWR cache, optimistic mutations, memoized transcript, windowed log |
+| claude-code-f31b02a1-75f-1785525508-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 1 | 452 | 252275 | 206 | 659 | 0.1341 | 407 | 926993 | 35677686 | 251415 | perf(mobile): SQL pushdown, lazy screens, AppState-gated polling, windowed lists |
+| claude-code-f31b02a1-75f-1785525553-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 241 | 252727 | 156 | 399 | 0.1318 | 409 | 927234 | 35930413 | 251571 | x (#659) |
+| claude-code-f31b02a1-75f-1785525597-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 171 | 252968 | 161 | 334 | 0.1316 | 411 | 927405 | 36183381 | 251732 | x (#659) |
+| claude-code-f31b02a1-75f-1785525660-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 10 | 6361 | 1269901 | 2735 | 9106 | 0.7431 | 421 | 933766 | 37453282 | 254467 | perf(mobile): SQL pushdown, lazy screens, AppState-gated polling, windowed lists |
 
 ### Steering
 

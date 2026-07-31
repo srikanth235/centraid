@@ -11,6 +11,7 @@
 // own and survives screen mount/unmount — the hook API is unchanged.
 
 import * as MediaLibrary from "expo-media-library";
+import { AppState } from "react-native";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
@@ -43,6 +44,18 @@ interface UploadEntry {
   receipt?: Record<string, unknown>;
 }
 
+/** Poll rate while the queue has work; slow rate when it is settled. */
+const ACTIVE_UPLOAD_POLL_MS = 4_000;
+const IDLE_UPLOAD_POLL_MS = 30_000;
+
+/**
+ * How long the device walk lets pages accumulate before re-deriving the merged
+ * timeline. Page one still recomputes immediately so the grid paints; after
+ * that, a recompute per 1,000-row page meant merging and re-sectioning the
+ * whole library ~50 times on the way to a 50k-photo roll.
+ */
+const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
+
 const REPLICA_ENTITIES = [
   "media.media_asset",
   "core.content_item",
@@ -71,6 +84,11 @@ class PhotoTimelineEngine {
   #generation = 0;
   #unsubscribe?: () => void;
   #pollTimer?: ReturnType<typeof setInterval>;
+  #appStateSub?: { remove: () => void };
+  #queue?: UploadQueue;
+  #queueBase?: string;
+  #uploadsInFlight = false;
+  #recomputeTimer?: ReturnType<typeof setTimeout>;
 
   #assetRows: ReplicaRow[] = [];
   #contentRows: ReplicaRow[] = [];
@@ -101,15 +119,43 @@ class PhotoTimelineEngine {
    */
   acquire(): () => void {
     this.#refs += 1;
-    if (this.#refs === 1 && !this.#pollTimer) {
-      // Flip queued → backed-up badges without a remount: the upload queue is a
-      // separate SQLite db the drainer mutates, so poll it while any screen is up.
-      this.#pollTimer = setInterval(() => this.refreshUploads(), 4_000);
+    if (this.#refs === 1) {
+      this.#appStateSub ??= AppState.addEventListener("change", (state) => {
+        if (state === "active") {
+          this.refreshUploads();
+          this.startUploadPoll();
+        } else this.stopUploadPoll();
+      });
+      if (AppState.currentState === "active") this.startUploadPoll();
     }
     return () => {
       this.#refs -= 1;
       if (this.#refs <= 0) this.teardown();
     };
+  }
+
+  /**
+   * Flip queued → backed-up badges without a remount: the upload queue is a
+   * separate SQLite database the drainer mutates, so it has to be observed.
+   *
+   * Two things make that cheap. The handle stays open for as long as any Photos
+   * screen is mounted — opening and closing SQLite every four seconds was most
+   * of the cost — and an idle queue drops to a slow poll, because a queue with
+   * nothing in flight cannot change without the user adding to it. Nothing
+   * polls at all while the app is in the background: there is no badge to
+   * update and no screen to show it on.
+   */
+  private startUploadPoll(): void {
+    if (this.#pollTimer || this.#refs === 0) return;
+    this.#pollTimer = setInterval(
+      () => this.refreshUploads(),
+      this.#uploadsInFlight ? ACTIVE_UPLOAD_POLL_MS : IDLE_UPLOAD_POLL_MS
+    );
+  }
+
+  private stopUploadPoll(): void {
+    if (this.#pollTimer) clearInterval(this.#pollTimer);
+    this.#pollTimer = undefined;
   }
 
   setSession(
@@ -145,11 +191,8 @@ class PhotoTimelineEngine {
   refreshUploads(): void {
     const base = this.#gatewayBase;
     let next = new Map<string, UploadEntry>();
-    if (base) {
-      const queue = UploadQueue.open({
-        gatewayBaseUrl: base,
-        headers: authHeader,
-      });
+    const queue = base ? this.uploadQueue(base) : undefined;
+    if (queue) {
       try {
         next = new Map(
           queue
@@ -160,10 +203,20 @@ class PhotoTimelineEngine {
             ])
         );
       } catch {
+        // The long-lived handle went bad (device storage, a purge). Drop it so
+        // the next tick reopens instead of polling a dead connection forever.
+        this.closeUploadQueue();
         return;
-      } finally {
-        queue.close();
       }
+    }
+    const inFlight = [...next.values()].some(
+      (entry) => entry.state !== "settled"
+    );
+    if (inFlight !== this.#uploadsInFlight) {
+      this.#uploadsInFlight = inFlight;
+      // The poll interval is derived from this, so re-arm it at the new rate.
+      this.stopUploadPoll();
+      this.startUploadPoll();
     }
     const signature = [...next.entries()]
       .map(
@@ -277,11 +330,18 @@ class PhotoTimelineEngine {
             source: "device",
           });
         }
-        this.#deviceRows = [...rows];
-        if (offset === 0) this.#deviceLoading = false;
-        this.recompute();
+        // `rows` is the live accumulator, not a snapshot to copy: re-copying it
+        // per page is quadratic across a fifty-page walk.
+        this.#deviceRows = rows;
+        if (offset === 0) {
+          this.#deviceLoading = false;
+          this.recompute();
+        } else this.scheduleRecompute();
         // A short page is the last page: the query has no cursor to run out of.
-        if (page.length < pageSize) return;
+        if (page.length < pageSize) {
+          this.recompute();
+          return;
+        }
         return loadPage(offset + page.length, 1_000);
       };
       await loadPage(0, 250);
@@ -293,7 +353,44 @@ class PhotoTimelineEngine {
     }
   }
 
+  /** One open handle per gateway base for as long as Photos is on screen. */
+  private uploadQueue(base: string): UploadQueue | undefined {
+    if (this.#queue && this.#queueBase === base) return this.#queue;
+    this.closeUploadQueue();
+    try {
+      this.#queue = UploadQueue.open({
+        gatewayBaseUrl: base,
+        headers: authHeader,
+      });
+    } catch {
+      // Opening can fail while storage is unavailable. Skipping this tick and
+      // retrying on the next one is the recovery; the durable queue is intact.
+      return undefined;
+    }
+    this.#queueBase = base;
+    return this.#queue;
+  }
+
+  private closeUploadQueue(): void {
+    this.#queue?.close();
+    this.#queue = undefined;
+    this.#queueBase = undefined;
+  }
+
+  /** Collapse the walk's page-by-page recomputes into one per quiet window. */
+  private scheduleRecompute(): void {
+    if (this.#recomputeTimer) return;
+    this.#recomputeTimer = setTimeout(() => {
+      this.#recomputeTimer = undefined;
+      this.recompute();
+    }, WALK_RECOMPUTE_DEBOUNCE_MS);
+  }
+
   private recompute(): void {
+    if (this.#recomputeTimer) {
+      clearTimeout(this.#recomputeTimer);
+      this.#recomputeTimer = undefined;
+    }
     const base = this.#gatewayBase;
     const deviceWithQueue = this.#deviceRows.map((asset) => {
       const upload = this.#uploadByUri.get(asset.originalUri);
@@ -427,8 +524,13 @@ class PhotoTimelineEngine {
     this.#refs = 0;
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
-    if (this.#pollTimer) clearInterval(this.#pollTimer);
-    this.#pollTimer = undefined;
+    this.stopUploadPoll();
+    this.#appStateSub?.remove();
+    this.#appStateSub = undefined;
+    this.closeUploadQueue();
+    this.#uploadsInFlight = false;
+    if (this.#recomputeTimer) clearTimeout(this.#recomputeTimer);
+    this.#recomputeTimer = undefined;
     this.#generation += 1;
     this.#session = undefined;
     this.#gatewayBase = undefined;

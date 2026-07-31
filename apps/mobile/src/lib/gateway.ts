@@ -18,6 +18,7 @@ import type {
 } from "@centraid/design-tokens";
 
 import { Store } from "../storage";
+import { ConditionalBodyCache } from "./conditional-fetch";
 import { MOBILE_AUTHORIZE_SURFACE } from "./connection-reauth";
 import type { AssistHandoff } from "./connection-reauth";
 import type { DecisionScope } from "./decision-detail";
@@ -255,7 +256,10 @@ export async function fetchJson<T>(
       `Gateway returned HTTP ${res.status}`
     );
   }
-  const text = await res.text();
+  return parseJsonBody<T>(await res.text());
+}
+
+function parseJsonBody<T>(text: string): T {
   try {
     return JSON.parse(text) as T;
   } catch {
@@ -264,6 +268,34 @@ export async function fetchJson<T>(
       `Gateway returned non-JSON: ${text.slice(0, 120)}`
     );
   }
+}
+
+const conditionalBodies = new ConditionalBodyCache();
+
+/**
+ * A GET the screens re-issue on mount, focus and every doorbell.
+ *
+ * Revalidating with `If-None-Match` means an unchanged answer costs a 304 and
+ * no body. Where the gateway sends no `ETag` this is exactly the old
+ * unconditional GET, so adding a route here is always safe.
+ */
+export async function fetchJsonRevalidated<T>(
+  href: string,
+  init: RequestInit = {}
+): Promise<T> {
+  const result = await conditionalBodies.fetch(
+    href,
+    init,
+    fetchOrThrow,
+    `${getActiveVaultId()} ${href}`
+  );
+  if (!result.ok) {
+    throw new GatewayError(
+      "bad_response",
+      `Gateway returned HTTP ${result.status}`
+    );
+  }
+  return parseJsonBody<T>(result.body);
 }
 
 /**
@@ -275,7 +307,7 @@ export async function fetchJson<T>(
  */
 export async function listAppRegistry(): Promise<AppRegistryRow[]> {
   const base = await requireGatewayBase();
-  return fetchJson<AppRegistryRow[]>(`${base}/centraid/_apps`, {
+  return fetchJsonRevalidated<AppRegistryRow[]>(`${base}/centraid/_apps`, {
     headers: apiHeaders(),
     method: "GET",
   });
@@ -293,7 +325,7 @@ export function isOpenableApp(row: AppRegistryRow): boolean {
 /** Parked vault invocations awaiting the owner's confirmation. */
 export async function listParked(): Promise<ParkedInvocation[]> {
   const base = await requireGatewayBase();
-  const body = await fetchJson<{ parked: ParkedInvocation[] }>(
+  const body = await fetchJsonRevalidated<{ parked: ParkedInvocation[] }>(
     `${base}/centraid/_vault/parked`,
     {
       headers: apiHeaders(),
@@ -307,7 +339,7 @@ export async function getNotifications(
   includeArchived = false
 ): Promise<MobileNotifications> {
   const base = await requireGatewayBase();
-  return fetchJson<MobileNotifications>(
+  return fetchJsonRevalidated<MobileNotifications>(
     `${base}/centraid/_vault/notifications${includeArchived ? "?include_archived=true" : ""}`,
     { headers: apiHeaders(), method: "GET" }
   );
