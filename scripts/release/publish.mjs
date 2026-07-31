@@ -20,6 +20,7 @@ import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
+import { changelogSectionBody } from "./changelog-section.mjs";
 import {
   buildSurfaceMatrix,
   defaultShipSurfaceIds,
@@ -118,12 +119,9 @@ function extractReleaseBody() {
   const clPath = path.join(root, "CHANGELOG.md");
   if (!existsSync(clPath)) return `Centraid ${version}`;
   const text = readFileSync(clPath, "utf8");
-  const re = new RegExp(
-    `^##\\s+\\[${version.replace(/\./gu, "\\.")}\\][^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
-    "mu"
+  return (
+    (changelogSectionBody(text, version) ?? "").trim() || `Centraid ${version}`
   );
-  const m = text.match(re);
-  return (m?.groups?.body ?? "").trim() || `Centraid ${version}`;
 }
 
 console.error(
