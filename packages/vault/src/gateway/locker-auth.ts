@@ -5,14 +5,19 @@
  * key. The database therefore contains no verifier that can be attacked from
  * a vault.db copy alone. Unlock sessions and one-time item permits exist only
  * in this gateway instance's memory; restarting the gateway always relocks.
+ *
+ * The derivation is ASYNC (issue #659 G11). scrypt at N=2^15 is ~100 ms of
+ * deliberate CPU, and `scryptSync` spent it on the event loop: one unlock
+ * froze every other request, SSE subscriber, and automation tick on the
+ * gateway — the exact shape docs/coding-standards.md D1 names. `scrypt` does
+ * the same work on libuv's threadpool. Parameters, the peppering HMAC, the
+ * equal-cost fake derivation for unknown credential ids, and the
+ * constant-time compare are all unchanged: this is a latency fix, and it must
+ * never become an auth-behaviour change.
  */
 
-import {
-  createHmac,
-  randomBytes,
-  scryptSync,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
@@ -30,6 +35,13 @@ const SCRYPT_OPTIONS = {
   p: 1,
   maxmem: 64 * 1024 * 1024,
 } as const;
+/** Same KDF, same parameters, off the event loop (issue #659 G11). */
+const scryptAsync = promisify(scrypt) as (
+  password: Buffer,
+  salt: Uint8Array,
+  keylen: number,
+  options: typeof SCRYPT_OPTIONS
+) => Promise<Buffer>;
 
 export type LockerAuthRequest =
   | { operation: "status"; sessionToken?: string }
@@ -114,7 +126,7 @@ export class LockerAuthentication {
     private readonly clock: () => number = Date.now
   ) {}
 
-  handle(request: LockerAuthRequest): LockerAuthResult {
+  async handle(request: LockerAuthRequest): Promise<LockerAuthResult> {
     this.sweep();
     switch (request.operation) {
       case "status":
@@ -233,7 +245,7 @@ export class LockerAuthentication {
     };
   }
 
-  private configure(secret: string): LockerAuthResult {
+  private async configure(secret: string): Promise<LockerAuthResult> {
     if (this.configured()) {
       return this.failure(
         "ALREADY_CONFIGURED",
@@ -251,7 +263,7 @@ export class LockerAuthentication {
         false
       );
     }
-    this.insertCredential(
+    await this.insertCredential(
       LOCKER_PRIMARY_CREDENTIAL_ID,
       "passphrase",
       "Primary passphrase",
@@ -267,7 +279,10 @@ export class LockerAuthentication {
     };
   }
 
-  private unlock(secret: string, credentialId: string): LockerAuthResult {
+  private async unlock(
+    secret: string,
+    credentialId: string
+  ): Promise<LockerAuthResult> {
     const blocked = this.retryAfter(credentialId);
     if (blocked > 0) {
       return this.failure(
@@ -279,7 +294,7 @@ export class LockerAuthentication {
         blocked
       );
     }
-    if (!this.verify(credentialId, secret)) {
+    if (!(await this.verify(credentialId, secret))) {
       const retryAfterMs = this.recordFailure(credentialId);
       return this.failure(
         "INVALID_CREDENTIAL",
@@ -302,9 +317,9 @@ export class LockerAuthentication {
     };
   }
 
-  private authorizeItem(
+  private async authorizeItem(
     request: Extract<LockerAuthRequest, { operation: "authorize-item" }>
-  ): LockerAuthResult {
+  ): Promise<LockerAuthResult> {
     if (!this.touchSession(request.sessionToken)) {
       return this.failure(
         "SESSION_EXPIRED",
@@ -329,7 +344,7 @@ export class LockerAuthentication {
         request.itemId
       );
     }
-    if (!this.verify(credentialId, request.secret)) {
+    if (!(await this.verify(credentialId, request.secret))) {
       const retryAfterMs = this.recordFailure(credentialId);
       return this.failure(
         "INVALID_CREDENTIAL",
@@ -373,9 +388,9 @@ export class LockerAuthentication {
     return { ok: true, configured: this.configured(), authenticated: false };
   }
 
-  private enrollDevice(
+  private async enrollDevice(
     request: Extract<LockerAuthRequest, { operation: "enroll-device" }>
-  ): LockerAuthResult {
+  ): Promise<LockerAuthResult> {
     if (!this.touchSession(request.sessionToken)) {
       return this.failure(
         "SESSION_EXPIRED",
@@ -395,7 +410,7 @@ export class LockerAuthentication {
       );
     }
     const credentialId = uuidv7();
-    this.insertCredential(
+    await this.insertCredential(
       credentialId,
       "device",
       request.label.trim() || "Biometric device",
@@ -441,14 +456,14 @@ export class LockerAuthentication {
     return { ok: true, configured: true, authenticated: true };
   }
 
-  private insertCredential(
+  private async insertCredential(
     credentialId: string,
     kind: "passphrase" | "device",
     label: string,
     secret: string
-  ): void {
+  ): Promise<void> {
     const salt = randomBytes(16);
-    const verifier = this.derive(secret, salt);
+    const verifier = await this.derive(secret, salt);
     const now = nowIso();
     this.db.vault
       .prepare(
@@ -468,26 +483,27 @@ export class LockerAuthentication {
       .get(credentialId) as CredentialRow | undefined;
   }
 
-  private verify(credentialId: string, secret: string): boolean {
+  private async verify(credentialId: string, secret: string): Promise<boolean> {
     const row = this.credential(credentialId);
     if (!row) {
       // Equal-cost fake derivation prevents a missing id from becoming a
-      // credential-enumeration timing oracle.
-      this.derive(secret, Buffer.alloc(16));
+      // credential-enumeration timing oracle. Awaited for the same reason it
+      // is computed at all: the cost must be PAID, not merely started.
+      await this.derive(secret, Buffer.alloc(16));
       return false;
     }
-    const actual = this.derive(secret, Buffer.from(row.salt));
+    const actual = await this.derive(secret, Buffer.from(row.salt));
     const expected = Buffer.from(row.verifier);
     return (
       actual.length === expected.length && timingSafeEqual(actual, expected)
     );
   }
 
-  private derive(secret: string, salt: Uint8Array): Buffer {
+  private async derive(secret: string, salt: Uint8Array): Promise<Buffer> {
     const peppered = createHmac("sha256", this.db.sealKey)
       .update(secret, "utf8")
       .digest();
-    return scryptSync(peppered, salt, 32, SCRYPT_OPTIONS);
+    return scryptAsync(peppered, salt, 32, SCRYPT_OPTIONS);
   }
 
   private mintSession(): { sessionToken: string; expiresAt: string } {

@@ -238,3 +238,50 @@ export function liveBlobShas(vault: DatabaseSync): Set<string> {
   for (const r of staged) live.add(r.sha256);
   return live;
 }
+
+interface LiveShaMemo {
+  /** The vault's write position when the set was computed. */
+  writeKey: string;
+  shas: ReadonlySet<string>;
+}
+
+const liveShaMemo = new WeakMap<DatabaseSync, LiveShaMemo>();
+
+/**
+ * A write position for the whole file: `data_version` moves when ANOTHER
+ * connection commits, `total_changes` when this one writes. Together they
+ * cannot miss a mutation, and both are O(1) reads.
+ */
+function vaultWriteKey(vault: DatabaseSync): string {
+  const dataVersion = (
+    vault.prepare("PRAGMA data_version").get() as { data_version: number }
+  ).data_version;
+  const totalChanges = (
+    vault.prepare("SELECT total_changes() AS n").get() as { n: number }
+  ).n;
+  return `${dataVersion}:${totalChanges}`;
+}
+
+/**
+ * `liveBlobShas`, computed once per write (issue #659 L5).
+ *
+ * The live set is three full scans of the content tables, and the hourly CAS
+ * mark/sweep, the backup reconciliation tick, and the remote sweep each
+ * recomputed it independently — the same answer, three times an hour, on a
+ * vault where nothing had changed. This memo derives it once per write
+ * position and hands the same set to every caller in between.
+ *
+ * The returned set is READ-ONLY on purpose: it is shared. A caller that needs
+ * to union extra roots (archived segments, retained snapshots) checks the
+ * other sets separately rather than mutating this one — see
+ * `sweepLocalOrphans`. Callers that genuinely want their own mutable copy
+ * keep using `liveBlobShas`.
+ */
+export function liveBlobShasCached(vault: DatabaseSync): ReadonlySet<string> {
+  const writeKey = vaultWriteKey(vault);
+  const memo = liveShaMemo.get(vault);
+  if (memo?.writeKey === writeKey) return memo.shas;
+  const shas = liveBlobShas(vault);
+  liveShaMemo.set(vault, { writeKey, shas });
+  return shas;
+}

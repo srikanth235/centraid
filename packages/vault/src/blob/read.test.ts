@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { resolveDerivativeShas } from "./read.js";
+import {
+  liveBlobShas,
+  liveBlobShasCached,
+  resolveDerivativeShas,
+} from "./read.js";
+import { blobUriFor } from "./store.js";
 
 let db: VaultDb;
 
@@ -100,5 +105,35 @@ describe("read", () => {
 
   test("an empty id list is a no-op, no query run", () => {
     expect(resolveDerivativeShas(db.vault, [], "thumb").size).toBe(0);
+  });
+
+  // ── issue #659 L5: the live set is derived once per write ─────────────
+
+  function seedBlobBacked(contentId: string, shaLocal: string): void {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'image/jpeg', ?, ?, 10, ?)`
+      )
+      .run(contentId, blobUriFor(shaLocal), shaLocal, nowIso());
+  }
+
+  test("the cached live set is shared between callers until the vault is written", () => {
+    seedBlobBacked("c-live", sha(1));
+    const first = liveBlobShasCached(db.vault);
+    const second = liveBlobShasCached(db.vault);
+    // Same object: N consumers in one sweep pay for one derivation.
+    expect(second).toBe(first);
+    expect(first.has(sha(1))).toBe(true);
+
+    seedBlobBacked("c-late", sha(2));
+    const afterWrite = liveBlobShasCached(db.vault);
+    expect(afterWrite).not.toBe(first);
+    expect(afterWrite.has(sha(2))).toBe(true);
+    // The uncached derivation agrees — the memo is a cache, not a policy.
+    expect([...afterWrite].sort()).toStrictEqual(
+      [...liveBlobShas(db.vault)].sort()
+    );
   });
 });

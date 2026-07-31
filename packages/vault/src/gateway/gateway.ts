@@ -223,8 +223,13 @@ export class Gateway {
     this.lockerAuthentication = new LockerAuthentication(db);
   }
 
-  /** Host-only Locker authentication plane; app bridges restrict the caller. */
-  authenticateLocker(request: LockerAuthRequest): LockerAuthResult {
+  /**
+   * Host-only Locker authentication plane; app bridges restrict the caller.
+   * ASYNC since issue #659 G11 — the scrypt derivation behind an unlock runs
+   * on the threadpool instead of blocking the gateway's event loop, so the
+   * caller must await it (the app bridge is already an async dispatcher).
+   */
+  authenticateLocker(request: LockerAuthRequest): Promise<LockerAuthResult> {
     return this.lockerAuthentication.handle(request);
   }
 

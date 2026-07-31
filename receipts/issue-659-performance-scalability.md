@@ -732,6 +732,7 @@ The session transcript contains:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-f31b02a1-75f-1785524783-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 360 | 888382 | 29546359 | 238581 | 1127323 | 26.2919 | 360 | 888382 | 29546359 | 238581 | docs(perf): constitutional performance principle and D1-D6 doctrine (#659) |
 | claude-code-f31b02a1-75f-1785525192-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 24 | 24061 | 2897576 | 8368 | 32453 | 1.8085 | 384 | 912443 | 32443935 | 246949 | docs(perf): constitutional performance principle and D1-D6 doctrine (#659) |
+| claude-code-f31b02a1-75f-1785525257-1 | claude-code | f31b02a1-75f6-4ef7-a889-17462a9b03a4 | #659 | claude-opus-5 | 2 | 1156 | 492970 | 372 | 1530 | 0.2630 | 386 | 913599 | 32936905 | 247321 | perf(vault): incremental phash clustering, bounded retention, footprint budget ( |
 
 ### Steering
 

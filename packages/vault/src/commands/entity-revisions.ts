@@ -5,9 +5,18 @@
 // because only the domain knows its invariants; this module owns the common
 // durable envelope, one-shot marking, and ten-second immediate undo window.
 
+import type { DatabaseSync } from "node:sqlite";
+
 import type { HandlerCtx } from "../gateway/types.js";
 
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
+
+/**
+ * Rows deleted by one `pruneExpiredEntityRevisions` pass (issue #659 L1).
+ * Bounded like every other retention pass so a vault that has never pruned
+ * does not turn its first sweep into a multi-second stall.
+ */
+export const ENTITY_REVISION_PRUNE_CAP = 5_000;
 
 export interface EntityRevision<T = unknown> {
   revisionId: string;
@@ -131,4 +140,49 @@ export function markEntityRevisionUndone(
   if (changed.changes !== 1)
     throw new Error("revision not found or already undone");
   ctx.wrote("core.entity_revision", revisionId);
+}
+
+export interface EntityRevisionPruneResult {
+  /** Rows deleted on this pass. */
+  deleted: number;
+  /** `true` when the cap stopped the pass — run it again to keep draining. */
+  capped: boolean;
+}
+
+/**
+ * Drop revisions whose undo window has closed (issue #659 L1).
+ *
+ * Every mutation in the P5 store contract writes a FULL-ROW JSON snapshot
+ * here, and the only reader — `loadEntityRevision` — refuses anything with
+ * `undo_until < now`. So past the ten-second window a snapshot is already
+ * unreadable through the store's own API; retaining it forever grows the
+ * vault (and every backup that ships it) with rows nothing can ever return.
+ * Deleting exactly those rows is therefore invisible to callers: this is a
+ * garbage collector, not a retention policy.
+ *
+ * Bounded per run (`limit`, default `ENTITY_REVISION_PRUNE_CAP`) and driven
+ * by `core_entity_revision_undo_idx`, so the cost of one pass is the rows it
+ * deletes rather than the size of the table. `capped` tells a sweep it has
+ * more to drain.
+ */
+export function pruneExpiredEntityRevisions(
+  vault: DatabaseSync,
+  now: string,
+  options: { limit?: number } = {}
+): EntityRevisionPruneResult {
+  const limit = options.limit ?? ENTITY_REVISION_PRUNE_CAP;
+  if (limit <= 0) throw new Error("entity revision prune limit must be > 0");
+  const info = vault
+    .prepare(
+      `DELETE FROM core_entity_revision
+        WHERE revision_id IN (
+          SELECT revision_id FROM core_entity_revision
+           WHERE undo_until < ?
+           ORDER BY undo_until
+           LIMIT ?
+        )`
+    )
+    .run(now, limit);
+  const deleted = Number(info.changes);
+  return { deleted, capped: deleted >= limit };
 }

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openVaultDb } from "./db.js";
+import { applyVaultFootprint } from "./vault-footprint.js";
 
 const cleanups: (() => void)[] = [];
 describe("db", () => {
@@ -158,5 +159,172 @@ describe("db", () => {
         }
       ).journal_mode
     ).toBe("wal");
+  });
+
+  // ── issue #659 L8: the per-vault footprint is a divisible budget ──────
+
+  function footprintOf(db: {
+    vault: DatabaseSync;
+    journal: DatabaseSync;
+  }): { mmapBytes: number; cacheKib: number }[] {
+    return [db.vault, db.journal].map((handle) => ({
+      mmapBytes: Number(
+        (handle.prepare("PRAGMA mmap_size").get() as { mmap_size: number })
+          .mmap_size
+      ),
+      // A negative cache_size is kibibytes; SQLite reports back what was set.
+      cacheKib: -Number(
+        (handle.prepare("PRAGMA cache_size").get() as { cache_size: number })
+          .cache_size
+      ),
+    }));
+  }
+
+  test("an unset footprint keeps the pre-#659 per-file pragmas exactly", () => {
+    const db = openVaultDb({ dir: tempDirSync() });
+    cleanups.push(() => db.close());
+    for (const file of footprintOf(db)) {
+      expect(file.mmapBytes).toBe(67_108_864);
+      expect(file.cacheKib).toBe(16_000);
+    }
+  });
+
+  test("a footprint budget is a per-vault TOTAL split across its databases", () => {
+    // What a host mounting 5 planes under a 320 MiB ceiling would pass.
+    const db = openVaultDb({
+      dir: tempDirSync(),
+      footprint: {
+        mmapBytes: 64 * 1024 * 1024,
+        cacheBytes: 8 * 1024 * 1024,
+      },
+    });
+    cleanups.push(() => db.close());
+    const files = footprintOf(db);
+    for (const file of files) {
+      expect(file.mmapBytes).toBe(32 * 1024 * 1024);
+      expect(file.cacheKib).toBe(4 * 1024);
+    }
+    // The load-bearing property: the two handles together stay inside the
+    // budget the caller named, rather than each taking it.
+    expect(files.reduce((n, f) => n + f.mmapBytes, 0)).toBeLessThanOrEqual(
+      64 * 1024 * 1024
+    );
+    expect(
+      files.reduce((n, f) => n + f.cacheKib * 1024, 0)
+    ).toBeLessThanOrEqual(8 * 1024 * 1024);
+  });
+
+  test("a budget divided too far still leaves each database a usable cache", () => {
+    const db = openVaultDb({
+      dir: tempDirSync(),
+      footprint: { mmapBytes: 0, cacheBytes: 1024 },
+    });
+    cleanups.push(() => db.close());
+    for (const file of footprintOf(db)) {
+      // mmap can go to zero — it is address space, and SQLite falls back to
+      // ordinary reads.
+      expect(file.mmapBytes).toBe(0);
+      // The cache cannot: a plane starved into thrashing is worse for the
+      // owner than one that overshoots by a few hundred kibibytes.
+      expect(file.cacheKib).toBe(512);
+    }
+  });
+
+  test("a negative budget is refused rather than silently clamped", () => {
+    expect(() =>
+      openVaultDb({ dir: tempDirSync(), footprint: { mmapBytes: -1 } })
+    ).toThrow(/footprint/u);
+  });
+
+  test("re-applying a smaller budget changes the pragmas of a LIVE connection", () => {
+    const db = openVaultDb({ dir: tempDirSync() });
+    cleanups.push(() => db.close());
+    for (const file of footprintOf(db)) {
+      expect(file.mmapBytes).toBe(67_108_864);
+      expect(file.cacheKib).toBe(16_000);
+    }
+
+    // What a host's rebalance does when a second vault is mounted: re-divide
+    // the SAME total across the now-larger set, on connections that are
+    // already open and serving.
+    const applied = [db.vault, db.journal].map((handle) =>
+      applyVaultFootprint(handle, {
+        mmapBytes: 32 * 1024 * 1024,
+        cacheBytes: 4 * 1024 * 1024,
+      })
+    );
+    for (const file of applied) {
+      expect(file.mmapBytes).toBe(16 * 1024 * 1024);
+      expect(file.cacheBytes).toBe(2 * 1024 * 1024);
+    }
+    // The live handles report the new numbers, not the ones they opened with.
+    for (const file of footprintOf(db)) {
+      expect(file.mmapBytes).toBe(16 * 1024 * 1024);
+      expect(file.cacheKib).toBe(2 * 1024);
+    }
+    // Still usable afterwards — a rebalance is a tuning change, not a reopen.
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM core_vault").get() as {
+          n: number;
+        }
+      ).n
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  test("rebalancing keeps a household's total flat where opening alone does not", () => {
+    const HOUSEHOLD = 5;
+    /** `vault.db` + `journal.db` — what one vault's budget is split across. */
+    const VAULT_DB_FILES_IN_A_VAULT = 2;
+    const CEILING_MMAP = 128 * 1024 * 1024;
+    const CEILING_CACHE = 32 * 1024 * 1024;
+    const vaults = Array.from({ length: HOUSEHOLD }, () => {
+      const db = openVaultDb({ dir: tempDirSync() });
+      cleanups.push(() => db.close());
+      return db;
+    });
+    const totalMmap = (): number =>
+      vaults.reduce(
+        (sum, db) =>
+          sum + footprintOf(db).reduce((n, file) => n + file.mmapBytes, 0),
+        0
+      );
+    const totalCache = (): number =>
+      vaults.reduce(
+        (sum, db) =>
+          sum +
+          footprintOf(db).reduce((n, file) => n + file.cacheKib * 1024, 0),
+        0
+      );
+
+    // THE CONTROL. Without a budget, five vaults cost exactly five times one
+    // vault — so the budgeted case below is proven to have a different SHAPE,
+    // not to have passed by coincidence.
+    const one = footprintOf(vaults[0]!).reduce(
+      (n, file) => n + file.mmapBytes,
+      0
+    );
+    expect(totalMmap()).toBe(HOUSEHOLD * one);
+    expect(totalMmap()).toBeGreaterThan(CEILING_MMAP);
+
+    // The rebalance: re-divide one ceiling across every open plane. This is
+    // the call a host makes on each mount/create/delete — dividing only at
+    // open time leaves vault 1 holding the whole budget forever.
+    for (const db of vaults)
+      for (const handle of [db.vault, db.journal])
+        applyVaultFootprint(handle, {
+          mmapBytes: CEILING_MMAP / HOUSEHOLD,
+          cacheBytes: CEILING_CACHE / HOUSEHOLD,
+        });
+
+    expect(totalMmap()).toBeLessThanOrEqual(CEILING_MMAP);
+    expect(totalCache()).toBeLessThanOrEqual(CEILING_CACHE);
+    // Flat, not merely smaller: the household consumes essentially the whole
+    // ceiling and no more, rather than a fifth of it or five times it. The
+    // few bytes of slack are the two floor divisions (budget → per vault →
+    // per file), which round DOWN so the ceiling can never be exceeded.
+    expect(CEILING_MMAP - totalMmap()).toBeLessThan(
+      HOUSEHOLD * 2 * VAULT_DB_FILES_IN_A_VAULT
+    );
   });
 });

@@ -34,6 +34,11 @@ import {
   resolveSealKey,
   sealKeyFileFor,
 } from "./schema/sealed.js";
+import {
+  applyVaultFootprint,
+  assertVaultFootprint,
+} from "./vault-footprint.js";
+import type { VaultFootprintBudget } from "./vault-footprint.js";
 
 export interface VaultDb {
   vault: DatabaseSync;
@@ -180,11 +185,18 @@ export interface OpenVaultOptions {
   replicationConcurrency?: number;
   /** FULL by default; a measured low-end hardware profile may choose WAL-safe NORMAL. */
   synchronous?: "FULL" | "NORMAL";
+  /**
+   * Per-vault memory footprint (issue #659 L8). Omitted = today's numbers
+   * exactly. See `VaultFootprintBudget` for why this is a TOTAL rather than a
+   * per-file constant.
+   */
+  footprint?: Partial<VaultFootprintBudget>;
 }
 
 function openFile(
   location: string,
-  synchronous: "FULL" | "NORMAL" = "FULL"
+  synchronous: "FULL" | "NORMAL" = "FULL",
+  footprint?: Partial<VaultFootprintBudget>
 ): DatabaseSync {
   try {
     const db = new DatabaseSync(location);
@@ -206,12 +218,11 @@ function openFile(
       // transaction (WAL's default NORMAL can drop the last commit(s) on
       // power loss; FULL fsyncs the WAL on every commit).
       db.exec(`PRAGMA synchronous = ${synchronous}`);
-      // Read-path tuning for Pi-class hosts (issue #456 S1). The negative
-      // cache size is kibibytes, so this caps each connection at 16 MiB
-      // instead of SQLite's ~2 MiB default. mmap is virtual and demand-paged;
-      // 64 MiB keeps the address-space win without assuming desktop RAM.
-      db.exec("PRAGMA cache_size = -16000");
-      db.exec("PRAGMA mmap_size = 67108864");
+      // Read-path tuning for Pi-class hosts (issue #456 S1), now a divisible
+      // per-vault budget rather than a per-file constant (issue #659 L8 — see
+      // `VaultFootprintBudget`). One owner for the division: a host that
+      // re-divides across live planes calls the same function.
+      applyVaultFootprint(db, footprint);
       db.exec("PRAGMA temp_store = MEMORY");
       // journal.db also carries the conversation-ledger band (the old
       // transcripts.db folded in), which worker subprocesses open by path —
@@ -278,20 +289,26 @@ export function readBlobStoreSettings(vault: DatabaseSync): BlobStoreSettings {
 /** Open (creating + migrating as needed) the vault pair. */
 export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const { dir } = options;
+  assertVaultFootprint(options.footprint);
+  const footprint = options.footprint;
   let vault: DatabaseSync;
   let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
-    vault = openFile(":memory:", options.synchronous);
+    vault = openFile(":memory:", options.synchronous, footprint);
     // The journal is the durable execution/receipt proof used to reclaim
     // vault-side invocation markers. It stays FULL even when an operator
     // explicitly relaxes the canonical vault to NORMAL.
-    journal = openFile(":memory:", "FULL");
+    journal = openFile(":memory:", "FULL", footprint);
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
-    vault = openFile(path.join(dir, "vault.db"), options.synchronous);
-    journal = openFile(path.join(dir, "journal.db"), "FULL");
+    vault = openFile(
+      path.join(dir, "vault.db"),
+      options.synchronous,
+      footprint
+    );
+    journal = openFile(path.join(dir, "journal.db"), "FULL", footprint);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
