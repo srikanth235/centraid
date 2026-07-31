@@ -9,6 +9,7 @@ import type {
   GatewayPaths,
 } from "@centraid/gateway";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 import type { OpenVaultOptions, VaultDb } from "@centraid/vault";
 
 const helpersDir = import.meta.dirname;
@@ -45,12 +46,25 @@ export async function createTestVault(
   const dir = inMemory
     ? undefined
     : (vaultOptions.dir ?? (await tempDir("centraid-vault-test-")));
-  const vault = openVaultDb({ ...vaultOptions, ...(dir ? { dir } : {}) });
-  if (bootstrap) bootstrapVault(vault, { ownerName });
-  onTestFinished(() => {
-    vault.close();
-  });
-  return vault;
+  // #656 Layer 4: open + bootstrap + register-the-close is one flow with one
+  // home, `@centraid/test-kit/vault`. This factory only adds the root-suite
+  // conveniences on top (in-memory default, auto temp dir, bootstrap opt-out).
+  if (!bootstrap) {
+    const bare = openVaultDb({ ...vaultOptions, ...(dir ? { dir } : {}) });
+    onTestFinished(() => {
+      bare.close();
+    });
+    return bare;
+  }
+  return bootstrappedVault<VaultDb, unknown>(
+    {
+      // The kit's only open knob is `dir`; the suite's other OpenVaultOptions
+      // ride in through the injected opener rather than widening the kit.
+      openVaultDb: (open) => openVaultDb({ ...vaultOptions, ...open }),
+      bootstrapVault,
+    },
+    { ...(dir ? { dir } : {}), ownerName }
+  ).db;
 }
 
 export interface BuildTestGatewayOptions extends Omit<

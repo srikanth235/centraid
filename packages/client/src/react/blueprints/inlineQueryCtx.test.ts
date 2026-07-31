@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
+import { seededRandom } from "@centraid/test-kit/random";
 
 import type { ShellReplicaReadRequest } from "../../replica/shell-session.js";
 import type {
@@ -18,12 +19,16 @@ import type { InlineReplicaSession } from "./inlineQueryCtx.js";
 const cursor = { epoch: "e1", seq: 7 };
 const dependency = { shapeId: "tasks/board", entity: "schedule.task" };
 
+// Only a stand-in row id for fixtures that omit `task_id`; seeded so the same
+// fixture gets the same synthetic id on every run.
+const rowIds = seededRandom(20_260_731);
+
 function envelope(
   values: Record<string, unknown>,
   extra?: Partial<ReplicaRowEnvelope>
 ): ReplicaRowEnvelope {
   return {
-    rowId: String(values.task_id ?? Math.random()),
+    rowId: String(values.task_id ?? rowIds.next()),
     values: values as ReplicaRowEnvelope["values"],
     oversizedFields: [],
     hasUnavailableFields: false,

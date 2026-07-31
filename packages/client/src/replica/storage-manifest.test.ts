@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import {
   forgetReplicaIdentity,
   listRememberedReplicaIdentities,
@@ -227,45 +229,41 @@ describe("remembered replica manifest", () => {
   });
 
   test("retries a durably selected inactive scope after inventory discovery fails", async () => {
-    vi.useFakeTimers();
-    try {
-      const storage = memoryStorage();
-      const inventory = memoryInventory();
-      await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
-      storage.values.clear();
-      vi.spyOn(inventory, "list").mockRejectedValueOnce(
-        new Error("IDB read interrupted")
-      );
-      const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
-      const options = {
-        storage,
-        inventory,
-        purgeIdentity,
-        retryBaseDelayMs: 10,
-        purgeSelector: {
-          kind: "gateway" as const,
-          gatewayId: inactive.gatewayId,
-        },
-      };
+    const clock = useFakeClock();
+    const storage = memoryStorage();
+    const inventory = memoryInventory();
+    await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
+    storage.values.clear();
+    vi.spyOn(inventory, "list").mockRejectedValueOnce(
+      new Error("IDB read interrupted")
+    );
+    const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
+    const options = {
+      storage,
+      inventory,
+      purgeIdentity,
+      retryBaseDelayMs: 10,
+      purgeSelector: {
+        kind: "gateway" as const,
+        gatewayId: inactive.gatewayId,
+      },
+    };
 
-      // Lifecycle dispatch deliberately does not surface async failures. The
-      // selector must remain durable for a fresh browser-lifetime retry loop.
-      await purgeRememberedReplicaIdentities(
-        (identity) => identity.gatewayId === inactive.gatewayId,
-        options
-      ).catch(() => undefined);
-      expect(purgeIdentity).not.toHaveBeenCalled();
+    // Lifecycle dispatch deliberately does not surface async failures. The
+    // selector must remain durable for a fresh browser-lifetime retry loop.
+    await purgeRememberedReplicaIdentities(
+      (identity) => identity.gatewayId === inactive.gatewayId,
+      options
+    ).catch(() => undefined);
+    expect(purgeIdentity).not.toHaveBeenCalled();
 
-      const reloaded = new TerminalReplicaPurgeRetryLoop(options);
-      reloaded.start();
-      await vi.advanceTimersByTimeAsync(0);
+    const reloaded = new TerminalReplicaPurgeRetryLoop(options);
+    reloaded.start();
+    await clock.advance(0);
 
-      expect(purgeIdentity).toHaveBeenCalledExactlyOnceWith(inactive);
-      await expect(inventory.list()).resolves.toStrictEqual([]);
-      reloaded.stop();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(purgeIdentity).toHaveBeenCalledExactlyOnceWith(inactive);
+    await expect(inventory.list()).resolves.toStrictEqual([]);
+    reloaded.stop();
   });
 
   test("refuses durable mode when the authoritative inventory cannot persist", async () => {
@@ -417,41 +415,36 @@ describe("remembered replica manifest", () => {
   });
 
   test("automatically resumes terminal cleanup across a fresh retry loop after two failures", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(2_000);
-    try {
-      const storage = memoryStorage();
-      const inventory = memoryInventory();
-      await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
-      const purgeIdentity = vi
-        .fn<PurgeIdentity>()
-        .mockRejectedValueOnce(new Error("OPFS busy"))
-        .mockRejectedValueOnce(new Error("OPFS still busy"))
-        .mockResolvedValue(undefined);
-      const options = {
-        storage,
-        inventory,
-        purgeIdentity,
-        retryBaseDelayMs: 10,
-      };
+    const clock = useFakeClock(2_000);
+    const storage = memoryStorage();
+    const inventory = memoryInventory();
+    await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
+    const purgeIdentity = vi
+      .fn<PurgeIdentity>()
+      .mockRejectedValueOnce(new Error("OPFS busy"))
+      .mockRejectedValueOnce(new Error("OPFS still busy"))
+      .mockResolvedValue(undefined);
+    const options = {
+      storage,
+      inventory,
+      purgeIdentity,
+      retryBaseDelayMs: 10,
+    };
 
-      await expect(
-        purgeReplicaIdentityStorage(inactive, options)
-      ).rejects.toThrow("Could not purge replica");
+    await expect(
+      purgeReplicaIdentityStorage(inactive, options)
+    ).rejects.toThrow("Could not purge replica");
 
-      // A new loop models a renderer reload: its startup sweep reads only the
-      // fixed-name inventory state, not an in-memory retry closure.
-      const reloaded = new TerminalReplicaPurgeRetryLoop(options);
-      reloaded.start();
-      await vi.advanceTimersByTimeAsync(10);
-      expect(purgeIdentity).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(20);
-      expect(purgeIdentity).toHaveBeenCalledTimes(3);
-      await expect(inventory.list()).resolves.toStrictEqual([]);
-      expect(listRememberedReplicaIdentities(storage)).toStrictEqual([]);
-      reloaded.stop();
-    } finally {
-      vi.useRealTimers();
-    }
+    // A new loop models a renderer reload: its startup sweep reads only the
+    // fixed-name inventory state, not an in-memory retry closure.
+    const reloaded = new TerminalReplicaPurgeRetryLoop(options);
+    reloaded.start();
+    await clock.advance(10);
+    expect(purgeIdentity).toHaveBeenCalledTimes(2);
+    await clock.advance(20);
+    expect(purgeIdentity).toHaveBeenCalledTimes(3);
+    await expect(inventory.list()).resolves.toStrictEqual([]);
+    expect(listRememberedReplicaIdentities(storage)).toStrictEqual([]);
+    reloaded.stop();
   });
 });

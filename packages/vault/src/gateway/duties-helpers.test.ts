@@ -2,7 +2,9 @@
 // Imports `duties.ts` by name — admitImportedRow / resolveHandle / revoke /
 // sweepLifecycle pure-ish paths with a bootstrapped vault.
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
@@ -23,8 +25,10 @@ let owner: Identity;
 
 describe("duties-helpers", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     owner = {
       kind: "owner-device",
       callerId: boot.deviceId,
@@ -32,10 +36,6 @@ describe("duties-helpers", () => {
       partyId: boot.ownerPartyId,
       mayAct: true,
     };
-  });
-
-  afterEach(() => {
-    db.close();
   });
 
   test("admitImportedRow inserts once and dedupes on the external id column", () => {

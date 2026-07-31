@@ -37,6 +37,11 @@ export const coverageInclude = [
   // co-located outside packages/blueprints/src (issue #630 Wave 0).
   "packages/blueprints/apps/**/*.{ts,tsx}",
   "packages/blueprints/kit/**/*.{ts,js}",
+  // The PWA service worker is load-bearing production offline/caching code that
+  // lives outside src/ only because it must be served from the PWA root. Named
+  // file, not `apps/*/public/**` — the rest of public/ is static assets (issue
+  // #656 Layer 1F).
+  "apps/web/public/sw.js",
 ];
 
 export const coverageExclude = [

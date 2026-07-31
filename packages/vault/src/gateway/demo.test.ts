@@ -5,6 +5,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import {
   bootstrapVault,
   createGrant,
@@ -54,8 +56,10 @@ function addTask(title: string, demo: boolean): InvokeOutcome {
 
 describe("demo", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     registerTaskCommands(gw);
     owner = {

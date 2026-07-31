@@ -25,7 +25,6 @@ const silentLogger = {
 const cleanups: Array<() => Promise<void> | void> = [];
 describe("connection-broker", () => {
   afterEach(async () => {
-    vi.useRealTimers();
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
       cleanup()
     );

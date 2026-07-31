@@ -13,10 +13,11 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { serve } from "../../packages/gateway/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/gateway/src/serve/serve.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/gateway-sessions.scale.test.ts";
 const SESSIONS = 40;
-const BUDGET_MS = 15_000;
+const BUDGET_MS = rigBudgetMs(OWNER);
 
 let dataDir: string;
 let handle: GatewayServeHandle;

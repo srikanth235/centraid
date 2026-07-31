@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit one pipeline suite over a single bootstrapped vault fixture — identity/consent/contract/execution/evidence stages are asserted against shared state
 import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import {
   bootstrapVault,
   createGrant,
@@ -54,8 +56,10 @@ function proposeInput(
 
 describe("gateway", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     registerScheduleCommands(gw);
     owner = {

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import {
   bootstrapVault,
   createGrant,
@@ -35,8 +37,10 @@ const AEAD_TAG_MISMATCH = "Unsupported state or unable to authenticate data";
 
 describe("sealed", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     registerLockerCommands(gw);
     owner = {

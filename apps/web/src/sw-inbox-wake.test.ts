@@ -122,28 +122,32 @@ describe("closed PWA Inbox wake", () => {
         initWasm: async () => undefined,
       };
     });
-    const source = readFileSync(
-      path.join(import.meta.dirname, "../public/sw.js"),
-      "utf8"
+    const swPath = path.join(import.meta.dirname, "../public/sw.js");
+    const source = readFileSync(swPath, "utf8");
+    vm.runInNewContext(
+      source,
+      {
+        self,
+        caches,
+        fetch,
+        importScripts,
+        atob,
+        Response,
+        Uint8Array,
+        URL,
+        Set,
+        Map,
+        Promise,
+        JSON,
+        encodeURIComponent,
+        decodeURIComponent,
+        setTimeout,
+        clearTimeout,
+      },
+      // Naming the script makes v8 attribute this run to public/sw.js, so the
+      // wake path counts toward the service worker's coverage (issue #656 1F).
+      { filename: swPath }
     );
-    vm.runInNewContext(source, {
-      self,
-      caches,
-      fetch,
-      importScripts,
-      atob,
-      Response,
-      Uint8Array,
-      URL,
-      Set,
-      Map,
-      Promise,
-      JSON,
-      encodeURIComponent,
-      decodeURIComponent,
-      setTimeout,
-      clearTimeout,
-    });
 
     const configure = listeners.get("message");
     expect(configure).toBeDefined();

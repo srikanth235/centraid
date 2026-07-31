@@ -16,10 +16,11 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { computeMissedWindows } from "../../packages/automation/src/fire/scheduler-ledger.js";
+import { rigBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/automations-fire.scale.test.ts";
 const AUTOMATION_COUNT = 200;
-const BUDGET_MS = 10_000;
+const BUDGET_MS = rigBudgetMs(OWNER);
 
 describe("automations-fire.scale", () => {
   test("computeMissedWindows at volume: one entry per automation, no backfill storm", async () => {

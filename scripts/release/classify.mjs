@@ -15,6 +15,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { changelogSectionBody } from "./changelog-section.mjs";
+
 const args = process.argv.slice(2);
 let changelogPath = "CHANGELOG.md";
 let version = null;
@@ -25,21 +27,18 @@ for (let i = 0; i < args.length; i++) {
 
 const text = readFileSync(path.resolve(changelogPath), "utf8");
 
-/** @returns {{ heading: string, body: string } | null} Parsed changelog section or null. */
-function sectionFor(ver) {
+/**
+ * @param {string} [heading] Version string; defaults to the Unreleased section.
+ * @returns {{ heading: string, body: string } | null} Parsed section or null.
+ */
+function sectionFor(heading = "Unreleased") {
   // ## [0.2.0] or ## Unreleased
-  const re = ver
-    ? new RegExp(
-        `^##\\s+\\[?${ver.replace(/\./gu, "\\.")}\\]?[^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
-        "mu"
-      )
-    : /^##\s+\[?Unreleased\]?[^\n]*\n(?<body>[\s\S]*?)(?=^##\s+|$)/mu;
-  const m = text.match(re);
-  if (!m) return null;
-  return { heading: ver ?? "Unreleased", body: m.groups?.body ?? "" };
+  const body = changelogSectionBody(text, heading);
+  if (body === null) return null;
+  return { heading, body };
 }
 
-const section = sectionFor(version);
+const section = sectionFor(version ?? undefined);
 if (!section) {
   process.stdout.write(
     JSON.stringify({
@@ -67,22 +66,11 @@ if (bullets.length === 0) {
   process.exit(0);
 }
 
-const nonFixed = headings.filter((h) => h !== "fixed");
-const bump =
-  nonFixed.length === 0 && headings.includes("fixed") ? "patch" : "minor";
-// Only *Fixed* present → patch. Empty headings with bullets under Fixed-only
-// also patch. Any Added/Changed/Removed → minor. No Fixed but other headings → minor.
-const onlyFixed =
-  headings.length > 0 && headings.every((h) => h === "fixed")
-    ? true
-    : headings.length === 0 && bump === "patch";
-
-const finalBump =
-  headings.length === 0
-    ? "minor"
-    : headings.every((h) => h === "fixed")
-      ? "patch"
-      : "minor";
+// Only *Fixed* present → patch. Any Added/Changed/Removed/Deprecated/Security
+// → minor. Bullets with no subsection heading at all → minor, because an
+// unclassified change cannot be proven to be fix-only.
+const onlyFixed = headings.length > 0 && headings.every((h) => h === "fixed");
+const finalBump = onlyFixed ? "patch" : "minor";
 
 const rationale =
   finalBump === "patch"

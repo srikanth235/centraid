@@ -106,6 +106,10 @@
       "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
       "ignoreDependencies": ["@babel/core", "expo-system-ui"]
     },
+    "apps/oauth-worker": {
+      "entry": ["src/worker.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
     "apps/extension": {
       "entry": [
         "src/worker.ts",

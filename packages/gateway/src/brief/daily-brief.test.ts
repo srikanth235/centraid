@@ -1,28 +1,19 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { afterEach, describe, expect, test } from "vitest";
 
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault, openVaultDb, uuidv7 } from "@centraid/vault";
 
 import { buildDailyBrief } from "./daily-brief.js";
 
 const open = [] as ReturnType<typeof openVaultDb>[];
-const dirs: string[] = [];
 
 describe("daily brief", () => {
   afterEach(() => {
     while (open.length) open.pop()?.close();
-    while (dirs.length) {
-      const dir = dirs.pop();
-      if (dir) rmSync(dir, { force: true, recursive: true });
-    }
   });
 
   test("combines events, due tasks, photos, and the owner's Tally stance", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "centraid-daily-brief-"));
-    dirs.push(dir);
+    const dir = tempDirSync("centraid-daily-brief-");
     const db = openVaultDb({ dir });
     open.push(db);
     const boot = bootstrapVault(db, {

@@ -8,6 +8,7 @@ import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 import {
   blobUriFor,
   bootstrapVault,
@@ -25,13 +26,11 @@ import {
 
 const servers: http.Server[] = [];
 const databases: GatewayDatabase[] = [];
-const vaults: VaultDb[] = [];
 const dirs: string[] = [];
 
 describe("placement-routes", () => {
   afterEach(async () => {
     for (const server of servers.splice(0)) server.close();
-    for (const vault of vaults.splice(0)) vault.close();
     for (const database of databases.splice(0)) database.close();
     await Promise.all(
       dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))
@@ -156,9 +155,10 @@ function openBootstrappedVault(
 ): { db: VaultDb; ownerPartyId: string } {
   const dir = path.join(root, "vaults", name);
   mkdirSync(dir, { recursive: true });
-  const db = openVaultDb({ dir });
-  vaults.push(db);
-  const boot = bootstrapVault(db, { ownerName: name, vaultId });
+  const { db, boot } = bootstrappedVault(
+    { openVaultDb, bootstrapVault },
+    { dir, ownerName: name, vaultId }
+  );
   return { db, ownerPartyId: boot.ownerPartyId };
 }
 

@@ -4,6 +4,7 @@ import {
   assertFloorsSubsetOfSeeds,
   buildScoresArtifact,
   enforceMutationFloors,
+  loadMutationFloors,
   mutationScoreFromReport,
   MUTATION_GLOBAL_WATCH,
   MUTATION_SEEDS,
@@ -55,23 +56,61 @@ describe("MUTATION_SEEDS", () => {
   test("covers core property-defended packages with package-local configs", () => {
     expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
       [
+        "apps/oauth-worker",
         "packages/agent-runtime",
         "packages/app-engine",
         "packages/automation",
         "packages/backup",
         "packages/blob-format",
+        "packages/blueprints",
+        "packages/cli",
         "packages/client/src/replica",
+        "packages/design-tokens",
         "packages/gateway",
         "packages/protocol",
+        "packages/time-engine",
         "packages/tunnel",
         "packages/vault",
       ].sort()
     );
     for (const seed of MUTATION_SEEDS) {
       expect(seed.config).toBe("stryker.config.mjs");
-      expect(seed.cwd.startsWith("packages/")).toBe(true);
+      expect(
+        seed.cwd.startsWith("packages/") || seed.cwd.startsWith("apps/"),
+        seed.id
+      ).toBe(true);
       expect(seed.report.startsWith("artifacts/mutation/")).toBe(true);
     }
+  });
+
+  test("every seed watches its own config pair, and every id is unique", () => {
+    // #545 A5 makes a missing score a gate failure, so a seed whose watch list
+    // omits its own config would go stale without the PR lane noticing.
+    const ids = MUTATION_SEEDS.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const labels = MUTATION_SEEDS.map((s) => s.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    for (const seed of MUTATION_SEEDS) {
+      expect(seed.watch, seed.id).toContain(`${seed.cwd}/stryker.config.mjs`);
+      expect(seed.watch, seed.id).toContain(
+        `${seed.cwd}/vitest.mutation.config.ts`
+      );
+      expect(seed.report, seed.id).toBe(
+        `artifacts/mutation/${seed.label}-report.json`
+      );
+    }
+  });
+
+  test("every seed has a floor and every floor names a seed", () => {
+    // The weakness gate (`_absoluteWeaknessBelow`) and the matrix computation
+    // both read floors ∪ scores by id; an unpaired entry on either side is a
+    // silent hole.
+    const floors = loadMutationFloors();
+    expect(assertFloorsSubsetOfSeeds(floors)).toStrictEqual([]);
+    for (const seed of MUTATION_SEEDS) {
+      expect(typeof floors[seed.id], seed.id).toBe("number");
+    }
+    expect(typeof floors._absoluteWeaknessBelow).toBe("number");
   });
 });
 

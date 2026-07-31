@@ -1,10 +1,15 @@
 # Intentionally ungated surfaces (#532 / TESTING.md). One package or app id per
 # line (e.g. packages/protocol, apps/desktop). Comments start with #.
 # Dev-only / tiny packages without a whole-tree floor:
-packages/blob-format
+# packages/blob-format is NO LONGER ungated (#656 Layer 1F): its source was one
+# `src/index.ts`, which the root `coverageExclude` `**/index.ts` erased, so the
+# package measured 0 lines. The implementation now lives in `src/cbsf.ts`
+# behind a re-export barrel and carries its own floor.
 packages/test-kit
-# client: only packages/client/src/replica/** is floored; the rest is journeys.
-packages/client
+# packages/client is NO LONGER ungated (#656 Layer 1B): its three runtime trees
+# each carry their own floor — replica/**, react/**, and the top-level
+# *.{ts,tsx} gateway-client seam. The allowlist row it used to hold is gone on
+# purpose, so a future client tree with no floor fails this directive.
 # Renderer / installable clients: e2e + extracted units, not line floors.
 apps/desktop
 apps/extension

@@ -17,40 +17,6 @@ const at = (h: number, mi: number, day = 1): Date =>
   new Date(2026, 0, day, h, mi, 0, 0);
 
 describe(computeMissedWindows, () => {
-  it("returns nothing for an ordinary tick-to-tick gap (no outage)", () => {
-    const missed = computeMissedWindows({
-      lastTickAt: at(8, 0),
-      now: at(8, 1),
-      entries: [{ ref: "a/one", crons: ["* * * * *"] }],
-    });
-    expect(missed).toStrictEqual([]);
-  });
-
-  it("returns nothing for a fast-restart gap under the grace margin", () => {
-    const missed = computeMissedWindows({
-      lastTickAt: at(8, 0),
-      now: new Date(at(8, 0).getTime() + 2.5 * 60_000), // +2.5min
-      entries: [{ ref: "a/one", crons: ["* * * * *"] }],
-      graceMs: 3 * 60_000,
-    });
-    expect(missed).toStrictEqual([]);
-  });
-
-  it("records ONE entry per automation for a gap spanning several missed fire times", () => {
-    // Gap 08:00 -> 08:10 on a once-a-minute-ish schedule: many minutes
-    // matched, but policy is one entry per automation per gap (earliest).
-    const missed = computeMissedWindows({
-      lastTickAt: at(8, 0),
-      now: at(8, 10),
-      entries: [{ ref: "a/every-minute", crons: ["* * * * *"] }],
-    });
-    expect(missed).toHaveLength(1);
-    expect(missed[0]!.automationRef).toBe("a/every-minute");
-    // Earliest missed minute strictly after 08:00 is 08:01.
-    expect(missed[0]!.scheduledFor).toBe(at(8, 1).toISOString());
-    expect(missed[0]!.reason).toBe("gateway-down");
-  });
-
   it("emits independent entries for multiple automations with different schedules", () => {
     const missed = computeMissedWindows({
       lastTickAt: at(8, 0),
@@ -164,10 +130,12 @@ describe(computeMissedWindows, () => {
 
   test("property: sub-grace gaps never emit misses", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 2 }), (minutes) => {
+      fc.property(fc.integer({ min: 1, max: 179 }), (seconds) => {
         // Default grace is 3 minutes — gaps under grace are quiet restarts.
+        // Generated in seconds so fractional-minute restarts (e.g. the 2.5min
+        // fast restart) are inside the range, not just whole minutes (#656).
         const lastTickAt = at(8, 0);
-        const now = new Date(lastTickAt.getTime() + minutes * 60_000);
+        const now = new Date(lastTickAt.getTime() + seconds * 1_000);
         const missed = computeMissedWindows({
           lastTickAt,
           now,
@@ -346,17 +314,6 @@ describe(recordSchedulerTick, () => {
     });
     expect(missed).toStrictEqual([]);
     expect(ledger.load().lastTickAt).toBe(at(8, 0).toISOString());
-  });
-
-  it("records nothing across ordinary consecutive ticks", () => {
-    const ledger = new SchedulerLedgerStore(fakeConversationStore());
-    recordSchedulerTick({ ledger, now: at(8, 0), automations: [] });
-    const missed = recordSchedulerTick({
-      ledger,
-      now: at(8, 1),
-      automations: [],
-    });
-    expect(missed).toStrictEqual([]);
   });
 
   it("detects a gap between two ticks and records one entry per enabled automation", () => {

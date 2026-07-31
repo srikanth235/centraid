@@ -32,6 +32,9 @@ const preload = path.join(desktop, "dist/preload.cjs");
 const renderer = path.join(desktop, "dist/renderer/react-boot.js");
 const builderYml = path.join(desktop, "electron-builder.yml");
 const preloadSrc = path.join(desktop, "src/preload.ts");
+// The bridge KEYS moved to the Electron-free core when preload.ts was split
+// for testability (#656 Layer 1F); preload.ts keeps only the exposure call.
+const preloadCoreSrc = path.join(desktop, "src/main/preload-core.ts");
 
 ok(existsSync(mainJs), "dist/main.js exists (packaged main entry)");
 ok(existsSync(preload), "dist/preload.cjs exists (preload bridge)");
@@ -112,8 +115,14 @@ if (existsSync(preloadSrc)) {
     /exposeInMainWorld\(['"]CentraidApi['"]/u.test(src),
     "preload exposes CentraidApi"
   );
+  // Look for the keys wherever the bridge is actually defined: the core when
+  // it exists, otherwise preload.ts itself. Checking only preload.ts would
+  // have silently passed once the definitions moved out of it.
+  const bridgeSrc = existsSync(preloadCoreSrc)
+    ? readFileSync(preloadCoreSrc, "utf8")
+    : src;
   for (const key of ["getSettings", "saveSettings", "onGatewayChanged"]) {
-    ok(src.includes(key), `preload defines bridge key ${key}`);
+    ok(bridgeSrc.includes(key), `preload defines bridge key ${key}`);
   }
 }
 

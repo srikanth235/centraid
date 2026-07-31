@@ -1,0 +1,8 @@
+{
+  "_comment": "Flake quarantine (#656 Layer 5). A test that fails nondeterministically moves HERE — it is never deleted inline and never retried-in-place until green, because both of those hide the flake instead of paying it down. A quarantined owner is excluded from the required checks, so the lane stays trustworthy, and carries an expiry: on expiry it either returns fixed or is deleted with a receipt. `bun run test:quarantine` fails on an expired, unissued, or unparseable entry, and the count is down-only under `test:ratchet`.",
+  "_policy": {
+    "maxDays": 30,
+    "budget": 0
+  },
+  "entries": []
+}

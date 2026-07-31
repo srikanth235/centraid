@@ -1,0 +1,8 @@
+{
+  "_comment": "Suite wall-clock ceilings (#656 Layer 5). Tighten-only, ratcheted alongside the perf budgets in scripts/test-report/ratchet-floors.mjs. `budgetMs` is the sum of per-file durations in artifacts/test-results/vitest.json, not the run's elapsed time — elapsed varies with host load and --concurrency, while the sum is the work the suite actually asked for, which is what an added test increases. Seeded 2026-07-31 from a full `bun run coverage` on this branch: 849 files, 1,408.3s measured, ceiling set 15% above at 1,620,000ms. Widening this number needs a top-level `approvedDeviation` saying what the extra time buys; `bun run test:suite-wall-clock -- --write` only ever lowers it.",
+  "lanes": {
+    "pr-vitest": {
+      "budgetMs": 1620000
+    }
+  }
+}

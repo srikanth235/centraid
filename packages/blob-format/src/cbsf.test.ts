@@ -6,7 +6,7 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
   encodeCbsfDirectory,
-} from "./index.js";
+} from "./cbsf.js";
 
 describe("cbsf", () => {
   test("CBSF magic and version are stable wire constants", () => {

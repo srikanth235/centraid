@@ -8,7 +8,7 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
   encodeCbsfDirectory,
-} from "./index.js";
+} from "./cbsf.js";
 
 const sha64: fc.Arbitrary<string> = fc
   .uint8Array({ minLength: 32, maxLength: 32 })

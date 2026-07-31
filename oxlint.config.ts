@@ -5,6 +5,123 @@ import vitest from "ultracite/oxlint/vitest";
 
 import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
 
+// ---------------------------------------------------------------------------
+// #656 Layer 4 — test seams as merge blockers.
+//
+// TESTING.md says "prefer the kit". Prose does not survive contact with an
+// agent writing the twentieth test file of a session, so the three seams whose
+// hand-rolled forms actually caused defects are mechanical here. Each entry
+// names the kit helper that replaces it; a ban with no shorter alternative is
+// just friction, so the helper landed first.
+//
+// `Date.now()` is deliberately NOT on this list. oxlint 1.76 has no
+// `no-restricted-syntax`, so the defect's real shape — wall clock read *inside*
+// an assertion's expected value — is not expressible; only a blanket property
+// ban is. That ban would touch 162 call sites, of which the sampled majority
+// are relative offsets (`Date.now() + 60_000`), unique id suffixes, and elapsed
+// measurement in perf rigs. A fake clock makes those wrong, not better, so the
+// rule would buy a rename and no determinism. See docs/coding-standards.md.
+const TEST_SEAM_PROPERTIES = [
+  {
+    property: "mkdtemp",
+    message:
+      "Use tempDir() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+  },
+  {
+    property: "mkdtempSync",
+    message:
+      "Use tempDirSync() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+  },
+  {
+    object: "vi",
+    property: "useFakeTimers",
+    message:
+      "Use useFakeClock() from @centraid/test-kit/fake-clock — it restores real timers even when the test throws, so a fake clock cannot leak into later tests as a hang. See docs/coding-standards.md, test seams.",
+  },
+  {
+    object: "vi",
+    property: "useRealTimers",
+    message:
+      "useFakeClock() from @centraid/test-kit/fake-clock already restores real timers; call clock.restore() if a test needs it early. See docs/coding-standards.md, test seams.",
+  },
+  {
+    object: "vi",
+    property: "setSystemTime",
+    message:
+      "Use clock.set() from useFakeClock() (@centraid/test-kit/fake-clock) — setting the system time without owning its restore is what leaks. See docs/coding-standards.md, test seams.",
+  },
+  {
+    object: "Math",
+    property: "random",
+    message:
+      "Use seededRandom() from @centraid/test-kit/random — a failure found from an unseeded draw is not reproducible from the failing run's own output. See docs/coding-standards.md, test seams.",
+  },
+] as const;
+
+const TEMP_DIR_IMPORT_MESSAGE =
+  "Import tempDir()/tempDirSync() from @centraid/test-kit/temp-dir instead — the kit owns the removal. See docs/coding-standards.md, test seams.";
+
+const TEST_SEAM_IMPORTS = {
+  paths: [
+    {
+      name: "node:fs",
+      importNames: ["mkdtemp", "mkdtempSync"],
+      message: TEMP_DIR_IMPORT_MESSAGE,
+    },
+    {
+      name: "node:fs/promises",
+      importNames: ["mkdtemp"],
+      message: TEMP_DIR_IMPORT_MESSAGE,
+    },
+    {
+      name: "fs",
+      importNames: ["mkdtemp", "mkdtempSync"],
+      message: TEMP_DIR_IMPORT_MESSAGE,
+    },
+    {
+      name: "fs/promises",
+      importNames: ["mkdtemp"],
+      message: TEMP_DIR_IMPORT_MESSAGE,
+    },
+  ],
+  // An override replaces the root rule's configuration rather than merging
+  // with it, so the repo-wide deep-import ban is restated here. Dropping it
+  // would silently ungate every test file.
+  patterns: [
+    {
+      group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
+      message:
+        "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
+    },
+  ],
+};
+
+// The vitest-owned test files. Playwright's e2e specs match the same shape but
+// run under a different runner with no `onTestFinished`, so they are switched
+// back off in the last override.
+const VITEST_TEST_FILES = [
+  "**/*.{test,spec}.{ts,tsx}",
+  "**/*.test-fixtures.ts",
+  "tests/helpers/**/*.ts",
+];
+
+// Hermes compatibility, kept separate so the mobile/time-engine *test* files
+// can carry both this and the seam rules — an override replaces a rule's
+// configuration, so the two lists have to be spread together rather than
+// layered.
+const HERMES_ARRAY_PROPERTIES = [
+  {
+    property: "toSorted",
+    message:
+      "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
+  },
+  {
+    property: "findLast",
+    message:
+      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
+  },
+] as const;
+
 // Ultracite is the reviewed policy seed; Oxlint is the only routine lint
 // command and this file is the repository's only lint configuration.
 // core + react are extended, while vitest is NOT: it applies
@@ -374,18 +491,49 @@ export default defineConfig({
       // on Node-based unit tests, whose newer Array prototype masks the bug.
       files: ["apps/mobile/src/**", "packages/time-engine/src/**"],
       rules: {
+        "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
+      },
+    },
+    {
+      // #656 Layer 4 — the test seams. Ordered after the Hermes override so it
+      // wins on files both globs match; the next override puts Hermes back for
+      // mobile/time-engine test files specifically.
+      files: VITEST_TEST_FILES,
+      rules: {
+        "no-restricted-properties": ["error", ...TEST_SEAM_PROPERTIES],
+        "no-restricted-imports": ["error", TEST_SEAM_IMPORTS],
+      },
+    },
+    {
+      // Mobile and time-engine test files need both lists. They are Node
+      // processes, so the Hermes entries gate nothing here — but a rule that
+      // silently stopped applying to half a tree because two globs overlapped
+      // is exactly the "reads as protection" failure this layer is about.
+      files: [
+        "apps/mobile/src/**/*.{test,spec}.{ts,tsx}",
+        "apps/mobile/src/**/*.test-fixtures.ts",
+        "packages/time-engine/src/**/*.{test,spec}.{ts,tsx}",
+        "packages/time-engine/src/**/*.test-fixtures.ts",
+      ],
+      rules: {
         "no-restricted-properties": [
           "error",
-          {
-            property: "toSorted",
-            message:
-              "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
-          },
-          {
-            property: "findLast",
-            message:
-              "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
-          },
+          ...HERMES_ARRAY_PROPERTIES,
+          ...TEST_SEAM_PROPERTIES,
+        ],
+        "no-restricted-imports": ["error", TEST_SEAM_IMPORTS],
+      },
+    },
+    {
+      // Playwright, not vitest: no `onTestFinished`, so none of the kit
+      // helpers the seam rules point at exist for these files. Same reasoning
+      // as the vitest-rule exclusion above — which runner owns the file.
+      files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
+      rules: {
+        "no-restricted-properties": "off",
+        "no-restricted-imports": [
+          "error",
+          { patterns: TEST_SEAM_IMPORTS.patterns },
         ],
       },
     },

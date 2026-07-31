@@ -157,49 +157,56 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(manifest.enabled).toBe(true);
   });
 
-  test("automation create rejects data/condition trigger kinds instead of coercing them to cron", async () => {
-    const res = await fetch(`${handle.url}/centraid/_automations`, {
-      method: "POST",
-      headers: { ...auth(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: "watcher",
-        triggers: [{ kind: "data", entities: ["core.content_derivative"] }],
-      }),
-    });
-    expect(res.status).toBe(400);
-    const out = (await res.json()) as { error: string; message: string };
-    expect(out.error).toBe("bad_request");
-    expect(out.message).toContain("data");
+  // ---- create-route WIRING (#656 1D) --------------------------------------
+  // Which trigger shapes are legal is the manifest validator's law, owned by
+  // `packages/automation/src/manifest/manifest.test.ts`. The tests below prove
+  // only what the route itself does: the kind pre-check, the cron default, the
+  // hand-written wire→manifest mapping, and that a validator rejection comes
+  // back out as a 400 `bad_request` carrying the validator's own message. They
+  // deliberately do NOT re-enumerate malformed-trigger cases.
 
-    // cron (explicit or default) and expr-only entries still scaffold fine.
+  test("create defaults an expr-only trigger entry to cron", async () => {
     const ok = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
       body: JSON.stringify({
         id: "minutely",
         triggers: [{ expr: "* * * * *" }],
+        publish: true,
       }),
     });
     expect(ok.status).toBe(201);
+    const out = (await ok.json()) as {
+      row: { manifest: { triggers: unknown[] } } | null;
+    };
+    expect(out.row?.manifest.triggers).toStrictEqual([
+      { kind: "cron", expr: "* * * * *" },
+    ]);
   });
 
-  test("automation create accepts a well-formed data trigger paired with a vault block", async () => {
+  test("create maps well-formed data and condition trigger bodies into the published manifest verbatim", async () => {
     const res = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: "watcher-data",
+        id: "watcher-vault",
         triggers: [
           {
             kind: "data",
             entities: ["core.content_derivative"],
             every: "*/5 * * * *",
           },
+          {
+            kind: "condition",
+            entity: "core.invoice",
+            where: [{ column: "due_at", op: "within-days", value: 3 }],
+          },
         ],
         vault: {
           purpose: "dpv:ServiceProvision",
           scopes: [
             { schema: "core", table: "content_derivative", verbs: "read" },
+            { schema: "core", table: "invoice", verbs: "read" },
           ],
         },
         publish: true,
@@ -215,34 +222,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
         entities: ["core.content_derivative"],
         every: "*/5 * * * *",
       },
-    ]);
-  });
-
-  test("automation create accepts a well-formed condition trigger paired with a vault block", async () => {
-    const res = await fetch(`${handle.url}/centraid/_automations`, {
-      method: "POST",
-      headers: { ...auth(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: "watcher-condition",
-        triggers: [
-          {
-            kind: "condition",
-            entity: "core.invoice",
-            where: [{ column: "due_at", op: "within-days", value: 3 }],
-          },
-        ],
-        vault: {
-          purpose: "dpv:ServiceProvision",
-          scopes: [{ schema: "core", table: "invoice", verbs: "read" }],
-        },
-        publish: true,
-      }),
-    });
-    expect(res.status).toBe(201);
-    const out = (await res.json()) as {
-      row: { manifest: { triggers: unknown[] } } | null;
-    };
-    expect(out.row?.manifest.triggers).toStrictEqual([
       {
         kind: "condition",
         entity: "core.invoice",
@@ -251,26 +230,7 @@ describe("automation-lifecycle-over-http scenarios", () => {
     ]);
   });
 
-  test("automation create rejects a malformed data trigger (missing entities) with a clear 400", async () => {
-    const res = await fetch(`${handle.url}/centraid/_automations`, {
-      method: "POST",
-      headers: { ...auth(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: "watcher-bad-data",
-        triggers: [{ kind: "data" }],
-        vault: {
-          purpose: "dpv:ServiceProvision",
-          scopes: [{ schema: "core", verbs: "read" }],
-        },
-      }),
-    });
-    expect(res.status).toBe(400);
-    const out = (await res.json()) as { error: string; message: string };
-    expect(out.error).toBe("bad_request");
-    expect(out.message).toContain("entities");
-  });
-
-  test("automation create rejects a malformed condition trigger (bad where type) with a clear 400", async () => {
+  test("create surfaces the manifest validator's field-scoped rejection as a 400", async () => {
     const res = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
@@ -288,10 +248,13 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(res.status).toBe(400);
     const out = (await res.json()) as { error: string; message: string };
     expect(out.error).toBe("bad_request");
-    expect(out.message).toContain("where");
+    // Verbatim validator text, not a route-authored paraphrase.
+    expect(out.message).toContain(
+      "where must be an array of {column, op, value?} clauses"
+    );
   });
 
-  test("automation create still rejects an unsupported trigger kind outright", async () => {
+  test("create rejects an unsupported trigger kind before it reaches the scaffolder", async () => {
     const res = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
@@ -304,6 +267,12 @@ describe("automation-lifecycle-over-http scenarios", () => {
     const out = (await res.json()) as { error: string; message: string };
     expect(out.error).toBe("bad_request");
     expect(out.message).toContain("carrier-pigeon");
+    // The app must not exist — the guard fires before any scaffold/publish.
+    const listRes = await fetch(`${handle.url}/centraid/_apps`, {
+      headers: auth(),
+    });
+    const list = (await listRes.json()) as Array<{ id: string }>;
+    expect(list.some((a) => a.id === "watcher-unknown-kind")).toBe(false);
   });
 
   test("rotating a webhook secret mints a fresh secret over the SAME route id", async () => {

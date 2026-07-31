@@ -79,6 +79,18 @@ export function findAbsoluteWeaknesses(
         floor: row.lineFloor,
       });
     }
+    if (
+      Number.isFinite(row.branches) &&
+      Number.isFinite(row.branchFloor) &&
+      row.branches - row.branchFloor >= coverageHeadroom
+    ) {
+      weaknesses.push({
+        kind: "coverage-floor-lag",
+        scope: `${row.scope} (branches)`,
+        value: row.branches,
+        floor: row.branchFloor,
+      });
+    }
   }
   for (const row of mutationRows ?? []) {
     if (Number.isFinite(row.score) && row.score < mutationMinimum) {
@@ -151,6 +163,46 @@ export function filterFloorConfigEntries(floorConfig) {
       key !== "approvedDeviation" &&
       (typeof value === "number" || (value && typeof value === "object"))
   );
+}
+
+/**
+ * Match a coverage-floor scope glob against a repo-relative file path.
+ *
+ * Mirrors how vitest resolves threshold globs (picomatch), because the report
+ * must agree with the gate: `*` matches within one path segment, `**` crosses
+ * segments, and `{a,b}` alternates. A plain `startsWith` prefix — which this
+ * replaced — silently renders every scope narrower than a directory (such as
+ * `packages/client/src/*.{ts,tsx}`, #656 Layer 1B) as an unmeasured empty row.
+ *
+ * Kept dependency-free on purpose: `generate.mjs` is executed from synthetic
+ * roots that have no `node_modules`.
+ *
+ * @param {string} scope Floor-config key.
+ * @returns {(file: string) => boolean} Predicate over repo-relative paths.
+ */
+export function scopeMatcher(scope) {
+  let pattern = "";
+  for (let i = 0; i < scope.length; i++) {
+    const char = scope[i];
+    if (char === "*") {
+      if (scope[i + 1] === "*") {
+        // `**/` may also match zero segments, so `a/**/b.ts` covers `a/b.ts`.
+        if (scope[i + 2] === "/") {
+          pattern += "(?:.*/)?";
+          i += 2;
+        } else {
+          pattern += ".*";
+          i += 1;
+        }
+      } else pattern += "[^/]*";
+    } else if (char === "?") pattern += "[^/]";
+    else if (char === "{") pattern += "(?:";
+    else if (char === "}") pattern += ")";
+    else if (char === ",") pattern += "|";
+    else pattern += char.replace(/[.+^$()|[\]\\]/u, "\\$&");
+  }
+  const re = new RegExp(`^${pattern}$`, "u");
+  return (file) => re.test(file);
 }
 
 /**

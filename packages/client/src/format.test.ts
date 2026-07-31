@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import {
   escapeHtml,
@@ -163,37 +165,28 @@ describe(shortVersionTitle, () => {
 });
 
 describe(relativeWhen, () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  const pin = (now: string): void => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(now));
-  };
-
   it('says "Just now" within the last minute', () => {
-    pin("2026-06-05T12:00:30Z");
+    useFakeClock(new Date("2026-06-05T12:00:30Z"));
     expect(relativeWhen("2026-06-05T12:00:00Z")).toBe("Just now");
   });
 
   it("counts whole minutes under an hour", () => {
-    pin("2026-06-05T12:45:00Z");
+    useFakeClock(new Date("2026-06-05T12:45:00Z"));
     expect(relativeWhen("2026-06-05T12:00:00Z")).toBe("45m ago");
   });
 
   it("counts whole hours under a day", () => {
-    pin("2026-06-05T20:00:00Z");
+    useFakeClock(new Date("2026-06-05T20:00:00Z"));
     expect(relativeWhen("2026-06-05T12:00:00Z")).toBe("8h ago");
   });
 
   it("counts whole days under a month", () => {
-    pin("2026-06-15T12:00:00Z");
+    useFakeClock(new Date("2026-06-15T12:00:00Z"));
     expect(relativeWhen("2026-06-05T12:00:00Z")).toBe("10d ago");
   });
 
   it("falls back to a locale date beyond 30 days", () => {
-    pin("2026-08-01T12:00:00Z");
+    useFakeClock(new Date("2026-08-01T12:00:00Z"));
     // 30+ days out → not a relative string.
     expect(relativeWhen("2026-06-05T12:00:00Z")).not.toMatch(/ago|Just now/u);
   });
@@ -202,7 +195,7 @@ describe(relativeWhen, () => {
     // `new Date('not-a-date')` yields NaN rather than throwing, so the parse
     // falls through to `toLocaleDateString()` → "Invalid Date" (the try/catch
     // guards only a genuine throw, which strings never trigger).
-    pin("2026-06-05T12:00:00Z");
+    useFakeClock(new Date("2026-06-05T12:00:00Z"));
     expect(relativeWhen("not-a-date")).toBe("Invalid Date");
   });
 });

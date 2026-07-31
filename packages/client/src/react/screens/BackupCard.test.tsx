@@ -24,7 +24,6 @@ describe("screens/BackupCard", () => {
     container?.remove();
     container = null;
     vi.clearAllMocks();
-    vi.useRealTimers();
   });
 
   async function mount(props: {

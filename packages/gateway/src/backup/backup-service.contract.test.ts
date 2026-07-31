@@ -9,6 +9,7 @@ import {
   WAL_DB_FILES,
 } from "@centraid/backup";
 import type { BackupProvider } from "@centraid/backup";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -390,17 +391,10 @@ describe("backup-service", () => {
     );
   });
 
-  test("a second run with nothing changed registers no new snapshot", async () => {
-    const h = await harness();
-    await h.service.runBackup(h.vaultId);
-    const first = (await h.service.status())[h.vaultId];
-
-    await h.service.runBackup(h.vaultId);
-    const second = (await h.service.status())[h.vaultId];
-
-    expect(second?.lastSeq).toBe(first?.lastSeq); // still seq 1 — no registration
-    expect(second?.generation).toBe(1);
-  });
+  // No-change and incremental registration are the ENGINE's laws, owned by
+  // packages/backup/src/engine.test.ts ("no-change run registers nothing" and
+  // "incremental second snapshot … uploads far fewer chunks than the first").
+  // BackupService only forwards them, so restating them here bought nothing.
 
   test("scheduled backups do not postpone the first restore-verification forever", async () => {
     const h = await harness();
@@ -419,19 +413,6 @@ describe("backup-service", () => {
     expect((await h.service.status())[h.vaultId]!.firstBackupAt).toBe(
       firstBackupAt
     );
-  });
-
-  test("a real change registers an incremental snapshot", async () => {
-    const h = await harness();
-    await h.service.runBackup(h.vaultId);
-    expect((await h.service.status())[h.vaultId]?.lastSeq).toBe(1);
-
-    await fs.writeFile(h.fixtureFile, "v1 — actually different content");
-    await h.service.runBackup(h.vaultId);
-    expect((await h.service.status())[h.vaultId]?.lastSeq).toBe(2);
-
-    const rows = await h.service.listSnapshots(h.vaultId);
-    expect(rows).toHaveLength(2);
   });
 
   test("conflict_generation fences the target: health error, no bump, no further auto-backup", async () => {
@@ -511,7 +492,7 @@ describe("backup-service", () => {
   });
 
   test("the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     try {
       const vaultRoot = await tempDir("backup-svc-posture-vault");
       const backupDir = await tempDir("backup-svc-posture-state");
@@ -528,14 +509,14 @@ describe("backup-service", () => {
       const tick = vi.spyOn(service, "tick").mockResolvedValue(undefined);
 
       service.start();
-      await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
+      await clock.advance(3 * 60 * 60 * 1000);
       expect(tick).not.toHaveBeenCalled();
 
       defer = false;
-      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      await clock.advance(60 * 60 * 1000);
       expect(tick).toHaveBeenCalledWith();
     } finally {
-      vi.useRealTimers();
+      clock.restore();
     }
   });
 });

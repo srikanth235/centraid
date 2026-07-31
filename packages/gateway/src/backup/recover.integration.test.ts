@@ -25,6 +25,7 @@ import { run } from "../worktree-store/git.js";
 import { WorktreeStore } from "../worktree-store/worktree-store.js";
 import { BackupService } from "./backup-service.js";
 import { recover } from "./recover.js";
+import { expectRefusalLeavesNoResidue } from "./recover.test-fixtures.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -527,49 +528,39 @@ describe("backup/recover", () => {
     });
     if (report.previews.warmed)
       throw new Error("headless recovery must not pre-warm previews");
-  }, 45_000);
 
-  test("recovery refuses a snapshot written by newer software BEFORE any byte is fetched", async () => {
-    const server = await startFakeProviderServer();
-    cleanups.push(() => server.close());
-    const a = await seedMachineA(server);
-
-    const providerClient = openRemoteBackupProvider({
-      baseUrl: a.serverUrl,
-      apiKey: a.apiKey,
-    });
+    // …and the same kit + api-key REFUSES a snapshot written by newer software.
+    // The version-gate law itself is owned by packages/backup/src/engine.test.ts
+    // ("restoreSnapshot refuses a newer vaultUserVersion BEFORE fetching or
+    // materializing anything"); what recovery adds — and what is asserted here —
+    // is that the refusal leaves NO residue on the blank machine: no vault dir,
+    // no `.recover-staging-*` scratch, and no keyring escrowed into the key
+    // store. Folded into this test so one seeded machine A serves both halves.
     await providerClient.registerSnapshot(a.targetId, {
       idempotencyKey: "from-the-future",
       manifestKey: `u/${a.targetId}/backup/manifests/future.json`,
       manifestHash: "c".repeat(64),
       totalBytes: 0,
       objectCount: 0,
-      generation: a.oldGeneration,
+      generation: report.generation,
       format: SNAPSHOT_FORMAT_V2,
       appMeta: { vaultUserVersion: "9999", ontologyVersion: "1.0" },
     });
-
-    const dataDir = await tempDir("recover-incompat");
-    const layout = daemonLayoutFor(dataDir);
-    await expect(
-      recover({
-        kitDocument: a.kitDocument,
-        password: KIT_PASSWORD,
-        apiKey: a.apiKey,
-        vaultRoot: layout.vaultDir,
-        dataDir: layout.dataDir,
-        log: silentLogger,
-      })
-    ).rejects.toThrow(/vaultUserVersion 9999 is newer/u);
-
-    expect(existsSync(path.join(layout.vaultDir, a.vaultId))).toBe(false);
-    const rootEntries = existsSync(layout.vaultDir)
-      ? await fs.readdir(layout.vaultDir)
-      : [];
-    expect(
-      rootEntries.filter((e) => e.startsWith(".recover-staging-"))
-    ).toHaveLength(0);
-    expect(new KeyStore(layout.keysDir).export("keyring.key")).toBeNull();
+    const futureLayout = daemonLayoutFor(await tempDir("recover-incompat"));
+    await expectRefusalLeavesNoResidue(
+      () =>
+        recover({
+          kitDocument: a.kitDocument,
+          password: KIT_PASSWORD,
+          apiKey: a.apiKey,
+          vaultRoot: futureLayout.vaultDir,
+          dataDir: futureLayout.dataDir,
+          log: silentLogger,
+        }),
+      /vaultUserVersion 9999 is newer/u,
+      futureLayout,
+      a.vaultId
+    );
   }, 45_000);
 
   test("adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it", async () => {

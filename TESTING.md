@@ -1,16 +1,40 @@
 # Testing strategy
 
-Centraid tests protect important product flows and invariants, not a test-file count. This document supersedes the product-shape assumptions from #212 and is the durable contract for the suite reorganized in #458.
+Centraid tests protect important product flows and invariants, not a test-file count. This document supersedes the product-shape assumptions from #212 and is the durable contract for the suite reorganized in #458 and rebuilt in #656.
 
-## Principles
+## The axiom
 
-1. **Coverage of flows, not count of tests.** Every important flow has one owner. More tests and more runtime are costs, not progress.
-2. **One flow, one home.** Prove a flow at the cheapest tier that can falsify it. A higher tier does not repeat a lower tier's ownership.
-3. **Runtime is a budget.** Unit, integration, and contracts run per PR. Full cross-client UI journeys, performance, and scale run nightly and on demand. Path-filtered client e2e and boot-the-artifact smoke are the PR-time client gates (issue #468 **L1** / **E2** — see [PR vs nightly](#pr-vs-nightly-l1--e2)).
-4. **Duplication is visible.** Two candidate owners for one flow are merged; they are not both added to the catalog.
-5. **Coverage floors ratchet up, never down.** A lower floor requires an approved constitutional deviation, not an ordinary refactor.
+This repo is written almost entirely by agents, and agents fail in predictable ways. They optimize for the green checkmark. They grade their own homework. They cannot see the whole suite, so they duplicate. They have no memory, so prose conventions decay. And the agent that writes the code writes the tests that _confirm_ it rather than tests that try to _falsify_ it.
 
-The machine-readable source of product-flow ownership is [`tests/matrix.json`](tests/matrix.json). `bun run test:matrix` verifies its surface/dimension references, owning paths, unique flow ids, and minimum size of named contract suites. A new test either claims an unowned flow/cell or extends its existing owner.
+This is not a hypothesis — the repo's own history demonstrates each mode. A probe sentinel was once left behind in a live assertion. Matrix cells were graded solid on the strength of prose. Owners of "solid" cells could skip themselves. Eight files hand-rolled a vault bootstrap that already existed in the test kit. `tests/quality-rig-budgets.json` drifted to describing 9 of 24 rigs while nothing in the repo actually read it.
+
+Therefore:
+
+> **Every quality claim is either computed by a machine or adversarially verified — never asserted by its author.**
+
+Five principles follow, each with a mechanical consequence:
+
+1. **Tests are the spec.** Contracts are the only statement of intent that survives context loss. The priority is more _named laws_, not more tests.
+2. **Never trust a green from the author.** Mutation testing is the mechanical adversary: it asks whether a test would notice if the code changed. Line coverage proves execution; only mutation proves detection.
+3. **Whatever is not mechanically enforced will regress.** Matrix grades are computed outputs, not typed-in inputs.
+4. **Gates must be cheap and deterministic, or agents route around them.** Flakes are quarantined with an expiry — never deleted inline, never retried-in-place until green. Suite wall clock ratchets tighten-only.
+5. **Make the right thing the only expressible thing.** Test-kit seams are enforced by lint; one-owner-per-law by a registry check, not by review.
+
+The older working principles still hold and are now consequences rather than assertions: coverage of flows rather than a count of tests; one flow, one home, proven at the cheapest tier that can falsify it; runtime is a budget; duplication is visible; floors ratchet up, never down.
+
+The machine-readable source of product-flow ownership is [`tests/matrix.json`](tests/matrix.json). `bun run test:matrix` verifies its surface/dimension references, owning paths, unique flow ids, and minimum contract sizes — and, since #656, **derives each cell's grade from evidence**. A new test either claims an unowned flow/cell or extends its existing owner.
+
+## What the machine cannot check
+
+The mechanisms below make dishonesty expensive, not impossible. These judgements have no gate, so this is where human scrutiny concentrates:
+
+- **Whether a law is worth writing.** A registry entry proves a law has exactly one owner. It cannot tell you the law matters. A suite of true, trivial laws passes every gate here.
+- **Whether a skip's reason is honest.** `tests/skips.json` forces every skip to cite an open issue and give a reason. Nothing checks that the reason is the _real_ reason, or that the issue is being worked.
+- **Whether a journey covers what its name claims.** `minimumTests` counts tests; the computed grade checks that they ran. Neither reads the assertions. A journey named "pairing survives a network partition" that never partitions a network is green.
+- **Whether a mutation-killing test asserts a law or an implementation detail.** Both raise the score. Only one survives a refactor.
+- **Whether a deletion was a de-duplication or a loss.** #656 deleted a dozen restatements and _refused_ four more because the surviving owner turned out to be weaker. That call needed reading both tests, and no gate could have made it.
+
+If you are reviewing agent-authored test work, spend your attention here and let the gates handle the rest.
 
 ## Runner and test taxonomy
 
@@ -28,7 +52,7 @@ The machine-readable source of product-flow ownership is [`tests/matrix.json`](t
 | Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
-| Mutation | StrykerJS on vault / client replica / automation | mutation-score floors | nightly |
+| Mutation | StrykerJS on 15 seeded engine packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
 
 ### PR vs nightly (L1 / E2)
 
@@ -61,6 +85,40 @@ Soft SLA (auto-issue, not a hard age gate):
 - top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
 - per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
 - `approvedDeviation` in the perf budget source when deliberately widening.
+
+### Computed grades (#656 Layer 2)
+
+A cell's `solid` / `partial` / `gap` is **derived from evidence**, not read from the JSON. `assessment` survives in `tests/matrix.json` only as a _declared expectation that the computation checks_: declaring above the computed ceiling is a hard error, and declaring below it needs a note. An agent may still type `solid` — the gate simply rejects it.
+
+The ceiling is computed from, in order: the owner exists and declares tests (a zero-test owner is a `gap` at PR time, with no lane run needed); the owner has no inventoried skip site and no default-CI env gate; the cell has a flow with a met `minimumTests`; the declared owner owns one of the cell's flows and no backing file is _oversubscribed_ (the floors it owns exceed the tests it declares — this is what kills "one four-test file owns fifteen cells" as a class); a tier-appropriate adversary exists (a coverage-floor scope for unit/contract/integration, a registered rig budget for perf/scale); mutation score, where a seeded package below `_absoluteWeaknessBelow` can never back a `solid`; and finally fresh run evidence, which can only _lower_ a grade. Absent or stale evidence reports `unknown` — never health.
+
+`solid` is therefore **uncomputable** for a cell whose owner can skip itself, whose flow has no `minimumTests`, or whose package is mutation-weak.
+
+### Skip budget (#656 Layer 2)
+
+Every `test.skip` / `describe.skipIf` / env gate is inventoried in [`tests/skips.json`](tests/skips.json) with an **open** issue and a reason. An uninventoried skip fails `check:pr`. The total is a **down-only** budget under `bun run test:ratchet`: removing a skip demands you tighten the budget, and adding one is a visible, reviewed edit. Keys are `<path>#<ordinal>`, so line drift is a warning rather than churn.
+
+### Law registry (#656 Layer 4)
+
+A named product law carries a machine-readable tag in its test title — `test("[law:backup-no-change] …")` — and is registered under `laws` in `tests/matrix.json` with a statement and its owning file. `bun run lint:law-registry` fails when a tag appears in more than one file (this is "one flow, one home" enforced at write time, which is what makes de-duplication _stick_), when a registered law has no tagged test, or when a tag names no registered law.
+
+### Flake quarantine (#656 Layer 5)
+
+A test that fails nondeterministically moves to [`tests/quarantine.json`](tests/quarantine.json) with an issue, a reason describing _how_ it flakes, and an expiry date. It is **never deleted inline** — that loses the coverage silently — and **never retried-in-place until green**, which converts a real defect into latency. While quarantined it is excluded from the required checks, so the lane stays trustworthy.
+
+On expiry it either returns fixed or is deleted with a receipt. `bun run test:quarantine` (in `check:pr`) makes that stick: an expired entry is a hard failure, so the debt cannot be parked forever. The entry count is a down-only budget, because a quarantine list that only grows is a slow way of deleting a suite.
+
+### Suite wall-clock ratchet (#656 Layer 5)
+
+Every other gate here pushes one way — more tests, higher floors — so the cheapest way for an agent to look thorough was to flood the suite, and the bill arrived as PR latency nobody owned. [`tests/suite-wall-clock.json`](tests/suite-wall-clock.json) is the backpressure: the PR lane's total wall clock is a **tighten-only** ceiling, ratcheted like a perf budget. Adding tests means making something else faster, or widening the ceiling in a reviewed edit that records what the extra time buys.
+
+It measures the sum of per-file durations from the vitest JSON report rather than the run's elapsed time, because elapsed time varies with host load and concurrency while the sum is the work the suite actually asked for. With no report present it prints "not measured" and exits 0 — a budget that could not be measured must never read as a budget that was met.
+
+### Test-kit seams (#656 Layer 4)
+
+The kit path is enforced, not merely recommended. In test files, oxlint bans raw `fs.mkdtemp*` (use `tempDir()` / `tempDirSync()`), `vi.useFakeTimers` / `vi.setSystemTime` / `vi.useRealTimers` (use `useFakeClock()`), and `Math.random()` (use `seededRandom()`). `bootstrappedVault()` exists so the shortest path to a vault fixture is also the correct one.
+
+`Date.now()` is deliberately **not** banned: the defect worth catching is wall clock inside an assertion's expected value, and oxlint cannot express that shape. A blanket ban would touch 162 call sites that are overwhelmingly relative offsets, id suffixes, and elapsed measurement — it would buy a rename, not determinism.
 
 ### Skipped-gate honesty + partial → solid (#496 B2/B3)
 
@@ -106,15 +164,15 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/design-tokens/src/**` | 99.03 / 71.42 | **98** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
 | `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
-| `packages/time-engine/src/**` | 75.15 / 57.54 | **74** / **56** |
+| `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
 | `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
-| `packages/client/src/react/**` | 67.58 / 57.63 | **65** / **35** |
-| `packages/automation/src/**` | 84.36 / 77.52 | **72** / **75** |
+| `packages/client/src/react/**` | 67.58 / 56.31 | **65** / **54** |
+| `packages/automation/src/**` | 84.36 / 77.52 | **82** / **75** |
 | `packages/tunnel/src/**` | 72.06 / 52.24 | **70** / **51** |
-| `packages/agent-runtime/src/**` | 85.97 / 76.29 | **72** / **75** |
+| `packages/agent-runtime/src/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
-| `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **55** |
+| `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
 The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
 
@@ -122,9 +180,9 @@ The #630 denominator expansion is an approved measurement deviation: the old 71%
 
 ### agent-runtime coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor was ratcheted to **~72%** once measured coverage cleared the old deliberate 27% seed (spawn-heavy adapters remain covered by contracts + integration rather than a pure line chase).
+`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
 
-Do **not** raise the agent-runtime line floor without a dedicated coverage campaign. Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
+Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
 
 ## Named invariant contracts
 
@@ -146,13 +204,14 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 `@centraid/test-kit` is a private, source-exported workspace package. Use it for:
 
 - `tempDir()` / `tempDirSync()` with automatic test-file cleanup;
-- `useFakeClock()` with automatic real-timer restoration;
-- bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
+- `useFakeClock()` with automatic real-timer restoration — the leak it prevents is expensive, because fake timers left installed by a test that threw before its `afterEach` make the _rest of the file_ fail as timeouts rather than as the leak;
+- `seededRandom()` for deterministic draws;
+- `bootstrappedVault()`, plus bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
 - node and jsdom+JSX+CSS-module Vitest presets;
 - deterministic parties, photos, conversations, turns, and blob custody volume fixtures;
 - perf/scale JSON result emission.
 
-Do not add another local helper when the shared package already owns the seam.
+Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
 Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.agent` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
