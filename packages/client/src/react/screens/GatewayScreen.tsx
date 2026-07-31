@@ -19,6 +19,7 @@ import Icon from "../ui/Icon.js";
 import BackupCard from "./BackupCard.js";
 import type { BackupCardProps } from "./BackupCard.js";
 import GatewayAlertsTab from "./GatewayAlertsTab.js";
+import GatewayServiceTip from "./GatewayServiceTip.js";
 import LogsScreen from "./LogsScreen.js";
 import type { LogsBridgeProps } from "./LogsScreen.js";
 import ResourceModeCard from "./ResourceModeCard.js";
@@ -211,6 +212,12 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
 
       {tab === "overview" ? (
         <>
+          {/* The H5 service offer, relocated here from a blocking onboarding
+              step. Demotes itself to a one-line standing control once the
+              user declines — dismissing the pitch must not retire the only
+              way to install the service — and disappears once installed. */}
+          <GatewayServiceTip />
+
           {/* Hero — orb + status word on the left, the gauge cluster on the
               right, heartbeat strip across the bottom. */}
           <section className={styles.hero}>
@@ -232,6 +239,17 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   {heartbeat === "down" && snapshot.lastError ? (
                     <div className={styles.statusError}>
                       {snapshot.lastError}
+                    </div>
+                  ) : null}
+                  {/* The consequence, said out loud at the moment it bites.
+                      A local gateway is a child of this app, so "down" also
+                      means every other device just lost the vault — most
+                      people meet that fact as "my phone can't see my stuff",
+                      with nothing connecting it back to here. */}
+                  {heartbeat === "down" && snapshot.gatewayKind === "local" ? (
+                    <div className={styles.statusSub}>
+                      This gateway runs inside Centraid — while it’s down, your
+                      phone and other devices can’t reach this vault either.
                     </div>
                   ) : null}
                   {overall === "degraded" ? (

@@ -1,0 +1,163 @@
+/* Informational tip on the Gateway overview — NOT a modal and not a blocking
+   step. It sits inline with the panels, reads as advice, and both actions are
+   quiet: the point of moving this out of onboarding was to stop demanding a
+   decision about background daemons from someone who just wants to look around.
+
+   Tokens only (docs/traps/design-tokens.md) so it tracks the ramp the rest of
+   the Gateway screen uses. */
+.tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+/* A small accent dot rather than an icon font — the Gateway screen already
+   speaks in status dots, so the tip borrows that vocabulary. */
+.icon {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.headline {
+  margin: 0 0 4px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.copy {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--ink-3);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary,
+.dismiss {
+  border-radius: var(--r-sm);
+  padding: 7px 14px;
+  font: inherit;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 140ms var(--ease);
+}
+
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--ink-inv);
+}
+.primary:hover:not(:disabled) {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
+/* Dismiss is a ghost button, not a second filled one. The onboarding step this
+   replaces rendered "Not now" with the PRIMARY cta class at opacity .85, so the
+   two choices looked equally weighted — the decline path must recede. */
+.dismiss {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+}
+.dismiss:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+
+.primary:disabled,
+.dismiss:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The standing control that survives a dismissal. Deliberately NOT a card:
+   no border, no elevated surface, no accent dot — it must not read as a
+   second tip, or dismissing the first one buys the user nothing. It is a
+   footnote with a verb, the durable home of the only path to
+   `installGatewayService` once the promotion is gone. */
+.standing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 16px;
+}
+
+/* States the consequence plainly instead of re-selling the feature — a
+   dismissed offer earns a fact, not another pitch. */
+.standingCopy {
+  margin: 0;
+  flex: 1 1 260px;
+  font: var(--t-small);
+  color: var(--ink-4);
+  text-wrap: pretty;
+}
+
+/* The shared error line is a flex item here — give it its own row so a long
+   install failure doesn't shove the action off the end. */
+.standing .error {
+  flex: 1 0 100%;
+  margin: 0;
+  font: var(--t-small);
+}
+
+/* Text button: the action stays available without occupying the eye. */
+.quiet {
+  flex: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: var(--t-small);
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 140ms var(--ease);
+}
+.quiet:hover:not(:disabled) {
+  color: var(--ink);
+}
+.quiet:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Narrow / compact form factor: actions drop under the copy rather than
+   squeezing it (docs/platform-gating.md — presentation branch only). */
+@media (max-width: 720px) {
+  .tip {
+    flex-wrap: wrap;
+  }
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
