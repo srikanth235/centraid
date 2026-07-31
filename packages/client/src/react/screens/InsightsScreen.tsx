@@ -186,7 +186,7 @@ export default function InsightsScreen({
           <span className={styles.titleIcon}>
             <Icon name="Activity" size={18} strokeWidth={2} />
           </span>
-          <h1>Insights</h1>
+          <h1>Analytics</h1>
         </div>
         <fieldset className={styles.filters} aria-label="Time window">
           {WINDOW_OPTIONS.map((d) => (

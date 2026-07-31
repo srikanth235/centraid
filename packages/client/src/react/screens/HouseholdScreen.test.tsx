@@ -61,7 +61,7 @@ describe("HouseholdScreen suite", () => {
     it("leads with people and devices, then the vaults they can reach", async () => {
       const el = await mount();
       const text = el.textContent ?? "";
-      expect(text).toContain("Household");
+      expect(text).toContain("Devices");
       expect(text).toContain("People & devices");
       expect(text).toContain("Vaults");
       expect(text.indexOf("People & devices")).toBeLessThan(

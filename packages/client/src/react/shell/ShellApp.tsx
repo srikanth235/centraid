@@ -7,9 +7,11 @@ import {
   canGoForward as canFwd,
   currentRoute,
   INITIAL_ROUTER,
+  routeKey,
   routerReducer,
 } from "./router.js";
 import ShellFrame from "./ShellFrame.js";
+import { useCompactLayout } from "./useCompactLayout.js";
 
 // The navigation surface handed to the sidebar + outlet render-props. It
 // exposes the current route and the history verbs, so callers dispatch
@@ -67,9 +69,28 @@ export default function ShellApp({
   // Sidebar open state is controllable — the eventual App root owns it in
   // prefs — but self-manages when the prop is omitted (tests, standalone).
   const [localOpen, setLocalOpen] = useState(sidebarOpenProp ?? true);
-  const sidebarOpen = sidebarOpenProp ?? localOpen;
+  const dockedOpen = sidebarOpenProp ?? localOpen;
 
+  // Compact keeps its OWN open state, deliberately not the persisted pref: a
+  // drawer is a transient thing you open, use, and dismiss, and letting those
+  // dismissals write through would mean a session on a phone silently
+  // collapses the rail the next time the desktop opens. The two never share a
+  // value — only the toggle verb.
+  const compact = useCompactLayout();
   const route = currentRoute(state) ?? initialRoute;
+  const currentKey = routeKey(route);
+
+  // The drawer remembers WHERE it was opened, so "navigating dismisses it"
+  // falls out of a comparison instead of an effect that fires after the new
+  // screen has already painted underneath it. Tapping a destination is the
+  // dismiss gesture — leaving the rail covering the page would make every
+  // trip a two-tap affair — and re-opening on the same page still works
+  // because the toggle re-stamps the key.
+  const [drawer, setDrawer] = useState({ open: false, at: currentKey });
+  const drawerOpen = drawer.open && drawer.at === currentKey;
+  // Above the breakpoint the drawer flag is simply not consulted, so leaving
+  // compact hands control back to the pref with no state to reconcile.
+  const sidebarOpen = compact ? drawerOpen : dockedOpen;
 
   const nav = useMemo<ShellNav>(
     () => ({
@@ -85,10 +106,22 @@ export default function ShellApp({
   );
 
   const toggleSidebar = useCallback(() => {
-    const next = !sidebarOpen;
+    if (compact) {
+      setDrawer((d) => ({
+        open: !(d.open && d.at === currentKey),
+        at: currentKey,
+      }));
+      return;
+    }
+    const next = !dockedOpen;
     if (onSidebarOpenChange) onSidebarOpenChange(next);
     else setLocalOpen(next);
-  }, [sidebarOpen, onSidebarOpenChange]);
+  }, [compact, currentKey, dockedOpen, onSidebarOpenChange]);
+
+  const dismissSidebar = useCallback(
+    () => setDrawer((d) => ({ open: false, at: d.at })),
+    []
+  );
 
   useEffect(() => {
     onNavReady?.(nav);
@@ -109,7 +142,9 @@ export default function ShellApp({
   return (
     <ShellFrame
       sidebarOpen={sidebarOpen}
+      compact={compact}
       onToggleSidebar={toggleSidebar}
+      onDismissSidebar={dismissSidebar}
       sidebar={renderSidebar(nav)}
       statusBanner={statusBanner}
       canGoBack={nav.canGoBack}

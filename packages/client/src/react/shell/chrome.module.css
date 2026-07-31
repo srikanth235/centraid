@@ -245,18 +245,93 @@
   flex-direction: column;
 }
 .sidebarInner {
-  width: 260px;
+  width: var(--sidebar-content-w, 260px);
   display: flex;
   flex-direction: column;
   /* tlSide sits above us in the .sidebar flex column, so claim the
-     remaining space via flex: 1 and scroll on overflow. */
+     remaining space via flex: 1. The column itself never scrolls — its
+     middle zone does (see .sbScroll), which is what keeps the account row
+     pinned to the bottom edge. */
   flex: 1;
   min-height: 0;
   padding: 6px 8px 8px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 .window[data-sidebar="closed"] .sidebar {
   border-right: none;
+}
+
+/* The sidebar's three zones (issue #667). Head and foot are fixed; the
+   middle scrolls, so Recents grows into whatever height the nav groups
+   didn't take and the account row never drifts off-screen. */
+.sbColumn {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sbScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Hide the scrollbar until the pointer is over the column: a permanent
+     track on a 260px rail reads as clutter next to 13px rows. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 160ms;
+}
+.sbColumn:hover .sbScroll {
+  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+}
+.sbScroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sbScroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+.sbColumn:hover .sbScroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+/* The leading group carries no section label, so it needs its own top
+   breathing room to sit off the identity head. */
+.sbGroup:first-child {
+  margin-top: 4px;
+}
+.sbFoot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* Pad for the iOS home indicator when the drawer runs to the screen edge;
+     resolves to 0 everywhere else. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Gateway alarm — the ONLY thing the gateway shows in the sidebar, and only
+   when it is down. Danger-tinted so it reads as an alarm rather than a nav
+   row, and it is the way into the Gateway page while the daemon is out. */
+.sbAlarm {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin-block: 4px;
+  padding: 7px 9px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.sbAlarm:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+.sbAlarm[disabled] {
+  cursor: default;
 }
 
 /* Sidebar items */
@@ -647,6 +722,133 @@
 .window[data-sidebar="closed"] .connectionBanner {
   left: 0;
 }
+/* ── Compact form factor ──────────────────────────────────────────────────
+   Below this width the sidebar stops being a column the layout makes room
+   for and becomes an overlay drawer: the main pane keeps the full viewport,
+   the rail slides in over it, and a scrim takes the dismiss tap. The DESKTOP
+   contract is unchanged above the breakpoint — this is one media block, not
+   a second component, so the IA can never drift between the two.
+
+   720px matches the compact form-factor signal in docs/platform-gating.md.
+   It is a layout threshold only — never a trust or capability boundary. */
+@media (max-width: 720px) {
+  .window {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main";
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 200;
+    width: min(300px, 86vw);
+    /* The drawer floats over page content, so it cannot borrow the wall's
+       translucency the way a docked rail can. */
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-md);
+    transform: translateX(-101%);
+    transition: transform 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+    /* The rail is a dialog here: keep it out of the tab order while closed. */
+    visibility: hidden;
+  }
+  .window[data-sidebar="open"] .sidebar {
+    transform: none;
+    visibility: visible;
+  }
+  /* The docked rail's divider is the seam between two panes; the drawer's
+     own shadow does that job, and the border would read as a stray hairline
+     against whatever it overlays. */
+  .window[data-sidebar="open"] .sidebar,
+  .window[data-sidebar="closed"] .sidebar {
+    border-right: none;
+  }
+  .sidebarInner {
+    --sidebar-content-w: 100%;
+  }
+  /* No macOS traffic lights on a touch host — reclaim both reservations. */
+  .tlSide .spacer,
+  .window[data-sidebar="closed"] .tlMain .spacer {
+    display: none;
+  }
+  /* tlSide is hidden-not-removed on desktop so the rail doesn't jump during
+     the width animation. The drawer animates on transform instead, so the
+     row simply comes back when it's open. */
+  .window[data-sidebar="open"] .tlSide {
+    visibility: visible;
+  }
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    border: 0;
+    padding: 0;
+    background: color-mix(in srgb, var(--ink) 34%, transparent);
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+    opacity: 1;
+    animation: scrimIn 200ms ease;
+    cursor: pointer;
+  }
+  /* Touch targets. 13px rows at 6px padding are a pointer-era size; on a
+     phone every row in this column has to clear ~44px. */
+  .sbItem,
+  .sbAlarm {
+    padding: 11px 10px;
+    font-size: 14px;
+  }
+  .sbAccount {
+    padding: 12px 10px;
+  }
+  .sbSeeAll {
+    padding: 11px 10px 11px 34px;
+  }
+  .sbArchivedToggle {
+    padding: 10px 12px;
+  }
+  /* The ••• is hover-revealed, and there is no hover on touch. */
+  .rowMore {
+    opacity: 1;
+    width: 32px;
+    height: 32px;
+    color: var(--ink-4);
+  }
+  .connectionBanner {
+    left: 0;
+  }
+}
+
+/* The scrim is compact-only; outside the media query it must not exist at
+   all, or a stray render would blanket the desktop window. */
+.scrim {
+  display: none;
+}
+@media (max-width: 720px) {
+  .scrim {
+    display: block;
+  }
+}
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Coarse pointers get the touch sizing regardless of width — a tablet in
+   landscape is wider than the breakpoint but still has no hover. */
+@media (pointer: coarse) {
+  .sbItem,
+  .sbAlarm {
+    padding: 10px 10px;
+  }
+  .rowMore {
+    opacity: 1;
+  }
+}
+
 .syncIndicator {
   position: fixed;
   z-index: 80;

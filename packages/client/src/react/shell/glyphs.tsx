@@ -77,23 +77,10 @@ export const PlusGlyph = (p: GlyphProps): JSX.Element => (
   </Svg>
 );
 
-export const SearchGlyph = (p: GlyphProps): JSX.Element => (
-  <Svg {...p}>
-    <>
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.5-3.5" />
-    </>
-  </Svg>
-);
-
-export const HomeGlyph = (p: GlyphProps): JSX.Element => (
-  <Svg {...p}>
-    <>
-      <path d="M3 11l9-7 9 7" />
-      <path d="M5 10v10h14V10" />
-    </>
-  </Svg>
-);
+// SearchGlyph / HomeGlyph lived here as local one-offs; the sidebar's nav rows
+// now draw every icon from the shared design-tokens set by name (#667), which
+// is the one path source, so the local copies were deleted rather than left to
+// drift against it.
 
 export const SparkleGlyph = ({
   size = 15,

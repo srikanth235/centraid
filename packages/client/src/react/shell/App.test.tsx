@@ -162,24 +162,27 @@ describe("App suite", () => {
       expect(el.textContent).toContain("Todos");
       expect(el.textContent).toContain("Automations");
       expect(el.textContent).toContain("Connectors");
-      expect(el.textContent).toContain("Discover");
+      // Discover left the rail for the ⌘K palette (#667).
+      expect(el.textContent).not.toContain("Discover");
       expect(el.textContent).not.toMatch(/Apps ·/u);
       expect(el.textContent).not.toContain("Starred");
       const activeHome = el.querySelector('[data-active="true"]');
       expect(activeHome?.textContent).toContain("Home");
     });
 
-    it("navigates to Insights via the sidebar and highlights it", async () => {
+    it("navigates to Analytics via the sidebar and highlights it", async () => {
       const el = await mount();
-      const insightsBtn = [...el.querySelectorAll(".sbItem")].find((b) =>
-        b.textContent?.includes("Insights")
+      // Labelled "Analytics" since #667; the route + highlight key are still
+      // `insights`, which is exactly the separation the rename relies on.
+      const insightsBtn = [...el.querySelectorAll(".sbItem")].find(
+        (b) => b.textContent?.trim() === "Analytics"
       ) as HTMLButtonElement;
       await act(async () => {
         insightsBtn.click();
       });
       const active = el.querySelector('[data-active="true"]');
-      expect(active?.textContent).toContain("Insights");
-      // Insights route mounts its own dashboard (a main-scroll body) once loaded.
+      expect(active?.textContent).toContain("Analytics");
+      // Analytics route mounts its own dashboard (a main-scroll body) once loaded.
       await act(async () => {
         await Promise.resolve();
       });
