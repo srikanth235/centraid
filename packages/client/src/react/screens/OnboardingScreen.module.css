@@ -430,6 +430,44 @@
   color: #ffb8b8;
 }
 
+/* The sentence the owner acts on. Carries the block's ink and weight; the
+   raw exception below it must never out-shout this line. */
+.errorSummary {
+  margin: 0;
+  line-height: 1.5;
+}
+/* Collapsed technical detail — present for a bug report, silent otherwise.
+   Both the disclosure and its body inherit `.error`'s ink rather than
+   restating a hex, so this adds nothing to the design-token ratchet. */
+.errorDetail {
+  margin-top: 6px;
+}
+.errorDetail > summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+}
+.errorDetailText {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-word;
+  color: color-mix(in srgb, currentColor 78%, transparent);
+}
+
+/* Why the CTA is disabled, said once and quietly (issue #603 UX-4). Shares
+   `.keychainNote`'s register deliberately — this is a heads-up, not a
+   validation error, so it must not read louder than the note beneath it.
+   Dimmed from the card's own ink rather than a fresh hex, so the
+   design-token ratchet stays where it is. */
+.hint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+
 /* "Back" to the desktop first-run chooser (issue #603) — a quiet text link,
    deliberately not competing with the primary CTA above it. */
 .backBtn {
@@ -460,6 +498,43 @@
   font-size: 12px;
   line-height: 1.5;
   color: color-mix(in srgb, #b9bcd1 70%, transparent);
+}
+
+/* Fresh-path "we are working" line. Deliberately quiet: the fresh path has no
+   question to ask, so this step should read as progress, not as a prompt. */
+/* Inherits the card's ink rather than restating a raw hex — the design-token
+   ratchet counts literals in this file, and this line needs no new colour. */
+.working {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 13.5px;
+  opacity: 0.8;
+}
+.workingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--onb-accent);
+  animation: onbWorkingPulse 1.4s ease-in-out infinite;
+}
+@keyframes onbWorkingPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workingDot {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 /* Hosts the shared ConnectFlow wizard (kit-token styled — the switcher's

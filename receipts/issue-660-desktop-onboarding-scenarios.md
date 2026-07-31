@@ -470,6 +470,7 @@ restore the credential, press again:
 | claude-code-62298c7b-4a8-1785489092-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 4 | 8106 | 439274 | 2014 | 10124 | 0.3207 | 3044 | 2116603 | 109111506 | 571254 | fix(desktop): tell gateway lock, custody, and port failures apart (#660)The lock |
 | claude-code-62298c7b-4a8-1785489142-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 1118 | 223690 | 613 | 1733 | 0.1342 | 3046 | 2117721 | 109335196 | 571867 | fix(client): never offer a fresh start when settings fail to read (#660)boot.tsx |
 | claude-code-62298c7b-4a8-1785489194-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 718 | 224808 | 600 | 1320 | 0.1319 | 3048 | 2118439 | 109560004 | 572467 | fix(client): keep the background service installable after a dismissal (#660)Gat |
+| claude-code-62298c7b-4a8-1785489245-1 | claude-code | 62298c7b-4a81-4f6a-85d2-a9be8a64becc | #660 | claude-opus-5 | 2 | 1052 | 225526 | 615 | 1669 | 0.1347 | 3050 | 2119491 | 109785530 | 573082 | fix(client): take the friction out of first run (#660)A failed fresh dial showed |
 
 ### Steering
 

@@ -47,11 +47,12 @@ test("1.1 — first launch shows onboarding with the CTA disabled until a name i
       .getByRole("button", { name: /start fresh on this mac/iu })
       .click();
     await page.getByTestId("onboarding-view").waitFor({ state: "visible" });
-    await page
-      .getByTestId("onboarding-service-decline")
-      .click({ timeout: 60_000 });
-    const cta = page.getByRole("button", { name: "Continue" });
+    // The fresh path dials its own gateway and goes straight to identity — the
+    // H5 service offer is no longer a blocking step (it lives on the Gateway
+    // screen now), so there is nothing to decline here.
     const name = page.getByRole("textbox", { name: "Your name" });
+    await name.waitFor({ state: "visible", timeout: 60_000 });
+    const cta = page.getByRole("button", { name: "Continue" });
     await expect(cta).toBeDisabled();
     await name.fill("Ada Lovelace");
     await expect(cta).toBeEnabled();
@@ -91,15 +92,13 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
 
-    // The fresh/local path connects on mount, then offers the H5 OS-service
-    // install; decline it. Identity comes after — the gateway just founded
-    // itself, so its owner is still the placeholder "You" and the name is
-    // genuinely unknown.
-    await page
-      .getByTestId("onboarding-service-decline")
-      .click({ timeout: 60_000 });
-
-    await page.getByRole("textbox", { name: "Your name" }).fill("Ada Lovelace");
+    // The fresh/local path connects on mount and lands directly on identity —
+    // the gateway just founded itself, so its owner is still the placeholder
+    // "You" and the name is genuinely unknown. The H5 OS-service install is no
+    // longer asked here; it is an opt-in tip on the Gateway screen.
+    const nameField = page.getByRole("textbox", { name: "Your name" });
+    await nameField.waitFor({ state: "visible", timeout: 60_000 });
+    await nameField.fill("Ada Lovelace");
     // Pick a specific swatch.
     await onboarding.getByRole("radio").nth(2).click();
     await page.getByRole("button", { name: "Continue" }).click();
