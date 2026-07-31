@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
-import { vaultImportStage } from "../../gateway-client.js";
 import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
 import ConnectFlow from "../shell/routes/ConnectFlow.js";
 import { connectFreshLocalGateway } from "../shell/routes/connectFlowIO.js";
 import { isNameSet, loadSelfProfile } from "../shell/routes/profileData.js";
+import { ErrorNote } from "./OnboardingErrorNote.js";
+import {
+  AVATAR_PALETTE,
+  OnboardingIdentityStep,
+} from "./OnboardingIdentityStep.js";
+import { OnboardingImportStep } from "./OnboardingImportStep.js";
 
-import a11y from "../styles/a11y.module.css";
 import styles from "./OnboardingScreen.module.css";
 
 /**
@@ -47,32 +51,6 @@ export interface OnboardingScreenProps {
   onBack?: () => void;
 }
 
-// Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
-// updateProfileMetadata, which validates #RRGGBB).
-const AVATAR_PALETTE = [
-  "#5B8DEF",
-  "#7C5CFF",
-  "#E36AD2",
-  "#E5734A",
-  "#E0B53D",
-  "#4FB077",
-  "#3FB5C7",
-  "#B07A4A",
-] as const;
-
-function initials(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return "·";
-  const parts = trimmed.split(/\s+/u).filter((w) => w.length > 0);
-  if (parts.length === 1) {
-    const w = parts[0] ?? "";
-    return (w.charAt(0) + (w.charAt(1) || "")).toUpperCase();
-  }
-  return (
-    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
-  ).toUpperCase();
-}
-
 /**
  * First-run onboarding — connect → (local only) H5 OS service offer →
  * identity, and only when the household doesn't already know this person.
@@ -84,12 +62,16 @@ export default function OnboardingScreen({
   onComplete,
   onBack,
 }: OnboardingScreenProps): JSX.Element {
+  // The ticket path opens on the pairing field. The fresh path has no gateway
+  // to join, so it gets its OWN step: it must never fall through to `connect`,
+  // whose ConnectFlow asks for a pair ticket. That fall-through was the bug —
+  // a failed fresh dial unmasked the join-a-gateway UI, so "Start fresh on this
+  // Mac" answered with a paste/scan-a-ticket screen.
   const [step, setStep] = useState<
-    "identity" | "connect" | "service" | "import"
-  >("connect");
-  // The ticket path opens on the pairing field; the fresh path has no gateway
-  // to join, so it connects to its own embedded one while showing the same
-  // "connecting" card rather than asking a question it already knows.
+    "identity" | "connect" | "connecting" | "import"
+  >(path === "fresh" ? "connecting" : "connect");
+  // Bumped by Retry to re-run the fresh dial effect.
+  const [dialAttempt, setDialAttempt] = useState(0);
   const [displayName, setDisplayName] = useState("");
   const [selfMemberId, setSelfMemberId] = useState<string | null>(null);
   const [avatarColor, setAvatarColor] = useState<string>(
@@ -100,14 +82,17 @@ export default function OnboardingScreen({
   // The fresh path starts already busy: it dials its embedded gateway on
   // mount, so the very first paint should read as working, not as idle.
   const [submitting, setSubmitting] = useState(path === "fresh");
+  // `error` is the sentence the owner reads; `errorDetail` is the raw exception
+  // behind it, rendered collapsed. They are always set together so a later
+  // failure can never inherit the previous one's technical detail.
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(
     null
   );
   const [keychainNote, setKeychainNote] = useState(false);
   const [wantsImport, setWantsImport] = useState(false);
   const [stagedCount, setStagedCount] = useState(0);
-  const nameRef = useRef<HTMLInputElement>(null);
   // Keep fresh-path dialing stable across new `afterConnect` closures.
   const afterConnectRef = useRef<(result: ConnectFlowResult) => void>(
     () => undefined
@@ -133,17 +118,24 @@ export default function OnboardingScreen({
     };
   }, []);
 
-  useEffect(() => {
-    if (step !== "identity") return;
-    const id = requestAnimationFrame(() => nameRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [step]);
-
-  const ready = displayName.trim().length > 0 && !submitting;
+  const showError = (summary: string, detail?: unknown): void => {
+    setError(summary);
+    setErrorDetail(
+      detail === undefined
+        ? null
+        : detail instanceof Error
+          ? detail.message
+          : String(detail)
+    );
+  };
+  const clearError = (): void => {
+    setError(null);
+    setErrorDetail(null);
+  };
 
   const finish = (result: ConnectFlowResult): void => {
     setSubmitting(true);
-    setError(null);
+    clearError();
     void (async () => {
       try {
         await onComplete({
@@ -159,8 +151,9 @@ export default function OnboardingScreen({
         });
       } catch (caughtError) {
         setSubmitting(false);
-        setError(
-          `Couldn't save your profile: ${caughtError instanceof Error ? caughtError.message : String(caughtError)}`
+        showError(
+          "Couldn't save your name and color. Nothing else was changed — try Continue again.",
+          caughtError
         );
       }
     })();
@@ -206,25 +199,21 @@ export default function OnboardingScreen({
 
   const continueFromIdentity = (): void => {
     if (!displayName.trim() || submitting || !pendingResult) return;
-    setError(null);
+    clearError();
     finishOrImport(pendingResult);
   };
 
   /**
-   * After connect: for the local gateway, offer H5 OS service install
-   * (default off). Remote gateways skip — service install is about the
-   * machine's own detached child.
+   * After connect, go straight to identity.
+   *
+   * The H5 OS service install used to be a BLOCKING onboarding step here, which
+   * asked a first-time user to decide about background daemons before they had
+   * seen the product. It is now a non-blocking offer on the Gateway screen
+   * (`GatewayServiceTip`). Onboarding deliberately leaves `offerGatewayService`
+   * UNSET: `shouldOfferServiceInstall()` treats "unset" as still-offerable, so
+   * moving the question out of onboarding is what keeps it askable later.
    */
   const afterConnect = (result: ConnectFlowResult): void => {
-    const isLocal =
-      result.gatewayId === "local" || result.gatewayId.startsWith("local");
-    const canInstall =
-      typeof window.CentraidApi?.installGatewayService === "function";
-    if (isLocal && canInstall) {
-      setPendingResult(result);
-      setStep("service");
-      return;
-    }
     identityOrFinish(result);
   };
 
@@ -233,10 +222,16 @@ export default function OnboardingScreen({
     afterConnectRef.current = afterConnect;
   });
 
-  // A fresh client connects to its auto-founded gateway on mount.
+  // A fresh client connects to its auto-founded gateway on mount. On failure it
+  // STAYS on the `connecting` step and shows the reason plus a Retry — the local
+  // gateway failing to start is a recoverable local fault, not a reason to ask
+  // the user for someone else's pair ticket.
   useEffect(() => {
     if (path !== "fresh") return;
     let cancelled = false;
+    // No synchronous setState here: `submitting` already initialises true for
+    // the fresh path, and Retry clears the previous error before bumping
+    // `dialAttempt`, so the effect body stays free of cascading renders.
     void connectFreshLocalGateway()
       .then((result) => {
         if (cancelled) return;
@@ -246,67 +241,22 @@ export default function OnboardingScreen({
       .catch((caughtError: unknown) => {
         if (cancelled) return;
         setSubmitting(false);
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError)
+        // One honest sentence, not a taxonomy: from the message text alone we
+        // cannot reliably tell a locked database from a refused socket from a
+        // half-written data dir, and guessing wrong is worse than not guessing.
+        // The exception itself stays one disclosure away.
+        showError(
+          "Centraid couldn't start on this Mac. This is usually temporary — try again, and if it keeps happening, quit Centraid completely and reopen it.",
+          caughtError
         );
       });
     return () => {
       cancelled = true;
     };
-    // `path` is the only real dependency: the continuation is read through a
-    // ref so a re-render can't redial a gateway this client already joined.
-  }, [path]);
-
-  const declineService = (): void => {
-    if (!pendingResult || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    void (async () => {
-      try {
-        // Awaited, same as acceptService: a rejected save used to be
-        // invisible, so "don't install the service" silently didn't stick.
-        await window.CentraidApi.saveSettings?.({ offerGatewayService: false });
-        identityOrFinish(pendingResult);
-      } catch (caughtError) {
-        setSubmitting(false);
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError)
-        );
-      }
-    })();
-  };
-
-  const acceptService = (): void => {
-    if (!pendingResult || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    void (async () => {
-      try {
-        const install = window.CentraidApi.installGatewayService;
-        if (install) {
-          const res = await install();
-          if (!res.ok) {
-            setSubmitting(false);
-            setError(res.error || "Service install failed");
-            return;
-          }
-        }
-        await window.CentraidApi.saveSettings?.({ offerGatewayService: true });
-        identityOrFinish(pendingResult);
-      } catch (caughtError) {
-        setSubmitting(false);
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError)
-        );
-      }
-    })();
-  };
+    // `path` and the retry counter are the only real dependencies: the
+    // continuation is read through a ref so a re-render can't redial a gateway
+    // this client already joined.
+  }, [path, dialAttempt]);
 
   return (
     <div
@@ -342,16 +292,29 @@ export default function OnboardingScreen({
               decides which space you land in.
             </p>
           </>
-        ) : step === "service" ? (
+        ) : step === "connecting" ? (
           <>
+            {/* One word for one moment (UX-8). This step used to open as
+                "Setting up your vault." and fail as "Couldn't start your
+                gateway." — two terms a first-timer has met neither of. The
+                product's own name is the thing they DO know, and "spaces" is
+                the owner-facing word for vaults (docs/glossary.md), so the
+                title, the sub, and the working line all say the same thing. */}
             <h1 className={styles.title}>
-              Keep your vault <em>reachable</em>?
+              {error ? (
+                <>
+                  Couldn&rsquo;t set up <em>Centraid</em>.
+                </>
+              ) : (
+                <>
+                  Setting up <em>Centraid</em>.
+                </>
+              )}
             </h1>
             <p className={styles.sub}>
-              Optionally install a small background service so your gateway
-              stays up when Centraid is closed — phones and other devices can
-              still reach your vault. Default is off; we never install this
-              without asking.
+              {error
+                ? "Your data is safe — nothing was created. Everything here runs on this Mac, so retrying is worth trying before anything else."
+                : "Starting Centraid on this Mac and preparing your spaces. This takes a moment the first time."}
             </p>
           </>
         ) : (
@@ -366,134 +329,20 @@ export default function OnboardingScreen({
           </>
         )}
         {step === "identity" ? (
-          <div className={styles.avatarWrap}>
-            <span className={styles.avatarRing} aria-hidden="true" />
-            <span
-              className={styles.avatar}
-              style={{ background: avatarColor }}
-              aria-hidden="true"
-            >
-              <span className={styles.initials}>{initials(displayName)}</span>
-            </span>
-          </div>
-        ) : null}
-        {step === "identity" ? (
-          <form
-            className={styles.form}
-            onSubmit={(e) => {
-              e.preventDefault();
-              continueFromIdentity();
-            }}
-          >
-            <label className={styles.fieldLabel} htmlFor="cd-onb-name">
-              Your name
-            </label>
-            <input
-              ref={nameRef}
-              id="cd-onb-name"
-              className={styles.input}
-              type="text"
-              placeholder="What should we call you?"
-              autoCapitalize="words"
-              autoComplete="name"
-              spellCheck={false}
-              aria-label="Your name"
-              maxLength={60}
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  continueFromIdentity();
-                }
-              }}
-            />
-            <span className={styles.fieldLabel} id="cd-onb-color-label">
-              Pick a color
-            </span>
-            <div
-              className={styles.swatches}
-              role="radiogroup"
-              aria-labelledby="cd-onb-color-label"
-            >
-              {AVATAR_PALETTE.map((c) => (
-                <label
-                  key={c}
-                  className={styles.swatch}
-                  data-color={c}
-                  data-selected={c === avatarColor ? "true" : "false"}
-                  style={{ background: c }}
-                >
-                  <input
-                    type="radio"
-                    className={a11y.srControl}
-                    name="onboarding-avatar-color"
-                    aria-label={`Color ${c}`}
-                    checked={c === avatarColor}
-                    onChange={() => setAvatarColor(c)}
-                  />
-                </label>
-              ))}
-            </div>
-            <label className={styles.importChoice}>
-              <input
-                type="checkbox"
-                checked={wantsImport}
-                onChange={(event) => setWantsImport(event.target.checked)}
-              />
-              <span>
-                I have data to import
-                <small>
-                  Preview ICS, vCard, CSV, Markdown, MBOX, or Takeout after
-                  connecting.
-                </small>
-              </span>
-            </label>
-            <button
-              type="button"
-              className={styles.cta}
-              disabled={!ready}
-              data-state={submitting ? "submitting" : ready ? "ready" : "idle"}
-              onClick={continueFromIdentity}
-            >
-              <span>Continue</span>
-              <span className={styles.ctaArrow}>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </span>
-            </button>
-            {keychainNote && path === "fresh" ? (
-              <p className={styles.keychainNote}>
-                Continuing stores this device&rsquo;s keys in your system
-                keychain — your OS may ask once to allow it.
-              </p>
-            ) : null}
-            {error ? (
-              <div className={styles.error} role="alert">
-                {error}
-              </div>
-            ) : null}
-            {onBack ? (
-              <button
-                type="button"
-                className={styles.backBtn}
-                disabled={submitting}
-                onClick={onBack}
-              >
-                Back
-              </button>
-            ) : null}
-          </form>
+          <OnboardingIdentityStep
+            displayName={displayName}
+            onDisplayName={setDisplayName}
+            avatarColor={avatarColor}
+            onAvatarColor={setAvatarColor}
+            wantsImport={wantsImport}
+            onWantsImport={setWantsImport}
+            submitting={submitting}
+            showKeychainNote={keychainNote && path === "fresh"}
+            error={error}
+            errorDetail={errorDetail}
+            onContinue={continueFromIdentity}
+            onBack={onBack}
+          />
         ) : step === "connect" ? (
           <div className={styles.connectPanel} data-theme="dark">
             <ConnectFlow
@@ -509,115 +358,67 @@ export default function OnboardingScreen({
                 keychain — your OS may ask once to allow it.
               </p>
             ) : null}
-            {error ? (
-              <div className={styles.error} role="alert">
-                {error}
-              </div>
-            ) : null}
+            {error ? <ErrorNote summary={error} detail={errorDetail} /> : null}
           </div>
-        ) : step === "service" ? (
-          <div className={styles.form}>
-            <button
-              type="button"
-              className={styles.cta}
-              disabled={submitting}
-              data-testid="onboarding-service-accept"
-              onClick={acceptService}
-            >
-              <span>{submitting ? "Installing…" : "Keep vault reachable"}</span>
-            </button>
-            <button
-              type="button"
-              className={styles.cta}
-              style={{ marginTop: 12, opacity: 0.85 }}
-              disabled={submitting}
-              data-testid="onboarding-service-decline"
-              onClick={declineService}
-            >
-              <span>Not now</span>
-            </button>
+        ) : step === "connecting" ? (
+          <div className={styles.form} data-testid="onboarding-connecting">
             {error ? (
-              <div className={styles.error} role="alert">
-                {error}
-              </div>
+              <>
+                <ErrorNote summary={error} detail={errorDetail} />
+                <button
+                  type="button"
+                  className={styles.cta}
+                  disabled={submitting}
+                  data-testid="onboarding-connect-retry"
+                  onClick={() => {
+                    setSubmitting(true);
+                    setError(null);
+                    setDialAttempt((n) => n + 1);
+                  }}
+                >
+                  <span>Try again</span>
+                </button>
+                {onBack ? (
+                  <button
+                    type="button"
+                    className={styles.backBtn}
+                    disabled={submitting}
+                    onClick={onBack}
+                  >
+                    Back
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <output className={styles.working}>
+                <span className={styles.workingDot} aria-hidden="true" />
+                <span>Setting up Centraid…</span>
+              </output>
+            )}
+            {keychainNote ? (
+              <p className={styles.keychainNote}>
+                Setting up stores this device&rsquo;s keys in your system
+                keychain — your OS may ask once to allow it.
+              </p>
             ) : null}
           </div>
         ) : (
-          <div className={styles.form}>
-            <label className={styles.importPicker} htmlFor="cd-onb-import">
-              <span>
-                {stagedCount > 0
-                  ? `${stagedCount} row${stagedCount === 1 ? "" : "s"} staged`
-                  : "Choose an export file…"}
-              </span>
-              <input
-                id="cd-onb-import"
-                type="file"
-                accept=".ics,.vcf,.vcard,.mbox,.csv,.md,.markdown,.zip"
-                disabled={submitting}
-                className={a11y.srControl}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  setSubmitting(true);
-                  setError(null);
-                  const extension =
-                    file.name.split(".").at(-1)?.toLowerCase() ?? "";
-                  void (async () => {
-                    const textKinds = new Set([
-                      "ics",
-                      "vcf",
-                      "vcard",
-                      "mbox",
-                      "csv",
-                      "md",
-                      "markdown",
-                    ]);
-                    const payload = textKinds.has(extension)
-                      ? { filename: file.name, text: await file.text() }
-                      : {
-                          filename: file.name,
-                          base64: btoa(
-                            Array.from(
-                              new Uint8Array(await file.arrayBuffer()),
-                              (byte) => String.fromCharCode(byte)
-                            ).join("")
-                          ),
-                        };
-                    const staged = await vaultImportStage(payload);
-                    setStagedCount((count) => count + staged.total);
-                  })()
-                    .catch((caughtError: unknown) =>
-                      setError(
-                        caughtError instanceof Error
-                          ? caughtError.message
-                          : "Import staging failed"
-                      )
-                    )
-                    .finally(() => setSubmitting(false));
-                }}
-              />
-            </label>
-            <p className={styles.keychainNote}>
-              This is a dry run. You will review field mappings and conflicts
-              before publishing; failed validation cannot change your vault.
-            </p>
-            <button
-              type="button"
-              className={styles.cta}
-              disabled={submitting || !pendingResult}
-              onClick={() => pendingResult && finish(pendingResult)}
-            >
-              <span>
-                {stagedCount > 0 ? "Review in Centraid" : "Skip for now"}
-              </span>
-            </button>
-            {error ? (
-              <div className={styles.error} role="alert">
-                {error}
-              </div>
-            ) : null}
-          </div>
+          <OnboardingImportStep
+            submitting={submitting}
+            onSubmitting={setSubmitting}
+            stagedCount={stagedCount}
+            onStaged={(total) => setStagedCount((count) => count + total)}
+            error={error}
+            errorDetail={errorDetail}
+            onError={showError}
+            onClearError={clearError}
+            canFinish={pendingResult !== null}
+            onFinish={() => pendingResult && finish(pendingResult)}
+            onBack={() => {
+              clearError();
+              setStep("identity");
+            }}
+          />
         )}
       </div>
     </div>

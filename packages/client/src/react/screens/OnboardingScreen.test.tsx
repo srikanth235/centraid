@@ -17,6 +17,9 @@ vi.mock(import("../../gateway-client.js"), () => ({
   listGatewayDevices: () => listGatewayDevicesMock(),
   renameGatewayMember: (memberId: string, label: string) =>
     renameGatewayMemberMock(memberId, label),
+  vaultImportStage: (
+    input: Parameters<typeof TypeImport_bmsl46.vaultImportStage>[0]
+  ) => vaultImportStageMock(input),
 }));
 
 const listVaultsMock = vi.fn<typeof TypeImport_bmsl46.listVaults>();
@@ -24,6 +27,7 @@ const listGatewayDevicesMock =
   vi.fn<typeof TypeImport_bmsl46.listGatewayDevices>();
 const renameGatewayMemberMock =
   vi.fn<typeof TypeImport_bmsl46.renameGatewayMember>();
+const vaultImportStageMock = vi.fn<typeof TypeImport_bmsl46.vaultImportStage>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();
@@ -123,6 +127,27 @@ describe("OnboardingScreen scenarios", () => {
   // carries the visible text / state attributes (issue #573).
   function radioIn(el: Element | null | undefined): HTMLInputElement | null {
     return el?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
+  }
+
+  /** Drive a file onto the import picker — jsdom's `files` is otherwise read-only. */
+  function pickFile(el: HTMLDivElement, file: File): void {
+    const input = el.querySelector("#cd-onb-import") as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    });
+    act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  }
+
+  /** Fresh path → identity → tick "I have data to import" → Continue. */
+  async function reachImportStep(): Promise<HTMLDivElement> {
+    const el = mount({ path: "fresh", onComplete: onCompleteMock() });
+    await flush(4);
+    typeName(el.querySelector(".input") as HTMLInputElement, "Ada");
+    click(el.querySelector('.importChoice input[type="checkbox"]'));
+    click(el.querySelector(".cta"));
+    await flush(3);
+    return el;
   }
 
   async function flush(times = 3): Promise<void> {
@@ -362,9 +387,10 @@ describe("OnboardingScreen scenarios", () => {
       });
     });
 
-    // Issue #603 C7: the decline handler used to fire-and-forget the settings
-    // save, so a rejected write left onboarding looking successful.
-    it("declining the service install surfaces a failed settings save", async () => {
+    // The H5 service offer is no longer a blocking onboarding step: it moved to
+    // GatewayServiceTip. A fresh run must reach identity WITHOUT being asked,
+    // even on a build that exposes `installGatewayService`.
+    it("does not ask about the OS service on the fresh path", async () => {
       listVaultsMock.mockResolvedValue([
         { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
       ]);
@@ -372,16 +398,127 @@ describe("OnboardingScreen scenarios", () => {
         globalThis as unknown as { CentraidApi: Record<string, unknown> }
       ).CentraidApi;
       Object.assign(api, {
-        installGatewayService: () => undefined,
-        saveSettings: () => Promise.reject(new Error("disk full")),
+        installGatewayService: () => Promise.resolve({ ok: true }),
       });
-      const onComplete = onCompleteMock().mockResolvedValue(undefined);
-      const el = mount({ path: "fresh", onComplete });
+      const el = mount({ path: "fresh", onComplete: onCompleteMock() });
       await flush(4);
-      click(el.querySelector('[data-testid="onboarding-service-decline"]'));
+      expect(
+        el.querySelector('[data-testid="onboarding-service-accept"]')
+      ).toBeNull();
+      expect(
+        el.querySelector('[data-testid="onboarding-service-decline"]')
+      ).toBeNull();
+      // Landed on identity, not on a question about background daemons.
+      expect(el.querySelector(".input")).not.toBeNull();
+    });
+
+    // The fresh path must never fall through to ConnectFlow: a failed local
+    // dial used to unmask the `connect` step, so "Start fresh on this Mac"
+    // answered with a paste/scan-a-pair-ticket screen.
+    it("keeps a failed fresh dial on its own step with a retry", async () => {
+      // The dial fails at vault enumeration — the same shape as a local gateway
+      // that could not start.
+      listVaultsMock.mockRejectedValue(new Error("gateway.db is locked"));
+      const el = mount({ path: "fresh", onComplete: onCompleteMock() });
       await flush(4);
-      expect(el.querySelector(".error")?.textContent).toContain("disk full");
-      expect(onComplete).not.toHaveBeenCalled();
+      expect(
+        el.querySelector('[data-testid="onboarding-connecting"]')
+      ).not.toBeNull();
+      expect(el.querySelector(".error")).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid="onboarding-connect-retry"]')
+      ).not.toBeNull();
+      // The join-a-gateway UI must not be on screen.
+      expect(el.querySelector(".connectPanel")).toBeNull();
+    });
+
+    // UX-1: a fresh dial that fails used to put the raw exception on screen as
+    // the whole message. The owner reads a sentence; the exception is still
+    // there, one disclosure away, for whoever files the bug.
+    it("leads a failed fresh dial with a sentence and folds the exception away", async () => {
+      listVaultsMock.mockRejectedValue(new Error("gateway.db is locked"));
+      const el = mount({ path: "fresh", onComplete: onCompleteMock() });
+      await flush(4);
+      const alert = el.querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain(
+        "Centraid couldn't start on this Mac"
+      );
+      expect(alert?.textContent).not.toContain("gateway.db is locked");
+      const details = el.querySelector("details") as HTMLDetailsElement | null;
+      expect(details?.open).toBe(false);
+      expect(details?.textContent).toContain("Technical detail");
+      expect(details?.textContent).toContain("gateway.db is locked");
+      // UX-8: one word for this moment, on the title as well as the failure.
+      expect(el.textContent).toContain("Centraid");
+      expect(el.textContent).not.toContain("your vault");
+      expect(el.textContent).not.toContain("your gateway");
+    });
+
+    // UX-4: Continue disables the moment the field is empty, and nothing said
+    // why. The cue is a hint, never a red error on a field nobody has touched.
+    it("says why Continue is unavailable while the name is empty", async () => {
+      const el = mount({ path: "fresh", onComplete: onCompleteMock() });
+      await flush(4);
+      expect(
+        el.querySelector('[data-testid="onboarding-name-hint"]')?.textContent
+      ).toContain("Add a name to continue");
+      expect(el.querySelector(".error")).toBeNull();
+      typeName(el.querySelector(".input") as HTMLInputElement, "Ada");
+      expect(
+        el.querySelector('[data-testid="onboarding-name-hint"]')
+      ).toBeNull();
+    });
+
+    // UX-5: the binary branch reads the whole file into a per-byte JS array, so
+    // a multi-GB Takeout took the renderer with it. Refuse before reading, and
+    // name the actual limit.
+    it("refuses an export too big to read into memory, before reading it", async () => {
+      const el = await reachImportStep();
+      const file = new File(["x"], "takeout.zip", { type: "application/zip" });
+      Object.defineProperty(file, "size", { value: 3 * 1024 * 1024 * 1024 });
+      pickFile(el, file);
+      await flush(3);
+      expect(vaultImportStageMock).not.toHaveBeenCalled();
+      const alert = el.querySelector('[role="alert"]')?.textContent ?? "";
+      expect(alert).toContain("3.0 GB");
+      expect(alert).toContain("64 MB");
+      expect(alert).toContain("Export a smaller date range");
+      // A refusal is not a technical failure — there is no exception to fold.
+      expect(el.querySelector("details")).toBeNull();
+    });
+
+    it("stages an export that fits", async () => {
+      vaultImportStageMock.mockResolvedValue({
+        batchId: "b1",
+        kind: "ics",
+        staged: { schedule_event: 12 },
+        total: 12,
+        unrouted: [],
+      });
+      const el = await reachImportStep();
+      pickFile(el, new File(["BEGIN:VCALENDAR"], "cal.ics"));
+      await flush(4);
+      expect(vaultImportStageMock).toHaveBeenCalledOnce();
+      expect(el.textContent).toContain("12 rows staged");
+      expect(el.querySelector(".error")).toBeNull();
+    });
+
+    // UX-6: import used to be a one-way door — only staging or "Skip for now".
+    it("lets the import step go back to name and color with state intact", async () => {
+      const el = await reachImportStep();
+      expect(el.querySelector(".input")).toBeNull();
+      click(el.querySelector('[data-testid="onboarding-import-back"]'));
+      await flush();
+      const input = el.querySelector(".input") as HTMLInputElement;
+      expect(input.value).toBe("Ada");
+      // And the choice itself is now un-makeable: unticking it and continuing
+      // finishes onboarding instead of returning to import.
+      click(el.querySelector('.importChoice input[type="checkbox"]'));
+      click(el.querySelector(".cta"));
+      await flush(4);
+      expect(
+        el.querySelector('[data-testid="onboarding-import-back"]')
+      ).toBeNull();
     });
 
     it("surfaces an error inline when onComplete rejects", async () => {

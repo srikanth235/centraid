@@ -40,6 +40,7 @@ export const Channel = {
   GATEWAY_RUNTIME_GET: "centraid:gateway-runtime:get",
   GATEWAY_RUNTIME_EVENT: "centraid:gateway-runtime:event",
   GATEWAY_RESTART: "centraid:gateway-runtime:restart",
+  GATEWAY_START_RETRY: "centraid:gateway-runtime:retry-start",
   GATEWAY_DIAGNOSTICS_EXPORT: "centraid:gateway-runtime:export-diagnostics",
   GATEWAY_RECOVERY_KIT_EXPORT: "centraid:gateway-runtime:export-recovery-kit",
 

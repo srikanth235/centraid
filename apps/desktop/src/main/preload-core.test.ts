@@ -111,6 +111,7 @@ const EXPECTED_API_KEYS = [
   "removeGateway",
   "renameGateway",
   "restartGateway",
+  "retryGatewayStart",
   "revokePhoneDevice",
   "saveSettings",
   "setActiveGateway",
@@ -161,6 +162,7 @@ const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
   ],
   ["getGatewayRuntime", Channel.GATEWAY_RUNTIME_GET, undefined],
   ["restartGateway", Channel.GATEWAY_RESTART, undefined],
+  ["retryGatewayStart", Channel.GATEWAY_START_RETRY, undefined],
   ["exportGatewayDiagnostics", Channel.GATEWAY_DIAGNOSTICS_EXPORT, undefined],
   [
     "exportGatewayRecoveryKit",

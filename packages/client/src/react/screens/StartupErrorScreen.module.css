@@ -1,0 +1,110 @@
+/* Startup error — the shell asked the host for its settings and the read
+   FAILED (see StartupErrorScreen.tsx for why that must never fall through to
+   the first-run chooser).
+
+   Deliberately NOT a copy of the onboarding stage: the first-run screens force
+   a dark editorial surface with literal hex because they are a welcome moment
+   staged before any theme preference exists. This one greets a member who
+   already has a theme, a household, and a populated vault — so it takes the
+   design tokens as they resolve and reads as the app they know, not as a
+   second welcome. Every value here is a token. */
+.view {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: var(--d-5);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.card {
+  width: min(480px, 92vw);
+  padding: var(--d-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-lg);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--d-1);
+  font: var(--t-mono);
+  letter-spacing: 0.22em;
+  color: var(--ink-3);
+}
+
+.eyebrowDot {
+  display: inline-block;
+  width: var(--d-1);
+  height: var(--d-1);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.title {
+  margin: var(--d-3) 0 var(--d-2);
+  font: var(--t-display);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.title em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.sub {
+  margin: 0;
+  max-width: 44ch;
+  font: var(--t-body);
+  color: var(--ink-2);
+}
+
+/* The host's own words, quoted rather than paraphrased: the member can read
+   it out to whoever helps them, and it is the only part of this screen that
+   changes between causes. */
+.detail {
+  margin-top: var(--d-4);
+  padding: var(--d-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-sunken);
+}
+
+.detailLabel {
+  display: block;
+  margin-bottom: var(--d-1);
+  font: var(--t-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.detailText {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: var(--t-mono);
+  color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  margin-top: var(--d-5);
+}
+
+.cta {
+  justify-content: center;
+}
+
+.footnote {
+  margin: var(--d-4) 0 0;
+  max-width: 44ch;
+  font: var(--t-small);
+  color: var(--ink-3);
+}

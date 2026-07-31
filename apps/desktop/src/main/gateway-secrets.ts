@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { safeStorage } from "electron";
+import { app, safeStorage } from "electron";
 
 import type { EndpointSecretPersistence } from "@centraid/tunnel";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
@@ -37,7 +37,23 @@ function emptySecrets(): DeviceSecrets {
   };
 }
 
+/**
+ * Dev/test escape hatch (docs/dev-environment.md).
+ *
+ * A dev build is ad-hoc signed, so macOS re-prompts for the login password on
+ * every restart — which makes restart-heavy scenarios impossible to automate.
+ * This reuses the Linux/no-libsecret plaintext path rather than adding a second
+ * format. `app.isPackaged` is the hard stop: a shipped build ignores the
+ * variable outright, so a real user's custody can never be downgraded.
+ */
+function insecureSecretsRequested(): boolean {
+  return (
+    process.env.CENTRAID_INSECURE_DEVICE_SECRETS === "1" && !app.isPackaged
+  );
+}
+
 function shouldUseFileFallback(): boolean {
+  if (insecureSecretsRequested()) return true;
   if (safeStorage.isEncryptionAvailable()) return false;
   if (process.platform !== "linux") {
     throw new Error(
@@ -93,15 +109,19 @@ function readSecrets(): DeviceSecrets {
   const text = ciphertext.toString("utf8");
   if (text.startsWith(FILE_FALLBACK_MAGIC)) {
     const secrets = parseSecrets(text.slice(FILE_FALLBACK_MAGIC.length), file);
-    // Adopt the Linux fallback into OS custody as soon as libsecret becomes
-    // available again; no operator migration step and no plaintext residue.
-    if (safeStorage.isEncryptionAvailable()) writeSecrets(secrets);
-    else shouldUseFileFallback();
+    // Adopt the fallback into OS custody as soon as custody is available again;
+    // no operator migration step and no plaintext residue. Asking
+    // shouldUseFileFallback — rather than isEncryptionAvailable — is what stops
+    // a hatched dev run from rewriting the store on every single read, and it
+    // still warns on Linux and throws on an unavailable macOS keychain.
+    if (!shouldUseFileFallback()) writeSecrets(secrets);
     return secrets;
   }
   if (shouldUseFileFallback()) {
     throw new Error(
-      `Device credential store at ${file} is encrypted but libsecret is unavailable; start the keyring service before pairing.`
+      insecureSecretsRequested()
+        ? `Device credential store at ${file} is encrypted, and CENTRAID_INSECURE_DEVICE_SECRETS=1 will not open the OS keychain to read it; give the run its own data dir.`
+        : `Device credential store at ${file} is encrypted but libsecret is unavailable; start the keyring service before pairing.`
     );
   }
   return parseSecrets(safeStorage.decryptString(ciphertext), file);
@@ -170,6 +190,19 @@ export function storeLocalLoopbackToken(
   const current = readSecrets();
   current.loopbackTokens[connectionId] = token;
   writeSecrets(current);
+}
+
+/**
+ * Whether this device already holds a wrapping key for `connectionId` —
+ * i.e. whether {@link getOrCreateGatewayWrappingKey} would MINT a new one.
+ *
+ * Minting is correct for a brand-new gateway and silently fatal for an
+ * existing data directory (the fresh key cannot open envelopes written under
+ * the old one), so callers that own a data dir must ask this first; see
+ * `deviceCustodyGap` in detached-gateway-core.ts.
+ */
+export function hasGatewayWrappingKey(connectionId: string): boolean {
+  return readSecrets().gatewayWrappingKeys[connectionId] !== undefined;
 }
 
 /** Device-custodied wrapping key for a local gateway's KeyStore envelopes. */

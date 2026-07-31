@@ -21,10 +21,15 @@ import { desktopGatewayKeyStore } from "./gateway-secrets.js";
 import { setLocalGatewayInfoProvider } from "./gateway-store.js";
 import {
   backoffForAttempt,
+  claimManualRetry,
+  claimRevival,
   initialSupervisorState,
   recordFailure,
 } from "./gateway-supervisor-core.js";
-import type { SupervisorState } from "./gateway-supervisor-core.js";
+import type {
+  RevivalBudget,
+  SupervisorState,
+} from "./gateway-supervisor-core.js";
 import { phoneLinkStatus } from "./phone-link.js";
 import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
 
@@ -56,6 +61,8 @@ export interface LocalGatewayRuntime {
   token: string;
   mode: "embedded" | "detached";
   owned?: boolean;
+  /** Detached child's pid — the liveness check `reviveLocalGatewayIfDead` needs. */
+  pid?: number;
   close: () => Promise<void>;
   /** Compatible with gateway HealthRegistry.registerProbe for the tunnel probe. */
   health: {
@@ -166,6 +173,7 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
     token: handle.token,
     mode: "detached",
     owned: handle.owned,
+    pid: handle.pid,
     close: () => handle.close(),
     health: handle.health,
     vaults: handle.vaults,
@@ -241,6 +249,11 @@ export async function ensureLocalGateway(
   gatewayId: string
 ): Promise<LocalGatewayRuntime> {
   ensureInfoProviderRegistered();
+  // A cached handle is returned as-is, deliberately: this function is called
+  // from every settings read (including the monitor's own 5s tick), so putting
+  // "is it still alive? then respawn" here would restart a crash-looping daemon
+  // on every tick with no budget. `reviveLocalGatewayIfDead` is the single
+  // owner of that decision and is rate-limited — see its comment block.
   const ready = handles.get(gatewayId);
   if (ready) return ready;
   const inFlight = starting.get(gatewayId);
@@ -251,10 +264,16 @@ export async function ensureLocalGateway(
   // maps first, so a deliberate user action is never blocked by this.
   const sup = supervisor.get(gatewayId);
   if (sup?.loopBroken) {
+    // No recovery instruction in the message. This string is quoted verbatim
+    // on the startup error screen, which has no sidebar and no navigation —
+    // telling that reader to "use Settings → Gateway → Restart" pointed at a
+    // surface they cannot reach, and quitting the app was the only real exit.
+    // The recovery now lives where the message is READ: the screen's "Try
+    // again" button routes through `retryLocalGatewayStart`, which clears this
+    // very latch. In the running shell the Gateway page still offers Restart.
     throw new Error(
       `local gateway "${gatewayId}" failed to start repeatedly and stopped retrying` +
-        (sup.lastError ? ` (last error: ${sup.lastError})` : "") +
-        " — use Settings → Gateway → Restart to try again."
+        (sup.lastError ? ` (last error: ${sup.lastError})` : "")
     );
   }
   const waitUntil = nextAttemptAt.get(gatewayId);
@@ -303,6 +322,71 @@ export async function ensureLocalGateway(
     });
   starting.set(gatewayId, p);
   return p;
+}
+
+/*
+ * Revival of an owned detached daemon that DIED after a successful start.
+ *
+ * `ensureLocalGateway` returns its cached handle without a liveness check, so
+ * once the desktop's own daemon was killed the UI correctly said "Gateway down"
+ * and nothing ever brought it back — the handle in `handles` still looked fine
+ * and the supervisor only ever sees *start* failures, never post-start death.
+ *
+ * The trigger is deliberately narrow so this cannot become a hot restart loop:
+ *
+ *   - only an OWNED detached gateway (embedded ones die with the process;
+ *     foreign daemons are not ours to restart, H3);
+ *   - only when the pid is actually GONE. A daemon that is merely wedged or
+ *     slow still holds gateway.db, and respawning against it would either be
+ *     refused or start a second writer — so an unreachable-but-alive daemon is
+ *     left to the down alert;
+ *   - inside the `claimRevival` budget (gateway-supervisor-core.ts): a daemon
+ *     that dies immediately every time stops being respawned after a few tries
+ *     instead of being restarted on every monitor tick forever, and the crash
+ *     loop surfaces through the existing supervisor/down alerts instead.
+ */
+const revivals = new Map<string, RevivalBudget>();
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Called by the gateway monitor when its heartbeat fails. Drops the stale
+ * cached handle and re-runs `ensureLocalGateway` when — and only when — the
+ * owned detached daemon behind it is really gone. Resolves to whether a
+ * revival was started; never rejects (the retry bookkeeping in
+ * `ensureLocalGateway` already records the failure).
+ */
+export async function reviveLocalGatewayIfDead(
+  gatewayId: string
+): Promise<boolean> {
+  if (disposed) return false;
+  const current = handles.get(gatewayId);
+  if (!current || current.mode !== "detached" || current.owned !== true) {
+    return false;
+  }
+  if (current.pid === undefined || pidAlive(current.pid)) return false;
+  const claim = claimRevival(revivals.get(gatewayId), Date.now());
+  revivals.set(gatewayId, claim.next);
+  if (!claim.allowed) return false;
+  process.stdout.write(
+    `[local-gateway] owned daemon pid ${current.pid} is gone; respawning "${gatewayId}"\n`
+  );
+  handles.delete(gatewayId);
+  await ensureLocalGateway(gatewayId).catch((error: unknown) => {
+    // Recorded by the supervisor inside ensureLocalGateway; keep the monitor
+    // tick alive rather than turning a failed respawn into a crash-log entry.
+    process.stdout.write(
+      `[local-gateway] respawn of "${gatewayId}" failed: ${error instanceof Error ? error.message : String(error)}\n`
+    );
+  });
+  return true;
 }
 
 /**
@@ -360,6 +444,47 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
     restarting.delete(gatewayId);
   });
   restarting.set(gatewayId, p);
+  return p;
+}
+
+/*
+ * "Try again", pressed by a member who cannot reach Settings.
+ *
+ * The startup error screen appears when the shell could not READ its settings,
+ * which on this desktop almost always means the local gateway would not start.
+ * Once `ensureLocalGateway` has latched `loopBroken`, every subsequent read
+ * fails instantly from the guard above — so a button that only re-read the
+ * settings was dead the moment it appeared, even after the user had removed
+ * the cause entirely (killed the process holding gateway.db, restored the
+ * device credential file). It is the same recovery the Gateway page's Restart
+ * offers, reachable from a screen that has no Gateway page.
+ *
+ * Clearing the automatic budgets is the whole point — see the tradeoff written
+ * out at `claimManualRetry` in gateway-supervisor-core.ts. The floor there is
+ * the only thing that survives, so leaning on the button costs one start
+ * attempt per press rather than one per event-loop turn.
+ */
+const lastManualRetryAt = new Map<string, number>();
+const manualRetryInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Clear every give-up latch for `gatewayId` and start it again. Rejects with
+ * the start failure so the caller can report why the retry did not take.
+ */
+export async function retryLocalGatewayStart(gatewayId: string): Promise<void> {
+  const claim = claimManualRetry(lastManualRetryAt.get(gatewayId), Date.now());
+  const pending = manualRetryInFlight.get(gatewayId);
+  // Inside the floor the press is collapsed into the previous one: the caller
+  // still gets a truthful outcome, just not a second spawn.
+  if (!claim.allowed && pending) return pending;
+  lastManualRetryAt.set(gatewayId, claim.next);
+  // The revival budget belongs to the monitor's automatic respawns; a human
+  // asking for a start hands it back a full one. `restartLocalGateway` clears
+  // the start-failure supervisor state (`loopBroken`) and the backoff deadline,
+  // then runs the same stop → start a manual Restart does.
+  revivals.delete(gatewayId);
+  const p = restartLocalGateway(gatewayId);
+  manualRetryInFlight.set(gatewayId, p);
   return p;
 }
 

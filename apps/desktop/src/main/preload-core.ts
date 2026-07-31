@@ -161,6 +161,11 @@ export function createCentraidApi(bridge: PreloadBridge) {
     // only (remote gateways restart server-side); diagnostics export fetches
     // the active gateway's bundle and saves it via a native dialog.
     restartGateway: () => bridge.invoke(Channel.GATEWAY_RESTART),
+    // The startup error screen's "Try again": clears the supervisor's give-up
+    // state and re-attempts the local gateway START. Separate from
+    // `restartGateway` because that one resolves the active gateway first,
+    // which is the call that fails when there is nothing to restart yet.
+    retryGatewayStart: () => bridge.invoke(Channel.GATEWAY_START_RETRY),
     exportGatewayDiagnostics: () =>
       bridge.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
     exportGatewayRecoveryKit: (input: { password: string }) =>
