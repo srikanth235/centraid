@@ -232,7 +232,15 @@ summary.agedInfraMismatchCellIds = agedInfraMismatches(
   summary.infraMismatchCellIds,
   durableHistory
 );
-summary.absoluteWeaknesses = findAbsoluteWeaknesses(coverageRows, mutationRows);
+summary.absoluteWeaknesses = findAbsoluteWeaknesses(
+  coverageRows,
+  mutationRows,
+  {
+    coverageHeadroom:
+      Number(floors._ratchetPolicy?.floorLagWarningPoints) || 15,
+    mutationMinimum: Number(mutationFloors._absoluteWeaknessBelow) || 60,
+  }
+);
 summary.flakeRates = calculateFlakeRates(evidence, durableHistory);
 const model = {
   generatedAt: new Date().toISOString(),

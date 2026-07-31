@@ -106,15 +106,15 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/design-tokens/src/**` | 99.03 / 71.42 | **98** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
 | `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
-| `packages/time-engine/src/**` | 75.15 / 57.54 | **74** / **56** |
+| `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
 | `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
-| `packages/client/src/react/**` | 67.58 / 57.63 | **65** / **35** |
-| `packages/automation/src/**` | 84.36 / 77.52 | **72** / **75** |
+| `packages/client/src/react/**` | 67.58 / 56.31 | **65** / **54** |
+| `packages/automation/src/**` | 84.36 / 77.52 | **82** / **75** |
 | `packages/tunnel/src/**` | 72.06 / 52.24 | **70** / **51** |
-| `packages/agent-runtime/src/**` | 85.97 / 76.29 | **72** / **75** |
+| `packages/agent-runtime/src/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
-| `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **55** |
+| `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
 The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
 
@@ -122,9 +122,9 @@ The #630 denominator expansion is an approved measurement deviation: the old 71%
 
 ### agent-runtime coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor was ratcheted to **~72%** once measured coverage cleared the old deliberate 27% seed (spawn-heavy adapters remain covered by contracts + integration rather than a pure line chase).
+`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
 
-Do **not** raise the agent-runtime line floor without a dedicated coverage campaign. Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
+Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
 
 ## Named invariant contracts
 

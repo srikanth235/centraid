@@ -77,6 +77,37 @@ describe("durable depth signals", () => {
       },
     ]);
   });
+
+  test("flags branch floor lag and honors configured thresholds", () => {
+    expect(
+      findAbsoluteWeaknesses(
+        [
+          {
+            scope: "oauth-worker",
+            lines: 90,
+            lineFloor: 88,
+            branches: 84,
+            branchFloor: 55,
+          },
+        ],
+        [{ scope: "gateway", score: 58, floor: 55 }],
+        { coverageHeadroom: 15, mutationMinimum: 60 }
+      )
+    ).toEqual([
+      {
+        kind: "coverage-floor-lag",
+        scope: "oauth-worker (branches)",
+        value: 84,
+        floor: 55,
+      },
+      {
+        kind: "weak-mutation",
+        scope: "gateway",
+        value: 58,
+        floor: 55,
+      },
+    ]);
+  });
 });
 
 describe("filterFloorConfigEntries", () => {

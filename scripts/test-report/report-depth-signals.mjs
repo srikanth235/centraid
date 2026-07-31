@@ -79,6 +79,18 @@ export function findAbsoluteWeaknesses(
         floor: row.lineFloor,
       });
     }
+    if (
+      Number.isFinite(row.branches) &&
+      Number.isFinite(row.branchFloor) &&
+      row.branches - row.branchFloor >= coverageHeadroom
+    ) {
+      weaknesses.push({
+        kind: "coverage-floor-lag",
+        scope: `${row.scope} (branches)`,
+        value: row.branches,
+        floor: row.branchFloor,
+      });
+    }
   }
   for (const row of mutationRows ?? []) {
     if (Number.isFinite(row.score) && row.score < mutationMinimum) {
