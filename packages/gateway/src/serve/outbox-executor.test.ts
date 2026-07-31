@@ -352,7 +352,8 @@ describe("outbox-executor", () => {
       "allowed_hosts"
     );
     expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
-      headline: expect.stringContaining("failed"),
+      // D4: the reason rides the headline; the full detail stays in the card.
+      headline: expect.stringContaining("failed: "),
       detail: expect.objectContaining({ outcome: "failed", itemId }),
       severity: "high",
     });

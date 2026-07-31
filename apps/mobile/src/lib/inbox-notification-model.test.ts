@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 
-import { composeMobileInboxNotifications } from "./inbox-notification-model";
+import {
+  composeMobileInboxNotifications,
+  planInboxNotifications,
+} from "./inbox-notification-model";
 import type { MobileInboxNotificationPull } from "./inbox-notification-model";
 
 function pull(
@@ -65,5 +68,100 @@ describe(composeMobileInboxNotifications, () => {
       "auth:conn-1:2026-07-31T10:00:00.000Z",
       "notice:notice-1:2026-07-31T10:00:00.000Z",
     ]);
+  });
+});
+
+function quiet(): MobileInboxNotificationPull {
+  return {
+    decisions: { outbox: [], needsAuth: [], parked: [], scopeRequests: [] },
+    notices: [],
+  };
+}
+
+describe(planInboxNotifications, () => {
+  test("the first sync seeds the baseline silently instead of blasting", () => {
+    const plan = planInboxNotifications({
+      inbox: pull(),
+      delivered: [],
+      seeded: false,
+      appActive: false,
+    });
+
+    expect(plan.notifications).toStrictEqual([]);
+    expect(plan.seeded).toBe(true);
+    expect(plan.nextDelivered).toHaveLength(5);
+  });
+
+  test("a decision arriving after the seed still notifies", () => {
+    const seed = planInboxNotifications({
+      inbox: pull(),
+      delivered: [],
+      seeded: false,
+      appActive: false,
+    });
+    const plan = planInboxNotifications({
+      inbox: pull("2026-07-31T10:00:00.000Z"),
+      delivered: seed.nextDelivered ?? [],
+      seeded: true,
+      appActive: false,
+    });
+
+    expect(plan.notifications.map((row) => row.key)).toStrictEqual([
+      "outbox:out-1:2026-07-31T10:00:00.000Z",
+      "auth:conn-1:2026-07-31T10:00:00.000Z",
+      "notice:notice-1:2026-07-31T10:00:00.000Z",
+    ]);
+  });
+
+  test("a quiet Inbox seeds too, so the first real decision is news", () => {
+    const seed = planInboxNotifications({
+      inbox: quiet(),
+      delivered: [],
+      seeded: false,
+      appActive: false,
+    });
+    expect(seed.seeded).toBe(true);
+    expect(seed.nextDelivered).toStrictEqual([]);
+
+    const plan = planInboxNotifications({
+      inbox: pull(),
+      delivered: seed.nextDelivered ?? [],
+      seeded: true,
+      appActive: false,
+    });
+    expect(plan.notifications).toHaveLength(5);
+  });
+
+  test("foreground composes nothing and leaves the ledger untouched", () => {
+    const plan = planInboxNotifications({
+      inbox: pull(),
+      delivered: ["outbox:out-1:2026-07-30T10:00:00.000Z"],
+      seeded: true,
+      appActive: true,
+    });
+
+    expect(plan.notifications).toStrictEqual([]);
+    // Untouched, not overwritten: a decision the owner did not act on while
+    // looking must still notify on the next background wake.
+    expect(plan.nextDelivered).toBeUndefined();
+    expect(plan.seeded).toBe(false);
+  });
+
+  test("a background pass with nothing new writes no ledger", () => {
+    const seed = planInboxNotifications({
+      inbox: pull(),
+      delivered: [],
+      seeded: false,
+      appActive: false,
+    });
+    const plan = planInboxNotifications({
+      inbox: pull(),
+      delivered: seed.nextDelivered ?? [],
+      seeded: true,
+      appActive: false,
+    });
+
+    expect(plan.notifications).toStrictEqual([]);
+    expect(plan.nextDelivered).toBeUndefined();
   });
 });

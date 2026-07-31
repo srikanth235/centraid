@@ -33,6 +33,7 @@ import type { ConnectionAuth } from "@centraid/automation";
 
 import type { ConnectionBroker } from "./connection-broker.js";
 import { timeoutSignal } from "./fetch-timeout.js";
+import { noticeGist } from "./inbox-notices.js";
 import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
@@ -378,12 +379,20 @@ export class OutboxExecutor {
           typeof value === "string" && value.trim() !== ""
       );
     const target = artifactLabel?.trim() ?? item?.target ?? "External write";
+    // D4: a failure headline names the reason, not just the disposition —
+    // "… — failed: 403 forbidden" beats a wall of identical "failed" cards.
+    // The full record stays in `detail`.
+    const gist = disposition === "sent" ? undefined : noticeGist(detail);
     const suffix =
       disposition === "sent"
         ? "sent"
         : disposition === "failed"
-          ? "failed"
-          : "needs approval again";
+          ? gist
+            ? `failed: ${gist}`
+            : "failed"
+          : gist
+            ? `needs approval again: ${gist}`
+            : "needs approval again";
     plane.inbox.put({
       kind: "outbox",
       sourceRef: itemId,

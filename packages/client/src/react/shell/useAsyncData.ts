@@ -18,9 +18,22 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 }
 
+export interface AsyncDataOptions {
+  /**
+   * Keep the last settled data on screen while a deps change refetches,
+   * instead of reporting `loading`. Routes whose deps double as a refresh
+   * doorbell (Inbox: SSE bumps a tick) need this — reporting `loading` swaps
+   * the whole screen for a spinner, UNMOUNTING it and discarding whatever the
+   * owner was in the middle of. Off by default: a route whose deps change
+   * means "show something else" still wants its loading line.
+   */
+  keepPreviousData?: boolean;
+}
+
 export function useAsyncData<T>(
   load: () => Promise<T>,
-  deps: readonly unknown[] = EMPTY_DEPS
+  deps: readonly unknown[] = EMPTY_DEPS,
+  options: AsyncDataOptions = {}
 ): AsyncState<T> {
   // The settled result is stamped with the deps it was fetched for; a deps
   // change therefore reads as `loading` during render, without an effect having
@@ -66,7 +79,9 @@ export function useAsyncData<T>(
     };
   }, [depsKey]);
 
-  return settled !== null && sameDeps(settled.deps, deps)
+  if (settled === null) return LOADING;
+  if (sameDeps(settled.deps, deps)) return settled.state;
+  return options.keepPreviousData && settled.state.status === "ready"
     ? settled.state
     : LOADING;
 }

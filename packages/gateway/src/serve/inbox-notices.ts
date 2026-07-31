@@ -70,6 +70,43 @@ function fromRow(row: NoticeRow): InboxNotice {
   };
 }
 
+/**
+ * The artifact-level gist a headline carries (#647 D4): the first line of a
+ * failure message, whitespace-collapsed and bounded. `detail_json` keeps the
+ * full record — the headline only has to say WHICH failure this is.
+ */
+export function noticeGist(
+  message: string | undefined,
+  maxLength = 80
+): string | undefined {
+  const firstLine = (message ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line !== "");
+  if (!firstLine) return undefined;
+  const collapsed = firstLine
+    .replace(/\s+/gu, " ")
+    // A serialized `Error: …` prefix is noise in a headline, never the gist.
+    .replace(/^[A-Za-z]*Error:\s*/u, "")
+    .replace(/[.:;,]+$/u, "");
+  if (collapsed === "") return undefined;
+  return collapsed.length > maxLength
+    ? `${collapsed.slice(0, maxLength - 1).trimEnd()}…`
+    : collapsed;
+}
+
+/**
+ * A human label for an automation whose manifest could not be read. Headlines
+ * never speak in refs (#647 D4), so `myapp/nightly-digest` reads as
+ * "Nightly digest" rather than leaking the on-disk handle.
+ */
+export function humanizeAutomationRef(ref: string): string {
+  const segment = ref.split("/").at(-1) ?? ref;
+  const words = segment.replace(/[-_]+/gu, " ").trim();
+  if (words === "") return ref;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function shouldWriteAutomationNotice(
   policy: AutomationNotifyPolicy | undefined,
   outcome: "success" | "failure",
@@ -157,15 +194,6 @@ export class InboxNoticeStore {
     if (!written) throw new Error("Inbox notice write did not settle");
     this.onChanged({ wake: written.severity === "high", notice: written });
     return written;
-  }
-
-  /**
-   * Insert an externally persisted event exactly once. Desktop gateway-health
-   * history replays after restart so an outage recorded while unreachable is
-   * eventually projected; replay must not inflate its collapse count or wake.
-   */
-  putIfAbsent(input: PutInboxNotice): InboxNotice {
-    return this.getBySource(input.kind, input.sourceRef) ?? this.put(input);
   }
 
   markRead(

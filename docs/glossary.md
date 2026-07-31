@@ -126,6 +126,7 @@ These pairs appear in code and docs for historical reasons. Prefer the **canonic
 | chat / conversation | **conversation ⊃ turn ⊃ item** | "chat" only in UI copy | Ledger model forbids "chat" as the technical term |
 | template / blueprint | **blueprint** for shipped source | "template" in gallery UI | After install it is an **app** |
 | server / gateway | **gateway** | HTTP "server" for the listener socket |  |
+| Approvals / Inbox | **Inbox** in UI labels, docs, and new identifiers | `Approvals*` file/component names, the `approvals` route kind, and mobile nav routes | Surface renamed in #647; code identifiers await a mechanical rename |
 
 **Mechanical vs judgment:** judgment-only (no synonym linter yet).
 

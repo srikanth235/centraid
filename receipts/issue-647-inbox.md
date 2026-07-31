@@ -63,6 +63,25 @@ GitHub issue: [#647](https://github.com/srikanth235/centraid/issues/647)
 - **Kit ask-panel consent cards removed; per-automation thread strip still shows that automation's own pending items.** The kit card files, static allowlist entries, and inline global card rendering were deleted; the automation thread's local pending-item strip was not removed.
 - **Archived notices pruned per retention policy; inbox endpoint stays bounded.** Tests cover age pruning, count pruning, active-first ordering, and request limits.
 
+### Review-fix round (2026-07-31)
+
+A five-slice adversarial review of the first snapshot surfaced two blockers, four design-contract gaps, and a set of correctness/noise issues. All were fixed in this round; a visual pass also ported the approved Inbox mock's design elements into the shipped screen.
+
+- **Kit parked/denied acknowledgment read a wire shape no producer emits.** `kit.ts` now detects the real `InvokeOutcome` shapes (bare `status`, nested `output.status`); the smoke-test fixture was rewritten from the actual producer types instead of mirroring the implementation.
+- **Mobile needs-auth reconnect could start but never finish.** Rebuilt on `expo-web-browser` in-app auth sessions and the app's own `centraid://oauth/finish` deep link: Assist completes with the same persisted client session and device that began the ceremony, and BYO works because the in-app browser keeps the loopback tunnel proxy alive. Invalid or foreign finish links are never posted.
+- **D3:** open decisions now stay pinned under every filter chip; notice-filter empty states no longer claim inbox-zero.
+- **D10:** an outbox notice now focuses, expands, and highlights its still-open decision (via `detail.itemId`) instead of a self-navigation no-op.
+- **D7:** the wake tracker keys on decision identities (id + episode), not counts — a net-zero swap in one grouped commit still wakes closed devices, and the first observation after a restart seeds silently instead of firing a phantom wake.
+- **SSE doorbell no longer unmounts the screen.** `useAsyncData` gained opt-in `keepPreviousData`; in-progress edit-then-approve state survives background refetches.
+- **Notification hygiene:** the web and mobile delivery ledgers seed silently on first sync (no permission-grant blast), and composition is skipped while the page is visible / the app is foreground.
+- **Paused connections are skips, not failures.** `HandlerOutcome.skipped` suppresses notices, wakes, and false "recovered" transitions.
+- **Doorbell cost coalesced.** Provenance-commit inbox summaries and SSE rings collapse into a leading + trailing flush per 250 ms window (`inboxDoorbellWindowMs`), instead of paying `blocking()` per commit.
+- **Gateway-health projection rebuilt.** Durable per-gateway high-water marks make projection at-most-once across restarts and vault switches; upgrades seed the mark without replaying stale history; source refs dropped their timestamps so flapping collapses server-side (the route moved from `putIfAbsent` to collapse-`put`); `""` vault ids are treated as unset; oldest-first batches drain backlogs instead of truncating them.
+- **D4 headlines:** automation and outbox notices carry an artifact-level gist ("<name> failed — <first line of the error>"), and the raw-ref fallback is humanized.
+- **Mobile decision cards** now show the scope summary (schema.table, verbs, row rule, field count) and a parked-input preview; automation deep links carry `x-centraid-vault`.
+- **Visual pass from the approved mock:** palette-hued correspondent tiles and kind icons on notice rows, severity pills and an unread dot replacing the off-system colored left rail, a failure-streak strip with duration phrasing ("failing for 6 days") replacing the bare `×N`, and flat-notice/elevated-decision surface contrast (also fixing the undefined `--surface` token).
+- **Glossary:** the Approvals→Inbox identifier dual is recorded in the known-dual-vocabulary table.
+
 ### Changed files
 
 ```text
@@ -71,6 +90,19 @@ CHANGELOG.md
 apps/desktop/src/main/gateway-monitor.ts
 apps/desktop/src/main/gateway-outage-log-core.test.ts
 apps/desktop/src/main/gateway-outage-log-core.ts
+apps/desktop/src/main/gateway-outage-log.ts
+apps/mobile/ios/Podfile.lock
+apps/mobile/native-fingerprints.json
+apps/mobile/package.json
+apps/mobile/src/lib/connection-reauth.test.ts
+apps/mobile/src/lib/connection-reauth.ts
+apps/mobile/src/lib/decision-detail.test.ts
+apps/mobile/src/lib/decision-detail.ts
+bun.lock
+packages/automation/src/fire/connector.test.ts
+packages/automation/src/fire/fire.ts
+packages/automation/src/handler/runner.ts
+packages/client/src/react/shell/useAsyncData.ts
 apps/mobile/src/apps/automations/AutomationThread.tsx
 apps/mobile/src/apps/automations/Automations.tsx
 apps/mobile/src/apps/insights/GatewayAlerts.tsx
@@ -229,6 +261,14 @@ bun run check:full
 - `bun run --cwd apps/web e2e`: passed all 14 tests after the desktop baseline failure prevented `check:full` from reaching this final lane.
 - Manual desktop/mobile-simulator notification interaction was not run in this headless worktree; the delivery, local composition, dedupe, action, SSE, and opaque-payload paths are covered by automated client and route gates.
 
+### Review-fix round verification (2026-07-31)
+
+- Per-slice suites after the fixes: gateway 182 files / 1,254 tests passed (6 skipped); automation 25 files / 376 passed; blueprints 48 files / 659 passed; client full suite 193 files / 1,488 passed; mobile 58 files / 326 passed; desktop 27 files / 244 passed. Typecheck clean on all six packages.
+- Sabotage checks: each behavioral fix (kit outcome shapes, D3 pinning, keepPreviousData + focus, notification seeding/visibility, paused-skip suppression, doorbell coalescing) was reverted in isolation and made its new tests fail, then restored.
+- `bun run check:pr` re-run on the combined snapshot: every static gate green (format, lint, lint:types after two switch-exhaustiveness fixes, knip, css/design-token/protocol lints, matrix, ratchets, native-state); `test:affected` green except `apps/desktop/src/main/embedded-gateway-layout.test.ts`, which fails identically on unmodified `origin/main` in network-connected environments (the #445 model-catalog warmer races test shutdown and adds `cache/model-catalog.json` to one tree) — pre-existing, environment-dependent, green in CI, and filed for a deterministic fix.
+- `check:diff-coverage` (the local preview of CI's authoritative `verify` coverage job, per its own header) ran 5,689 tests with 3 failures under the full 10-project instrumented sweep — `wal.integration.test.ts` G5 ×2 and `install-over-http.test.ts` union listing — all timing-sensitive suites that pass 24/24 in isolation both with and without `--coverage` on this snapshot; consistent with the documented local concurrency-saturation flakes. CI `verify` on the pushed snapshot is the arbiter.
+- `expo-web-browser@~57.0.2` added for the mobile reconnect fix; `pod install` delta is the six ExpoWebBrowser lines, and `verify-native-state` reports pod lock, project paths, and iOS/Android fingerprints in agreement.
+
 ## Audit
 
 Fresh-context publication audit: **PASS**. The auditor rechecked the final staged snapshot after the closed-PWA correction and confirmed the worker-owned production Iroh transport closes the prior D7 blocker.
@@ -246,6 +286,10 @@ Fresh-context steering audit: **PASS**. The final snapshot remains within issue 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019fb401-a5c-1785448606-1 | codex | 019fb401-a5c2-77f0-9448-c4d8c024ad52 | #647 | gpt-5.6-sol | 4075431 | 0 | 128861184 | 254167 | 4329598 | 46.2164 | 4075431 | 0 | 128861184 | 254167 |  |
+| claude-code-940406ef-8ec-1785471483-1 | claude-code | 940406ef-8ec0-488a-a59e-e8ac91415b43 | #647 | claude-opus-5 | 504 | 2325062 | 35993561 | 357705 | 2683271 | 41.4736 | 504 | 2325062 | 35993561 | 357705 |  |
+| claude-code-940406ef-8ec-1785472218-1 | claude-code | 940406ef-8ec0-488a-a59e-e8ac91415b43 | #647 | claude-fable-5 | 53 | 387978 | 5659910 | 15177 | 403208 | 11.2690 | 557 | 2713040 | 41653471 | 372882 |  |
+| claude-code-940406ef-8ec-1785472285-1 | claude-code | 940406ef-8ec0-488a-a59e-e8ac91415b43 | #647 | claude-fable-5 | 4 | 8528 | 457862 | 1824 | 10356 | 0.6557 | 561 | 2721568 | 42111333 | 374706 |  |
+| claude-code-940406ef-8ec-1785472370-1 | claude-code | 940406ef-8ec0-488a-a59e-e8ac91415b43 | #647 | claude-fable-5 | 10 | 6421 | 1410895 | 2618 | 9049 | 1.6222 | 571 | 2727989 | 43522228 | 377324 |  |
 
 ### Steering
 

@@ -1,8 +1,8 @@
+import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,7 +16,17 @@ import Icon from "../kit/components/Icon";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
+  ASSIST_RETURN_URL,
+  classifyAuthSession,
+  reconnectFailureMessage,
+} from "../lib/connection-reauth";
+import {
+  describeInvocationInput,
+  describeScopes,
+} from "../lib/decision-detail";
+import {
   beginInboxConnectionAuthorization,
+  completeInboxConnectionAuthorization,
   confirmParked,
   decideInboxOutbox,
   decideInboxScope,
@@ -159,7 +169,25 @@ export default function ApprovalsScreen({
             act(connectionId, async () => {
               const authUrl =
                 await beginInboxConnectionAuthorization(connectionId);
-              await Linking.openURL(authUrl);
+              // An IN-APP auth session, never `Linking.openURL`: the host app
+              // must stay active so the phone-local tunnel proxy keeps serving
+              // the gateway's own OAuth callback, and so the Assist return
+              // `centraid://oauth/finish` resolves back into THIS process (the
+              // ceremony is bound to this client session + device). See
+              // lib/connection-reauth.ts.
+              const outcome = classifyAuthSession(
+                await WebBrowser.openAuthSessionAsync(
+                  authUrl,
+                  ASSIST_RETURN_URL
+                )
+              );
+              const failure = reconnectFailureMessage(outcome);
+              if (failure) throw new Error(failure);
+              if (outcome.kind === "assist-handoff")
+                await completeInboxConnectionAuthorization(outcome.handoff);
+              // `closed` needs nothing: a BYO ceremony finishes at the
+              // gateway's callback, and `act` re-reads the Inbox either way —
+              // an authorized connection stops being a decision.
             }),
           openNotice: (notice) => {
             const parent = navigation.getParent();
@@ -334,6 +362,7 @@ function renderBody(input: {
               key={row.invocationId}
               title={row.command}
               detail={`${row.caller ?? row.callerKind} · ${formatWhen(row.parkedAt)}`}
+              extra={describeInvocationInput(row.input)}
               busy={busy === row.invocationId}
               styles={styles}
               onApprove={() =>
@@ -355,6 +384,7 @@ function renderBody(input: {
               key={row.requestId}
               title={`${row.appId} requests access`}
               detail={row.purpose}
+              extra={describeScopes(row.scopes)}
               busy={busy === row.requestId}
               styles={styles}
               onApprove={() =>
@@ -373,6 +403,16 @@ function renderBody(input: {
                 {row.label} needs reconnection
               </Text>
               <Text style={styles.cardDetail}>{row.note ?? row.kind}</Text>
+              {/*
+                Says where the flow finishes, because it finishes INSIDE
+                Centraid: the in-app browser keeps this app active, which is
+                what keeps the gateway reachable. Leaving for another app
+                breaks the ceremony, so the card asks the owner not to.
+              */}
+              <Text style={styles.cardExtra}>
+                Opens a secure browser inside Centraid — stay here until it
+                closes.
+              </Text>
               <View style={styles.cardActions}>
                 <Button
                   label={busy === row.connectionId ? "Opening…" : "Reconnect"}
@@ -411,6 +451,12 @@ function renderBody(input: {
 function DecisionCard(props: {
   title: string;
   detail: string;
+  /**
+   * The consent-relevant body: what is actually being granted (scopes) or
+   * executed (invocation input). Web shows both; a phone card that omits them
+   * asks the owner to approve table-level writes sight-unseen (#647 review).
+   */
+  extra?: string;
   busy: boolean;
   styles: ReturnType<typeof makeStyles>;
   onApprove: () => Promise<void>;
@@ -420,6 +466,11 @@ function DecisionCard(props: {
     <View style={props.styles.card}>
       <Text style={props.styles.cardTitle}>{props.title}</Text>
       <Text style={props.styles.cardDetail}>{props.detail}</Text>
+      {props.extra ? (
+        <Text style={props.styles.cardExtra} numberOfLines={4}>
+          {props.extra}
+        </Text>
+      ) : null}
       <View style={props.styles.cardActions}>
         <Button
           label="Approve"
@@ -531,6 +582,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     cardBtn: { flex: 1 },
     cardDetail: { ...t("small"), color: colors.ink3, marginTop: 3 },
+    cardExtra: { ...t("small"), color: colors.ink2, marginTop: spacing[2] },
     cardTitle: { ...t("bodyStrong"), color: colors.ink },
     emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
     emptyCopy: { ...t("body"), color: colors.ink2 },

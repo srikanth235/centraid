@@ -4,7 +4,13 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ApprovalsScreen from "./ApprovalsScreen.js";
+import ApprovalsScreen, {
+  NOTICE_BAR_MAX,
+  noticeBarCount,
+  noticeHue,
+  noticeSeverityLabel,
+  noticeSpanPhrase,
+} from "./ApprovalsScreen.js";
 import type {
   ApprovalsActivityRowDTO,
   ApprovalsGrantRowDTO,
@@ -189,6 +195,11 @@ describe("screens/ApprovalsScreen", () => {
     if (!btn) throw new Error(`no button with text "${text}"`);
     return btn as HTMLButtonElement;
   }
+  function rerender(props: ApprovalsScreenProps): void {
+    act(() => {
+      root?.render(<ApprovalsScreen {...props} />);
+    });
+  }
   function openArchived(el: HTMLElement): void {
     act(() => {
       findButton(el, "Archived").click();
@@ -235,7 +246,20 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       expect(el.textContent).toContain("1 waiting on you");
-      expect(el.textContent).toContain("Digest failed ×2");
+      expect(el.textContent).toContain("Digest failed");
+      // The collapsed multiplicity now rides the meta line as a duration
+      // phrase + attempt strip, not a `×N` suffix on the headline.
+      expect(el.textContent).toContain("failing for 1 day");
+      expect(
+        el.querySelector('[data-testid="notice-severity-pill"]')?.textContent
+      ).toBe("Failed");
+      expect(
+        el.querySelectorAll('[data-testid="notice-streak"] span span')
+      ).toHaveLength(2);
+      expect(el.querySelector('[data-testid="notice-tile"]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid="notice-unread-dot"]')
+      ).not.toBeNull();
       expect(el.textContent).toContain("brief/digest");
       act(() => findButton(el, "Mark read").click());
       act(() => {
@@ -278,6 +302,61 @@ describe("screens/ApprovalsScreen", () => {
       openArchived(el);
       expect(el.textContent).toContain("Old failure");
       expect(el.textContent).not.toContain("Digest failed");
+    });
+
+    it("keeps open decisions pinned under every chip, including Archived", () => {
+      // The chips filter the NOTICE stream. A decision that is blocking the
+      // owner must not disappear because they tapped "Apps" (#647 D3).
+      const el = mount(
+        makeProps({
+          outbox: [outboxRow],
+          parked: [parkedRow],
+          notices: [noticeRow()],
+        })
+      );
+      for (const chip of ["Automations", "Agents", "Apps", "Archived"]) {
+        act(() => findButton(el, chip).click());
+        expect(el.textContent).toContain("Hi");
+        expect(el.textContent).toContain("social.send_message");
+        expect(el.textContent).toContain("2 waiting on you");
+      }
+    });
+
+    it("says only that a notice filter is empty, never that the inbox is clear", () => {
+      const el = mount(makeProps({ outbox: [outboxRow], notices: [] }));
+      act(() => findButton(el, "Apps").click());
+      expect(el.textContent).toContain("No notices here.");
+      expect(el.textContent).not.toContain("Nothing waiting on you.");
+      expect(el.textContent).toContain("Hi");
+    });
+
+    it("focuses the outbox decision an outbox notice deep-links to", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      openArchived(el);
+      rerender({ ...props, focusOutbox: { itemId: "item1", nonce: 1 } });
+
+      expect(findButton(el, "Needs me").dataset.active).toBe("true");
+      expect(findButton(el, "Archived").dataset.active).toBeUndefined();
+      expect(
+        (
+          el.querySelector(
+            '[data-testid="outbox-row-item1"]'
+          ) as HTMLElement | null
+        )?.dataset.focused
+      ).toBe("true");
+      // Expanded, so the owner lands on the artifact rather than a collapsed row.
+      expect(el.textContent).toContain("See you at 6.");
+    });
+
+    it("falls back to Needs me with nothing focused when the item is gone", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      openArchived(el);
+      rerender({ ...props, focusOutbox: { itemId: "decided", nonce: 1 } });
+
+      expect(findButton(el, "Needs me").dataset.active).toBe("true");
+      expect(el.querySelector('[data-focused="true"]')).toBeNull();
     });
 
     it("expands an outbox row on click to reveal the readable artifact fields + actions", () => {
@@ -821,5 +900,100 @@ describe("screens/ApprovalsScreen", () => {
       expect(findButton(el, "Approve").disabled).toBe(true);
       expect(findButton(el, "Deny").disabled).toBe(true);
     });
+  });
+});
+
+describe("notice presentation helpers", () => {
+  const HUES = [
+    "amber",
+    "forest",
+    "indigo",
+    "ochre",
+    "rose",
+    "slate",
+    "teal",
+    "violet",
+  ];
+
+  it("hashes a correspondent to a stable palette hue", () => {
+    expect(noticeHue("brief/digest")).toBe(noticeHue("brief/digest"));
+    expect(HUES).toContain(noticeHue("brief/digest"));
+    expect(HUES).toContain(noticeHue(""));
+    // Different correspondents should not all collapse onto one hue.
+    const spread = new Set(
+      ["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => noticeHue(s))
+    );
+    expect(spread.size).toBeGreaterThan(1);
+  });
+
+  it("labels only warning and high severities", () => {
+    expect(noticeSeverityLabel("automation", "info")).toBeNull();
+    expect(noticeSeverityLabel("automation", "high")).toBe("Failed");
+    expect(noticeSeverityLabel("automation", "warning")).toBe("Warning");
+    expect(noticeSeverityLabel("gateway-health", "high")).toBe("Down");
+    expect(noticeSeverityLabel("gateway-health", "warning")).toBe("Degraded");
+  });
+
+  it("phrases a collapsed span as a failure duration or a neutral count", () => {
+    const at = (iso: string): string => iso;
+    expect(
+      noticeSpanPhrase({
+        count: 1,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBeNull();
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("failing for 6 days");
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-01T03:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("×6 over 3 hours");
+    // Informational notices never claim to be "failing", however long the run.
+    expect(
+      noticeSpanPhrase({
+        count: 6,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-07T00:00:00.000Z"),
+        severity: "info",
+      })
+    ).toBe("×6 over 6 days");
+    // Unparseable / non-advancing timestamps state multiplicity only.
+    expect(
+      noticeSpanPhrase({
+        count: 3,
+        firstAt: "nope",
+        lastAt: "nope",
+        severity: "high",
+      })
+    ).toBe("×3");
+    expect(
+      noticeSpanPhrase({
+        count: 3,
+        firstAt: at("2026-07-01T00:00:00.000Z"),
+        lastAt: at("2026-07-01T00:00:00.000Z"),
+        severity: "high",
+      })
+    ).toBe("×3");
+  });
+
+  it("clamps the attempt strip and leaves the remainder to a +N label", () => {
+    expect(noticeBarCount(0)).toBe(0);
+    expect(noticeBarCount(1)).toBe(0);
+    expect(noticeBarCount(3)).toBe(3);
+    expect(noticeBarCount(NOTICE_BAR_MAX)).toBe(NOTICE_BAR_MAX);
+    expect(noticeBarCount(40)).toBe(NOTICE_BAR_MAX);
+    expect(noticeBarCount(Number.POSITIVE_INFINITY)).toBe(0);
   });
 });

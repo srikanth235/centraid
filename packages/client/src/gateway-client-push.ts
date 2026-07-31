@@ -5,6 +5,12 @@ import type { InboxNotificationPull } from "./inbox-notification-model.js";
 const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
 const INBOX_DELIVERY_KEY = "/__centraid_notifications__/inbox";
 const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
+/**
+ * Ledger member recording that the inbox delivery baseline has been taken for
+ * this (gateway, vault). Not a notification key — never composed, never
+ * matched by the service worker's membership test.
+ */
+const DELIVERY_SEEDED = "__seeded__";
 
 /** Register the PWA only after the user has created reminder value. */
 export async function enableWebPushWake(
@@ -151,13 +157,29 @@ export async function syncWebDueNotifications(): Promise<void> {
   await writeNotificationCache(REMINDER_DELIVERY_KEY, delivered);
 }
 
-/** Fetch private Inbox content locally after an opaque wake/SSE doorbell. */
+/**
+ * Fetch private Inbox content locally after an opaque wake/SSE doorbell.
+ *
+ * Two guards keep this from banner-blasting the owner, because the callers
+ * (useInboxCounts, the Inbox route) ring it on every load, poll, SSE event and
+ * focus tick:
+ *
+ *  - A FOCUSED page composes nothing. The owner is looking at these rows in
+ *    the UI; OS banners for what is already on screen are noise, and closed /
+ *    backgrounded delivery is the service worker's job.
+ *  - A page with NO delivery ledger yet (first run, or the moment permission
+ *    is granted) seeds the ledger from the current payload silently. Without
+ *    it, every already-open decision counts as newly delivered and fires at
+ *    once.
+ */
 export async function syncWebInboxNotifications(): Promise<void> {
   if (
     typeof window === "undefined" ||
     !("Notification" in window) ||
     Notification.permission !== "granted"
   )
+    return;
+  if (typeof document !== "undefined" && document.visibilityState === "visible")
     return;
   const { baseUrl, token, vaultId } = await auth();
   const response = await doFetch(baseUrl, "/centraid/_vault/inbox", {
@@ -182,11 +204,27 @@ export async function syncWebInboxNotifications(): Promise<void> {
   } catch {
     // Disposable delivery cache; the gateway Inbox is canonical.
   }
-  const delivered = new Set([
-    ...prior,
-    ...(await readNotificationCache(INBOX_DELIVERY_KEY)),
-  ]);
+  const cached = await readNotificationCache(INBOX_DELIVERY_KEY);
+  const delivered = new Set([...prior, ...cached]);
+  // Deliver-silently baseline: no ledger means "we have never notified for
+  // this (gateway, vault)", not "everything currently open is brand new". The
+  // sentinel is what makes that a one-time decision — an EMPTY inbox would
+  // otherwise leave the ledger empty and re-arm the blast for the next
+  // payload. It rides in the same array of strings the service worker reads
+  // (membership only), so the shared ledger format is unchanged, and it can
+  // never collide with a composed key (all of which are `prefix:…`).
+  const seeding = !delivered.has(DELIVERY_SEEDED);
   const rows = composeWebInboxNotifications(inbox, delivered);
+  if (seeding) {
+    delivered.add(DELIVERY_SEEDED);
+    for (const row of rows) delivered.add(row.key);
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify([...delivered].slice(-2_000))
+    );
+    await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+    return;
+  }
   const registration =
     "serviceWorker" in navigator
       ? await navigator.serviceWorker.ready.catch(() => undefined)
@@ -212,6 +250,10 @@ export async function syncWebInboxNotifications(): Promise<void> {
     })
   );
   for (const row of rows) delivered.add(row.key);
+  // Keep the sentinel at the tail so the bounded slice can never evict it and
+  // silently re-arm the seeding path.
+  delivered.delete(DELIVERY_SEEDED);
+  delivered.add(DELIVERY_SEEDED);
   window.localStorage.setItem(
     storageKey,
     JSON.stringify([...delivered].slice(-2_000))

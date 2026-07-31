@@ -9,7 +9,14 @@
 // The gateway routes are in packages/gateway/src/routes/automations-routes.ts
 // (list, turn-now) and lifecycle-automation-routes.ts (set-enabled).
 
-import { authHeader, fetchJson, requireGatewayBase } from "./gateway";
+// Every call here goes out with `apiHeaders()` — auth *and* `x-centraid-vault`
+// (issue #289 addressing). Sending only the bearer let the gateway fall back to
+// its implied default vault, so an Inbox notice raised by an automation in a
+// non-active Space opened the wrong vault's thread and "Run now" fired there.
+// The Inbox itself is fetched with `apiHeaders()`, so the active Space is the
+// only vault whose automations mobile can be looking at; these calls must
+// follow the same axis.
+import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
 // One trigger entry from a manifest's `triggers[]`, narrowed to the fields the
 // schedule summary reads. Mirrors `@centraid/automation`'s `Trigger` union
@@ -180,7 +187,7 @@ function toRow(wire: WireRow): AutomationRow {
 export async function listAutomations(): Promise<AutomationRow[]> {
   const base = await requireGatewayBase();
   const body = await fetchJson<ListResult>(`${base}/centraid/_automations`, {
-    headers: authHeader(),
+    headers: apiHeaders(),
     method: "GET",
   });
   return (body.rows ?? []).map(toRow);
@@ -192,7 +199,7 @@ export async function listAutomationTemplates(): Promise<AutomationTemplate[]> {
   const templates = await fetchJson<
     Array<AutomationTemplate & { kind?: "app" | "automation" }>
   >(`${base}/centraid/_templates`, {
-    headers: authHeader(),
+    headers: apiHeaders(),
     method: "GET",
   });
   return templates.filter(
@@ -208,7 +215,7 @@ export async function cloneAutomationTemplate(
   const base = await requireGatewayBase();
   await fetchJson<unknown>(`${base}/centraid/_apps/_clone`, {
     body: JSON.stringify({ templateId, publish: true }),
-    headers: { "content-type": "application/json", ...authHeader() },
+    headers: apiHeaders({ "content-type": "application/json" }),
     method: "POST",
   });
 }
@@ -218,7 +225,7 @@ export async function runAutomation(ref: string): Promise<string> {
   const base = await requireGatewayBase();
   const body = await fetchJson<{ turnId: string }>(
     `${base}/centraid/_automations/turn-now?ref=${encodeURIComponent(ref)}`,
-    { headers: authHeader(), method: "POST" }
+    { headers: apiHeaders(), method: "POST" }
   );
   return body.turnId;
 }
@@ -231,7 +238,7 @@ export async function listAutomationTurns(
   const base = await requireGatewayBase();
   const body = await fetchJson<{ turns?: AutomationTurnRow[] }>(
     `${base}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}&limit=${limit}`,
-    { headers: authHeader(), method: "GET" }
+    { headers: apiHeaders(), method: "GET" }
   );
   return body.turns ?? [];
 }
@@ -250,7 +257,7 @@ export async function setAutomationEnabled(
     `${base}/centraid/_automations/set-enabled?ref=${encodeURIComponent(ref)}`,
     {
       body: JSON.stringify({ enabled, publish: true }),
-      headers: { "content-type": "application/json", ...authHeader() },
+      headers: apiHeaders({ "content-type": "application/json" }),
       method: "POST",
     }
   );

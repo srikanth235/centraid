@@ -1,14 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import { AppState } from "react-native";
 
 import { authHeader } from "./gateway";
-import { composeMobileInboxNotifications } from "./inbox-notification-model";
+import { planInboxNotifications } from "./inbox-notification-model";
 import type { MobileInboxNotificationPull } from "./inbox-notification-model";
 import * as NotificationModel from "./notification-model";
 import type { DueReminder } from "./notification-model";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
 const DELIVERED_INBOX_KEYS = "centraid:delivered-inbox-keys:v1";
+/**
+ * Separate from the ledger on purpose: a *quiet* Inbox seeds an empty ledger,
+ * and an empty ledger must not read as "never seeded" on the next pass.
+ */
+const SEEDED_INBOX_LEDGER = "centraid:delivered-inbox-keys:seeded:v1";
 
 export async function installNotificationCategories(): Promise<void> {
   await Promise.all([
@@ -91,10 +97,18 @@ export async function requestInboxNotificationPermission(): Promise<boolean> {
   return (await Notifications.requestPermissionsAsync()).granted;
 }
 
-/** Compose decision/high-severity Inbox notifications only after local fetch. */
+/**
+ * Compose decision/high-severity Inbox notifications only after local fetch.
+ *
+ * The decisions (seed vs notify, foreground vs background) live in
+ * `planInboxNotifications`; this function is the I/O shell. `appState` is
+ * injected so the rule is testable without RN's native module — RN's own
+ * `AppState` satisfies the shape, and is the default.
+ */
 export async function syncInboxNotifications(
   baseUrl: string,
-  vaultId: string
+  vaultId: string,
+  appState: { currentState: string } = AppState
 ): Promise<void> {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
@@ -103,13 +117,14 @@ export async function syncInboxNotifications(
   });
   if (!response.ok) return;
   const inbox = (await response.json()) as MobileInboxNotificationPull;
-  const raw = await AsyncStorage.getItem(DELIVERED_INBOX_KEYS).catch(
-    () => null
-  );
+  const [rawLedger, rawSeeded] = await Promise.all([
+    AsyncStorage.getItem(DELIVERED_INBOX_KEYS).catch(() => null),
+    AsyncStorage.getItem(SEEDED_INBOX_LEDGER).catch(() => null),
+  ]);
   let prior: string[] = [];
-  if (raw) {
+  if (rawLedger) {
     try {
-      const parsed: unknown = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(rawLedger);
       if (Array.isArray(parsed))
         prior = parsed.filter(
           (value): value is string => typeof value === "string"
@@ -118,10 +133,14 @@ export async function syncInboxNotifications(
       // Device bookkeeping is disposable; the authenticated Inbox is truth.
     }
   }
-  const delivered = new Set(prior);
-  const decisionRows = composeMobileInboxNotifications(inbox, delivered);
+  const plan = planInboxNotifications({
+    inbox,
+    delivered: prior,
+    seeded: rawSeeded === "1",
+    appActive: appState.currentState === "active",
+  });
   await Promise.all(
-    decisionRows.map((row) =>
+    plan.notifications.map((row) =>
       Notifications.scheduleNotificationAsync({
         content: {
           title: row.title,
@@ -133,11 +152,14 @@ export async function syncInboxNotifications(
       })
     )
   );
-  for (const row of decisionRows) delivered.add(row.key);
-  await AsyncStorage.setItem(
-    DELIVERED_INBOX_KEYS,
-    JSON.stringify([...delivered].slice(-2_000))
-  ).catch(() => undefined);
+  if (plan.nextDelivered) {
+    await AsyncStorage.setItem(
+      DELIVERED_INBOX_KEYS,
+      JSON.stringify(plan.nextDelivered)
+    ).catch(() => undefined);
+  }
+  if (plan.seeded)
+    await AsyncStorage.setItem(SEEDED_INBOX_LEDGER, "1").catch(() => undefined);
 }
 
 /**

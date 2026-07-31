@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import Button from "../ui/Button.js";
 import { cx } from "../ui/cx.js";
@@ -186,6 +188,14 @@ export interface ApprovalsScreenProps {
   onOpenNotice?: (notice: InboxNoticeRowDTO) => void;
   /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
+  /**
+   * A request to bring one outbox decision into view — what tapping an
+   * `outbox` notice means (#647 D10). `nonce` makes a repeat tap on the SAME
+   * item a new request; the screen switches to "Needs me", expands that row
+   * and scrolls it into view. A null itemId — or one that is no longer open
+   * (already decided, drained) — lands on "Needs me" with nothing focused.
+   */
+  focusOutbox?: { itemId: string | null; nonce: number } | null;
 }
 
 function GroupHead({
@@ -245,6 +255,7 @@ function OutboxRow({
   row,
   busy,
   expanded,
+  focused = false,
   onToggle,
   onApprove,
   onDeny,
@@ -252,11 +263,22 @@ function OutboxRow({
   row: ApprovalsOutboxRowDTO;
   busy: boolean;
   expanded: boolean;
+  /** Deep-link target from an outbox notice — highlight and scroll into view. */
+  focused?: boolean;
   onToggle: () => void;
   onApprove: (alwaysAllow: boolean, artifact?: Record<string, unknown>) => void;
   onDeny: () => void;
 }): JSX.Element {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    // `scrollIntoView` is absent under jsdom — the highlight is the assertable
+    // half of the behaviour, the scroll is the browser-only nicety.
+    if (focused && el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "nearest" });
+    }
+  }, [focused]);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState<Record<string, string>>({});
 
@@ -295,7 +317,13 @@ function OutboxRow({
   };
 
   return (
-    <div className={styles.row} data-expanded={expanded ? "true" : undefined}>
+    <div
+      ref={rootRef}
+      className={styles.row}
+      data-expanded={expanded ? "true" : undefined}
+      data-focused={focused ? "true" : undefined}
+      data-testid={`outbox-row-${row.itemId}`}
+    >
       <button type="button" className={styles.rowMain} onClick={onToggle}>
         <span className={styles.rowIcon}>
           <Icon name="Send" size={14} />
@@ -779,16 +807,131 @@ function ActivityRow({
   );
 }
 
-/** Empty state for the inbox groups — the grants section renders regardless. */
-function InboxEmpty(): JSX.Element {
+/**
+ * Empty state for the inbox groups — the grants section renders regardless.
+ * `text` defaults to the inbox-zero claim, which is only honest when NOTHING
+ * is waiting; a chip that filters the notice stream passes neutral copy so an
+ * empty notice list never implies the pinned decisions are gone too.
+ */
+function InboxEmpty({
+  text = "Nothing waiting on you.",
+}: {
+  text?: string;
+}): JSX.Element {
   return (
     <div className={emptyCss.pageEmpty}>
       <div className={emptyCss.pageEmptyIcon}>
         <Icon name="CheckCircle" size={22} />
       </div>
-      <div className={emptyCss.pageEmptyText}>Nothing waiting on you.</div>
+      <div className={emptyCss.pageEmptyText}>{text}</div>
     </div>
   );
+}
+
+/**
+ * The eight app-icon palette hues (`--c-<hue>` in design-tokens). A notice's
+ * correspondent tile borrows one so the same source always looks the same —
+ * scan-level "who is talking" identity, the way an app icon works.
+ */
+const NOTICE_HUES = [
+  "amber",
+  "forest",
+  "indigo",
+  "ochre",
+  "rose",
+  "slate",
+  "teal",
+  "violet",
+] as const;
+
+export type NoticeHue = (typeof NOTICE_HUES)[number];
+
+/** Deterministic hue for a correspondent — stable across renders and reloads. */
+export function noticeHue(source: string): NoticeHue {
+  let h = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    h = (h * 31 + source.charCodeAt(i)) % 100003;
+  }
+  return NOTICE_HUES[h % NOTICE_HUES.length] ?? "slate";
+}
+
+/** Correspondent glyph — kind wins (gateway health isn't an "app"), else source type. */
+function noticeIcon(
+  kind: string,
+  sourceType: InboxNoticeRowDTO["sourceType"]
+): IconName {
+  if (kind === "gateway-health") return "Cpu";
+  switch (sourceType) {
+    case "automation":
+      return "Bolt";
+    case "agent":
+      return "Sparkle";
+    case "app":
+      return "Command";
+  }
+}
+
+/**
+ * Severity as a WORD, not a coloured rail — the pill replaces the off-system
+ * `border-left` treatment. `info` gets nothing: a quiet update needs no label.
+ */
+export function noticeSeverityLabel(
+  kind: string,
+  severity: InboxNoticeRowDTO["severity"]
+): string | null {
+  if (severity === "info") return null;
+  if (kind === "gateway-health")
+    return severity === "high" ? "Down" : "Degraded";
+  return severity === "high" ? "Failed" : "Warning";
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+function spanWords(ms: number): string {
+  if (ms >= DAY_MS) {
+    const d = Math.round(ms / DAY_MS);
+    return `${d} day${d === 1 ? "" : "s"}`;
+  }
+  if (ms >= HOUR_MS) {
+    const h = Math.round(ms / HOUR_MS);
+    return `${h} hour${h === 1 ? "" : "s"}`;
+  }
+  const m = Math.max(1, Math.round(ms / MINUTE_MS));
+  return `${m} minute${m === 1 ? "" : "s"}`;
+}
+
+/**
+ * Collapsed-notice duration phrase (#647). A day-plus run of failures reads as
+ * "failing for 6 days" — the thing the owner actually needs to know; anything
+ * shorter, or merely informational, keeps the neutral "×6 over 3 hours".
+ * Returns null for an uncollapsed notice (count 1), which has no span to tell.
+ */
+export function noticeSpanPhrase(
+  row: Pick<InboxNoticeRowDTO, "count" | "firstAt" | "lastAt" | "severity">
+): string | null {
+  if (row.count <= 1) return null;
+  const first = Date.parse(row.firstAt);
+  const last = Date.parse(row.lastAt);
+  // Unparseable or non-advancing timestamps: state the multiplicity only,
+  // never invent a duration.
+  if (Number.isNaN(first) || Number.isNaN(last) || last <= first) {
+    return `×${row.count}`;
+  }
+  const span = last - first;
+  if (row.severity !== "info" && span >= DAY_MS) {
+    return `failing for ${spanWords(span)}`;
+  }
+  return `×${row.count} over ${spanWords(span)}`;
+}
+
+/** Attempt-strip bars are capped; the remainder becomes a leading "+N". */
+export const NOTICE_BAR_MAX = 8;
+
+export function noticeBarCount(count: number): number {
+  if (!Number.isFinite(count) || count <= 1) return 0;
+  return Math.min(Math.floor(count), NOTICE_BAR_MAX);
 }
 
 function NoticeRow({
@@ -804,22 +947,62 @@ function NoticeRow({
   onArchive: () => void;
   onOpen: () => void;
 }): JSX.Element {
+  const hue = noticeHue(row.sourceRef || row.sourceLabel || row.kind);
+  const severityLabel = noticeSeverityLabel(row.kind, row.severity);
+  const spanPhrase = noticeSpanPhrase(row);
+  const bars = noticeBarCount(row.count);
+  const overflow = row.count - NOTICE_BAR_MAX;
   return (
     <article
       className={styles.noticeRow}
       data-severity={row.severity}
       data-unread={row.readAt === null ? "true" : undefined}
     >
+      <span
+        className={styles.noticeTile}
+        data-hue={hue}
+        data-testid="notice-tile"
+        aria-hidden="true"
+      >
+        <Icon name={noticeIcon(row.kind, row.sourceType)} size={14} />
+      </span>
       <button type="button" className={styles.noticeBody} onClick={onOpen}>
         <span className={styles.noticeHeadline}>
-          {row.headline}
-          {row.count > 1 ? ` ×${row.count}` : ""}
+          {row.readAt === null ? (
+            <span
+              className={styles.unreadDot}
+              data-testid="notice-unread-dot"
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className={styles.noticeHeadlineText}>{row.headline}</span>
         </span>
         <span className={styles.noticeMeta}>
+          {severityLabel ? (
+            <span
+              className={styles.severityPill}
+              data-testid="notice-severity-pill"
+            >
+              {severityLabel}
+            </span>
+          ) : null}
           {row.kind.replaceAll("-", " ")}
           {row.sourceLabel ? ` · ${row.sourceLabel}` : ""} ·{" "}
           {new Date(row.lastAt).toLocaleString()}
+          {spanPhrase ? ` · ${spanPhrase}` : ""}
         </span>
+        {bars > 0 ? (
+          <span className={styles.streak} data-testid="notice-streak">
+            {overflow > 0 ? (
+              <span className={styles.streakOverflow}>+{overflow}</span>
+            ) : null}
+            <span className={styles.streakBars} aria-hidden="true">
+              {Array.from({ length: bars }, (_, i) => (
+                <span key={i} className={styles.streakBar} />
+              ))}
+            </span>
+          </span>
+        ) : null}
         {row.detailText ? (
           <span className={styles.noticeDetail}>{row.detailText}</span>
         ) : null}
@@ -871,6 +1054,7 @@ export default function ApprovalsScreen(
     onArchiveNotice = () => undefined,
     onOpenNotice = () => undefined,
     onSeeAllActivity,
+    focusOutbox = null,
   } = props;
   const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
@@ -879,6 +1063,25 @@ export default function ApprovalsScreen(
   const [inboxFilter, setInboxFilter] = useState<
     "needs" | "automations" | "agents" | "apps" | "archived"
   >("needs");
+  const [focusedOutbox, setFocusedOutbox] = useState<string | null>(null);
+  const [seenFocusNonce, setSeenFocusNonce] = useState<number | null>(null);
+
+  // Honor a deep link from an outbox notice (#647 D10). Adjusting state while
+  // rendering (React's documented "derived from props" escape) rather than in
+  // an effect: the move must be part of the same paint as the tap, and a
+  // nonce-keyed effect would cascade an extra render. Keyed on the nonce so
+  // tapping the same notice twice re-focuses; an item that is no longer open
+  // (decided or drained since the notice) lands on "Needs me" with nothing
+  // highlighted rather than pointing at a row that isn't there.
+  if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
+    const { itemId } = focusOutbox;
+    const stillOpen =
+      itemId !== null && outbox.some((row) => row.itemId === itemId);
+    setSeenFocusNonce(focusOutbox.nonce);
+    setInboxFilter("needs");
+    setFocusedOutbox(stillOpen ? itemId : null);
+    setExpandedOutbox(stillOpen ? itemId : null);
+  }
 
   const filteredActivity = useMemo(() => {
     if (activityFilter === "denied") {
@@ -905,15 +1108,19 @@ export default function ApprovalsScreen(
                   ? "agent"
                   : "app")
           );
-  const showDecisions = inboxFilter === "needs";
+  const totalCount =
+    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
+  // Open decisions are pinned at the top under EVERY chip (Archived
+  // included): the chips filter the notice stream, they never hide something
+  // that is blocking the owner. Hiding them behind "Needs me" made a decision
+  // vanish the moment the owner tapped any other chip (#647 D3).
+  const showDecisions = totalCount > 0;
   const inboxEmpty =
     outbox.length === 0 &&
     needsAuth.length === 0 &&
     parked.length === 0 &&
     scopeRequests.length === 0 &&
     activeNotices.length === 0;
-  const totalCount =
-    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
 
   return (
     <div className={styles.page}>
@@ -973,6 +1180,7 @@ export default function ApprovalsScreen(
                     row={row}
                     busy={busyId === row.itemId}
                     expanded={expandedOutbox === row.itemId}
+                    focused={focusedOutbox === row.itemId}
                     onToggle={() =>
                       setExpandedOutbox(
                         expandedOutbox === row.itemId ? null : row.itemId
@@ -1046,7 +1254,9 @@ export default function ApprovalsScreen(
               </div>
             </section>
           ) : inboxFilter === "needs" ? null : (
-            <InboxEmpty />
+            // A notice-filtering chip with no matches says only that: the
+            // pinned decisions above are still waiting.
+            <InboxEmpty text="No notices here." />
           )}
         </div>
       )}

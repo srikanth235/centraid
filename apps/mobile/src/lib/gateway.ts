@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the inbox/decision endpoints); pending split of the inbox client into a sibling module
 // Mobile gateway client (issue #263). Base-URL resolution order:
 //   (a) the paired tunnel — a localhost proxy that forwards every request
 //       over iroh to the desktop, which attaches the bearer on its side;
@@ -17,6 +18,9 @@ import type {
 } from "@centraid/design-tokens";
 
 import { Store } from "../storage";
+import { MOBILE_AUTHORIZE_SURFACE } from "./connection-reauth";
+import type { AssistHandoff } from "./connection-reauth";
+import type { DecisionScope } from "./decision-detail";
 import { ensureTunnelStarted } from "./phone-link";
 import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
 import { getActiveVaultId } from "./spaces";
@@ -85,7 +89,8 @@ export interface MobileInbox {
       appId: string;
       purpose: string;
       requestedAt: string;
-      scopes: Array<{ schema: string; table?: string; verbs: string }>;
+      /** The asked triples — rendered on the card, never approved unseen. */
+      scopes: DecisionScope[];
     }>;
   };
   notices: MobileInboxNotice[];
@@ -380,31 +385,63 @@ export async function decideInboxScope(
   );
 }
 
-/** Begin the canonical connection re-authorization flow from a needs-auth row. */
+/**
+ * The stable client-session id both halves of an OAuth ceremony must carry.
+ * The gateway binds a pending ceremony to it (plus the enrolled device), so
+ * begin and complete MUST send the same value — hence the persisted store
+ * rather than a per-call random.
+ */
+async function oauthClientSessionId(): Promise<string> {
+  const stored = await Store.hydrate<string>(OAUTH_CLIENT_SESSION_KEY, "");
+  if (/^[A-Za-z0-9_-]{32,128}$/u.test(stored)) return stored;
+  const minted = Crypto.randomUUID();
+  Store.set(OAUTH_CLIENT_SESSION_KEY, minted);
+  return minted;
+}
+
+/**
+ * Begin the canonical connection re-authorization flow from a needs-auth row.
+ * `surface` selects the Assist Worker's *deep-link* return so the in-app auth
+ * session can catch it — see lib/connection-reauth.ts for the full rationale.
+ */
 export async function beginInboxConnectionAuthorization(
   connectionId: string
 ): Promise<string> {
   const base = await requireGatewayBase();
-  let clientSessionId = await Store.hydrate<string>(
-    OAUTH_CLIENT_SESSION_KEY,
-    ""
-  );
-  if (!/^[A-Za-z0-9_-]{32,128}$/u.test(clientSessionId)) {
-    clientSessionId = Crypto.randomUUID();
-    Store.set(OAUTH_CLIENT_SESSION_KEY, clientSessionId);
-  }
   const body = await fetchJson<{ auth_url: string }>(
     `${base}/centraid/_vault/connections/${encodeURIComponent(connectionId)}/authorize`,
     {
-      body: JSON.stringify({ surface: "web" }),
+      body: JSON.stringify({ surface: MOBILE_AUTHORIZE_SURFACE }),
       headers: apiHeaders({
         "content-type": "application/json",
-        "x-centraid-client-session": clientSessionId,
+        "x-centraid-client-session": await oauthClientSessionId(),
       }),
       method: "POST",
     }
   );
   return body.auth_url;
+}
+
+/**
+ * Deliver the Assist code-courier tuple to the gateway. Nothing here is
+ * persisted: the tuple lives in memory for the length of this call, exactly as
+ * the PWA/desktop couriers do (docs/oauth-assist.md step 5).
+ */
+export async function completeInboxConnectionAuthorization(
+  handoff: AssistHandoff
+): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson<{ ok: boolean }>(
+    `${base}/centraid/_vault/connections/assist/complete`,
+    {
+      body: JSON.stringify(handoff),
+      headers: apiHeaders({
+        "content-type": "application/json",
+        "x-centraid-client-session": await oauthClientSessionId(),
+      }),
+      method: "POST",
+    }
+  );
 }
 
 export async function updateMobileInboxNotice(

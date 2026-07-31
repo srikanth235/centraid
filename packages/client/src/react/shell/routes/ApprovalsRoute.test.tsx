@@ -323,11 +323,36 @@ describe("ApprovalsRoute", () => {
       const at = "2026-07-30T10:00:00.000Z";
       getInbox.mockResolvedValue({
         decisions: {
-          outbox: [],
+          // The outbox notice below points at this still-open item, so its
+          // deep link has somewhere real to land (#647 D10).
+          outbox: [
+            {
+              itemId: "item-1",
+              connection: { kind: "pull.gmail", label: "personal" },
+              actor: "gmail-send",
+              actorId: "agent-1",
+              actorKind: "ai_agent",
+              verb: "gmail.send",
+              target: "ravi@example.com",
+              artifact: {
+                to: "ravi@example.com",
+                subject: "Hi",
+                body: "See you at 6.",
+              },
+              status: "pending",
+              grantId: null,
+              stagedAt: at,
+              decidedAt: null,
+              drainedAt: null,
+              result: null,
+              note: null,
+              canEdit: false,
+            },
+          ],
           needsAuth: [],
           parked: [],
           scopeRequests: [],
-          count: 0,
+          count: 1,
         },
         notices: [
           {
@@ -409,8 +434,84 @@ describe("ApprovalsRoute", () => {
       });
       clickHeadline("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
+      // An outbox notice must NOT self-navigate to the page we are already
+      // on — it puts the staged decision it names in front of the owner.
+      const navigationsBefore = navigate.mock.calls.length;
       clickHeadline("Message needs approval again");
-      expect(navigate).toHaveBeenLastCalledWith({ kind: "approvals" });
+      expect(navigate).toHaveBeenCalledTimes(navigationsBefore);
+      expect(
+        (
+          el.querySelector(
+            '[data-testid="outbox-row-item-1"]'
+          ) as HTMLElement | null
+        )?.dataset.focused
+      ).toBe("true");
+      expect(el.textContent).toContain("See you at 6.");
+    });
+
+    it("keeps the screen mounted across an SSE doorbell refetch", async () => {
+      const item = (subject: string): Record<string, unknown> => ({
+        itemId: "item1",
+        connection: { kind: "pull.gmail", label: "personal" },
+        actor: "gmail-send",
+        actorId: "agent-1",
+        actorKind: "ai_agent",
+        verb: "gmail.send",
+        target: "ravi@example.com",
+        artifact: { to: "ravi@example.com", subject, body: "See you at 6." },
+        status: "pending",
+        grantId: null,
+        stagedAt: "2026-07-30T10:00:00.000Z",
+        decidedAt: null,
+        drainedAt: null,
+        result: null,
+        note: null,
+        canEdit: true,
+      });
+      const inboxWith = (
+        subject: string
+      ): Awaited<ReturnType<OutboxModule["getInbox"]>> =>
+        ({
+          decisions: {
+            outbox: [item(subject)],
+            needsAuth: [],
+            parked: [],
+            scopeRequests: [],
+            count: 1,
+          },
+          notices: [],
+          unreadNoticeCount: 0,
+        }) as unknown as Awaited<ReturnType<OutboxModule["getInbox"]>>;
+      getInbox.mockResolvedValue(inboxWith("Hi"));
+      // Capture the doorbell the route hands to the SSE subscription.
+      let ring = (): void => undefined;
+      subscribeInboxChanges.mockImplementation(async (onChange) => {
+        ring = onChange;
+      });
+
+      const el = await render();
+      // Put the owner mid-flight: row expanded, edit form open.
+      await act(async () => {
+        [...el.querySelectorAll("button")]
+          .find((b) => b.textContent?.includes("Hi"))!
+          .click();
+      });
+      await act(async () => {
+        [...el.querySelectorAll("button")]
+          .find((b) => b.textContent === "Edit")!
+          .click();
+      });
+      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
+
+      // A doorbell must refresh the data underneath, not tear the screen down
+      // and throw the half-finished edit away.
+      await act(async () => {
+        ring();
+        await Promise.resolve();
+      });
+      expect(el.textContent).not.toContain("Loading Inbox…");
+      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
+      expect(getInbox).toHaveBeenCalledTimes(2);
     });
   });
 });

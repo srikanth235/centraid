@@ -242,9 +242,14 @@ import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
 import {
   createInboxDecisionWakeTracker,
+  inboxDecisionKeys,
   InboxEventBus,
 } from "./inbox-events.js";
-import { shouldWriteAutomationNotice } from "./inbox-notices.js";
+import {
+  humanizeAutomationRef,
+  noticeGist,
+  shouldWriteAutomationNotice,
+} from "./inbox-notices.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
@@ -404,6 +409,14 @@ export interface BuildGatewayOptions {
    * (defaults to a `backup` sibling of `paths.vaultDir`).
    */
   backup?: BackupConfig;
+  /**
+   * Coalescing window for the Inbox doorbell (#647). Every journalled write
+   * commit could otherwise recompute the whole Inbox projection and ring SSE
+   * to every subscriber; a bulk connector sync would pay that per batch. The
+   * first commit after idle fires promptly, the rest of the burst collapses
+   * into one trailing recomputation. Tests shorten it; hosts leave it alone.
+   */
+  inboxDoorbellWindowMs?: number;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the turn-now route. */
@@ -974,6 +987,11 @@ export async function buildGateway(
   ) => void = () => {};
   const inboxEvents = new InboxEventBus();
   const inboxDecisionWake = createInboxDecisionWakeTracker();
+  const inboxDoorbellWindowMs = options.inboxDoorbellWindowMs ?? 250;
+  const inboxDoorbellWindows = new Map<
+    string,
+    { timer: NodeJS.Timeout; pending: boolean }
+  >();
   // Restore quarantine can create a fresh decision while the registry mounts,
   // before the relay exists. Hold those content-free wakes until the relay is
   // constructed instead of dropping the boot-time doorbell.
@@ -1999,9 +2017,15 @@ export async function buildGateway(
         }
       | undefined;
     const recordAutomationNotice = (
-      outcome: "success" | "failure",
+      outcome: "success" | "failure" | "skipped",
       error?: string
     ): void => {
+      // Skips are silent (#647 D6 quiet-by-default). A paused or needs-auth
+      // connection is owner-chosen state, already carried by its own Inbox
+      // decision; minting a high-severity notice per cron tick would reset
+      // read state and wake devices forever. A skip also never becomes the
+      // stored "failure" a later success would announce a recovery from.
+      if (outcome === "skipped") return;
       const plane = vaultRegistry.current();
       const prior = plane.inbox.getBySource("automation", automationRef);
       const previousOutcome =
@@ -2017,13 +2041,19 @@ export async function buildGateway(
         )
       )
         return;
-      const name = noticeContext?.name ?? automationRef;
+      // The manifest is the source of the display name; without it, humanize
+      // the ref rather than putting `<app>/<automation>` in front of the owner.
+      const name = noticeContext?.name ?? humanizeAutomationRef(automationRef);
+      // D4: the headline says WHICH failure, not just that one happened.
+      const gist = outcome === "failure" ? noticeGist(error) : undefined;
       plane.inbox.put({
         kind: "automation",
         sourceRef: automationRef,
         headline:
           outcome === "failure"
-            ? `${name} failed`
+            ? gist
+              ? `${name} failed — ${gist}`
+              : `${name} failed`
             : previousOutcome === "failure"
               ? `${name} recovered`
               : `${name} completed`,
@@ -2161,7 +2191,11 @@ export async function buildGateway(
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
       recordAutomationNotice(
-        result.outcome.ok ? "success" : "failure",
+        result.outcome.skipped
+          ? "skipped"
+          : result.outcome.ok
+            ? "success"
+            : "failure",
         result.outcome.error
       );
       // Grant-matched outbox items the fire just staged drain now, not
@@ -3317,15 +3351,44 @@ export async function buildGateway(
     return created;
   };
 
-  provenanceDoorbell = (vaultId, entityTypes) => {
+  // The Inbox doorbell is coalesced per vault (#647 review). Recomputing the
+  // projection costs a listOutbox scan plus three queries, and each SSE ring
+  // makes every subscribed client refetch the whole Inbox — a bulk connector
+  // sync commits far too often to pay that per commit. A burst therefore
+  // collapses to one recomputation per window instead of one per commit;
+  // the leading edge still fires immediately so a lone write feels instant.
+  const fireInboxDoorbell = (vaultId: string): void => {
     inboxEvents.publish(vaultId);
-    const decisionCount = vaultRegistry.get(vaultId)?.inboxSummary()
-      .decisions.count;
+    const decisions = vaultRegistry.get(vaultId)?.inboxSummary().decisions;
     if (
-      decisionCount !== undefined &&
-      inboxDecisionWake.observe(vaultId, decisionCount)
+      decisions &&
+      inboxDecisionWake.observe(vaultId, inboxDecisionKeys(decisions))
     )
       requestInboxWake(vaultId);
+  };
+  const armInboxDoorbellWindow = (vaultId: string): void => {
+    const timer = setTimeout(() => {
+      const open = inboxDoorbellWindows.get(vaultId);
+      inboxDoorbellWindows.delete(vaultId);
+      if (!open?.pending) return;
+      fireInboxDoorbell(vaultId);
+      armInboxDoorbellWindow(vaultId);
+    }, inboxDoorbellWindowMs);
+    timer.unref();
+    inboxDoorbellWindows.set(vaultId, { timer, pending: false });
+  };
+  const ringInboxDoorbell = (vaultId: string): void => {
+    const open = inboxDoorbellWindows.get(vaultId);
+    if (open) {
+      open.pending = true;
+      return;
+    }
+    fireInboxDoorbell(vaultId);
+    armInboxDoorbellWindow(vaultId);
+  };
+
+  provenanceDoorbell = (vaultId, entityTypes) => {
+    ringInboxDoorbell(vaultId);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -4569,6 +4632,9 @@ export async function buildGateway(
     await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearTimeout(outboxTimer);
+    // A trailing Inbox doorbell must not outlive the registry it samples.
+    for (const open of inboxDoorbellWindows.values()) clearTimeout(open.timer);
+    inboxDoorbellWindows.clear();
     // Await the in-flight backup run (if any): its post-registration steps
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.

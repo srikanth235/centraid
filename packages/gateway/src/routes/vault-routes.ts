@@ -1035,7 +1035,13 @@ export function makeVaultRouteHandler(
             });
           }
           notices.push(
-            plane.inbox.putIfAbsent({
+            // Collapse-put, not dedupe: the desktop's sourceRef is stable per
+            // (gateway, scope, transition) and it never replays a projected
+            // event (its outage log keeps a durable high-water mark). Every
+            // POST is a genuinely new transition, so a flapping gateway bumps
+            // ONE card's count and reopens it if the owner already read or
+            // archived it — see COORDINATION-gateway-health.md.
+            plane.inbox.put({
               kind: "gateway-health",
               sourceRef: value.sourceRef,
               headline: value.headline,

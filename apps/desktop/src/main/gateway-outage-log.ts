@@ -20,11 +20,15 @@ import { app } from "electron";
 
 import {
   capOutageLog,
-  formatOutageLogLine,
+  formatOutageLogFile,
   OUTAGE_LOG_CAP,
-  parseOutageLogLines,
+  OUTAGE_LOG_SCHEMA,
+  parseOutageLogFile,
 } from "./gateway-outage-log-core.js";
-import type { OutageLogEvent } from "./gateway-outage-log-core.js";
+import type {
+  OutageLogEvent,
+  OutageLogFile,
+} from "./gateway-outage-log-core.js";
 
 const OUTAGE_LOG_FILE = "gateway-outage-log.jsonl";
 
@@ -37,42 +41,61 @@ function outageLogPath(): string {
  * launch, or a launch before this wave) or a corrupt one just starts
  * empty rather than blocking the monitor.
  */
-export function loadOutageLog(): OutageLogEvent[] {
+export function loadOutageLog(): OutageLogFile {
   try {
-    return parseOutageLogLines(readFileSync(outageLogPath(), "utf8"));
+    return parseOutageLogFile(readFileSync(outageLogPath(), "utf8"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       process.stdout.write(
         `[gateway-outage-log] failed to read: ${String(error)}\n`
       );
     }
-    return [];
+    return { schema: OUTAGE_LOG_SCHEMA, events: [], projected: {} };
   }
 }
 
-/**
- * Append `events` onto `existing`, cap, and persist (temp + rename — same
- * atomicity idiom as backup-state.ts's `saveBackupState`, so a crash
- * mid-write never leaves a torn file the next boot reads as truth).
- * Returns the capped list so the caller's in-memory copy stays in sync
- * without a second read. A no-op (returns `existing` unchanged, no write)
- * when `events` is empty — most ticks have nothing to log.
- */
-export function persistOutageEvents(
-  existing: OutageLogEvent[],
-  events: OutageLogEvent[]
-): OutageLogEvent[] {
-  if (events.length === 0) return existing;
-  const next = capOutageLog([...existing, ...events], OUTAGE_LOG_CAP);
+function writeOutageLog(file: OutageLogFile): void {
   try {
-    const file = outageLogPath();
-    const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tmp, next.map(formatOutageLogLine).join(""), { mode: 0o600 });
-    renameSync(tmp, file);
+    const target = outageLogPath();
+    const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+    writeFileSync(tmp, formatOutageLogFile(file), { mode: 0o600 });
+    renameSync(tmp, target);
   } catch (error) {
     process.stdout.write(
       `[gateway-outage-log] failed to persist: ${String(error)}\n`
     );
   }
+}
+
+/**
+ * Persist an advanced (or newly seeded) Inbox projection high-water mark
+ * (issue #647 review). Written the moment the mark moves, not batched with the
+ * next event: a crash between an accepted HTTP 200 and the next transition
+ * must not re-project what the gateway already has.
+ */
+export function persistProjectionMarks(file: OutageLogFile): void {
+  writeOutageLog(file);
+}
+
+/**
+ * Append `events` onto `existing.events`, cap, and persist (temp + rename —
+ * same atomicity idiom as backup-state.ts's `saveBackupState`, so a crash
+ * mid-write never leaves a torn file the next boot reads as truth). The
+ * per-gateway projection marks ride along unchanged. Returns the capped file
+ * so the caller's in-memory copy stays in sync without a second read. A no-op
+ * (returns `existing` unchanged, no write) when `events` is empty — most ticks
+ * have nothing to log.
+ */
+export function persistOutageEvents(
+  existing: OutageLogFile,
+  events: OutageLogEvent[]
+): OutageLogFile {
+  if (events.length === 0) return existing;
+  const next: OutageLogFile = {
+    schema: OUTAGE_LOG_SCHEMA,
+    events: capOutageLog([...existing.events, ...events], OUTAGE_LOG_CAP),
+    projected: existing.projected,
+  };
+  writeOutageLog(next);
   return next;
 }

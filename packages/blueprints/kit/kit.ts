@@ -58,6 +58,30 @@ function applyInOrder<T>(
   );
 }
 
+/**
+ * Normalize a `tool.result` payload to the vault `InvokeOutcome` it carries.
+ *
+ * Real producers emit the outcome BARE as the event's `result`
+ * (`runVaultInvokeTool` → `{ok, result: <InvokeOutcome>}`, and the ACP
+ * emitters forward `call.result` unwrapped), so a top-level `status` is the
+ * common shape. A wrapper that nests the outcome under `output` is the
+ * second shape the pre-#647 consent-card helper accepted — keep that
+ * tolerance so neither producer silently stops reaching the owner.
+ * Returns `null` when the payload is not an outcome at all.
+ */
+function outcomeOf(value) {
+  if (!value || typeof value !== "object") return null;
+  if (typeof value.status === "string") return value;
+  if (
+    value.output &&
+    typeof value.output === "object" &&
+    typeof value.output.status === "string"
+  ) {
+    return value.output;
+  }
+  return null;
+}
+
 export type VaultOutcomeStatus =
   | "executed"
   | "parked"
@@ -2331,10 +2355,12 @@ export function wireThemeToggle(
             // The conversation acknowledges a parked outcome, but the owner
             // decides it only in Inbox. Keeping this content-free of decision
             // controls prevents a second consent surface from drifting.
-            const o =
-              ev.result && typeof ev.result === "object"
-                ? ev.result.outcome
-                : undefined;
+            // Producers emit the `InvokeOutcome` DIRECTLY as `result`
+            // (`runVaultInvokeTool` returns `{ok, result: <InvokeOutcome>}`
+            // and the ACP emitters pass `call.result` through unwrapped), so
+            // read the bare `status` first, falling back to a nested
+            // `output.status` exactly like the pre-#647 `outcomeOf` did.
+            const o = outcomeOf(ev.result);
             if (o && o.status === "parked") {
               say("That decision is waiting in Inbox.");
             } else if (o && o.status === "denied") {

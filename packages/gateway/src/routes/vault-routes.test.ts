@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite per route module (#647 added the inbox route cases); mirrors the vault-routes.ts waiver — pending split alongside the routes it exercises
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -305,6 +306,48 @@ describe("vault-routes", () => {
     );
     expect(archived.status).toBe(200);
     expect(plane.inbox.list()).toStrictEqual([]);
+  });
+
+  test("a repeated gateway-health transition collapses into one counting card", async () => {
+    const dir = await tempDir();
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    registry.create("Personal");
+    cleanups.push(() => registry.stop());
+    const plane = registry.current();
+    const base = await startHandlerServer(
+      makeVaultRouteHandler(registry, { inboxEvents: new InboxEventBus() })
+    );
+    // The desktop projects at-most-once per transition and keys on a STABLE
+    // sourceRef, so a second POST means the gateway went down AGAIN.
+    const post = (at: string): Promise<Response> =>
+      fetch(`${base}/centraid/_vault/inbox/gateway-health`, {
+        method: "POST",
+        body: JSON.stringify({
+          events: [
+            {
+              sourceRef: "gateway-health:local:gateway:down",
+              headline: "Local is unreachable",
+              severity: "high",
+              at,
+            },
+          ],
+        }),
+      });
+
+    expect((await post("2026-07-30T10:00:00.000Z")).status).toBe(200);
+    const second = await post("2026-07-30T10:05:00.000Z");
+    expect(second.status).toBe(200);
+    const body = (await second.json()) as {
+      notices: Array<{ count: number; lastAt: string }>;
+    };
+    expect(body.notices).toHaveLength(1);
+    expect(body.notices[0]?.count).toBe(2);
+    expect(body.notices[0]?.lastAt).toBe("2026-07-30T10:05:00.000Z");
+    expect(plane.inbox.list()).toHaveLength(1);
   });
 
   test("Inbox SSE emits its content-free doorbell immediately after a canonical change", async () => {

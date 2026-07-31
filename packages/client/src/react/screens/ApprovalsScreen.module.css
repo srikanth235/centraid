@@ -115,6 +115,11 @@ button.rowMain:hover {
 .row[data-expanded="true"] .rowMain {
   background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
+/* Deep-linked from an outbox notice (#647 D10): mark WHICH row the tap meant,
+   so landing in a list of similar sends is not a guess. */
+.row[data-focused="true"] {
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
 .rowIcon {
   display: grid;
   place-items: center;
@@ -332,27 +337,132 @@ button.rowMain:hover {
   padding: 0;
   border: 0;
 }
+/* Notices are FLAT — transparent + one hairline — so the elevated decision
+   list above them reads as the heavier thing. Elevation arrives on hover
+   only. (`var(--surface)` used to sit here; it is not a token.) */
 .noticeRow {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding-left: 12px;
   border: 0.5px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: transparent;
   overflow: hidden;
+  transition: background 0.12s ease;
 }
-.noticeRow[data-unread="true"] {
-  border-left: 3px solid var(--accent);
+.noticeRow:hover {
+  background: var(--bg-sunken);
 }
-.noticeRow[data-severity="high"] {
-  border-left-color: var(--danger);
+
+/* Correspondent identity tile — a palette hue derived from the source, so the
+   same automation/agent/app always presents the same colour + glyph. */
+.noticeTile {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 8px;
+  flex: none;
+  color: var(--notice-hue, var(--ink-3));
+  background: color-mix(
+    in oklab,
+    var(--notice-hue, var(--ink)) 18%,
+    transparent
+  );
+}
+.noticeTile[data-hue="amber"] {
+  --notice-hue: var(--c-amber);
+}
+.noticeTile[data-hue="forest"] {
+  --notice-hue: var(--c-forest);
+}
+.noticeTile[data-hue="indigo"] {
+  --notice-hue: var(--c-indigo);
+}
+.noticeTile[data-hue="ochre"] {
+  --notice-hue: var(--c-ochre);
+}
+.noticeTile[data-hue="rose"] {
+  --notice-hue: var(--c-rose);
+}
+.noticeTile[data-hue="slate"] {
+  --notice-hue: var(--c-slate);
+}
+.noticeTile[data-hue="teal"] {
+  --notice-hue: var(--c-teal);
+}
+.noticeTile[data-hue="violet"] {
+  --notice-hue: var(--c-violet);
+}
+
+/* Unread: a 6px dot, not a coloured left rail (rails are off-system here).
+   "Mark read" in the row's actions is the textual half of the signal. */
+.unreadDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--accent);
+}
+
+/* Severity as a word. Amber on a light ground needs a darkened ink to stay
+   legible; the dark theme takes the raw hue back. */
+.severityPill {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: baseline;
+}
+.noticeRow[data-severity="high"] .severityPill {
+  color: color-mix(in oklab, var(--danger) 80%, var(--ink));
+  background: color-mix(in oklab, var(--danger) 14%, transparent);
+}
+.noticeRow[data-severity="warning"] .severityPill {
+  color: color-mix(in srgb, var(--c-amber) 65%, var(--ink));
+  background: color-mix(in oklab, var(--c-amber) 16%, transparent);
+}
+:root[data-theme="dark"] .noticeRow[data-severity="warning"] .severityPill {
+  color: var(--c-amber);
+}
+
+/* Failure-streak strip on a collapsed notice — one bar per attempt, capped. */
+.streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.streakOverflow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.streakBars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.streakBar {
+  width: 3px;
+  height: 10px;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--ink) 20%, transparent);
+}
+.noticeRow[data-severity="high"] .streakBar {
+  background: color-mix(in oklab, var(--danger) 55%, transparent);
+}
+.noticeRow[data-severity="warning"] .streakBar {
+  background: color-mix(in oklab, var(--c-amber) 60%, transparent);
 }
 .noticeBody {
   display: grid;
   flex: 1;
   min-width: 0;
   gap: 3px;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -360,9 +470,18 @@ button.rowMain:hover {
   cursor: pointer;
 }
 .noticeHeadline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 13px;
   font-weight: 590;
   color: var(--ink);
+}
+.noticeHeadlineText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .noticeMeta,
 .noticeDetail {

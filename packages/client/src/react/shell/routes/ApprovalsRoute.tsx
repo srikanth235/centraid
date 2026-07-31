@@ -35,6 +35,17 @@ import {
 const REVIEW_LIMIT_DEFAULT = 20;
 const REVIEW_LIMIT_SEE_ALL = 200;
 
+/** The route's whole payload — one fetch triple, so the last-good copy the
+ *  route holds across refetches has a name. */
+async function loadApprovals(reviewLimit: number) {
+  const [inbox, grants, review] = await Promise.all([
+    getInbox(true),
+    listOutboxGrants(),
+    getReview(reviewLimit),
+  ]);
+  return { inbox, grants, review };
+}
+
 // React-owned Inbox route (issues #306/#308/#647) — the desktop UI over the
 // vault's outbox/blocking/scope-request/grant surface, which shipped with no
 // renderer consumer at all. Loads `GET /_vault/blocking` (the unified inbox)
@@ -50,14 +61,25 @@ export default function ApprovalsRoute(): JSX.Element {
   const [refreshTick, setRefreshTick] = useState(0);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
 
-  const state = useAsyncData(async () => {
-    const [inbox, grants, review] = await Promise.all([
-      getInbox(true),
-      listOutboxGrants(),
-      getReview(reviewLimit),
-    ]);
-    return { inbox, grants, review };
-  }, [refreshTick, reviewLimit]);
+  // The outbox decision an `outbox` notice deep-links to (#647 D10). The
+  // nonce makes a repeat tap a fresh request; the screen owns the resulting
+  // chip/expansion move.
+  const [focusOutbox, setFocusOutbox] = useState<{
+    itemId: string | null;
+    nonce: number;
+  } | null>(null);
+
+  // Every inbox-changed doorbell bumps `refreshTick`, which is a deps change —
+  // so without `keepPreviousData` the route would swap to PageLoading on every
+  // SSE event, UNMOUNTING ApprovalsScreen and discarding whatever the owner
+  // was in the middle of: half-edited outbox artifact text, the expanded row,
+  // the "always allow" checkbox, the active chip. The loader is for the FIRST
+  // load only.
+  const state = useAsyncData(
+    () => loadApprovals(reviewLimit),
+    [refreshTick, reviewLimit],
+    { keepPreviousData: true }
+  );
 
   const reload = (): void => setRefreshTick((t) => t + 1);
   useEffect(() => {
@@ -288,12 +310,21 @@ export default function ApprovalsRoute(): JSX.Element {
           } else if (typeof appId === "string") {
             navigate({ kind: "app", id: appId });
           } else if (notice.kind === "outbox") {
-            navigate({ kind: "approvals" });
+            // We are already ON Inbox, so navigating here was a no-op. The
+            // gateway ships the staged item's id (outbox-executor.ts) — use
+            // it to put that decision in front of the owner instead.
+            const itemId = notice.detail.itemId;
+            setFocusOutbox((prev) => ({
+              itemId:
+                typeof itemId === "string" && itemId !== "" ? itemId : null,
+              nonce: (prev?.nonce ?? 0) + 1,
+            }));
           } else {
             navigate({ kind: "approvals" });
           }
         }}
         onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}
+        focusOutbox={focusOutbox}
       />
     </PageScroll>
   );

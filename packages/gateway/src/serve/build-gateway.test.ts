@@ -13,6 +13,8 @@ import type { GatewayPaths } from "../paths.ts";
 import { buildGateway } from "./build-gateway.ts";
 import type { BuiltGateway } from "./build-gateway.ts";
 import { GatewayDatabase } from "./gateway-db.js";
+import { configureApiKey, stageItem } from "./outbox-executor-test-kit.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole
 // object graph but binds no socket. These tests pin that contract — the
@@ -54,6 +56,23 @@ async function waitFor(
       throw new Error("timed out waiting for gateway state");
     await new Promise((resolve) => {
       setTimeout(resolve, 20);
+    });
+    return waitForNext();
+  };
+  return waitForNext();
+}
+
+async function waitForAsync(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 10_000
+): Promise<void> {
+  const startedAt = Date.now();
+  const waitForNext = async (): Promise<void> => {
+    if (await predicate()) return;
+    if (Date.now() - startedAt > timeoutMs)
+      throw new Error("timed out waiting for gateway state");
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
     });
     return waitForNext();
   };
@@ -114,6 +133,157 @@ describe("build-gateway scenarios", () => {
     ).toBeUndefined();
   });
 
+  /** Publish one automation app into the gateway's live code store. */
+  async function publishAutomation(input: {
+    appId: string;
+    automationId: string;
+    name: string;
+    handler: string;
+    connector?: { kind: string; label: string };
+  }): Promise<void> {
+    const store = await gateway.appsStore();
+    const sessionId = `seed-${input.appId}`;
+    const session = await store.openSession(sessionId);
+    await Promise.all(
+      scaffoldAppFiles(input.appId, {
+        automationId: input.automationId,
+        name: input.name,
+        triggers: [],
+        ...(input.connector
+          ? {
+              connector: input.connector,
+              // A connector manifest must declare the vault access its
+              // staged rows land under.
+              vault: {
+                purpose: "dpv:ServiceProvision",
+                why: "stage pulled rows",
+                scopes: [{ schema: "sync", verbs: "read+act" }],
+              },
+            }
+          : {}),
+      }).map(async (file) => {
+        const target = path.join(
+          session.worktreePath,
+          "apps",
+          input.appId,
+          file.path
+        );
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.writeFile(
+          target,
+          file.path.endsWith("/handler.js") ? input.handler : file.content,
+          "utf8"
+        );
+      })
+    );
+    await store.publish({
+      sessionId,
+      appId: input.appId,
+      message: `seed ${input.appId}`,
+    });
+    await store.closeSession(sessionId);
+    await gateway.syncApps();
+  }
+
+  test("a burst of provenance commits collapses into one Inbox recomputation (#647)", async () => {
+    const plane = gateway.vaults.current();
+    // Instrument the production projection the doorbell samples: every
+    // uncoalesced commit would pay a listOutbox scan plus three queries AND
+    // ring SSE to every subscriber, which a bulk connector sync repeats per
+    // batch.
+    const computeSummary = plane.inboxSummary.bind(plane);
+    let summaries = 0;
+    plane.inboxSummary = ((includeArchived?: boolean) => {
+      summaries += 1;
+      return computeSummary(includeArchived);
+    }) as VaultPlane["inboxSummary"];
+
+    // Each of these is a journalled write commit → one provenance doorbell.
+    configureApiKey(plane);
+    for (let i = 0; i < 12; i += 1) stageItem(plane);
+
+    // The leading edge fired once; the other twelve commits are still in the
+    // window, not twelve more projections.
+    expect(summaries).toBe(1);
+    // …and the whole burst settles into exactly one trailing recomputation.
+    await waitFor(() => summaries > 1);
+    expect(summaries).toBe(2);
+    expect(plane.blocking().outbox).toHaveLength(12);
+  });
+
+  test("a paused connection skips its fire without minting a failure notice (#647)", async () => {
+    const appId = "paused-connector";
+    const automationId = "pull";
+    const automationRef = `${appId}/${automationId}`;
+    const plane = gateway.vaults.current();
+    const connectionId = configureApiKey(plane);
+    const setStatus = (status: string): void => {
+      const outcome = plane.gateway.invoke(plane.ownerCredential, {
+        command: "sync.set_connection_status",
+        input: { connection_id: connectionId, status },
+      });
+      if (outcome.status !== "executed")
+        throw new Error(`set_connection_status: ${JSON.stringify(outcome)}`);
+    };
+    setStatus("paused");
+    await publishAutomation({
+      appId,
+      automationId,
+      name: "Paused pull",
+      handler: "export default async () => ({ ran: true });\n",
+      connector: { kind: "pull.gmail", label: "personal" },
+    });
+    await gateway.start("http://127.0.0.1:0");
+    const mounted = await mountUnauthed(gateway.composedHandler);
+    // A skipped fire never opens a run: the honest-liveness gate returns
+    // before the handler executes. A real fire always lands a terminal turn,
+    // so the ledger separates "skipped" from "ran".
+    interface LedgerTurn {
+      endedAt?: number;
+      ok?: boolean;
+      error?: string;
+    }
+    const endedTurns = async (): Promise<LedgerTurn[]> => {
+      const response = await fetch(
+        `${mounted.url}/centraid/_automations/turns?ref=${automationRef}`
+      );
+      const body = (await response.json()) as { turns?: LedgerTurn[] };
+      return (body.turns ?? []).filter((turn) => turn.endedAt !== undefined);
+    };
+    const fire = async (): Promise<void> => {
+      const response = await fetch(
+        `${mounted.url}/centraid/_automations/turn-now?ref=${automationRef}`,
+        { method: "POST" }
+      );
+      expect(response.status).toBe(202);
+    };
+    const notice = (): unknown =>
+      gateway.vaults.current().inbox.getBySource("automation", automationRef);
+    try {
+      // A paused connection is owner-chosen state, already carried by its own
+      // connection card: every tick skips, and stays silent while it does.
+      await fire();
+      await fire();
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1_000);
+      });
+      await expect(endedTurns()).resolves.toStrictEqual([]);
+      // No notice → no severity, no unread reset, no wake.
+      expect(notice()).toBeUndefined();
+
+      // Resuming runs for real — which also proves the fires above were
+      // skipped by the gate, not lost by the harness. The skip left no
+      // stored "failure", so this success announces no recovery either.
+      setStatus("active");
+      await fire();
+      await waitForAsync(async () => (await endedTurns()).length === 1);
+      expect((await endedTurns())[0]?.ok).toBe(true);
+      expect(notice()).toBeUndefined();
+    } finally {
+      await mounted.close();
+    }
+  }, 30_000);
+
   test("a failed automation fire writes and collapses its Inbox notice", async () => {
     const appId = "broken-run";
     const automationId = "nightly";
@@ -168,7 +338,8 @@ describe("build-gateway scenarios", () => {
       expect(
         gateway.vaults.current().inbox.getBySource("automation", automationRef)
       ).toMatchObject({
-        headline: "Broken nightly failed",
+        // D4: the headline carries the failure gist, not just "failed".
+        headline: "Broken nightly failed — expected automation failure",
         count: 1,
         severity: "high",
         detail: {
