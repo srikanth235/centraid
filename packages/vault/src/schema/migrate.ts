@@ -34,8 +34,11 @@ import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL } from "./fts.js";
-import { INBOX_NOTICE_DDL } from "./inbox.js";
 import { JOURNAL_DDL } from "./journal.js";
+import {
+  NOTIFICATIONS_NOTICE_DDL,
+  RENAME_INBOX_NOTICE_DDL,
+} from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
@@ -105,9 +108,12 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // After soft people.merge_people was folded into core.merge_party (#630/#638),
   // drop the unused people_merge residual without rewriting the organize band.
   DROP_PEOPLE_MERGE_DDL,
-  // Inbox is a projection: decisions stay canonical and only durable notices
-  // gain a new table (#647).
-  INBOX_NOTICE_DDL,
+  // Notifications is a projection: decisions stay canonical and only durable
+  // notices gain a new table (#647).
+  NOTIFICATIONS_NOTICE_DDL,
+  // The surface rename Inbox → Notifications (#665) renamed the table with it.
+  // v0 owes no data migration: the old table is dropped, not copied.
+  RENAME_INBOX_NOTICE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

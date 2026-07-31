@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
 import { fetchGatewayHealth, fetchInsightsSummary } from "../../lib/insights";
 import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
-import { subscribeSpaces } from "../../lib/spaces";
+import { subscribeVaultLinks } from "../../lib/vault-links";
 
 // The Insights screen mirrors TWO independent gateway surfaces — health
 // (gateway-wide) and usage (vault-scoped) — that can be available on different
@@ -87,8 +87,8 @@ export function useInsights(): UseInsights {
   useEffect(() => {
     void loadInsights(setState);
   }, []);
-  // Switching the active Space re-points usage at a different vault — reload.
-  useEffect(() => subscribeSpaces(() => void loadInsights(setState)), []);
+  // Switching the active Vault re-points usage at a different vault — reload.
+  useEffect(() => subscribeVaultLinks(() => void loadInsights(setState)), []);
 
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);

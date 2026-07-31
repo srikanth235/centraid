@@ -7,7 +7,7 @@ import { formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import type { GroupedDevice } from "./device-groups.js";
-import { lastAdminSpace } from "./device-roles.js";
+import { lastAdminVault } from "./device-roles.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -63,8 +63,8 @@ export default function DeviceRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set only once the gateway has refused: this device is the last live one
-  // of the space's last owner, so the confirm escalates in place.
-  const [strandedSpace, setStrandedSpace] = useState<string | null>(null);
+  // of the vault's last owner, so the confirm escalates in place.
+  const [strandedVault, setStrandedVault] = useState<string | null>(null);
   const [computeBusy, setComputeBusy] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(device.label);
@@ -82,9 +82,9 @@ export default function DeviceRow({
       await onRevoke(device, confirmLastAdmin);
       // On success the parent drops the row; nothing more to do here.
     } catch (caughtError) {
-      const stranded = lastAdminSpace(caughtError);
+      const stranded = lastAdminVault(caughtError);
       if (stranded !== undefined && confirmLastAdmin === undefined) {
-        setStrandedSpace(stranded);
+        setStrandedVault(stranded);
       } else {
         setError(
           caughtError instanceof Error
@@ -92,7 +92,7 @@ export default function DeviceRow({
             : String(caughtError)
         );
         setConfirming(false);
-        setStrandedSpace(null);
+        setStrandedVault(null);
       }
       setBusy(false);
     }
@@ -115,7 +115,7 @@ export default function DeviceRow({
 
   const cancel = (): void => {
     setConfirming(false);
-    setStrandedSpace(null);
+    setStrandedVault(null);
   };
 
   return (
@@ -195,8 +195,8 @@ export default function DeviceRow({
         </div>
         <div className={styles.meta}>
           {device.platform ? <span>{device.platform}</span> : null}
-          {/* Every space this device reaches — it holds one enrollment per
-              space, and showing only the first read as "paired to Shared"
+          {/* Every vault this device reaches — it holds one enrollment per
+              vault, and showing only the first read as "paired to Shared"
               for a device that also reached Personal. */}
           {device.vaults.map((vault) => (
             <span key={vault.vaultId} className={styles.metaVault}>
@@ -247,9 +247,9 @@ export default function DeviceRow({
               ))}
           </div>
         ) : null}
-        {strandedSpace ? (
+        {strandedVault ? (
           <div className={styles.rowWarn}>
-            This is the last owner device for {strandedSpace}. Getting back in
+            This is the last owner device for {strandedVault}. Getting back in
             would need the gateway machine and its command line.
           </div>
         ) : null}
@@ -267,13 +267,13 @@ export default function DeviceRow({
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, styles.confirmYes)}
               disabled={busy}
-              onClick={() => void revoke(strandedSpace ?? undefined)}
+              onClick={() => void revoke(strandedVault ?? undefined)}
             >
               {busy ? (
                 <span className={styles.spin}>
                   <Icon name="Loader" size={13} />
                 </span>
-              ) : strandedSpace ? (
+              ) : strandedVault ? (
                 "Revoke anyway"
               ) : (
                 "Revoke"

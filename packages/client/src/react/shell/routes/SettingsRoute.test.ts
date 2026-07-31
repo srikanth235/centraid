@@ -24,6 +24,6 @@ describe("resolveSettingsPage", () => {
   );
 
   it("preserves a visible Settings deep link", () => {
-    expect(resolveSettingsPage("space")).toBe("space");
+    expect(resolveSettingsPage("vault")).toBe("vault");
   });
 });

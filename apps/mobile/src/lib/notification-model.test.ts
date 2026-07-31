@@ -40,7 +40,7 @@ describe("notification model", () => {
     });
   });
 
-  test("routes task, reminder, app, invite, and Inbox actions", () => {
+  test("routes task, reminder, app, invite, and Notifications actions", () => {
     expect(
       notificationActionPlan(COMPLETE_TASK, {
         kind: "task",
@@ -63,7 +63,7 @@ describe("notification model", () => {
       notificationActionPlan("OPEN_ITEM", { kind: "invite" })
     ).toStrictEqual({ kind: "open-home" });
     expect(
-      notificationActionPlan("OPEN_ITEM", { kind: "inbox" })
-    ).toStrictEqual({ kind: "open-inbox" });
+      notificationActionPlan("OPEN_ITEM", { kind: "notifications" })
+    ).toStrictEqual({ kind: "open-notifications" });
   });
 });

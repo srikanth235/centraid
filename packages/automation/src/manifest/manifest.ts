@@ -403,7 +403,7 @@ export interface Manifest {
   readonly description?: string;
   readonly enabled: boolean;
   /**
-   * Inbox delivery policy for fire outcomes. `failures` includes the first
+   * Notifications delivery policy for fire outcomes. `failures` includes the first
    * success after a failure so the owner sees recovery, then goes quiet.
    */
   readonly notify?: "always" | "failures" | "never";

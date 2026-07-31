@@ -19,10 +19,10 @@ import type {
 /**
  * One physical device, with every enrollment it holds folded in.
  *
- * The devices route returns a row per (device, SPACE) enrollment, so a browser
+ * The devices route returns a row per (device, VAULT) enrollment, so a browser
  * paired into Shared + Personal came back twice. Rendered raw that reads as
  * two devices — the card counted "4 devices" for two — and each copy carried a
- * button labelled "Revoke device" that only dropped one space. The user thinks
+ * button labelled "Revoke device" that only dropped one vault. The user thinks
  * in hardware, so the row is hardware and `enrollmentIds` carries what revoking
  * it has to remove.
  */
@@ -30,8 +30,8 @@ export interface GroupedDevice extends CentraidGatewayDevice {
   /** Every enrollment row this device holds; revoking the device drops all. */
   enrollmentIds: string[];
   /**
-   * The spaces it reaches, in the order the gateway returned them. The role
-   * rides on the SPACE, not the device: it is authored per (person, space),
+   * The vaults it reaches, in the order the gateway returned them. The role
+   * rides on the VAULT, not the device: it is authored per (person, vault),
    * so a device can be admin in Personal and read-only in Shared.
    */
   vaults: GatewayVaultGrant[];
@@ -87,7 +87,7 @@ function rolesFromDevices(
   const byVault = new Map<string, GatewayVaultGrant>();
   for (const device of devices) {
     if (isRevokedDevice(device)) continue;
-    // Read every space the merged device reaches, not just the one its first
+    // Read every vault the merged device reaches, not just the one its first
     // enrollment row happened to name.
     for (const vault of device.vaults) {
       if (!byVault.has(vault.vaultId)) byVault.set(vault.vaultId, vault);
@@ -145,8 +145,8 @@ export function groupDevicesByMember(
   );
 }
 
-/** Every space the caller can see, for the pairing panel's grant rows. */
-export function spacesFromGroups(
+/** Every vault the caller can see, for the pairing panel's grant rows. */
+export function vaultsFromGroups(
   groups: readonly MemberGroup[]
 ): GatewayVaultGrant[] {
   const byVault = new Map<string, GatewayVaultGrant>();

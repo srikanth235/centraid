@@ -5,7 +5,7 @@ import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
 
 import controlsCss from "../../styles/controls.module.css";
-import spaceModalStyles from "./SpaceModal.module.css";
+import vaultModalStyles from "./VaultModal.module.css";
 
 export interface RenameGatewayModalProps {
   initialLabel: string;
@@ -14,7 +14,7 @@ export interface RenameGatewayModalProps {
 }
 
 /** The switcher overflow menu's "Rename…" action (issue #382) — a single-field
- *  sibling of SpaceModal/ConnectFlowModal, reusing the same `.prof*` dialog
+ *  sibling of VaultModal/ConnectFlowModal, reusing the same `.prof*` dialog
  *  chrome so every "small form in a modal" in this app looks identical. */
 export default function RenameGatewayModal({
   initialLabel,
@@ -49,25 +49,25 @@ export default function RenameGatewayModal({
   };
 
   return (
-    <div className={spaceModalStyles.profOverlay}>
+    <div className={vaultModalStyles.profOverlay}>
       <button
         type="button"
-        className={spaceModalStyles.profScrim}
+        className={vaultModalStyles.profScrim}
         aria-label="Close"
         tabIndex={-1}
         onClick={onCancel}
       />
-      <dialog open className={spaceModalStyles.profModal} aria-modal="true">
-        <div className={spaceModalStyles.profModalHead}>
+      <dialog open className={vaultModalStyles.profModal} aria-modal="true">
+        <div className={vaultModalStyles.profModalHead}>
           <span
-            className={spaceModalStyles.profModalHeadIcon}
+            className={vaultModalStyles.profModalHeadIcon}
             // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Pencil", 14) }}
           />
-          <h2 className={spaceModalStyles.profModalTitle}>Rename gateway</h2>
+          <h2 className={vaultModalStyles.profModalTitle}>Rename gateway</h2>
           <button
             type="button"
-            className={cx(controlsCss.iconBtn, spaceModalStyles.profModalClose)}
+            className={cx(controlsCss.iconBtn, vaultModalStyles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onCancel}
@@ -75,12 +75,12 @@ export default function RenameGatewayModal({
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
-        <div className={spaceModalStyles.profModalBody}>
-          <label className={spaceModalStyles.profField}>
-            <span className={spaceModalStyles.profFieldLabel}>Label</span>
+        <div className={vaultModalStyles.profModalBody}>
+          <label className={vaultModalStyles.profField}>
+            <span className={vaultModalStyles.profFieldLabel}>Label</span>
             <input
               ref={ref}
-              className={spaceModalStyles.profFieldInput}
+              className={vaultModalStyles.profFieldInput}
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -93,14 +93,14 @@ export default function RenameGatewayModal({
             />
           </label>
         </div>
-        <div className={spaceModalStyles.profModalFoot}>
+        <div className={vaultModalStyles.profModalFoot}>
           <span style={{ flex: 1 }} />
           <button type="button" className={controlsCss.chip} onClick={onCancel}>
             Cancel
           </button>
           <button
             type="button"
-            className={spaceModalStyles.profModalSave}
+            className={vaultModalStyles.profModalSave}
             disabled={!ready}
             data-enabled={ready ? "true" : "false"}
             onClick={submit}

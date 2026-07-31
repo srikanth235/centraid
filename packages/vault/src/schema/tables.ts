@@ -124,7 +124,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   enrich: ["embedding", "request", "policy"],
   outbox: ["item", "grant"],
-  inbox: ["notice"],
+  notifications: ["notice"],
   // Read-only custody projection (issue #352): local-vs-replicated state per
   // content item, rebuilt on the standing sweep — see blob/custody.ts.
   blob: ["custody_state"],

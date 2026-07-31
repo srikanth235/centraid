@@ -88,7 +88,7 @@ The desktop app runs its gateway **in-process**, so a fresh browser origin serve
    }
    ```
 
-4. Web onboarding opens straight on the ticket path — paste the ticket, then fill in the profile step (display name + avatar colour). The ConnectFlow (`packages/client/src/react/shell/routes/ConnectFlow.tsx`) is shared with desktop's **Connect with a ticket** option and the switcher's **Add gateway**; web passes `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — it opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
+4. Web onboarding opens straight on the ticket path — paste the ticket, then fill in the profile step (display name + avatar colour). The ticket step (`packages/client/src/react/shell/routes/ConnectTicketPanel.tsx`, wrapping `ConnectFlow.tsx`) is shared verbatim with desktop's **Connect with a ticket** option and the switcher's **Add vault** modal; it defaults to `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — every surface opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
 
 There is no remote URL+token connection path and no SSH-routed connect (the SSH code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId pairing contract. Do not point a standalone gateway at a data dir the desktop app is **also** running against: `gateway.db` rejects the second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 

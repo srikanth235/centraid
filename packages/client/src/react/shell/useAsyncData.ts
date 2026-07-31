@@ -22,7 +22,7 @@ export interface AsyncDataOptions {
   /**
    * Keep the last settled data on screen while a deps change refetches,
    * instead of reporting `loading`. Routes whose deps double as a refresh
-   * doorbell (Inbox: SSE bumps a tick) need this — reporting `loading` swaps
+   * doorbell (Notifications: SSE bumps a tick) need this — reporting `loading` swaps
    * the whole screen for a spinner, UNMOUNTING it and discarding whatever the
    * owner was in the middle of. Off by default: a route whose deps change
    * means "show something else" still wants its loading line.

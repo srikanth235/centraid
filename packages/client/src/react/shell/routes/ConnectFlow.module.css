@@ -173,23 +173,13 @@
   gap: 12px;
 }
 
-.rememberRow {
-  align-items: flex-start;
-  display: flex;
-  gap: 10px;
-  line-height: 1.25;
-}
-
-.rememberRow input {
-  margin-top: 3px;
-}
-
-.rememberRow span {
-  display: grid;
-  gap: 3px;
-}
-
-.rememberRow small {
+/* Heads-up before the first keychain write. Shared by onboarding's ticket
+   step and the switcher's "Add vault" modal via ConnectTicketPanel, so the
+   two surfaces cannot drift apart on when the OS dialog is announced. */
+.keychainNote {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 

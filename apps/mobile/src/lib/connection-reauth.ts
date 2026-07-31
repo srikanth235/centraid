@@ -40,7 +40,7 @@
  *    through the still-alive loopback proxy; the gateway completes the ceremony
  *    server-side and renders its "Connected" page inside the session. Nothing
  *    comes back to the app, so the session ends as a plain dismissal and the
- *    caller simply re-reads the Inbox: an authorized connection is no longer
+ *    caller simply re-reads the Notifications: an authorized connection is no longer
  *    `needs-auth`, so the decision disappears.
  *
  * "desktop" is the wire word for "return by `centraid://` deep link" — the
@@ -73,7 +73,7 @@ export type ReconnectOutcome =
   /**
    * The browser closed without a deep link. Either the owner backed out, or a
    * BYO ceremony finished at the gateway's own callback page. Indistinguishable
-   * from here on purpose — re-read the Inbox and let the row speak.
+   * from here on purpose — re-read Notifications and let the row speak.
    */
   | { kind: "closed" };
 

@@ -5,31 +5,31 @@ import { openVaultDb } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 import {
-  createInboxDecisionWakeTracker,
-  inboxDecisionKeys,
-  InboxEventBus,
-} from "./inbox-events.js";
-import {
   humanizeAutomationRef,
-  InboxNoticeStore,
+  NoticeStore,
   noticeGist,
   shouldWriteAutomationNotice,
-} from "./inbox-notices.js";
+} from "./notices.js";
+import {
+  createNotificationsDecisionWakeTracker,
+  notificationsDecisionKeys,
+  NotificationsEventBus,
+} from "./notifications-events.js";
 import { configureApiKey, stageItem } from "./outbox-executor-test-kit.js";
 import { openVaultPlane } from "./vault-plane.js";
 
-describe("Inbox notice delivery", () => {
+describe("Notifications notice delivery", () => {
   let db: VaultDb | undefined;
   afterEach(() => {
     db?.close();
     db = undefined;
   });
 
-  describe(InboxNoticeStore, () => {
+  describe(NoticeStore, () => {
     test("collapses repeats by kind/source and reopens an archived card", () => {
       db = openVaultDb();
       const changes: Array<{ wake: boolean }> = [];
-      const store = new InboxNoticeStore(db.vault, (change) =>
+      const store = new NoticeStore(db.vault, (change) =>
         changes.push({ wake: change.wake })
       );
       const first = store.put({
@@ -67,7 +67,7 @@ describe("Inbox notice delivery", () => {
 
     test("read and archive transitions are idempotent and archived rows are opt-in", () => {
       db = openVaultDb();
-      const store = new InboxNoticeStore(db.vault);
+      const store = new NoticeStore(db.vault);
       const notice = store.put({
         kind: "outbox",
         sourceRef: "item-1",
@@ -88,19 +88,19 @@ describe("Inbox notice delivery", () => {
       expect(store.archive("missing")).toBeUndefined();
     });
 
-    test("a repeated gateway-health transition bumps one card and reopens it", () => {
+    test("a repeated automation failure bumps one card and reopens it", () => {
       db = openVaultDb();
       const changes: Array<{ wake: boolean }> = [];
-      const store = new InboxNoticeStore(db.vault, (change) =>
+      const store = new NoticeStore(db.vault, (change) =>
         changes.push({ wake: change.wake })
       );
-      // The desktop's sourceRef is stable per (gateway, scope, transition):
-      // a flapping gateway must collapse into ONE card that counts up, not
-      // dedupe into the first outage forever.
+      // A producer's sourceRef is stable per (source, outcome): an automation
+      // that keeps failing must collapse into ONE card that counts up, not
+      // dedupe into the first failure forever.
       const input = {
-        kind: "gateway-health",
-        sourceRef: "gateway-health:local:gateway:down",
-        headline: "Local is unreachable",
+        kind: "automation",
+        sourceRef: "myapp/nightly-digest:failure",
+        headline: "Nightly digest failed",
         severity: "high" as const,
         at: "2026-07-30T10:00:00.000Z",
       };
@@ -124,7 +124,7 @@ describe("Inbox notice delivery", () => {
     test("prunes old archives, enforces the cap, and never evicts active cards first", () => {
       db = openVaultDb();
       const insert = db.vault.prepare(
-        `INSERT INTO inbox_notice(
+        `INSERT INTO notifications_notice(
          notice_id, kind, source_ref, headline, detail_json, severity,
          count, first_at, last_at, read_at, archived_at
        ) VALUES (?, 'seed', ?, 'Seed', '{}', 'info', 1, ?, ?, ?, ?)`
@@ -158,7 +158,7 @@ describe("Inbox notice delivery", () => {
       );
       db.vault.exec("COMMIT");
 
-      const store = new InboxNoticeStore(db.vault);
+      const store = new NoticeStore(db.vault);
       store.put({
         kind: "seed",
         sourceRef: "active-new",
@@ -167,7 +167,7 @@ describe("Inbox notice delivery", () => {
       });
 
       const count = db.vault
-        .prepare("SELECT count(*) AS n FROM inbox_notice")
+        .prepare("SELECT count(*) AS n FROM notifications_notice")
         .get() as unknown as { n: number };
       expect(count.n).toBe(1_000);
       expect(store.getBySource("seed", "old")).toBeUndefined();
@@ -215,14 +215,16 @@ describe("Inbox notice delivery", () => {
       expect(humanizeAutomationRef("myapp/nightly-digest")).toBe(
         "Nightly digest"
       );
-      expect(humanizeAutomationRef("mail/pull_inbox")).toBe("Pull inbox");
+      expect(humanizeAutomationRef("mail/pull_notifications")).toBe(
+        "Pull notifications"
+      );
       expect(humanizeAutomationRef("standalone")).toBe("Standalone");
     });
   });
 
-  describe(InboxEventBus, () => {
+  describe(NotificationsEventBus, () => {
     test("delivers a vault-scoped content-free doorbell and unsubscribes", () => {
-      const bus = new InboxEventBus();
+      const bus = new NotificationsEventBus();
       const events: Array<{ vaultId: string; wake: boolean }> = [];
       const unsubscribe = bus.subscribe("vault-a", (event) =>
         events.push(event)
@@ -241,7 +243,7 @@ describe("Inbox notice delivery", () => {
     });
   });
 
-  describe(createInboxDecisionWakeTracker, () => {
+  describe(createNotificationsDecisionWakeTracker, () => {
     test("keys real open decisions: seeds at startup, wakes on a net-zero swap", async () => {
       const plane = openVaultPlane({
         bootstrap: true,
@@ -256,9 +258,12 @@ describe("Inbox notice delivery", () => {
       try {
         configureApiKey(plane);
         const first = stageItem(plane);
-        const tracker = createInboxDecisionWakeTracker();
+        const tracker = createNotificationsDecisionWakeTracker();
         const observe = (): boolean =>
-          tracker.observe("vault-a", inboxDecisionKeys(plane.blocking()));
+          tracker.observe(
+            "vault-a",
+            notificationsDecisionKeys(plane.blocking())
+          );
 
         // A decision open before this process started is not news: the first
         // observation after a restart seeds silently.
@@ -288,7 +293,7 @@ describe("Inbox notice delivery", () => {
     });
 
     test("tracks each vault separately", () => {
-      const tracker = createInboxDecisionWakeTracker();
+      const tracker = createNotificationsDecisionWakeTracker();
       expect(tracker.observe("vault-a", ["parked:i1"])).toBe(false);
       expect(tracker.observe("vault-b", ["parked:i2"])).toBe(false);
       expect(tracker.observe("vault-a", ["parked:i1", "parked:i2"])).toBe(true);

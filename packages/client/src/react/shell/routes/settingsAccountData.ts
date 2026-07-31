@@ -17,19 +17,32 @@ import type {
   PhoneBridgeProps,
 } from "../../screen-contracts.js";
 
-/** Settings → Space page data (issue #382) — scoped to the ACTIVE vault
+/** Settings → Vault page data (issue #382) — scoped to the ACTIVE vault
  *  only; the cross-vault list + gateway "Connections" group both moved to
  *  the switcher, which is the pair manager now. */
-export interface ActiveSpaceData {
+export interface ActiveVaultData {
   vaultId: string;
   name: string;
   icon: IconName;
   color: string;
   blurb: string;
   /** False when this is the last vault on its gateway — mirrors the retired
-   *  Spaces list's `primordial` guard (never let the user delete their only
-   *  space from here). */
+   *  Vaults list's `primordial` guard (never let the user delete their only
+   *  vault from here). */
   deletable: boolean;
+  /** Present only when this vault is reached over a REMOTE connection — the
+   *  primordial local gateway is this machine, so there is nothing to
+   *  disconnect from and the danger-zone action is simply absent (issue #665). */
+  connection?: RemoteConnectionData;
+}
+
+/** The connection the active vault arrives over, and everything else that
+ *  arrives with it — dropping it is connection-wide, never per-vault, so the
+ *  confirm has to be able to name the siblings. */
+export interface RemoteConnectionData {
+  gatewayId: string;
+  /** Every OTHER vault this connection serves, by name. */
+  siblingNames: string[];
 }
 
 /** Settings → This device — the browser's own half of the pairing. */
@@ -53,6 +66,21 @@ export async function loadThisDeviceData(): Promise<ThisDeviceData> {
 }
 
 /**
+ * Turn this device's offline copy on or off.
+ *
+ * The pairing/onboarding flow stopped asking (it is ON by default), so this is
+ * the whole of the user's control over it. The host owns the consequences —
+ * cache purge, replica drop, durable-storage request — because they differ per
+ * host; this is only the call.
+ */
+export async function setOfflineCopy(enabled: boolean): Promise<boolean> {
+  const result = await window.CentraidApi.setGatewayRememberDevice({
+    rememberDevice: enabled,
+  });
+  return result.rememberDevice;
+}
+
+/**
  * Drop this browser's pairing. `removeGateway` already owns the full local
  * purge (connection, device key, tunnel caches, replica); clearing
  * `onboardingCompletedAt` is what actually returns the shell to onboarding
@@ -65,7 +93,7 @@ export async function forgetThisDeviceLocally(
   await window.CentraidApi.saveSettings({ onboardingCompletedAt: undefined });
 }
 
-export async function loadActiveSpaceData(): Promise<ActiveSpaceData | null> {
+export async function loadActiveVaultData(): Promise<ActiveVaultData | null> {
   const vaultList = await listVaults()
     .then((v) => v ?? [])
     .catch(() => []);
@@ -81,6 +109,36 @@ export async function loadActiveSpaceData(): Promise<ActiveSpaceData | null> {
     icon: (active.icon as IconName) ?? "Folder",
     name: active.name,
     vaultId: active.vaultId,
+    ...(await loadRemoteConnection(active.vaultId, vaultList)),
+  };
+}
+
+/**
+ * Resolve the active vault's connection, when it is a remote one.
+ *
+ * `listVaults()` already answers for the gateway this client addresses, so its
+ * entries ARE the sibling set — no second probe. A local connection resolves to
+ * `{}`: this machine is not something the owner disconnects from.
+ */
+async function loadRemoteConnection(
+  activeVaultId: string,
+  vaultList: readonly { vaultId: string; name: string }[]
+): Promise<{ connection?: RemoteConnectionData }> {
+  const gatewayId = await window.CentraidApi.getGatewayAuth()
+    .then((a) => a.gatewayId)
+    .catch(() => undefined);
+  if (!gatewayId) return {};
+  const kind = await window.CentraidApi.listGateways?.()
+    .then((rows) => rows.find((row) => row.id === gatewayId)?.kind)
+    .catch(() => undefined);
+  if (kind !== "remote") return {};
+  return {
+    connection: {
+      gatewayId,
+      siblingNames: vaultList
+        .filter((v) => v.vaultId !== activeVaultId)
+        .map((v) => v.name),
+    },
   };
 }
 

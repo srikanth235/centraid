@@ -99,6 +99,31 @@ export function installWebHost(): void {
         : [];
     },
     setActiveGateway: async () => settings(),
+    // Settings → This device's offline-copy switch. Pairing no longer asks
+    // (it defaults ON), so the enable/disable semantics that used to live
+    // only on the pairing path are reused verbatim here: turning it OFF drops
+    // the tunnel caches and asks the shell to purge this gateway's replica,
+    // turning it ON asks the browser for durable storage. The pairing itself
+    // is untouched — the connection stays durable either way (`web-state.ts`).
+    setGatewayRememberDevice: async (input: { rememberDevice: boolean }) => {
+      const next = saveConnection({
+        rememberDevice: input.rememberDevice === true,
+      });
+      if (next.rememberDevice) {
+        void requestPersistentStorage();
+      } else {
+        purgeTunnelCaches();
+      }
+      const gatewayId = webGatewayId(next);
+      publish(GATEWAY_EVENT, {
+        activeGatewayId: "web",
+        ...(gatewayId ? { gatewayId } : {}),
+        ...(!next.rememberDevice && gatewayId
+          ? { purgeReplicaGatewayId: gatewayId }
+          : {}),
+      });
+      return { rememberDevice: next.rememberDevice === true };
+    },
     addGateway: async (input: {
       label: string;
       endpointId: string;

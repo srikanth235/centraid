@@ -1,5 +1,5 @@
 /**
- * Consent-relevant card body for Inbox decisions (#647 review of PR #655).
+ * Consent-relevant card body for Notifications decisions (#647 review of PR #655).
  *
  * The phone cards used to render only "<app> requests access" + purpose, and
  * only "<command> · <caller>" for a parked invocation — so the owner could
@@ -10,7 +10,7 @@
  * secondary line, which is the native equivalent of web's block.
  */
 
-/** One requested triple, as the Inbox projection sends it. */
+/** One requested triple, as the Notifications projection sends it. */
 export interface DecisionScope {
   schema: string;
   table?: string;

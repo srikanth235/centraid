@@ -1,21 +1,21 @@
 import { updateVault } from "../../../gateway-client.js";
-import type { SpaceModalCommit } from "./SpaceModal.js";
+import type { VaultModalCommit } from "./VaultModal.js";
 
-// Gateway I/O for the Spaces (#280: a space IS a vault) add / rename / delete
-// flows. The modal chrome is the React <SpaceModal>; App.tsx (switcher "New
-// space…") and SettingsRoute.tsx (the active-vault Space page, issue #382)
+// Gateway I/O for the Vaults (#280: a vault IS a vault) add / rename / delete
+// flows. The modal chrome is the React <VaultModal>; App.tsx (switcher "New
+// vault…") and SettingsRoute.tsx (the active-vault Vault page, issue #382)
 // own the modal state and call these helpers on submit. Vault create/delete
 // are owner acts over the IPC bridge (local gateway only); metadata rides
 // updateVault.
 
-/** Create a space and make it the addressed vault (re-scopes Home). */
-export async function createSpace(data: SpaceModalCommit): Promise<void> {
+/** Create a vault and make it the addressed vault (re-scopes Home). */
+export async function addVault(data: VaultModalCommit): Promise<void> {
   // Hosts that cannot administer vaults (the web PWA) omit `createVault`
   // entirely; callers hide the affordance, and this is the honest backstop.
   const create = window.CentraidApi.createVault;
   if (typeof create !== "function") {
     throw new Error(
-      "Creating a space needs the desktop app or the gateway host CLI."
+      "Creating a vault needs the desktop app or the centraid-gateway CLI."
     );
   }
   const created = await create({ name: data.name });
@@ -28,10 +28,10 @@ export async function createSpace(data: SpaceModalCommit): Promise<void> {
   await window.CentraidApi.setActiveVault({ vaultId: created.vaultId });
 }
 
-/** Rename / retheme an existing space. */
-export async function saveSpace(
+/** Rename / retheme an existing vault. */
+export async function saveVault(
   id: string,
-  data: SpaceModalCommit
+  data: VaultModalCommit
 ): Promise<void> {
   await updateVault({
     vaultId: id,
@@ -47,6 +47,6 @@ export async function saveSpace(
   await window.CentraidApi.notifyVaultMetadataChanged();
 }
 
-export async function deleteSpace(id: string, name: string): Promise<void> {
+export async function removeVault(id: string, name: string): Promise<void> {
   await window.CentraidApi.deleteVault({ vaultId: id, name });
 }

@@ -8,28 +8,28 @@ import { useAsyncData } from "./useAsyncData.js";
 // The member's scope registry (issue #599) feeds Household, explicit target
 // pickers, and the combined sidebar switcher.
 //
-// A member holds a role in their own space and in every space the household
+// A member holds a role in their own vault and in every vault the household
 // added them to. `GET /_vault/scopes` answers that set for the CALLING MEMBER
 // (roles come from the member layer, never from the device), so it is the right
-// source for both the Household page and every "which space?" picker. An older
+// source for both the Household page and every "which vault?" picker. An older
 // gateway with no scopes plane degrades to `listVaults()`, whose entries carry
 // no role — those are reported as `admin`, matching the single-owner world that
 // gateway lives in.
 //
-// The DEFAULT scope pointer is also the visible active space. `useShellApps`'
-// per-space home pins, the space/pairing flows, the enrichment worker, and
+// The DEFAULT scope pointer is also the visible active vault. `useShellApps`'
+// per-vault home pins, the vault/pairing flows, the enrichment worker, and
 // ambient request headers all resolve through it; creation flows still name
 // their target explicitly and Household still shows every scope at once.
 
 export interface MemberScopesController {
-  /** Every space this member holds a role in, own space first. */
+  /** Every vault this member holds a role in, own vault first. */
   scopes: MemberScope[];
-  /** The member's own (primary) space — the default target for anything new. */
+  /** The member's own (primary) vault — the default target for anything new. */
   primary: MemberScope | undefined;
   /** The scope named by the shell's current default pointer. */
   active: MemberScope | undefined;
   /**
-   * The shell's default/active scope pointer. Per-space home pins and ambient
+   * The shell's default/active scope pointer. Per-vault home pins and ambient
    * request headers resolve through it when a surface has no explicit target.
    */
   defaultScopeId: string;
@@ -53,7 +53,7 @@ interface ScopesSnapshot {
 async function loadScopes(): Promise<MemberScope[]> {
   // Both sources are wrapped rather than `.catch`-ed: a host (or a route test)
   // that never wired the vault client makes the CALL itself throw, not the
-  // promise reject, and an unreachable registry must degrade to "no spaces
+  // promise reject, and an unreachable registry must degrade to "no vaults
   // known" instead of taking the whole shell down with it.
   let fromPlane: Awaited<ReturnType<typeof listAppScopes>>;
   try {
@@ -112,7 +112,7 @@ export function useMemberScopes(): MemberScopesController {
     const api = window.CentraidApi as typeof window.CentraidApi | undefined;
     const offVault = api?.onVaultChanged?.(refresh);
     const offGateway = api?.onGatewayChanged?.(refresh);
-    // Metadata-only changes (a space rename/retheme) are a separate broadcast
+    // Metadata-only changes (a vault rename/retheme) are a separate broadcast
     // so a save there refreshes this registry WITHOUT tripping App.tsx's
     // `reScope` (which treats onVaultChanged as "the default pointer moved").
     const offMetadata = api?.onVaultMetadataChanged?.(refresh);
@@ -126,7 +126,7 @@ export function useMemberScopes(): MemberScopesController {
   const ready = state.status === "ready" ? state.data : undefined;
   const scopes = ready?.scopes ?? [];
   const defaultScopeId = ready?.defaultScopeId ?? "";
-  // The member's own space is the gateway's first, oldest scope; fall back to
+  // The member's own vault is the gateway's first, oldest scope; fall back to
   // whatever the default pointer names when the list is ordered otherwise.
   const primary = scopes[0] ?? scopes.find((s) => s.id === defaultScopeId);
   const active = scopes.find((scope) => scope.id === defaultScopeId) ?? primary;

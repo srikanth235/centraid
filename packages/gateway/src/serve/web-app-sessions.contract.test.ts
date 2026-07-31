@@ -329,20 +329,20 @@ describe("web-app-sessions.contract scenarios", () => {
     const wakeHeaders = {
       Cookie: cookie,
       "sec-fetch-site": "same-origin",
-      "x-centraid-service-worker": "inbox-wake",
+      "x-centraid-service-worker": "notifications-wake",
     };
-    const inbox = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/inbox")}`,
+    const notifications = await fetch(
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/notifications")}`,
       { headers: wakeHeaders }
     );
-    expect(inbox.status).toBe(200);
-    await expect(inbox.json()).resolves.toMatchObject({
+    expect(notifications.status).toBe(200);
+    await expect(notifications.json()).resolves.toMatchObject({
       decisions: expect.any(Object),
       notices: expect.any(Array),
     });
 
     const missingPurpose = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/inbox")}`,
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_vault/notifications")}`,
       {
         headers: {
           Cookie: cookie,

@@ -36,11 +36,11 @@ describe(vaultForTriggers, () => {
 
   it("maps a bare (dotless) entity to a schema-only scope with no table", () => {
     expect(
-      vaultForTriggers([{ kind: "condition", entity: "inbox" }])
+      vaultForTriggers([{ kind: "condition", entity: "notifications" }])
     ).toStrictEqual({
       purpose: "dpv:ServiceProvision",
       why: "Evaluate automation triggers.",
-      scopes: [{ schema: "inbox", verbs: "read" }],
+      scopes: [{ schema: "notifications", verbs: "read" }],
     });
   });
 

@@ -15,8 +15,8 @@ import styles from "./DevicePairPanel.module.css";
  * "remove Priya" holding live access. The one text input here appears only
  * after "New person…" is chosen, and the gateway creates that member itself.
  *
- * Access is authored per SPACE, because the fence against role sprawl is
- * narrower spaces rather than finer roles: the kid who may edit Shared Lists
+ * Access is authored per VAULT, because the fence against role sprawl is
+ * narrower vaults rather than finer roles: the kid who may edit Shared Lists
  * but only view Family Photos gets two rows here, not a fourth role tier.
  */
 
@@ -34,7 +34,7 @@ export interface PairGrant {
   role: GatewayDeviceRole;
 }
 
-export interface PairSpace {
+export interface PairVault {
   vaultId: string;
   vaultName?: string;
 }
@@ -45,14 +45,14 @@ export interface DevicePairTargetProps {
   members: readonly GatewayMember[];
   /** The caller's own member id — the row rendered as "For myself". */
   currentMemberId?: string;
-  spaces: readonly PairSpace[];
+  vaults: readonly PairVault[];
   grants: readonly PairGrant[];
   onGrantsChange: (grants: PairGrant[]) => void;
   disabled: boolean;
 }
 
-function spaceLabel(space: PairSpace): string {
-  return space.vaultName ?? space.vaultId;
+function vaultLabel(vault: PairVault): string {
+  return vault.vaultName ?? vault.vaultId;
 }
 
 export default function DevicePairTarget({
@@ -60,7 +60,7 @@ export default function DevicePairTarget({
   onTargetChange,
   members,
   currentMemberId,
-  spaces,
+  vaults,
   grants,
   onGrantsChange,
   disabled,
@@ -87,7 +87,7 @@ export default function DevicePairTarget({
   const grantFor = (vaultId: string): PairGrant | undefined =>
     grants.find((grant) => grant.vaultId === vaultId);
 
-  const toggleSpace = (vaultId: string, on: boolean): void => {
+  const toggleVault = (vaultId: string, on: boolean): void => {
     onGrantsChange(
       on
         ? [...grants, { vaultId, role: DEFAULT_ROLE }]
@@ -147,27 +147,27 @@ export default function DevicePairTarget({
       ) : (
         <fieldset className={styles.grantGroup}>
           <legend className={styles.pairFieldLabel}>What they may reach</legend>
-          {spaces.length === 0 ? (
-            <p className={styles.roleHint}>No spaces available to share.</p>
+          {vaults.length === 0 ? (
+            <p className={styles.roleHint}>No vaults available to share.</p>
           ) : (
-            spaces.map((space) => {
-              const grant = grantFor(space.vaultId);
+            vaults.map((vault) => {
+              const grant = grantFor(vault.vaultId);
               return (
-                <div key={space.vaultId} className={styles.grantRow}>
+                <div key={vault.vaultId} className={styles.grantRow}>
                   <label className={styles.grantCheck}>
                     <input
                       type="checkbox"
                       checked={grant !== undefined}
                       disabled={disabled}
                       onChange={(event) =>
-                        toggleSpace(space.vaultId, event.target.checked)
+                        toggleVault(vault.vaultId, event.target.checked)
                       }
                     />
-                    <span>{spaceLabel(space)}</span>
+                    <span>{vaultLabel(vault)}</span>
                   </label>
                   <fieldset
                     className={styles.ttlGroup}
-                    aria-label={`Role in ${spaceLabel(space)}`}
+                    aria-label={`Role in ${vaultLabel(vault)}`}
                   >
                     {ROLE_PRESETS.map((preset) => (
                       <button
@@ -180,7 +180,7 @@ export default function DevicePairTarget({
                         aria-pressed={grant?.role === preset.role}
                         disabled={disabled || grant === undefined}
                         title={preset.hint}
-                        onClick={() => setRole(space.vaultId, preset.role)}
+                        onClick={() => setRole(vault.vaultId, preset.role)}
                       >
                         {preset.label}
                       </button>

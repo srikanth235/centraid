@@ -1,5 +1,5 @@
 // A row of colour swatches for picking a hex tint — shared by Settings → You
-// (the profile colour) and Settings → Space (the vault colour) so both wear the
+// (the profile colour) and Settings → Vault (the vault colour) so both wear the
 // same picker (issue #498). The selected swatch reads with a ring + check; the
 // value is a raw hex string, matching how both callers store it.
 

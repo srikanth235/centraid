@@ -78,7 +78,7 @@ export interface DeviceEnrichmentLease {
 export type GatewayDeviceRole = "admin" | "write" | "read";
 
 /**
- * One (space, role) pair — the unit authority is authored in since #599.
+ * One (vault, role) pair — the unit authority is authored in since #599.
  * Roles hang off the MEMBER; a device only inherits its member's grants.
  */
 export interface GatewayVaultGrant {
@@ -154,7 +154,7 @@ export interface GatewayDeviceTicket {
   /** The person the redeeming device will act as. */
   memberId: string;
   memberLabel: string;
-  /** Every (space, role) the ticket carries. The first is echoed flat below. */
+  /** Every (vault, role) the ticket carries. The first is echoed flat below. */
   grants: GatewayVaultGrant[];
   vaultId: string;
   vaultName?: string;
@@ -174,7 +174,7 @@ export interface GatewayDeviceTicketInput {
   memberId?: string;
   /** A NEW person, created by this mint. Never combine with `memberId`. */
   newMemberLabel?: string;
-  /** Per-space roles. Omitted with no member = self-pair at your own roles. */
+  /** Per-vault roles. Omitted with no member = self-pair at your own roles. */
   grants?: { vaultId: string; role: GatewayDeviceRole }[];
 }
 
@@ -187,7 +187,7 @@ export interface GatewayDeviceTicketInput {
  * member at the roles they already hold (#599 Decision 5), which is why a
  * bare `{ttlMinutes}` call is safe. Naming another person (`memberId`, or
  * `newMemberLabel` to create one) is an invite, and requires the caller hold
- * `admin` in every granted space: the ticket leaves this machine, so the
+ * `admin` in every granted vault: the ticket leaves this machine, so the
  * grants travel with it.
  */
 export async function createGatewayDeviceTicket(
@@ -211,8 +211,8 @@ export async function createGatewayDeviceTicket(
  * Idempotent — `removed:false` when already gone.
  *
  * The row survives as a tombstone at role `revoked`, so prior attribution
- * still resolves. Revoking the last live device of a space's last owner 409s
- * until `confirmLastAdmin` echoes that space's name back.
+ * still resolves. Revoking the last live device of a vault's last owner 409s
+ * until `confirmLastAdmin` echoes that vault's name back.
  */
 export async function revokeGatewayDevice(
   deviceId: string,

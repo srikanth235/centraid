@@ -30,7 +30,7 @@ const REPLICA_APP_PATHS = new Set([
   "/centraid/_vault/replica/intents",
 ]);
 const SERVICE_WORKER_WAKE_PATHS = new Set([
-  "/centraid/_vault/inbox",
+  "/centraid/_vault/notifications",
   "/centraid/_reminders/due",
 ]);
 
@@ -271,7 +271,7 @@ export class WebAppSessions {
       const serviceWorkerWake =
         origin === undefined &&
         (req.method ?? "GET").toUpperCase() === "GET" &&
-        req.headers[WEB_SERVICE_WORKER_HEADER] === "inbox-wake" &&
+        req.headers[WEB_SERVICE_WORKER_HEADER] === "notifications-wake" &&
         req.headers["sec-fetch-site"] === "same-origin" &&
         target !== null &&
         SERVICE_WORKER_WAKE_PATHS.has(target);

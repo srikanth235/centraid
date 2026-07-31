@@ -1,8 +1,8 @@
 // Client↔gateway seam laws for the household roster (#599 L2) — the module had
 // no test file (#656 Layer 1B). Two laws carry the design: a gateway with no
 // device plane (the desktop embed) has no roster and must read as EMPTY rather
-// than as a failure, and removing the last owner of a space is refused until the
-// caller echoes that space's name back. Shared harness in
+// than as a failure, and removing the last owner of a vault is refused until the
+// caller echoes that vault's name back. Shared harness in
 // gateway-client-seam-fixtures.ts.
 
 import { describe, expect, it } from "vitest";
@@ -95,7 +95,7 @@ describe("household roster seam", () => {
     expect(sentJson("DELETE /centraid/_gateway/members/m-1")).toStrictEqual({});
   });
 
-  it("law: removing the last owner must echo the space name back", async () => {
+  it("law: removing the last owner must echo the vault name back", async () => {
     respond("DELETE /centraid/_gateway/members/m-1", (request) => {
       const body = JSON.parse(String(request.body)) as {
         confirmLastAdmin?: string;

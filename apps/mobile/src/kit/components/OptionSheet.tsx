@@ -140,7 +140,7 @@ const makeStyles = (colors: ThemeColors) =>
     rowDetail: { ...t("tiny"), color: colors.ink3 },
     rowDisabled: { color: colors.ink3 },
     rowLabel: { ...t("body"), color: colors.ink },
-    // Scrims are shadow, not surface — the same literal the space drawer uses.
+    // Scrims are shadow, not surface — the same literal the vault drawer uses.
     scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
     sheet: {
       backgroundColor: colors.bgElev,

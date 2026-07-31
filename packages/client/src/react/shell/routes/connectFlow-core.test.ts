@@ -54,6 +54,28 @@ describe(connectFlowReducer, () => {
     });
   });
 
+  // The pairing UI stopped asking, so the initial state IS the product
+  // default — including through a method switch, which rebuilds the state.
+  it("rememberDevice starts ON and survives selecting a method", () => {
+    expect(createInitialConnectFlowState().rememberDevice).toBe(true);
+    expect(createInitialConnectFlowState("gateway").rememberDevice).toBe(true);
+    expect(
+      connectFlowReducer(createInitialConnectFlowState(), {
+        method: "local",
+        type: "selectMethod",
+      }).rememberDevice
+    ).toBe(true);
+  });
+
+  it("setRememberDevice is still honoured for a host that opts out", () => {
+    expect(
+      connectFlowReducer(createInitialConnectFlowState("gateway"), {
+        type: "setRememberDevice",
+        value: false,
+      }).rememberDevice
+    ).toBe(false);
+  });
+
   it("setField updates the named field only", () => {
     const s = connectFlowReducer(createInitialConnectFlowState(), {
       field: "ticket",
@@ -136,7 +158,7 @@ describe(connectFlowReducer, () => {
       result: { ok: false, message: "gateway is down" },
       type: "localVaultsLoaded",
     });
-    // Settled (so the step leaves "Loading spaces…") but unhappy.
+    // Settled (so the step leaves "Loading vaults…") but unhappy.
     expect(s.report).not.toBeNull();
     expect(s.vaultsError).toBe("gateway is down");
     expect(

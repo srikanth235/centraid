@@ -3,18 +3,19 @@ import * as Notifications from "expo-notifications";
 import { AppState } from "react-native";
 
 import { authHeader } from "./gateway";
-import { planInboxNotifications } from "./inbox-notification-model";
-import type { MobileInboxNotificationPull } from "./inbox-notification-model";
 import * as NotificationModel from "./notification-model";
 import type { DueReminder } from "./notification-model";
+import { planNotifications } from "./notifications-plan";
+import type { MobileNotificationsPull } from "./notifications-plan";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
-const DELIVERED_INBOX_KEYS = "centraid:delivered-inbox-keys:v1";
+const DELIVERED_NOTIFICATION_KEYS = "centraid:delivered-notification-keys:v1";
 /**
- * Separate from the ledger on purpose: a *quiet* Inbox seeds an empty ledger,
+ * Separate from the ledger on purpose: a *quiet* Notifications seeds an empty ledger,
  * and an empty ledger must not read as "never seeded" on the next pass.
  */
-const SEEDED_INBOX_LEDGER = "centraid:delivered-inbox-keys:seeded:v1";
+const SEEDED_NOTIFICATION_LEDGER =
+  "centraid:delivered-notification-keys:seeded:v1";
 
 export async function installNotificationCategories(): Promise<void> {
   await Promise.all([
@@ -74,11 +75,11 @@ export async function installNotificationCategories(): Promise<void> {
       ]
     ),
     Notifications.setNotificationCategoryAsync(
-      NotificationModel.INBOX_CATEGORY,
+      NotificationModel.NOTIFICATIONS_CATEGORY,
       [
         {
           identifier: NotificationModel.OPEN_ITEM,
-          buttonTitle: "Open Inbox",
+          buttonTitle: "Open Notifications",
           options: { opensAppToForeground: true },
         },
       ]
@@ -87,10 +88,10 @@ export async function installNotificationCategories(): Promise<void> {
 }
 
 /**
- * Inbox itself is the contextual owner gesture for notification consent.
+ * Notifications itself is the contextual owner gesture for notification consent.
  * Boot/background paths only inspect existing permission and never prompt.
  */
-export async function requestInboxNotificationPermission(): Promise<boolean> {
+export async function requestNotificationPermission(): Promise<boolean> {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   if (current.canAskAgain === false) return false;
@@ -98,28 +99,31 @@ export async function requestInboxNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Compose decision/high-severity Inbox notifications only after local fetch.
+ * Compose decision/high-severity Notifications notifications only after local fetch.
  *
  * The decisions (seed vs notify, foreground vs background) live in
- * `planInboxNotifications`; this function is the I/O shell. `appState` is
+ * `planNotifications`; this function is the I/O shell. `appState` is
  * injected so the rule is testable without RN's native module — RN's own
  * `AppState` satisfies the shape, and is the default.
  */
-export async function syncInboxNotifications(
+export async function syncNotifications(
   baseUrl: string,
   vaultId: string,
   appState: { currentState: string } = AppState
 ): Promise<void> {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
-  const response = await fetch(new URL("/centraid/_vault/inbox", baseUrl), {
-    headers: { ...authHeader(), "x-centraid-vault": vaultId },
-  });
+  const response = await fetch(
+    new URL("/centraid/_vault/notifications", baseUrl),
+    {
+      headers: { ...authHeader(), "x-centraid-vault": vaultId },
+    }
+  );
   if (!response.ok) return;
-  const inbox = (await response.json()) as MobileInboxNotificationPull;
+  const notifications = (await response.json()) as MobileNotificationsPull;
   const [rawLedger, rawSeeded] = await Promise.all([
-    AsyncStorage.getItem(DELIVERED_INBOX_KEYS).catch(() => null),
-    AsyncStorage.getItem(SEEDED_INBOX_LEDGER).catch(() => null),
+    AsyncStorage.getItem(DELIVERED_NOTIFICATION_KEYS).catch(() => null),
+    AsyncStorage.getItem(SEEDED_NOTIFICATION_LEDGER).catch(() => null),
   ]);
   let prior: string[] = [];
   if (rawLedger) {
@@ -130,11 +134,11 @@ export async function syncInboxNotifications(
           (value): value is string => typeof value === "string"
         );
     } catch {
-      // Device bookkeeping is disposable; the authenticated Inbox is truth.
+      // Device bookkeeping is disposable; the authenticated Notifications pull is truth.
     }
   }
-  const plan = planInboxNotifications({
-    inbox,
+  const plan = planNotifications({
+    notifications,
     delivered: prior,
     seeded: rawSeeded === "1",
     appActive: appState.currentState === "active",
@@ -145,8 +149,11 @@ export async function syncInboxNotifications(
         content: {
           title: row.title,
           body: row.body,
-          categoryIdentifier: NotificationModel.INBOX_CATEGORY,
-          data: { kind: "inbox", url: "centraid://settings/inbox" },
+          categoryIdentifier: NotificationModel.NOTIFICATIONS_CATEGORY,
+          data: {
+            kind: "notifications",
+            url: "centraid://settings/notifications",
+          },
         },
         trigger: null,
       })
@@ -154,12 +161,14 @@ export async function syncInboxNotifications(
   );
   if (plan.nextDelivered) {
     await AsyncStorage.setItem(
-      DELIVERED_INBOX_KEYS,
+      DELIVERED_NOTIFICATION_KEYS,
       JSON.stringify(plan.nextDelivered)
     ).catch(() => undefined);
   }
   if (plan.seeded)
-    await AsyncStorage.setItem(SEEDED_INBOX_LEDGER, "1").catch(() => undefined);
+    await AsyncStorage.setItem(SEEDED_NOTIFICATION_LEDGER, "1").catch(
+      () => undefined
+    );
 }
 
 /**

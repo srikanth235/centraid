@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the inbox/decision endpoints); pending split of the inbox client into a sibling module
+// governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the notifications/decision endpoints); pending split of the notifications client into a sibling module
 // Mobile gateway client (issue #263). Base-URL resolution order:
 //   (a) the paired tunnel — a localhost proxy that forwards every request
 //       over iroh to the desktop, which attaches the bearer on its side;
@@ -23,7 +23,7 @@ import type { AssistHandoff } from "./connection-reauth";
 import type { DecisionScope } from "./decision-detail";
 import { ensureTunnelStarted } from "./phone-link";
 import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
-import { getActiveVaultId } from "./spaces";
+import { getActiveVaultId } from "./vault-links";
 
 export const SETTINGS_KEY = "settings.gatewayUrl";
 export const SETTINGS_TOKEN_KEY = "settings.gatewayToken";
@@ -57,7 +57,7 @@ export interface ParkedInvocation {
   input: Record<string, unknown>;
 }
 
-export interface MobileInboxNotice {
+export interface MobileNotice {
   noticeId: string;
   kind: string;
   sourceRef: string;
@@ -71,10 +71,10 @@ export interface MobileInboxNotice {
   archivedAt: string | null;
 }
 
-export interface MobileInbox {
+export interface MobileNotifications {
   decisions: {
     count: number;
-    outbox: MobileInboxOutbox[];
+    outbox: MobileOutboxRow[];
     needsAuth: Array<{
       connectionId: string;
       kind: string;
@@ -93,11 +93,11 @@ export interface MobileInbox {
       scopes: DecisionScope[];
     }>;
   };
-  notices: MobileInboxNotice[];
+  notices: MobileNotice[];
   unreadNoticeCount: number;
 }
 
-export interface MobileInboxOutbox {
+export interface MobileOutboxRow {
   itemId: string;
   actor: string | null;
   actorKind: string;
@@ -155,13 +155,13 @@ export function authHeader(): Record<string, string> {
 }
 
 /**
- * The `x-centraid-vault` header addressing the active Space's vault (issue #289
+ * The `x-centraid-vault` header addressing the active Vault's vault (issue #289
  * addressing model). Every RN-side gateway fetch carries it so the whole app —
- * app grid, Settings → Space, approvals — follows whichever vault the Spaces
+ * app grid, Settings → Vault, approvals — follows whichever vault the Vaults
  * switcher has active, instead of floating to the gateway's implied default.
  * '' (no active vault, e.g. fresh manual-URL dev) sends no header, preserving
  * the old "let the gateway pick" behaviour. The replica sends its own copy of
- * this header (ReplicaProvider) keyed on the same active Space.
+ * this header (ReplicaProvider) keyed on the same active Vault.
  */
 export function vaultHeader(): Record<string, string> {
   const vaultId = getActiveVaultId();
@@ -303,27 +303,32 @@ export async function listParked(): Promise<ParkedInvocation[]> {
   return body.parked;
 }
 
-export async function getInbox(includeArchived = false): Promise<MobileInbox> {
+export async function getNotifications(
+  includeArchived = false
+): Promise<MobileNotifications> {
   const base = await requireGatewayBase();
-  return fetchJson<MobileInbox>(
-    `${base}/centraid/_vault/inbox${includeArchived ? "?include_archived=true" : ""}`,
+  return fetchJson<MobileNotifications>(
+    `${base}/centraid/_vault/notifications${includeArchived ? "?include_archived=true" : ""}`,
     { headers: apiHeaders(), method: "GET" }
   );
 }
 
-/** Content-free Inbox SSE doorbell; callers re-fetch the canonical payload. */
-export async function subscribeMobileInboxChanges(
+/** Content-free Notifications SSE doorbell; callers re-fetch the canonical payload. */
+export async function subscribeMobileNotificationsChanges(
   onChange: () => void,
   signal: AbortSignal
 ): Promise<void> {
   const base = await requireGatewayBase();
-  const response = await expoFetch(`${base}/centraid/_vault/inbox/events`, {
-    headers: apiHeaders({ accept: "text/event-stream" }),
-    method: "GET",
-    signal,
-  });
+  const response = await expoFetch(
+    `${base}/centraid/_vault/notifications/events`,
+    {
+      headers: apiHeaders({ accept: "text/event-stream" }),
+      method: "GET",
+      signal,
+    }
+  );
   if (!response.ok || !response.body)
-    throw new Error(`Inbox events returned HTTP ${response.status}`);
+    throw new Error(`Notifications events returned HTTP ${response.status}`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -338,7 +343,11 @@ export async function subscribeMobileInboxChanges(
     while (boundary >= 0) {
       const frame = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      if (frame.split("\n").some((line) => line === "event: inbox-changed"))
+      if (
+        frame
+          .split("\n")
+          .some((line) => line === "event: notifications-changed")
+      )
         onChange();
       boundary = buffer.indexOf("\n\n");
     }
@@ -347,7 +356,7 @@ export async function subscribeMobileInboxChanges(
   await readNext();
 }
 
-export async function decideInboxOutbox(
+export async function decideNotificationsOutbox(
   itemId: string,
   decision: "approve" | "discard",
   options: {
@@ -370,7 +379,7 @@ export async function decideInboxOutbox(
   );
 }
 
-export async function decideInboxScope(
+export async function decideNotificationsScope(
   requestId: string,
   approve: boolean
 ): Promise<void> {
@@ -404,7 +413,7 @@ async function oauthClientSessionId(): Promise<string> {
  * `surface` selects the Assist Worker's *deep-link* return so the in-app auth
  * session can catch it — see lib/connection-reauth.ts for the full rationale.
  */
-export async function beginInboxConnectionAuthorization(
+export async function beginNotificationsConnectionAuthorization(
   connectionId: string
 ): Promise<string> {
   const base = await requireGatewayBase();
@@ -427,7 +436,7 @@ export async function beginInboxConnectionAuthorization(
  * persisted: the tuple lives in memory for the length of this call, exactly as
  * the PWA/desktop couriers do (docs/oauth-assist.md step 5).
  */
-export async function completeInboxConnectionAuthorization(
+export async function completeNotificationsConnectionAuthorization(
   handoff: AssistHandoff
 ): Promise<void> {
   const base = await requireGatewayBase();
@@ -444,13 +453,13 @@ export async function completeInboxConnectionAuthorization(
   );
 }
 
-export async function updateMobileInboxNotice(
+export async function updateMobileNotice(
   noticeId: string,
   action: "read" | "archive"
 ): Promise<void> {
   const base = await requireGatewayBase();
   await fetchJson(
-    `${base}/centraid/_vault/inbox/notices/${encodeURIComponent(noticeId)}`,
+    `${base}/centraid/_vault/notifications/notices/${encodeURIComponent(noticeId)}`,
     {
       body: JSON.stringify({ action }),
       headers: apiHeaders({ "content-type": "application/json" }),
@@ -476,7 +485,7 @@ export async function confirmParked(
 }
 
 /**
- * One vault of the owner's registry — a "space" in the UI. Presentation
+ * One vault of the owner's registry — a "vault" in the UI. Presentation
  * (`color`/`icon`/`blurb`) lives in `core_vault.settings_json` (#280: profiles
  * are vaults). Mirrors `VaultListEntry` in packages/client gateway-client-vault
  * ts — `color` is a raw hex string, `icon` a design-tokens IconName key.
@@ -493,9 +502,9 @@ export interface VaultRow {
 /**
  * The owner's vault registry from `GET /centraid/_vault/vaults` (returns
  * `{ vaults }`). `undefined` when the gateway mounts no vault plane (route
- * 404s) — a valid deployment, so callers render a "no space" state, not an
+ * 404s) — a valid deployment, so callers render a "no vault" state, not an
  * error. There is no server-side active flag (#289): the active vault is a
- * device-local pointer (see lib/spaces.ts), and the Spaces switcher reads this
+ * device-local pointer (see lib/vault-links.ts), and the Vaults switcher reads this
  * list to offer the vaults this device may address. Deliberately header-free
  * (no `vaultHeader()`): the switcher's own data source must not depend on the
  * active vault being valid, and an unknown `x-centraid-vault` would 404 here.
@@ -522,8 +531,8 @@ export async function listVaults(): Promise<VaultRow[] | undefined> {
  * updated row. The vault is named by URL path, so this is header-free like
  * `listVaults` — no `vaultHeader()`. Vault create/delete have NO client HTTP
  * surface by design (#289): the gateway answers 405 and points at
- * `centraid-gateway vault create|delete` on the host. The mobile "Spaces"
- * feature (lib/spaces.ts) adds/switches/forgets device-local (gateway, vault)
+ * `centraid-gateway vault create|delete` on the host. The mobile "Vaults"
+ * feature (lib/vault-links.ts) adds/switches/forgets device-local (gateway, vault)
  * tuples — it never creates or destroys a vault.
  */
 export async function updateVault(

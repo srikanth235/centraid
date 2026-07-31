@@ -815,7 +815,7 @@ export * from "./gateway-client-atlas.js";
 // Settings → Connections screen imports it from the same barrel.
 export * from "./gateway-client-connections.js";
 
-// The outbox / blocking-inbox / standing-grant surface (issues #306, #308)
+// The outbox / blocking-notifications / standing-grant surface (issues #306, #308)
 // lives in `gateway-client-outbox.ts`. Re-exported here so the Approvals
 // screen imports it from the same barrel.
 export * from "./gateway-client-outbox.js";

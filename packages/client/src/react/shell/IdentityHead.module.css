@@ -1,17 +1,13 @@
-/* Sidebar identity row (issue #599, Decision 14). An avatar + the active space
-   name + the gateway it lives on. The WHOLE row is the switcher target — the
-   trailing ⇅ is decoration inside that one button, not a separate 26px hit
-   area at the right edge (#608). */
+/* Sidebar identity row (issue #599, Decision 14). A rounded tile icon, the
+   gateway eyebrow over the active vault name, and a native-select stepper at
+   the right edge. The WHOLE row is the switcher — the stepper is decoration
+   inside that one button, not a separate 26px hit area (#608). */
 
 .row {
   display: flex;
   align-items: center;
   margin-bottom: 6px;
-  border-radius: 9px;
-}
-.row:hover,
-.row[data-open="true"] {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 10px;
 }
 
 .head {
@@ -20,12 +16,29 @@
   gap: 10px;
   flex: 1;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 7px 7px 7px 8px;
   border: none;
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   cursor: pointer;
   text-align: left;
+  transition:
+    background 140ms ease-out,
+    box-shadow 140ms ease-out;
+}
+.head:hover,
+.head:focus-visible {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  outline: none;
+}
+.head:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.row[data-open="true"] .head {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.head:active:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
 }
 .head:disabled {
   cursor: default;
@@ -36,7 +49,7 @@
   width: 30px;
   height: 30px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
 }
@@ -48,40 +61,78 @@
   flex: 1;
   min-width: 0;
 }
+/* The quiet context line ABOVE the selection — the gateway this client is
+   talking to, in the member's words ("This Mac"). */
+.eyebrow {
+  display: block;
+  font: var(--t-mono);
+  font-size: 9.5px;
+  line-height: 1.25;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 140ms ease-out;
+}
 .name {
   display: block;
+  margin-top: 1px;
   font: var(--t-title);
   font-weight: 600;
   font-size: 13.5px;
+  line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sub {
-  display: block;
-  margin-top: 1px;
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.head:hover .eyebrow,
+.head:focus-visible .eyebrow,
+.row[data-open="true"] .eyebrow {
+  color: var(--ink-3);
 }
 
-/* Decoration inside the row button — it says "this opens something". Not
-   interactive on its own, so it takes no hit area away from the row. */
-.switch {
+/* ⌃ over ⌄ — the stepper a native select wears. Two 11px chevrons pulled
+   together so they read as one glyph rather than two icons. */
+.stepper {
   flex-shrink: 0;
-  width: 20px;
-  display: grid;
-  place-items: center;
+  width: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
   color: var(--ink-4);
-  transition: color 120ms;
+  transition:
+    color 140ms ease-out,
+    transform 140ms ease-out;
 }
-.head:hover .switch,
-.head:focus-visible .switch,
-.row[data-open="true"] .switch {
+.stepper svg {
+  display: block;
+}
+.stepUp {
+  display: block;
+  transform: rotate(180deg);
+  margin-bottom: -3px;
+}
+.head:hover .stepper,
+.head:focus-visible .stepper,
+.row[data-open="true"] .stepper {
   color: var(--ink-2);
+}
+.row[data-open="true"] .stepper {
+  transform: scale(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head,
+  .eyebrow,
+  .stepper {
+    transition: none;
+  }
+  .row[data-open="true"] .stepper {
+    transform: none;
+  }
 }

@@ -331,7 +331,7 @@ function AutomationCard({
     <View
       style={[styles.card, focused && { borderColor: colors.accent }]}
       accessibilityLabel={
-        focused ? `${row.name}, opened from Inbox` : undefined
+        focused ? `${row.name}, opened from Notifications` : undefined
       }
     >
       <View style={styles.cardHead}>
@@ -367,7 +367,7 @@ function AutomationCard({
 
       {focused ? (
         <Text style={[styles.scheduleText, { color: colors.accent }]}>
-          Opened from Inbox
+          Opened from Notifications
         </Text>
       ) : null}
 

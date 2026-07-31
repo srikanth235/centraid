@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   BlockingSummary,
-  InboxSummary,
+  NotificationsSummary,
   OutboxItem,
   OutboxNeedsAuth,
 } from "../../gateway-client-outbox.js";
@@ -13,16 +13,16 @@ import type { VaultParkedEntry } from "../../gateway-client-vault.js";
 import type * as TypeImport_bmsl46 from "../../gateway-client.js";
 import type * as TypeImport_6f8n6u from "./useBlockingCount.js";
 
-const getInbox = vi.fn<typeof TypeImport_bmsl46.getInbox>();
-const subscribeInboxChanges =
-  vi.fn<typeof TypeImport_bmsl46.subscribeInboxChanges>();
-const syncWebInboxNotifications =
-  vi.fn<typeof TypeImport_bmsl46.syncWebInboxNotifications>();
+const getNotifications = vi.fn<typeof TypeImport_bmsl46.getNotifications>();
+const subscribeNotificationsChanges =
+  vi.fn<typeof TypeImport_bmsl46.subscribeNotificationsChanges>();
+const syncWebNotifications =
+  vi.fn<typeof TypeImport_bmsl46.syncWebNotifications>();
 vi.mock(import("../../gateway-client.js"), () => ({
-  getInbox: () => getInbox(),
-  subscribeInboxChanges: (onChange: () => void, signal?: AbortSignal) =>
-    subscribeInboxChanges(onChange, signal),
-  syncWebInboxNotifications: () => syncWebInboxNotifications(),
+  getNotifications: () => getNotifications(),
+  subscribeNotificationsChanges: (onChange: () => void, signal?: AbortSignal) =>
+    subscribeNotificationsChanges(onChange, signal),
+  syncWebNotifications: () => syncWebNotifications(),
 }));
 
 let useBlockingCount: typeof TypeImport_6f8n6u.useBlockingCount;
@@ -79,7 +79,9 @@ function blockingSummary({
   };
 }
 
-function inboxSummary(decisions = blockingSummary()): InboxSummary {
+function notificationsSummary(
+  decisions = blockingSummary()
+): NotificationsSummary {
   return {
     decisions: {
       ...decisions,
@@ -96,9 +98,9 @@ function inboxSummary(decisions = blockingSummary()): InboxSummary {
 
 describe("useBlockingCount", () => {
   beforeEach(async () => {
-    getInbox.mockReset();
-    subscribeInboxChanges.mockReset().mockResolvedValue(undefined);
-    syncWebInboxNotifications.mockReset().mockResolvedValue(undefined);
+    getNotifications.mockReset();
+    subscribeNotificationsChanges.mockReset().mockResolvedValue(undefined);
+    syncWebNotifications.mockReset().mockResolvedValue(undefined);
     ({ useBlockingCount } = await import("./useBlockingCount.js"));
   });
 
@@ -128,24 +130,28 @@ describe("useBlockingCount", () => {
 
   describe("useBlockingCount", () => {
     it("sums all four blocking groups", async () => {
-      getInbox.mockResolvedValue(
-        inboxSummary(blockingSummary({ outbox: 2, needsAuth: 1, parked: 3 }))
+      getNotifications.mockResolvedValue(
+        notificationsSummary(
+          blockingSummary({ outbox: 2, needsAuth: 1, parked: 3 })
+        )
       );
       await mount();
       expect(count()).toBe(6);
     });
 
     it("stays at the last known count when the gateway is unreachable", async () => {
-      getInbox.mockRejectedValue(new Error("offline"));
+      getNotifications.mockRejectedValue(new Error("offline"));
       await mount();
       expect(count()).toBe(0);
     });
 
     it("refreshes on window focus", async () => {
-      getInbox.mockResolvedValue(inboxSummary());
+      getNotifications.mockResolvedValue(notificationsSummary());
       await mount();
       expect(count()).toBe(0);
-      getInbox.mockResolvedValue(inboxSummary(blockingSummary({ outbox: 1 })));
+      getNotifications.mockResolvedValue(
+        notificationsSummary(blockingSummary({ outbox: 1 }))
+      );
       await act(async () => {
         window.dispatchEvent(new Event("focus"));
       });

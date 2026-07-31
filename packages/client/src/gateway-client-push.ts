@@ -1,12 +1,12 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
-import { composeWebInboxNotifications } from "./inbox-notification-model.js";
-import type { InboxNotificationPull } from "./inbox-notification-model.js";
+import { composeWebNotifications } from "./notifications-model.js";
+import type { NotificationsPull } from "./notifications-model.js";
 
 const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
-const INBOX_DELIVERY_KEY = "/__centraid_notifications__/inbox";
+const NOTIFICATIONS_DELIVERY_KEY = "/__centraid_notifications__/delivered";
 const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
 /**
- * Ledger member recording that the inbox delivery baseline has been taken for
+ * Ledger member recording that the Notifications delivery baseline has been taken for
  * this (gateway, vault). Not a notification key — never composed, never
  * matched by the service worker's membership test.
  */
@@ -158,10 +158,10 @@ export async function syncWebDueNotifications(): Promise<void> {
 }
 
 /**
- * Fetch private Inbox content locally after an opaque wake/SSE doorbell.
+ * Fetch private Notifications content locally after an opaque wake/SSE doorbell.
  *
  * Two guards keep this from banner-blasting the owner, because the callers
- * (useInboxCounts, the Inbox route) ring it on every load, poll, SSE event and
+ * (useNotificationsCounts, the Notifications route) ring it on every load, poll, SSE event and
  * focus tick:
  *
  *  - A FOCUSED page composes nothing. The owner is looking at these rows in
@@ -172,7 +172,7 @@ export async function syncWebDueNotifications(): Promise<void> {
  *    it, every already-open decision counts as newly delivered and fires at
  *    once.
  */
-export async function syncWebInboxNotifications(): Promise<void> {
+export async function syncWebNotifications(): Promise<void> {
   if (
     typeof window === "undefined" ||
     !("Notification" in window) ||
@@ -182,14 +182,14 @@ export async function syncWebInboxNotifications(): Promise<void> {
   if (typeof document !== "undefined" && document.visibilityState === "visible")
     return;
   const { baseUrl, token, vaultId } = await auth();
-  const response = await doFetch(baseUrl, "/centraid/_vault/inbox", {
+  const response = await doFetch(baseUrl, "/centraid/_vault/notifications", {
     headers: authHeaders(token),
   });
-  const inbox = await readJson<InboxNotificationPull>(
+  const notifications = await readJson<NotificationsPull>(
     response,
-    "load Inbox notifications"
+    "load Notifications"
   );
-  const storageKey = `centraid:web-inbox:v1:${encodeURIComponent(
+  const storageKey = `centraid:web-notifications:v1:${encodeURIComponent(
     `${baseUrl} ${vaultId ?? ""}`
   )}`;
   let prior: string[] = [];
@@ -202,19 +202,19 @@ export async function syncWebInboxNotifications(): Promise<void> {
         (value): value is string => typeof value === "string"
       );
   } catch {
-    // Disposable delivery cache; the gateway Inbox is canonical.
+    // Disposable delivery cache; the gateway Notifications projection is canonical.
   }
-  const cached = await readNotificationCache(INBOX_DELIVERY_KEY);
+  const cached = await readNotificationCache(NOTIFICATIONS_DELIVERY_KEY);
   const delivered = new Set([...prior, ...cached]);
   // Deliver-silently baseline: no ledger means "we have never notified for
   // this (gateway, vault)", not "everything currently open is brand new". The
-  // sentinel is what makes that a one-time decision — an EMPTY inbox would
+  // sentinel is what makes that a one-time decision — an EMPTY pull would
   // otherwise leave the ledger empty and re-arm the blast for the next
   // payload. It rides in the same array of strings the service worker reads
   // (membership only), so the shared ledger format is unchanged, and it can
   // never collide with a composed key (all of which are `prefix:…`).
   const seeding = !delivered.has(DELIVERY_SEEDED);
-  const rows = composeWebInboxNotifications(inbox, delivered);
+  const rows = composeWebNotifications(notifications, delivered);
   if (seeding) {
     delivered.add(DELIVERY_SEEDED);
     for (const row of rows) delivered.add(row.key);
@@ -222,7 +222,7 @@ export async function syncWebInboxNotifications(): Promise<void> {
       storageKey,
       JSON.stringify([...delivered].slice(-2_000))
     );
-    await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+    await writeNotificationCache(NOTIFICATIONS_DELIVERY_KEY, delivered);
     return;
   }
   const registration =
@@ -235,7 +235,7 @@ export async function syncWebInboxNotifications(): Promise<void> {
         await registration.showNotification(row.title, {
           body: row.body,
           tag: row.key,
-          data: { url: "/?inbox=1" },
+          data: { url: "/?notifications=1" },
         });
         return;
       }
@@ -245,7 +245,7 @@ export async function syncWebInboxNotifications(): Promise<void> {
       });
       notification.addEventListener("click", () => {
         window.focus();
-        window.location.assign("/?inbox=1");
+        window.location.assign("/?notifications=1");
       });
     })
   );
@@ -258,7 +258,7 @@ export async function syncWebInboxNotifications(): Promise<void> {
     storageKey,
     JSON.stringify([...delivered].slice(-2_000))
   );
-  await writeNotificationCache(INBOX_DELIVERY_KEY, delivered);
+  await writeNotificationCache(NOTIFICATIONS_DELIVERY_KEY, delivered);
 }
 
 async function readNotificationCache(key: string): Promise<string[]> {

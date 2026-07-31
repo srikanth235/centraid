@@ -6,7 +6,7 @@ import {
   listGatewayMembers,
 } from "../../../gateway-client.js";
 import DevicePairPanel from "../../screens/DevicePairPanel.js";
-import type { PairSpace } from "../../screens/DevicePairTarget.js";
+import type { PairVault } from "../../screens/DevicePairTarget.js";
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
 import { useAsyncData } from "../useAsyncData.js";
@@ -14,7 +14,7 @@ import { useMemberScopes } from "../useMemberScopes.js";
 import { loadSelfProfile } from "./profileData.js";
 
 import controlsCss from "../../styles/controls.module.css";
-import spaceModalStyles from "./SpaceModal.module.css";
+import vaultModalStyles from "./VaultModal.module.css";
 
 export interface PairDeviceModalProps {
   onClose: () => void;
@@ -66,38 +66,38 @@ export default function PairDeviceModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // The scope registry is the same source every "which space?" picker reads,
+  // The scope registry is the same source every "which vault?" picker reads,
   // so the grant rows here can never disagree with what this member can reach.
-  const spaces: PairSpace[] = scopes.scopes.map((scope) => ({
+  const vaults: PairVault[] = scopes.scopes.map((scope) => ({
     vaultId: scope.id,
     vaultName: scope.label,
   }));
 
   return (
-    <div className={spaceModalStyles.profOverlay}>
+    <div className={vaultModalStyles.profOverlay}>
       <button
         type="button"
-        className={spaceModalStyles.profScrim}
+        className={vaultModalStyles.profScrim}
         aria-label="Close"
         tabIndex={-1}
         onClick={onClose}
       />
       <dialog
         open
-        className={spaceModalStyles.profModal}
+        className={vaultModalStyles.profModal}
         aria-modal="true"
         data-testid="pair-device-modal"
       >
-        <div className={spaceModalStyles.profModalHead}>
+        <div className={vaultModalStyles.profModalHead}>
           <span
-            className={spaceModalStyles.profModalHeadIcon}
+            className={vaultModalStyles.profModalHeadIcon}
             // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Phone", 14) }}
           />
-          <h2 className={spaceModalStyles.profModalTitle}>Pair a device</h2>
+          <h2 className={vaultModalStyles.profModalTitle}>Pair a device</h2>
           <button
             type="button"
-            className={cx(controlsCss.iconBtn, spaceModalStyles.profModalClose)}
+            className={cx(controlsCss.iconBtn, vaultModalStyles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onClose}
@@ -105,14 +105,14 @@ export default function PairDeviceModal({
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
-        <div className={spaceModalStyles.profModalBody}>
+        <div className={vaultModalStyles.profModalBody}>
           <DevicePairPanel
             now={now}
             onCreateTicket={createGatewayDeviceTicket}
             onClose={onClose}
             members={members}
             {...(selfMemberId ? { currentMemberId: selfMemberId } : {})}
-            spaces={spaces}
+            vaults={vaults}
           />
         </div>
       </dialog>

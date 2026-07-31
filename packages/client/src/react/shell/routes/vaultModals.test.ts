@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
-import { createSpace, deleteSpace, saveSpace } from "./spaceModals.js";
+import { addVault, removeVault, saveVault } from "./vaultModals.js";
 
 const updateVault = vi.fn<typeof TypeImport_1gl5zx7.updateVault>((_input) =>
   Promise.resolve({ vaultId: "v1", name: "Work", ownerPartyId: "party-1" })
 );
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
-// before spaceModals.js pulls gateway-client-core's load-time side-effect.
+// before vaultModals.js pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () =>
     Promise.resolve([
@@ -35,7 +35,7 @@ const setActiveVault =
 const notifyVaultMetadataChanged =
   vi.fn<NonNullable<typeof window.CentraidApi.notifyVaultMetadataChanged>>();
 
-describe("spaceModals", () => {
+describe("vaultModals", () => {
   beforeEach(() => {
     updateVault.mockClear();
     createVault.mockClear();
@@ -50,9 +50,9 @@ describe("spaceModals", () => {
     };
   });
 
-  describe("spaceModals", () => {
-    it("createSpace creates a vault, paints it, and switches to it", async () => {
-      await createSpace({
+  describe("vaultModals", () => {
+    it("addVault creates a vault, paints it, and switches to it", async () => {
+      await addVault({
         name: "Play",
         icon: "Star",
         color: "#0f0",
@@ -68,8 +68,8 @@ describe("spaceModals", () => {
       expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "new1" });
     });
 
-    it("saveSpace renames the vault without switching, then notifies listeners to refresh", async () => {
-      await saveSpace("v1", {
+    it("saveVault renames the vault without switching, then notifies listeners to refresh", async () => {
+      await saveVault("v1", {
         name: "Work HQ",
         icon: "Folder",
         color: "#111",
@@ -84,13 +84,13 @@ describe("spaceModals", () => {
       });
       expect(setActiveVault).not.toHaveBeenCalled();
       // updateVault is a direct HTTP call, not IPC, so it never broadcasts
-      // VAULT_CHANGED on its own — saveSpace must notify explicitly or the
+      // VAULT_CHANGED on its own — saveVault must notify explicitly or the
       // sidebar head keeps showing the stale name (issue #382 follow-up).
       expect(notifyVaultMetadataChanged).toHaveBeenCalledOnce();
     });
 
-    it("deleteSpace removes the vault", async () => {
-      await deleteSpace("v1", "Personal");
+    it("removeVault removes the vault", async () => {
+      await removeVault("v1", "Personal");
       expect(deleteVault).toHaveBeenCalledWith({
         vaultId: "v1",
         name: "Personal",

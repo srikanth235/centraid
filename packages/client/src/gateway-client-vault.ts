@@ -39,7 +39,7 @@ export interface VaultListEntry {
    * True for the owner's PERSONAL vault — the gateway's default target,
    * marked in the vault itself at founding. Survives the fresh path renaming
    * it to the owner's display name, so this (not `name === "Personal"`) is
-   * how a client finds "my own space".
+   * how a client finds "my own vault".
    */
   personal?: boolean;
   /**

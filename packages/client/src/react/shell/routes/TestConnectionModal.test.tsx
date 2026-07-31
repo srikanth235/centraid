@@ -9,7 +9,7 @@ import TestConnectionModal from "./TestConnectionModal.js";
 // in the module) imports gateway-client.js, which registers an
 // `onGatewayChanged` listener at module-load time — stub it so that load-time
 // side effect doesn't reach for a `window.CentraidApi` this file only wires
-// up inside `beforeEach` (same trap spaceModals.test.ts / ConnectFlow.test.tsx
+// up inside `beforeEach` (same trap vaultModals.test.ts / ConnectFlow.test.tsx
 // sidestep).
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => Promise.resolve([]),

@@ -2,12 +2,12 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type * as TypeImport_core from "./gateway-client-core.js";
 import type * as TypeImport_push from "./gateway-client-push.js";
-import { composeWebInboxNotifications } from "./inbox-notification-model.js";
-import type { InboxNotificationPull } from "./inbox-notification-model.js";
+import { composeWebNotifications } from "./notifications-model.js";
+import type { NotificationsPull } from "./notifications-model.js";
 
 function pull(
-  overrides: Partial<InboxNotificationPull["decisions"]> = {}
-): InboxNotificationPull {
+  overrides: Partial<NotificationsPull["decisions"]> = {}
+): NotificationsPull {
   return {
     decisions: {
       outbox: [],
@@ -20,9 +20,9 @@ function pull(
   };
 }
 
-describe(composeWebInboxNotifications, () => {
+describe(composeWebNotifications, () => {
   test("composes every decision kind and unread high notices locally", () => {
-    const inbox = pull({
+    const notifications = pull({
       outbox: [
         {
           itemId: "out-1",
@@ -41,7 +41,7 @@ describe(composeWebInboxNotifications, () => {
       parked: [{ invocationId: "park-1", command: "calendar.create" }],
       scopeRequests: [{ requestId: "scope-1", appId: "brief" }],
     });
-    inbox.notices.push(
+    notifications.notices.push(
       {
         noticeId: "notice-1",
         headline: "Gateway down",
@@ -60,10 +60,10 @@ describe(composeWebInboxNotifications, () => {
       }
     );
 
-    expect(composeWebInboxNotifications(inbox, new Set())).toHaveLength(5);
+    expect(composeWebNotifications(notifications, new Set())).toHaveLength(5);
     expect(
-      composeWebInboxNotifications(
-        inbox,
+      composeWebNotifications(
+        notifications,
         new Set(["parked:park-1", "scope:scope-1"])
       ).map((row) => row.key)
     ).toStrictEqual([
@@ -92,7 +92,7 @@ describe(composeWebInboxNotifications, () => {
       ],
     });
     const delivered = new Set(
-      composeWebInboxNotifications(first, new Set()).map((row) => row.key)
+      composeWebNotifications(first, new Set()).map((row) => row.key)
     );
     const recreated = pull({
       outbox: [
@@ -110,7 +110,7 @@ describe(composeWebInboxNotifications, () => {
     });
 
     expect(
-      composeWebInboxNotifications(recreated, delivered).map((row) => row.key)
+      composeWebNotifications(recreated, delivered).map((row) => row.key)
     ).toStrictEqual([
       "outbox:out-1:2026-07-31T10:00:00.000Z",
       "auth:conn-1:2026-07-31T10:00:00.000Z",
@@ -118,7 +118,7 @@ describe(composeWebInboxNotifications, () => {
   });
 });
 
-// --- syncWebInboxNotifications -------------------------------------------
+// --- syncWebNotifications -------------------------------------------
 //
 // The OS-banner half of the same surface. Two guards decide whether anything
 // is shown at all, and both were missing (#647): a focused page must stay
@@ -141,7 +141,7 @@ function setVisibility(state: "visible" | "hidden"): void {
   });
 }
 
-const STORAGE_KEY = `centraid:web-inbox:v1:${encodeURIComponent(
+const STORAGE_KEY = `centraid:web-notifications:v1:${encodeURIComponent(
   "http://gateway.test vault-1"
 )}`;
 
@@ -150,7 +150,7 @@ function ledger(): string[] {
   return raw === null ? [] : (JSON.parse(raw) as string[]);
 }
 
-function inboxPayload(itemIds: readonly string[]): InboxNotificationPull {
+function notificationsPayload(itemIds: readonly string[]): NotificationsPull {
   return {
     decisions: {
       outbox: itemIds.map((itemId) => ({
@@ -167,8 +167,8 @@ function inboxPayload(itemIds: readonly string[]): InboxNotificationPull {
   };
 }
 
-describe("syncWebInboxNotifications", () => {
-  let syncWebInboxNotifications: typeof TypeImport_push.syncWebInboxNotifications;
+describe("syncWebNotifications", () => {
+  let syncWebNotifications: typeof TypeImport_push.syncWebNotifications;
   let resetGatewayAuthCache: typeof TypeImport_core.resetGatewayAuthCache;
   const getGatewayAuth = vi.fn<typeof window.CentraidApi.getGatewayAuth>();
   const fetchMock = vi.fn<typeof fetch>();
@@ -181,7 +181,7 @@ describe("syncWebInboxNotifications", () => {
     } as unknown as typeof window.CentraidApi;
     (globalThis as { Notification?: unknown }).Notification =
       FakeNotification as unknown as typeof Notification;
-    ({ syncWebInboxNotifications } = await import("./gateway-client-push.js"));
+    ({ syncWebNotifications } = await import("./gateway-client-push.js"));
     ({ resetGatewayAuthCache } = await import("./gateway-client-core.js"));
   });
 
@@ -201,7 +201,7 @@ describe("syncWebInboxNotifications", () => {
     resetGatewayAuthCache();
   });
 
-  function serve(payload: InboxNotificationPull): void {
+  function serve(payload: NotificationsPull): void {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify(payload), {
         status: 200,
@@ -212,18 +212,18 @@ describe("syncWebInboxNotifications", () => {
 
   test("a visible page never composes — no fetch, no banners", async () => {
     setVisibility("visible");
-    serve(inboxPayload(["out-1", "out-2"]));
+    serve(notificationsPayload(["out-1", "out-2"]));
 
-    await syncWebInboxNotifications();
+    await syncWebNotifications();
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(FakeNotification.shown).toStrictEqual([]);
   });
 
   test("the first sync seeds the ledger silently instead of blasting", async () => {
-    serve(inboxPayload(["out-1", "out-2"]));
+    serve(notificationsPayload(["out-1", "out-2"]));
 
-    await syncWebInboxNotifications();
+    await syncWebNotifications();
 
     expect(FakeNotification.shown).toStrictEqual([]);
     expect(ledger()).toContain("outbox:out-1:2026-07-30T10:00:00.000Z");
@@ -231,24 +231,24 @@ describe("syncWebInboxNotifications", () => {
   });
 
   test("after the baseline, only a genuinely new decision notifies", async () => {
-    serve(inboxPayload(["out-1"]));
-    await syncWebInboxNotifications();
+    serve(notificationsPayload(["out-1"]));
+    await syncWebNotifications();
     expect(FakeNotification.shown).toStrictEqual([]);
 
-    serve(inboxPayload(["out-1", "out-2"]));
-    await syncWebInboxNotifications();
+    serve(notificationsPayload(["out-1", "out-2"]));
+    await syncWebNotifications();
 
     expect(FakeNotification.shown).toStrictEqual(["Send out-2"]);
   });
 
   test("an empty first payload still counts as the baseline", async () => {
-    serve(inboxPayload([]));
-    await syncWebInboxNotifications();
+    serve(notificationsPayload([]));
+    await syncWebNotifications();
 
     // Without the sentinel the empty ledger would re-arm seeding and swallow
     // this decision instead of notifying.
-    serve(inboxPayload(["out-1"]));
-    await syncWebInboxNotifications();
+    serve(notificationsPayload(["out-1"]));
+    await syncWebNotifications();
 
     expect(FakeNotification.shown).toStrictEqual(["Send out-1"]);
   });

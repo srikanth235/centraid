@@ -20,7 +20,7 @@ describe("ownership words", () => {
   it('says what the role lets you do, without wire words or "vault"', () => {
     for (const role of ["admin", "write", "read"]) {
       const sentence = roleSentence(role);
-      expect(sentence).not.toMatch(/\bvault\b/iu);
+      expect(sentence).not.toMatch(/\bspaces?\b/iu);
       expect(sentence).not.toMatch(/\badmin\b/u);
       expect(sentence.startsWith("You ")).toBe(true);
     }

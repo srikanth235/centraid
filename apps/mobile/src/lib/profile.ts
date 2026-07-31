@@ -24,7 +24,7 @@ export const BRAND_TEAL = "#128A78";
 
 // Swatch options offered in Settings → You for the avatar + greeting tint. Teal
 // (the brand default) leads; the rest are the shared design-tokens palette, so a
-// person and their space (Settings → Space uses the same palette) can wear the
+// person and their vault (Settings → Vault uses the same palette) can wear the
 // same colour. The profile colour is stored as a free hex string (see
 // `setProfileColor`), which is exactly what these values are.
 export const PROFILE_COLORS: readonly string[] = [

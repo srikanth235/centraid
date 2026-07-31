@@ -15,13 +15,13 @@ import {
   updateVault,
 } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
-import { getActiveVaultId, subscribeSpaces } from "../../lib/spaces";
+import { getActiveVaultId, subscribeVaultLinks } from "../../lib/vault-links";
 import ColorSwatchRow from "./ColorSwatchRow";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Space — a port of desktop's Settings → Space (issue #382), scoped
-// to the ACTIVE (gateway, vault) tuple the Spaces switcher has selected (lib/
-// spaces). Falls back to the first visible vault when nothing is active yet.
+// Settings → Vault — a port of desktop's Settings → Vault (issue #382), scoped
+// to the ACTIVE (gateway, vault) tuple the Vaults switcher has selected (lib/
+// vaults). Falls back to the first visible vault when nothing is active yet.
 // Edits the vault's presentation only: name, colour, icon, description. Creating
 // or deleting a vault is an admin act on the gateway host (#289) with no client
 // HTTP surface; the switcher's add/forget act on device-local tuples, not the
@@ -29,7 +29,7 @@ import SettingsSection from "./SettingsSection";
 
 // The vault stores a raw hex colour; these are the shared design-tokens palette
 // values — the same set desktop's PROFILE_COLORS offers (they ARE those hexes).
-const SPACE_COLORS: readonly string[] = [
+const VAULT_COLORS: readonly string[] = [
   palette.indigo,
   palette.rose,
   palette.violet,
@@ -42,7 +42,7 @@ const SPACE_COLORS: readonly string[] = [
 
 // The vault stores an icon as a design-tokens IconName key. Mirrors desktop's
 // PROFILE_ICONS; every one resolves in the mobile Icon registry.
-const SPACE_ICONS: readonly IconName[] = [
+const VAULT_ICONS: readonly IconName[] = [
   "Home",
   "Bolt",
   "Sparkle",
@@ -63,11 +63,11 @@ const DEFAULT_ICON: IconName = "Sparkle";
 type State =
   | { kind: "loading" }
   | { kind: "no-gateway" }
-  | { kind: "no-space" }
+  | { kind: "no-vault" }
   | { kind: "ready"; vault: VaultRow }
   | { kind: "error"; message: string };
 
-type SpaceFormSetters = {
+type VaultFormSetters = {
   setState: (next: State) => void;
   setName: (next: string) => void;
   setColor: (next: string) => void;
@@ -76,7 +76,7 @@ type SpaceFormSetters = {
 };
 
 /** Push a vault's presentation into the edit form's fields. */
-function seedForm(setters: SpaceFormSetters, vault: VaultRow): void {
+function seedForm(setters: VaultFormSetters, vault: VaultRow): void {
   setters.setName(vault.name);
   setters.setColor(vault.color ?? DEFAULT_COLOR);
   setters.setIcon(asIcon(vault.icon) ?? DEFAULT_ICON);
@@ -86,7 +86,7 @@ function seedForm(setters: SpaceFormSetters, vault: VaultRow): void {
 // The loader lives outside the component: it closes over nothing but the
 // (stable) state setters, so it needs no `useCallback` identity dance and the
 // effects below read as plain async kick-offs.
-async function loadSpace(setters: SpaceFormSetters): Promise<void> {
+async function loadVault(setters: VaultFormSetters): Promise<void> {
   try {
     const base = await resolveGatewayBase();
     if (!base) {
@@ -94,13 +94,13 @@ async function loadSpace(setters: SpaceFormSetters): Promise<void> {
       return;
     }
     const vaults = await listVaults();
-    // Prefer the vault the Spaces switcher has active; fall back to the first
+    // Prefer the vault the Vaults switcher has active; fall back to the first
     // visible one (fresh install with nothing selected yet).
     const activeVaultId = getActiveVaultId();
     const active =
       vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
     if (!active) {
-      setters.setState({ kind: "no-space" });
+      setters.setState({ kind: "no-vault" });
       return;
     }
     seedForm(setters, active);
@@ -109,12 +109,12 @@ async function loadSpace(setters: SpaceFormSetters): Promise<void> {
     const message =
       error instanceof GatewayError || error instanceof Error
         ? error.message
-        : "Could not load your space.";
+        : "Could not load your vault.";
     setters.setState({ kind: "error", message });
   }
 }
 
-export default function SpaceSection(): React.JSX.Element {
+export default function VaultSection(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -127,29 +127,32 @@ export default function SpaceSection(): React.JSX.Element {
 
   // Every member is a `useState` setter, so the bundle is stable for the
   // component's lifetime — memoized once so the effects below can depend on it.
-  const setters = useMemo<SpaceFormSetters>(
+  const setters = useMemo<VaultFormSetters>(
     () => ({ setState, setName, setColor, setIcon, setBlurb }),
     []
   );
 
   useEffect(() => {
-    void loadSpace(setters);
+    void loadVault(setters);
   }, [setters]);
-  // Re-load when the active Space changes, so this edits whatever the switcher
+  // Re-load when the active Vault changes, so this edits whatever the switcher
   // just selected.
-  useEffect(() => subscribeSpaces(() => void loadSpace(setters)), [setters]);
+  useEffect(
+    () => subscribeVaultLinks(() => void loadVault(setters)),
+    [setters]
+  );
 
   if (state.kind !== "ready") {
     return (
-      <SettingsSection label="Space">
+      <SettingsSection label="Vault">
         <Text style={styles.hint}>
           {state.kind === "loading"
-            ? "Loading your space…"
+            ? "Loading your vault…"
             : state.kind === "error"
               ? state.message
-              : state.kind === "no-space"
-                ? "No space on this gateway yet."
-                : "Pair with your desktop to edit your space."}
+              : state.kind === "no-vault"
+                ? "No vault on this gateway yet."
+                : "Pair with your desktop to edit your vault."}
         </Text>
       </SettingsSection>
     );
@@ -179,20 +182,20 @@ export default function SpaceSection(): React.JSX.Element {
       })
       .catch((error: unknown) => {
         setSaveError(
-          error instanceof Error ? error.message : "Could not save your space."
+          error instanceof Error ? error.message : "Could not save your vault."
         );
       })
       .finally(() => setSaving(false));
   };
 
   return (
-    <SettingsSection label="Space">
+    <SettingsSection label="Vault">
       <View style={styles.card}>
         <Text style={styles.fieldLabel}>Name</Text>
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="Space name"
+          placeholder="Vault name"
           placeholderTextColor={colors.ink3}
           style={styles.input}
           returnKeyType="done"
@@ -201,13 +204,13 @@ export default function SpaceSection(): React.JSX.Element {
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Colour</Text>
         <ColorSwatchRow
           value={color}
-          options={SPACE_COLORS}
+          options={VAULT_COLORS}
           onChange={setColor}
         />
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Icon</Text>
         <View style={styles.iconGrid}>
-          {SPACE_ICONS.map((iconName) => {
+          {VAULT_ICONS.map((iconName) => {
             const active = iconName === icon;
             return (
               <Pressable
@@ -260,7 +263,7 @@ export default function SpaceSection(): React.JSX.Element {
 
 function asIcon(value: string | undefined): IconName | undefined {
   return value !== undefined &&
-    (SPACE_ICONS as readonly string[]).includes(value)
+    (VAULT_ICONS as readonly string[]).includes(value)
     ? (value as IconName)
     : undefined;
 }

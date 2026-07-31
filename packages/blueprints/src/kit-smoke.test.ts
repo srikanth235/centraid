@@ -297,7 +297,7 @@ describe("kit smoke", () => {
     expect(updates).toStrictEqual([]);
   });
 
-  it("routes parked tool outcomes to Inbox without rendering consent controls", async () => {
+  it("routes parked tool outcomes to Notifications without rendering consent controls", async () => {
     window.centraid = { appId: "todo" };
     document.querySelector(".kit-ask-history-new").click();
     // These are the REAL producer shapes: `runVaultInvokeTool` returns
@@ -342,7 +342,8 @@ describe("kit smoke", () => {
       // Both the bare-`status` frame and the nested `output.status` frame
       // must reach the owner — two parked lines, not one.
       expect(
-        log.textContent.split("That decision is waiting in Inbox.").length - 1
+        log.textContent.split("That decision is waiting in Notifications.")
+          .length - 1
       ).toBe(2);
       expect(log.textContent).toContain(
         "The vault denied that write: scope missing"

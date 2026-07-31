@@ -37,6 +37,7 @@ export const Channel = {
   VAULT_METADATA_CHANGED: "centraid:vaults:metadata-changed",
   VAULT_METADATA_PUSH: "centraid:vaults:metadata-push",
   GATEWAY_AUTH_GET: "centraid:gateways:auth",
+  GATEWAY_REMEMBER_DEVICE_SET: "centraid:gateways:set-remember-device",
   GATEWAY_RUNTIME_GET: "centraid:gateway-runtime:get",
   GATEWAY_RUNTIME_EVENT: "centraid:gateway-runtime:event",
   GATEWAY_RESTART: "centraid:gateway-runtime:restart",

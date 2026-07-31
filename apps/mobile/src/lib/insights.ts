@@ -9,7 +9,7 @@
 //   • usage insights — GET /centraid/_insights/summary?windowDays= →
 //     InsightsSummary: token/cost KPIs, a daily series, per-model usage, and a
 //     recent-activity tail. Vault-SCOPED, so it uses apiHeaders (auth + the
-//     active vault) and follows the Spaces switcher's selection.
+//     active vault) and follows the Vaults switcher's selection.
 //
 // Mobile doesn't depend on the gateway package, so the wire shapes are mirrored
 // here as lean local interfaces (exactly as lib/gateway + lib/automations do).

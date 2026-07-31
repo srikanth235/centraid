@@ -1,4 +1,4 @@
-export interface MobileInboxNotificationPull {
+export interface MobileNotificationsPull {
   decisions: {
     outbox: Array<{
       itemId: string;
@@ -24,19 +24,19 @@ export interface MobileInboxNotificationPull {
   }>;
 }
 
-export interface MobileInboxNotificationRow {
+export interface MobileNotificationRow {
   key: string;
   title: string;
   body: string;
 }
 
-/** Private Inbox content becomes notification text only on the paired device. */
-export function composeMobileInboxNotifications(
-  inbox: MobileInboxNotificationPull,
+/** Private Notifications content becomes notification text only on the paired device. */
+export function composeMobileNotifications(
+  notifications: MobileNotificationsPull,
   delivered: ReadonlySet<string>
-): MobileInboxNotificationRow[] {
+): MobileNotificationRow[] {
   return [
-    ...inbox.decisions.outbox.map((row) => ({
+    ...notifications.decisions.outbox.map((row) => ({
       key: `outbox:${row.itemId}:${row.stagedAt}`,
       title:
         ["title", "subject", "name"]
@@ -45,22 +45,22 @@ export function composeMobileInboxNotifications(
         row.target,
       body: "External write needs your approval",
     })),
-    ...inbox.decisions.needsAuth.map((row) => ({
+    ...notifications.decisions.needsAuth.map((row) => ({
       key: `auth:${row.connectionId}:${row.attentionAt}`,
       title: `${row.label} needs reconnection`,
-      body: "Open Inbox to reconnect",
+      body: "Open Notifications to reconnect",
     })),
-    ...inbox.decisions.parked.map((row) => ({
+    ...notifications.decisions.parked.map((row) => ({
       key: `parked:${row.invocationId}`,
       title: row.command,
-      body: "A decision is waiting in Inbox",
+      body: "A decision is waiting in Notifications",
     })),
-    ...inbox.decisions.scopeRequests.map((row) => ({
+    ...notifications.decisions.scopeRequests.map((row) => ({
       key: `scope:${row.requestId}`,
       title: `${row.appId} requests access`,
-      body: "Review the requested scope in Inbox",
+      body: "Review the requested scope in Notifications",
     })),
-    ...inbox.notices
+    ...notifications.notices
       .filter(
         (notice) =>
           notice.severity === "high" &&
@@ -70,15 +70,15 @@ export function composeMobileInboxNotifications(
       .map((notice) => ({
         key: `notice:${notice.noticeId}:${notice.lastAt}`,
         title: notice.headline,
-        body: "Open Inbox for details",
+        body: "Open Notifications for details",
       })),
   ].filter((row) => !delivered.has(row.key));
 }
 
-/** What one `syncInboxNotifications` pass should do. */
-export interface InboxNotificationPlan {
+/** What one `syncNotifications` pass should do. */
+export interface NotificationPlan {
   /** OS notifications to schedule now (empty on a seed or foreground pass). */
-  notifications: MobileInboxNotificationRow[];
+  notifications: MobileNotificationRow[];
   /** Ledger to persist, or `undefined` to leave the stored ledger untouched. */
   nextDelivered?: string[];
   /** True when this pass established the baseline instead of notifying. */
@@ -97,22 +97,22 @@ const LEDGER_LIMIT = 2_000;
  *     a grant treated every already-open decision as new and fired one banner
  *     per row. A first pass now records the current payload as the baseline and
  *     notifies about nothing; only what appears *after* it is news.
- *  2. **Never notify over the owner's shoulder.** With the app active the Inbox
+ *  2. **Never notify over the owner's shoulder.** With the app active the Notifications
  *     itself is on screen, so a banner is noise. A foreground pass leaves the
  *     ledger alone — deliberately, so anything that arrived while the owner was
  *     looking still notifies on the next background wake if it is still waiting.
  *
  * `seeded` is tracked outside the ledger array so that an empty baseline (a
- * quiet Inbox at grant time) is not mistaken for "never seeded", which would
+ * quiet Notifications at grant time) is not mistaken for "never seeded", which would
  * swallow the first real decision instead of announcing it.
  */
-export function planInboxNotifications(input: {
-  inbox: MobileInboxNotificationPull;
+export function planNotifications(input: {
+  notifications: MobileNotificationsPull;
   delivered: readonly string[];
   seeded: boolean;
   appActive: boolean;
-}): InboxNotificationPlan {
-  const candidates = composeMobileInboxNotifications(input.inbox, new Set());
+}): NotificationPlan {
+  const candidates = composeMobileNotifications(input.notifications, new Set());
   if (!input.seeded) {
     return {
       notifications: [],

@@ -380,7 +380,7 @@ function currentIrohWakeConfiguration(): IrohWakeConfiguration | undefined {
 /**
  * Mirror the minimum paired transport state into private service-worker
  * storage. A closed PWA has no WindowClient to own the normal Iroh bridge, so
- * the worker must be able to authenticate its canonical Inbox pull itself.
+ * the worker must be able to authenticate its canonical Notifications pull itself.
  */
 export async function syncIrohWakeConfiguration(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;

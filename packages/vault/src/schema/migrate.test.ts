@@ -51,9 +51,9 @@ function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
     DROP INDEX IF EXISTS schedule_task_organize_idx;
     DROP INDEX IF EXISTS schedule_section_project_idx;
     DROP INDEX IF EXISTS schedule_project_owner_idx;
-    DROP INDEX IF EXISTS inbox_notice_active_idx;
-    DROP INDEX IF EXISTS inbox_notice_retention_idx;
-    DROP TABLE IF EXISTS inbox_notice;
+    DROP INDEX IF EXISTS notifications_notice_active_idx;
+    DROP INDEX IF EXISTS notifications_notice_retention_idx;
+    DROP TABLE IF EXISTS notifications_notice;
     DROP TABLE IF EXISTS tally_recurring_expense;
     DROP TABLE IF EXISTS people_merge;
     DROP TABLE IF EXISTS social_contact_channel;
@@ -257,7 +257,7 @@ describe("schema/migrate", () => {
     const file = path.join(dir, "vault.db");
     const raw = new DatabaseSync(file);
     raw.exec(`
-      DROP TABLE inbox_notice;
+      DROP TABLE notifications_notice;
       CREATE TABLE people_merge (
         merge_id        TEXT PRIMARY KEY,
         source_party_id TEXT NOT NULL,
@@ -266,7 +266,7 @@ describe("schema/migrate", () => {
         merged_at       TEXT NOT NULL,
         undone_at       TEXT
       ) STRICT;
-      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 2};
+      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 3};
     `);
     raw.close();
     expect(

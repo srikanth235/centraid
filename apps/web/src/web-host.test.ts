@@ -218,6 +218,55 @@ describe("web-host", () => {
     });
   });
 
+  // Pairing stopped asking about the offline copy, so Settings → This device
+  // is the only place it is answered — and turning it off has to actually
+  // take the replica with it, not just flip a stored flag.
+  test("turning the offline copy off persists it and asks the shell to purge the replica", async () => {
+    await window.CentraidApi.addGateway({
+      label: "Home",
+      endpointId: "gateway-endpoint",
+      rememberDevice: true,
+    });
+    const changed =
+      vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
+    const off = window.CentraidApi.onGatewayChanged(changed);
+
+    await expect(
+      window.CentraidApi.setGatewayRememberDevice({ rememberDevice: false })
+    ).resolves.toStrictEqual({ rememberDevice: false });
+    off();
+
+    expect(localStorage.getItem("centraid.web.v1.connection")).toContain(
+      '"rememberDevice":false'
+    );
+    expect(changed).toHaveBeenLastCalledWith({
+      activeGatewayId: "web",
+      gatewayId: "gateway-endpoint",
+      purgeReplicaGatewayId: "gateway-endpoint",
+    });
+  });
+
+  test("turning the offline copy back on publishes no purge hint", async () => {
+    await window.CentraidApi.addGateway({
+      label: "Home",
+      endpointId: "gateway-endpoint",
+      rememberDevice: false,
+    });
+    const changed =
+      vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
+    const off = window.CentraidApi.onGatewayChanged(changed);
+
+    await expect(
+      window.CentraidApi.setGatewayRememberDevice({ rememberDevice: true })
+    ).resolves.toStrictEqual({ rememberDevice: true });
+    off();
+
+    expect(changed).toHaveBeenLastCalledWith({
+      activeGatewayId: "web",
+      gatewayId: "gateway-endpoint",
+    });
+  });
+
   test("removing a remembered gateway clears durable consent and device state", async () => {
     localStorage.setItem(
       "centraid.web.v1.connection",

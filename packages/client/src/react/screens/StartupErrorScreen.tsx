@@ -81,7 +81,7 @@ export default function StartupErrorScreen({
         </div>
         <p className={styles.footnote}>
           If trying again doesn&rsquo;t help, quit Centraid and open it once
-          more. Your spaces stay exactly as they are either way.
+          more. Your vaults stay exactly as they are either way.
         </p>
       </div>
     </div>

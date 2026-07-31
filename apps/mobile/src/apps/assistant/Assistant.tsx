@@ -169,7 +169,7 @@ export default function AssistantScreen({
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Assistant</Text>
-          <Text style={styles.subtitle}>Ask about your space</Text>
+          <Text style={styles.subtitle}>Ask about your vault</Text>
         </View>
       </View>
 
@@ -212,7 +212,7 @@ export default function AssistantScreen({
                     </Text>
                     <Text style={styles.emptyBody}>
                       {loadError ??
-                        "Ask your assistant anything about your space to get started."}
+                        "Ask your assistant anything about your vault to get started."}
                     </Text>
                   </>
                 )}

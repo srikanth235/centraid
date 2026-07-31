@@ -112,8 +112,8 @@ export interface VaultRegistryOptions {
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
-  /** Forwarded to each plane for the unified Inbox event/wake channel. */
-  onInboxChanged?: (vaultId: string, wake: boolean) => void;
+  /** Forwarded to each plane for the unified Notifications event/wake channel. */
+  onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
   synchronous?: "FULL" | "NORMAL";
   /** Global event-loop pressure gate forwarded to mounted planes. */
@@ -178,7 +178,7 @@ export class VaultRegistry {
   private readonly onProvenanceCommitted:
     | ((vaultId: string, entityTypes?: readonly string[]) => void)
     | undefined;
-  private readonly onInboxChanged:
+  private readonly onNotificationsChanged:
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private readonly synchronous: "FULL" | "NORMAL" | undefined;
@@ -219,7 +219,7 @@ export class VaultRegistry {
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
     this.onProvenanceCommitted = options.onProvenanceCommitted;
-    this.onInboxChanged = options.onInboxChanged;
+    this.onNotificationsChanged = options.onNotificationsChanged;
     this.synchronous = options.synchronous;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
     this.replicationConcurrency = options.replicationConcurrency;
@@ -408,7 +408,9 @@ export class VaultRegistry {
       ...(this.onProvenanceCommitted
         ? { onProvenanceCommitted: this.onProvenanceCommitted }
         : {}),
-      ...(this.onInboxChanged ? { onInboxChanged: this.onInboxChanged } : {}),
+      ...(this.onNotificationsChanged
+        ? { onNotificationsChanged: this.onNotificationsChanged }
+        : {}),
       ...(this.synchronous ? { synchronous: this.synchronous } : {}),
       ...(this.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
@@ -501,14 +503,50 @@ export class VaultRegistry {
     return this.planes.get(vaultId);
   }
 
-  /** Every mounted vault, oldest first. */
+  /**
+   * Every mounted vault the CLIENT sees — DEFAULT VAULT FIRST, then the rest
+   * oldest-first (issue #665).
+   *
+   * This is the single choke point every client-facing vault listing goes
+   * through (`GET /_vault/vaults` via `vault-routes.ts`, and the member scopes
+   * plane `GET /_vault/scopes` via `build-gateway.ts`'s `listVaults` dep), so
+   * the two can never disagree about which vault heads the list.
+   *
+   * WHY THE HEAD IS NOT JUST THE OLDEST. Ids are UUIDv7, so plain
+   * lexicographic order IS creation order, and the auto-found bootstrap
+   * (#603) founds `Shared` before the personal vault — so oldest-first put
+   * `Shared` at the head of every list. Clients treat the first row as
+   * PRIMARY (`useMemberScopes.ts` takes `scopes[0]`), which put them on a
+   * different vault than the gateway's own `defaultVaultId()`. Hoisting the
+   * default vault settles that disagreement in one place.
+   *
+   * The head is `defaultVaultIdOrUndefined()` — the same durable `personal`
+   * marker the rest of the gateway trusts, never the literal name "Personal"
+   * (the desktop fresh path renames it to the owner's display name). With no
+   * marked vault (pre-marker data dirs, an erased personal vault) that seam
+   * already answers "oldest", so the order is byte-for-byte the previous
+   * behaviour. Total and stable either way.
+   */
   list(): VaultInfo[] {
-    return [...this.planes.keys()]
-      .sort()
-      .map((id) => this.info(this.planes.get(id)!));
+    return this.listedIds().map((id) => this.info(this.planes.get(id)!));
   }
 
-  /** Every mounted plane, oldest first (boot activation iterates these). */
+  /** Mounted ids in client-listing order: default vault first, then oldest-first. */
+  private listedIds(): string[] {
+    const ids = [...this.planes.keys()].sort();
+    const head = this.defaultVaultIdOrUndefined();
+    if (head === undefined || ids[0] === head) return ids;
+    return [head, ...ids.filter((id) => id !== head)];
+  }
+
+  /**
+   * Every mounted plane, oldest first (boot activation iterates these).
+   *
+   * Deliberately NOT reordered like `list()`: no caller here renders a list or
+   * reads element 0 as "primary" — they start, sweep, drain, or diagnose every
+   * plane — so creation order stays the stable iteration order for background
+   * work, and the default-first hoist is confined to the client wire (#665).
+   */
   planesList(): VaultPlane[] {
     return [...this.planes.keys()].sort().map((id) => this.planes.get(id)!);
   }

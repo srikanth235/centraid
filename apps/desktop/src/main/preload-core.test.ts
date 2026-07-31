@@ -116,6 +116,7 @@ const EXPECTED_API_KEYS = [
   "saveSettings",
   "setActiveGateway",
   "setActiveVault",
+  "setGatewayRememberDevice",
   "testGatewayConnection",
   "transcribeMedia",
   "updateProfileMetadata",
@@ -153,6 +154,11 @@ const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
   ["updateProfileMetadata", Channel.GATEWAYS_UPDATE_METADATA, { id: "gw-1" }],
   ["setActiveGateway", Channel.GATEWAYS_SET_ACTIVE, { id: "gw-1" }],
   ["getGatewayAuth", Channel.GATEWAY_AUTH_GET, undefined],
+  [
+    "setGatewayRememberDevice",
+    Channel.GATEWAY_REMEMBER_DEVICE_SET,
+    { rememberDevice: false },
+  ],
   ["redeemGatewayPairing", Channel.GATEWAY_PAIR_REDEEM, { ticket: "t-1" }],
   ["listGatewayVaults", Channel.GATEWAYS_LIST_VAULTS, { gatewayId: "gw-1" }],
   [

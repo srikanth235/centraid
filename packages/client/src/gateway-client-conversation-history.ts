@@ -5,7 +5,7 @@
  * `@centraid/blueprints/kit/conversation-client.js` (#420).
  *
  * Every read/write here takes an optional `scopeId`: a conversation row lives in
- * exactly ONE space, so once its space is known the client must name it rather
+ * exactly ONE vault, so once its vault is known the client must name it rather
  * than let the ambient default-scope pointer decide (#599, Decision 14).
  * Omitted, the request falls back to that pointer — which is how every
  * conversation created before the picker existed keeps working.
@@ -50,8 +50,8 @@ export async function listConversations(
 }
 
 /** Create a fresh chat session row (the chat session id the turn streams to).
- *  `scopeId` pins the new conversation to one space (issue #599) — the row is
- *  written there, so every later load/turn must name the same space. */
+ *  `scopeId` pins the new conversation to one vault (issue #599) — the row is
+ *  written there, so every later load/turn must name the same vault. */
 export async function createConversation(
   appId: string,
   title = "",

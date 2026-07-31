@@ -20,7 +20,7 @@ import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import {
   syncDueNotifications,
-  syncInboxNotifications,
+  syncNotifications,
 } from "../../lib/notifications-core";
 import { getDesktopName } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
@@ -48,15 +48,15 @@ import {
 } from "../../lib/replica/op-sqlite-driver";
 import { postPlacement } from "../../lib/replica/placement-transport";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
+import { nativeSyncAllowed } from "../../lib/upload/native-policy";
 import {
   LAST_BASE,
-  getActiveSpace,
-  hydrateSpaces,
+  getActiveVaultLink,
+  hydrateVaultLinks,
   noteActiveIdentity,
-  subscribeSpaces,
-} from "../../lib/spaces";
-import type { Space } from "../../lib/spaces";
-import { nativeSyncAllowed } from "../../lib/upload/native-policy";
+  subscribeVaultLinks,
+} from "../../lib/vault-links";
+import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
 
 export const REPLICA_UNPAIRED_MESSAGE =
@@ -82,7 +82,7 @@ export interface ReplicaBootstrapProgress {
 export interface ReplicaContextValue {
   session?: MultiVaultReplicaSession;
   gatewayBase?: string;
-  /** Visible Space filter / default write target; not a session identity. */
+  /** Visible VaultLink filter / default write target; not a session identity. */
   vaultId?: string;
   scopes?: readonly ReplicaScopeFreshness[];
   ready: boolean;
@@ -123,22 +123,22 @@ function fetcher(vaultId?: string): ReplicaFetcher {
   };
 }
 
-async function resolveIdentity(space: Space | undefined): Promise<{
+async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   auth: GatewayAuth;
   gatewayId: string;
   online: boolean;
 }> {
   const cachedBase = await Store.hydrate(LAST_BASE, "http://127.0.0.1");
-  if (space?.gatewayId && space.vaultId) {
+  if (vault?.gatewayId && vault.vaultId) {
     const liveBase = await resolveGatewayBase().catch(() => undefined);
     if (liveBase) Store.set(LAST_BASE, liveBase);
     return {
       auth: {
         baseUrl: liveBase ?? cachedBase,
-        gatewayId: space.gatewayId,
-        vaultId: space.vaultId,
+        gatewayId: vault.gatewayId,
+        vaultId: vault.vaultId,
       },
-      gatewayId: space.gatewayId,
+      gatewayId: vault.gatewayId,
       online: liveBase !== undefined,
     };
   }
@@ -148,7 +148,7 @@ async function resolveIdentity(space: Space | undefined): Promise<{
     { baseUrl: liveBase },
     { window: 1, fetcher: fetcher() }
   );
-  const gatewayId = getDesktopName() || space?.gatewayId || liveBase;
+  const gatewayId = getDesktopName() || vault?.gatewayId || liveBase;
   Store.set(LAST_BASE, liveBase);
   await noteActiveIdentity({ gatewayId, vaultId: probe.vaultId });
   return {
@@ -260,20 +260,20 @@ export function ReplicaProvider({
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const [active, setActive] = useState<Space | undefined>();
-  const activeRef = useRef<Space | undefined>(undefined);
+  const [active, setActive] = useState<VaultLink | undefined>();
+  const activeRef = useRef<VaultLink | undefined>(undefined);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     let unsubscribe = (): void => undefined;
-    void hydrateSpaces().then(() => {
+    void hydrateVaultLinks().then(() => {
       const update = (): void => {
-        const space = getActiveSpace();
-        activeRef.current = space;
-        setActive(space);
+        const vault = getActiveVaultLink();
+        activeRef.current = vault;
+        setActive(vault);
       };
       update();
       setHydrated(true);
-      unsubscribe = subscribeSpaces(update);
+      unsubscribe = subscribeVaultLinks(update);
     });
     return () => unsubscribe();
   }, []);
@@ -310,7 +310,7 @@ export function ReplicaProvider({
           for (const scope of scopes)
             void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
           for (const scope of scopes)
-            void syncInboxNotifications(identity.auth.baseUrl, scope.vaultId);
+            void syncNotifications(identity.auth.baseUrl, scope.vaultId);
         }
         if (cancelled) return;
         let connected = identity.online;

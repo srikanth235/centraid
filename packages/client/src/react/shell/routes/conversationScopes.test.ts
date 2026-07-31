@@ -7,7 +7,7 @@ import {
 } from "./conversationScopes.js";
 
 describe("conversationScopes suite", () => {
-  // A conversation reads exactly ONE space for its whole life (#599, Decision 14
+  // A conversation reads exactly ONE vault for its whole life (#599, Decision 14
   // acceptance criterion). This is the record that makes the client able to keep
   // that promise across reloads.
 
@@ -16,12 +16,12 @@ describe("conversationScopes suite", () => {
   });
 
   describe(conversationScopes, () => {
-    it("remembers a conversation’s space and hands it back", () => {
+    it("remembers a conversation’s vault and hands it back", () => {
       rememberConversationScope("conv-1", "v-family");
       expect(conversationScope("conv-1")).toBe("v-family");
     });
 
-    it("keeps every conversation’s space independent", () => {
+    it("keeps every conversation’s vault independent", () => {
       rememberConversationScope("conv-1", "v-mine");
       rememberConversationScope("conv-2", "v-family");
       expect(conversationScopes()).toStrictEqual({

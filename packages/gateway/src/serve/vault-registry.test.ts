@@ -71,16 +71,16 @@ describe("vault-registry scenarios", () => {
     const shared = registry.create("Shared");
     const personal = registry.create("Personal", { personal: true });
 
-    // Oldest-first listing still leads with Shared…
+    // The listing leads with the DEFAULT vault, not the oldest one (#665):
+    // `Shared` is founded first, but `Personal` carries the marker.
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
-      shared.vaultId,
       personal.vaultId,
+      shared.vaultId,
     ]);
     expect(registry.list().map((v) => v.personal)).toStrictEqual([
-      undefined,
       true,
+      undefined,
     ]);
-    // …but the default is the owner's own vault.
     expect(registry.defaultVaultId()).toBe(personal.vaultId);
 
     // The desktop fresh path renames it to the owner's display name — the
@@ -95,6 +95,44 @@ describe("vault-registry scenarios", () => {
     registry.delete(shared.vaultId);
     expect(registry.defaultVaultIdOrUndefined()).toBeUndefined();
     expect(() => registry.defaultVaultId()).toThrow(/no vault mounted/u);
+  });
+
+  test("listing hoists the marked vault to the head from any founding position (#665)", async () => {
+    const root = await tempDir();
+    const registry = openVaultRegistry({
+      rootDir: root,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    cleanups.push(() => registry.stop());
+    const shared = registry.create("Shared");
+    const personal = registry.create("Personal", { personal: true });
+    const family = registry.create("Family");
+
+    // Marked vault founded in the MIDDLE — it still heads the list, and the
+    // remainder keeps its creation order (a hoist, never a shuffle).
+    expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
+      personal.vaultId,
+      shared.vaultId,
+      family.vaultId,
+    ]);
+    expect(registry.list()[0]!.vaultId).toBe(registry.defaultVaultId());
+
+    // Background iteration is deliberately NOT reordered: creation order.
+    expect(registry.planesList().map((p) => p.boot.vaultId)).toStrictEqual([
+      shared.vaultId,
+      personal.vaultId,
+      family.vaultId,
+    ]);
+
+    // No marked vault (pre-marker data dir, or an erased personal vault) →
+    // byte-for-byte the old oldest-first order.
+    registry.delete(personal.vaultId);
+    expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
+      shared.vaultId,
+      family.vaultId,
+    ]);
+    expect(registry.list()[0]!.vaultId).toBe(registry.defaultVaultId());
   });
 
   test("create / rename / delete permits the last vault to return to zero", async () => {

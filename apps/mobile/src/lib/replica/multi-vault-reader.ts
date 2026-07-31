@@ -78,7 +78,7 @@ interface AttachedScope extends MountedReplicaScope {
  * One op-sqlite connection with every mounted vault attached.
  *
  * Per-vault sessions remain the only writers. Reads and FTS fan-in happen on
- * this connection so changing the visible Space is a filter change, not a
+ * this connection so changing the visible Vault is a filter change, not a
  * session teardown. Every row carries vault provenance and row-level write
  * authority; equal content hashes collapse into one row with several badges.
  */

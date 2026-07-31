@@ -113,7 +113,7 @@ describe("connectFlowIO scenarios", () => {
     });
 
     // Issue #603 W4: an unreachable gateway used to fold into an empty list,
-    // which the UI then rendered as "no spaces here" and offered to create one
+    // which the UI then rendered as "no vaults here" and offered to create one
     // against. Failure must stay distinguishable from an empty registry.
     it("reports a transport failure instead of an empty list", async () => {
       listVaults.mockRejectedValue(new Error("down"));
@@ -173,7 +173,7 @@ describe("connectFlowIO scenarios", () => {
     // marker has no "Personal" vault either — it was renamed on the first
     // first-run — and `vaults[0]` is the OLDEST vault, i.e. "Shared".
     // Entering there is fine; flagging it renamable is not, because the host
-    // would rename everyone's shared space.
+    // would rename everyone's shared vault.
     it("connectFreshLocalGateway never flags the fallback vault as the owner's", async () => {
       listVaults.mockResolvedValue([
         { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },

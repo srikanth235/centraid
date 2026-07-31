@@ -36,7 +36,7 @@ import type { ProviderCapabilitiesDTO } from "./connectorPlatform.js";
 // screen's own DTOs, and hosts
 // the one piece of policy that doesn't belong in a pure screen component —
 // confirm-gating the destructive detach action, mirroring how SettingsRoute
-// gates space deletion (`removeSpace`) with the same `confirm` action.
+// gates vault deletion (`deleteVault`) with the same `confirm` action.
 
 const STATUS_TO_HEALTH: Record<ConnectionEntry["status"], ConnectionHealth> = {
   active: "ok",
@@ -306,7 +306,7 @@ export async function completeAssistReturnLink(
  * Remove is a real, irreversible delete (issue #304's missing renderer
  * half — `sync.remove_connection`, distinct from the credential-only detach
  * `configure_credential({cred_kind:'none'})` performs): it rides the same
- * promise-based confirm dialog the Spaces page uses before deleting a space.
+ * promise-based confirm dialog the Vaults page uses before deleting a vault.
  * Still exported/named `makeDetachConnection` — `SettingsRoute.tsx` (owned
  * by another in-flight change in this tree) imports it under that name and
  * wires it to the screen's `detachConnection` prop; renaming either would

@@ -14,7 +14,7 @@
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
 //   ├─ Capture       → CaptureScreen (preview-first universal quick add)
 //   ├─ Scan          → ScanScreen (camera/share OCR review)
-//   ├─ Automations   → AutomationsScreen (list + run the space's automations)
+//   ├─ Automations   → AutomationsScreen (list + run the vault's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
 //   └─ Settings      → SettingsStack (Settings, Approvals)
 //

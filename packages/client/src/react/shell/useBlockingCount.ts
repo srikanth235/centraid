@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  getInbox,
-  syncWebInboxNotifications,
-  subscribeInboxChanges,
+  getNotifications,
+  syncWebNotifications,
+  subscribeNotificationsChanges,
 } from "../../gateway-client.js";
 
 const POLL_MS = 60_000;
 
 /**
- * Count of open decisions only. Notices use the Inbox's subtle unread dot and
+ * Count of open decisions only. Notices use the Notifications's subtle unread dot and
  * never inflate this badge; SSE is primary and a 60s poll remains the fallback.
  */
-export function useInboxCounts(): {
+export function useNotificationsCounts(): {
   decisionCount: number;
   hasUnreadNotices: boolean;
 } {
@@ -21,13 +21,13 @@ export function useInboxCounts(): {
     hasUnreadNotices: false,
   });
   const load = useCallback(() => {
-    void getInbox()
-      .then((inbox) => {
+    void getNotifications()
+      .then((notifications) => {
         setCounts({
-          decisionCount: inbox.decisions.count,
-          hasUnreadNotices: inbox.unreadNoticeCount > 0,
+          decisionCount: notifications.decisions.count,
+          hasUnreadNotices: notifications.unreadNoticeCount > 0,
         });
-        void syncWebInboxNotifications().catch(() => undefined);
+        void syncWebNotifications().catch(() => undefined);
       })
       .catch(() => {
         // Gateway unreachable — keep the last known count rather than flapping.
@@ -36,7 +36,7 @@ export function useInboxCounts(): {
   useEffect(() => {
     load();
     const controller = new AbortController();
-    void subscribeInboxChanges(load, controller.signal).catch(() => {
+    void subscribeNotificationsChanges(load, controller.signal).catch(() => {
       // The slow poll below is the deliberate fallback.
     });
     const timer = window.setInterval(load, POLL_MS);
@@ -52,5 +52,5 @@ export function useInboxCounts(): {
 
 /** Compatibility accessor for callers that only render the decision badge. */
 export function useBlockingCount(): number {
-  return useInboxCounts().decisionCount;
+  return useNotificationsCounts().decisionCount;
 }

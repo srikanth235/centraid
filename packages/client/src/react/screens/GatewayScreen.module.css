@@ -11,7 +11,14 @@
    own screens (SettingsDiagnosticsScreen / LogsScreen) inside .tabPane —
    this file only owns the tab strip and the Overview/Alerts content. */
 
+/* Sized by its PANE, not the window: this page renders inside a resizable
+   split (and inside the settings shell), so a viewport media query fires at
+   the wrong moment in both directions — a wide window with a narrow pane kept
+   the three-up gauge row and clipped "Latency" against the card edge. Every
+   narrow-width rule below is an `@container gateway-page` query. */
 .page {
+  container: gateway-page / inline-size;
+  min-width: 0;
   max-width: 1120px;
   margin: 0 auto;
   display: flex;
@@ -69,13 +76,21 @@
 
 /* Tab strip — Overview / Components / Logs / Alerts. Plain underline
    tabs, not pill chips: this is page-level navigation, not a filter. */
+/* Scrolls rather than wraps: a wrapped second row would break the shared
+   underline the active tab sits on. */
 .tabs {
   display: flex;
   gap: 4px;
   border-bottom: 0.5px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 .tab {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
@@ -157,10 +172,20 @@
   flex-wrap: wrap;
   margin-bottom: 20px;
 }
+/* `flex: 1 1 260px` — the headline block claims the row until it can no
+   longer hold 260px, at which point the gauge cluster wraps below it instead
+   of squeezing both into unreadable columns. */
 .statusCluster {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+/* The flex item that holds the status word + subtitles. Needs `min-width: 0`
+   of its own: without it the block floors at the longest unbroken word in the
+   subtitle and pushes the gauges off the card's clipped right edge. */
+.statusText {
   min-width: 0;
 }
 
@@ -228,19 +253,27 @@
   letter-spacing: -0.02em;
   color: var(--ink);
 }
+/* Reflows onto more lines rather than overflowing: the gateway label is
+   user-supplied and can be a long path-like string. */
 .statusSub {
   margin-top: 5px;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.03em;
+  line-height: 1.45;
   color: var(--ink-3);
+  overflow-wrap: anywhere;
 }
+/* One ellipsized line — the full text is in the logs; a raw fetch error can
+   be a paragraph and must not become the tallest thing on the page.
+   `max-width` is capped by the block, not a fixed 380px, so a pane narrower
+   than that still clips at the text's own edge instead of the card's. */
 .statusError {
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--danger);
-  max-width: 380px;
+  max-width: min(380px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -252,13 +285,20 @@
   color: var(--icon-amber);
 }
 
-/* Gauge figures — mono numerals, hairline dividers between them. */
+/* Gauge figures — mono numerals, hairline dividers between them. A grid of
+   `minmax(0, …)` tracks, not a flex row of `min-width: 118px` items: the old
+   floor (3 × 118px + dividers ≈ 430px) could not shrink, so in a narrow pane
+   the row simply overflowed and `.hero { overflow: hidden }` sliced the last
+   gauge in half ("LATENC…", "199…"). Tracks may now shrink, and the container
+   queries below re-flow them before they get too tight to read. */
 .figures {
-  display: flex;
-  gap: 26px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  column-gap: 26px;
+  min-width: 0;
 }
 .figure {
-  min-width: 118px;
+  min-width: 0;
 }
 .figure + .figure {
   border-left: 0.5px solid var(--line);
@@ -271,6 +311,9 @@
   text-transform: uppercase;
   color: var(--ink-4);
   margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .figureValue {
   font-family: var(--font-mono);
@@ -280,11 +323,16 @@
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Wraps instead of clipping — "N checks this session" is a sentence, and a
+   truncated count reads as a broken number. */
 .figureSub {
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 10px;
+  line-height: 1.4;
   color: var(--ink-4);
 }
 
@@ -1060,8 +1108,12 @@
   text-transform: uppercase;
   color: var(--ink-4);
 }
+/* `min-width: 0` — a flex item floors at its content's min-content width, so
+   without it `text-overflow: ellipsis` never engages and a long gateway label
+   pushed the row past the panel's clipped edge instead of truncating. */
 .idRow dd {
   margin: 0;
+  min-width: 0;
   font-size: 12.5px;
   color: var(--ink-2);
   text-align: right;
@@ -1110,12 +1162,78 @@
   overflow-wrap: anywhere;
 }
 
-/* Narrow-window fallback. */
-@media (max-width: 1080px) {
+/* ── Narrow PANE fallbacks ────────────────────────────────────────────────
+   Declared LAST on purpose: container queries carry no extra specificity, so
+   a plain rule further down the file would silently win and undo them
+   (same trap as SettingsRoute.module.css). */
+
+/* One column: the right rail's Identity rows are label/value pairs that go
+   unreadable long before the left column's timeline does. */
+@container gateway-page (max-width: 1080px) {
   .grid {
     grid-template-columns: 1fr;
   }
   .figures {
     width: 100%;
+  }
+}
+
+/* The headline block and the gauge row no longer fit side by side. Gauges
+   wrap under the headline (heroTop already wraps) and spread across the full
+   card, dropping the vertical dividers — a divider on the first item of a
+   re-flowed row reads as a stray hairline. */
+@container gateway-page (max-width: 720px) {
+  .hero {
+    padding: 18px 16px 12px;
+  }
+  .heroTop {
+    gap: 18px;
+    margin-bottom: 16px;
+  }
+  .statusCluster {
+    flex: 1 1 100%;
+    gap: 14px;
+  }
+  .statusWord {
+    font-size: 24px;
+  }
+  .figures {
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    column-gap: 18px;
+    row-gap: 14px;
+  }
+  .figure + .figure {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+
+/* Outage / alert-history rows: the four-track row (dot · time · text · badge)
+   starves the text track. Keep dot, time and badge on the first line and give
+   the message a full-width second line. */
+@container gateway-page (max-width: 560px) {
+  .outage {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+  }
+  .outageDot,
+  .outageStart {
+    grid-row: 1;
+  }
+  .outageBadge {
+    grid-row: 1;
+    grid-column: 3;
+  }
+  .outageDuration {
+    grid-row: 2;
+    grid-column: 2 / -1;
+  }
+  /* Label above value: the right-aligned ellipsized value had nothing left to
+     show once the label took its half of the row. */
+  .idRow {
+    display: block;
+  }
+  .idRow dd {
+    text-align: left;
+    margin-top: 2px;
   }
 }

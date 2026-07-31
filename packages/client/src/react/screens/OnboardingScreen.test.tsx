@@ -344,7 +344,8 @@ describe("OnboardingScreen scenarios", () => {
       await flush(4);
       expect(redeemGatewayPairing).toHaveBeenCalledWith({
         label: undefined,
-        rememberDevice: false,
+        // ON by default now — pairing no longer asks (Settings owns it).
+        rememberDevice: true,
         ticket: "a-ticket",
       });
       // Paired, and only now asked who this is.

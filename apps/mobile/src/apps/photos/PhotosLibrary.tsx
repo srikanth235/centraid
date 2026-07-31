@@ -225,12 +225,12 @@ export default function PhotosLibrary({
       Alert.alert(
         result.changedCount || result.missingCount || result.inCloudCount
           ? "Freed with exclusions"
-          : "Space freed",
+          : "Vault freed",
         lines.join("\n")
       );
     } catch (error) {
       Alert.alert(
-        "Free up space paused",
+        "Free up vault paused",
         error instanceof Error ? error.message : String(error)
       );
     } finally {
@@ -253,7 +253,7 @@ export default function PhotosLibrary({
       return;
     }
     Alert.alert(
-      "Free up space",
+      "Free up vault",
       `${eligibleCount} verified originals (${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Bytes are re-hashed at delete time and anything changed since backup is kept. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
       [
         { text: "Cancel" },
@@ -455,7 +455,7 @@ export default function PhotosLibrary({
           />
         </Pressable>
         <Pressable
-          accessibilityLabel="Free offline thumbnail space"
+          accessibilityLabel="Free offline thumbnail vault"
           accessibilityRole="button"
           accessibilityState={{ disabled: !pinsHydrated || freeing }}
           disabled={!pinsHydrated || freeing}
@@ -463,7 +463,7 @@ export default function PhotosLibrary({
         >
           <Row
             icon="hard-drive"
-            title="Free up space"
+            title="Free up vault"
             meta={
               freeing
                 ? "Re-hashing device originals…"

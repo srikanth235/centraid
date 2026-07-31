@@ -218,7 +218,7 @@ export function CaptureScanPanel({
         );
         window.setTimeout(onSaved, 650);
       } else if (outcome.status === "parked") {
-        setStatus("Saved for owner approval in Inbox.");
+        setStatus("Saved for owner approval in Notifications.");
       } else {
         setFailed(true);
         setStatus(outcome.reason ?? "The vault did not apply this scan.");

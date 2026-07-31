@@ -1,5 +1,5 @@
 /* Household (issue #599, Decision 14) — the page that answers "who is in this
-   household, what hardware do they use, and which spaces do we have". It took
+   household, what hardware do they use, and which vaults do we have". It took
    the People & devices card off the Gateway page, which is now purely "is the
    gateway healthy". */
 
@@ -74,12 +74,12 @@
 
 /* `min(248px, 100%)`, not a bare 248px: a bare track floor cannot shrink, so
    below 248px the grid overflows its column rather than dropping to one. */
-.spaces {
+.vaults {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(248px, 100%), 1fr));
   gap: 10px;
 }
-.space {
+.vault {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -88,7 +88,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
 }
-.spaceTop {
+.vaultTop {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -104,13 +104,13 @@
 .avatar svg {
   display: block;
 }
-.spaceText {
+.vaultText {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
-.spaceName {
+.vaultName {
   font: var(--t-title);
   font-size: 13.5px;
   font-weight: 600;
@@ -119,7 +119,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.spaceRole {
+.vaultRole {
   margin-top: 1px;
   font: var(--t-small);
   font-size: 11px;
@@ -142,7 +142,7 @@
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
-.spaceLinks {
+.vaultLinks {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

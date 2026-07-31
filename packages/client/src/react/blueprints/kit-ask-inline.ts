@@ -4,7 +4,7 @@ import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 // kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
 // `streamTurn(appId, …, register:'ask')`. Any write the agent parks belongs to
-// the canonical Inbox; this conversational surface never forks decision state.
+// the canonical Notifications; this conversational surface never forks decision state.
 //
 // Strictly online-only and lazy: `installInlineAsk` performs NO network on the
 // mount path (it only builds DOM + click handlers), so the route host can fire

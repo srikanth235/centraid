@@ -1,12 +1,12 @@
-// The global Space drawer (issue #498, Slice 4) — the springboard's identity +
+// The global Vault drawer (issue #498, Slice 4) — the springboard's identity +
 // system surface, slid in from the left edge over Home. It is the ONE thing the
 // desktop sidebar (packages/client/src/react/shell/Sidebar.tsx) carries that the
-// launcher otherwise lacks: a persistent space head plus a curated menu.
+// launcher otherwise lacks: a persistent vault head plus a curated menu.
 //
 // It is deliberately NOT a 1:1 port of the ~17-entry desktop sidebar. The app
 // list already IS Home's grid; Search / Settings / Assistant live in the dock;
 // Approvals / Automations live in the attention line. So this drawer only adds
-// the space identity header and two short sections (GO TO / SYSTEM). Desktop-only
+// the vault identity header and two short sections (GO TO / SYSTEM). Desktop-only
 // rows with no mobile destination (Insights, Discover, Starred, Vault Atlas,
 // Chats, Backups) are intentionally omitted rather than rendered as dead links.
 //
@@ -35,7 +35,7 @@ import type { ConnectionState } from "./AttentionLine";
 
 const PANEL_WIDTH = 288;
 
-export interface SpaceDrawerProps {
+export interface VaultDrawerProps {
   open: boolean;
   onClose: () => void;
   /** Desktop-link state, shared with Home so the drawer never re-fetches it. */
@@ -44,8 +44,8 @@ export interface SpaceDrawerProps {
   approvals: number;
   /** Local identity: display name + accent, straight from Home's profile state. */
   profile: { name: string; color: string };
-  /** Open the Spaces switcher (add / switch / forget device-local vaults). */
-  onSpaces: () => void;
+  /** Open the Vaults switcher (add / switch / forget device-local vaults). */
+  onVaults: () => void;
   onAssistant: () => void;
   onAutomations: () => void;
   onInsights: () => void;
@@ -73,19 +73,19 @@ function describeConnection(connection: ConnectionState): {
   }
 }
 
-export default function SpaceDrawer({
+export default function VaultDrawer({
   open,
   onClose,
   connection,
   approvals,
   profile,
-  onSpaces,
+  onVaults,
   onAssistant,
   onAutomations,
   onInsights,
   onApprovals,
   onSettings,
-}: SpaceDrawerProps): React.JSX.Element {
+}: VaultDrawerProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -148,9 +148,9 @@ export default function SpaceDrawer({
           ]}
         >
           <Pressable
-            accessibilityLabel="Switch space"
+            accessibilityLabel="Switch vault"
             accessibilityRole="button"
-            onPress={go(onSpaces)}
+            onPress={go(onVaults)}
             style={[styles.header, { borderBottomColor: colors.line }]}
           >
             <View style={[styles.avatar, { backgroundColor: profile.color }]}>
@@ -161,7 +161,7 @@ export default function SpaceDrawer({
                 style={[styles.headerName, { color: colors.ink }]}
                 numberOfLines={1}
               >
-                {profile.name || "Your space"}
+                {profile.name || "Your vault"}
               </Text>
               <Text
                 style={[styles.headerSub, { color: colors.ink3 }]}
@@ -201,7 +201,7 @@ export default function SpaceDrawer({
             <Pressable style={styles.row} onPress={go(onApprovals)}>
               <Feather name="bell" size={19} color={colors.ink3} />
               <Text style={[styles.rowLabel, { color: colors.ink }]}>
-                Inbox
+                Notifications
               </Text>
               {approvals > 0 ? (
                 <View

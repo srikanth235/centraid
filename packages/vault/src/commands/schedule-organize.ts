@@ -528,7 +528,7 @@ function organizeTask(ctx: HandlerCtx): Record<string, unknown> {
   };
   // Placement columns are COALESCE'd: omitting project_id/section_id leaves
   // the current filing in place. Explicit clear_* flags are the only NULL path
-  // so agents can retune recurrence without unfiling into Inbox.
+  // so agents can retune recurrence without unfiling into Notifications.
   const clearProject = input.clear_project === true;
   const clearSection = clearProject || input.clear_section === true;
   ctx.db

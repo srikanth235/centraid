@@ -33,7 +33,7 @@ import type { ConnectionAuth } from "@centraid/automation";
 
 import type { ConnectionBroker } from "./connection-broker.js";
 import { timeoutSignal } from "./fetch-timeout.js";
-import { noticeGist } from "./inbox-notices.js";
+import { noticeGist } from "./notices.js";
 import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
@@ -393,7 +393,7 @@ export class OutboxExecutor {
           : gist
             ? `needs approval again: ${gist}`
             : "needs approval again";
-    plane.inbox.put({
+    plane.notices.put({
       kind: "outbox",
       sourceRef: itemId,
       headline: `${target} — ${suffix}`,
@@ -423,7 +423,7 @@ export class OutboxExecutor {
             }
           : {}),
         ...(detail ? { detail } : {}),
-        deepLink: "/inbox",
+        deepLink: "/notifications",
       },
     });
   }

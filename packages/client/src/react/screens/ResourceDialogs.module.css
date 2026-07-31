@@ -1,7 +1,7 @@
 /* Dialogs for the Resource card (issue #528 follow-up): the "Compare modes"
    table and the "How we sized this" details sheet. Self-contained overlay
    chrome — the client has no shared <Modal> component, only the fixed-position
-   idiom (styles/modal.module.css, SpaceModal.module.css). We keep our own so
+   idiom (styles/modal.module.css, VaultModal.module.css). We keep our own so
    the wide comparison table can size independently of the 560px modal card. */
 
 @keyframes rd-fade {

@@ -1,13 +1,13 @@
-/** In-process doorbell for the Inbox SSE stream and content-free wake relay. */
-export interface InboxChangedEvent {
+/** In-process doorbell for the Notifications SSE stream and content-free wake relay. */
+export interface NotificationsChangedEvent {
   vaultId: string;
   wake: boolean;
 }
 
-export class InboxEventBus {
+export class NotificationsEventBus {
   readonly #listeners = new Map<
     string,
-    Set<(event: InboxChangedEvent) => void>
+    Set<(event: NotificationsChangedEvent) => void>
   >();
 
   publish(vaultId: string, wake = false): void {
@@ -17,7 +17,7 @@ export class InboxEventBus {
 
   subscribe(
     vaultId: string,
-    listener: (event: InboxChangedEvent) => void
+    listener: (event: NotificationsChangedEvent) => void
   ): () => void {
     const listeners = this.#listeners.get(vaultId) ?? new Set();
     listeners.add(listener);
@@ -30,7 +30,7 @@ export class InboxEventBus {
 }
 
 /** The decision projection this module keys on — structurally, not by class. */
-export interface InboxDecisionProjection {
+export interface NotificationsDecisionProjection {
   outbox: ReadonlyArray<{ itemId: string; stagedAt: string }>;
   needsAuth: ReadonlyArray<{ connectionId: string; attentionAt: string }>;
   parked: ReadonlyArray<{ invocationId: string }>;
@@ -43,8 +43,8 @@ export interface InboxDecisionProjection {
  * item re-staged, a connection re-entering needs-auth) so a new episode reads
  * as a new decision rather than as the same one still standing.
  */
-export function inboxDecisionKeys(
-  decisions: InboxDecisionProjection
+export function notificationsDecisionKeys(
+  decisions: NotificationsDecisionProjection
 ): string[] {
   return [
     ...decisions.outbox.map((row) => `outbox:${row.itemId}:${row.stagedAt}`),
@@ -69,7 +69,7 @@ export function inboxDecisionKeys(
  * were already open before this process started are not news, and waking on
  * them would spam every device on every gateway restart.
  */
-export function createInboxDecisionWakeTracker(): {
+export function createNotificationsDecisionWakeTracker(): {
   observe: (vaultId: string, keys: readonly string[]) => boolean;
 } {
   const seen = new Map<string, Set<string>>();

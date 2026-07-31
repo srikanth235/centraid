@@ -1103,12 +1103,12 @@ export interface SettingsProvidersBridgeProps {
   ) => void;
 }
 
-// ── Settings: Space (issue #382) ─────────────────────────────────────────────
-// The cross-vault "Spaces" list + gateway "Connections" group DTOs
+// ── Settings: Vault (issue #382) ─────────────────────────────────────────────
+// The cross-vault "Vaults" list + gateway "Connections" group DTOs
 // (ProfileRowDTO/ConnectionRowDTO/SettingsProfilesBridgeProps) retired with
 // SettingsProfilesScreen.tsx — that surface moved to the switcher, which is
-// the (gateway, vault) pair manager now. The Settings "Space" page's own
-// shape is `ActiveSpaceData` (shell/routes/settingsAccountData.ts), scoped
+// the (gateway, vault) pair manager now. The Settings "Vault" page's own
+// shape is `ActiveVaultData` (shell/routes/settingsAccountData.ts), scoped
 // to the active vault only.
 
 // ── Home ────────────────────────────────────────────────────────────────────

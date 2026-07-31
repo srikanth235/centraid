@@ -1,11 +1,11 @@
 // The editorial greeting header at the top of the springboard Home (issue #498,
 // Slice B). A time-of-day salutation set upright in the Playfair serif, the
 // profile name in its italic and tinted with the profile colour, next to a round
-// identity avatar that opens the Space drawer.
+// identity avatar that opens the Vault drawer.
 //
 // The avatar is the drawer handle: tapping it (or the left-edge swipe Home owns)
-// opens the Space menu. It carries the profile colour + initial so identity and
-// the "switch space" affordance read as one thing.
+// opens the Vault menu. It carries the profile colour + initial so identity and
+// the "switch vault" affordance read as one thing.
 
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -43,7 +43,7 @@ export default function GreetingHeader({
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Open space menu"
+        accessibilityLabel="Open vault menu"
         onPress={onOpenMenu}
         hitSlop={10}
         style={({ pressed }) => [

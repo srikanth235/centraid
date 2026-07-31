@@ -191,8 +191,12 @@ describe("serve scenarios", () => {
     expect(Array.isArray(body.logs)).toBe(true);
     // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
     expect(body.vaults).toHaveLength(2);
-    // Oldest-first listing (Shared leads); the DEFAULT vault is Personal.
-    expect(body.vaults[0]!.vaultId).toBe(handle.vaults.list()[0]!.vaultId);
+    // The diagnostics inventory enumerates planes in FOUNDING order (Shared
+    // leads) — unlike the client-facing listing, which leads with the default
+    // vault (#665). Nothing here reads element 0 as "primary".
+    expect(body.vaults[0]!.vaultId).toBe(
+      handle.vaults.planesList()[0]!.boot.vaultId
+    );
     expect(body.vaults[0]!.files.vaultDbBytes).toBeTypeOf("number");
   });
 
@@ -234,9 +238,10 @@ describe("serve scenarios", () => {
       recoveryKit: { confirmedAt: null },
     });
     expect(body.vaults).toHaveLength(2);
-    // Oldest-first listing, so Shared leads (the DEFAULT vault is Personal).
+    // Backup inventories planes in FOUNDING order, so Shared leads here even
+    // though the client-facing vault listing leads with Personal (#665).
     expect(body.vaults[0]).toMatchObject({
-      vaultId: handle.vaults.list()[0]!.vaultId,
+      vaultId: handle.vaults.planesList()[0]!.boot.vaultId,
       name: "Shared",
       running: false,
       destination: { kind: "gateway-local" },
@@ -264,9 +269,10 @@ describe("serve scenarios", () => {
         provider: { kind: "local", dir: providerDir },
       },
     });
-    // Backup status lists vaults oldest-first, so this is Shared — the
-    // registry DEFAULT (`current()`) is Personal and sits second.
-    const vaultId = handle.vaults.list()[0]!.vaultId;
+    // Backup status inventories planes in FOUNDING order, so this is Shared —
+    // the registry DEFAULT (`current()`, and the head of the client-facing
+    // listing since #665) is Personal.
+    const vaultId = handle.vaults.planesList()[0]!.boot.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
     const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {

@@ -22,7 +22,7 @@
     NOTIFICATION_CACHE,
   ]);
   const IROH_CONFIG_KEY = '/__centraid_notifications__/iroh-config';
-  const INBOX_DELIVERY_KEY = '/__centraid_notifications__/inbox';
+  const NOTIFICATIONS_DELIVERY_KEY = '/__centraid_notifications__/delivered';
   const REMINDER_DELIVERY_KEY = '/__centraid_notifications__/reminders';
   const WAKE_CONNECT_TIMEOUT_MS = 15000;
 
@@ -292,7 +292,7 @@
         `/centraid/_web/control?path=${encodeURIComponent(path)}`,
         {
           credentials: 'include',
-          headers: { 'x-centraid-service-worker': 'inbox-wake' },
+          headers: { 'x-centraid-service-worker': 'notifications-wake' },
         },
       );
       if (!response.ok) throw irohError;
@@ -300,11 +300,11 @@
     }
   }
 
-  // Mirrors packages/client/src/inbox-notification-model.ts. Content is built
+  // Mirrors packages/client/src/notifications-model.ts. Content is built
   // only after the authenticated local fetch; the push provider still receives
   // exactly the opaque `replica-wake` marker.
-  function composeInboxNotifications(inbox, delivered) {
-    const decisions = inbox?.decisions || {};
+  function composeWebNotifications(notifications, delivered) {
+    const decisions = notifications?.decisions || {};
     return [
       ...(decisions.outbox || []).map((row) => ({
         key: `outbox:${row.itemId}:${row.stagedAt}`,
@@ -317,19 +317,19 @@
       ...(decisions.needsAuth || []).map((row) => ({
         key: `auth:${row.connectionId}:${row.attentionAt}`,
         title: `${row.label} needs reconnection`,
-        body: 'Open Inbox to reconnect',
+        body: 'Open Notifications to reconnect',
       })),
       ...(decisions.parked || []).map((row) => ({
         key: `parked:${row.invocationId}`,
         title: row.command,
-        body: 'A decision is waiting in Inbox',
+        body: 'A decision is waiting in Notifications',
       })),
       ...(decisions.scopeRequests || []).map((row) => ({
         key: `scope:${row.requestId}`,
         title: `${row.appId} requests access`,
-        body: 'Review the requested scope in Inbox',
+        body: 'Review the requested scope in Notifications',
       })),
-      ...(inbox?.notices || [])
+      ...(notifications?.notices || [])
         .filter(
           (notice) =>
             notice.severity === 'high' &&
@@ -339,26 +339,26 @@
         .map((notice) => ({
           key: `notice:${notice.noticeId}:${notice.lastAt}`,
           title: notice.headline,
-          body: 'Open Inbox for details',
+          body: 'Open Notifications for details',
         })),
     ].filter((row) => !delivered.has(row.key));
   }
 
-  async function notifyClosedInbox() {
-    const inbox = await fetchPrivate('/centraid/_vault/inbox');
-    const delivered = await deliveredKeys(INBOX_DELIVERY_KEY);
-    const rows = composeInboxNotifications(inbox, delivered);
+  async function notifyClosedNotifications() {
+    const notifications = await fetchPrivate('/centraid/_vault/notifications');
+    const delivered = await deliveredKeys(NOTIFICATIONS_DELIVERY_KEY);
+    const rows = composeWebNotifications(notifications, delivered);
     await Promise.all(
       rows.map((row) =>
         self.registration.showNotification(row.title, {
           body: row.body,
           tag: row.key,
-          data: { url: '/?inbox=1' },
+          data: { url: '/?notifications=1' },
         }),
       ),
     );
     for (const row of rows) delivered.add(row.key);
-    await saveDeliveredKeys(INBOX_DELIVERY_KEY, delivered);
+    await saveDeliveredKeys(NOTIFICATIONS_DELIVERY_KEY, delivered);
   }
 
   async function notifyClosedReminders() {
@@ -390,7 +390,7 @@
 
   // Web Push carries only an opaque wake marker. An open client performs its
   // authenticated pull. A closed PWA uses its HttpOnly control session to fetch
-  // the canonical Inbox/reminder rows and composes private OS content locally.
+  // the canonical Notifications/reminder rows and composes private OS content locally.
   self.addEventListener('push', (event) => {
     let wake = false;
     try {
@@ -416,7 +416,7 @@
           let results;
           try {
             results = await Promise.allSettled([
-              notifyClosedInbox(),
+              notifyClosedNotifications(),
               notifyClosedReminders(),
             ]);
           } finally {

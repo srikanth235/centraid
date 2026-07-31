@@ -17,8 +17,15 @@
  *
  * It lives in main, not the renderer, so the watch survives navigation and
  * alerts land even when the window is backgrounded. Live transition tracking
- * is per-launch, while the alert history is durable and doubles as the Inbox
- * projection queue for events observed while the gateway was unreachable.
+ * is per-launch; the alert history is durable (gateway-outage-log.ts) and is
+ * the only place health outlives the process.
+ *
+ * Health deliberately does NOT reach the vault Notifications (issue #665). It was
+ * dual-written there for one release (#647) and that was wrong: Notifications is
+ * for things only the owner can RESOLVE, and no Notifications action un-degrades a
+ * gateway. Health's homes are the Gateway page (Overview status card,
+ * Components tab, durable Alerts history) and the threshold-gated OS
+ * notification below.
  *
  * Wave 2 of #351 adds a fourth alert: the version handshake (previously
  * dead code — see version-handshake.ts) is now judged every tick for a
@@ -40,6 +47,7 @@ import {
   evaluateAlert,
   formatDurationMs,
   initialRuntimeState,
+  isPendingBootProbe,
 } from "./gateway-monitor-core.js";
 import type {
   GatewayAlertAction,
@@ -50,24 +58,9 @@ import type {
   GatewayVersionSkewAction,
 } from "./gateway-monitor-core.js";
 import { probeGateway } from "./gateway-monitor-probe.js";
-import {
-  deriveOutageEvents,
-  eventsAfterMark,
-  gatewayInboxEvent,
-  INBOX_FLUSH_BATCH,
-  inboxProjectionTarget,
-  outageEventMark,
-  seedProjectionMarks,
-} from "./gateway-outage-log-core.js";
-import type {
-  OutageLogEvent,
-  OutageLogFile,
-} from "./gateway-outage-log-core.js";
-import {
-  loadOutageLog,
-  persistOutageEvents,
-  persistProjectionMarks,
-} from "./gateway-outage-log.js";
+import { deriveOutageEvents } from "./gateway-outage-log-core.js";
+import type { OutageLogEvent } from "./gateway-outage-log-core.js";
+import { loadOutageLog, persistOutageEvents } from "./gateway-outage-log.js";
 import {
   CRASH_LOOP_THRESHOLD,
   CRASH_LOOP_WINDOW_MS,
@@ -130,37 +123,8 @@ const crashLoopNotified = new Set<string>();
  * events land. `historyBootAt` is captured the same moment: any persisted
  * entry older than it predates this launch ("previous session" in the UI).
  */
-let outageHistory: OutageLogFile | undefined;
+let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
-
-/**
- * POST one batch of already-persisted health events. Throws on any non-200 so
- * the caller leaves the projection mark where it is and retries next tick —
- * the durable log, not this call, is the queue.
- */
-async function postGatewayInboxEvents(
-  events: readonly OutageLogEvent[],
-  baseUrl: string,
-  token: string | undefined,
-  vaultId: string
-): Promise<void> {
-  const response = await fetch(
-    new URL("/centraid/_vault/inbox/gateway-health", baseUrl),
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-centraid-vault": vaultId,
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ events: events.map(gatewayInboxEvent) }),
-    }
-  );
-  if (!response.ok)
-    throw new Error(
-      `Inbox gateway-health write returned HTTP ${response.status}`
-    );
-}
 
 function notify(action: GatewayAlertAction, label: string): void {
   if (!Notification.isSupported()) return;
@@ -315,11 +279,17 @@ async function tick(): Promise<void> {
         }
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
-        : { at: Date.now(), ok: false, detail: "gateway URL not resolved yet" }
+        : {
+            at: Date.now(),
+            ok: false,
+            detail: "gateway URL not resolved yet",
+            bootPhase: true,
+          }
     : {
         at: Date.now(),
         ok: false,
         detail: settingsError ?? "settings unavailable",
+        bootPhase: true,
       };
   // A failed heartbeat against a LOCAL gateway is the one place the desktop
   // learns that its own detached daemon died after starting cleanly — the
@@ -343,7 +313,18 @@ async function tick(): Promise<void> {
   // check does internally for the in-memory `outages` log.
   const prevStatus = trackedState.status;
   const prevHealthStatus = trackedState.healthStatus;
-  state = applyProbe(trackedState, probe);
+  // A boot-phase pseudo-failure (no URL yet / settings unreadable, before this
+  // launch has resolved the gateway either way) stays PENDING: the state is
+  // left at `unknown` rather than folded to `down`, so no outage opens, no
+  // durable `down` event is derived, and the eventual first success reads as
+  // `unknown → up` — which derives no paired `recovered` either. See
+  // `isPendingBootProbe` for why this is narrow enough to keep genuine
+  // unreachable-at-launch alerting intact. Everything below is naturally inert
+  // for such a tick (no transition, no outage row, no component issues), so the
+  // rest of the pipeline still runs and the renderer still gets a snapshot.
+  state = isPendingBootProbe(trackedState, probe)
+    ? trackedState
+    : applyProbe(trackedState, probe);
 
   // Suppress the down-alert during first-run setup (#603): until the user
   // picks "Start fresh on this Mac" the local gateway is deliberately not
@@ -404,17 +385,7 @@ async function tick(): Promise<void> {
   if (outageHistory === undefined) {
     outageHistory = loadOutageLog();
     historyBootAt = Date.now();
-    // The outage log is the durable queue while the gateway is unreachable,
-    // and the per-gateway projection mark inside it is how far Inbox
-    // projection has got. A log written before marks existed (schema 1) is
-    // adopted wholesale as already-projected — see `seedProjectionMarks`.
-    const seeded = seedProjectionMarks(outageHistory);
-    if (seeded !== outageHistory) {
-      outageHistory = seeded;
-      persistProjectionMarks(outageHistory);
-    }
   }
-  const monitoredGatewayId = state.gatewayId;
   const newOutageEvents = deriveOutageEvents({
     prevStatus,
     prevHealthStatus,
@@ -425,60 +396,9 @@ async function tick(): Promise<void> {
       : {}),
     now: Date.now(),
   });
-  // Durable first: this tick's events hit the log BEFORE any HTTP write, so a
-  // crash mid-flush loses nothing and the next launch retries from the mark.
+  // The durable log is the whole story for health (issue #665) — no Notifications
+  // write follows it. See this file's header for why health is not a decision.
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
-
-  // Dual-write the already-derived monitor events into Inbox (#647). The queue
-  // is derived from durable state — everything after this gateway's projection
-  // mark — rather than a per-launch in-memory list, which is what makes
-  // projection at-most-once across restarts AND across active-vault switches.
-  //
-  // Retention note (issue #647 review): events for a gateway the monitor has
-  // switched AWAY from are not force-flushed here. They stay in the durable log
-  // behind that gateway's own mark, cost no memory, and project when that
-  // gateway is monitored again — against whatever vault is active then. Force-
-  // flushing on switch-away isn't available: the flush needs that gateway's
-  // reachable URL/token, which is exactly what a switch takes away.
-  const pending = eventsAfterMark(
-    outageHistory.events.filter(
-      (event) => event.gatewayId === monitoredGatewayId
-    ),
-    outageHistory.projected[monitoredGatewayId]
-  ).slice(0, INBOX_FLUSH_BATCH); // oldest-first; a bigger backlog drains over successive ticks
-  const projectionTarget = inboxProjectionTarget({
-    probeOk: probe.ok,
-    gatewayUrl: settings?.gatewayUrl,
-    // Truthy, not `!== undefined`: an unset active vault is stored as "".
-    vaultId: settings?.activeVaultId,
-    pendingCount: pending.length,
-  });
-  if (projectionTarget) {
-    const projectedThrough = pending[pending.length - 1];
-    await postGatewayInboxEvents(
-      pending,
-      projectionTarget.gatewayUrl,
-      settings?.gatewayToken,
-      projectionTarget.vaultId
-    )
-      .then(() => {
-        // Advance ONLY on HTTP 200 — the mark is the delivery receipt.
-        if (!projectedThrough || !outageHistory) return;
-        outageHistory = {
-          ...outageHistory,
-          projected: {
-            ...outageHistory.projected,
-            [monitoredGatewayId]: outageEventMark(projectedThrough),
-          },
-        };
-        persistProjectionMarks(outageHistory);
-      })
-      .catch((error) => {
-        process.stdout.write(
-          `[gateway-monitor] Inbox dual-write deferred: ${error instanceof Error ? error.message : String(error)}\n`
-        );
-      });
-  }
 
   // `componentAlerts`/`versionSkewAlertedAt` are internal dedupe bookkeeping
   // — not part of the wire snapshot (see GatewayRuntimeSnapshot's doc comment).
@@ -491,15 +411,13 @@ async function tick(): Promise<void> {
   // display (see `buildAlertHistoryRows`). `previousSession` compares
   // against `historyBootAt`, captured the moment this launch first loaded
   // the persisted log above.
-  const alertHistory: OutageLogSnapshotEntry[] = outageHistory.events.map(
-    (e) => ({
-      at: e.at,
-      kind: e.kind,
-      ...(e.detail === undefined ? {} : { detail: e.detail }),
-      ...(e.durationMs === undefined ? {} : { durationMs: e.durationMs }),
-      previousSession: historyBootAt !== undefined && e.at < historyBootAt,
-    })
-  );
+  const alertHistory: OutageLogSnapshotEntry[] = outageHistory.map((e) => ({
+    at: e.at,
+    kind: e.kind,
+    ...(e.detail === undefined ? {} : { detail: e.detail }),
+    ...(e.durationMs === undefined ? {} : { durationMs: e.durationMs }),
+    previousSession: historyBootAt !== undefined && e.at < historyBootAt,
+  }));
   lastSnapshot = {
     ...publicState,
     alert,

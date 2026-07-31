@@ -12,6 +12,7 @@
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 
 import { describe, afterEach, expect, test } from "vitest";
 
@@ -20,6 +21,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
 import { makeScopesRouteHandler } from "./scopes-routes.js";
 import type { ScopeVault } from "./scopes-routes.js";
 
@@ -62,7 +64,8 @@ describe("scopes-routes suite", () => {
     ) => Promise<Response>;
   }
 
-  // Three mounted vaults, oldest first — the registry's own order.
+  // Three mounted vaults in registry listing order (`VaultRegistry.list()`:
+  // the default vault, then the rest oldest-first — see the #665 test below).
   const VAULTS: ScopeVault[] = [
     {
       vaultId: "vault-priya",
@@ -174,6 +177,81 @@ describe("scopes-routes suite", () => {
       },
       { vaultId: "vault-family", label: "Family", role: "write" },
     ]);
+  });
+
+  /*
+   * Issue #665: the two client-facing vault listings — this plane and the
+   * plain `GET /_vault/vaults` a gateway without a scopes plane degrades to —
+   * both read `VaultRegistry.list()`, so a client can never be told two
+   * different "which vault is primary?" answers. A REAL registry here, not
+   * the stub above, because the ordering being asserted is the registry's.
+   */
+  test("the personal vault heads the scopes plane and the degraded vault listing alike", async () => {
+    const root = await tempDir("scopes-order-");
+    dirs.push(root);
+    const registry = openVaultRegistry({
+      rootDir: root,
+      logger: {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
+      ownerName: "Priya",
+    });
+    // Founding order is the real one: Shared first, Personal second.
+    const shared = registry.create("Shared");
+    const personal = registry.create("Personal", { personal: true });
+    // The desktop fresh path renames it — a name match would break here.
+    registry.rename(personal.vaultId, "Priya");
+
+    const database = GatewayDatabase.open(path.join(root, "gw"));
+    databases.push(database);
+    const enrollments = EnrollmentStore.open(database);
+    const priya = enrollments.enroll({
+      endpointId: "priya-laptop",
+      vaultId: shared.vaultId,
+      role: "admin",
+      label: "Priya laptop",
+      memberLabel: "Priya",
+    });
+    enrollments.members.setGrant(priya.memberId, personal.vaultId, "admin");
+
+    const handler = makeScopesRouteHandler({
+      enrollments,
+      listVaults: () => registry.list(),
+      installedApps: () => undefined,
+    });
+    const server = http.createServer((req, res) => {
+      void (async () => {
+        if (!(await handler(req, res))) {
+          res.statusCode = 404;
+          res.end("{}");
+        }
+      })();
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const { port } = server.address() as AddressInfo;
+
+    const scopes = await scopesOf(
+      await fetch(`http://127.0.0.1:${port}/centraid/_vault/scopes`, {
+        headers: { [AUTHED_DEVICE_HEADER]: "priya-laptop" },
+      })
+    );
+
+    // The marked vault is first even though `Shared` is older…
+    expect(scopes.map((row) => row.vaultId)).toStrictEqual([
+      personal.vaultId,
+      shared.vaultId,
+    ]);
+    expect(scopes[0]!.vaultId).toBe(registry.defaultVaultId());
+    // …and the degraded listing agrees, row for row.
+    expect(registry.list().map((v) => v.vaultId)).toStrictEqual(
+      scopes.map((row) => row.vaultId)
+    );
+    registry.stop();
   });
 
   test("another member of the same household sees only their own row", async () => {

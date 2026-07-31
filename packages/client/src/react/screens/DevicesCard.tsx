@@ -10,7 +10,7 @@ import type {
 } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { groupDevicesByMember, spacesFromGroups } from "./device-groups.js";
+import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
 import type { GroupedDevice } from "./device-groups.js";
 import DeviceMemberGroup from "./DeviceMemberGroup.js";
 import DevicePairPanel from "./DevicePairPanel.js";
@@ -76,7 +76,7 @@ export interface DevicesCardProps {
   ) => Promise<CentraidGatewayDevice>;
   loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
   /**
-   * Whether the viewer owns any space here. A read-only member saw live
+   * Whether the viewer owns any vault here. A read-only member saw live
    * `Revoke device` / `Remove <person>` buttons whose clicks the gateway
    * refused with no feedback (onboarding run B11); the roster now renders
    * read-only rows for them instead.
@@ -146,8 +146,8 @@ export default function DevicesCard({
   const revoke = useCallback(
     async (device: GroupedDevice, confirmLastAdmin?: string): Promise<void> => {
       // "Revoke device" means the hardware, so every enrollment it holds goes
-      // — one per space it reached. Chained rather than `Promise.all`: the
-      // gateway refuses the enrollment that would strand a space's last owner,
+      // — one per vault it reached. Chained rather than `Promise.all`: the
+      // gateway refuses the enrollment that would strand a vault's last owner,
       // and that refusal has to surface before the rest are dropped.
       await device.enrollmentIds.reduce(
         (chain, enrollmentId) =>
@@ -229,11 +229,11 @@ export default function DevicesCard({
     () => groupDevicesByMember(devices ?? [], members),
     [devices, members]
   );
-  const spaces = useMemo(() => spacesFromGroups(groups), [groups]);
+  const vaults = useMemo(() => vaultsFromGroups(groups), [groups]);
   const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
 
   const people = groups.length;
-  // Count hardware, not enrollment rows: a browser paired into two spaces is
+  // Count hardware, not enrollment rows: a browser paired into two vaults is
   // one device, and counting its rows read as "4 devices" for two.
   const liveCount = groups.reduce(
     (sum, group) => sum + group.devices.length,
@@ -287,7 +287,7 @@ export default function DevicesCard({
             {...(selfMemberId === undefined
               ? {}
               : { currentMemberId: selfMemberId })}
-            spaces={spaces}
+            vaults={vaults}
           />
         ) : null}
         {loadError ? (

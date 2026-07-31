@@ -65,10 +65,10 @@ export interface SidebarConversation {
   pinned?: boolean;
   /** Archived threads render behind a collapsed group at the bottom. */
   archived?: boolean;
-  /** The space this conversation reads, when it is NOT the member's own
-   *  (issue #599). A conversation is pinned to one space for life, so the row
+  /** The vault this conversation reads, when it is NOT the member's own
+   *  (issue #599). A conversation is pinned to one vault for life, so the row
    *  says which — but only when that is news; labelling every row with the
-   *  member's own space would be noise. */
+   *  member's own vault would be noise. */
   scopeLabel?: string;
 }
 
@@ -110,14 +110,14 @@ export interface SidebarProps {
   onAutomations?: () => void;
   onConnectors?: () => void;
   onApprovals?: () => void;
-  /** Count badge next to Inbox — decisions only. */
+  /** Count badge next to Notifications — decisions only. */
   approvalsCount?: number;
   /** Notices are informational and use a dot instead of inflating the badge. */
-  inboxHasUnreadNotices?: boolean;
+  notificationsHasUnreadNotices?: boolean;
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: "up" | "down" | "unknown";
-  /** People, devices and spaces (issue #599). */
+  /** People, devices and vaults (issue #599). */
   onHousehold?: () => void;
   /** @deprecated Storage is a Gateway tab; retained for caller compatibility. */
   onStorage?: () => void;
@@ -544,15 +544,15 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       />
       <SbItem
         icon={<Icon name="CheckCircle" size={15} />}
-        label="Inbox"
+        label="Notifications"
         meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
         active={props.activePage === "approvals"}
         disabled={!props.onApprovals}
         onClick={() => props.onApprovals?.()}
         trailing={
-          props.inboxHasUnreadNotices ? (
+          props.notificationsHasUnreadNotices ? (
             <span
-              className={chrome.inboxUnreadDot}
+              className={chrome.notificationsUnreadDot}
               aria-label="Unread updates"
             />
           ) : undefined

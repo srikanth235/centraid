@@ -1,6 +1,6 @@
 import type { CentraidRedeemGatewayPairingResult } from "../../../centraid-api.js";
 
-// Gateway I/O for the "Add gateway" flow (issue #376), mirroring spaceModals.ts's
+// Gateway I/O for the "Add gateway" flow (issue #376), mirroring vaultModals.ts's
 // split: chrome (GatewayModal / GatewayPairingForm) is React, the gateway I/O
 // lives here so it's plain-async-function testable. Three credential shapes,
 // one result type — GatewayPairingForm builds the input from whatever the user
@@ -38,9 +38,9 @@ const FRIENDLY_ERRORS: Record<string, string> = {
     "That pairing code isn't valid — double-check you copied the whole thing.",
   ticket_expired: "This ticket has expired — ask for a new one.",
   invalid_input: "That ticket looks malformed — double-check it and try again.",
-  unreachable: "Couldn't reach that gateway — check that it's running.",
+  unreachable: "Couldn't reach that host — check that it's running.",
   bad_response:
-    "The gateway sent back something unexpected. Try again in a moment.",
+    "The host sent back something unexpected. Try again in a moment.",
 };
 
 /** Map a stable error code to friendly copy; falls back to the raw message. */

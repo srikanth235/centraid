@@ -288,7 +288,7 @@
 
 /* In-panel empty state — quiet single line, no icon or frame; the
    dashed-box `pageEmpty` treatment is reserved for a whole route being
-   empty (see ApprovalsScreen's inbox), not one panel among several. The
+   empty (see ApprovalsScreen's notifications), not one panel among several. The
    min-height gives the right-column empties (By model, Recent activity)
    enough presence to land level with the taller left column, so the page
    has no diagonal void at the bottom-right when everything is empty. */

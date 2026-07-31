@@ -29,6 +29,7 @@ import {
   listGateways,
   removeGateway,
   renameGateway,
+  updateGatewayRememberDevice,
   updateProfileMetadata,
 } from "./gateway-store.js";
 import type { GatewayProfile } from "./gateway-store.js";
@@ -393,7 +394,7 @@ export function registerIpcHandlers(): void {
       await deleteLocalVault(gatewayId, input.vaultId, input.name);
       // Every other vault-mutating handler (create/switch/pair/ssh-connect)
       // broadcasts VAULT_CHANGED so the renderer's active-vault state
-      // (sidebar head, switcher, Settings -> Space) re-reads itself. This
+      // (sidebar head, switcher, Settings -> Vault) re-reads itself. This
       // one didn't — deleting the ACTIVE vault left the shell showing the
       // just-deleted vault's name until some unrelated event happened to
       // refresh it (found via live E2E, issue #382).
@@ -404,7 +405,7 @@ export function registerIpcHandlers(): void {
 
   // Notify-only: the renderer calls this right after a metadata-only
   // `updateVault()` HTTP call succeeds (rename/retheme via Settings ->
-  // Space or the switcher's "New space" edit path) so every window's
+  // Vault or the switcher's "New vault" edit path) so every window's
   // sidebar head re-reads the vault list immediately. Broadcasts on the
   // SEPARATE VAULT_METADATA_PUSH channel, not VAULT_CHANGED — no addressing
   // changed here, so this must not trigger `reScope`'s navigate-Home.
@@ -603,6 +604,32 @@ export function registerIpcHandlers(): void {
           ? {}
           : { vaultId: settings.activeVaultId }),
       };
+    }
+  );
+
+  // Settings → This device's offline-copy switch. The pairing flow no longer
+  // asks the question (it defaults ON), so this is where it is answered after
+  // the fact. Turning it OFF reuses the redeem path's purge signal so the
+  // replica this device already built is dropped rather than left orphaned;
+  // the enrollment on the gateway is untouched either way.
+  ipcMain.handle(
+    Channel.GATEWAY_REMEMBER_DEVICE_SET,
+    async (
+      _event,
+      input: { rememberDevice: boolean }
+    ): Promise<{ rememberDevice: boolean }> => {
+      const settings = await loadSettings();
+      const profile = await updateGatewayRememberDevice(
+        settings.activeGatewayId,
+        input.rememberDevice === true
+      );
+      broadcastGatewayChanged(
+        settings,
+        profile.rememberDevice === true
+          ? {}
+          : { purgeReplicaGatewayId: profile.id }
+      );
+      return { rememberDevice: profile.rememberDevice === true };
     }
   );
 

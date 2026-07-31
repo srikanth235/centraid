@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
 import { family, useTheme } from "../../kit/theme";
 import { getProfileColor, getProfileName, initialsOf } from "../../lib/profile";
-import { getActiveSpace, subscribeSpaces } from "../../lib/spaces";
+import { getActiveVaultLink, subscribeVaultLinks } from "../../lib/vault-links";
 
 const PANEL_WIDTH = 288;
 // The green used by the design for the "On" backup badge.
@@ -43,7 +43,7 @@ export type PhotosDrawerProps = {
   onClose: () => void;
   onHome: () => void;
   onSettings: () => void;
-  /** Open the Spaces switcher (add / switch / forget device-local vaults). */
+  /** Open the Vaults switcher (add / switch / forget device-local vaults). */
   onSwitchVault: () => void;
 };
 
@@ -60,11 +60,14 @@ export default function PhotosDrawer({
   const color = getProfileColor();
   // The active (gateway, vault) tuple, kept live so the switch card names the
   // vault the app is actually pointed at — not a static placeholder.
-  const [space, setSpace] = useState(() => getActiveSpace());
-  useEffect(() => subscribeSpaces(() => setSpace(getActiveSpace())), []);
+  const [vault, setVault] = useState(() => getActiveVaultLink());
+  useEffect(
+    () => subscribeVaultLinks(() => setVault(getActiveVaultLink())),
+    []
+  );
   const vaultName =
-    space?.vaultName || space?.desktopName || name || "Personal vault";
-  const vaultColor = space?.color || color;
+    vault?.vaultName || vault?.desktopName || name || "Personal vault";
+  const vaultColor = vault?.color || color;
   const slide = useAnimatedValue(-PANEL_WIDTH);
   const fade = useAnimatedValue(0);
 
@@ -126,8 +129,8 @@ export default function PhotosDrawer({
           </View>
 
           <View style={styles.scroll}>
-            {/* Explicit space switcher: names the CURRENT vault + a labelled
-                "Switch" control, and opens the real Spaces sheet. Replaces the
+            {/* Explicit vault switcher: names the CURRENT vault + a labelled
+                "Switch" control, and opens the real Vaults sheet. Replaces the
                 old cryptic overlapping-avatars pill, which did nothing. */}
             <Pressable
               accessibilityRole="button"
@@ -200,7 +203,7 @@ export default function PhotosDrawer({
                   <Text
                     style={[styles.storageAction, { color: colors.accent }]}
                   >
-                    Free up space
+                    Free up vault
                   </Text>
                 </Pressable>
               </View>
@@ -226,7 +229,7 @@ export default function PhotosDrawer({
             <Pressable style={[styles.row, { borderBottomColor: colors.line }]}>
               <Feather name="smartphone" size={19} color={colors.ink3} />
               <Text style={[styles.rowLabel, { color: colors.ink }]}>
-                Free up space on device
+                Free up vault on device
               </Text>
               <Feather name="chevron-right" size={17} color={colors.ink4} />
             </Pressable>

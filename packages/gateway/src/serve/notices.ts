@@ -1,5 +1,5 @@
 /*
- * Durable Inbox notices (#647).
+ * Durable notices behind the Notifications surface (#647).
  *
  * This store intentionally owns only notices. Owner decisions remain in
  * their canonical tables and are projected beside these rows by VaultPlane.
@@ -10,16 +10,16 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-export type InboxNoticeSeverity = "info" | "warning" | "high";
+export type NoticeSeverity = "info" | "warning" | "high";
 export type AutomationNotifyPolicy = "always" | "failures" | "never";
 
-export interface InboxNotice {
+export interface Notice {
   noticeId: string;
   kind: string;
   sourceRef: string;
   headline: string;
   detail: Record<string, unknown>;
-  severity: InboxNoticeSeverity;
+  severity: NoticeSeverity;
   count: number;
   firstAt: string;
   lastAt: string;
@@ -27,12 +27,12 @@ export interface InboxNotice {
   archivedAt: string | null;
 }
 
-export interface PutInboxNotice {
+export interface PutNotice {
   kind: string;
   sourceRef: string;
   headline: string;
   detail?: Record<string, unknown>;
-  severity?: InboxNoticeSeverity;
+  severity?: NoticeSeverity;
   at?: string;
 }
 
@@ -42,7 +42,7 @@ interface NoticeRow {
   source_ref: string;
   headline: string;
   detail_json: string;
-  severity: InboxNoticeSeverity;
+  severity: NoticeSeverity;
   count: number;
   first_at: string;
   last_at: string;
@@ -54,7 +54,7 @@ const MAX_NOTICES = 1_000;
 const DEFAULT_LIST_LIMIT = 200;
 const ARCHIVED_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 
-function fromRow(row: NoticeRow): InboxNotice {
+function fromRow(row: NoticeRow): Notice {
   return {
     noticeId: row.notice_id,
     kind: row.kind,
@@ -118,21 +118,19 @@ export function shouldWriteAutomationNotice(
   return outcome === "failure" || previousOutcome === "failure";
 }
 
-export class InboxNoticeStore {
+export class NoticeStore {
   constructor(
     private readonly db: DatabaseSync,
     private readonly onChanged: (change: {
       wake: boolean;
-      notice: InboxNotice;
+      notice: Notice;
     }) => void = () => undefined
   ) {
     // Enforce retention on mount even when the vault receives no new notices.
     this.prune(new Date().toISOString());
   }
 
-  list(
-    input: { includeArchived?: boolean; limit?: number } = {}
-  ): InboxNotice[] {
+  list(input: { includeArchived?: boolean; limit?: number } = {}): Notice[] {
     const limit = Math.max(
       1,
       Math.min(input.limit ?? DEFAULT_LIST_LIMIT, DEFAULT_LIST_LIMIT)
@@ -141,7 +139,7 @@ export class InboxNoticeStore {
       .prepare(
         `SELECT notice_id, kind, source_ref, headline, detail_json, severity,
                 count, first_at, last_at, read_at, archived_at
-           FROM inbox_notice
+           FROM notifications_notice
           ${input.includeArchived ? "" : "WHERE archived_at IS NULL"}
           ORDER BY archived_at IS NOT NULL, last_at DESC
           LIMIT ?`
@@ -150,23 +148,23 @@ export class InboxNoticeStore {
     return rows.map(fromRow);
   }
 
-  getBySource(kind: string, sourceRef: string): InboxNotice | undefined {
+  getBySource(kind: string, sourceRef: string): Notice | undefined {
     const row = this.db
       .prepare(
         `SELECT notice_id, kind, source_ref, headline, detail_json, severity,
                 count, first_at, last_at, read_at, archived_at
-           FROM inbox_notice WHERE kind = ? AND source_ref = ?`
+           FROM notifications_notice WHERE kind = ? AND source_ref = ?`
       )
       .get(kind, sourceRef) as unknown as NoticeRow | undefined;
     return row ? fromRow(row) : undefined;
   }
 
-  put(input: PutInboxNotice): InboxNotice {
+  put(input: PutNotice): Notice {
     const at = input.at ?? new Date().toISOString();
     const noticeId = randomUUID();
     this.db
       .prepare(
-        `INSERT INTO inbox_notice(
+        `INSERT INTO notifications_notice(
            notice_id, kind, source_ref, headline, detail_json, severity,
            count, first_at, last_at, read_at, archived_at
          ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL)
@@ -174,7 +172,7 @@ export class InboxNoticeStore {
            headline = excluded.headline,
            detail_json = excluded.detail_json,
            severity = excluded.severity,
-           count = inbox_notice.count + 1,
+           count = notifications_notice.count + 1,
            last_at = excluded.last_at,
            read_at = NULL,
            archived_at = NULL`
@@ -191,7 +189,7 @@ export class InboxNoticeStore {
       );
     this.prune(at);
     const written = this.getBySource(input.kind, input.sourceRef);
-    if (!written) throw new Error("Inbox notice write did not settle");
+    if (!written) throw new Error("Notice write did not settle");
     this.onChanged({ wake: written.severity === "high", notice: written });
     return written;
   }
@@ -199,10 +197,10 @@ export class InboxNoticeStore {
   markRead(
     noticeId: string,
     at = new Date().toISOString()
-  ): InboxNotice | undefined {
+  ): Notice | undefined {
     const changed = this.db
       .prepare(
-        `UPDATE inbox_notice
+        `UPDATE notifications_notice
             SET read_at = COALESCE(read_at, ?)
           WHERE notice_id = ?`
       )
@@ -213,13 +211,10 @@ export class InboxNoticeStore {
     return notice;
   }
 
-  archive(
-    noticeId: string,
-    at = new Date().toISOString()
-  ): InboxNotice | undefined {
+  archive(noticeId: string, at = new Date().toISOString()): Notice | undefined {
     const changed = this.db
       .prepare(
-        `UPDATE inbox_notice
+        `UPDATE notifications_notice
             SET read_at = COALESCE(read_at, ?), archived_at = COALESCE(archived_at, ?)
           WHERE notice_id = ?`
       )
@@ -230,12 +225,12 @@ export class InboxNoticeStore {
     return notice;
   }
 
-  private getById(noticeId: string): InboxNotice | undefined {
+  private getById(noticeId: string): Notice | undefined {
     const row = this.db
       .prepare(
         `SELECT notice_id, kind, source_ref, headline, detail_json, severity,
                 count, first_at, last_at, read_at, archived_at
-           FROM inbox_notice WHERE notice_id = ?`
+           FROM notifications_notice WHERE notice_id = ?`
       )
       .get(noticeId) as unknown as NoticeRow | undefined;
     return row ? fromRow(row) : undefined;
@@ -247,15 +242,15 @@ export class InboxNoticeStore {
     ).toISOString();
     this.db
       .prepare(
-        `DELETE FROM inbox_notice
+        `DELETE FROM notifications_notice
           WHERE archived_at IS NOT NULL AND archived_at < ?`
       )
       .run(cutoff);
     this.db
       .prepare(
-        `DELETE FROM inbox_notice
+        `DELETE FROM notifications_notice
           WHERE notice_id IN (
-            SELECT notice_id FROM inbox_notice
+            SELECT notice_id FROM notifications_notice
              ORDER BY archived_at IS NOT NULL, last_at DESC
              LIMIT -1 OFFSET ?
           )`
