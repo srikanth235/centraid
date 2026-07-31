@@ -54,9 +54,21 @@ fi
 # to the fast commit-time path.
 export GOVERNANCE_SHELL_FULL=1
 
-printf "\n▶ pre-push-gate: bun run check:pr (skip with SKIP_CHECK_PR=1)\n\n" >&2
-if ! bun run check:pr; then
-    violation "check:pr failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
+# The push tier runs `check:push`, NOT `check:pr` (#668). `check:pr` is the
+# local mirror of the whole CI PR gate: at ~250s serial it stopped at the first
+# failure, so three unrelated problems cost three full passes, and the price of
+# a push drifted far enough above its value that SKIP_CHECK_PR became the
+# default rather than the exception. A gate people always skip enforces
+# nothing.
+#
+# `check:push` is the same gates minus the four that CI recomputes
+# authoritatively anyway (full typecheck, lint:types, workflow-pins,
+# diff-coverage), run concurrently, reporting every failure in one pass.
+# ~52s, bounded by the affected tests — which is the gate that actually
+# catches breakage.
+printf "\n▶ pre-push-gate: bun run check:push (skip with SKIP_CHECK_PR=1)\n\n" >&2
+if ! bun run check:push; then
+    violation "check:push failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
 fi
 
 directive_end

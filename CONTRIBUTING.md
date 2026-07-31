@@ -16,7 +16,7 @@ Centraid is a **solo-maintained** project. Review bandwidth is the bottleneck. T
 | **Linked issue** | `Fixes #N` / `Refs #N` in the description. |
 | **Testing evidence** | Commands run and results (or why not). Follow [TESTING.md](TESTING.md). |
 | **Screenshots** | For UI changes: each affected platform you claim (desktop / web / mobile). |
-| **Green local gates** | `bun run check:pr` before push (see [AGENTS.md](AGENTS.md)). |
+| **Green local gates** | `bun run check:push` before push — the pre-push hook runs it for you (see [AGENTS.md](AGENTS.md)). |
 
 Low-effort, fully generated PRs with no issue link, no tests, and no evidence the author ran the app will be closed.
 
