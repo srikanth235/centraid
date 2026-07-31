@@ -67,8 +67,21 @@ export GOVERNANCE_SHELL_FULL=1
 # ~52s, bounded by the affected tests — which is the gate that actually
 # catches breakage.
 printf "\n▶ pre-push-gate: bun run check:push (skip with SKIP_CHECK_PR=1)\n\n" >&2
-if ! bun run check:push; then
-    violation "check:push failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
-fi
+# Strip git's hook environment before handing control to the gate (#668).
+#
+# Git exports GIT_DIR (and friends) to its hooks. Every gate — and every test a
+# gate runs — inherits them, and for git those variables OVERRIDE cwd. A test
+# that builds a throwaway repo with `git init` in a temp directory therefore
+# re-initializes the REAL repository instead. That is not hypothetical: it set
+# `core.bare = true` in the shared config on every push, which broke `git` in
+# the main checkout and in every worktree, and then failed the three gates that
+# shell out to git — so the gate could never pass from the hook, only when run
+# by hand. `scripts/release/publish-guards.test.mjs` no longer inherits them
+# either; this is the belt to that file's braces, and it covers gates nobody
+# has written yet.
+env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u GIT_PREFIX -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    bun run check:push \
+    || violation "check:push failed — fix the failures above, or push with SKIP_CHECK_PR=1 and let CI enforce"
 
 directive_end

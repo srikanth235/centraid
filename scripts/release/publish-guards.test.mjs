@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
@@ -22,9 +28,38 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 const realRoot = path.resolve(import.meta.dirname, "../..");
 const FIXTURE_VERSION = "0.4.2";
 
-/** Env that keeps spawned git/node calls off the user's global config. */
+/**
+ * Env that keeps spawned git/node calls off the user's global config.
+ *
+ * The repo-pointing variables must be STRIPPED, not just overridden (#668).
+ * Git exports `GIT_DIR` to its hooks, so under `pre-push` this file's
+ * `process.env` carries a `GIT_DIR` aimed at the real repository. Inheriting
+ * it made `git init -q` in a temp `cwd` re-initialize the REAL repo instead —
+ * and because that `GIT_DIR` is a worktree admin directory with no work tree
+ * of its own, the re-init wrote `core.bare = true` into the shared config.
+ * That broke `git` in the main checkout and in every worktree, which in turn
+ * failed the three gates that shell out to git, on every single push.
+ * `cwd` alone does not isolate git: `GIT_DIR` always wins over it.
+ */
+const REPO_POINTING_GIT_VARS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_PREFIX",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+];
+
+/** Copy of `env` with every repo-pointing git variable removed. */
+function stripRepoPointingGitEnv(env) {
+  const out = { ...env };
+  for (const key of REPO_POINTING_GIT_VARS) delete out[key];
+  return out;
+}
+
 const isolatedEnv = {
-  ...process.env,
+  ...stripRepoPointingGitEnv(process.env),
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "fixture",
@@ -95,6 +130,50 @@ function runPrepare(root, args) {
     { cwd: root, encoding: "utf8", env: isolatedEnv }
   );
 }
+
+describe("fixture isolation", () => {
+  // The file header promises these fixtures cannot touch the real repo. Under
+  // `pre-push` that promise used to be false, and the failure was invisible:
+  // the fixtures all passed while re-initializing the real repository around
+  // them (#668). Assert the promise instead of documenting it.
+  test("a hook environment is scrubbed of every repo-pointing git variable", () => {
+    // Exactly what `pre-push` hands this process.
+    const hookEnv = {
+      PATH: "/usr/bin",
+      GIT_DIR: "/real/repo/.git/worktrees/wt",
+      GIT_WORK_TREE: "/real/repo",
+      GIT_COMMON_DIR: "/real/repo/.git",
+      GIT_INDEX_FILE: "/real/repo/.git/index",
+      GIT_PREFIX: "sub/",
+      GIT_OBJECT_DIRECTORY: "/real/repo/.git/objects",
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: "/other/objects",
+    };
+    const scrubbed = stripRepoPointingGitEnv(hookEnv);
+    for (const key of REPO_POINTING_GIT_VARS) {
+      expect(
+        scrubbed,
+        `${key} would redirect fixture git at the real repo`
+      ).not.toHaveProperty(key);
+    }
+    // Unrelated variables survive — this is a scalpel, not a wipe.
+    expect(scrubbed.PATH).toBe("/usr/bin");
+  });
+
+  test("the env these fixtures actually run under carries none of them", () => {
+    for (const key of REPO_POINTING_GIT_VARS) {
+      expect(
+        isolatedEnv,
+        `${key} leaked into the fixture env`
+      ).not.toHaveProperty(key);
+    }
+  });
+
+  test("a fixture git init lands in its own cwd", () => {
+    const fixture = tempDirSync("centraid-fixture-");
+    spawnSync("git", ["init", "-q"], { cwd: fixture, env: isolatedEnv });
+    expect(existsSync(path.join(fixture, ".git"))).toBe(true);
+  });
+});
 
 describe("release publish guards", () => {
   /** @type {string} */

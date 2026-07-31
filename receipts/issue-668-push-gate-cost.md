@@ -12,6 +12,7 @@
 - [x] Nothing was deleted from the repo; every gate still runs somewhere
 - [x] now invokes `check:push`
 - [x] Docs — `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, and `docs/dev-environment.md` updated
+- [x] The gate corrupted the repository it was gating
 
 ## What changed
 
@@ -33,6 +34,7 @@
 - **`lint:node-version` added to the `static` job.** Verified it was in no workflow at all — so before this change it was a gate that only ever ran on a developer's machine, only ever as a false alarm, and enforced nothing anywhere.
 - **`turbo:lint` alias** added so the runner can address `turbo run lint` as a single script name.
 - **Pre-push directive** (`.governance/packs/srikanth235/centraid/directives/pre-push-gate/`) now invokes `check:push`; `check.sh` and `constitution.md` both carry the reasoning. `SKIP_CHECK_PR=1` is unchanged as the escape hatch.
+- **The gate corrupted the repository it was gating** — found by pushing this branch, and the deepest reason the gate was unusable. Git exports `GIT_DIR` to its hooks, and for git those variables **override `cwd`**. `scripts/release/publish-guards.test.mjs` built its `isolatedEnv` by spreading `process.env` — it neutralized `GIT_CONFIG_GLOBAL`/`SYSTEM` but not the repo-pointing set — so its `git init -q` in a temp `cwd` re-initialized the **real** repository. Because the inherited `GIT_DIR` is a worktree admin directory with no work tree, that re-init wrote `core.bare = true` into the shared `.git/config`. Every subsequent git call in the main checkout **and every worktree** then failed with `fatal: this operation must be run in a work tree`, which failed the three gates that shell out to git (`scripts:test`, `test:governance-shell`, `check:mobile-native-state`). The gate therefore could not pass from the hook — only when run by hand — while quietly breaking the repo on each attempt. Fixed at the source (the fixture strips the repo-pointing variables through a `stripRepoPointingGitEnv` seam) and defensively at the hook (`env -u GIT_DIR …` before `check:push`, covering gates nobody has written yet). Three regression tests pin it, including one that scrubs a synthetic hook environment rather than asserting git's own precedence rules. Pre-existing: the old `check:pr` ran `scripts:test` from the same hook.
 - **Docs** — `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, and `docs/dev-environment.md` updated. The gate-loop table gains a tier 1.5 (`check:pr`, ~4 min, "want CI's answer early") and a measured table of what left the push tier and why. `docs/dev-environment.md` prerequisites no longer claim the exact Node is enforced locally.
 
 ## Decisions
@@ -88,6 +90,16 @@ node scripts/ci/run-gates.mjs lint:css definitely-not-a-gate
 ✗ 1/2 gates passed — Failed: definitely-not-a-gate
 ```
 
+Repo-corruption fix, reproduced and then proven fixed by poisoning the environment exactly the way the hook does:
+
+```
+git config --local core.bare false
+GIT_DIR=<repo>/.git/worktrees/<wt> bun run scripts:test
+git config --get core.bare     # before: true (repo broken) — after: false
+```
+
+Three regression tests in `scripts/release/publish-guards.test.mjs` (`fixture isolation`) pin it: 44 tests pass with `GIT_DIR` set, and `core.bare` is untouched.
+
 `bun run knip` clean (the new script is reachable from package scripts); `bun run lint` and `bun run format:check` clean.
 
 Files touched:
@@ -102,44 +114,8 @@ Files touched:
 - `README.md`
 - `CONTRIBUTING.md`
 - `docs/dev-environment.md`
+- `scripts/release/publish-guards.test.mjs`
 
-## Verification
-
-Before, serial (`check:pr` as the pre-push gate): ~250s, stops at first failure, and on this machine died at step 3 on `lint:node-version` under nvm's default Node 22 versus the pinned 24.4.1.
-
-After:
-
-```
-bun run check:push
-✓ 25/25 gates passed in 55.0s — slowest: test:affected 55.0s,
-  typecheck:affected 24.3s, knip 7.7s, test:governance-shell 3.3s,
-  test:ratchet:unit 3.2s
-```
-
-Repeat run with warm turbo caches: **7.7s**.
-
-Full mirror still composes and passes:
-
-```
-bun run check:pr        # exit 0
-diff-coverage: ok — 100.0% ≥ 80% (154/154) (base origin/main)
-```
-
-Node-version behaviour, both directions:
-
-```
-bun run lint:node-version           # warns, exit 0
-CI=true bun run lint:node-version   # errors, exit 1
-```
-
-Runner failure path (unknown gate is reported, not silently skipped):
-
-```
-node scripts/ci/run-gates.mjs lint:css definitely-not-a-gate
-✗ 1/2 gates passed — Failed: definitely-not-a-gate
-```
-
-`bun run knip` clean (the new script is reachable from package scripts); `bun run lint` and `bun run format:check` clean.
 
 ## Audit
 
@@ -184,6 +160,7 @@ The three earlier steering events (ordinals 1–3) occurred during sidebar IA wo
 
 | claude-code-bfd7df95-2de-1785523051-1 | claude-code | bfd7df95-2de9-4ff5-a42b-f3abd34e91ce | #668 | claude-opus-5 | 2 | 1217 | 377701 | 712 | 1931 | 0.2143 | 675 | 1880210 | 78891448 | 307608 |  |
 | claude-code-bfd7df95-2de-1785523129-1 | claude-code | bfd7df95-2de9-4ff5-a42b-f3abd34e91ce | #668 | claude-opus-5 | 6 | 3936 | 1136754 | 2601 | 6543 | 0.6580 | 681 | 1884146 | 80028202 | 310209 |  |
+| claude-code-bfd7df95-2de-1785523888-1 | claude-code | bfd7df95-2de9-4ff5-a42b-f3abd34e91ce | #668 | claude-opus-5 | 170 | 96610 | 37134806 | 60293 | 157073 | 20.6794 | 851 | 1980756 | 117163008 | 370502 |  |
 (Cost rows for this issue will be filled by the agent-token-accounting pre-commit hook based on session transcript.)
 
 ### Steering
