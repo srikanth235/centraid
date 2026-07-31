@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, afterEach, expect, test, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -360,7 +361,7 @@ describe("vault-registry scenarios", () => {
   // failure is recorded, retried (with backoff) on a later `scan()`, and
   // cleared once the directory becomes mountable.
   test("a directory that fails to mount is recorded in failedMounts, retried on a later scan (past backoff), and cleared once mountable", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     try {
       const root = await tempDir();
       const donorRoot = await tempDir();
@@ -429,7 +430,7 @@ describe("vault-registry scenarios", () => {
       expect(mounted).toContain(donorVaultId);
       expect(firstAttemptAt).toBeDefined(); // sanity: we did capture a timestamp above
     } finally {
-      vi.useRealTimers();
+      clock.restore();
     }
   });
 

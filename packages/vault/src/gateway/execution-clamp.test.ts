@@ -5,6 +5,8 @@
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import { bootstrapVault, createGrant, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -21,8 +23,10 @@ let agent: { agentId: string; partyId: string };
 
 describe("execution-clamp", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     agent = enrollAgent(db, {
       name: "digest",
       modelRef: "centraid-automation",

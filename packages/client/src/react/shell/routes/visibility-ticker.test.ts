@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
 // Wakeup-hygiene fix (issue #528 Phase D): the 1s ticker must stop firing while
@@ -17,14 +19,13 @@ let teardown: (() => void) | null = null;
 
 describe("visibility-ticker", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    useFakeClock();
     setVisibility("visible");
   });
 
   afterEach(() => {
     teardown?.();
     teardown = null;
-    vi.useRealTimers();
   });
 
   describe(startVisibilityTicker, () => {

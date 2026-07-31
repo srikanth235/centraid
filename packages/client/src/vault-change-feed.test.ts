@@ -1,13 +1,6 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type * as TypeImport_dar201 from "./gateway-client-core.js";
@@ -52,8 +45,6 @@ describe("vault-change-feed", () => {
     window.sessionStorage.clear();
     await feedModule.setVaultChangeShapeIds(undefined);
   });
-
-  afterAll(() => vi.useRealTimers());
 
   const flush = flushMacrotasks;
 
@@ -246,7 +237,7 @@ describe("vault-change-feed", () => {
     });
 
     it("reconnects a closed stream from the last accepted cursor", async () => {
-      vi.useFakeTimers();
+      const clock = useFakeClock();
       vi.spyOn(Math, "random").mockReturnValue(0.5);
       const first = controlledBody();
       const second = controlledBody();
@@ -262,24 +253,23 @@ describe("vault-change-feed", () => {
           body: second.body,
         } as unknown as Response);
       const off = feedModule.subscribeVaultChanges(() => undefined);
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
       first.enqueue('event: cursor\ndata: "epoch-r:12"\n\n');
       first.close();
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
 
       expect(core.doFetch).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(1_000);
+      await clock.advance(1_000);
       expect(core.doFetch).toHaveBeenCalledTimes(2);
       expect(core.doFetch.mock.calls[1]?.[1]).toBe(
         "/centraid/_vault/changes?since=epoch-r%3A12&stream=1"
       );
 
       off();
-      vi.useRealTimers();
     });
 
     it("pauses on a rebootstrap instruction until the snapshot cursor resumes it", async () => {
-      vi.useFakeTimers();
+      const clock = useFakeClock();
       const stale = controlledBody();
       const resumed = controlledBody();
       core.doFetch
@@ -297,31 +287,30 @@ describe("vault-change-feed", () => {
       const off = feedModule.subscribeVaultChanges((message) =>
         messages.push(message)
       );
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
 
       stale.enqueue(
         'event: rebootstrap\ndata: {"reason":"retention","watermark":{"epoch":"epoch-b","seq":40}}\n\n'
       );
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
       expect(messages).toMatchObject([
         { type: "centraid:vault-rebootstrap", detail: { reason: "retention" } },
       ]);
-      await vi.advanceTimersByTimeAsync(30_000);
+      await clock.advance(30_000);
       expect(core.doFetch).toHaveBeenCalledOnce();
 
       await feedModule.resumeVaultChanges({ epoch: "epoch-b", seq: 40 });
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
       expect(core.doFetch).toHaveBeenCalledTimes(2);
       expect(core.doFetch.mock.calls[1]?.[1]).toBe(
         "/centraid/_vault/changes?since=epoch-b%3A40&stream=1"
       );
 
       off();
-      vi.useRealTimers();
     });
 
     it("turns a revoked stream response into a wipe/rebootstrap signal instead of retrying cached data", async () => {
-      vi.useFakeTimers();
+      const clock = useFakeClock();
       core.doFetch.mockResolvedValue({
         ok: false,
         status: 403,
@@ -332,7 +321,7 @@ describe("vault-change-feed", () => {
       const off = feedModule.subscribeVaultChanges((message) =>
         messages.push(message)
       );
-      await vi.advanceTimersByTimeAsync(0);
+      await clock.advance(0);
 
       expect(messages).toStrictEqual([
         {
@@ -340,11 +329,10 @@ describe("vault-change-feed", () => {
           detail: { error: "replica_device_not_enrolled" },
         },
       ]);
-      await vi.advanceTimersByTimeAsync(30_000);
+      await clock.advance(30_000);
       expect(core.doFetch).toHaveBeenCalledOnce();
 
       off();
-      vi.useRealTimers();
     });
   });
 });

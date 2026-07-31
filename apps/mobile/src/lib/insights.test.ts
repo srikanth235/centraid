@@ -3,7 +3,9 @@
  * Insights owner (issue #545 C6) — pure format helpers the Insights screen uses.
  * Gateway fetch helpers are mocked so vitest never loads react-native.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 vi.mock(import("./gateway") as Promise<unknown>, () => ({
   apiHeaders: () => ({}),
@@ -58,13 +60,8 @@ describe("Insights format helpers", () => {
   });
 
   describe(relativeTime, () => {
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     it("renders just now / minutes / hours / days", () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-07-25T12:00:00.000Z"));
+      useFakeClock(new Date("2026-07-25T12:00:00.000Z"));
       expect(relativeTime(Date.now() - 10_000)).toBe("just now");
       expect(relativeTime(Date.now() - 5 * 60_000)).toBe("5m ago");
       expect(relativeTime(Date.now() - 3 * 60 * 60_000)).toBe("3h ago");

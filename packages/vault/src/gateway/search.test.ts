@@ -4,6 +4,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { seededRandom } from "@centraid/test-kit/random";
+
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
@@ -14,6 +16,8 @@ import type { Gateway } from "./gateway.js";
 import { createGateway } from "./gateway.js";
 import { ftsMatchExpression } from "./search.js";
 import type { Credential } from "./types.js";
+
+const rng = seededRandom(0x5ea_2c_41);
 
 let db: VaultDb;
 let gw: Gateway;
@@ -44,7 +48,7 @@ function appCred(
   scopes: Parameters<typeof createGrant>[1]["scopes"]
 ): Credential {
   const app = enrollApp(db, {
-    name: `app-${Math.random().toString(36).slice(2, 8)}`,
+    name: `app-${rng.token(6)}`,
   });
   createGrant(db, {
     appId: app.appId,

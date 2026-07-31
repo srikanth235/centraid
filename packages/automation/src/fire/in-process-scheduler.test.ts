@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type { Row } from "../scaffold/app.js";
 import { InProcessScheduler } from "./in-process-scheduler.js";
@@ -182,12 +184,6 @@ describe("condition-trigger watches", () => {
 });
 
 describe("InProcessScheduler.nudge", () => {
-  // Fake-timer tests call vi.useFakeTimers(); always restore so real-timer
-  // suites (bootstrap / cron backstop) never inherit a stuck clock.
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   function dataRow(ref: string, entities: readonly string[]): Row {
     const [ownerApp, id] = ref.split("/") as [string, string];
     const triggers = [{ kind: "data" as const, entities }];
@@ -204,7 +200,7 @@ describe("InProcessScheduler.nudge", () => {
   }
 
   it("coalesces a burst into one filtered data-trigger evaluation pass", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -234,7 +230,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("bypasses the minute gate while leaving condition triggers poll-only", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -269,7 +265,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("bootstraps a fresh data watcher during reconcile before its first write", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -314,7 +310,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("serializes a doorbell that races the minute tick and performs one dirty rerun", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -385,7 +381,7 @@ describe("InProcessScheduler.nudge", () => {
   });
 
   it("routes rejected off-cycle evaluations without rejecting the caller", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const errors: string[] = [];
     const s = new InProcessScheduler({
       fire: () => {},

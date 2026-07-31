@@ -4,7 +4,9 @@
 // recording, ACID postcondition rollback, seal sweep, and idempotent replay
 // without going through the full Gateway facade for each path.
 
-import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
+import { assert, beforeEach, describe, expect, test } from "vitest";
+
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
@@ -37,8 +39,10 @@ let consent: ConsentAllow;
 
 describe("execution", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     identity = {
       kind: "owner-device",
       callerId: boot.deviceId,
@@ -52,10 +56,6 @@ describe("execution", () => {
       rowFilter: [],
       fieldMask: null,
     };
-  });
-
-  afterEach(() => {
-    db.close();
   });
 
   function commandRow(

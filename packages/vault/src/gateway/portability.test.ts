@@ -1,5 +1,7 @@
 import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
@@ -18,8 +20,10 @@ let owner: Credential;
 
 describe("portability", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     registerScheduleCommands(gw);
     owner = {

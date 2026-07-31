@@ -1,14 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { showToast } from "./toast.js";
 
 describe("toast", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    useFakeClock();
     document.body.innerHTML = "";
-  });
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   describe(showToast, () => {

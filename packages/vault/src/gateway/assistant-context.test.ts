@@ -4,6 +4,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
@@ -13,8 +15,10 @@ let db: VaultDb;
 
 describe("assistant-context", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    bootstrapVault(db, { ownerName: "Priya" });
+    ({ db } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
   });
 
   describe(buildAssistantContext, () => {

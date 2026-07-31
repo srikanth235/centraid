@@ -40,6 +40,10 @@ export const PERF_BUDGET_SOURCES = [
   // `const BUDGET_MS` inside five rig files, where widening one to make a slow
   // rig green was an unreviewed one-line edit.
   { path: "tests/quality-rig-budgets.json" },
+  // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
+  // reason as any perf ceiling: it is the only gate that pushes back on adding
+  // tests, so widening it must be a reviewed edit rather than a quiet one.
+  { path: "tests/suite-wall-clock.json" },
 ];
 
 /**

@@ -1,5 +1,4 @@
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -7,6 +6,7 @@ import { encode as encodeJpeg } from "jpeg-js";
 import { describe, expect, test } from "vitest";
 
 import { ReplicaSqliteStore } from "@centraid/client/replica/native";
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
@@ -193,7 +193,7 @@ function measuredThumbnailBytes(): number[] {
 
 describe(MultiVaultReplicaReader, () => {
   test("keeps a writable vault and its item id atomic across equal-sha rows", () => {
-    const root = mkdtempSync(path.join(tmpdir(), "centraid-provenance-"));
+    const root = tempDirSync("centraid-provenance-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
     seed(personal, "personal", "p");
@@ -229,7 +229,7 @@ describe(MultiVaultReplicaReader, () => {
   });
 
   test("ATTACHes mounted vaults, federates FTS, and dedupes equal sha provenance", () => {
-    const root = mkdtempSync(path.join(tmpdir(), "centraid-mounted-"));
+    const root = tempDirSync("centraid-mounted-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
     seed(personal, "personal", "p");
@@ -323,7 +323,7 @@ describe(MultiVaultReplicaReader, () => {
   });
 
   test("detaches only a revoked scope and drops its cross-scope outbox work", () => {
-    const root = mkdtempSync(path.join(tmpdir(), "centraid-revoked-"));
+    const root = tempDirSync("centraid-revoked-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
     seed(personal, "personal", "p");
@@ -369,7 +369,7 @@ describe(MultiVaultReplicaReader, () => {
   });
 
   test("holds the 50k-item ten-year cold-read and local-search budgets", () => {
-    const root = mkdtempSync(path.join(tmpdir(), "centraid-household-"));
+    const root = tempDirSync("centraid-household-");
     const fixtureScopes = [
       { vaultId: "personal", label: "Personal", role: "admin" as const },
       { vaultId: "family", label: "Family", role: "write" as const },

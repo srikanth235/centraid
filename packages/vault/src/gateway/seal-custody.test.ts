@@ -9,6 +9,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
@@ -43,8 +44,13 @@ describe("seal-custody", () => {
   beforeEach(() => {
     root = tempDirSync("seal-custody-");
     vaultDir = path.join(root, "vault-a");
-    db = openVaultDb({ dir: vaultDir });
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    // autoClose:false: this suite deliberately closes and REOPENS `db` inside
+    // tests (see reopen()), so the handle the kit would have registered is
+    // stale by the time the test ends. Its own afterEach owns the close.
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { dir: vaultDir, ownerName: "Priya", autoClose: false }
+    ));
     gw = createGateway(db);
     registerLockerCommands(gw);
     owner = {

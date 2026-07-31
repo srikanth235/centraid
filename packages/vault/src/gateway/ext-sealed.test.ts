@@ -6,6 +6,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { bootstrappedVault } from "@centraid/test-kit/vault";
+
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -40,8 +42,10 @@ const CRED_TABLE: ExtTableSpec = {
 
 describe("ext-sealed", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     owner = {
       kind: "device",

@@ -9,6 +9,7 @@
 import { describe, beforeEach, expect, test } from "vitest";
 
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import {
   bootstrapVault,
@@ -34,8 +35,10 @@ let boot: BootstrapResult;
 let calendarId: string;
 describe("acting-member suite", () => {
   beforeEach(() => {
-    db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: "Priya" });
+    ({ db, boot } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { ownerName: "Priya" }
+    ));
     gw = createGateway(db);
     registerScheduleCommands(gw);
     calendarId = uuidv7();

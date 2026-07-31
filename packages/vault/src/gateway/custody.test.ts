@@ -11,6 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { bootstrappedVault } from "@centraid/test-kit/vault";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -26,12 +27,13 @@ describe("custody", () => {
   beforeEach(() => {
     root = tempDirSync("custody-stage-");
     vaultDir = path.join(root, "vault-a");
-    db = openVaultDb({ dir: vaultDir });
-    bootstrapVault(db, { ownerName: "Priya" });
+    ({ db } = bootstrappedVault(
+      { openVaultDb, bootstrapVault },
+      { dir: vaultDir, ownerName: "Priya" }
+    ));
   });
 
   afterEach(() => {
-    db.close();
     rmSync(root, { recursive: true, force: true });
   });
 

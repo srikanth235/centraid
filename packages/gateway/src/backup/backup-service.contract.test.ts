@@ -9,6 +9,7 @@ import {
   WAL_DB_FILES,
 } from "@centraid/backup";
 import type { BackupProvider } from "@centraid/backup";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -491,7 +492,7 @@ describe("backup-service", () => {
   });
 
   test("the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     try {
       const vaultRoot = await tempDir("backup-svc-posture-vault");
       const backupDir = await tempDir("backup-svc-posture-state");
@@ -508,14 +509,14 @@ describe("backup-service", () => {
       const tick = vi.spyOn(service, "tick").mockResolvedValue(undefined);
 
       service.start();
-      await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
+      await clock.advance(3 * 60 * 60 * 1000);
       expect(tick).not.toHaveBeenCalled();
 
       defer = false;
-      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      await clock.advance(60 * 60 * 1000);
       expect(tick).toHaveBeenCalledWith();
     } finally {
-      vi.useRealTimers();
+      clock.restore();
     }
   });
 });

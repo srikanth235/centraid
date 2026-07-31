@@ -15,6 +15,8 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
@@ -242,7 +244,7 @@ describe("kit smoke", () => {
   });
 
   it("data-change debounce preserves every distinct intent settlement", () => {
-    vi.useFakeTimers();
+    useFakeClock();
     let listener;
     window.centraid = {
       onChange(next) {
@@ -282,7 +284,6 @@ describe("kit smoke", () => {
     ]);
     stop();
     delete window.centraid;
-    vi.useRealTimers();
   });
 
   it("plain Promise reads retain the compatibility path", async () => {

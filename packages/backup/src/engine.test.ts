@@ -233,7 +233,7 @@ async function buildFixture(): Promise<Fixture> {
 }
 
 describe("createSnapshot / restoreSnapshot roundtrip", () => {
-  test("restores byte-identical files and the directory tree, plus a quarantine marker", async () => {
+  test("[law:backup-round-trip] restores byte-identical files and the directory tree, plus a quarantine marker", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row = await createSnapshot({
       provider,
@@ -290,7 +290,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(marker.restoredAt).toBeTypeOf("string");
   });
 
-  test("incremental second snapshot after a 1-byte change uploads far fewer chunks than the first", async () => {
+  test("[law:backup-incremental] incremental second snapshot after a 1-byte change uploads far fewer chunks than the first", async () => {
     const { provider, targetId, keyring, sourceDir, entries } =
       await buildFixture();
     await createSnapshot({
@@ -349,7 +349,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     ).toBeLessThanOrEqual(MAX_INCREMENTAL_PUTS - 1);
   });
 
-  test("no-change run registers nothing (returns null, uploads only the previous unmodified state)", async () => {
+  test("[law:backup-no-change] no-change run registers nothing (returns null, uploads only the previous unmodified state)", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row1 = await createSnapshot({
       provider,
@@ -377,7 +377,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(rows).toHaveLength(1); // the no-change run registered nothing
   });
 
-  test("restoreSnapshot refuses a non-empty destDir", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses a non-empty destDir", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -402,7 +402,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     ).rejects.toThrow(/not empty/u);
   });
 
-  test("restoreSnapshot refuses a newer vaultUserVersion BEFORE fetching or materializing anything", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses a newer vaultUserVersion BEFORE fetching or materializing anything", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -447,7 +447,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(existsSync(destDir)).toBe(false);
   });
 
-  test("restoreSnapshot refuses an unknown format", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot refuses an unknown format", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -484,7 +484,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     ).rejects.toThrow(/unknown format/u);
   });
 
-  test("restoreSnapshot rejects a snapshot whose manifest hash does not verify", async () => {
+  test("[law:backup-restore-refusal] restoreSnapshot rejects a snapshot whose manifest hash does not verify", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     const row = await createSnapshot({
       provider,
@@ -521,7 +521,7 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
 });
 
 describe(verifySnapshot, () => {
-  test("detects a deliberately deleted chunk object", async () => {
+  test("[law:backup-verify] detects a deliberately deleted chunk object", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -553,7 +553,7 @@ describe(verifySnapshot, () => {
     expect(result.missing).toContain(listed[0]!.slice("chunks/".length));
   });
 
-  test("detects a corrupted chunk object via the sample pass", async () => {
+  test("[law:backup-verify] detects a corrupted chunk object via the sample pass", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,
@@ -590,7 +590,7 @@ describe(verifySnapshot, () => {
     expect(result.corrupt).toContain(target.slice("chunks/".length));
   });
 
-  test("a clean snapshot verifies with no missing or corrupt objects", async () => {
+  test("[law:backup-verify] a clean snapshot verifies with no missing or corrupt objects", async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
       provider,

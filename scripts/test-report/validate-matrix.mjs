@@ -1,7 +1,9 @@
 import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { countDeclaredTests, gradeMatrix } from "./matrix-grades.mjs";
 import { detectDefaultCiEnvGate } from "./report-signals.mjs";
+import { discoverSkipSites, validateSkipInventory } from "./skip-inventory.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const allowedStatuses = new Set(["solid", "partial", "gap", "skip"]);
@@ -9,6 +11,43 @@ const boilerplatePartial =
   /has some owning proof but is incomplete or not continuously exercised/iu;
 const nonStructuralSkip =
   /\b(?:no (?:dedicated )?(?:harness|rig|budget)|not (?:yet|currently)|\byet\b|planned)\b/iu;
+
+/**
+ * Evaluate one compat revisit trigger. Returns the first file that proves the
+ * skip is stale, an error when the glob can no longer match anything (a
+ * tripwire pointing at a path that does not exist is worse than no tripwire),
+ * or neither when the surface is still genuinely migration-free.
+ */
+export async function fireRevisitTrigger(trigger, { cwd, readSource } = {}) {
+  const read =
+    readSource ??
+    ((file) => readFile(path.join(cwd, file), "utf8").catch(() => null));
+  const candidates = [];
+  for await (const match of glob(trigger.glob, { cwd })) {
+    const file = match.replaceAll("\\", "/");
+    if (/\.(?:test|spec)\.[a-z]+$/u.test(file)) continue;
+    candidates.push(file);
+  }
+  if (!candidates.length) {
+    return {
+      error: `glob ${trigger.glob} matches no file; point it at a path that exists so the tripwire can fire`,
+    };
+  }
+  if (!trigger.contains) return { match: candidates.sort()[0] };
+  let pattern;
+  try {
+    pattern = new RegExp(trigger.contains, "u");
+  } catch {
+    return { error: `contains is not a valid regex: ${trigger.contains}` };
+  }
+  const sorted = candidates.sort();
+  const sources = await Promise.all(sorted.map((file) => read(file)));
+  const hit = sorted.findIndex(
+    (_, index) =>
+      typeof sources[index] === "string" && pattern.test(sources[index])
+  );
+  return hit === -1 ? {} : { match: sorted[hit] };
+}
 
 export async function validateMatrix(matrix, options = {}) {
   const errors = [];
@@ -137,6 +176,33 @@ export async function validateMatrix(matrix, options = {}) {
             cellErrors.push(
               `${cellId} uses the rejected boilerplate partial note; name the missing proof`
             );
+          } else if (options.checkPartialTracking !== false) {
+            // #656 Layer 1E — a partial is a standing debt, so it must name an
+            // issue that is still open. Closed issues may stay in the prose as
+            // provenance; they cannot be the thing tracking the gap.
+            const cited = [...note.matchAll(/#(?<issue>\d+)/gu)].map((match) =>
+              Number(match.groups.issue)
+            );
+            const open = cited.filter(
+              (issue) =>
+                matrix.trackingIssues?.[String(issue)]?.state === "open"
+            );
+            if (!open.length) {
+              cellErrors.push(
+                `${cellId} is partial but cites no open tracking issue (${cited.length ? `only ${cited.map((issue) => `#${issue}`).join(", ")}` : "no issue at all"}); register one in trackingIssues and cite it in the note`
+              );
+            }
+          }
+        }
+        // An issue number in a note is a claim about the world; keep the
+        // ledger honest so a closed issue cannot masquerade as live tracking.
+        for (const match of String(notes[cellId] ?? "").matchAll(
+          /#(?<issue>\d+)/gu
+        )) {
+          if (!matrix.trackingIssues?.[match.groups.issue]) {
+            cellErrors.push(
+              `${cellId} note cites unregistered issue #${match.groups.issue}; add it to trackingIssues with its state`
+            );
           }
         }
         if (
@@ -149,16 +215,18 @@ export async function validateMatrix(matrix, options = {}) {
               `${cellId} is a time-bound compat skip but has no checkable revisit trigger`
             );
           } else if (options.checkFiles !== false) {
-            const matches = [];
-            for await (const match of glob(trigger.glob, {
+            // A tripwire only works if it globs something real. `contains`
+            // makes the trigger a CONTENT check (a COMPAT( shim, a versioned
+            // ladder) rather than the existence of a directory that the repo
+            // never had — the failure mode that left all nine triggers inert.
+            const fired = await fireRevisitTrigger(trigger, {
               cwd: options.root ?? root,
-            })) {
-              matches.push(match);
-              if (matches.length > 1) break;
-            }
-            if (matches.length) {
+            });
+            if (fired.error) {
+              cellErrors.push(`${cellId} revisit trigger ${fired.error}`);
+            } else if (fired.match) {
               cellErrors.push(
-                `${cellId} revisit trigger matched ${matches[0]}; convert the skip to a tracked gap`
+                `${cellId} revisit trigger matched ${fired.match}; convert the skip to a tracked gap or grade the cell`
               );
             }
           }
@@ -179,6 +247,21 @@ export async function validateMatrix(matrix, options = {}) {
   for (const cellId of Object.keys(matrix.cellOwners ?? {})) {
     if (!expectedCells.has(cellId))
       errors.push(`unknown cell-owner mapping ${cellId}`);
+  }
+
+  // A trigger on a cell that is no longer `skip` is dead weight that reads as
+  // live protection — the same class of lie as an inert glob.
+  for (const cellId of Object.keys(matrix.revisitTriggers ?? {})) {
+    if (!expectedCells.has(cellId)) {
+      errors.push(`unknown revisit trigger ${cellId}`);
+      continue;
+    }
+    const [surfaceId, dimensionId] = cellId.split(".");
+    if (surfaces.get(surfaceId)?.assessment?.[dimensionId] !== "skip") {
+      errors.push(
+        `${cellId} has a revisit trigger but is not a skip cell; remove the trigger`
+      );
+    }
   }
 
   const flowValidation = await Promise.all(
@@ -222,7 +305,10 @@ export async function validateMatrix(matrix, options = {}) {
           await access(ownerPath);
           const source = await readFile(ownerPath, "utf8");
           if (flow.minimumTests !== undefined && flow.minimumTests !== null) {
-            const testCount = source.match(/\b(?:test|it)\s*\(/gu)?.length ?? 0;
+            // One definition of "how many tests does this file declare",
+            // shared with the grade computation — two regexes would let a
+            // floor pass one check and fail the other.
+            const testCount = countDeclaredTests(source, flow.owner);
             if (testCount < flow.minimumTests) {
               flowErrors.push(
                 `${flow.id} contract shrank: ${testCount} tests, minimum ${flow.minimumTests}`
@@ -291,7 +377,44 @@ export async function validateMatrix(matrix, options = {}) {
     }
   }
 
-  return { errors, warnings, dimensions, surfaces, flowIds };
+  // #656 Layer 2 — the declared assessment is checked against computed
+  // evidence, and the skip population is checked against its committed budget.
+  // Both are opt-in so existing callers (the report generator, unit fixtures)
+  // keep their previous contract.
+  let grades;
+  let skips;
+  if (options.computeGrades) {
+    const skipSites =
+      options.skipSites ??
+      (await discoverSkipSites({ root: options.root ?? root }));
+    const inventory =
+      options.skipInventory ??
+      JSON.parse(
+        await readFile(
+          path.join(options.root ?? root, "tests/skips.json"),
+          "utf8"
+        )
+      );
+    skips = validateSkipInventory(inventory, skipSites, {
+      trackingIssues: matrix.trackingIssues ?? {},
+    });
+    errors.push(...skips.errors.map((error) => `skip budget: ${error}`));
+    warnings.push(
+      ...skips.warnings.map((warning) => `skip budget: ${warning}`)
+    );
+
+    grades = await gradeMatrix(matrix, {
+      root: options.root ?? root,
+      checkRunEvidence: options.checkRunEvidence,
+      nowMs: options.nowMs,
+    });
+    errors.push(...grades.errors.map((error) => `computed grade: ${error}`));
+    warnings.push(
+      ...grades.warnings.map((warning) => `computed grade: ${warning}`)
+    );
+  }
+
+  return { errors, warnings, dimensions, surfaces, flowIds, grades, skips };
 }
 
 async function main() {
@@ -299,9 +422,10 @@ async function main() {
     process.argv[2] ?? path.join(root, "tests/matrix.json")
   );
   const matrix = JSON.parse(await readFile(matrixPath, "utf8"));
-  const { errors, warnings, surfaces, dimensions, flowIds } =
+  const { errors, warnings, surfaces, dimensions, flowIds, grades, skips } =
     await validateMatrix(matrix, {
       warnMissingMinimumTests: true,
+      computeGrades: true,
     });
   for (const w of warnings ?? []) console.warn(`matrix: warning: ${w}`);
   if (errors.length) {
@@ -309,8 +433,12 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const graded = grades?.cells?.length ?? 0;
   console.log(
     `matrix: ${surfaces.size} surfaces × ${dimensions.size} dimensions, ${flowIds.size} canonical flows`
+  );
+  console.log(
+    `matrix: ${graded} owned cells graded from evidence (run evidence: ${grades?.runEvidence ?? "n/a"}), ${skips?.count ?? 0} inventoried skips`
   );
 }
 

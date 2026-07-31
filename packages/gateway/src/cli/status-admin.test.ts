@@ -78,9 +78,18 @@ describe("status-admin scenarios", () => {
   test.skipIf(servicePlatform)(
     "status --json uses the shared default data dir (never-installed unit reads clean)",
     async () => {
+      // An explicit, per-run label. Without it the probe asks launchd/systemd
+      // about the DEFAULT label, so on any machine that actually runs Centraid
+      // the service is installed and "never-installed" reads `true` — the test
+      // was asserting a property of the host, not of the code (#656).
+      const neverInstalled = `dev.centraid.never-installed.${crypto.randomUUID()}`;
       const parsed = lastJson(
         await capture(() =>
-          commandStatus(["--data-dir", dataDir, "--json"], fail, offlineFetch)
+          commandStatus(
+            ["--data-dir", dataDir, "--label", neverInstalled, "--json"],
+            fail,
+            offlineFetch
+          )
         )
       );
       expect(parsed.ok).toBe(true);
@@ -91,7 +100,7 @@ describe("status-admin scenarios", () => {
       });
       const service = parsed.service as { installed: boolean; label: string };
       expect(service.installed).toBe(false);
-      expect(service.label).toBeTypeOf("string");
+      expect(service.label).toBe(neverInstalled);
     }
   );
 

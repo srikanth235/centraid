@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import type { CompileAttemptDTO, CompileStepDTO } from "../screen-contracts.js";
 import AutomationCompilePane from "./AutomationCompilePane.js";
 import type { AutomationCompilePaneProps } from "./AutomationCompilePane.js";
@@ -284,47 +286,42 @@ describe("screens/AutomationCompilePane", () => {
     it("counts up while a compile is open, and shows no clock once it settles", async () => {
       // A compile is a coding-agent run and can take minutes; without a clock,
       // "Compiling…" is indistinguishable from a hang.
-      vi.useFakeTimers();
-      vi.setSystemTime(60_000);
-      try {
-        const running: CompileAttemptDTO = {
-          turnId: "c-9",
-          startedAt: 60_000 - 95_000, // opened 1m35s ago
-          endedAt: null,
-          status: "running",
-          error: null,
-          summary: null,
-          whenLabel: "just now",
-        };
-        const el = await mount(
-          makeProps({
-            loadAttempts: vi
-              .fn<AutomationCompilePaneProps["loadAttempts"]>()
-              .mockResolvedValue([running]),
-          })
-        );
-        expect(verdict(el)).toBe("Compiling…");
-        expect(
-          el.querySelector('[data-testid="compile-elapsed"]')?.textContent
-        ).toBe("1:35");
-        // A compile this mount did not start still counts as busy — otherwise
-        // reloading mid-compile offers a button that starts a second one.
-        const compileBtn = el.querySelector<HTMLButtonElement>(
-          '[data-testid="compile-now"]'
-        );
-        expect(compileBtn?.disabled).toBe(true);
-        expect(compileBtn?.textContent).toContain("Compiling…");
-        expect(el.textContent).toContain("Waiting for the first step…");
+      const clock = useFakeClock(60_000);
+      const running: CompileAttemptDTO = {
+        turnId: "c-9",
+        startedAt: 60_000 - 95_000, // opened 1m35s ago
+        endedAt: null,
+        status: "running",
+        error: null,
+        summary: null,
+        whenLabel: "just now",
+      };
+      const el = await mount(
+        makeProps({
+          loadAttempts: vi
+            .fn<AutomationCompilePaneProps["loadAttempts"]>()
+            .mockResolvedValue([running]),
+        })
+      );
+      expect(verdict(el)).toBe("Compiling…");
+      expect(
+        el.querySelector('[data-testid="compile-elapsed"]')?.textContent
+      ).toBe("1:35");
+      // A compile this mount did not start still counts as busy — otherwise
+      // reloading mid-compile offers a button that starts a second one.
+      const compileBtn = el.querySelector<HTMLButtonElement>(
+        '[data-testid="compile-now"]'
+      );
+      expect(compileBtn?.disabled).toBe(true);
+      expect(compileBtn?.textContent).toContain("Compiling…");
+      expect(el.textContent).toContain("Waiting for the first step…");
 
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(5000);
-        });
-        expect(
-          el.querySelector('[data-testid="compile-elapsed"]')?.textContent
-        ).toBe("1:40");
-      } finally {
-        vi.useRealTimers();
-      }
+      await act(async () => {
+        await clock.advance(5000);
+      });
+      expect(
+        el.querySelector('[data-testid="compile-elapsed"]')?.textContent
+      ).toBe("1:40");
     });
 
     it("shows no elapsed clock when nothing is running", async () => {
