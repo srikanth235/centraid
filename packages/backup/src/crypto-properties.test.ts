@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { fc } from "@centraid/test-kit/fast-check";
 
 import {
+  chunkId,
   decrypt,
   deriveDataKey,
   deriveDedupKey,
@@ -158,6 +159,137 @@ describe("backup crypto property", () => {
         }
       ),
       { numRuns: 24, seed: 53247 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-kill campaign (#656 Layer 1C).
+//
+// Laws the seal/derive surface owes FORMAT.md, stated over the whole input
+// domain rather than over one hand-picked vector.
+// ---------------------------------------------------------------------------
+
+describe("backup crypto domain law", () => {
+  test("a nonce that is not the format's 12 bytes is refused, not silently used", () => {
+    // `decrypt` recovers the IV by slicing the FIRST 12 bytes back off the
+    // blob. GCM itself accepts other IV lengths, so an encoder that passed one
+    // through would emit a blob whose own reader mis-frames it — the
+    // ciphertext would be unrecoverable rather than merely unreadable. The
+    // length check is the only thing keeping the wire shape self-describing.
+    fc.assert(
+      fc.property(
+        keyBytes,
+        plainBytes,
+        fc.integer({ min: 0, max: 40 }).filter((n) => n !== 12),
+        (key, plain, len) => {
+          const nonce = new Uint8Array(len);
+          expect(() => encryptWithNonce(key, nonce, plain)).toThrow(/nonce/iu);
+        }
+      ),
+      { numRuns: 40, seed: 53248 }
+    );
+  });
+
+  test("a 12-byte nonce is accepted and is recoverable from the blob", () => {
+    fc.assert(
+      fc.property(
+        keyBytes,
+        fc.uint8Array({ minLength: 12, maxLength: 12 }),
+        plainBytes,
+        (key, nonceArr, plain) => {
+          const nonce = new Uint8Array(nonceArr);
+          const blob = encryptWithNonce(key, nonce, plain);
+          // The wire shape IS `nonce || ct || tag` — the reader depends on it.
+          expect([...blob.subarray(0, 12)]).toStrictEqual([...nonce]);
+          expect([...decrypt(key, blob)]).toStrictEqual([...plain]);
+        }
+      ),
+      { numRuns: 32, seed: 53249 }
+    );
+  });
+
+  test("every vault gets its own data key and its own dedup key", () => {
+    // Per-vault separation is the whole point of the HKDF info string: two
+    // vaults under one master must not share a key, or a dedup index built for
+    // one would confirm the other's contents.
+    fc.assert(
+      fc.property(
+        keyBytes,
+        fc.string({ minLength: 1, maxLength: 36 }),
+        fc.string({ minLength: 1, maxLength: 36 }),
+        (master, vaultA, vaultB) => {
+          fc.pre(vaultA !== vaultB);
+          expect([...deriveDataKey(master, vaultA)]).not.toStrictEqual([
+            ...deriveDataKey(master, vaultB),
+          ]);
+          expect([...deriveDedupKey(master, vaultA)]).not.toStrictEqual([
+            ...deriveDedupKey(master, vaultB),
+          ]);
+          // …and the two key DOMAINS never cross, for any pair of vaults.
+          expect([...deriveDataKey(master, vaultA)]).not.toStrictEqual([
+            ...deriveDedupKey(master, vaultB),
+          ]);
+        }
+      ),
+      { numRuns: 32, seed: 53250 }
+    );
+  });
+
+  test("derived keys are a pure function of (master, vaultId)", () => {
+    fc.assert(
+      fc.property(
+        keyBytes,
+        keyBytes,
+        fc.string({ minLength: 1, maxLength: 36 }),
+        (master, otherMaster, vaultId) => {
+          expect([...deriveDataKey(master, vaultId)]).toStrictEqual([
+            ...deriveDataKey(master, vaultId),
+          ]);
+          fc.pre([...master].some((b, i) => b !== otherMaster[i]));
+          expect([...deriveDataKey(master, vaultId)]).not.toStrictEqual([
+            ...deriveDataKey(otherMaster, vaultId),
+          ]);
+        }
+      ),
+      { numRuns: 24, seed: 53251 }
+    );
+  });
+
+  test("chunkId is a hex content address of the plaintext", () => {
+    fc.assert(
+      fc.property(keyBytes, plainBytes, (dedupKey, plain) => {
+        const id = chunkId(dedupKey, plain);
+        // Chunk ids are used as object-store key components, so the value has
+        // to be a printable hex string — not a Buffer, not raw bytes.
+        expect(id).toBeTypeOf("string");
+        expect(id).toMatch(/^[0-9a-f]{64}$/u);
+        expect(chunkId(dedupKey, plain)).toBe(id);
+      }),
+      { numRuns: 32, seed: 53252 }
+    );
+  });
+
+  test("chunkId separates distinct plaintexts", () => {
+    fc.assert(
+      fc.property(keyBytes, plainBytes, plainBytes, (dedupKey, a, b) => {
+        fc.pre(Buffer.compare(Buffer.from(a), Buffer.from(b)) !== 0);
+        expect(chunkId(dedupKey, a)).not.toBe(chunkId(dedupKey, b));
+      }),
+      { numRuns: 32, seed: 53253 }
+    );
+  });
+
+  test("chunkId is KEYED — the same bytes address differently per vault", () => {
+    // Dedup must not span vaults or epochs, and a provider holding the ids
+    // must not be able to confirm a guessed plaintext without the dedup key.
+    // Both properties follow from the id depending on the key.
+    fc.assert(
+      fc.property(keyBytes, keyBytes, plainBytes, (keyA, keyB, plain) => {
+        fc.pre([...keyA].some((b, i) => b !== keyB[i]));
+        expect(chunkId(keyA, plain)).not.toBe(chunkId(keyB, plain));
+      }),
+      { numRuns: 24, seed: 53254 }
     );
   });
 });

@@ -1248,7 +1248,8 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
-      "minimumTests": 18
+      "minimumTests": 16,
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the no-change and incremental round-trip laws were restated here on top of packages/backup/src/engine.test.ts, which is now their sole owner. The two gateway restatements were deleted only after engine.test.ts was strengthened to cover what they uniquely asserted (bounded incremental put count; restore refusal proven to abort before the dest dir is created). This file keeps fencing, policy echo, and CLI-restore->adopt->quarantine. The round-trip contract did not shrink — only its restatements did."
     },
     {
       "id": "backup-crash-recovery",
@@ -1367,7 +1368,8 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
-      "minimumTests": 23
+      "minimumTests": 19,
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: removed four example tests whose property twins in the same file already own the law — 'records ONE entry per automation for a gap spanning several missed fire times' (subsumed by 'property: at most one missed entry per automation per gap'), 'returns nothing for a fast-restart gap under the grace margin' (subsumed by 'property: sub-grace gaps never emit misses', whose generator was widened to seconds so the 2.5min fast restart is inside its range), and 'returns nothing for an ordinary tick-to-tick gap' + 'records nothing across ordinary consecutive ticks' (both subsumed by 'property: successive ordinary ticks accumulate zero misses'). The no-backfill contract did not shrink — only its redundant restatements did; the disabled-only-registry example was deliberately retained because its property twin never generates a zero-enabled registry."
     },
     {
       "id": "agent-provider-compat",
@@ -1506,7 +1508,8 @@
       "dimension": "journey",
       "tier": "integration",
       "owner": "packages/gateway/src/backup/recover.integration.test.ts",
-      "minimumTests": 3
+      "minimumTests": 2,
+      "approvedMinimumTestsDeviation": "#656 Layer 1D single-owner de-duplication: the separate 'recovery refuses a snapshot written by newer software BEFORE any byte is fetched' test re-ran the whole ~45s seedMachineA fixture to restate the restore-refusal law owned by packages/backup/src/engine.test.ts. It was FOLDED INTO the blank-machine test rather than dropped — its unique assertions (no vault dir, no .recover-staging-* residue, no keyring escrowed) now run there against the already-seeded machine A. The journey lost no assertion; the test count fell only because two tests became one."
     },
     {
       "id": "vault-search",

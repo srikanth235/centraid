@@ -42,9 +42,11 @@ describe("InProcessScheduler.reconcile", () => {
 });
 
 describe("InProcessScheduler.tick", () => {
-  it("fires each due cron once and catches the latest missed instant", async () => {
+  // Catch-up across a slept window (which instant, how many skipped) is owned
+  // by cron-cursor.test.ts — this owns the scheduler wiring around it.
+  it("fires each due cron once per minute", async () => {
     const fired: string[] = [];
-    let clock = at(8, 0);
+    const clock = at(8, 0);
     const s = new InProcessScheduler({
       fire: (ref) => void fired.push(ref),
       now: () => clock,
@@ -67,13 +69,6 @@ describe("InProcessScheduler.tick", () => {
     s.tick();
     await settle();
     expect(fired).toStrictEqual(["a/morning"]);
-
-    // The scheduler slept across 20:00. Its cursor catches the latest due
-    // instant on the first wake minute instead of losing the evening run.
-    clock = at(20, 1);
-    s.tick();
-    await settle();
-    expect(fired).toStrictEqual(["a/morning", "a/evening"]);
   });
 
   it("fires every registered automation whose cron matches the minute", async () => {

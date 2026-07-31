@@ -90,7 +90,7 @@ export const MUTATION_SEEDS = [
     config: "stryker.config.mjs",
     report: "artifacts/mutation/blob-format-report.json",
     watch: [
-      "packages/blob-format/src/index.ts",
+      "packages/blob-format/src/cbsf.ts",
       "packages/blob-format/src/cbsf-properties.test.ts",
       "packages/blob-format/src/cbsf.test.ts",
       "packages/blob-format/stryker.config.mjs",

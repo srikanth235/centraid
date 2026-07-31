@@ -58,7 +58,10 @@ async function settle(): Promise<void> {
 }
 
 describe(VaultCursorEngine, () => {
-  it("collapses a cron restart gap to the latest instant with write-ahead intent", async () => {
+  // The gap-collapse arithmetic itself (which instant, how many skipped, the
+  // gap reason) is owned by cron-cursor.test.ts — this only proves the engine
+  // records the intent before firing and commits it after.
+  it("writes cron fire intent ahead of the fire and commits it after", async () => {
     const cursors = store();
     cursors.putCursor({
       automationId: "clock/minutely",
@@ -88,61 +91,18 @@ describe(VaultCursorEngine, () => {
     await engine.reconcile([
       row("clock/minutely", [{ kind: "cron", expr: "* * * * *" }]),
     ]);
-
-    engine.tick();
-    await settle();
-
-    expect(fired).toHaveLength(1);
-    expect(fired[0]).toMatchObject({
-      sourceKind: "cron",
-      skipped: 4,
-      gapReason: "scheduler_gap",
-      element: { occurredAt: at.getTime() },
-    });
-    expect(cursors.getCursor("clock/minutely", 0)).toMatchObject({
-      positionJson: JSON.stringify(at.getTime()),
-    });
-    expect(cursors.getCursor("clock/minutely", 0)?.pendingJson).toBeUndefined();
-  });
-
-  it("fires the latest missed cron instant on the first tick after a sleep", async () => {
-    const cursors = store();
-    const from = new Date(2026, 0, 1, 8, 0).getTime();
-    cursors.putCursor({
-      automationId: "clock/daily",
-      triggerIndex: 0,
-      sourceKind: "cron",
-      positionJson: JSON.stringify(from),
-      updatedAt: from,
-    });
-    const fired: TriggerCursorFireInput[] = [];
-    const at = new Date(2026, 0, 1, 10, 0);
-    const engine = new VaultCursorEngine({
-      store: cursors,
-      now: () => at,
-      fire: vi.fn<VaultCursorEngineOptions["fire"]>(),
-      fireCursor: (input) => void fired.push(input),
-    });
-
-    await engine.reconcile([
-      row("clock/daily", [{ kind: "cron", expr: "0 9 * * *" }]),
-    ]);
     // Registration itself must never fire — the catch-up belongs to the tick.
     expect(fired).toStrictEqual([]);
 
     engine.tick();
     await settle();
 
-    expect(fired).toStrictEqual([
-      expect.objectContaining({
-        element: expect.objectContaining({
-          occurredAt: new Date(2026, 0, 1, 9, 0).getTime(),
-        }),
-      }),
-    ]);
-    expect(cursors.getCursor("clock/daily", 0)?.positionJson).toBe(
-      JSON.stringify(at.getTime())
-    );
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatchObject({ sourceKind: "cron" });
+    expect(cursors.getCursor("clock/minutely", 0)).toMatchObject({
+      positionJson: JSON.stringify(at.getTime()),
+    });
+    expect(cursors.getCursor("clock/minutely", 0)?.pendingJson).toBeUndefined();
   });
 
   it("caps every source uniformly and records the skipped gap once", async () => {

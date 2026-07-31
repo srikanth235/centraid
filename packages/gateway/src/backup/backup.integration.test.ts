@@ -1,6 +1,5 @@
 import crypto, { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
-import type * as TypeImport_g9tn66 from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * The full-story end-to-end test for the offsite backup feature
@@ -20,13 +19,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
-import {
-  openLocalBackupProvider,
-  openManifest,
-  SNAPSHOT_FORMAT_V2,
-  validateKeyring,
-  verifySnapshot,
-} from "@centraid/backup";
+import { openLocalBackupProvider } from "@centraid/backup";
 import type { BackupProvider } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -61,21 +54,6 @@ const silentLogger = {
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe("backup", () => {
-  async function countFiles(dir: string): Promise<number> {
-    let entries: TypeImport_g9tn66.Dirent[];
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return 0;
-    }
-    const counts = await Promise.all(
-      entries.map(async (entry) =>
-        entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1
-      )
-    );
-    return counts.reduce((total, count) => total + count, 0);
-  }
-
   /** Real command invocation, throwing loudly on refusal — mirrors every other real-vault test in this suite. */
   function invoke(
     plane: VaultPlane,
@@ -222,19 +200,9 @@ describe("backup", () => {
     gatewayDatabase: GatewayDatabase;
     health: HealthRegistry;
     seeded: Seeded;
-    /** Set once the CLI-restore test has run — reused by the non-empty-dest refusal test. */
-    restoredDestDir?: string;
   }
 
   let h: Harness;
-
-  function harnessKeyring() {
-    const bytes = daemonKeyStore(path.join(h.dataDir, "keys")).export(
-      "keyring.key"
-    );
-    if (!bytes) throw new Error("fixture keyring missing");
-    return validateKeyring(JSON.parse(bytes.toString("utf8")));
-  }
 
   function reopen(): void {
     h.gatewayDatabase = GatewayDatabase.open(h.dataDir);
@@ -450,58 +418,16 @@ describe("backup", () => {
     );
   });
 
-  test("no-change semantics: an idle vault registers NO new snapshot; a code publish does", async () => {
-    // OBSERVED CONTRACT (verified against engine.ts + backup-sources.ts): the db
-    // bases are the shipper's pinned base clones — stable files that only re-clone
-    // on a generation break, not a per-tick VACUUM — and the code-store bundle is
-    // now reused UNTOUCHED across ticks while the store's refs have not moved
-    // (`bundleCodeStore`'s ref-digest gate). So for a genuinely idle vault every
-    // entry keeps its `(size, mtime)`, `createSnapshot` takes its all-reused fast
-    // path, and `chunkIndexIdentical && entriesIdentical` short-circuits to NO new
-    // registration. This is the whole point of the code-bundle stability fix: an
-    // idle vault no longer re-registers (and re-reads/re-uploads) every tick.
-    const before = (await h.service.status())[h.vaultId];
-    await h.service.runBackup(h.vaultId);
-    const idle = (await h.service.status())[h.vaultId];
-    expect(idle?.lastSeq).toBe(before?.lastSeq);
-
-    // A code change moves the store's refs (a new `todo2/v1` tag + a main commit),
-    // so the digest changes, the bundle regenerates, and the next backup registers
-    // a fresh snapshot — the optimization skips UNCHANGED code, never real changes.
-    await publishRealApp(h.plane, "todo2");
-    await h.service.runBackup(h.vaultId);
-    const afterPublish = (await h.service.status())[h.vaultId];
-    expect(afterPublish?.lastSeq).toBe((before?.lastSeq ?? 0) + 1);
-  });
-
-  test("incremental backup: a new blob registers a small delta, not a re-upload of everything", async () => {
-    const objectsDir = path.join(h.providerDir, "objects");
-    const targetId = (await h.service.status())[h.vaultId]!.targetId;
-    // Per-store isolated prefix (PROTOCOL.md § Layer 1): LocalBackupProvider
-    // nests each store class under its own subdirectory.
-    const chunksDir = path.join(objectsDir, targetId, "backup", "chunks");
-    const before = await countFiles(chunksDir);
-
-    const taskId = invoke(h.plane, "schedule.add_task", {
-      title: "Renew passport",
-    })["task_id"] as string;
-    const newBlobBytes = randomBytes(700_000); // ~1-2 chunks worth
-    stageAndAttach(h.plane, taskId, newBlobBytes);
-
-    const beforeStatus = (await h.service.status())[h.vaultId];
-    await h.service.runBackup(h.vaultId);
-    const afterStatus = (await h.service.status())[h.vaultId];
-    expect(afterStatus?.lastSeq).toBe((beforeStatus?.lastSeq ?? 0) + 1);
-
-    const after = await countFiles(chunksDir);
-    const delta = after - before;
-    // A full re-upload would repeat every chunk from every unchanged entry
-    // (db copies, the existing blobs, the bundle) — dozens of objects at
-    // least. The new blob is < 2MiB, so its delta is at most a handful of
-    // chunks (max chunk size 4MiB, min 512KiB — so 700KB is 1-2 chunks).
-    expect(delta).toBeGreaterThan(0);
-    expect(delta).toBeLessThanOrEqual(4);
-  });
+  // No-change and incremental registration live in ONE place each:
+  //   - the engine laws (nothing registered when nothing moved; a change ships
+  //     only the changed chunks) are owned by packages/backup/src/engine.test.ts
+  //     ("no-change run registers nothing …" / "incremental second snapshot …").
+  //   - the vault-shaped input those laws depend on — the pinned db base clones
+  //     and the ref-digest-gated code bundle that make an idle vault genuinely
+  //     byte-identical — is owned by backup-sources.test.ts ("db bases are the
+  //     shipper pinned clones read IN PLACE …" / "the code-store bundle is
+  //     REUSED untouched while refs are unchanged, and REGENERATED when they
+  //     move"). This file keeps only fencing, policy echo, and CLI restore.
 
   test("CLI restore materializes a fresh dest, and adopting it as a live vault mounts, returns real data, and fires quarantine", async () => {
     const sourceReplica = currentReplicaLogState(h.plane.db.vault);
@@ -537,7 +463,6 @@ describe("backup", () => {
     expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
       true
     );
-    h.restoredDestDir = destDir;
     const restoredDb = new DatabaseSync(path.join(destDir, "vault.db"));
     const restoredReplica = currentReplicaLogState(restoredDb);
     restoredDb.close();
@@ -804,7 +729,9 @@ describe("backup", () => {
     // SEPARATE from serviceA's — exactly the cross-process shape the bug
     // affected).
     const before = (await h.service.status())[h.vaultId];
-    await h.service.runBackup(h.vaultId); // re-registers because journal.db always changed (see the no-change test) — reaches the provider, which now 409s
+    // serviceB's own run moved the shipper's pinned bases, so serviceA's next
+    // run has real work and therefore reaches the provider — which now 409s.
+    await h.service.runBackup(h.vaultId);
     const after = (await h.service.status())[h.vaultId];
     expect(after?.fenced).toBe(true);
     expect(after?.generation).toBe(before?.generation); // never bumped automatically
@@ -816,149 +743,14 @@ describe("backup", () => {
     );
   });
 
-  test("verify catches real damage: a deleted chunk is reported missing, a flipped chunk is reported corrupt", async () => {
-    const targetId = (await h.service.status())[h.vaultId]!.targetId;
-    const chunksDir = path.join(
-      h.providerDir,
-      "objects",
-      targetId,
-      "backup",
-      "chunks"
-    );
-
-    // Object GC never runs (PROTOCOL.md: "no server-side content GC"), so the
-    // provider dir accumulates chunk files from EVERY prior snapshot in this
-    // suite, including ones the LATEST manifest no longer references — a
-    // random file from `readdir` could easily be one of those orphans, which
-    // `verifySnapshot` (scoped to the newest manifest) would never check.
-    // Resolve the two victim chunks from the newest manifest's own public
-    // chunkIndex instead, so they are guaranteed to be in scope.
-    const provider = openLocalBackupProvider({ rootDir: h.providerDir });
-    const keyring = harnessKeyring();
-    const newestRow = (await provider.listSnapshots(targetId))[0]!;
-    const store = await provider.openDataPlane(targetId, "backup", "read");
-    const manifestBytes = await store.get(newestRow.manifestKey);
-    const opened = openManifest(
-      manifestBytes,
-      keyring,
-      h.vaultId,
-      newestRow.manifestHash
-    );
-    expect(opened.public.chunkIndex.length).toBeGreaterThan(1);
-    const [victimA, victimB] = opened.public.chunkIndex;
-
-    const toDelete = path.join(chunksDir, victimA!.id);
-    await fs.rm(toDelete);
-    const toCorrupt = path.join(chunksDir, victimB!.id);
-    const original = await fs.readFile(toCorrupt);
-    const flipped = Buffer.from(original);
-    flipped[0] = (flipped[0]! ^ 0xff) & 0xff;
-    await fs.writeFile(toCorrupt, flipped);
-
-    // Call the engine directly with a sampleCount covering every referenced
-    // chunk, so the flipped one is deterministically included — the default
-    // sample of 8 (what BackupService.runVerify uses) would make this
-    // assertion flaky against a larger chunk set.
-    const result = await verifySnapshot({
-      provider,
-      targetId,
-      keyring,
-      vaultId: h.vaultId,
-      sampleCount: opened.public.chunkIndex.length,
-    });
-    expect(result.missing).toContain(victimA!.id);
-    expect(result.corrupt).toContain(victimB!.id);
-  });
-
-  test("restore refusal: a registered snapshot with a newer vaultUserVersion refuses BEFORE downloading anything", async () => {
-    // A fully separate, minimal fixture — deliberately independent of the
-    // shared harness's (now chunk-corrupted) provider dir.
-    const vaultDir = await tempDir("e2e-refusal-vault");
-    const providerDir = await tempDir("e2e-refusal-provider");
-    const backupDir = await tempDir("e2e-refusal-backup");
-    const registry = openVaultRegistry({
-      rootDir: vaultDir,
-      logger: silentLogger,
-      ownerName: "Alex",
-    });
-    registry.create("Personal");
-    const vaultId = registry.defaultVaultId();
-    const health = new HealthRegistry();
-    const config: BackupConfig = {
-      enabled: true,
-      provider: { kind: "local", dir: providerDir },
-    };
-    const service = new BackupService({
-      config,
-      cacheDir: backupDir,
-      vaults: registry,
-      health,
-      logger: silentLogger,
-    });
-    try {
-      await service.runBackup(vaultId);
-      const target = (await service.status())[vaultId]!;
-      const provider = openLocalBackupProvider({ rootDir: providerDir });
-      const targetInfo = await provider.getTarget(target.targetId);
-      const realRow = (await provider.listSnapshots(target.targetId))[0]!;
-
-      // Register a doctored snapshot THROUGH THE REAL PROVIDER API — a
-      // manifestKey that does not exist on the data plane, so if
-      // restoreSnapshot ever tried to download it, we'd see an ENOENT/read
-      // error instead of the compatibility-gate message, proving the gate
-      // really does run first.
-      await provider.registerSnapshot(target.targetId, {
-        idempotencyKey: "doctored-newer-version",
-        manifestKey: "manifests/does-not-exist-on-disk.json",
-        manifestHash: "f".repeat(64),
-        totalBytes: 1,
-        objectCount: 1,
-        generation: targetInfo.currentGeneration,
-        // A READABLE format (the current one) so the refusal comes from the
-        // version gate, not the format gate — the whole point of this test is
-        // that a newer vaultUserVersion is refused before any download.
-        format: SNAPSHOT_FORMAT_V2,
-        appMeta: { ...realRow.appMeta, vaultUserVersion: "99999" },
-      });
-      const destDir = path.join(
-        await tempDir("e2e-refusal-dest-parent"),
-        "refusal-dest"
-      );
-      await expect(service.restore({ vaultId, destDir })).rejects.toThrow(
-        /vaultUserVersion.*newer/u
-      );
-      // Never attempted to materialize anything — the compat gate ran before
-      // any directory creation or data-plane read.
-      expect(existsSync(destDir)).toBe(false);
-    } finally {
-      registry.stop();
-    }
-  });
-
-  test("restore refusal: the CLI refuses a non-empty --dest", async () => {
-    await h.service.stop();
-    h.registry.stop();
-    h.gatewayDatabase.close();
-    const restoredDestDir = h.restoredDestDir;
-    expect(restoredDestDir).toBeTruthy();
-    await expect(
-      capture(() =>
-        commandBackup(
-          [
-            "restore",
-            "--config",
-            h.configPath,
-            "--vault",
-            h.vaultId,
-            "--dest",
-            restoredDestDir!,
-          ],
-          (msg) => {
-            throw new Error(msg);
-          }
-        )
-      )
-    ).rejects.toThrow(/not empty/u);
-    reopen();
-  });
+  // Verify (a deleted chunk is reported missing, a flipped chunk corrupt) and
+  // restore refusal (a newer vaultUserVersion / a non-empty dest are refused
+  // before anything is fetched or materialized) are ENGINE laws, owned by
+  // packages/backup/src/engine.test.ts — `describe(verifySnapshot)` and the two
+  // roundtrip refusal tests. The gateway adds no logic on those paths: the
+  // non-empty check exists only in engine.ts, and the deleted "verify catches
+  // real damage" test called `verifySnapshot` directly. What the gateway DOES
+  // add — that a refused recovery leaves no residue on a blank machine — lives
+  // in recover.integration.test.ts's blank-machine test. This file keeps only
+  // fencing, policy echo, and the CLI-restore -> adopt -> quarantine flow.
 });

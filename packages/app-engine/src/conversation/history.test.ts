@@ -977,22 +977,89 @@ describe(ConversationHistoryStore, () => {
   });
 });
 
-describe("ConversationHistoryStore per-app scoping", () => {
-  it("isolates sessions and lookups per app", () => {
-    const store = new ConversationHistoryStore(
-      workspaceFor(freshVaultDir("todos", "habits"))
-    );
-    const t = store.createSession("todos", "todos-1");
-    store.createSession("habits", "habits-1");
-    store.createSession("habits", "habits-2");
-    expect(store.listSessions("todos").map((s) => s.title)).toStrictEqual([
-      "todos-1",
-    ]);
-    expect(store.listSessions("habits")).toHaveLength(2);
-    // A session id is only found under its owning app.
-    expect(store.getSession("todos", t.id)).toBeTruthy();
-    expect(store.getSession("habits", t.id)).toBeUndefined();
-  });
+/*
+ * Two axes, ONE law: a conversation is visible only to the (app, user) pair
+ * that created it — `listSessions` never leaks a neighbour's row and
+ * `getSession` never resolves a foreign id. The app axis partitions one store
+ * across app ids; the user axis partitions one vault's `journal.db` across
+ * owner identities. The body is identical, so it runs from a table instead of
+ * two hand-copied blocks that could drift apart.
+ */
+type ListedSession = ReturnType<
+  ConversationHistoryStore["listSessions"]
+>[number];
+
+interface ScopeSide {
+  store: ConversationHistoryStore;
+  app: string;
+}
+
+interface ScopeAxis {
+  /** Axis name (used in the test title). */
+  name: string;
+  /** Both sides address the SAME journal.db — isolation is a query law, not a file boundary. */
+  make: () => { a: ScopeSide; b: ScopeSide };
+  /** Axis-specific stamp every row handed to a side must carry, when the axis has one. */
+  expectStamp?: (side: "a" | "b", rows: ListedSession[]) => void;
+}
+
+const SCOPE_AXES: ScopeAxis[] = [
+  {
+    name: "app",
+    make: () => {
+      const store = new ConversationHistoryStore(
+        workspaceFor(freshVaultDir("todos", "habits"))
+      );
+      return { a: { store, app: "todos" }, b: { store, app: "habits" } };
+    },
+  },
+  {
+    name: "user",
+    make: () => {
+      const appsDir = freshVaultDir();
+      return {
+        a: {
+          store: new ConversationHistoryStore(workspaceFor(appsDir, "alice")),
+          app: APP,
+        },
+        b: {
+          store: new ConversationHistoryStore(workspaceFor(appsDir, "bob")),
+          app: APP,
+        },
+      };
+    },
+    expectStamp: (side, rows) => {
+      const owner = side === "a" ? "alice" : "bob";
+      expect(rows.every((s) => s.userId === owner)).toBeTruthy();
+    },
+  },
+];
+
+describe("ConversationHistoryStore scoping", () => {
+  it.each(SCOPE_AXES)(
+    "$name scope: listSessions and getSession never cross the boundary",
+    ({ make, expectStamp }) => {
+      const { a, b } = make();
+      const mine = a.store.createSession(a.app, "a-1");
+      a.store.createSession(a.app, "a-2");
+      b.store.createSession(b.app, "b-1");
+
+      const aList = a.store.listSessions(a.app);
+      expect(aList.map((s) => s.title).toSorted()).toStrictEqual([
+        "a-1",
+        "a-2",
+      ]);
+      expectStamp?.("a", aList);
+
+      const bList = b.store.listSessions(b.app);
+      expect(bList.map((s) => s.title)).toStrictEqual(["b-1"]);
+      expectStamp?.("b", bList);
+
+      // A session id resolves only under the side that created it.
+      expect(a.store.getSession(a.app, mine.id)).toBeTruthy();
+      expect(b.store.getSession(b.app, mine.id)).toBeUndefined();
+    }
+  );
 });
 
 describe("ConversationHistoryStore per-user scoping", () => {
@@ -1015,26 +1082,10 @@ describe("ConversationHistoryStore per-user scoping", () => {
     expect(store.getSession(APP, s.id)?.userId).toBe("alice");
   });
 
-  it("listSessions does not return another user's sessions", () => {
-    const { alice, bob } = pair();
-    alice.createSession(APP, "alice-1");
-    alice.createSession(APP, "alice-2");
-    bob.createSession(APP, "bob-1");
-
-    const aliceList = alice.listSessions(APP);
-    expect(aliceList).toHaveLength(2);
-    expect(aliceList.every((s) => s.userId === "alice")).toBeTruthy();
-
-    const bobList = bob.listSessions(APP);
-    expect(bobList).toHaveLength(1);
-    expect(bobList[0]!.title).toBe("bob-1");
-  });
-
-  it("getSession returns undefined for another user's session id", () => {
-    const { alice, bob } = pair();
-    const aliceSession = alice.createSession(APP);
-    expect(bob.getSession(APP, aliceSession.id)).toBeUndefined();
-  });
+  // listSessions / getSession isolation for this axis is asserted by the
+  // table-driven "ConversationHistoryStore scoping" suite above. What remains
+  // here is user-axis-only: the ownership stamp and the WRITE refusals, which
+  // have no app-axis twin.
 
   it("recordTurn refuses to write into another user's session", () => {
     const { alice, bob } = pair();

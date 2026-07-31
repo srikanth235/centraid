@@ -197,6 +197,16 @@ describe(validateManifest, () => {
     ).toThrow(ManifestError);
   });
 
+  // The single owner of "which trigger kinds exist". The gateway's create and
+  // update routes each keep a thin pre-check with the same vocabulary, but the
+  // rule itself — and the message that names the offending kind — is proven
+  // here, not re-enumerated over HTTP (#656 1D).
+  it("rejects an unsupported trigger kind and names it in the message", () => {
+    expect(() =>
+      validateManifest(baseManifest({ triggers: [{ kind: "carrier-pigeon" }] }))
+    ).toThrow(/"carrier-pigeon" is not supported/u);
+  });
+
   it("rejects apps that is not an array of non-empty strings", () => {
     expect(() => validateManifest(baseManifest({ apps: "todos" }))).toThrow(
       ManifestError
@@ -307,6 +317,23 @@ describe("condition triggers", () => {
     ).toThrow(/vault block/u);
   });
 
+  // Field-scoped `where` rejection. The gateway routes surface this exact
+  // message body as their 400; they no longer re-prove the rule (#656 1D).
+  it("rejects a where that is not an array of clauses", () => {
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [
+          {
+            kind: "condition",
+            entity: "business.invoice",
+            where: "not-an-array",
+          },
+        ],
+      })
+    ).toThrow(/where must be an array of \{column, op, value\?\} clauses/u);
+  });
+
   it("rejects malformed entities, ops and gates", () => {
     expect(() =>
       validateManifest({
@@ -374,6 +401,11 @@ describe("data triggers", () => {
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: "data", entities: [] }] })
     ).toThrow(/entities/u);
+    // Omitted entirely, not just empty — the shape the gateway's create route
+    // used to re-prove over HTTP (#656 1D).
+    expect(() =>
+      validateManifest({ ...base, triggers: [{ kind: "data" }] })
+    ).toThrow(/entities must be a non-empty array/u);
     expect(() =>
       validateManifest({
         ...base,
