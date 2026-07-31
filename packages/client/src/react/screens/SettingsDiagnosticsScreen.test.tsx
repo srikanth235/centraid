@@ -3,8 +3,11 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { buildGatewayRows } from "../shell/gatewayRegistry.js";
+import type { GatewayRow } from "../shell/gatewayRegistry.js";
 import SettingsDiagnosticsScreen from "./SettingsDiagnosticsScreen.js";
 import type {
+  DiagnosticsConnectionsProps,
   GatewayHealthDTO,
   SettingsDiagnosticsBridgeProps,
 } from "./SettingsDiagnosticsScreen.js";
@@ -276,6 +279,123 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       expect(metrics?.textContent).toContain("3.2 ms");
       expect(metrics?.textContent).toContain("Conserve");
       expect(metrics?.textContent).toContain("Constrained");
+    });
+  });
+
+  // Connections — host plumbing (issue #665). Every management act against a
+  // host lives here and nowhere else, so "the three acts fire against the row
+  // that was clicked" is the contract this section has to keep.
+  describe("connections section", () => {
+    const rows = (): GatewayRow[] =>
+      buildGatewayRows(
+        [
+          {
+            gatewayId: "local",
+            gatewayKind: "local",
+            gatewayLabel: "This Mac",
+          },
+          {
+            gatewayId: "office",
+            gatewayKind: "remote",
+            gatewayLabel: "Office",
+          },
+        ],
+        {
+          local: {
+            status: "ready",
+            vaults: [
+              { name: "Shared", vaultId: "s" },
+              { name: "Personal", vaultId: "p" },
+            ],
+          },
+          office: { status: "error", error: "unreachable", vaults: undefined },
+        },
+        "local"
+      );
+
+    type Act = (gatewayId: string, label: string) => void;
+
+    async function mountWithConnections(
+      over: Partial<DiagnosticsConnectionsProps> = {}
+    ): Promise<{
+      el: HTMLDivElement;
+      onTest: ReturnType<typeof vi.fn<Act>>;
+      onRename: ReturnType<typeof vi.fn<Act>>;
+      onRemove: ReturnType<typeof vi.fn<Act>>;
+    }> {
+      const onTest = vi.fn<Act>();
+      const onRename = vi.fn<Act>();
+      const onRemove = vi.fn<Act>();
+      const el = await mount({
+        loadHealth: vi
+          .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
+          .mockResolvedValue(makeHealth()),
+        connections: {
+          loadConnections: () => Promise.resolve(rows()),
+          onRemove,
+          onRename,
+          onTest,
+          ...over,
+        },
+      });
+      return { el, onRemove, onRename, onTest };
+    }
+
+    const rowFor = (el: HTMLElement, id: string): HTMLElement =>
+      el.querySelector<HTMLElement>(`[data-gateway-id="${id}"]`)!;
+
+    it("is absent entirely when the host exposes no registry", async () => {
+      const el = await mount({
+        loadHealth: vi
+          .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
+          .mockResolvedValue(makeHealth()),
+      });
+      expect(el.querySelector('[data-testid="diag-connections"]')).toBeNull();
+    });
+
+    it("lists each host with its transport and what it serves", async () => {
+      const { el } = await mountWithConnections();
+      const local = rowFor(el, "local");
+      expect(local.textContent).toContain("This Mac");
+      expect(local.textContent).toContain("Active");
+      // Names, not just a count: the vaults are what the owner recognises.
+      expect(local.textContent).toContain("2 vaults · Shared, Personal");
+      const office = rowFor(el, "office");
+      expect(office.textContent).toContain("iroh");
+      // The switcher's status vocabulary, reused rather than reinvented.
+      expect(office.textContent).toContain("Offline");
+    });
+
+    it("fires test / rename / remove for the host whose row was clicked", async () => {
+      const { el, onTest, onRename, onRemove } = await mountWithConnections();
+      const office = rowFor(el, "office");
+      const click = (label: string): void => {
+        const button = [...office.querySelectorAll("button")].find((b) =>
+          b.textContent?.includes(label)
+        )!;
+        act(() => button.click());
+      };
+      click("Test connection");
+      click("Rename");
+      click("Remove");
+      expect(onTest).toHaveBeenCalledWith("office", "Office");
+      expect(onRename).toHaveBeenCalledWith("office", "Office");
+      expect(onRemove).toHaveBeenCalledWith("office", "Office");
+    });
+
+    it("never offers to remove the primordial local host", async () => {
+      const { el } = await mountWithConnections();
+      const labels = [...rowFor(el, "local").querySelectorAll("button")].map(
+        (b) => b.textContent
+      );
+      expect(labels.some((l) => l?.includes("Remove"))).toBe(false);
+    });
+
+    it("says so rather than rendering an empty panel when nothing is registered", async () => {
+      const { el } = await mountWithConnections({
+        loadConnections: () => Promise.resolve([]),
+      });
+      expect(el.textContent).toContain("No hosts are registered");
     });
   });
 });

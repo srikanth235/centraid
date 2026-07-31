@@ -5,23 +5,23 @@ import type { MemberScope } from "../memberScope.js";
 
 import styles from "./ScopePicker.module.css";
 
-// "Which space?" — the explicit target every creation flow names (issue #599,
+// "Which vault?" — the explicit target every creation flow names (issue #599,
 // Decision 14).
 //
-// The switcher this replaces made the answer AMBIENT: whatever space the
+// The switcher this replaces made the answer AMBIENT: whatever vault the
 // sidebar happened to point at was where a new conversation, app or install
 // silently landed, and the only way to see that was to read the sidebar head.
 // Naming the target at the point of creation is the whole reason the switcher
 // could be retired.
 //
 // Rules the component enforces, so no call site has to remember them:
-//   * spaces this member cannot write to are not offerable targets;
-//   * with only one writable space there is nothing to choose, so the picker
+//   * vaults this member cannot write to are not offerable targets;
+//   * with only one writable vault there is nothing to choose, so the picker
 //     collapses to a plain statement of where the thing will land;
-//   * the default selection is the member's own space, never the last one used.
+//   * the default selection is the member's own vault, never the last one used.
 
 export interface ScopePickerProps {
-  /** Every space the member holds a role in (own space first). */
+  /** Every vault the member holds a role in (own vault first). */
   scopes: MemberScope[];
   /** The currently chosen target. */
   value: string | undefined;
@@ -29,7 +29,7 @@ export interface ScopePickerProps {
   /** Leading text — e.g. "New conversation in". */
   label: string;
   /** Renders as a fixed statement rather than a control: the choice is already
-   *  made and can no longer change (an existing conversation's space). */
+   *  made and can no longer change (an existing conversation's vault). */
   locked?: boolean;
 }
 

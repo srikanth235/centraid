@@ -1,4 +1,4 @@
-export interface InboxNotificationPull {
+export interface NotificationsPull {
   decisions: {
     outbox: Array<{
       itemId: string;
@@ -24,24 +24,24 @@ export interface InboxNotificationPull {
   }>;
 }
 
-export interface InboxNotificationRow {
+export interface NotificationRow {
   key: string;
   title: string;
   body: string;
 }
 
 /**
- * Compose private notification content after the authenticated Inbox fetch.
+ * Compose private notification content after the authenticated Notifications fetch.
  * Decision keys include the canonical transition timestamp so an outbox
  * re-park or a later needs-auth episode can notify again without duplicating
  * a still-open decision.
  */
-export function composeWebInboxNotifications(
-  inbox: InboxNotificationPull,
+export function composeWebNotifications(
+  notifications: NotificationsPull,
   delivered: ReadonlySet<string>
-): InboxNotificationRow[] {
+): NotificationRow[] {
   return [
-    ...inbox.decisions.outbox.map((row) => ({
+    ...notifications.decisions.outbox.map((row) => ({
       key: `outbox:${row.itemId}:${row.stagedAt}`,
       title:
         ["title", "subject", "name"]
@@ -50,22 +50,22 @@ export function composeWebInboxNotifications(
         row.target,
       body: "External write needs your approval",
     })),
-    ...inbox.decisions.needsAuth.map((row) => ({
+    ...notifications.decisions.needsAuth.map((row) => ({
       key: `auth:${row.connectionId}:${row.attentionAt}`,
       title: `${row.label} needs reconnection`,
-      body: "Open Inbox to reconnect",
+      body: "Open Notifications to reconnect",
     })),
-    ...inbox.decisions.parked.map((row) => ({
+    ...notifications.decisions.parked.map((row) => ({
       key: `parked:${row.invocationId}`,
       title: row.command,
-      body: "A decision is waiting in Inbox",
+      body: "A decision is waiting in Notifications",
     })),
-    ...inbox.decisions.scopeRequests.map((row) => ({
+    ...notifications.decisions.scopeRequests.map((row) => ({
       key: `scope:${row.requestId}`,
       title: `${row.appId} requests access`,
-      body: "Review the requested scope in Inbox",
+      body: "Review the requested scope in Notifications",
     })),
-    ...inbox.notices
+    ...notifications.notices
       .filter(
         (notice) =>
           notice.severity === "high" &&
@@ -75,7 +75,7 @@ export function composeWebInboxNotifications(
       .map((notice) => ({
         key: `notice:${notice.noticeId}:${notice.lastAt}`,
         title: notice.headline,
-        body: "Open Inbox for details",
+        body: "Open Notifications for details",
       })),
   ].filter((row) => !delivered.has(row.key));
 }

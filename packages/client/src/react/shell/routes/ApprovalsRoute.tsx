@@ -4,16 +4,16 @@ import type { JSX } from "react";
 import {
   decideOutboxItem,
   decideScopeRequest,
-  getInbox,
+  getNotifications,
   getReview,
   listOutboxGrants,
   revokeOutboxGrant,
-  subscribeInboxChanges,
-  updateInboxNotice,
+  subscribeNotificationsChanges,
+  updateNotice,
 } from "../../../gateway-client-outbox.js";
 import {
   enableWebPushWake,
-  syncWebInboxNotifications,
+  syncWebNotifications,
 } from "../../../gateway-client-push.js";
 import { confirmVaultParked } from "../../../gateway-client-vault.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
@@ -38,17 +38,17 @@ const REVIEW_LIMIT_SEE_ALL = 200;
 /** The route's whole payload — one fetch triple, so the last-good copy the
  *  route holds across refetches has a name. */
 async function loadApprovals(reviewLimit: number) {
-  const [inbox, grants, review] = await Promise.all([
-    getInbox(true),
+  const [notifications, grants, review] = await Promise.all([
+    getNotifications(true),
     listOutboxGrants(),
     getReview(reviewLimit),
   ]);
-  return { inbox, grants, review };
+  return { notifications, grants, review };
 }
 
-// React-owned Inbox route (issues #306/#308/#647) — the desktop UI over the
+// React-owned Notifications route (issues #306/#308/#647) — the desktop UI over the
 // vault's outbox/blocking/scope-request/grant surface, which shipped with no
-// renderer consumer at all. Loads `GET /_vault/blocking` (the unified inbox)
+// renderer consumer at all. Loads `GET /_vault/blocking` (the unified notifications)
 // + `GET /_vault/outbox-grants` (standing rules), maps the wire rows to the
 // screen's DTOs (approvalsData.ts), and wires every decision back over
 // `gateway-client-outbox.ts`. Deny/revoke ride the shared confirm overlay,
@@ -69,7 +69,7 @@ export default function ApprovalsRoute(): JSX.Element {
     nonce: number;
   } | null>(null);
 
-  // Every inbox-changed doorbell bumps `refreshTick`, which is a deps change —
+  // Every notifications-changed doorbell bumps `refreshTick`, which is a deps change —
   // so without `keepPreviousData` the route would swap to PageLoading on every
   // SSE event, UNMOUNTING ApprovalsScreen and discarding whatever the owner
   // was in the middle of: half-edited outbox artifact text, the expanded row,
@@ -84,16 +84,14 @@ export default function ApprovalsRoute(): JSX.Element {
   const reload = (): void => setRefreshTick((t) => t + 1);
   useEffect(() => {
     const controller = new AbortController();
-    void subscribeInboxChanges(reload, controller.signal).catch(() => {
+    void subscribeNotificationsChanges(reload, controller.signal).catch(() => {
       // The sidebar's shared 60s poll is the fallback when SSE is unavailable.
     });
-    // Opening Inbox is the relevant owner gesture for notification consent.
+    // Opening Notifications is the relevant owner gesture for notification consent.
     // Never prompt at app launch; once granted, register the opaque wake relay
     // and compose any current content locally from the authenticated payload.
     void enableWebPushWake(true)
-      .then((enabled) =>
-        enabled ? syncWebInboxNotifications() : Promise.resolve()
-      )
+      .then((enabled) => (enabled ? syncWebNotifications() : Promise.resolve()))
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
@@ -232,27 +230,27 @@ export default function ApprovalsRoute(): JSX.Element {
     action: "read" | "archive"
   ): void => {
     void runDecision(noticeId, async () => {
-      await updateInboxNotice(noticeId, action);
+      await updateNotice(noticeId, action);
     });
   };
 
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageLoading label="Loading Inbox…" />
+        <PageLoading label="Loading Notifications…" />
       </PageScroll>
     );
   }
   if (state.status === "error") {
     return (
       <PageScroll>
-        <PageEmpty message={`Couldn’t load Inbox: ${state.error}`} />
+        <PageEmpty message={`Couldn’t load Notifications: ${state.error}`} />
       </PageScroll>
     );
   }
 
-  const { inbox, grants, review } = state.data;
-  const blocking = inbox.decisions;
+  const { notifications, grants, review } = state.data;
+  const blocking = notifications.decisions;
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
   // Truncated when the wire returned a full page at the current limit —
   // "See all" raises the cap in place (no separate audit-log screen).
@@ -267,7 +265,7 @@ export default function ApprovalsRoute(): JSX.Element {
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
         activity={activity}
-        notices={inbox.notices.map((notice) => ({
+        notices={notifications.notices.map((notice) => ({
           ...notice,
           sourceType:
             notice.detail.sourceType === "automation" ||
@@ -306,11 +304,14 @@ export default function ApprovalsRoute(): JSX.Element {
           if (typeof ref === "string") {
             navigate({ kind: "automation-view", automationId: ref });
           } else if (notice.kind === "gateway-health") {
+            // Legacy rows only (issue #665): health no longer projects into the
+            // Notifications, but cards written by an earlier build survive in vault.db
+            // until archived, and Alerts is still exactly where they point.
             navigate({ kind: "gateway", tab: "alerts" });
           } else if (typeof appId === "string") {
             navigate({ kind: "app", id: appId });
           } else if (notice.kind === "outbox") {
-            // We are already ON Inbox, so navigating here was a no-op. The
+            // We are already ON Notifications, so navigating here was a no-op. The
             // gateway ships the staged item's id (outbox-executor.ts) — use
             // it to put that decision in front of the owner instead.
             const itemId = notice.detail.itemId;

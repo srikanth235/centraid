@@ -72,7 +72,7 @@ const removeConnection = vi.fn<typeof GatewayClient.removeConnection>(() =>
 
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
 // before settingsConnectionsData.js pulls gateway-client-core's load-time
-// side-effect (mirrors spaceModals.test.ts's approach).
+// side-effect (mirrors vaultModals.test.ts's approach).
 vi.mock(import("../../../gateway-client.js"), () => ({
   beginConnectionAuthorization: (a) => beginConnectionAuthorization(a),
   cloneTemplate: (a) => cloneTemplate(a),

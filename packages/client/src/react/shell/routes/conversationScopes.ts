@@ -1,8 +1,8 @@
 import { Store } from "../store.js";
 
-// Which space each conversation belongs to (issue #599, Decision 14).
+// Which vault each conversation belongs to (issue #599, Decision 14).
 //
-// A conversation reads and writes exactly ONE space for its whole life: the
+// A conversation reads and writes exactly ONE vault for its whole life: the
 // assistant answers from a single set of shapes, and a thread that silently
 // changed which household member's data it could see would be a privacy bug,
 // not a convenience. The choice is made once, when the conversation is created,
@@ -10,8 +10,8 @@ import { Store } from "../store.js";
 // `x-centraid-vault` header.
 //
 // The mapping is CLIENT-SIDE. The conversation row itself already lives in the
-// space it was created in, so the gateway needs no second copy of this fact —
-// but the client has to remember which space to address before it can fetch the
+// vault it was created in, so the gateway needs no second copy of this fact —
+// but the client has to remember which vault to address before it can fetch the
 // row at all. A device that has never seen a conversation simply has no entry
 // and falls back to the internal default scope, which is exactly how every
 // conversation created before this issue behaves.
@@ -24,7 +24,7 @@ function read(): ScopeMap {
   return Store.get<ScopeMap>(KEY, {});
 }
 
-/** The space a conversation was created in, or `undefined` if this device
+/** The vault a conversation was created in, or `undefined` if this device
  *  never recorded one (an older thread, or one started elsewhere). */
 export function conversationScope(
   conversationId: string | undefined
@@ -33,7 +33,7 @@ export function conversationScope(
   return read()[conversationId];
 }
 
-/** Record a fresh conversation's space. Called once, at creation. */
+/** Record a fresh conversation's vault. Called once, at creation. */
 export function rememberConversationScope(
   conversationId: string,
   scopeId: string
@@ -42,7 +42,7 @@ export function rememberConversationScope(
 }
 
 /** The whole map — the sidebar reads it to label rows that live somewhere
- *  other than the member's own space. */
+ *  other than the member's own vault. */
 export function conversationScopes(): ScopeMap {
   return read();
 }

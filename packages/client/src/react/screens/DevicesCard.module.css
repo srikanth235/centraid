@@ -95,7 +95,7 @@
   color: var(--ink);
   overflow-wrap: break-word;
 }
-/* Ownership words (Owner / Member / Viewer) beside the space they apply to —
+/* Ownership words (Owner / Member / Viewer) beside the vault they apply to —
    the only place a role is stated, because the person is where it is authored. */
 .roleChip {
   display: inline-flex;

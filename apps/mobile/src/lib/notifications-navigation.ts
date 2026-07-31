@@ -1,16 +1,16 @@
-import type { MobileInboxNotice } from "./gateway";
+import type { MobileNotice } from "./gateway";
 
-export type MobileInboxDestination =
+export type MobileNotificationsDestination =
   | { kind: "automation-thread"; automationRef: string }
   | { kind: "gateway-alerts" }
   | { kind: "outbox"; itemId: string }
   | { kind: "app"; appId: string }
-  | { kind: "inbox" };
+  | { kind: "notifications" };
 
 /** Resolve a notice to the native surface where the owner can act on it. */
-export function mobileInboxDestination(
-  notice: MobileInboxNotice
-): MobileInboxDestination {
+export function mobileNotificationsDestination(
+  notice: MobileNotice
+): MobileNotificationsDestination {
   if (notice.detail.sourceType === "automation") {
     const automationRef =
       typeof notice.detail.automationRef === "string"
@@ -28,5 +28,5 @@ export function mobileInboxDestination(
   }
   if (typeof notice.detail.appId === "string")
     return { kind: "app", appId: notice.detail.appId };
-  return { kind: "inbox" };
+  return { kind: "notifications" };
 }

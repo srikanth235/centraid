@@ -29,9 +29,9 @@
  *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
  *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
  *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked + scope requests)
- *   GET    /centraid/_vault/inbox                      — unified decisions + durable notices projection
- *   GET    /centraid/_vault/inbox/events               — `inbox-changed` SSE doorbell
- *   POST   /centraid/_vault/inbox/notices/<id>         — mark a notice read or archived
+ *   GET    /centraid/_vault/notifications              — unified decisions + durable notices projection
+ *   GET    /centraid/_vault/notifications/events       — `notifications-changed` SSE doorbell
+ *   POST   /centraid/_vault/notifications/notices/<id> — mark a notice read or archived
  *   GET    /centraid/_vault/scope-requests             — open manifest scope-widening asks (issue #308)
  *   POST   /centraid/_vault/scope-requests/<requestId> — {approve: boolean} → decided request
  *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
@@ -82,7 +82,7 @@ import { ensureProviderCasTarget } from "../backup/storage-credentials.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import type { InboxEventBus } from "../serve/inbox-events.js";
+import type { NotificationsEventBus } from "../serve/notifications-events.js";
 import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
@@ -104,7 +104,7 @@ import { readJson, sendJson } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
 const PREFIX = "/centraid/_vault";
-const defaultInboxSubscriberCap = new SseSubscriberCap();
+const defaultNotificationsSubscriberCap = new SseSubscriberCap();
 
 export interface VaultRouteOptions {
   /**
@@ -156,10 +156,10 @@ export interface VaultRouteOptions {
   fenceVaultForErase?: (vaultId: string) => Promise<void>;
   /** Crash-injection seam after durable state commit and before file unlink. */
   afterEraseStateCommitted?: (vaultId: string) => void;
-  /** Per-gateway Inbox doorbell used by the owner SSE stream. */
-  inboxEvents?: InboxEventBus;
+  /** Per-gateway Notifications doorbell used by the owner SSE stream. */
+  notificationsEvents?: NotificationsEventBus;
   /** Overridable in route tests. */
-  inboxSubscriberCap?: SseSubscriberCap;
+  notificationsSubscriberCap?: SseSubscriberCap;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,8 +185,8 @@ export function makeVaultRouteHandler(
   vaults: VaultRegistry,
   options: VaultRouteOptions = {}
 ): RouteHandler {
-  const inboxSubscriberCap =
-    options.inboxSubscriberCap ?? defaultInboxSubscriberCap;
+  const notificationsSubscriberCap =
+    options.notificationsSubscriberCap ?? defaultNotificationsSubscriberCap;
   /** The vaults the calling device may see — all of them for keyless transports. */
   const visibleVaults = (): VaultInfo[] => {
     const deviceKey = vaultContext()?.deviceKey;
@@ -912,37 +912,37 @@ export function makeVaultRouteHandler(
 
       if (
         method === "GET" &&
-        segments[0] === "inbox" &&
+        segments[0] === "notifications" &&
         segments.length === 1
       ) {
-        const inbox = plane.inboxSummary(
+        const notifications = plane.notificationsSummary(
           url.searchParams.get("include_archived") === "true"
         );
         if (vaultContext()?.grantProfile !== undefined) {
-          return sendJson(res, 200, { count: inbox.decisions.count });
+          return sendJson(res, 200, { count: notifications.decisions.count });
         }
         return sendJson(res, 200, {
-          ...inbox,
+          ...notifications,
           decisions: {
-            ...inbox.decisions,
-            outbox: withCanEdit(inbox.decisions.outbox),
+            ...notifications.decisions,
+            outbox: withCanEdit(notifications.decisions.outbox),
           },
         });
       }
 
       if (
         method === "GET" &&
-        segments[0] === "inbox" &&
+        segments[0] === "notifications" &&
         segments[1] === "events" &&
         segments.length === 2
       ) {
-        if (!options.inboxEvents) {
+        if (!options.notificationsEvents) {
           return sendJson(res, 503, {
-            error: "inbox_events_unavailable",
-            message: "Inbox events are not configured on this gateway",
+            error: "notifications_events_unavailable",
+            message: "Notifications events are not configured on this gateway",
           });
         }
-        const releaseSlot = inboxSubscriberCap.admit(res);
+        const releaseSlot = notificationsSubscriberCap.admit(res);
         if (!releaseSlot) return true;
         res.writeHead(200, {
           "Content-Type": "text/event-stream; charset=utf-8",
@@ -953,11 +953,11 @@ export function makeVaultRouteHandler(
         const write = (): void => {
           if (!res.writableEnded)
             res.write(
-              'event: inbox-changed\ndata: {"type":"inbox-changed"}\n\n'
+              'event: notifications-changed\ndata: {"type":"notifications-changed"}\n\n'
             );
         };
         write();
-        const unsubscribe = options.inboxEvents.subscribe(
+        const unsubscribe = options.notificationsEvents.subscribe(
           plane.boot.vaultId,
           write
         );
@@ -981,7 +981,7 @@ export function makeVaultRouteHandler(
 
       if (
         method === "POST" &&
-        segments[0] === "inbox" &&
+        segments[0] === "notifications" &&
         segments[1] === "notices" &&
         segments.length === 3
       ) {
@@ -995,64 +995,28 @@ export function makeVaultRouteHandler(
         }
         const notice =
           action === "read"
-            ? plane.inbox.markRead(segments[2] ?? "")
-            : plane.inbox.archive(segments[2] ?? "");
+            ? plane.notices.markRead(segments[2] ?? "")
+            : plane.notices.archive(segments[2] ?? "");
         return notice
           ? sendJson(res, 200, { notice })
           : sendJson(res, 404, {
               error: "notice_not_found",
-              message: "Inbox notice not found",
+              message: "Notice not found",
             });
       }
 
-      if (
-        method === "POST" &&
-        segments[0] === "inbox" &&
-        segments[1] === "gateway-health" &&
-        segments.length === 2
-      ) {
-        const body = await readJson(req);
-        const events = Array.isArray(body.events) ? body.events : undefined;
-        if (!events || events.length === 0 || events.length > 100) {
-          return sendJson(res, 400, {
-            error: "bad_request",
-            message: "gateway-health body needs 1–100 events",
-          });
-        }
-        const notices = [];
-        for (const value of events) {
-          if (
-            !isRecord(value) ||
-            typeof value.sourceRef !== "string" ||
-            typeof value.headline !== "string" ||
-            !["info", "warning", "high"].includes(String(value.severity)) ||
-            (value.at !== undefined && typeof value.at !== "string") ||
-            (value.detail !== undefined && !isRecord(value.detail))
-          ) {
-            return sendJson(res, 400, {
-              error: "bad_request",
-              message: "invalid gateway-health event",
-            });
-          }
-          notices.push(
-            // Collapse-put, not dedupe: the desktop's sourceRef is stable per
-            // (gateway, scope, transition) and it never replays a projected
-            // event (its outage log keeps a durable high-water mark). Every
-            // POST is a genuinely new transition, so a flapping gateway bumps
-            // ONE card's count and reopens it if the owner already read or
-            // archived it — see COORDINATION-gateway-health.md.
-            plane.inbox.put({
-              kind: "gateway-health",
-              sourceRef: value.sourceRef,
-              headline: value.headline,
-              severity: value.severity as "info" | "warning" | "high",
-              ...(value.detail ? { detail: value.detail } : {}),
-              ...(value.at ? { at: value.at } : {}),
-            })
-          );
-        }
-        return sendJson(res, 200, { notices });
-      }
+      // NOTE (issue #665): `POST /centraid/_vault/inbox/gateway-health` (the
+      // path spelling of the day, before the surface was renamed
+      // Notifications) used to live here so the desktop monitor could
+      // dual-write gateway health into the stream (#647). It is gone, along
+      // with its only caller. Health is STATUS, not a decision the owner can
+      // resolve from Notifications — it lives on the Gateway page (Overview
+      // card, Components tab, durable Alerts history) and in the desktop's OS
+      // notification. The route was never part of the published protocol
+      // surface (`packages/protocol/src/routes.ts` exposes only
+      // `vaultNotifications` / `vaultNotificationsEvents`) and carried no
+      // COMPAT tag, so deleting it outright is the documented path rather
+      // than a deprecation window.
 
       // Manifest scope-widening requests (issue #308 A3): a published
       // manifest asking beyond its last consent parks here; the owner's

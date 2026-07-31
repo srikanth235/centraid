@@ -1,10 +1,10 @@
-// governance: allow-repo-hygiene file-size-limit cohesive Spaces switcher sheet (identity list + add/switch/forget + pair entry); decompose in a follow-up (#498)
-// The Spaces switcher — the phone's picker over its device-local (gateway,
-// vault) tuples (lib/spaces). Reached by tapping the identity head in the Space
-// drawer. It is the ONE surface that does add / switch / delete of Spaces:
+// governance: allow-repo-hygiene file-size-limit cohesive Vaults switcher sheet (identity list + add/switch/forget + pair entry); decompose in a follow-up (#498)
+// The Vaults switcher — the phone's picker over its device-local (gateway,
+// vault) tuples (lib/vault-links). Reached by tapping the identity head in the VaultLink
+// drawer. It is the ONE surface that does add / switch / delete of Vaults:
 //
-//   • switch — tap a saved Space; the whole app (app grid, replica, every vault
-//     fetch) re-points at it (phone-link.switchSpace restarts the tunnel when
+//   • switch — tap a saved VaultLink; the whole app (app grid, replica, every vault
+//     fetch) re-points at it (phone-link.switchVaultLink restarts the tunnel when
 //     the gateway changes; same-gateway is just a vault-header + replica re-key).
 //   • add    — a vault the active gateway exposes but the phone hasn't saved yet
 //     (from listVaults) joins with one tap; a whole new desktop is added by
@@ -13,7 +13,7 @@
 //     on the gateway; deleting a vault itself is an admin act on the host (#289).
 //
 // Form: a bottom sheet in the springboard idiom — serif title, per-vault colour
-// accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
+// accents, a prominent active card. Mechanics mirror the VaultLink/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -40,27 +40,27 @@ import { family, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listVaults } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
-import { forgetSpace, switchSpace } from "../../lib/phone-link";
+import { forgetVaultLink, switchVaultLink } from "../../lib/phone-link";
 import {
   addActiveGatewayVault,
-  getActiveSpace,
-  listSpaces,
+  getActiveVaultLink,
+  listVaultLinks,
   noteActiveVaultMeta,
-  subscribeSpaces,
-} from "../../lib/spaces";
-import type { Space } from "../../lib/spaces";
+  subscribeVaultLinks,
+} from "../../lib/vault-links";
+import type { VaultLink } from "../../lib/vault-links";
 
 const DEFAULT_ICON: IconName = "Sparkle";
 const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.
 
-export interface SpacesSwitcherProps {
+export interface VaultsSwitcherProps {
   open: boolean;
   onClose: () => void;
   /** Route to the desktop-pairing flow (Settings owns the QR scanner). */
   onPairDesktop: () => void;
 }
 
-/** A saved Space, or a vault the active gateway offers that isn't saved yet. */
+/** A saved VaultLink, or a vault the active gateway offers that isn't saved yet. */
 type AddableVault = {
   vaultId: string;
   name: string;
@@ -78,42 +78,45 @@ function iconOf(value: string | undefined): IconName {
 // both the subscription and the on-open refresh share one definition and the
 // effects stay plain external-system reads.
 function syncFromRegistry(
-  setSpaces: (next: Space[]) => void,
+  setVaultLinks: (next: VaultLink[]) => void,
   setActiveId: (next: string | undefined) => void
 ): void {
-  setSpaces([...listSpaces()]);
-  setActiveId(getActiveSpace()?.id);
+  setVaultLinks([...listVaultLinks()]);
+  setActiveId(getActiveVaultLink()?.id);
 }
 
-export default function SpacesSwitcher({
+export default function VaultsSwitcher({
   open,
   onClose,
   onPairDesktop,
-}: SpacesSwitcherProps): React.JSX.Element {
+}: VaultsSwitcherProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const slide = useAnimatedValue(SHEET_TRAVEL);
   const fade = useAnimatedValue(0);
 
-  // Local mirrors of the registry, kept live via subscribeSpaces so a switch/add/
+  // Local mirrors of the registry, kept live via subscribeVaultLinks so a switch/add/
   // forget from within this sheet re-renders it immediately.
-  const [spaces, setSpaces] = useState<Space[]>(() => listSpaces());
+  const [vaultLinks, setVaultLinks] = useState<VaultLink[]>(() =>
+    listVaultLinks()
+  );
   const [activeId, setActiveId] = useState<string | undefined>(
-    () => getActiveSpace()?.id
+    () => getActiveVaultLink()?.id
   );
   const [addable, setAddable] = useState<AddableVault[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(
-    () => subscribeSpaces(() => syncFromRegistry(setSpaces, setActiveId)),
+    () =>
+      subscribeVaultLinks(() => syncFromRegistry(setVaultLinks, setActiveId)),
     []
   );
 
   // On open: animate in, and refresh the addable list from the active gateway.
   useEffect(() => {
     if (!open) return;
-    syncFromRegistry(setSpaces, setActiveId);
+    syncFromRegistry(setVaultLinks, setActiveId);
     slide.setValue(SHEET_TRAVEL);
     fade.setValue(0);
     Animated.parallel([
@@ -135,9 +138,9 @@ export default function SpacesSwitcher({
     void listVaults()
       .then((vaults) => {
         if (cancelled || !vaults) return;
-        // Enrich the active Space's cached presentation so its card shows the
+        // Enrich the active VaultLink's cached presentation so its card shows the
         // vault's real name/colour/icon even before the next connect.
-        const active = getActiveSpace();
+        const active = getActiveVaultLink();
         const activeRow =
           active && vaults.find((v) => v.vaultId === active.vaultId);
         if (activeRow) {
@@ -148,7 +151,7 @@ export default function SpacesSwitcher({
           });
         }
         const saved = new Set(
-          listSpaces()
+          listVaultLinks()
             .map((s) => s.vaultId)
             .filter(Boolean)
         );
@@ -164,7 +167,7 @@ export default function SpacesSwitcher({
         );
       })
       .catch(() => {
-        // Offline / no vault plane — saved Spaces still switch; nothing to add.
+        // Offline / no vault plane — saved Vaults still switch; nothing to add.
         if (!cancelled) setAddable([]);
       });
     return () => {
@@ -186,13 +189,13 @@ export default function SpacesSwitcher({
   );
 
   const onSwitch = useCallback(
-    (space: Space): void => {
-      if (space.id === activeId) {
+    (vault: VaultLink): void => {
+      if (vault.id === activeId) {
         onClose();
         return;
       }
       void runExclusive(async () => {
-        await switchSpace(space.id);
+        await switchVaultLink(vault.id);
         onClose();
       });
     },
@@ -215,19 +218,19 @@ export default function SpacesSwitcher({
   );
 
   const onForget = useCallback(
-    (space: Space): void => {
-      const label = space.vaultName || space.desktopName || "this space";
+    (vault: VaultLink): void => {
+      const label = vault.vaultName || vault.desktopName || "this vault";
       Alert.alert(
         "Remove from this phone?",
         `“${label}” will be removed from this iPhone. The vault itself stays on ${
-          space.desktopName || "the desktop"
+          vault.desktopName || "the desktop"
         } — you can add it again by pairing.`,
         [
           { style: "cancel", text: "Cancel" },
           {
             style: "destructive",
             text: "Remove",
-            onPress: () => void runExclusive(() => forgetSpace(space.id)),
+            onPress: () => void runExclusive(() => forgetVaultLink(vault.id)),
           },
         ]
       );
@@ -235,8 +238,8 @@ export default function SpacesSwitcher({
     [runExclusive]
   );
 
-  const active = spaces.find((s) => s.id === activeId);
-  const others = spaces.filter((s) => s.id !== activeId);
+  const active = vaultLinks.find((s) => s.id === activeId);
+  const others = vaultLinks.filter((s) => s.id !== activeId);
 
   return (
     <Modal
@@ -249,7 +252,7 @@ export default function SpacesSwitcher({
         <Animated.View style={[styles.scrim, { opacity: fade }]}>
           <Pressable
             style={StyleSheet.absoluteFill}
-            accessibilityLabel="Close space switcher"
+            accessibilityLabel="Close vault switcher"
             onPress={onClose}
           />
         </Animated.View>
@@ -265,7 +268,7 @@ export default function SpacesSwitcher({
         >
           <Grabber />
           <Text style={styles.eyebrow}>ON THIS IPHONE</Text>
-          <Text style={styles.title}>Spaces</Text>
+          <Text style={styles.title}>Vaults</Text>
 
           <ScrollView
             style={styles.scroll}
@@ -273,25 +276,25 @@ export default function SpacesSwitcher({
             showsVerticalScrollIndicator={false}
           >
             {active ? (
-              <ActiveCard colors={colors} styles={styles} space={active} />
+              <ActiveCard colors={colors} styles={styles} vault={active} />
             ) : (
               <Text style={styles.empty}>
-                No space selected yet. Pair a desktop to connect one.
+                No vault selected yet. Pair a desktop to connect one.
               </Text>
             )}
 
             {others.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>SWITCH TO</Text>
-                {others.map((space) => (
-                  <SpaceRow
-                    key={space.id}
+                {others.map((vault) => (
+                  <VaultLinkRow
+                    key={vault.id}
                     colors={colors}
                     styles={styles}
-                    space={space}
+                    vault={vault}
                     disabled={busy}
-                    onPress={() => onSwitch(space)}
-                    onForget={() => onForget(space)}
+                    onPress={() => onSwitch(vault)}
+                    onForget={() => onForget(vault)}
                   />
                 ))}
               </>
@@ -358,18 +361,18 @@ export default function SpacesSwitcher({
   );
 }
 
-/** The prominent card for the currently-active Space. */
+/** The prominent card for the currently-active VaultLink. */
 function ActiveCard({
   colors,
   styles,
-  space,
+  vault,
 }: {
   colors: ThemeColors;
   styles: ReturnType<typeof makeStyles>;
-  space: Space;
+  vault: VaultLink;
 }): React.JSX.Element {
-  const tint = space.color ?? colors.accent;
-  const resolving = space.vaultId === "";
+  const tint = vault.color ?? colors.accent;
+  const resolving = vault.vaultId === "";
   return (
     <View
       style={[
@@ -379,7 +382,7 @@ function ActiveCard({
     >
       <View style={[styles.emblem, { backgroundColor: tint }]}>
         <Icon
-          name={iconOf(space.icon)}
+          name={iconOf(vault.icon)}
           size={24}
           color={colors.inkInv}
           strokeWidth={1.75}
@@ -387,10 +390,10 @@ function ActiveCard({
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.activeName} numberOfLines={1}>
-          {space.vaultName || space.desktopName || "Your space"}
+          {vault.vaultName || vault.desktopName || "Your vault"}
         </Text>
         <Text style={styles.activeSub} numberOfLines={1}>
-          {resolving ? "Setting up…" : space.desktopName || "This space"}
+          {resolving ? "Setting up…" : vault.desktopName || "This vault"}
         </Text>
       </View>
       <View style={[styles.activePill, { backgroundColor: tint }]}>
@@ -400,35 +403,35 @@ function ActiveCard({
   );
 }
 
-/** A saved Space that isn't active — tap to switch, trailing control to forget. */
-function SpaceRow({
+/** A saved VaultLink that isn't active — tap to switch, trailing control to forget. */
+function VaultLinkRow({
   colors,
   styles,
-  space,
+  vault,
   disabled,
   onPress,
   onForget,
 }: {
   colors: ThemeColors;
   styles: ReturnType<typeof makeStyles>;
-  space: Space;
+  vault: VaultLink;
   disabled: boolean;
   onPress: () => void;
   onForget: () => void;
 }): React.JSX.Element {
-  const tint = space.color ?? colors.accent;
+  const tint = vault.color ?? colors.accent;
   return (
     <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Switch to ${space.vaultName || space.desktopName || "space"}`}
+        accessibilityLabel={`Switch to ${vault.vaultName || vault.desktopName || "vault"}`}
         disabled={disabled}
         onPress={onPress}
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         <View style={[styles.dot, { backgroundColor: tint }]}>
           <Icon
-            name={iconOf(space.icon)}
+            name={iconOf(vault.icon)}
             size={16}
             color={colors.inkInv}
             strokeWidth={1.75}
@@ -436,17 +439,17 @@ function SpaceRow({
         </View>
         <View style={styles.rowMeta}>
           <Text style={styles.rowName} numberOfLines={1}>
-            {space.vaultName || space.desktopName || "Space"}
+            {vault.vaultName || vault.desktopName || "VaultLink"}
           </Text>
           <Text style={styles.rowSub} numberOfLines={1}>
-            {space.desktopName ||
-              (space.vaultId === "" ? "Setting up…" : "Saved")}
+            {vault.desktopName ||
+              (vault.vaultId === "" ? "Setting up…" : "Saved")}
           </Text>
         </View>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Remove ${space.vaultName || space.desktopName || "space"} from this phone`}
+        accessibilityLabel={`Remove ${vault.vaultName || vault.desktopName || "vault"} from this phone`}
         hitSlop={10}
         disabled={disabled}
         onPress={onForget}

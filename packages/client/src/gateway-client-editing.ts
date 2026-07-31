@@ -271,7 +271,7 @@ export async function createApp(input: {
    *  the gateway defaults to Sparkle/violet when omitted. */
   iconKey?: string;
   colorKey?: string;
-  /** The space the new app is created in (issue #599). A creation flow names
+  /** The vault the new app is created in (issue #599). A creation flow names
    *  its target explicitly; omitted falls back to the internal default. */
   scopeId?: string;
 }): Promise<{ id: string; name?: string; kind?: "app" | "automation" }> {
@@ -340,7 +340,7 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
  */
 export async function installTemplate(input: {
   templateId: string;
-  /** The space the app is installed into (issue #599) — Discover's target
+  /** The vault the app is installed into (issue #599) — Discover's target
    *  picker names it; omitted falls back to the internal default. */
   scopeId?: string;
 }): Promise<{

@@ -175,7 +175,7 @@ describe("DevicesCard suite", () => {
 
     // Onboarding run B11: a read-only member was shown both verbs and every
     // click was refused server-side with no feedback at all.
-    it("hides the household verbs from a member who owns no space", async () => {
+    it("hides the household verbs from a member who owns no vault", async () => {
       const el = await mount({
         canAdminister: false,
         loadDevices: vi
@@ -336,7 +336,7 @@ describe("DevicesCard suite", () => {
 
       await click(button(el, "Revoke device"));
       await click(button(el, "Revoke"));
-      // The refusal names the space that would be stranded; the owner is told
+      // The refusal names the vault that would be stranded; the owner is told
       // what recovery costs rather than made to retype a name.
       expect(el.textContent).toContain("last owner device for Personal");
 

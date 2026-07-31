@@ -11,22 +11,23 @@ type OutboxModule = typeof import("../../../gateway-client-outbox.js");
 type PushModule = typeof import("../../../gateway-client-push.js");
 type VaultModule = typeof import("../../../gateway-client-vault.js");
 
-const getInbox = vi.fn<OutboxModule["getInbox"]>();
+const getNotifications = vi.fn<OutboxModule["getNotifications"]>();
 const listOutboxGrants = vi.fn<OutboxModule["listOutboxGrants"]>();
 const getReview = vi.fn<OutboxModule["getReview"]>();
-const subscribeInboxChanges = vi.fn<OutboxModule["subscribeInboxChanges"]>();
+const subscribeNotificationsChanges =
+  vi.fn<OutboxModule["subscribeNotificationsChanges"]>();
 const decideOutboxItem =
   vi.fn<(input: unknown) => ReturnType<OutboxModule["decideOutboxItem"]>>();
 const enableWebPushWake = vi.fn<PushModule["enableWebPushWake"]>();
-const syncWebInboxNotifications =
-  vi.fn<PushModule["syncWebInboxNotifications"]>();
+const syncWebNotifications = vi.fn<PushModule["syncWebNotifications"]>();
 vi.mock(import("../../../gateway-client-outbox.js"), () => ({
-  getInbox: (includeArchived?: boolean) => getInbox(includeArchived),
+  getNotifications: (includeArchived?: boolean) =>
+    getNotifications(includeArchived),
   listOutboxGrants: () => listOutboxGrants(),
   getReview: () => getReview(),
-  subscribeInboxChanges: (onChange: () => void, signal?: AbortSignal) =>
-    subscribeInboxChanges(onChange, signal),
-  updateInboxNotice: vi.fn<OutboxModule["updateInboxNotice"]>(),
+  subscribeNotificationsChanges: (onChange: () => void, signal?: AbortSignal) =>
+    subscribeNotificationsChanges(onChange, signal),
+  updateNotice: vi.fn<OutboxModule["updateNotice"]>(),
   decideOutboxItem: (input: unknown) => decideOutboxItem(input),
   decideScopeRequest: vi.fn<OutboxModule["decideScopeRequest"]>(),
   revokeOutboxGrant: vi.fn<OutboxModule["revokeOutboxGrant"]>(),
@@ -37,7 +38,7 @@ vi.mock(import("../../../gateway-client-vault.js"), () => ({
 vi.mock(import("../../../gateway-client-push.js"), () => ({
   enableWebPushWake: (requestPermission: boolean) =>
     enableWebPushWake(requestPermission),
-  syncWebInboxNotifications: () => syncWebInboxNotifications(),
+  syncWebNotifications: () => syncWebNotifications(),
 }));
 
 let ApprovalsRoute: typeof TypeImport_1lvx9zk.default;
@@ -66,7 +67,7 @@ describe("ApprovalsRoute", () => {
   beforeEach(async () => {
     ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
     ({ ShellActionsProvider } = await import("../actions.js"));
-    getInbox.mockReset().mockResolvedValue({
+    getNotifications.mockReset().mockResolvedValue({
       decisions: {
         outbox: [],
         needsAuth: [],
@@ -77,12 +78,12 @@ describe("ApprovalsRoute", () => {
       notices: [],
       unreadNoticeCount: 0,
     });
-    subscribeInboxChanges.mockReset().mockResolvedValue(undefined);
+    subscribeNotificationsChanges.mockReset().mockResolvedValue(undefined);
     listOutboxGrants.mockReset().mockResolvedValue([]);
     getReview.mockReset().mockResolvedValue([]);
     decideOutboxItem.mockReset();
     enableWebPushWake.mockReset().mockResolvedValue(false);
-    syncWebInboxNotifications.mockReset().mockResolvedValue(undefined);
+    syncWebNotifications.mockReset().mockResolvedValue(undefined);
     confirm.mockClear().mockResolvedValue(true);
     showToast.mockClear();
     navigate.mockClear();
@@ -110,20 +111,20 @@ describe("ApprovalsRoute", () => {
   });
 
   describe("ApprovalsRoute", () => {
-    it("shows a loading state, then the empty state once the blocking inbox resolves empty", async () => {
+    it("shows a loading state, then the empty state once the blocking notifications resolves empty", async () => {
       const el = await render();
       expect(el.textContent).toContain("Nothing waiting on you.");
       expect(enableWebPushWake).toHaveBeenCalledWith(true);
     });
 
     it("surfaces a fetch error", async () => {
-      getInbox.mockRejectedValue(new Error("offline"));
+      getNotifications.mockRejectedValue(new Error("offline"));
       const el = await render();
       expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
     });
 
     it("opens Connectors from a needs-auth decision", async () => {
-      getInbox.mockResolvedValue({
+      getNotifications.mockResolvedValue({
         decisions: {
           outbox: [],
           needsAuth: [
@@ -151,8 +152,8 @@ describe("ApprovalsRoute", () => {
       expect(navigate).toHaveBeenCalledWith({ kind: "connectors" });
     });
 
-    it("approves an outbox item and reloads the inbox", async () => {
-      getInbox.mockResolvedValueOnce({
+    it("approves an outbox item and reloads the notifications", async () => {
+      getNotifications.mockResolvedValueOnce({
         decisions: {
           outbox: [
             {
@@ -186,7 +187,7 @@ describe("ApprovalsRoute", () => {
         notices: [],
         unreadNoticeCount: 0,
       });
-      getInbox.mockResolvedValueOnce({
+      getNotifications.mockResolvedValueOnce({
         decisions: {
           outbox: [],
           needsAuth: [],
@@ -220,11 +221,11 @@ describe("ApprovalsRoute", () => {
         decision: "approve",
         alwaysAllow: false,
       });
-      expect(getInbox).toHaveBeenCalledTimes(2);
+      expect(getNotifications).toHaveBeenCalledTimes(2);
     });
 
     it("edits an editable outbox item and approves with the revised artifact", async () => {
-      getInbox.mockResolvedValueOnce({
+      getNotifications.mockResolvedValueOnce({
         decisions: {
           outbox: [
             {
@@ -258,7 +259,7 @@ describe("ApprovalsRoute", () => {
         notices: [],
         unreadNoticeCount: 0,
       });
-      getInbox.mockResolvedValueOnce({
+      getNotifications.mockResolvedValueOnce({
         decisions: {
           outbox: [],
           needsAuth: [],
@@ -316,12 +317,12 @@ describe("ApprovalsRoute", () => {
           body: "See you at 6.",
         },
       });
-      expect(getInbox).toHaveBeenCalledTimes(2);
+      expect(getNotifications).toHaveBeenCalledTimes(2);
     });
 
     it("opens each notice at its exact action surface", async () => {
       const at = "2026-07-30T10:00:00.000Z";
-      getInbox.mockResolvedValue({
+      getNotifications.mockResolvedValue({
         decisions: {
           // The outbox notice below points at this still-open item, so its
           // deep link has somewhere real to land (#647 D10).
@@ -422,18 +423,24 @@ describe("ApprovalsRoute", () => {
         act(() => button?.click());
       };
 
+      // Info-severity notices sit under their source chip, not "Needs me"
+      // (#665) — the deep links still work from there.
+      clickHeadline("Automations");
       clickHeadline("Digest finished");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "automation-view",
         automationId: "daily/digest",
       });
+      clickHeadline("Needs me");
       clickHeadline("Gateway degraded");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "gateway",
         tab: "alerts",
       });
+      clickHeadline("Apps");
       clickHeadline("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
+      clickHeadline("Needs me");
       // An outbox notice must NOT self-navigate to the page we are already
       // on — it puts the staged decision it names in front of the owner.
       const navigationsBefore = navigate.mock.calls.length;
@@ -468,9 +475,9 @@ describe("ApprovalsRoute", () => {
         note: null,
         canEdit: true,
       });
-      const inboxWith = (
+      const notificationsWith = (
         subject: string
-      ): Awaited<ReturnType<OutboxModule["getInbox"]>> =>
+      ): Awaited<ReturnType<OutboxModule["getNotifications"]>> =>
         ({
           decisions: {
             outbox: [item(subject)],
@@ -481,11 +488,11 @@ describe("ApprovalsRoute", () => {
           },
           notices: [],
           unreadNoticeCount: 0,
-        }) as unknown as Awaited<ReturnType<OutboxModule["getInbox"]>>;
-      getInbox.mockResolvedValue(inboxWith("Hi"));
+        }) as unknown as Awaited<ReturnType<OutboxModule["getNotifications"]>>;
+      getNotifications.mockResolvedValue(notificationsWith("Hi"));
       // Capture the doorbell the route hands to the SSE subscription.
       let ring = (): void => undefined;
-      subscribeInboxChanges.mockImplementation(async (onChange) => {
+      subscribeNotificationsChanges.mockImplementation(async (onChange) => {
         ring = onChange;
       });
 
@@ -509,9 +516,9 @@ describe("ApprovalsRoute", () => {
         ring();
         await Promise.resolve();
       });
-      expect(el.textContent).not.toContain("Loading Inbox…");
+      expect(el.textContent).not.toContain("Loading Notifications…");
       expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
-      expect(getInbox).toHaveBeenCalledTimes(2);
+      expect(getNotifications).toHaveBeenCalledTimes(2);
     });
   });
 });

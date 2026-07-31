@@ -4,7 +4,7 @@ import { cx } from "../../ui/cx.js";
 import Icon from "../../ui/Icon.js";
 import { canCommitConnectFlow, vaultCapability } from "./connectFlow-core.js";
 import type { ConnectFlowEvent, ConnectFlowState } from "./connectFlow-core.js";
-import { PROFILE_COLORS } from "./SpaceModal.js";
+import { PROFILE_COLORS } from "./VaultModal.js";
 
 import a11y from "../../styles/a11y.module.css";
 import controlsCss from "../../styles/controls.module.css";
@@ -32,11 +32,11 @@ export function VaultStep({
           <span className={styles.spinner} data-spin="true" data-inline="true">
             <Icon name="Loader" size={16} strokeWidth={2} />
           </span>
-          Loading spaces…
+          Loading vaults…
         </div>
       ) : state.vaultsError ? (
         // Honest unreachable (issue #603 W4). A failed read is NOT an empty
-        // registry: offering "create a space" here would commit against a
+        // registry: offering "create a vault" here would commit against a
         // gateway we could not even talk to.
         <div className={styles.errorBanner} role="alert">
           {state.vaultsError}
@@ -48,12 +48,12 @@ export function VaultStep({
           </span>
           <span className={styles.lockedName}>{cap.locked.vaultName}</span>
           <p className={styles.hint}>
-            Fixed by the pairing ticket — connecting to a different space on
+            Fixed by the pairing ticket — connecting to a different vault on
             this gateway needs a new ticket.
           </p>
         </div>
       ) : (
-        <div className={styles.vaultList} role="radiogroup" aria-label="Space">
+        <div className={styles.vaultList} role="radiogroup" aria-label="Vault">
           {cap.options.map((v) => (
             <label
               key={v.vaultId}
@@ -114,13 +114,13 @@ export function VaultStep({
                 >
                   <Icon name="Plus" size={12} strokeWidth={2.4} />
                 </span>
-                <span>Create new space</span>
+                <span>Create new vault</span>
               </label>
               {state.vaultChoice?.kind === "create" ? (
                 <input
                   className={styles.input}
                   type="text"
-                  placeholder="Space name"
+                  placeholder="Vault name"
                   autoFocus
                   value={state.newVaultName}
                   onChange={(e) =>
@@ -135,15 +135,15 @@ export function VaultStep({
             </div>
           ) : cap.options.length > 0 ? (
             <p className={styles.hint}>
-              Creating a new space here needs the gateway host's CLI.
+              Creating a new vault here needs the gateway host's CLI.
             </p>
           ) : (
             // Nothing to pick, nothing to create (issue #603 D10) — an
-            // enrollment that grants no space used to render as a blank list
+            // enrollment that grants no vault used to render as a blank list
             // with "Continue" still live. `canCommitConnectFlow` now says no;
             // this says why.
             <p className={styles.hint}>
-              This gateway shared no space with this device — ask its host for a
+              This gateway shared no vault with this device — ask its host for a
               new pairing ticket.
             </p>
           )}

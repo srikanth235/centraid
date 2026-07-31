@@ -15,28 +15,28 @@ import HouseholdScreen from "../../screens/HouseholdScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { useMemberScopes } from "../useMemberScopes.js";
-import SpaceModal, {
-  DEFAULT_SPACE_ICON,
-  randomSpaceColor,
-} from "./SpaceModal.js";
-import { createSpace } from "./spaceModals.js";
+import VaultModal, {
+  DEFAULT_VAULT_ICON,
+  randomVaultColor,
+} from "./VaultModal.js";
+import { addVault } from "./vaultModals.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
 // React-owned Household route (issue #599, Decision 14). The roster half is the
-// device/member surface that used to hang off the Gateway page; the spaces half
-// reads the member's scope registry, which is also what every "which space?"
+// device/member surface that used to hang off the Gateway page; the vaults half
+// reads the member's scope registry, which is also what every "which vault?"
 // picker resolves against — one source, so the page and the pickers can never
 // disagree about what this member can reach.
 export default function HouseholdRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const scopes = useMemberScopes();
   const [now, setNow] = useState(() => Date.now());
-  // "New space" moved here with the rest of the space vocabulary — it used to
-  // hang off a gateway header row in the retired switcher. `createSpace`
+  // "New vault" moved here with the rest of the vault vocabulary — it used to
+  // hang off a gateway header row in the retired switcher. `addVault`
   // operates on the gateway this client already addresses, which is the one
   // Household is describing, so there is no gateway to pick first any more.
-  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
-  const canCreateSpace = typeof window.CentraidApi.createVault === "function";
+  const [newVaultOpen, setNewVaultOpen] = useState(false);
+  const canCreateVault = typeof window.CentraidApi.createVault === "function";
 
   // 1s ticker for the devices card's humanized ages, suspended while the tab is
   // hidden (issue #528 Phase D wakeup hygiene) — same discipline as Gateway.
@@ -44,20 +44,20 @@ export default function HouseholdRoute(): JSX.Element {
 
   return (
     <PageScroll>
-      {newSpaceOpen ? (
-        <SpaceModal
+      {newVaultOpen ? (
+        <VaultModal
           mode="add"
-          initial={{ color: randomSpaceColor(), icon: DEFAULT_SPACE_ICON }}
-          onCancel={() => setNewSpaceOpen(false)}
+          initial={{ color: randomVaultColor(), icon: DEFAULT_VAULT_ICON }}
+          onCancel={() => setNewVaultOpen(false)}
           onCommit={(data) => {
-            setNewSpaceOpen(false);
+            setNewVaultOpen(false);
             void (async () => {
               try {
-                await createSpace(data);
-                showToast(`Space created · ${data.name}`);
+                await addVault(data);
+                showToast(`Vault created · ${data.name}`);
               } catch (error) {
                 showToast(
-                  `Couldn't create space: ${error instanceof Error ? error.message : String(error)}`
+                  `Couldn't create vault: ${error instanceof Error ? error.message : String(error)}`
                 );
               }
             })();
@@ -66,13 +66,13 @@ export default function HouseholdRoute(): JSX.Element {
       ) : null}
       <HouseholdScreen
         now={now}
-        spaces={scopes.scopes}
+        vaults={scopes.scopes}
         defaultScopeId={scopes.defaultScopeId}
-        spacesLoading={scopes.loading}
-        {...(canCreateSpace ? { onNewSpace: () => setNewSpaceOpen(true) } : {})}
+        vaultsLoading={scopes.loading}
+        {...(canCreateVault ? { onNewVault: () => setNewVaultOpen(true) } : {})}
         onOpenStorage={() => navigate({ kind: "storage" })}
-        onOpenSpaceSettings={() =>
-          navigate({ kind: "settings", page: "space" })
+        onOpenVaultSettings={() =>
+          navigate({ kind: "settings", page: "vault" })
         }
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
 import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
-import ConnectFlow from "../shell/routes/ConnectFlow.js";
 import { connectFreshLocalGateway } from "../shell/routes/connectFlowIO.js";
+import ConnectTicketPanel, {
+  CONNECT_TICKET_INTRO,
+} from "../shell/routes/ConnectTicketPanel.js";
 import { isNameSet, loadSelfProfile } from "../shell/routes/profileData.js";
 import { ErrorNote } from "./OnboardingErrorNote.js";
 import {
@@ -11,6 +13,7 @@ import {
   OnboardingIdentityStep,
 } from "./OnboardingIdentityStep.js";
 import { OnboardingImportStep } from "./OnboardingImportStep.js";
+import { useKeychainPromptExpected } from "./useKeychainPrompt.js";
 
 import styles from "./OnboardingScreen.module.css";
 
@@ -90,33 +93,17 @@ export default function OnboardingScreen({
   const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(
     null
   );
-  const [keychainNote, setKeychainNote] = useState(false);
+  // Warn before first-write keychain prompts (dev/unsigned builds, #603). The
+  // ticket step's own copy comes from ConnectTicketPanel, which probes the
+  // same way; this instance covers the steps the panel never renders (the
+  // fresh path's `connecting` and the identity step).
+  const keychainNote = useKeychainPromptExpected();
   const [wantsImport, setWantsImport] = useState(false);
   const [stagedCount, setStagedCount] = useState(0);
   // Keep fresh-path dialing stable across new `afterConnect` closures.
   const afterConnectRef = useRef<(result: ConnectFlowResult) => void>(
     () => undefined
   );
-
-  // Warn before first-write keychain prompts (dev/unsigned builds, #603).
-  // The bridge method is desktop-only; a missing method means no prompt.
-  useEffect(() => {
-    const probe = window.CentraidApi.keychainPromptExpected;
-    if (!probe) return;
-    let cancelled = false;
-    probe()
-      .then((expected) => {
-        if (!cancelled) setKeychainNote(expected);
-      })
-      .catch((caughtError: unknown) => {
-        // A broken probe must not block onboarding, but losing the note means
-        // the OS dialog arrives unannounced — leave a trace for debugging.
-        console.error("keychainPromptExpected probe failed", caughtError);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const showError = (summary: string, detail?: unknown): void => {
     setError(summary);
@@ -284,21 +271,22 @@ export default function OnboardingScreen({
           </>
         ) : step === "connect" ? (
           <>
+            {/* Vault-first: the ticket joins a VAULT, and the gateway hosting
+                it never needs a name here. The sentence is shared with the
+                switcher's "Add vault" modal so both surfaces explain a ticket
+                identically. */}
             <h1 className={styles.title}>
-              Connect your <em>gateway</em>.
+              Connect your <em>vault</em>.
             </h1>
-            <p className={styles.sub}>
-              Paste or scan the pair ticket from the gateway you already run. It
-              decides which space you land in.
-            </p>
+            <p className={styles.sub}>{CONNECT_TICKET_INTRO}</p>
           </>
         ) : step === "connecting" ? (
           <>
             {/* One word for one moment (UX-8). This step used to open as
                 "Setting up your vault." and fail as "Couldn't start your
                 gateway." — two terms a first-timer has met neither of. The
-                product's own name is the thing they DO know, and "spaces" is
-                the owner-facing word for vaults (docs/glossary.md), so the
+                product's own name is the thing they DO know, and "vault" is
+                the owner-facing word (docs/glossary.md), so the
                 title, the sub, and the working line all say the same thing. */}
             <h1 className={styles.title}>
               {error ? (
@@ -314,7 +302,7 @@ export default function OnboardingScreen({
             <p className={styles.sub}>
               {error
                 ? "Your data is safe — nothing was created. Everything here runs on this Mac, so retrying is worth trying before anything else."
-                : "Starting Centraid on this Mac and preparing your spaces. This takes a moment the first time."}
+                : "Starting Centraid on this Mac and preparing your vaults. This takes a moment the first time."}
             </p>
           </>
         ) : (
@@ -345,19 +333,11 @@ export default function OnboardingScreen({
           />
         ) : step === "connect" ? (
           <div className={styles.connectPanel} data-theme="dark">
-            <ConnectFlow
+            <ConnectTicketPanel
               context="onboarding"
-              methods={["gateway"]}
-              initialMethod="gateway"
               {...(onBack ? { onCancel: onBack } : {})}
               onDone={afterConnect}
             />
-            {keychainNote ? (
-              <p className={styles.keychainNote}>
-                Connecting stores this device&rsquo;s keys in your system
-                keychain — your OS may ask once to allow it.
-              </p>
-            ) : null}
             {error ? <ErrorNote summary={error} detail={errorDetail} /> : null}
           </div>
         ) : step === "connecting" ? (

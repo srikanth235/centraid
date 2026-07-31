@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { relativeTime } from "../format.js";
+import { gatewayStatusCopy, railStatus } from "../shell/gatewayRegistry.js";
+import type { GatewayRow } from "../shell/gatewayRegistry.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
 import type {
@@ -85,12 +87,37 @@ export interface GatewayHealthDTO {
   metrics?: HealthMetricsDTO;
 }
 
+/**
+ * Host plumbing, the one place it is allowed to be visible (issue #665).
+ *
+ * Everywhere else the owner manages vaults; here the machine serving them is
+ * the subject, so "host" and "connection" are the right words and the three
+ * rare, deliberate acts against one — prove it works, relabel it, stop talking
+ * to it — belong together. Omitted by hosts that expose no registry (web,
+ * stubbed test bridges): the whole section then simply isn't rendered.
+ */
+export interface DiagnosticsConnectionsProps {
+  /** Refresh the registry: resolves with the cached rows to paint now and
+   *  calls `onUpdate` again for each probe that lands. */
+  loadConnections: (
+    onUpdate: (rows: GatewayRow[]) => void
+  ) => Promise<GatewayRow[]>;
+  /** Bumped by the owner of the rename/remove modals once one commits, so the
+   *  list re-reads instead of showing the label it had a moment ago. */
+  refreshKey?: number;
+  onTest: (gatewayId: string, label: string) => void;
+  onRename: (gatewayId: string, label: string) => void;
+  onRemove: (gatewayId: string, label: string) => void;
+}
+
 export interface SettingsDiagnosticsBridgeProps {
   loadHealth: () => Promise<GatewayHealthDTO>;
   /** Jump into the Logs tab, focused on this component's lines — omitted
    *  when the caller has nowhere to send the click (only wired from the
    *  Gateway page, where Logs is a sibling tab). */
   onJumpToLogs?: (component: string) => void;
+  /** Host plumbing. Absent on hosts with no gateway registry. */
+  connections?: DiagnosticsConnectionsProps;
 }
 
 const STATUS_LABEL: Record<HealthStatus, string> = {
@@ -272,9 +299,120 @@ function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
   );
 }
 
+/** Reachability in the health dot's vocabulary — a still-probing host has no
+ *  verdict yet, so it gets the dot's neutral default rather than a colour. */
+function connectionHealth(row: GatewayRow): HealthStatus | undefined {
+  const rail = railStatus(row);
+  if (rail === "ready") return "ok";
+  if (rail === "error") return "error";
+  return undefined;
+}
+
+/** What one host is currently serving, in the fewest words that still say it. */
+function connectionSummary(row: GatewayRow): string {
+  if (row.status !== "ready") return gatewayStatusCopy(row);
+  const names = (row.vaults ?? []).map((vault) => vault.name);
+  if (names.length === 0) return "No vaults";
+  const count = `${names.length} ${names.length === 1 ? "vault" : "vaults"}`;
+  return `${count} · ${names.join(", ")}`;
+}
+
+function ConnectionsPanel({
+  loadConnections,
+  refreshKey,
+  onTest,
+  onRename,
+  onRemove,
+}: DiagnosticsConnectionsProps): JSX.Element {
+  const [rows, setRows] = useState<GatewayRow[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const apply = (next: GatewayRow[]): void => {
+      if (alive) setRows(next);
+    };
+    void loadConnections(apply)
+      .then(apply)
+      .catch(() => {
+        if (alive) setRows([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [loadConnections, refreshKey]);
+
+  return (
+    <>
+      <div className={styles.eventsHead}>Connections</div>
+      <div className={styles.panel} data-testid="diag-connections">
+        {rows === null ? (
+          <div className={styles.empty}>Checking connections…</div>
+        ) : rows.length === 0 ? (
+          <div className={styles.empty}>
+            No hosts are registered on this device.
+          </div>
+        ) : (
+          rows.map((row) => (
+            <div
+              className={styles.connRow}
+              key={row.gatewayId}
+              data-testid="diag-connection"
+              data-gateway-id={row.gatewayId}
+            >
+              <span
+                className={styles.dot}
+                data-health={connectionHealth(row)}
+              />
+              <div className={styles.rowMeta}>
+                <div className={styles.rowName}>
+                  {row.gatewayLabel}
+                  <span className={styles.connBadge}>{row.transportBadge}</span>
+                  {row.isActive ? (
+                    <span className={styles.connBadge}>Active</span>
+                  ) : null}
+                </div>
+                <div className={styles.rowSub}>{connectionSummary(row)}</div>
+              </div>
+              <div className={styles.connActions}>
+                <button
+                  type="button"
+                  className={controlsCss.chip}
+                  onClick={() => onTest(row.gatewayId, row.gatewayLabel)}
+                >
+                  <Icon name="Wifi" size={12} />
+                  Test connection
+                </button>
+                <button
+                  type="button"
+                  className={controlsCss.chip}
+                  onClick={() => onRename(row.gatewayId, row.gatewayLabel)}
+                >
+                  <Icon name="Pencil" size={12} />
+                  Rename
+                </button>
+                {row.canRemove ? (
+                  <button
+                    type="button"
+                    className={cx(controlsCss.chip, controlsCss.chipDanger)}
+                    onClick={() => onRemove(row.gatewayId, row.gatewayLabel)}
+                  >
+                    <Icon name="Trash" size={12} />
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function SettingsDiagnosticsScreen({
   loadHealth,
   onJumpToLogs,
+  connections,
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -356,6 +494,8 @@ export default function SettingsDiagnosticsScreen({
           ))
         )}
       </div>
+
+      {connections ? <ConnectionsPanel {...connections} /> : null}
 
       <div className={styles.eventsHead}>Recent warnings &amp; errors</div>
       <div className={styles.panel}>

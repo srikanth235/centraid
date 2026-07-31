@@ -288,7 +288,7 @@ export function outcomeMessage(
     );
   }
   if (outcome?.status === "parked") {
-    return "Waiting for your approval — open Inbox to review it.";
+    return "Waiting for your approval — open Notifications to review it.";
   }
   if (outcome?.status === "failed") {
     const detail =
@@ -432,7 +432,7 @@ export function localMonthKey(dateish: string | number | Date): string {
   return localDayKey(dateish).slice(0, 7);
 }
 
-/** "5m" / "3h" / "2d" / "Mar 4" — the inbox-style relative timestamp. */
+/** "5m" / "3h" / "2d" / "Mar 4" — the notifications-style relative timestamp. */
 export function relTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
@@ -1241,7 +1241,7 @@ export function wireThemeToggle(
 //    - POST  <app>/_turn                        — the app's declared-handler
 //      agent (SSE stream). Writes the agent makes flow through the same
 //      dispatcher + vault consent gates as every other caller.
-//      A parked write is acknowledged here and reviewed only in Inbox, the
+//      A parked write is acknowledged here and reviewed only in Notifications, the
 //      single owner decision surface.
 //    - GET   /centraid/_vault/status + /apps    — the context chip reflects
 //      the app's true grant state instead of a hardcoded label.
@@ -2256,7 +2256,7 @@ export function wireThemeToggle(
    * Default conversation driver: POST the question to the app's `_turn`
    * agent and translate its SSE stream into panel bubbles. Writes the agent
    * makes flow through the dispatcher + vault consent gates like any other
-   * caller. A write that PARKS appears in the canonical Inbox; this panel
+   * caller. A write that PARKS appears in the canonical Notifications; this panel
    * renders the conversation only and never forks a second decision surface.
    *
    * `_turn` keys a turn on a real conversation-history row and 404s on any
@@ -2353,7 +2353,7 @@ export function wireThemeToggle(
             return;
           case "tool.result": {
             // The conversation acknowledges a parked outcome, but the owner
-            // decides it only in Inbox. Keeping this content-free of decision
+            // decides it only in Notifications. Keeping this content-free of decision
             // controls prevents a second consent surface from drifting.
             // Producers emit the `InvokeOutcome` DIRECTLY as `result`
             // (`runVaultInvokeTool` returns `{ok, result: <InvokeOutcome>}`
@@ -2362,7 +2362,7 @@ export function wireThemeToggle(
             // `output.status` exactly like the pre-#647 `outcomeOf` did.
             const o = outcomeOf(ev.result);
             if (o && o.status === "parked") {
-              say("That decision is waiting in Inbox.");
+              say("That decision is waiting in Notifications.");
             } else if (o && o.status === "denied") {
               say(
                 "The vault denied that write" +

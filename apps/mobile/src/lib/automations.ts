@@ -1,4 +1,4 @@
-// Mobile automations client (issue #263 family). The space's automations are
+// Mobile automations client (issue #263 family). The vault's automations are
 // long-lived agent conversations that fire on a trigger; this module lists
 // them, fires one now, and toggles a row's enabled flag — all over the same
 // gateway base (paired tunnel or manual dev URL) the rest of the app uses.
@@ -11,9 +11,9 @@
 
 // Every call here goes out with `apiHeaders()` — auth *and* `x-centraid-vault`
 // (issue #289 addressing). Sending only the bearer let the gateway fall back to
-// its implied default vault, so an Inbox notice raised by an automation in a
-// non-active Space opened the wrong vault's thread and "Run now" fired there.
-// The Inbox itself is fetched with `apiHeaders()`, so the active Space is the
+// its implied default vault, so a Notifications notice raised by an automation in a
+// non-active Vault opened the wrong vault's thread and "Run now" fired there.
+// Notifications itself is fetched with `apiHeaders()`, so the active Vault is the
 // only vault whose automations mobile can be looking at; these calls must
 // follow the same axis.
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
@@ -183,7 +183,7 @@ function toRow(wire: WireRow): AutomationRow {
   };
 }
 
-/** Every automation the space knows, mapped to the lean card shape. */
+/** Every automation the vault knows, mapped to the lean card shape. */
 export async function listAutomations(): Promise<AutomationRow[]> {
   const base = await requireGatewayBase();
   const body = await fetchJson<ListResult>(`${base}/centraid/_automations`, {

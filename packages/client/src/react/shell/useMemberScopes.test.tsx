@@ -66,7 +66,7 @@ describe("useMemberScopes suite", () => {
   }
 
   describe("useMemberScopes", () => {
-    it("reads the member scope plane, keeping roles and own space first", async () => {
+    it("reads the member scope plane, keeping roles and own vault first", async () => {
       listAppScopes.mockResolvedValue([
         { vaultId: "a", label: "Mine", role: "admin", color: "#4E68DD" },
         { vaultId: "b", label: "Family", role: "read" },

@@ -210,7 +210,7 @@ describe("Sidebar suite", () => {
       expect(household.disabled).toBe(true);
     });
 
-    it("labels a conversation row with its space only when one is recorded (#599)", () => {
+    it("labels a conversation row with its vault only when one is recorded (#599)", () => {
       const el = render(
         <Sidebar
           {...base}

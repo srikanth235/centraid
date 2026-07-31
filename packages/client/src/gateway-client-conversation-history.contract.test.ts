@@ -1,6 +1,6 @@
 // Client↔gateway seam laws for chat history (#420, #599 Decision 14) — the
-// module had no test file (#656 Layer 1B). The load-bearing law is space
-// pinning: a conversation row lives in exactly ONE space, so once its space is
+// module had no test file (#656 Layer 1B). The load-bearing law is vault
+// pinning: a conversation row lives in exactly ONE vault, so once its vault is
 // known the client must NAME it on the wire rather than let the shell's ambient
 // default-scope pointer decide. Routes are single-sourced from
 // `@centraid/blueprints/kit/conversation-client.js`, so these tests assert
@@ -46,7 +46,7 @@ describe("conversation history seam", () => {
     ]);
   });
 
-  it("law: a named scope pins the request to that space, overriding the ambient pointer", async () => {
+  it("law: a named scope pins the request to that vault, overriding the ambient pointer", async () => {
     await history.createConversation("daily", "Groceries", "vault-shared");
 
     const request = sent(`POST ${SESSIONS}`);

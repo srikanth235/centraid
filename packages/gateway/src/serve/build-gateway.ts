@@ -240,17 +240,17 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
-import {
-  createInboxDecisionWakeTracker,
-  inboxDecisionKeys,
-  InboxEventBus,
-} from "./inbox-events.js";
+import { LocalUsageScanner } from "./local-usage.js";
 import {
   humanizeAutomationRef,
   noticeGist,
   shouldWriteAutomationNotice,
-} from "./inbox-notices.js";
-import { LocalUsageScanner } from "./local-usage.js";
+} from "./notices.js";
+import {
+  createNotificationsDecisionWakeTracker,
+  notificationsDecisionKeys,
+  NotificationsEventBus,
+} from "./notifications-events.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
 import { PowerContextMonitor } from "./power-context.js";
@@ -410,13 +410,13 @@ export interface BuildGatewayOptions {
    */
   backup?: BackupConfig;
   /**
-   * Coalescing window for the Inbox doorbell (#647). Every journalled write
-   * commit could otherwise recompute the whole Inbox projection and ring SSE
+   * Coalescing window for the Notifications doorbell (#647). Every journalled write
+   * commit could otherwise recompute the whole Notifications projection and ring SSE
    * to every subscriber; a bulk connector sync would pay that per batch. The
    * first commit after idle fires promptly, the rest of the burst collapses
    * into one trailing recomputation. Tests shorten it; hosts leave it alone.
    */
-  inboxDoorbellWindowMs?: number;
+  notificationsDoorbellWindowMs?: number;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the turn-now route. */
@@ -985,19 +985,20 @@ export async function buildGateway(
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void = () => {};
-  const inboxEvents = new InboxEventBus();
-  const inboxDecisionWake = createInboxDecisionWakeTracker();
-  const inboxDoorbellWindowMs = options.inboxDoorbellWindowMs ?? 250;
-  const inboxDoorbellWindows = new Map<
+  const notificationsEvents = new NotificationsEventBus();
+  const notificationsDecisionWake = createNotificationsDecisionWakeTracker();
+  const notificationsDoorbellWindowMs =
+    options.notificationsDoorbellWindowMs ?? 250;
+  const notificationsDoorbellWindows = new Map<
     string,
     { timer: NodeJS.Timeout; pending: boolean }
   >();
   // Restore quarantine can create a fresh decision while the registry mounts,
   // before the relay exists. Hold those content-free wakes until the relay is
   // constructed instead of dropping the boot-time doorbell.
-  const pendingInboxWakes = new Set<string>();
-  let requestInboxWake: (vaultId: string) => void = (vaultId) => {
-    pendingInboxWakes.add(vaultId);
+  const pendingNotificationsWakes = new Set<string>();
+  let requestNotificationsWake: (vaultId: string) => void = (vaultId) => {
+    pendingNotificationsWakes.add(vaultId);
   };
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
@@ -1032,9 +1033,9 @@ export async function buildGateway(
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
-    onInboxChanged: (vaultId, wake) => {
-      inboxEvents.publish(vaultId, wake);
-      if (wake) requestInboxWake(vaultId);
+    onNotificationsChanged: (vaultId, wake) => {
+      notificationsEvents.publish(vaultId, wake);
+      if (wake) requestNotificationsWake(vaultId);
     },
     // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
@@ -2021,13 +2022,13 @@ export async function buildGateway(
       error?: string
     ): void => {
       // Skips are silent (#647 D6 quiet-by-default). A paused or needs-auth
-      // connection is owner-chosen state, already carried by its own Inbox
+      // connection is owner-chosen state, already carried by its own Notifications
       // decision; minting a high-severity notice per cron tick would reset
       // read state and wake devices forever. A skip also never becomes the
       // stored "failure" a later success would announce a recovery from.
       if (outcome === "skipped") return;
       const plane = vaultRegistry.current();
-      const prior = plane.inbox.getBySource("automation", automationRef);
+      const prior = plane.notices.getBySource("automation", automationRef);
       const previousOutcome =
         prior?.detail.outcome === "success" ||
         prior?.detail.outcome === "failure"
@@ -2046,7 +2047,7 @@ export async function buildGateway(
       const name = noticeContext?.name ?? humanizeAutomationRef(automationRef);
       // D4: the headline says WHICH failure, not just that one happened.
       const gist = outcome === "failure" ? noticeGist(error) : undefined;
-      plane.inbox.put({
+      plane.notices.put({
         kind: "automation",
         sourceRef: automationRef,
         headline:
@@ -3351,44 +3352,49 @@ export async function buildGateway(
     return created;
   };
 
-  // The Inbox doorbell is coalesced per vault (#647 review). Recomputing the
+  // The Notifications doorbell is coalesced per vault (#647 review). Recomputing the
   // projection costs a listOutbox scan plus three queries, and each SSE ring
-  // makes every subscribed client refetch the whole Inbox — a bulk connector
+  // makes every subscribed client refetch the whole Notifications — a bulk connector
   // sync commits far too often to pay that per commit. A burst therefore
   // collapses to one recomputation per window instead of one per commit;
   // the leading edge still fires immediately so a lone write feels instant.
-  const fireInboxDoorbell = (vaultId: string): void => {
-    inboxEvents.publish(vaultId);
-    const decisions = vaultRegistry.get(vaultId)?.inboxSummary().decisions;
+  const fireNotificationsDoorbell = (vaultId: string): void => {
+    notificationsEvents.publish(vaultId);
+    const decisions = vaultRegistry
+      .get(vaultId)
+      ?.notificationsSummary().decisions;
     if (
       decisions &&
-      inboxDecisionWake.observe(vaultId, inboxDecisionKeys(decisions))
+      notificationsDecisionWake.observe(
+        vaultId,
+        notificationsDecisionKeys(decisions)
+      )
     )
-      requestInboxWake(vaultId);
+      requestNotificationsWake(vaultId);
   };
-  const armInboxDoorbellWindow = (vaultId: string): void => {
+  const armNotificationsDoorbellWindow = (vaultId: string): void => {
     const timer = setTimeout(() => {
-      const open = inboxDoorbellWindows.get(vaultId);
-      inboxDoorbellWindows.delete(vaultId);
+      const open = notificationsDoorbellWindows.get(vaultId);
+      notificationsDoorbellWindows.delete(vaultId);
       if (!open?.pending) return;
-      fireInboxDoorbell(vaultId);
-      armInboxDoorbellWindow(vaultId);
-    }, inboxDoorbellWindowMs);
+      fireNotificationsDoorbell(vaultId);
+      armNotificationsDoorbellWindow(vaultId);
+    }, notificationsDoorbellWindowMs);
     timer.unref();
-    inboxDoorbellWindows.set(vaultId, { timer, pending: false });
+    notificationsDoorbellWindows.set(vaultId, { timer, pending: false });
   };
-  const ringInboxDoorbell = (vaultId: string): void => {
-    const open = inboxDoorbellWindows.get(vaultId);
+  const ringNotificationsDoorbell = (vaultId: string): void => {
+    const open = notificationsDoorbellWindows.get(vaultId);
     if (open) {
       open.pending = true;
       return;
     }
-    fireInboxDoorbell(vaultId);
-    armInboxDoorbellWindow(vaultId);
+    fireNotificationsDoorbell(vaultId);
+    armNotificationsDoorbellWindow(vaultId);
   };
 
   provenanceDoorbell = (vaultId, entityTypes) => {
-    ringInboxDoorbell(vaultId);
+    ringNotificationsDoorbell(vaultId);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -4123,7 +4129,7 @@ export async function buildGateway(
         enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
-        inboxEvents,
+        notificationsEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
         // fix (this session): agent-grant approval can be the FIRST enrollment
@@ -4182,9 +4188,15 @@ export async function buildGateway(
               paths.cacheDir ?? path.join(dataDir, "cache"),
               "agent-capabilities"
             ),
-            // Only force a spawn on explicit refresh; otherwise serve cache
-            // (and probe once on first read when cold).
+            // Only force a spawn on explicit refresh; otherwise serve cache.
+            // `probeIfMissing` delivers the "probe once on first read when
+            // cold" half of that promise — without it a cold gateway (fresh
+            // start, nothing persisted yet) answered `undefined` and an
+            // installed, authed runner showed no models until the user
+            // manually hit Refresh (#665). The in-flight de-dupe inside
+            // resolveAcpCapabilities keeps concurrent cold reads to one probe.
             refresh,
+            probeIfMissing: true,
           });
           if (!caps) return undefined;
           if (refresh && caps.reachable && !caps.authRequired) {
@@ -4355,9 +4367,10 @@ export async function buildGateway(
     enrollmentStore,
     gatewayDatabase
   );
-  requestInboxWake = (vaultId) => pushWakeRelay.requestWake(vaultId);
-  for (const vaultId of pendingInboxWakes) pushWakeRelay.requestWake(vaultId);
-  pendingInboxWakes.clear();
+  requestNotificationsWake = (vaultId) => pushWakeRelay.requestWake(vaultId);
+  for (const vaultId of pendingNotificationsWakes)
+    pushWakeRelay.requestWake(vaultId);
+  pendingNotificationsWakes.clear();
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
@@ -4632,9 +4645,10 @@ export async function buildGateway(
     await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearTimeout(outboxTimer);
-    // A trailing Inbox doorbell must not outlive the registry it samples.
-    for (const open of inboxDoorbellWindows.values()) clearTimeout(open.timer);
-    inboxDoorbellWindows.clear();
+    // A trailing Notifications doorbell must not outlive the registry it samples.
+    for (const open of notificationsDoorbellWindows.values())
+      clearTimeout(open.timer);
+    notificationsDoorbellWindows.clear();
     // Await the in-flight backup run (if any): its post-registration steps
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.

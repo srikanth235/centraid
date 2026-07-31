@@ -47,7 +47,7 @@ vi.mock(import("../../gateway-client.js"), () => ({
     ]),
   listAutomations: () => Promise.resolve([]),
   listAutomationTurns: () => Promise.resolve([]),
-  getInbox: () =>
+  getNotifications: () =>
     Promise.resolve({
       decisions: {
         outbox: [],
@@ -59,8 +59,8 @@ vi.mock(import("../../gateway-client.js"), () => ({
       notices: [],
       unreadNoticeCount: 0,
     }),
-  subscribeInboxChanges: () => Promise.resolve(),
-  syncWebInboxNotifications: () => Promise.resolve(),
+  subscribeNotificationsChanges: () => Promise.resolve(),
+  syncWebNotifications: () => Promise.resolve(),
 }));
 
 const store = vi.hoisted(() => new Map<string, unknown>());

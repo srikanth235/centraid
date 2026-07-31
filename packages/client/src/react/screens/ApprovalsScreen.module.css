@@ -329,7 +329,7 @@ button.rowMain:hover {
   color: var(--ink-4);
 }
 
-.inboxFilters {
+.notificationsFilters {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;

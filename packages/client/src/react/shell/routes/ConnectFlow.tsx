@@ -20,7 +20,7 @@ import {
 } from "./connectFlowIO.js";
 import { VaultStep } from "./ConnectFlowVaultStep.js";
 import HandshakeLadder, { reportSummaryText } from "./HandshakeLadder.js";
-import { PROFILE_COLORS } from "./SpaceModal.js";
+import { PROFILE_COLORS } from "./VaultModal.js";
 
 import a11y from "../../styles/a11y.module.css";
 import controlsCss from "../../styles/controls.module.css";
@@ -28,10 +28,10 @@ import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
 // The shared connect wizard (issue #382) — two top-level methods (This Mac /
-// Existing gateway), a connectivity-test "handshake ladder"
-// (HandshakeLadder.tsx), then a vault pick/create step, then commit. Used
-// embedded in onboarding's ticket path AND wrapped in a modal for the
-// switcher's "Add gateway" action (see ConnectFlowModal.tsx). All the state
+// Existing vault), a connectivity-test "handshake ladder"
+// (HandshakeLadder.tsx), then a vault pick/create step, then commit. Both
+// hosts reach it through `ConnectTicketPanel`: onboarding's ticket path and
+// the switcher's "Add vault" modal (see ConnectFlowModal.tsx). All the state
 // transitions live in the pure `connectFlow-core.ts`; this component only
 // dispatches events and runs the IO (`connectFlowIO.ts`) the transitions ask
 // for.
@@ -43,7 +43,7 @@ export interface ConnectFlowProps {
    *  is a real question and the desktop chooser answers it before we get
    *  here. */
   context: "onboarding" | "switcher";
-  /** Method cards to offer. Defaults to both; the switcher's "Add gateway"
+  /** Method cards to offer. Defaults to both; the switcher's "Add vault"
    *  passes `['gateway']` — 'local' is always already registered there, so
    *  re-offering it wouldn't add a connection. */
   methods?: readonly ConnectMethod[];
@@ -71,11 +71,14 @@ const METHOD_CARDS: ReadonlyArray<{
     title: "This Mac",
   },
   {
+    // Vault-first copy: a ticket pairs this device to a VAULT, and the
+    // gateway that hosts it is an implementation detail the owner never has
+    // to name. The method id stays `gateway` — internal, not shown.
     color: PROFILE_COLORS[3]!,
-    desc: "Paste or scan a pair ticket.",
+    desc: "Paste or scan a pairing ticket.",
     icon: "Wifi",
     method: "gateway",
-    title: "Existing gateway",
+    title: "Existing vault",
   },
 ];
 

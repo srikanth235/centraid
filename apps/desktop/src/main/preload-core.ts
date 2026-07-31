@@ -133,6 +133,10 @@ export function createCentraidApi(bridge: PreloadBridge) {
     // direct data-plane client. Token originates in keychain-backed
     // settings (main); this is the single bridge crossing for it.
     getGatewayAuth: () => bridge.invoke(Channel.GATEWAY_AUTH_GET),
+    // Settings → This device: flip the active gateway's offline copy. The
+    // pairing flow stopped asking, so this is the only way to answer it.
+    setGatewayRememberDevice: (input: { rememberDevice: boolean }) =>
+      bridge.invoke(Channel.GATEWAY_REMEMBER_DEVICE_SET, input),
     // Pairing-ticket redemption (issue #376): decode + dial/POST, add-or-reuse
     // the gateway profile, flip active gateway + active vault together.
     redeemGatewayPairing: (input: {

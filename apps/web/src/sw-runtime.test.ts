@@ -174,12 +174,12 @@ describe("service worker never-cache rules", () => {
 
   test("never caches an API request issued by fetch()/XHR", async () => {
     const worker = loadWorker({
-      routes: { "/centraid/_vault/inbox": () => html("{}") },
+      routes: { "/centraid/_vault/notifications": () => html("{}") },
     });
     // A programmatic fetch has an empty `destination`; the worker must pass it
     // through so authenticated gateway JSON never lands in Cache Storage.
     const response = await worker.dispatchFetch(
-      request("/centraid/_vault/inbox", { destination: "" })
+      request("/centraid/_vault/notifications", { destination: "" })
     );
     await expect(response.text()).resolves.toBe("{}");
     expect(worker.caches.buckets.size).toBe(0);

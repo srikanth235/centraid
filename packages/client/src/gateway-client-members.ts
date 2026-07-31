@@ -34,13 +34,13 @@ export interface GatewayMember {
   /** Owner-facing name. Renaming never changes the id, so history survives. */
   label: string;
   createdAt: string;
-  /** Every space this person holds a role in, with the resolved space name. */
+  /** Every vault this person holds a role in, with the resolved vault name. */
   roles: GatewayVaultGrant[];
   /** Live (non-tombstoned) devices bound to this person. */
   deviceCount: number;
 }
 
-/** Everyone the caller shares a space with; `[]` when the gateway has no device plane. */
+/** Everyone the caller shares a vault with; `[]` when the gateway has no device plane. */
 export async function listGatewayMembers(): Promise<GatewayMember[]> {
   const { baseUrl, token } = await auth();
   try {
@@ -98,8 +98,8 @@ export async function renameGatewayMember(
 
 /**
  * Remove a PERSON — one atomic act that drops their grants and every device
- * they own. Removing the last owner of a space 409s until `confirmLastAdmin`
- * echoes that space's name back (the gateway states which one in the error).
+ * they own. Removing the last owner of a vault 409s until `confirmLastAdmin`
+ * echoes that vault's name back (the gateway states which one in the error).
  */
 export async function removeGatewayMember(
   memberId: string,

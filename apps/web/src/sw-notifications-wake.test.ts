@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { describe, expect, test, vi } from "vitest";
 
-describe("closed PWA Inbox wake", () => {
+describe("closed PWA Notifications wake", () => {
   test("pulls canonical rows over worker-owned Iroh and deduplicates delivery", async () => {
     const listeners = new Map<string, (event: unknown) => void>();
     const shown: Array<{ title: string; options: NotificationOptions }> = [];
@@ -46,7 +46,7 @@ describe("closed PWA Inbox wake", () => {
           "x-centraid-vault": "vault-1",
         });
         const body =
-          target === "/centraid/_vault/inbox"
+          target === "/centraid/_vault/notifications"
             ? {
                 decisions: {
                   outbox: [
@@ -185,7 +185,7 @@ describe("closed PWA Inbox wake", () => {
     expect(shown[0]?.title).toBe("Dinner plans");
     expect(shown[0]?.options).toMatchObject({
       body: "External write needs your approval",
-      data: { url: "/?inbox=1" },
+      data: { url: "/?notifications=1" },
       tag: "outbox:item-1:2026-07-30T10:00:00.000Z",
     });
     expect(importScripts).toHaveBeenCalledWith(

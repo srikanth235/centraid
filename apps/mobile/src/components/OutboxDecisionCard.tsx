@@ -11,14 +11,14 @@ import {
 import Button from "../kit/components/Button";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
-import type { MobileInboxOutbox } from "../lib/gateway";
+import type { MobileOutboxRow } from "../lib/gateway";
 import {
   applyArtifactEdits,
   editableArtifactFields,
-} from "../lib/inbox-artifact-editor";
+} from "../lib/notifications-artifact-editor";
 
 export default function OutboxDecisionCard(props: {
-  row: MobileInboxOutbox;
+  row: MobileOutboxRow;
   busy: boolean;
   focused: boolean;
   onApprove: (

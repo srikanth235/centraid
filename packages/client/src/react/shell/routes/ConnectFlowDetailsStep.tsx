@@ -45,7 +45,10 @@ export function GatewayDetailsStep({
         <textarea
           ref={ticketRef}
           className={styles.textarea}
-          placeholder="Paste the code from centraid-gateway pair --vault <name>"
+          // The ticket names the VAULT you are joining; which gateway hosts
+          // it is the ticket's business, not the reader's. The CLI is quoted
+          // verbatim because the person minting the ticket has to type it.
+          placeholder="Paste the ticket for the vault you're joining — centraid-gateway pair --vault <name>"
           rows={3}
           spellCheck={false}
           value={state.ticket}
@@ -64,23 +67,10 @@ export function GatewayDetailsStep({
           onChange={setField("label")}
         />
       </label>
-      <label className={styles.rememberRow}>
-        <input
-          type="checkbox"
-          aria-label="Keep an offline copy"
-          checked={state.rememberDevice}
-          onChange={(event) =>
-            dispatch({ type: "setRememberDevice", value: event.target.checked })
-          }
-        />
-        <span>
-          <strong>Keep an offline copy</strong>
-          <small>
-            An encrypted replica, queued changes, and cached previews stay on
-            this device. Either way it stays paired until you forget it.
-          </small>
-        </span>
-      </label>
+      {/* No "Keep an offline copy" question here any more. It defaulted off,
+          was asked of someone who had not yet seen the product, and its answer
+          decided whether the app worked offline. It is ON by default
+          (`connectFlow-core.ts`) and reversible in Settings → This device. */}
       <div className={styles.foot}>
         {canGoBack ? (
           <button

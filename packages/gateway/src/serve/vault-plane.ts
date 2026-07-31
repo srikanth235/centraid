@@ -142,8 +142,8 @@ import type {
 
 import { canWrite } from "./enrollment-store.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
-import { InboxNoticeStore } from "./inbox-notices.js";
 import { decideJournalArchive } from "./journal-limit.js";
+import { NoticeStore } from "./notices.js";
 import { replicaIntentContext } from "./replica-intent-context.js";
 import { vaultContext } from "./vault-context.js";
 import { pickAnchors, pickEntities } from "./vault-picker.js";
@@ -270,8 +270,8 @@ export interface VaultPlaneOptions {
     vaultId: string,
     entityTypes?: readonly string[]
   ) => void;
-  /** Inbox projection changed; `wake` requests the existing content-free relay. */
-  onInboxChanged?: (vaultId: string, wake: boolean) => void;
+  /** Notifications projection changed; `wake` requests the existing content-free relay. */
+  onNotificationsChanged?: (vaultId: string, wake: boolean) => void;
   /** SQLite durability selected by the gateway hardware profile. */
   synchronous?: "FULL" | "NORMAL";
   /** Global event-loop pressure gate for detached maintenance. */
@@ -497,7 +497,7 @@ export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
   readonly boot: HostBootstrap;
-  readonly inbox: InboxNoticeStore;
+  readonly notices: NoticeStore;
   /** The vault's directory — the registry deletes it on vault removal. */
   readonly dir: string;
   /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
@@ -535,8 +535,8 @@ export class VaultPlane {
   private readonly onReplicationPass:
     | ((info: { bytesReplicated: number; durationMs: number }) => void)
     | undefined;
-  /** Content-free Inbox doorbell; persisted projections own correctness. */
-  private readonly onInboxChanged:
+  /** Content-free Notifications doorbell; persisted projections own correctness. */
+  private readonly onNotificationsChanged:
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private sweepTimer: NodeJS.Timeout | undefined;
@@ -640,9 +640,9 @@ export class VaultPlane {
       );
     }
     this.displayName = this.boot.displayName;
-    this.onInboxChanged = options.onInboxChanged;
-    this.inbox = new InboxNoticeStore(this.db.vault, ({ wake }) =>
-      this.ringInboxChanged(wake)
+    this.onNotificationsChanged = options.onNotificationsChanged;
+    this.notices = new NoticeStore(this.db.vault, ({ wake }) =>
+      this.ringNotificationsChanged(wake)
     );
     this.gateway = createGateway(this.db, {
       ...(options.onProvenanceCommitted
@@ -651,10 +651,10 @@ export class VaultPlane {
               options.onProvenanceCommitted?.(this.boot.vaultId, entityTypes),
           }
         : {}),
-      ...(options.onInboxChanged
+      ...(options.onNotificationsChanged
         ? {
             onDecisionChanged: (created: boolean) =>
-              this.ringInboxChanged(created),
+              this.ringNotificationsChanged(created),
           }
         : {}),
     });
@@ -714,9 +714,9 @@ export class VaultPlane {
     this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
     if ((this.quarantine?.outboxParked ?? 0) > 0) {
       // Restore quarantine turns formerly approved work back into a new
-      // owner-decision episode. Ring both the live Inbox and the opaque wake
+      // owner-decision episode. Ring both the live Notifications and the opaque wake
       // relay just like any other newly created decision.
-      this.ringInboxChanged(true);
+      this.ringNotificationsChanged(true);
     }
     // WAL shipper (issue #408). A restored-and-adopted directory has no
     // wal-ship state, so its first tick mints a fresh generation — which is
@@ -1006,7 +1006,7 @@ export class VaultPlane {
       clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
     closeObsoleteScopeRequest(this.db, "app", appId);
     closeObsoleteScopeRequest(this.db, "agent", appId);
-    if (hadOpenScopeRequest) this.ringInboxChanged(false);
+    if (hadOpenScopeRequest) this.ringNotificationsChanged(false);
     return { grantsRevoked: revoked };
   }
 
@@ -1137,7 +1137,7 @@ export class VaultPlane {
       // decided, or everything asked-for is tombstoned) — a stale open
       // request must not keep blocking the owner.
       closeObsoleteScopeRequest(this.db, input.plane, input.appId);
-      if (existingRequest) this.ringInboxChanged(false);
+      if (existingRequest) this.ringNotificationsChanged(false);
       return;
     }
     if (!hasGrantHistory(this.db, input.grantee)) {
@@ -1166,7 +1166,7 @@ export class VaultPlane {
       !existingRequest ||
       JSON.stringify(existingRequest.scopes) !== JSON.stringify(nextScopes)
     ) {
-      this.ringInboxChanged(existingRequest === undefined);
+      this.ringNotificationsChanged(existingRequest === undefined);
     }
     this.logger.info(
       `vault plane: ${input.plane} "${input.appId}" asks for ${missing.length} scope(s) beyond its last consent — parked for the owner`
@@ -1211,18 +1211,18 @@ export class VaultPlane {
       requestId,
       approve ? "approved" : "denied"
     );
-    this.ringInboxChanged(false);
+    this.ringNotificationsChanged(false);
     this.logger.info(
       `vault plane: owner ${approve ? "approved" : "denied"} the ${request.plane} "${request.appId}" scope request (${request.scopes.length} scope(s))`
     );
     return request;
   }
 
-  private ringInboxChanged(wake: boolean): void {
+  private ringNotificationsChanged(wake: boolean): void {
     try {
-      this.onInboxChanged?.(this.boot.vaultId, wake);
+      this.onNotificationsChanged?.(this.boot.vaultId, wake);
     } catch {
-      // Doorbells are hints; clients refetch the persisted Inbox projection.
+      // Doorbells are hints; clients refetch the persisted Notifications projection.
     }
   }
 
@@ -1551,10 +1551,10 @@ export class VaultPlane {
     };
   }
 
-  /** Unified Inbox projection: decisions stay canonical; notices are durable. */
-  inboxSummary(includeArchived = false): {
+  /** Unified Notifications projection: decisions stay canonical; notices are durable. */
+  notificationsSummary(includeArchived = false): {
     decisions: ReturnType<VaultPlane["blocking"]> & { count: number };
-    notices: ReturnType<InboxNoticeStore["list"]>;
+    notices: ReturnType<NoticeStore["list"]>;
     unreadNoticeCount: number;
   } {
     const decisions = this.blocking();
@@ -1563,7 +1563,7 @@ export class VaultPlane {
       decisions.needsAuth.length +
       decisions.parked.length +
       decisions.scopeRequests.length;
-    const notices = this.inbox.list({ includeArchived });
+    const notices = this.notices.list({ includeArchived });
     return {
       decisions: { ...decisions, count },
       notices,

@@ -2037,7 +2037,7 @@ export class Gateway {
     try {
       this.deps.onDecisionChanged?.(created);
     } catch {
-      // Doorbells are hints; the persisted Inbox projection owns correctness.
+      // Doorbells are hints; the persisted Notifications projection owns correctness.
     }
   }
 }

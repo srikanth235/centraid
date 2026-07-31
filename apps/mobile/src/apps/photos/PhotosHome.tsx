@@ -29,7 +29,7 @@ import {
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
-import SpacesSwitcher from "../../screens/home/SpacesSwitcher";
+import VaultsSwitcher from "../../screens/home/VaultsSwitcher";
 import { Store } from "../../storage";
 import {
   IN_CLOUD_MESSAGE,
@@ -82,7 +82,7 @@ export default function PhotosHome({
   const timeline = usePhotoTimeline();
   const [view, setView] = useState<PhotosView>("photos");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [spacesOpen, setSpacesOpen] = useState(false);
+  const [vaultsOpen, setVaultsOpen] = useState(false);
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -559,7 +559,7 @@ export default function PhotosHome({
         }}
         onSwitchVault={() => {
           setDrawerOpen(false);
-          setSpacesOpen(true);
+          setVaultsOpen(true);
         }}
         onSettings={() => {
           setDrawerOpen(false);
@@ -567,11 +567,11 @@ export default function PhotosHome({
         }}
       />
 
-      <SpacesSwitcher
-        open={spacesOpen}
-        onClose={() => setSpacesOpen(false)}
+      <VaultsSwitcher
+        open={vaultsOpen}
+        onClose={() => setVaultsOpen(false)}
         onPairDesktop={() => {
-          setSpacesOpen(false);
+          setVaultsOpen(false);
           navigation.navigate("Settings", { screen: "Settings" });
         }}
       />

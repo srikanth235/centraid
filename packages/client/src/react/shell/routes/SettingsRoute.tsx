@@ -10,10 +10,11 @@ import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js"
 import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
 import SettingsProvidersScreen from "../../screens/SettingsProvidersScreen.js";
-import SettingsSpaceScreen from "../../screens/SettingsSpaceScreen.js";
 import SettingsStorageScreen from "../../screens/SettingsStorageScreen.js";
+import SettingsVaultScreen from "../../screens/SettingsVaultScreen.js";
 import Icon from "../../ui/Icon.js";
 import { useShellActions } from "../actions.js";
+import { disconnectConfirmCopy } from "../gatewayRegistry.js";
 import { openPrompt } from "../prompt.js";
 import { PageEmpty, PageLoading } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
@@ -21,8 +22,9 @@ import { loadSelfProfile, saveSelfProfile } from "./profileData.js";
 import {
   forgetThisDeviceLocally,
   importCallbacks,
-  loadActiveSpaceData,
+  loadActiveVaultData,
   loadThisDeviceData,
+  setOfflineCopy,
 } from "./settingsAccountData.js";
 import {
   activateRunner,
@@ -43,7 +45,7 @@ import {
   makeDeleteStorageConnection,
   testStorageConnection,
 } from "./settingsStorageData.js";
-import { deleteSpace, saveSpace } from "./spaceModals.js";
+import { removeVault, saveVault } from "./vaultModals.js";
 
 import styles from "./SettingsRoute.module.css";
 
@@ -51,7 +53,7 @@ import styles from "./SettingsRoute.module.css";
 // renderSettings (app-settings.ts): a grouped category nav beside a content
 // pane that shows one page at a time (page head + the page's controls). The
 // Workspace + Models pages (Appearance/Layout/Providers) are native here; the
-// Account pages (Spaces/Import) land in a follow-up. Pairing a phone is NOT a
+// Account pages (Vaults/Import) land in a follow-up. Pairing a phone is NOT a
 // page here: it is a one-off act, so it lives in the account menu as
 // PairDeviceModal. Component health
 // and logs used to live here as a "Gateway" section — they now live on the
@@ -61,7 +63,7 @@ import styles from "./SettingsRoute.module.css";
 export type SettingsPageId =
   | "appearance"
   | "workspace"
-  | "space"
+  | "vault"
   | "profile"
   | "device"
   | "import"
@@ -101,16 +103,16 @@ const ALL_PAGES: readonly PageDef[] = [
       "Your name and color, as the rest of your household sees them. The name lives on the household roster, not on this device.",
   },
   {
-    id: "space",
-    label: "Space",
+    id: "vault",
+    label: "Vault",
     section: "Account",
     icon: "Users",
     subtitle:
-      "This space’s presentation — name, icon, color, and description. Switch between reachable spaces, or add and manage gateways, from the sidebar switcher (⌘⇧G).",
+      "This vault’s presentation — name, icon, color, and description, plus whether it stays on this device. Switch between reachable vaults from the sidebar switcher (⌘⇧G).",
   },
   // Web only: on desktop the gateway runs in-process, so "this device" has no
-  // separate pairing to forget. The switcher's Remove-gateway action covers
-  // the desktop case (App.tsx).
+  // separate pairing to forget; the desktop case is the active vault's own
+  // "On this device → Disconnect" above.
   {
     id: "device",
     label: "This device",
@@ -176,6 +178,16 @@ export interface SettingsRouteProps {
   initialPage?: string;
   /** Dismiss the dialog. Backdrop, the close button, and Escape all call it. */
   onClose?: () => void;
+  /**
+   * Drop the active vault's connection from this device (issue #665).
+   *
+   * The primitive is connection-wide — every vault the same host serves goes
+   * with it — so the CONFIRM lives here, where the vault and its siblings are
+   * known by name; this callback is the unguarded act. Resolves `true` once the
+   * connection is gone, so the dialog can close itself instead of hovering over
+   * a vault this device no longer reaches.
+   */
+  onDisconnectVault: (gatewayId: string) => Promise<boolean>;
 }
 
 export default function SettingsRoute({
@@ -183,6 +195,7 @@ export default function SettingsRoute({
   setPrefs,
   initialPage,
   onClose,
+  onDisconnectVault,
 }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(() =>
     resolveSettingsPage(initialPage)
@@ -217,35 +230,35 @@ export default function SettingsRoute({
     () => makeDeleteStorageConnection(confirm),
     [confirm]
   );
-  // Settings → Space (issue #382) — scoped to the ACTIVE vault only; the
+  // Settings → Vault (issue #382) — scoped to the ACTIVE vault only; the
   // cross-vault list + gateway "Connections" group both moved to the
-  // switcher. `spaceNonce` re-fetches after a save (the preview + dirty
+  // switcher. `vaultNonce` re-fetches after a save (the preview + dirty
   // check need the freshly-saved values as the new baseline) and on any
-  // vault/gateway change broadcast (switching spaces while this page is
+  // vault/gateway change broadcast (switching vaults while this page is
   // open should re-seed the form, not silently edit the wrong vault).
-  const [spaceNonce, setSpaceNonce] = useState(0);
-  const activeSpace = useAsyncData(loadActiveSpaceData, [spaceNonce]);
-  const refreshSpace = (): void => setSpaceNonce((n) => n + 1);
+  const [vaultNonce, setVaultNonce] = useState(0);
+  const activeVault = useAsyncData(loadActiveVaultData, [vaultNonce]);
+  const refreshVault = (): void => setVaultNonce((n) => n + 1);
   useEffect(() => {
-    const offVault = window.CentraidApi.onVaultChanged?.(refreshSpace);
-    const offGateway = window.CentraidApi.onGatewayChanged?.(refreshSpace);
+    const offVault = window.CentraidApi.onVaultChanged?.(refreshVault);
+    const offGateway = window.CentraidApi.onGatewayChanged?.(refreshVault);
     return () => {
       offVault?.();
       offGateway?.();
     };
   }, []);
-  const saveActiveSpace = (data: {
+  const saveActiveVault = (data: {
     name: string;
     icon: IconName;
     color: string;
     blurb: string;
   }): void => {
-    if (activeSpace.status !== "ready" || !activeSpace.data) return;
-    const vaultId = activeSpace.data.vaultId;
-    void saveSpace(vaultId, data)
+    if (activeVault.status !== "ready" || !activeVault.data) return;
+    const vaultId = activeVault.data.vaultId;
+    void saveVault(vaultId, data)
       .then(() => {
         showToast(`Saved · ${data.name}`);
-        refreshSpace();
+        refreshVault();
       })
       .catch((error: unknown) =>
         showToast(
@@ -276,13 +289,26 @@ export default function SettingsRoute({
   const thisDeviceState = useAsyncData(loadThisDeviceData, []);
   const thisDevice =
     thisDeviceState.status === "ready" ? thisDeviceState.data : undefined;
+  // Flip this device's offline copy. Resolves with the value that actually
+  // took effect so the switch never shows a state the device is not in: a
+  // failed write comes back as the value we started from, plus a toast.
+  const changeOfflineCopy = async (next: boolean): Promise<boolean> => {
+    try {
+      return await setOfflineCopy(next);
+    } catch (error) {
+      showToast(
+        `Couldn't change the offline copy: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return !next;
+    }
+  };
   const forgetThisDevice = (): void => {
     void (async () => {
       const ok = await confirm({
         confirmLabel: "Forget",
         danger: true,
         message:
-          "This browser drops its device key, offline copy, and cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on the gateway until you revoke it from Household → Devices.",
+          "This browser drops its device key, offline copy, and cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on its host until you revoke it from Household → Devices.",
         title: "Forget this device?",
       });
       if (!ok) return;
@@ -295,18 +321,40 @@ export default function SettingsRoute({
       }
     })();
   };
-  const deleteActiveSpace = (): void => {
-    if (activeSpace.status !== "ready" || !activeSpace.data) return;
-    const { vaultId, name } = activeSpace.data;
+  // "On this device → Disconnect" (issue #665). Offered only when the active
+  // vault sits on a REMOTE connection — the primordial local gateway is this
+  // machine, and there is nothing to disconnect from. The act is
+  // connection-wide, so the confirm names every sibling vault that goes with
+  // it; `disconnectConfirmCopy` owns that wording.
+  const disconnectActiveVault = (): void => {
+    if (activeVault.status !== "ready" || !activeVault.data) return;
+    const { connection, name: vaultName } = activeVault.data;
+    if (!connection) return;
+    void (async () => {
+      const ok = await confirm({
+        confirmLabel: "Disconnect",
+        danger: true,
+        message: disconnectConfirmCopy(vaultName, connection.siblingNames),
+        title: `Disconnect ${JSON.stringify(vaultName)}?`,
+      });
+      if (!ok) return;
+      const done = await onDisconnectVault(connection.gatewayId);
+      if (done) onClose?.();
+    })();
+  };
+
+  const deleteActiveVault = (): void => {
+    if (activeVault.status !== "ready" || !activeVault.data) return;
+    const { vaultId, name } = activeVault.data;
     void (async () => {
       const typed = await openPrompt({
-        title: `Type ${JSON.stringify(name)} to erase this space`,
+        title: `Type ${JSON.stringify(name)} to erase this vault`,
         placeholder: name,
         confirmLabel: "Erase permanently",
       });
       if (typed !== name) return;
       try {
-        await deleteSpace(vaultId, typed);
+        await removeVault(vaultId, typed);
         showToast(`Deleted · ${name}`);
         navigate({ kind: "home" });
       } catch (error) {
@@ -422,7 +470,7 @@ export default function SettingsRoute({
                     onSave={saveProfile}
                   />
                 ) : (
-                  <PageEmpty message="This gateway doesn’t expose a household roster, so there is no profile to edit here." />
+                  <PageEmpty message="This connection doesn’t expose a household roster, so there is no profile to edit here." />
                 )
               ) : page === "device" ? (
                 <SettingsDeviceScreen
@@ -430,6 +478,7 @@ export default function SettingsRoute({
                     ? { gatewayLabel: thisDevice.gatewayLabel }
                     : {})}
                   offlineCopy={thisDevice?.offlineCopy ?? false}
+                  onOfflineCopy={changeOfflineCopy}
                   onForget={forgetThisDevice}
                 />
               ) : page === "import" ? (
@@ -445,23 +494,26 @@ export default function SettingsRoute({
                   detachVaultConnection={detachVaultConnection}
                   showToast={showToast}
                 />
-              ) : page === "space" ? (
-                activeSpace.status === "loading" ? (
-                  <PageLoading label="Loading this space…" />
-                ) : activeSpace.status === "error" ? (
+              ) : page === "vault" ? (
+                activeVault.status === "loading" ? (
+                  <PageLoading label="Loading this vault…" />
+                ) : activeVault.status === "error" ? (
                   <PageEmpty
-                    message={`Couldn’t load this space: ${activeSpace.error}`}
+                    message={`Couldn’t load this vault: ${activeVault.error}`}
                   />
-                ) : activeSpace.data ? (
-                  <SettingsSpaceScreen
-                    space={activeSpace.data}
-                    onSave={saveActiveSpace}
-                    {...(activeSpace.data.deletable
-                      ? { onDelete: deleteActiveSpace }
+                ) : activeVault.data ? (
+                  <SettingsVaultScreen
+                    vault={activeVault.data}
+                    onSave={saveActiveVault}
+                    {...(activeVault.data.deletable
+                      ? { onDelete: deleteActiveVault }
+                      : {})}
+                    {...(activeVault.data.connection
+                      ? { onDisconnect: disconnectActiveVault }
                       : {})}
                   />
                 ) : (
-                  <PageEmpty message="No active space." />
+                  <PageEmpty message="No active vault." />
                 )
               ) : (
                 <PageEmpty message="This settings page is being migrated to React." />

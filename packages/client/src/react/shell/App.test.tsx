@@ -57,7 +57,7 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       windowDays: 30,
       generatedAt: 0,
     }),
-  getInbox: () =>
+  getNotifications: () =>
     Promise.resolve({
       decisions: {
         outbox: [],
@@ -69,8 +69,8 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       notices: [],
       unreadNoticeCount: 0,
     }),
-  subscribeInboxChanges: () => Promise.resolve(),
-  syncWebInboxNotifications: () => Promise.resolve(),
+  subscribeNotificationsChanges: () => Promise.resolve(),
+  syncWebNotifications: () => Promise.resolve(),
 }));
 
 // The renderer's client-local store is a plain module now; back it with an
@@ -283,7 +283,7 @@ describe("App suite", () => {
       expect(store.get("appearance.v2")).toMatchObject({ sidebarOpen: false });
     });
 
-    it("switches the active space through the combined sidebar switcher", async () => {
+    it("switches the active vault through the sidebar switcher", async () => {
       apiMocks.listVaults.mockResolvedValue([
         { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
         { vaultId: "personal", name: "Personal", ownerPartyId: "owner" },
@@ -305,17 +305,86 @@ describe("App suite", () => {
         await Promise.resolve();
       });
       // The whole identity row is the switcher (#608) — its label names the
-      // space and gateway it is switching, so match on the action.
+      // vault and gateway it is switching, so match on the action.
       const switcher = el.querySelector<HTMLButtonElement>(
-        'button[aria-label$="Switch space or gateway."]'
+        'button[aria-label$="Switch vault or gateway."]'
       )!;
       await act(async () => switcher.click());
       const personal = document.querySelector<HTMLButtonElement>(
-        '[data-space-id="personal"]'
+        '[data-vault-id="personal"]'
       )!;
       expect(personal.textContent).toContain("Personal");
       await act(async () => personal.click());
       expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "personal" });
+    });
+
+    // Issue #665 — the switcher is VAULTS ONLY, flattened across gateways.
+    it("lists the vaults of every registered gateway in one list, and picking one on another gateway switches both", async () => {
+      apiMocks.listVaults.mockResolvedValue([
+        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
+      ]);
+      const order: string[] = [];
+      const setActiveVault = vi.fn<
+        (input: { vaultId: string }) => Promise<undefined>
+      >((input) => {
+        order.push(`vault:${input.vaultId}`);
+        return Promise.resolve(undefined);
+      });
+      const setActiveGateway = vi.fn<
+        (input: { id: string }) => Promise<undefined>
+      >((input) => {
+        order.push(`gateway:${input.id}`);
+        return Promise.resolve(undefined);
+      });
+      const centraidApi = (
+        globalThis as unknown as {
+          CentraidApi: Record<string, unknown>;
+        }
+      ).CentraidApi;
+      centraidApi.getSettings = () =>
+        Promise.resolve({ activeGatewayId: "local" });
+      centraidApi.getGatewayAuth = () => Promise.resolve({ vaultId: "shared" });
+      centraidApi.setActiveVault = setActiveVault;
+      centraidApi.setActiveGateway = setActiveGateway;
+      centraidApi.listGateways = () =>
+        Promise.resolve([
+          { id: "local", label: "This Mac", kind: "local" },
+          { id: "office", label: "Office", kind: "remote" },
+        ]);
+      centraidApi.listGatewayVaults = (input: { gatewayId: string }) =>
+        Promise.resolve(
+          input.gatewayId === "local"
+            ? { ok: true, vaults: [{ vaultId: "shared", name: "Shared" }] }
+            : { ok: true, vaults: [{ vaultId: "studio", name: "Studio" }] }
+        );
+
+      const el = await mount();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const switcher = el.querySelector<HTMLButtonElement>(
+        'button[aria-label$="Switch vault or gateway."]'
+      )!;
+      await act(async () => switcher.click());
+      // Let both probes land and patch the open popover in place.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const pop = document.querySelector('[role="menu"]')!;
+      // No Gateways section survives — one list, both gateways' vaults in it.
+      expect(pop.textContent).not.toContain("Gateways");
+      expect(pop.textContent).toContain("Shared");
+      expect(pop.textContent).toContain("Studio");
+      const studio = document.querySelector<HTMLButtonElement>(
+        '[data-vault-id="studio"]'
+      )!;
+      // The gateway is named as quiet context because more than one is known.
+      expect(studio.textContent).toContain("Office");
+      await act(async () => studio.click());
+      expect(order).toStrictEqual(["gateway:office", "vault:studio"]);
     });
   });
 

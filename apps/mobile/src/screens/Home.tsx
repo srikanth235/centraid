@@ -30,13 +30,13 @@ import {
   GatewayError,
   isOpenableApp,
   listAppRegistry,
-  getInbox,
+  getNotifications,
   resolveAppMeta,
   resolveGatewayBase,
-  subscribeMobileInboxChanges,
+  subscribeMobileNotificationsChanges,
 } from "../lib/gateway";
 import { getProfileColor, getProfileName } from "../lib/profile";
-import { subscribeSpaces } from "../lib/spaces";
+import { subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
 import AttentionLine from "./home/AttentionLine";
 import type { ConnectionState } from "./home/AttentionLine";
@@ -47,13 +47,13 @@ import GlassDock from "./home/GlassDock";
 import GreetingHeader from "./home/GreetingHeader";
 import LauncherGrid from "./home/LauncherGrid";
 import SearchOverlay from "./home/SearchOverlay";
-import SpaceDrawer from "./home/SpaceDrawer";
-import SpacesSwitcher from "./home/SpacesSwitcher";
+import VaultDrawer from "./home/VaultDrawer";
+import VaultsSwitcher from "./home/VaultsSwitcher";
 
 const H_PADDING = 20;
 
 // A drag must start within this many points of the left screen edge to open the
-// Space drawer, so an edge-swipe never competes with in-content horizontal
+// Vault drawer, so an edge-swipe never competes with in-content horizontal
 // scroll (e.g. the attention line's chip strip).
 const EDGE_ZONE = 24;
 
@@ -96,9 +96,9 @@ async function loadHome(
       .filter((app) => !NATIVE_APP_IDS.has(app.id));
     const automations = rows.filter((row) => row.kind === "automation").length;
     setState({ apps, automations, brief, kind: "ready" });
-    // Inbox is secondary — never fail the whole load over it.
+    // Notifications is secondary — never fail the whole load over it.
     try {
-      setApprovals((await getInbox()).decisions.count);
+      setApprovals((await getNotifications()).decisions.count);
     } catch {
       setApprovals(0);
     }
@@ -147,7 +147,7 @@ export default function HomeScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [spacesOpen, setSpacesOpen] = useState(false);
+  const [vaultsOpen, setVaultsOpen] = useState(false);
   const [profile, setProfile] = useState(() => ({
     name: getProfileName(),
     color: getProfileColor(),
@@ -158,25 +158,25 @@ export default function HomeScreen({
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    const refreshInboxCount = (): void => {
-      void getInbox()
-        .then((inbox) => setApprovals(inbox.decisions.count))
+    const refreshNotificationsCount = (): void => {
+      void getNotifications()
+        .then((notifications) => setApprovals(notifications.decisions.count))
         .catch(() => undefined);
     };
-    void subscribeMobileInboxChanges(
-      refreshInboxCount,
+    void subscribeMobileNotificationsChanges(
+      refreshNotificationsCount,
       controller.signal
     ).catch(() => undefined);
-    const timer = setInterval(refreshInboxCount, 60_000);
+    const timer = setInterval(refreshNotificationsCount, 60_000);
     return () => {
       controller.abort();
       clearInterval(timer);
     };
   }, []);
-  // Switching / adding / forgetting a Space re-points the whole app at a new
-  // vault — reload the grid so it reflects the now-active space's apps.
+  // Switching / adding / forgetting a Vault re-points the whole app at a new
+  // vault — reload the grid so it reflects the now-active vault's apps.
   useEffect(
-    () => subscribeSpaces(() => void loadHome(setState, setApprovals)),
+    () => subscribeVaultLinks(() => void loadHome(setState, setApprovals)),
     []
   );
   useFocusEffect(
@@ -340,15 +340,15 @@ export default function HomeScreen({
           />
         ) : null}
 
-        <SpaceDrawer
+        <VaultDrawer
           open={menuOpen}
           onClose={() => setMenuOpen(false)}
           connection={connection}
           approvals={approvals}
           profile={profile}
-          onSpaces={() => {
+          onVaults={() => {
             setMenuOpen(false);
-            setSpacesOpen(true);
+            setVaultsOpen(true);
           }}
           onAssistant={() => navigation.navigate("Assistant")}
           onAutomations={() => navigation.navigate("Automations")}
@@ -359,9 +359,9 @@ export default function HomeScreen({
           onSettings={openSettings}
         />
 
-        <SpacesSwitcher
-          open={spacesOpen}
-          onClose={() => setSpacesOpen(false)}
+        <VaultsSwitcher
+          open={vaultsOpen}
+          onClose={() => setVaultsOpen(false)}
           onPairDesktop={openSettings}
         />
       </SafeAreaView>

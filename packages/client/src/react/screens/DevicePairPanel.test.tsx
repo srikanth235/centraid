@@ -45,7 +45,7 @@ const MEMBERS: GatewayMember[] = [
   },
 ];
 
-const SPACES = [
+const VAULTS = [
   { vaultId: "v1", vaultName: "Personal" },
   { vaultId: "v2", vaultName: "Family Photos" },
 ];
@@ -75,7 +75,7 @@ describe("DevicePairPanel suite", () => {
           onClose={() => undefined}
           members={MEMBERS}
           currentMemberId="mem_me"
-          spaces={SPACES}
+          vaults={VAULTS}
         />
       );
     });
@@ -112,19 +112,19 @@ describe("DevicePairPanel suite", () => {
     });
   }
 
-  /** The role ladder for one space — scoped, since every grant row has all three. */
+  /** The role ladder for one vault — scoped, since every grant row has all three. */
   function roleButton(
     el: HTMLElement,
-    space: string,
+    vault: string,
     label: string
   ): HTMLButtonElement | undefined {
-    const group = el.querySelector(`[aria-label="Role in ${space}"]`);
+    const group = el.querySelector(`[aria-label="Role in ${vault}"]`);
     return [...(group?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === label
     );
   }
 
-  async function checkSpace(el: HTMLElement, label: string): Promise<void> {
+  async function checkVault(el: HTMLElement, label: string): Promise<void> {
     const box = [...el.querySelectorAll("label")]
       .find((node) => node.textContent?.trim() === label)
       ?.querySelector("input");
@@ -175,13 +175,13 @@ describe("DevicePairPanel suite", () => {
       expect(el.textContent).toContain("Personal · Member");
     });
 
-    it("mints for an existing person with per-space grants", async () => {
+    it("mints for an existing person with per-vault grants", async () => {
       const onCreateTicket = vi
         .fn<DevicePairPanelProps["onCreateTicket"]>()
         .mockResolvedValue(TICKET);
       const el = await mount(onCreateTicket);
       await pick(el, "mem_priya");
-      await checkSpace(el, "Family Photos");
+      await checkVault(el, "Family Photos");
       // Viewer, not `read` — the ladder is stated in ownership words.
       await act(async () => roleButton(el, "Family Photos", "Viewer")!.click());
       await generate(el);
@@ -192,7 +192,7 @@ describe("DevicePairPanel suite", () => {
       });
     });
 
-    it("creates a new person by label, defaulting each space to Member", async () => {
+    it("creates a new person by label, defaulting each vault to Member", async () => {
       const onCreateTicket = vi
         .fn<DevicePairPanelProps["onCreateTicket"]>()
         .mockResolvedValue(TICKET);
@@ -202,7 +202,7 @@ describe("DevicePairPanel suite", () => {
         el.querySelector('input[type="text"]') as HTMLInputElement,
         " Arun "
       );
-      await checkSpace(el, "Personal");
+      await checkVault(el, "Personal");
       await generate(el);
       expect(onCreateTicket).toHaveBeenCalledWith({
         ttlMinutes: 15,
@@ -219,7 +219,7 @@ describe("DevicePairPanel suite", () => {
       await pick(el, "mem_priya");
       await generate(el);
       expect(onCreateTicket).not.toHaveBeenCalled();
-      expect(el.textContent).toContain("Choose at least one space");
+      expect(el.textContent).toContain("Choose at least one vault");
     });
 
     it("reads role_above_own back as the ownership sentence it is", async () => {
@@ -249,7 +249,7 @@ describe("DevicePairPanel suite", () => {
           )
       );
       await pick(el, "mem_priya");
-      await checkSpace(el, "Personal");
+      await checkVault(el, "Personal");
       await generate(el);
       expect(el.textContent).toContain("needs you to be an Owner");
     });

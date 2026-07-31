@@ -68,7 +68,7 @@ describe("mobile connection re-authorization", () => {
   test("a browser the owner simply closed asks only for a refresh", () => {
     // iOS says `cancel`, Android says `dismiss`, and a BYO ceremony that
     // finished at the gateway's own callback page looks identical from here —
-    // all three mean "re-read the Inbox", never "claim success".
+    // all three mean "re-read the Notifications", never "claim success".
     expect(classifyAuthSession({ type: "cancel" })).toStrictEqual({
       kind: "closed",
     });

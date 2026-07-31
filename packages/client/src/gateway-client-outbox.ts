@@ -1,10 +1,10 @@
 /*
- * Renderer-side client for the vault's outbox / blocking-inbox surface
+ * Renderer-side client for the vault's outbox / blocking-notifications surface
  * (issues #306, #308 — `/centraid/_vault/outbox*`, `/_vault/blocking`,
  * `/_vault/scope-requests`). An agent stages an external write (e.g. a
  * gmail send) as an inert artifact; the owner reviews it here — approve,
  * deny, or mint a standing "always allow" grant — before anything leaves
- * the vault. `GET /_vault/blocking` is the unified inbox: pending outbox
+ * the vault. `GET /_vault/blocking` is the unified notifications: pending outbox
  * items + connections needing reconnection + Tier 3/4 parked invocations
  * + manifest scope-widening asks, all in one read.
  *
@@ -106,7 +106,7 @@ export interface BlockingSummary {
   scopeRequests: OutboxScopeRequest[];
 }
 
-export interface InboxNotice {
+export interface Notice {
   noticeId: string;
   kind: string;
   sourceRef: string;
@@ -120,10 +120,10 @@ export interface InboxNotice {
   archivedAt: string | null;
 }
 
-/** The one Inbox wire contract shared by desktop, web, and mobile. */
-export interface InboxSummary {
+/** The one Notifications wire contract shared by desktop, web, and mobile. */
+export interface NotificationsSummary {
   decisions: BlockingSummary & { count: number };
-  notices: InboxNotice[];
+  notices: Notice[];
   unreadNoticeCount: number;
 }
 
@@ -178,63 +178,66 @@ async function readOutcome(res: Response, op: string): Promise<OutboxOutcome> {
   }
 }
 
-/** The unified blocking inbox: outbox + needs-auth + parked + scope requests. */
+/** The unified blocking notifications: outbox + needs-auth + parked + scope requests. */
 export async function getBlocking(): Promise<BlockingSummary> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/blocking", {
     method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<BlockingSummary>(res, "fetch blocking inbox");
+  return readJson<BlockingSummary>(res, "fetch blocking notifications");
 }
 
-export async function getInbox(includeArchived = false): Promise<InboxSummary> {
+export async function getNotifications(
+  includeArchived = false
+): Promise<NotificationsSummary> {
   const { baseUrl, token } = await auth();
   const suffix = includeArchived ? "?include_archived=true" : "";
-  const res = await doFetch(baseUrl, `/centraid/_vault/inbox${suffix}`, {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  return readJson<InboxSummary>(res, "fetch Inbox");
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/notifications${suffix}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson<NotificationsSummary>(res, "fetch Notifications");
 }
 
-export async function updateInboxNotice(
+export async function updateNotice(
   noticeId: string,
   action: "read" | "archive"
-): Promise<InboxNotice> {
+): Promise<Notice> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
-    `/centraid/_vault/inbox/notices/${enc(noticeId)}`,
+    `/centraid/_vault/notifications/notices/${enc(noticeId)}`,
     {
       method: "POST",
       headers: authHeaders(token, "application/json"),
       body: JSON.stringify({ action }),
     }
   );
-  const body = await readJson<{ notice: InboxNotice }>(
-    res,
-    `${action} Inbox notice`
-  );
+  const body = await readJson<{ notice: Notice }>(res, `${action} notice`);
   return body.notice;
 }
 
 /**
- * Subscribe to the content-free Inbox doorbell. The returned cleanup aborts
+ * Subscribe to the content-free Notifications doorbell. The returned cleanup aborts
  * the authenticated stream; callers keep the 60s polling fallback.
  */
-export async function subscribeInboxChanges(
+export async function subscribeNotificationsChanges(
   onChange: () => void,
   signal?: AbortSignal
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/inbox/events", {
+  const res = await doFetch(baseUrl, "/centraid/_vault/notifications/events", {
     method: "GET",
     headers: authHeaders(token),
     ...(signal ? { signal } : {}),
   });
   if (!res.ok || !res.body) {
-    throw new Error(`subscribe to Inbox changes: HTTP ${res.status}`);
+    throw new Error(`subscribe to Notifications changes: HTTP ${res.status}`);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -248,7 +251,11 @@ export async function subscribeInboxChanges(
     while (boundary >= 0) {
       const event = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      if (event.split("\n").some((line) => line === "event: inbox-changed"))
+      if (
+        event
+          .split("\n")
+          .some((line) => line === "event: notifications-changed")
+      )
         onChange();
       boundary = buffer.indexOf("\n\n");
     }

@@ -12,7 +12,7 @@ import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import { pairErrorMessage, roleLabel } from "./device-roles.js";
 import DevicePairTarget from "./DevicePairTarget.js";
-import type { PairGrant, PairSpace, PairTarget } from "./DevicePairTarget.js";
+import type { PairGrant, PairVault, PairTarget } from "./DevicePairTarget.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -25,16 +25,16 @@ export interface DevicePairPanelProps {
     input?: GatewayDeviceTicketInput
   ) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
-  /** Everyone the caller shares a space with — the picker's list (#599). */
+  /** Everyone the caller shares a vault with — the picker's list (#599). */
   members?: readonly GatewayMember[];
   /** The caller's own member id, so "Myself" is distinguishable from a peer. */
   currentMemberId?: string;
-  /** Spaces the caller may grant, with resolved names. */
-  spaces?: readonly PairSpace[];
+  /** Vaults the caller may grant, with resolved names. */
+  vaults?: readonly PairVault[];
 }
 
 const NO_MEMBERS: readonly GatewayMember[] = [];
-const NO_SPACES: readonly PairSpace[] = [];
+const NO_VAULTS: readonly PairVault[] = [];
 
 const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
   { label: "15 min", minutes: 15 },
@@ -55,7 +55,7 @@ export default function DevicePairPanel({
   onClose,
   members = NO_MEMBERS,
   currentMemberId,
-  spaces = NO_SPACES,
+  vaults = NO_VAULTS,
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
   const [target, setTarget] = useState<PairTarget>({ kind: "self" });
@@ -105,7 +105,7 @@ export default function DevicePairPanel({
       return;
     }
     if (target.kind !== "self" && grants.length === 0) {
-      setError("Choose at least one space this device may reach.");
+      setError("Choose at least one vault this device may reach.");
       return;
     }
     setBusy(true);
@@ -231,7 +231,7 @@ export default function DevicePairPanel({
         }}
         members={members}
         {...(currentMemberId === undefined ? {} : { currentMemberId })}
-        spaces={spaces}
+        vaults={vaults}
         grants={grants}
         onGrantsChange={setGrants}
         disabled={busy}

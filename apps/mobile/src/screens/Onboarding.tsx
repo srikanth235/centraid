@@ -396,7 +396,7 @@ function ProfileStep({
       </Text>
       <Text style={styles.lede}>
         Your name and colour show on your avatar here and to anyone you share a
-        space with. You can change both later in Settings.
+        vault with. You can change both later in Settings.
       </Text>
 
       <View style={styles.identity}>
@@ -466,7 +466,7 @@ function Done({
         You&apos;re all set, <Text style={styles.h1Accent}>{greet}</Text>.
       </Text>
       <Text style={[styles.lede, styles.center]}>
-        Your space is ready. Everything you build lands on your home screen —
+        Your vault is ready. Everything you build lands on your home screen —
         yours, on this phone.
       </Text>
       <PrimaryButton label="Enter Centraid" onPress={onEnter} />

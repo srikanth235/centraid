@@ -46,7 +46,7 @@ export async function runConnectivityTest(
       return {
         error: "unavailable",
         ok: false,
-        stages: [{ id: "reach", label: "Reach gateway", status: "fail" }],
+        stages: [{ id: "reach", label: "Reach the host", status: "fail" }],
       };
     }
     return await b.testGatewayConnection(input);
@@ -58,7 +58,7 @@ export async function runConnectivityTest(
         {
           detail: error instanceof Error ? error.message : String(error),
           id: "reach",
-          label: "Reach gateway",
+          label: "Reach the host",
           status: "fail",
         },
       ],
@@ -72,7 +72,7 @@ export async function runConnectivityTest(
  *
  * The catch is a typed translation, not a swallow (issue #603 W4): an
  * unreachable gateway used to fold into an empty list, which the vault step
- * then rendered as "this gateway has no spaces" and the onboarding host
+ * then rendered as "this gateway has no vaults" and the onboarding host
  * auto-committed a create against. The caller now sees WHY the list is empty.
  */
 export async function loadLocalVaults(): Promise<LocalVaultsResult> {
@@ -81,7 +81,7 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
     if (!vaults) {
       return {
         ok: false,
-        message: "This gateway does not serve a vault list.",
+        message: "This connection does not serve a vault list.",
       };
     }
     return {
@@ -97,7 +97,7 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   } catch (error) {
     return {
       ok: false,
-      message: `Couldn't read this gateway's spaces: ${
+      message: `Couldn't read the vaults on this connection: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };
@@ -126,11 +126,11 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   // Reinstalling over existing data may find no personal vault at all (it was
   // erased). Landing on the oldest vault is still the right place to enter,
   // but it is "Shared", so it must NOT be flagged renamable (issue #603 C10:
-  // the fallback used to rename everyone's shared space).
+  // the fallback used to rename everyone's shared vault).
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(
-      "The gateway on this Mac has no spaces yet — restart Centraid and try again."
+      "This Mac has no vaults yet — restart Centraid and try again."
     );
   }
   await window.CentraidApi.setActiveVault({ vaultId: target.vaultId });
@@ -171,13 +171,13 @@ async function ensureLocalGatewayActive(): Promise<void> {
 async function commitLocal(
   state: ConnectFlowState
 ): Promise<ConnectFlowResult> {
-  if (!state.vaultChoice) throw new Error("Pick or create a space first.");
+  if (!state.vaultChoice) throw new Error("Pick or create a vault first.");
   await ensureLocalGatewayActive();
   if (state.vaultChoice.kind === "create") {
     const create = window.CentraidApi.createVault;
     if (typeof create !== "function") {
       throw new Error(
-        "This host cannot create spaces — use the desktop app or the gateway CLI."
+        "This host cannot create vaults — use the desktop app or the centraid-gateway CLI."
       );
     }
     const name = state.newVaultName.trim();

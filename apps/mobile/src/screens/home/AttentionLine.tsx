@@ -115,7 +115,7 @@ export default function AttentionLine({
           <ChipCard
             icon="Bell"
             count={approvals}
-            title="Inbox"
+            title="Notifications"
             sub={
               approvals === 1
                 ? "1 waiting on you"

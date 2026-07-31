@@ -72,7 +72,7 @@
   "packages/client/src/react/shell/routes/InlineAppRoute.module.css": {
     "rawHex": 1
   },
-  "packages/client/src/react/shell/routes/SpaceModal.module.css": {
+  "packages/client/src/react/shell/routes/VaultModal.module.css": {
     "rawHex": 1
   },
   "packages/client/src/react/shell/routes/assistantRich.module.css": {

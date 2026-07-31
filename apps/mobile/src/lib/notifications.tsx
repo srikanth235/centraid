@@ -75,7 +75,7 @@ async function handleNotificationResponse(
       if (rootNavigationRef.isReady()) rootNavigationRef.navigate("Home");
       return;
     }
-    if (plan.kind === "open-inbox") {
+    if (plan.kind === "open-notifications") {
       if (rootNavigationRef.isReady())
         rootNavigationRef.navigate("Settings", { screen: "Approvals" });
       return;

@@ -206,7 +206,7 @@ describe("push-wake-routes", () => {
     expect(webRegistrationRows(database)).toStrictEqual([]);
   });
 
-  test("PushWakeRelay debounces vault and Inbox wakes into opaque-only payloads", async () => {
+  test("PushWakeRelay debounces vault and Notifications wakes into opaque-only payloads", async () => {
     const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     const deviceId = "wake-phone";

@@ -30,12 +30,12 @@ export const ROLE_PRESETS: readonly RolePreset[] = [
   {
     role: "read",
     label: "Viewer",
-    hint: "Can see this space. Cannot change anything.",
+    hint: "Can see this vault. Cannot change anything.",
   },
   {
     role: "write",
     label: "Member",
-    hint: "Can see and change this space. The usual choice.",
+    hint: "Can see and change this vault. The usual choice.",
   },
   {
     role: "admin",
@@ -61,11 +61,11 @@ export function roleLabel(role: GatewayDeviceRole | "revoked"): string {
 const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   [
     "role_above_own",
-    "You can only pair a device for yourself at the access you already have. Ask an owner of that space to pair it for you.",
+    "You can only pair a device for yourself at the access you already have. Ask an owner of that vault to pair it for you.",
   ],
   [
     "not_admin",
-    "Pairing a device for someone else needs you to be an Owner of every space you are granting.",
+    "Pairing a device for someone else needs you to be an Owner of every vault you are granting.",
   ],
   ["ambiguous_member", "Pick an existing person or add a new one — not both."],
   ["invalid_member_label", "Give the new person a name."],
@@ -75,14 +75,14 @@ const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   ],
   [
     "invalid_grants",
-    "Each space needs a role. Remove any blank row and try again.",
+    "Each vault needs a role. Remove any blank row and try again.",
   ],
-  ["grants_required", "Choose at least one space this device may reach."],
+  ["grants_required", "Choose at least one vault this device may reach."],
   [
     "no_iroh_endpoint",
     "The gateway has no network identity yet. Start it and try again.",
   ],
-  ["vault_required", "Choose at least one space this device may reach."],
+  ["vault_required", "Choose at least one vault this device may reach."],
   ["device_identity_required", "This device is not allowed to pair others."],
 ];
 
@@ -96,18 +96,18 @@ export function pairErrorMessage(err: unknown): string {
 }
 
 /*
- * The gateway refuses to strand a space with no owner: removing the last live
+ * The gateway refuses to strand a vault with no owner: removing the last live
  * owner device — or the last owner person — 409s until the caller echoes that
- * space's name back in `confirmLastAdmin`. It names the space inside the
+ * vault's name back in `confirmLastAdmin`. It names the vault inside the
  * refusal (JSON-quoted), so the surface can escalate its confirm in place
  * instead of making the owner retype anything.
  */
 const LAST_ADMIN_CODE = "last_admin_confirmation_required";
-const LAST_ADMIN_SPACE = /(?:type|member of)\s+\\?"(?<space>[^"\\]+)\\?"/u;
+const LAST_ADMIN_VAULT = /(?:type|member of)\s+\\?"(?<vault>[^"\\]+)\\?"/u;
 
-/** The space that would lose its last owner, or `undefined` for other errors. */
-export function lastAdminSpace(err: unknown): string | undefined {
+/** The vault that would lose its last owner, or `undefined` for other errors. */
+export function lastAdminVault(err: unknown): string | undefined {
   const raw = err instanceof Error ? err.message : String(err);
   if (!raw.includes(LAST_ADMIN_CODE)) return undefined;
-  return LAST_ADMIN_SPACE.exec(raw)?.[1];
+  return LAST_ADMIN_VAULT.exec(raw)?.[1];
 }

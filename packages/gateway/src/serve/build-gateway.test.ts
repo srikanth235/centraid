@@ -185,18 +185,18 @@ describe("build-gateway scenarios", () => {
     await gateway.syncApps();
   }
 
-  test("a burst of provenance commits collapses into one Inbox recomputation (#647)", async () => {
+  test("a burst of provenance commits collapses into one Notifications recomputation (#647)", async () => {
     const plane = gateway.vaults.current();
     // Instrument the production projection the doorbell samples: every
     // uncoalesced commit would pay a listOutbox scan plus three queries AND
     // ring SSE to every subscriber, which a bulk connector sync repeats per
     // batch.
-    const computeSummary = plane.inboxSummary.bind(plane);
+    const computeSummary = plane.notificationsSummary.bind(plane);
     let summaries = 0;
-    plane.inboxSummary = ((includeArchived?: boolean) => {
+    plane.notificationsSummary = ((includeArchived?: boolean) => {
       summaries += 1;
       return computeSummary(includeArchived);
-    }) as VaultPlane["inboxSummary"];
+    }) as VaultPlane["notificationsSummary"];
 
     // Each of these is a journalled write commit → one provenance doorbell.
     configureApiKey(plane);
@@ -258,7 +258,7 @@ describe("build-gateway scenarios", () => {
       expect(response.status).toBe(202);
     };
     const notice = (): unknown =>
-      gateway.vaults.current().inbox.getBySource("automation", automationRef);
+      gateway.vaults.current().notices.getBySource("automation", automationRef);
     try {
       // A paused connection is owner-chosen state, already carried by its own
       // connection card: every tick skips, and stays silent while it does.
@@ -284,12 +284,12 @@ describe("build-gateway scenarios", () => {
     }
   }, 30_000);
 
-  test("a failed automation fire writes and collapses its Inbox notice", async () => {
+  test("a failed automation fire writes and collapses its Notifications notice", async () => {
     const appId = "broken-run";
     const automationId = "nightly";
     const automationRef = `${appId}/${automationId}`;
     const store = await gateway.appsStore();
-    const sessionId = "inbox-failure";
+    const sessionId = "notifications-failure";
     const session = await store.openSession(sessionId);
     await Promise.all(
       scaffoldAppFiles(appId, {
@@ -333,10 +333,12 @@ describe("build-gateway scenarios", () => {
         () =>
           gateway.vaults
             .current()
-            .inbox.getBySource("automation", automationRef) !== undefined
+            .notices.getBySource("automation", automationRef) !== undefined
       );
       expect(
-        gateway.vaults.current().inbox.getBySource("automation", automationRef)
+        gateway.vaults
+          .current()
+          .notices.getBySource("automation", automationRef)
       ).toMatchObject({
         // D4: the headline carries the failure gist, not just "failed".
         headline: "Broken nightly failed — expected automation failure",
@@ -355,11 +357,12 @@ describe("build-gateway scenarios", () => {
         () =>
           gateway.vaults
             .current()
-            .inbox.getBySource("automation", automationRef)?.count === 2
+            .notices.getBySource("automation", automationRef)?.count === 2
       );
       expect(
-        gateway.vaults.current().inbox.getBySource("automation", automationRef)
-          ?.count
+        gateway.vaults
+          .current()
+          .notices.getBySource("automation", automationRef)?.count
       ).toBe(2);
     } finally {
       await mounted.close();
@@ -379,19 +382,24 @@ describe("build-gateway scenarios", () => {
         pair: () => ({ ok: false }),
       },
     });
-    // Shared is founded first, so it heads the (oldest-first) listing — but
-    // the DEFAULT the registry hands unscoped callers and unnamed pair
-    // tickets is the owner's marked Personal vault, never Shared.
+    // Shared is founded FIRST, but the client-facing listing leads with the
+    // marked Personal vault (#665) — the same vault the registry hands
+    // unscoped callers and unnamed pair tickets. Founding order survives in
+    // `planesList()`, which background work iterates.
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
+      "Personal",
+      "Shared",
+    ]);
+    expect(gateway.vaults.list().map((v) => v.personal)).toStrictEqual([
+      true,
+      undefined,
+    ]);
+    expect(gateway.vaults.planesList().map((p) => p.name)).toStrictEqual([
       "Shared",
       "Personal",
     ]);
-    expect(gateway.vaults.list().map((v) => v.personal)).toStrictEqual([
-      undefined,
-      true,
-    ]);
     const founded = gateway.vaults.list().map((v) => v.vaultId);
-    expect(gateway.vaults.defaultVaultId()).toBe(founded[1]);
+    expect(gateway.vaults.defaultVaultId()).toBe(founded[0]);
     await expect(directoryBytes(dataDir)).resolves.toBeLessThanOrEqual(
       14 * 1024 ** 2
     );
@@ -425,9 +433,10 @@ describe("build-gateway scenarios", () => {
       expect(tunnelAttacker.status).toBe(403);
       // The vault plane answers straight away: no 409 wall to clear first.
       expect(status.status).toBe(200);
-      // Unscoped → the default vault, which is Personal (founded[1]).
+      // Unscoped → the default vault, which is Personal — and since #665 that
+      // is also the head of the listing `founded` was read from.
       await expect(status.json()).resolves.toMatchObject({
-        vaultId: founded[1],
+        vaultId: founded[0],
       });
     } finally {
       await mounted.close();
@@ -437,9 +446,11 @@ describe("build-gateway scenarios", () => {
     await gateway.stop();
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     expect(gateway.vaults.list().map((v) => v.vaultId)).toStrictEqual(founded);
+    // The `personal` marker is durable, so the remount lists in the same
+    // default-first order rather than reverting to founding order (#665).
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
-      "Shared",
       "Personal",
+      "Shared",
     ]);
   });
 

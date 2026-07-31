@@ -43,14 +43,14 @@ import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
 import SettingsSection from "./settings/SettingsSection";
-import SpaceSection from "./settings/SpaceSection";
+import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
 
 // Settings is a full-screen cover over Home (springboard model): a native back
 // arrow returns to Home (no pull-down on a full-screen modal), and the title sits
 // in the editorial serif to match Home's greeting. Sections read top-to-bottom as
 // one designed surface: You (local profile) · Appearance (theme override) ·
-// Space (the active vault) · Desktop link (pairing) · Approvals · Advanced.
+// Vault (the active vault) · Desktop link (pairing) · Approvals · Advanced.
 //
 // The desktop link is the primary connection path: scan a desktop "Connect phone"
 // QR, or a headless `centraid-gateway pair` / `pair --qr` terminal QR on a VPS,
@@ -189,7 +189,7 @@ export default function SettingsScreen({
         <YouSection />
         <AppearanceSection />
         <AppLockSection />
-        <SpaceSection />
+        <VaultSection />
 
         <SettingsSection label="Desktop link">
           {paired ? (
@@ -201,7 +201,7 @@ export default function SettingsScreen({
                 {tunnelStatusLabel(tunnelStatus)}
               </Text>
               <Text style={styles.help}>
-                Switch between your connected spaces from the space menu on
+                Switch between your connected vaults from the vault menu on
                 Home. Pair another desktop or gateway to add its vault here too.
               </Text>
               <View style={styles.linkAction}>
@@ -278,11 +278,11 @@ export default function SettingsScreen({
           )}
         </SettingsSection>
 
-        <SettingsSection label="Inbox">
+        <SettingsSection label="Notifications">
           <Pressable
             onPress={() => navigation.navigate("Approvals")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-            accessibilityLabel="Inbox"
+            accessibilityLabel="Notifications"
           >
             <Icon
               name="CheckCircle"

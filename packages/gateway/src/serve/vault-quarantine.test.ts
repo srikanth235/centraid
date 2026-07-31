@@ -31,14 +31,14 @@ describe("vault-quarantine", () => {
   });
   function openPlane(
     dir: string,
-    onInboxChanged?: (vaultId: string, wake: boolean) => void
+    onNotificationsChanged?: (vaultId: string, wake: boolean) => void
   ): VaultPlane {
     const plane = openVaultPlane({
       bootstrap: true,
       dir,
       logger: silentLogger,
       ownerName: "Priya",
-      ...(onInboxChanged ? { onInboxChanged } : {}),
+      ...(onNotificationsChanged ? { onNotificationsChanged } : {}),
     });
     cleanups.push(() => plane.stop());
     return plane;
@@ -120,8 +120,10 @@ describe("vault-quarantine", () => {
       JSON.stringify({ restoredAt: "2026-01-01T00:00:00.000Z", sourceSeq: 7 })
     );
 
-    const inboxChanges: boolean[] = [];
-    const second = openPlane(dir, (_vaultId, wake) => inboxChanges.push(wake));
+    const notificationsChanges: boolean[] = [];
+    const second = openPlane(dir, (_vaultId, wake) =>
+      notificationsChanges.push(wake)
+    );
     expect(second.quarantine).toMatchObject({
       sourceSeq: 7,
       restoredAt: "2026-01-01T00:00:00.000Z",
@@ -144,7 +146,7 @@ describe("vault-quarantine", () => {
     expect(item.grant_id).toBeNull();
     expect(item.decided_at).toBeNull();
     expect(item.staged_at).not.toBe(previousEpisode);
-    expect(inboxChanges).toContain(true);
+    expect(notificationsChanges).toContain(true);
 
     const grant = second.db.vault
       .prepare("SELECT revoked_at FROM outbox_grant WHERE grant_id = ?")

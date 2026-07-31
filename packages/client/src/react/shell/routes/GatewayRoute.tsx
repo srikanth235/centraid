@@ -37,7 +37,10 @@ import { PageLoading } from "../status.js";
 import { useGatewayHealth } from "../useGatewayHealth.js";
 import { useGatewayRuntime } from "../useGatewayRuntime.js";
 import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
-import { loadDiagnosticsData } from "./settingsDiagnosticsData.js";
+import {
+  loadConnectionRows,
+  loadDiagnosticsData,
+} from "./settingsDiagnosticsData.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
 // React-owned Gateway route — the runtime page over the main-process
@@ -49,10 +52,25 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
 // clamps + re-broadcasts immediately, so the screen reflects the change on
 // the next pushed snapshot). A 1s local ticker drives the running counters
 // (gateway uptime, "for 2h 14m") between polls.
+/** The shell-root half of the Connections section — just the acts; the rows
+ *  come from this route's own `loadConnectionRows`. */
+export interface GatewayConnectionsProps {
+  refreshKey: number;
+  onTest: (gatewayId: string, label: string) => void;
+  onRename: (gatewayId: string, label: string) => void;
+  onRemove: (gatewayId: string, label: string) => void;
+}
+
 export default function GatewayRoute({
   initialTab,
+  connections,
 }: {
   initialTab?: "overview" | "components" | "storage" | "logs" | "alerts";
+  /** Host plumbing for the Components tab's Connections section (issue #665).
+   *  The three acts open modals the shell root owns (they must sit above every
+   *  page), so App hands the callbacks down rather than this route wiring
+   *  them; `refreshKey` is bumped once one commits so the list re-reads. */
+  connections?: GatewayConnectionsProps;
 } = {}): JSX.Element {
   const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
@@ -185,6 +203,17 @@ export default function GatewayRoute({
         onLaunchAtLoginChange={(enabled) => void saveLaunchAtLogin(enabled)}
         health={health}
         loadHealth={loadDiagnosticsData}
+        {...(connections
+          ? {
+              connections: {
+                loadConnections: loadConnectionRows,
+                onRemove: connections.onRemove,
+                onRename: connections.onRename,
+                onTest: connections.onTest,
+                refreshKey: connections.refreshKey,
+              },
+            }
+          : {})}
         streamLogs={streamGatewayLogs}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() =>

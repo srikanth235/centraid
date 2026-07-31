@@ -117,7 +117,7 @@ describe("ConnectFlow scenarios", () => {
       const el = mount({ context: "onboarding", onDone: onDoneMock() });
       expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(2);
       expect(el.textContent).toContain("This Mac");
-      expect(el.textContent).toContain("Existing gateway");
+      expect(el.textContent).toContain("Existing vault");
       expect(el.textContent).not.toContain("Over SSH");
     });
 
@@ -139,7 +139,21 @@ describe("ConnectFlow scenarios", () => {
         onDone: onDoneMock(),
       });
       expect(el.querySelector("textarea")).toBeTruthy();
-      expect(el.textContent).not.toContain("Existing gateway");
+      expect(el.textContent).not.toContain("Existing vault");
+    });
+
+    // The offline copy is ON by default and Settings owns it now, so the
+    // pairing step must not ask — a checkbox here would be a second, older
+    // answer to the same question.
+    it("the ticket step asks nothing about an offline copy", () => {
+      const el = mount({
+        context: "switcher",
+        initialMethod: "gateway",
+        methods: ["gateway"],
+        onDone: onDoneMock(),
+      });
+      expect(el.querySelector('input[type="checkbox"]')).toBeNull();
+      expect(el.textContent).not.toContain("Keep an offline copy");
     });
 
     // #603: a fresh gateway auto-founds TWO vaults, so onboarding no longer
@@ -149,7 +163,7 @@ describe("ConnectFlow scenarios", () => {
       click(radios(el, "This Mac")[0]);
       await flush(4);
       expect(
-        el.querySelector('[role="radiogroup"][aria-label="Space"]')
+        el.querySelector('[role="radiogroup"][aria-label="Vault"]')
       ).toBeTruthy();
       expect(setActiveVault).not.toHaveBeenCalled();
     });
@@ -162,7 +176,7 @@ describe("ConnectFlow scenarios", () => {
       expect(el.querySelector('[role="alert"]')?.textContent).toContain(
         "gateway is down"
       );
-      expect(el.textContent).not.toContain("Create new space");
+      expect(el.textContent).not.toContain("Create new vault");
       const cta = [...el.querySelectorAll("button")].find(
         (b) => b.textContent === "Enter Centraid"
       ) as HTMLButtonElement;
@@ -174,7 +188,7 @@ describe("ConnectFlow scenarios", () => {
       click(radios(el, "This Mac")[0]);
       await flush(3);
       expect(
-        el.querySelector('[role="radiogroup"][aria-label="Space"]')
+        el.querySelector('[role="radiogroup"][aria-label="Vault"]')
       ).toBeTruthy();
       expect(setActiveVault).not.toHaveBeenCalled();
     });
@@ -211,10 +225,10 @@ describe("ConnectFlow scenarios", () => {
       const el = mount({ context: "switcher", onDone: onDoneMock() });
       click(radios(el, "This Mac")[0]);
       await flush(3);
-      const createRow = radios(el, "Create new space")[0];
+      const createRow = radios(el, "Create new vault")[0];
       click(createRow);
       typeInto(
-        el.querySelector('input[placeholder="Space name"]') as HTMLInputElement,
+        el.querySelector('input[placeholder="Vault name"]') as HTMLInputElement,
         "Play"
       );
       const connectBtn = [...el.querySelectorAll("button")].find(
@@ -246,7 +260,7 @@ describe("ConnectFlow scenarios", () => {
       });
       const onDone = onDoneMock();
       const el = mount({ context: "onboarding", onDone });
-      click(radios(el, "Existing gateway")[0]);
+      click(radios(el, "Existing vault")[0]);
       await flush();
       typeInto(el.querySelector("textarea") as HTMLTextAreaElement, "a-ticket");
       const continueBtn1 = [...el.querySelectorAll("button")].find(
@@ -274,7 +288,8 @@ describe("ConnectFlow scenarios", () => {
       await flush(3);
       expect(redeemGatewayPairing).toHaveBeenCalledWith({
         label: undefined,
-        rememberDevice: false,
+        // ON by default now — the pairing step no longer asks.
+        rememberDevice: true,
         ticket: "a-ticket",
       });
       expect(onDone).toHaveBeenCalledWith({
@@ -294,7 +309,7 @@ describe("ConnectFlow scenarios", () => {
         ],
       });
       const el = mount({ context: "onboarding", onDone: onDoneMock() });
-      click(radios(el, "Existing gateway")[0]);
+      click(radios(el, "Existing vault")[0]);
       await flush();
       typeInto(el.querySelector("textarea") as HTMLTextAreaElement, "a-ticket");
       click(
@@ -309,7 +324,7 @@ describe("ConnectFlow scenarios", () => {
         )
       );
       await flush();
-      expect(el.textContent).toContain("shared no space with this device");
+      expect(el.textContent).toContain("shared no vault with this device");
       const cta = [...el.querySelectorAll("button")].find(
         (b) => b.textContent === "Enter Centraid"
       ) as HTMLButtonElement;
@@ -323,7 +338,7 @@ describe("ConnectFlow scenarios", () => {
         stages: [{ id: "decode", label: "Decode ticket", status: "fail" }],
       });
       const el = mount({ context: "onboarding", onDone: onDoneMock() });
-      click(radios(el, "Existing gateway")[0]);
+      click(radios(el, "Existing vault")[0]);
       await flush();
       typeInto(
         el.querySelector("textarea") as HTMLTextAreaElement,
@@ -365,7 +380,7 @@ describe("ConnectFlow scenarios", () => {
       });
       const onDone = onDoneMock();
       const el = mount({ context: "switcher", methods: ["gateway"], onDone });
-      click(radios(el, "Existing gateway")[0]);
+      click(radios(el, "Existing vault")[0]);
       await flush();
       typeInto(el.querySelector("textarea") as HTMLTextAreaElement, "a-ticket");
       click(

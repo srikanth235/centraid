@@ -137,7 +137,7 @@ export interface ApprovalsActivityRowDTO {
   action: string;
 }
 
-export interface InboxNoticeRowDTO {
+export interface NoticeRowDTO {
   noticeId: string;
   kind: string;
   sourceRef: string;
@@ -161,7 +161,7 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   activity: readonly ApprovalsActivityRowDTO[];
-  notices?: readonly InboxNoticeRowDTO[];
+  notices?: readonly NoticeRowDTO[];
   /**
    * Whether the review feed was truncated at the current limit — drives the
    * in-place "See all" affordance (issue #552; no separate audit screen).
@@ -185,7 +185,7 @@ export interface ApprovalsScreenProps {
   onRevokeGrant: (grantId: string) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
-  onOpenNotice?: (notice: InboxNoticeRowDTO) => void;
+  onOpenNotice?: (notice: NoticeRowDTO) => void;
   /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
   /**
@@ -808,12 +808,13 @@ function ActivityRow({
 }
 
 /**
- * Empty state for the inbox groups — the grants section renders regardless.
- * `text` defaults to the inbox-zero claim, which is only honest when NOTHING
+ * Empty state for the Notifications groups — the grants section renders
+ * regardless. `text` defaults to the nothing-waiting claim, which is only
+ * honest when NOTHING
  * is waiting; a chip that filters the notice stream passes neutral copy so an
  * empty notice list never implies the pinned decisions are gone too.
  */
-function InboxEmpty({
+function NotificationsEmpty({
   text = "Nothing waiting on you.",
 }: {
   text?: string;
@@ -855,10 +856,19 @@ export function noticeHue(source: string): NoticeHue {
   return NOTICE_HUES[h % NOTICE_HUES.length] ?? "slate";
 }
 
-/** Correspondent glyph — kind wins (gateway health isn't an "app"), else source type. */
+/**
+ * Correspondent glyph — kind wins (gateway health isn't an "app"), else source
+ * type.
+ *
+ * Nothing WRITES `gateway-health` notices any more (issue #665 retired the
+ * desktop's dual-write; health lives on the Gateway page). The branch stays
+ * because rows already persisted in `vault.db` by an earlier build are still
+ * listed until their owner archives them — deleting it would render real,
+ * still-visible cards as generic "app" news the owner can't place.
+ */
 function noticeIcon(
   kind: string,
-  sourceType: InboxNoticeRowDTO["sourceType"]
+  sourceType: NoticeRowDTO["sourceType"]
 ): IconName {
   if (kind === "gateway-health") return "Cpu";
   switch (sourceType) {
@@ -877,7 +887,7 @@ function noticeIcon(
  */
 export function noticeSeverityLabel(
   kind: string,
-  severity: InboxNoticeRowDTO["severity"]
+  severity: NoticeRowDTO["severity"]
 ): string | null {
   if (severity === "info") return null;
   if (kind === "gateway-health")
@@ -909,7 +919,7 @@ function spanWords(ms: number): string {
  * Returns null for an uncollapsed notice (count 1), which has no span to tell.
  */
 export function noticeSpanPhrase(
-  row: Pick<InboxNoticeRowDTO, "count" | "firstAt" | "lastAt" | "severity">
+  row: Pick<NoticeRowDTO, "count" | "firstAt" | "lastAt" | "severity">
 ): string | null {
   if (row.count <= 1) return null;
   const first = Date.parse(row.firstAt);
@@ -941,7 +951,7 @@ function NoticeRow({
   onArchive,
   onOpen,
 }: {
-  row: InboxNoticeRowDTO;
+  row: NoticeRowDTO;
   busy: boolean;
   onRead: () => void;
   onArchive: () => void;
@@ -1060,7 +1070,7 @@ export default function ApprovalsScreen(
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
-  const [inboxFilter, setInboxFilter] = useState<
+  const [notificationsFilter, setNotificationsFilter] = useState<
     "needs" | "automations" | "agents" | "apps" | "archived"
   >("needs");
   const [focusedOutbox, setFocusedOutbox] = useState<string | null>(null);
@@ -1078,7 +1088,7 @@ export default function ApprovalsScreen(
     const stillOpen =
       itemId !== null && outbox.some((row) => row.itemId === itemId);
     setSeenFocusNonce(focusOutbox.nonce);
-    setInboxFilter("needs");
+    setNotificationsFilter("needs");
     setFocusedOutbox(stillOpen ? itemId : null);
     setExpandedOutbox(stillOpen ? itemId : null);
   }
@@ -1095,16 +1105,21 @@ export default function ApprovalsScreen(
     (notice) => notice.archivedAt !== null
   );
   const filteredNotices =
-    inboxFilter === "archived"
+    notificationsFilter === "archived"
       ? archivedNotices
-      : inboxFilter === "needs"
-        ? activeNotices
+      : notificationsFilter === "needs"
+        ? // "Needs me" means "requires my attention": an info-severity notice
+          // (a gateway recovering, an FYI) is news, not a demand — it stays
+          // reachable under its source-type chip and in Archived, but doesn't
+          // sit in the default view as an unread obligation (#665). Warning
+          // and high keep their place.
+          activeNotices.filter((notice) => notice.severity !== "info")
         : activeNotices.filter(
             (notice) =>
               notice.sourceType ===
-              (inboxFilter === "automations"
+              (notificationsFilter === "automations"
                 ? "automation"
-                : inboxFilter === "agents"
+                : notificationsFilter === "agents"
                   ? "agent"
                   : "app")
           );
@@ -1115,7 +1130,7 @@ export default function ApprovalsScreen(
   // that is blocking the owner. Hiding them behind "Needs me" made a decision
   // vanish the moment the owner tapped any other chip (#647 D3).
   const showDecisions = totalCount > 0;
-  const inboxEmpty =
+  const notificationsEmpty =
     outbox.length === 0 &&
     needsAuth.length === 0 &&
     parked.length === 0 &&
@@ -1129,7 +1144,7 @@ export default function ApprovalsScreen(
           <span className={styles.titleIcon}>
             <Icon name="CheckCircle" size={18} strokeWidth={2} />
           </span>
-          <h1>Inbox</h1>
+          <h1>Notifications</h1>
         </div>
         <p className={styles.subtitle}>
           {totalCount > 0
@@ -1140,7 +1155,10 @@ export default function ApprovalsScreen(
         </p>
       </div>
 
-      <fieldset className={styles.inboxFilters} aria-label="Inbox filter">
+      <fieldset
+        className={styles.notificationsFilters}
+        aria-label="Notifications filter"
+      >
         {(
           [
             ["needs", "Needs me"],
@@ -1154,16 +1172,16 @@ export default function ApprovalsScreen(
             key={value}
             type="button"
             className={styles.filterChip}
-            data-active={inboxFilter === value ? "true" : undefined}
-            onClick={() => setInboxFilter(value)}
+            data-active={notificationsFilter === value ? "true" : undefined}
+            onClick={() => setNotificationsFilter(value)}
           >
             {label}
           </button>
         ))}
       </fieldset>
 
-      {inboxEmpty && inboxFilter === "needs" ? (
-        <InboxEmpty />
+      {notificationsEmpty && notificationsFilter === "needs" ? (
+        <NotificationsEmpty />
       ) : (
         <div className={styles.groups}>
           {showDecisions && totalCount > 0 ? (
@@ -1237,7 +1255,9 @@ export default function ApprovalsScreen(
             <section>
               <GroupHead
                 icon={<Icon name="Bell" size={13} />}
-                label={inboxFilter === "archived" ? "Archived" : "Updates"}
+                label={
+                  notificationsFilter === "archived" ? "Archived" : "Updates"
+                }
                 count={filteredNotices.length}
               />
               <div className={styles.list}>
@@ -1253,15 +1273,15 @@ export default function ApprovalsScreen(
                 ))}
               </div>
             </section>
-          ) : inboxFilter === "needs" ? null : (
+          ) : notificationsFilter === "needs" ? null : (
             // A notice-filtering chip with no matches says only that: the
             // pinned decisions above are still waiting.
-            <InboxEmpty text="No notices here." />
+            <NotificationsEmpty text="No notices here." />
           )}
         </div>
       )}
 
-      {inboxFilter === "archived" ? (
+      {notificationsFilter === "archived" ? (
         <section className={styles.grantsSection}>
           <GroupHead
             icon={<Icon name="Key" size={13} />}
@@ -1288,7 +1308,7 @@ export default function ApprovalsScreen(
         </section>
       ) : null}
 
-      {inboxFilter === "archived" && activity.length > 0 ? (
+      {notificationsFilter === "archived" && activity.length > 0 ? (
         <section className={styles.grantsSection} data-testid="recent-activity">
           <div className={styles.activityHead}>
             <GroupHead

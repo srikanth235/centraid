@@ -55,7 +55,7 @@ export interface PlaneFixture {
   push: (cleanup: () => Promise<void> | void) => void;
   /** A bootstrapped, self-stopping plane rooted at `dir`. */
   openPlane: (dir: string) => VaultPlane;
-  /** …with extra options (WAL shipper gating, inbox hook, …). */
+  /** …with extra options (WAL shipper gating, notifications hook, …). */
   openPlaneWith: (
     options: Omit<VaultPlaneOptions, "logger"> &
       Partial<Pick<VaultPlaneOptions, "logger">>

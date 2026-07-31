@@ -139,7 +139,7 @@ describe("outbox-executor", () => {
     const row = itemRow(plane, itemId);
     expect(row.status).toBe("sent");
     expect(JSON.parse(String(row.result_json)).status_code).toBe(200);
-    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+    expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
       headline: expect.stringContaining("sent"),
       detail: expect.objectContaining({
         outcome: "sent",
@@ -158,7 +158,7 @@ describe("outbox-executor", () => {
     expect(receipts.n).toBe(1);
   });
 
-  test("raw ai_agent outcome notices stay in the Agents Inbox filter", () => {
+  test("raw ai_agent outcome notices stay in the Notifications Agents filter", () => {
     let written: Record<string, unknown> | undefined;
     const plane = {
       listOutbox: () => [
@@ -172,7 +172,7 @@ describe("outbox-executor", () => {
         },
       ],
       rawOutboxItem: () => undefined,
-      inbox: {
+      notices: {
         put: (input: Record<string, unknown>) => {
           written = input;
         },
@@ -351,7 +351,7 @@ describe("outbox-executor", () => {
     expect(JSON.parse(String(row.result_json)).detail).toContain(
       "allowed_hosts"
     );
-    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+    expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
       // D4: the reason rides the headline; the full detail stays in the card.
       headline: expect.stringContaining("failed: "),
       detail: expect.objectContaining({ outcome: "failed", itemId }),
@@ -505,7 +505,7 @@ describe("outbox-executor", () => {
     expect(row.status).toBe("pending");
     expect(row.decided_at).toBeNull();
     expect(row.note).toContain("expired");
-    expect(plane.inbox.getBySource("outbox", itemId)).toMatchObject({
+    expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
       headline: expect.stringContaining("needs approval again"),
       detail: expect.objectContaining({ outcome: "reparked", itemId }),
       severity: "warning",

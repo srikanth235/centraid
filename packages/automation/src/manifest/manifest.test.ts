@@ -64,7 +64,7 @@ describe(validateManifest, () => {
     expect(m.triggers[0]).toStrictEqual({ kind: "cron", expr: "0 9 * * *" });
   });
 
-  it("validates the automation Inbox notification policy", () => {
+  it("validates the automation Notifications notification policy", () => {
     expect(validateManifest(baseManifest({ notify: "always" })).notify).toBe(
       "always"
     );
@@ -434,7 +434,7 @@ describe("data triggers", () => {
 
 describe("provider event triggers and cursor loop guard", () => {
   const base = {
-    name: "Inbox watcher",
+    name: "Notifications watcher",
     prompt: "summarize new activity",
     generated: { by: "test", at: "2026-07-25" },
     connections: [

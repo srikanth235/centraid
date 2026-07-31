@@ -5,26 +5,55 @@
   border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
+  /* The panel — not the viewport — is what the lanes have to fit into: this
+     screen sits inside the settings content column, which is itself already a
+     container (`settings-shell`), so a viewport media query mis-reports the
+     available width by the sidebar + nav (a 1200px window can hand this panel
+     600px). Same idiom as DevicesCard. */
+  container: providers-panel / inline-size;
 }
 
 /* ── Routing ───────────────────────────────────────────────────────────────
    Each subsystem is a lane resolving to an (agent, model) pair. The default
    is the first lane, not a separate switch: it is the fallback every unset
    lane inherits, so it belongs in the same table rather than above it. */
+/* The label column carries a real minimum. `minmax(0, 1fr)` had none, so the
+   selects' intrinsic width (a <select> is as wide as its widest option) ate
+   the row and left the name + hint a ~100px gutter that wrapped one word per
+   line. The controls track is `auto`, i.e. never narrower than its own
+   min-content, so the two columns can no longer starve each other; when they
+   stop fitting the container query below stacks them. */
 .routeRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
-  gap: 12px;
+  grid-template-columns: minmax(210px, 1fr) auto;
+  gap: 10px 14px;
   align-items: center;
   padding: 12px 16px;
 }
 .routeControls,
 .agentControls {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  /* Past this the selects wrap onto a second line inside the controls column
+     rather than shrinking into "Use default · Code…". */
+  max-width: 520px;
+}
+/* Every select in this screen, routing lane or inventory row. Width first,
+   ellipsis only after: the basis is a legible model name, growth fills a
+   stacked row, and the cap stops one long option id from claiming the row. */
+.selectField {
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 260px;
+}
+/* Graceful ellipsis is the last resort, after the sizing above has given the
+   control every pixel it can have. */
+.selectField select {
+  text-overflow: ellipsis;
 }
 .routeRow + .routeRow {
   border-top: 1px solid var(--line);
@@ -39,12 +68,15 @@
   flex-direction: column;
   gap: 2px;
 }
+/* `align-items: flex-start`, not `center`: a wrapped label ("In-app Ask" over
+   two lines) used to centre the dot against the whole block, parking it beside
+   the second line. The dot belongs to the first line. */
 .routeName {
   font: var(--t-small);
   font-weight: 500;
   color: var(--ink);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
 }
 /* Raw px, not `font: var(--t-tiny)`: the --t-* tokens are `font` shorthands
@@ -57,6 +89,9 @@
 .routeDot {
   width: 7px;
   height: 7px;
+  /* Optically centres the dot on the first line box (an empty span has no
+     baseline to align to). */
+  margin-top: 0.42em;
   border-radius: 50%;
   flex: none;
   background: var(--route-accent, var(--accent));
@@ -71,13 +106,40 @@
   gap: 6px;
 }
 
-@media (max-width: 1000px) {
+/* Narrow PANEL (not narrow window). The controls drop to their own line under
+   the label and spread across the full width instead of being squeezed beside
+   it — 720px is where a 210px label plus three legible selects stops fitting.
+   Declared after the rules they override: container queries add no
+   specificity. */
+@container providers-panel (max-width: 720px) {
   .routeRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .routeControls,
+  .agentControls,
   .ladderRow {
     justify-content: flex-start;
+    max-width: none;
+  }
+  /* Line the stacked controls up under the text column, past the glyph. */
+  .agentControls {
+    flex-basis: 100%;
+    padding-left: 42px;
+  }
+  .row {
+    flex-wrap: wrap;
+  }
+}
+
+/* Very narrow panel: two selects side by side is a pair of truncated stubs,
+   so give each one the whole line. */
+@container providers-panel (max-width: 440px) {
+  .selectField {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .agentControls {
+    padding-left: 0;
   }
 }
 

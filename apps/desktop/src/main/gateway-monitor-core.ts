@@ -55,6 +55,14 @@ export interface GatewayProbe {
   /** Failure reason when `!ok` (fetch error / HTTP status). */
   detail?: string;
   /**
+   * Marks a SYNTHESIZED boot-phase failure — no HTTP request was made because
+   * the desktop doesn't know where to send one yet (settings unreadable, or
+   * the local gateway's URL not resolved). See {@link isPendingBootProbe}:
+   * these are "not started yet", not "unreachable". A crash-looped local
+   * gateway is deliberately NOT flagged — that IS a real failure.
+   */
+  bootPhase?: boolean;
+  /**
    * Aggregate status from `/centraid/_gateway/health`'s payload. Undefined
    * when the probe fell back to `/info` (older gateway, pre-#347/#351) —
    * that gateway simply never reports component health.
@@ -248,6 +256,41 @@ function sustainedHighLatency(samples: GatewaySample[]): boolean {
     (s) =>
       s.ok && s.latencyMs !== undefined && s.latencyMs > DEGRADED_LATENCY_MS
   );
+}
+
+/**
+ * True when this tick's failure is boot-phase noise that must NOT be folded
+ * into tracking at all (issue #647 follow-up).
+ *
+ * On a fresh vault login Notifications filled with "Local is unreachable —
+ * gateway URL not resolved yet ×5" / "Local recovered" cards. Their source was
+ * the first few ticks after launch: the monitor synthesizes a failed probe
+ * while the embedded gateway's URL is still being resolved, `applyProbe` reads
+ * that as `unknown → down` (a real transition, opening an outage), and
+ * `deriveOutageEvents` turns it into a severity-high durable event plus a
+ * paired `recovered` once the gateway finally answered.
+ *
+ * The honest model is a third outcome — "pending" — which this repo already
+ * has a name for: `status: 'unknown'`. Leaving the state untouched for such a
+ * tick means no outage opens, so no `down` event fires AND the eventual first
+ * success is an `unknown → up` transition, which derives no `recovered`
+ * either. The suppressed pair disappears together, by construction, rather
+ * than needing a second flag to remember it was suppressed.
+ *
+ * Deliberately narrow, so genuine "remote gateway unreachable at launch"
+ * alerting is untouched:
+ *   - only SYNTHESIZED failures ({@link GatewayProbe.bootPhase}) qualify — an
+ *     actual HTTP probe that failed is a real `down` from the very first tick,
+ *     local or remote;
+ *   - only while `status === 'unknown'`, i.e. this launch has never resolved
+ *     the gateway either way. Once tracking has established up or down, a
+ *     later settings failure folds through normally.
+ */
+export function isPendingBootProbe(
+  state: GatewayRuntimeState,
+  probe: GatewayProbe
+): boolean {
+  return probe.bootPhase === true && !probe.ok && state.status === "unknown";
 }
 
 /** Fold one probe result into the runtime state. Pure — returns a new state. */

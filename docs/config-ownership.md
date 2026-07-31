@@ -41,7 +41,7 @@ Baseline inputs now describe the **granted share of the host, not the raw machin
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<userData>/connections.json` | Desktop main process / gateway switcher | One non-secret row per EndpointId; relay hints are refreshable cache. |
+| `<userData>/connections.json` | Desktop main process / Gateway → Components → Connections | One non-secret row per EndpointId; relay hints are refreshable cache. |
 | `<userData>/connection-secrets.bin` | Desktop main process / OS `safeStorage` | Per-connection device keys; never renderer storage. |
 
 ### Vault ontology settings — vault commands win

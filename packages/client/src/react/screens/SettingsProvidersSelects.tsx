@@ -35,7 +35,7 @@ export function Select({
 }): JSX.Element {
   return (
     <span
-      className={selectCss.selectWrap}
+      className={cx(selectCss.selectWrap, styles.selectField)}
       data-disabled={disabled ? "true" : ""}
     >
       <select

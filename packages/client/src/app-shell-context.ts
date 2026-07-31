@@ -87,7 +87,7 @@ export type ShellRoute =
       tab?: "overview" | "components" | "storage" | "logs" | "alerts";
     }
   // The people side of this installation (issue #599, Decision 14): the member
-  // roster, the devices acting for each person, and every space this member can
+  // roster, the devices acting for each person, and every vault this member can
   // reach. Sits under the sidebar's Operations section beside Gateway — which
   // it took People & devices from, leaving Gateway purely about runtime health.
   | { kind: "household" }

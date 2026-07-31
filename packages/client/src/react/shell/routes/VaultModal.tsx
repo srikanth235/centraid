@@ -7,10 +7,10 @@ import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
 
 import controlsCss from "../../styles/controls.module.css";
-import styles from "./SpaceModal.module.css";
+import styles from "./VaultModal.module.css";
 
-// The Spaces add/rename modal, ported to React (issue #325, R5) from the vanilla
-// `window.Profiles.openModal`. A space IS a vault (#280); this is a name + icon +
+// The Vaults add/rename modal, ported to React (issue #325, R5) from the vanilla
+// `window.Profiles.openModal`. A vault IS a vault (#280); this is a name + icon +
 // color + blurb form with a live switcher preview. Renders the same global
 // `.cd-prof-*` chrome the vanilla emitted (already in styles.css). Gateway I/O +
 // the delete flow live in the caller (SettingsRoute); this is pure presentation.
@@ -39,30 +39,30 @@ export const PROFILE_ICONS: readonly IconName[] = [
   "Mood",
   "Gift",
 ];
-export const DEFAULT_SPACE_ICON: IconName = "Sparkle";
+export const DEFAULT_VAULT_ICON: IconName = "Sparkle";
 
-export function randomSpaceColor(): string {
+export function randomVaultColor(): string {
   const i = Math.floor(Math.random() * PROFILE_COLORS.length);
   return PROFILE_COLORS[i] ?? PROFILE_COLORS[0] ?? "#4E68DD";
 }
 
-export interface SpaceModalInitial {
+export interface VaultModalInitial {
   name?: string;
   icon?: IconName;
   color?: string;
   blurb?: string;
 }
-export interface SpaceModalCommit {
+export interface VaultModalCommit {
   name: string;
   icon: IconName;
   color: string;
   blurb: string;
 }
-export interface SpaceModalProps {
+export interface VaultModalProps {
   mode: "add" | "edit";
-  initial: SpaceModalInitial;
+  initial: VaultModalInitial;
   onCancel: () => void;
-  onCommit: (data: SpaceModalCommit) => void;
+  onCommit: (data: VaultModalCommit) => void;
   /** Shown as a "Delete" chip in the footer for non-primordial edit. */
   onDelete?: () => void;
 }
@@ -87,16 +87,16 @@ function Avatar({
   );
 }
 
-export default function SpaceModal({
+export default function VaultModal({
   mode,
   initial,
   onCancel,
   onCommit,
   onDelete,
-}: SpaceModalProps): JSX.Element {
+}: VaultModalProps): JSX.Element {
   const [name, setName] = useState(initial.name ?? "");
   const [icon, setIcon] = useState<IconName>(
-    initial.icon ?? DEFAULT_SPACE_ICON
+    initial.icon ?? DEFAULT_VAULT_ICON
   );
   const [color, setColor] = useState(initial.color ?? PROFILE_COLORS[0]!);
   const [blurb, setBlurb] = useState(initial.blurb ?? "");

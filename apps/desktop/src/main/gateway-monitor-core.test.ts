@@ -10,6 +10,7 @@ import {
   evaluateAlert,
   formatDurationMs,
   initialRuntimeState,
+  isPendingBootProbe,
   MAX_ALERT_SECONDS,
   MIN_ALERT_SECONDS,
   OUTAGE_CAP,
@@ -427,5 +428,60 @@ describe(applyComponentAlerts, () => {
     );
     expect(actions).toStrictEqual([]);
     expect(next.componentAlerts).toStrictEqual([]);
+  });
+});
+
+describe(isPendingBootProbe, () => {
+  const booting = (at: number, detail = "gateway URL not resolved yet") => ({
+    ...fail(at, detail),
+    bootPhase: true,
+  });
+
+  it("treats a synthesized boot-phase failure as pending, not as an outage", () => {
+    expect(isPendingBootProbe(initialRuntimeState(GW, T0), booting(T0))).toBe(
+      true
+    );
+  });
+
+  it("the suppressed pair vanishes together: no outage opens, so none closes", () => {
+    // The monitor skips `applyProbe` for a pending tick, so the first real
+    // answer is `unknown → up` — the transition that derives NO `recovered`.
+    let state = initialRuntimeState(GW, T0);
+    for (const at of [T0, T0 + 5000, T0 + 10_000])
+      if (!isPendingBootProbe(state, booting(at)))
+        state = applyProbe(state, booting(at));
+    expect(state.status).toBe("unknown");
+    expect(state.outages).toStrictEqual([]);
+
+    state = applyProbe(state, ok(T0 + 15_000));
+    expect(state.status).toBe("up");
+    expect(state.outages).toStrictEqual([]);
+  });
+
+  it("a REAL failed probe is a real outage from the very first tick", () => {
+    const state = initialRuntimeState(GW, T0);
+    expect(isPendingBootProbe(state, fail(T0, "ECONNREFUSED"))).toBe(false);
+    expect(applyProbe(state, fail(T0, "ECONNREFUSED")).outages).toHaveLength(1);
+  });
+
+  it("stops suppressing once this launch has resolved the gateway either way", () => {
+    // Settings going unreadable AFTER the gateway has been seen is a genuine
+    // regression, not boot noise — it must still fold through to `down`.
+    const up = applyProbe(initialRuntimeState(GW, T0), ok(T0 + 5000));
+    expect(
+      isPendingBootProbe(up, booting(T0 + 10_000, "settings unavailable"))
+    ).toBe(false);
+
+    const down = applyProbe(initialRuntimeState(GW, T0), fail(T0 + 5000));
+    expect(isPendingBootProbe(down, booting(T0 + 10_000))).toBe(false);
+  });
+
+  it("a successful probe is never pending, whatever the flag says", () => {
+    expect(
+      isPendingBootProbe(initialRuntimeState(GW, T0), {
+        ...ok(T0),
+        bootPhase: true,
+      })
+    ).toBe(false);
   });
 });

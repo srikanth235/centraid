@@ -167,8 +167,8 @@ centraid-gateway pair --data-dir "$DATA_DIR" --vault Personal
 
 | Client | How to enroll |
 | --- | --- |
-| **Desktop** | First run offers **Start fresh on this Mac** or **Connect with a ticket**; a registered desktop pastes the ticket into **Add gateway** |
-| **PWA** | Ticket only — paste the one-line ticket into the first-run flow or **Add gateway** |
+| **Desktop** | First run offers **Start fresh on this Mac** or **Connect with a ticket**; a registered desktop pastes the ticket into **Add vault** |
+| **PWA** | Ticket only — paste the one-line ticket into the first-run flow or **Add vault** |
 | **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Gateway link |
 
 Tickets burn on first successful redeem (or wrong secret). See [docs/recovery/pairing.md](docs/recovery/pairing.md).

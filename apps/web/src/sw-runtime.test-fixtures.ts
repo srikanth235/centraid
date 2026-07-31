@@ -6,7 +6,7 @@ import { SERVICE_WORKER_VERSION as VERSION } from "./sw-version.js";
 
 // `public/sw.js` is a classic, IIFE-wrapped service worker: it has no exports
 // and cannot be imported. It is evaluated in a `node:vm` context whose globals
-// are the fakes below (the same technique sw-inbox-wake.test.ts uses), with the
+// are the fakes below (the same technique sw-notifications-wake.test.ts uses), with the
 // real file path as the script filename so v8 attributes coverage to it.
 //
 // Split out of `sw-runtime.test.ts` (#656 Layer 1F) so the shell/caching laws
@@ -134,7 +134,7 @@ export type FakePort = {
   postMessage: (data: Json) => void;
   close: () => void;
   deliverLater: () => void;
-  inbox: Json[];
+  notifications: Json[];
 };
 
 /**
@@ -145,12 +145,12 @@ export type FakePort = {
  */
 export const createPort = (): FakePort => {
   const listeners: Array<(event: { data: Json }) => void> = [];
-  const inbox: Json[] = [];
+  const notifications: Json[] = [];
   let started = false;
   let draining = false;
   const port: FakePort = {
     closed: false,
-    inbox,
+    notifications,
     addEventListener(_type: string, listener: (event: { data: Json }) => void) {
       listeners.push(listener);
     },
@@ -160,18 +160,18 @@ export const createPort = (): FakePort => {
       port.deliverLater();
     },
     postMessage(data: Json) {
-      port.peer?.inbox.push(data);
+      port.peer?.notifications.push(data);
       port.peer?.deliverLater();
     },
     close() {
       port.closed = true;
     },
     deliverLater() {
-      if (!started || draining || inbox.length === 0) return;
+      if (!started || draining || notifications.length === 0) return;
       draining = true;
       setTimeout(() => {
         draining = false;
-        const next = inbox.shift();
+        const next = notifications.shift();
         if (next !== undefined)
           for (const listener of listeners) listener({ data: next });
         port.deliverLater();

@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  composeMobileInboxNotifications,
-  planInboxNotifications,
-} from "./inbox-notification-model";
-import type { MobileInboxNotificationPull } from "./inbox-notification-model";
+  composeMobileNotifications,
+  planNotifications,
+} from "./notifications-plan";
+import type { MobileNotificationsPull } from "./notifications-plan";
 
 function pull(
   attentionAt = "2026-07-30T10:00:00.000Z"
-): MobileInboxNotificationPull {
+): MobileNotificationsPull {
   return {
     decisions: {
       outbox: [
@@ -50,18 +50,18 @@ function pull(
   };
 }
 
-describe(composeMobileInboxNotifications, () => {
+describe(composeMobileNotifications, () => {
   test("composes all decisions and only unread high notices", () => {
-    expect(composeMobileInboxNotifications(pull(), new Set())).toHaveLength(5);
+    expect(composeMobileNotifications(pull(), new Set())).toHaveLength(5);
   });
 
   test("dedupes an open decision but not a later re-created episode", () => {
     const first = pull();
     const delivered = new Set(
-      composeMobileInboxNotifications(first, new Set()).map((row) => row.key)
+      composeMobileNotifications(first, new Set()).map((row) => row.key)
     );
     const recreated = pull("2026-07-31T10:00:00.000Z");
-    const rows = composeMobileInboxNotifications(recreated, delivered);
+    const rows = composeMobileNotifications(recreated, delivered);
 
     expect(rows.map((row) => row.key)).toStrictEqual([
       "outbox:out-1:2026-07-31T10:00:00.000Z",
@@ -71,17 +71,17 @@ describe(composeMobileInboxNotifications, () => {
   });
 });
 
-function quiet(): MobileInboxNotificationPull {
+function quiet(): MobileNotificationsPull {
   return {
     decisions: { outbox: [], needsAuth: [], parked: [], scopeRequests: [] },
     notices: [],
   };
 }
 
-describe(planInboxNotifications, () => {
+describe(planNotifications, () => {
   test("the first sync seeds the baseline silently instead of blasting", () => {
-    const plan = planInboxNotifications({
-      inbox: pull(),
+    const plan = planNotifications({
+      notifications: pull(),
       delivered: [],
       seeded: false,
       appActive: false,
@@ -93,14 +93,14 @@ describe(planInboxNotifications, () => {
   });
 
   test("a decision arriving after the seed still notifies", () => {
-    const seed = planInboxNotifications({
-      inbox: pull(),
+    const seed = planNotifications({
+      notifications: pull(),
       delivered: [],
       seeded: false,
       appActive: false,
     });
-    const plan = planInboxNotifications({
-      inbox: pull("2026-07-31T10:00:00.000Z"),
+    const plan = planNotifications({
+      notifications: pull("2026-07-31T10:00:00.000Z"),
       delivered: seed.nextDelivered ?? [],
       seeded: true,
       appActive: false,
@@ -113,9 +113,9 @@ describe(planInboxNotifications, () => {
     ]);
   });
 
-  test("a quiet Inbox seeds too, so the first real decision is news", () => {
-    const seed = planInboxNotifications({
-      inbox: quiet(),
+  test("a quiet Notifications seeds too, so the first real decision is news", () => {
+    const seed = planNotifications({
+      notifications: quiet(),
       delivered: [],
       seeded: false,
       appActive: false,
@@ -123,8 +123,8 @@ describe(planInboxNotifications, () => {
     expect(seed.seeded).toBe(true);
     expect(seed.nextDelivered).toStrictEqual([]);
 
-    const plan = planInboxNotifications({
-      inbox: pull(),
+    const plan = planNotifications({
+      notifications: pull(),
       delivered: seed.nextDelivered ?? [],
       seeded: true,
       appActive: false,
@@ -133,8 +133,8 @@ describe(planInboxNotifications, () => {
   });
 
   test("foreground composes nothing and leaves the ledger untouched", () => {
-    const plan = planInboxNotifications({
-      inbox: pull(),
+    const plan = planNotifications({
+      notifications: pull(),
       delivered: ["outbox:out-1:2026-07-30T10:00:00.000Z"],
       seeded: true,
       appActive: true,
@@ -148,14 +148,14 @@ describe(planInboxNotifications, () => {
   });
 
   test("a background pass with nothing new writes no ledger", () => {
-    const seed = planInboxNotifications({
-      inbox: pull(),
+    const seed = planNotifications({
+      notifications: pull(),
       delivered: [],
       seeded: false,
       appActive: false,
     });
-    const plan = planInboxNotifications({
-      inbox: pull(),
+    const plan = planNotifications({
+      notifications: pull(),
       delivered: seed.nextDelivered ?? [],
       seeded: true,
       appActive: false,

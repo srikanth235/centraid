@@ -14,11 +14,11 @@
 // rides the iroh tunnel; the gateway/desktop attaches auth on its side.
 //
 // The phone can pair with several gateways: each pairing is recorded as a
-// (gateway, vault) Space in lib/spaces, and this module operates on the ACTIVE
-// Space's projected slot (LINK_* keys). `pair()` adds a Space, `switchSpace()`
+// (gateway, vault) VaultLink in lib/vaults, and this module operates on the ACTIVE
+// VaultLink's projected slot (LINK_* keys). `pair()` adds a VaultLink, `switchVaultLink()`
 // re-points the active slot (restarting the tunnel when the gateway changes),
-// and `forgetSpace()`/`unpair()` drop one. The device secret key is device-wide
-// — one EndpointId enrolls with every desktop — so it is never per-Space.
+// and `forgetVaultLink()`/`unpair()` drop one. The device secret key is device-wide
+// — one EndpointId enrolls with every desktop — so it is never per-vault.
 
 import { Platform } from "react-native";
 
@@ -41,16 +41,16 @@ import {
   LINK_DEVICE_ID_KEY,
   LINK_SECRET_KEY,
   LINK_ENDPOINT_HINT_KEY,
-  addSpace,
-  getActiveSpace,
-  hydrateSpaces,
-  listSpaces,
-  removeSpace,
-  setActiveSpace,
-} from "./spaces";
-import type { Space } from "./spaces";
+  addVaultLink,
+  getActiveVaultLink,
+  hydrateVaultLinks,
+  listVaultLinks,
+  removeVaultLink,
+  setActiveVaultLink,
+} from "./vault-links";
+import type { VaultLink } from "./vault-links";
 
-// The active-slot keys now live in their new owner, lib/spaces (the Spaces
+// The active-slot keys now live in their new owner, lib/vault-links (the Vaults
 // registry projects the active (gateway, vault) tuple into them); imported above
 // for this module's own tunnel/link reads.
 
@@ -70,9 +70,9 @@ export class PhoneLinkError extends Error {
 
 /** Pull link prefs into Store + secrets into secure storage. Idempotent. */
 export async function hydratePhoneLink(): Promise<void> {
-  // Hydrate the registry first: it folds any pre-registry install into a Space
-  // and projects the active Space into the LINK_* slot keys read below.
-  await hydrateSpaces();
+  // Hydrate the registry first: it folds any pre-registry install into a VaultLink
+  // and projects the active VaultLink into the LINK_* slot keys read below.
+  await hydrateVaultLinks();
   await Promise.all([
     hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
     Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ""),
@@ -142,15 +142,15 @@ export async function pair(
     const desktopName = result.desktopName ?? "";
     const deviceId = result.deviceId;
     // A new pairing may target a DIFFERENT gateway than the running tunnel. Stop
-    // it so the re-init (driven by the active-Space change) dials the gateway we
+    // it so the re-init (driven by the active-vault change) dials the gateway we
     // just paired with rather than reusing the old proxy.
     await stopTunnel().catch(() => {
       /* not running */
     });
-    // Record this desktop as the active Space; addSpace projects the active
+    // Record this desktop as the active VaultLink; addVaultLink projects the active
     // LINK_* slot (endpoint hint + names). vaultId starts empty and is filled by
     // ReplicaProvider's bootstrap probe.
-    await addSpace({
+    await addVaultLink({
       gatewayId: result.gatewayId,
       desktopName,
       deviceId,
@@ -177,7 +177,7 @@ export async function pair(
   }
   // The tunnel dials the gateway EndpointTicket (`gw`) embedded in the pairing
   // token. A new pairing may target a DIFFERENT gateway than the running tunnel,
-  // so stop it — the re-init (driven by the active-Space change) dials the
+  // so stop it — the re-init (driven by the active-vault change) dials the
   // gateway we just paired with rather than reusing the old proxy.
   await stopTunnel().catch(() => {
     /* not running */
@@ -194,8 +194,8 @@ export async function pair(
   const deviceId =
     result.enrollmentId || result.gatewayId || result.deviceId || "gateway";
   // EndpointId is durable identity. `gw` is only a refreshable dial hint; a
-  // relay change updates it in-place because addSpace keys on EndpointId.
-  await addSpace({
+  // relay change updates it in-place because addVaultLink keys on EndpointId.
+  await addVaultLink({
     gatewayId,
     desktopName,
     deviceId,
@@ -208,35 +208,37 @@ export async function pair(
 
 /**
  * Forget the ACTIVE desktop/gateway link (Settings' "Unpair"). Stops the tunnel
- * and removes the active Space, falling back to another Space if one remains.
+ * and removes the active VaultLink, falling back to another VaultLink if one remains.
  * Keeps the device secret key so a future re-pair presents the same EndpointId
  * (the peer can also revoke it by name).
  */
 export async function unpair(): Promise<void> {
-  await hydrateSpaces();
-  const active = getActiveSpace();
+  await hydrateVaultLinks();
+  const active = getActiveVaultLink();
   if (isTunnelAvailableImpl()) {
-    if (active && isLastSpaceForGateway(active))
+    if (active && isLastVaultLinkForGateway(active))
       await revokePushRegistration().catch(() => undefined);
     await stopTunnel().catch(() => {
       /* already stopped */
     });
   }
-  if (active) await removeSpace(active.id);
+  if (active) await removeVaultLink(active.id);
 }
 
 /**
- * Make a saved Space active. Re-points the active slot to its (gateway, vault)
+ * Make a saved VaultLink active. Re-points the active slot to its (gateway, vault)
  * tuple; when the gateway differs from the current one, stops the tunnel so the
  * next `ensureTunnelStarted` dials the new gateway (a same-gateway vault switch
  * keeps the tunnel up and only changes the vault header + replica key). The
- * replica re-keys off the active-Space change; returns the now-active Space.
+ * replica re-keys off the active-vault change; returns the now-active VaultLink.
  */
-export async function switchSpace(id: string): Promise<Space | undefined> {
-  await hydrateSpaces();
-  const prev = getActiveSpace();
+export async function switchVaultLink(
+  id: string
+): Promise<VaultLink | undefined> {
+  await hydrateVaultLinks();
+  const prev = getActiveVaultLink();
   if (prev?.id === id) return prev;
-  const next = await setActiveSpace(id);
+  const next = await setActiveVaultLink(id);
   if (!next) return undefined;
   if (isTunnelAvailableImpl() && prev && prev.gatewayId !== next.gatewayId) {
     await stopTunnel().catch(() => {
@@ -247,30 +249,30 @@ export async function switchSpace(id: string): Promise<Space | undefined> {
 }
 
 /**
- * Forget one Space by id (the switcher's "Remove from this phone"). The vault
+ * Forget one VaultLink by id (the switcher's "Remove from this phone"). The vault
  * stays on the gateway — this only drops the local tuple + its ticket. When the
- * forgotten Space is active, the tunnel is stopped so the fallback Space (if
+ * forgotten VaultLink is active, the tunnel is stopped so the fallback VaultLink (if
  * any) can re-connect cleanly.
  */
-export async function forgetSpace(id: string): Promise<void> {
-  await hydrateSpaces();
-  const active = getActiveSpace();
-  const removed = listSpaces().find((space) => space.id === id);
+export async function forgetVaultLink(id: string): Promise<void> {
+  await hydrateVaultLinks();
+  const active = getActiveVaultLink();
+  const removed = listVaultLinks().find((vault) => vault.id === id);
   const wasActive = active?.id === id;
   if (wasActive && isTunnelAvailableImpl()) {
-    if (removed && isLastSpaceForGateway(removed))
+    if (removed && isLastVaultLinkForGateway(removed))
       await revokePushRegistration().catch(() => undefined);
     await stopTunnel().catch(() => {
       /* not running */
     });
   }
-  await removeSpace(id);
+  await removeVaultLink(id);
 }
 
-function isLastSpaceForGateway(space: Space): boolean {
-  return !listSpaces().some(
+function isLastVaultLinkForGateway(vault: VaultLink): boolean {
+  return !listVaultLinks().some(
     (candidate) =>
-      candidate.id !== space.id && candidate.gatewayId === space.gatewayId
+      candidate.id !== vault.id && candidate.gatewayId === vault.gatewayId
   );
 }
 

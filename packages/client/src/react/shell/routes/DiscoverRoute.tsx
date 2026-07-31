@@ -46,8 +46,8 @@ export default function DiscoverRoute({
 }: DiscoverRouteProps): JSX.Element {
   const { navigate, showToast } = useShellActions();
   // Where an install LANDS (issue #599, Decision 14). The retired switcher made
-  // this ambient — an app quietly installed into whichever space the sidebar
-  // pointed at. The picker names it, defaulting to the member's own space.
+  // this ambient — an app quietly installed into whichever vault the sidebar
+  // pointed at. The picker names it, defaulting to the member's own vault.
   const memberScopes = useMemberScopes();
   const [installScope, setInstallScope] = useState<string | undefined>(
     undefined

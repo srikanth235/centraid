@@ -14,12 +14,13 @@ describe("vault-plane install scopes + execution clamps", () => {
 
   test("install-time scopes: enrolling grants the declared block, idempotently (issue #306)", async () => {
     const dir = await tempDir();
-    const inboxChanges: boolean[] = [];
+    const notificationsChanges: boolean[] = [];
     const plane = fixture.openPlaneWith({
       bootstrap: true,
       dir,
       ownerName: "Priya",
-      onInboxChanged: (_vaultId, wake) => inboxChanges.push(wake),
+      onNotificationsChanged: (_vaultId, wake) =>
+        notificationsChanges.push(wake),
     });
     const calendarId = seedCalendar(plane);
 
@@ -28,7 +29,7 @@ describe("vault-plane install scopes + execution clamps", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
-    expect(inboxChanges).toStrictEqual([]);
+    expect(notificationsChanges).toStrictEqual([]);
     const outcome = await plane.bridgeFor("planner")({
       op: "invoke",
       payload: {
@@ -72,11 +73,11 @@ describe("vault-plane install scopes + execution clamps", () => {
       scopes: [{ schema: "knowledge", verbs: "read" }],
     });
     expect(plane.blocking().scopeRequests).toHaveLength(1);
-    expect(inboxChanges).toStrictEqual([true]);
+    expect(notificationsChanges).toStrictEqual([true]);
 
     // The owner's approval mints exactly the asked scopes and closes the ask.
     plane.decideScopeRequest(requests[0]!.requestId, true);
-    expect(inboxChanges).toStrictEqual([true, false]);
+    expect(notificationsChanges).toStrictEqual([true, false]);
     const approved = plane.listApps().find((a) => a.name === "planner");
     expect(approved?.grants.flatMap((g) => g.scopes) ?? []).toHaveLength(2);
     expect(plane.listScopeRequests()).toHaveLength(0);
@@ -88,7 +89,7 @@ describe("vault-plane install scopes + execution clamps", () => {
       ],
     });
     expect(plane.listScopeRequests()).toHaveLength(0);
-    expect(inboxChanges).toStrictEqual([true, false]);
+    expect(notificationsChanges).toStrictEqual([true, false]);
 
     // The agent-plane mirror covers automations.
     plane.ensureAgentInstallGrant("gmail-send", {

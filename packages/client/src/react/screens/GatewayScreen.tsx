@@ -30,6 +30,7 @@ import type {
 import RestartGatewayButton from "./RestartGatewayButton.js";
 import SettingsDiagnosticsScreen from "./SettingsDiagnosticsScreen.js";
 import type {
+  DiagnosticsConnectionsProps,
   GatewayHealthDTO,
   SettingsDiagnosticsBridgeProps,
 } from "./SettingsDiagnosticsScreen.js";
@@ -61,6 +62,9 @@ export interface GatewayScreenProps {
    *  badges the Components tab. `null` before the first poll lands. */
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps["loadHealth"];
+  /** Host plumbing for the Components tab's Connections section (issue #665).
+   *  Optional so hosts with no gateway registry (and route tests) still render. */
+  connections?: DiagnosticsConnectionsProps;
   streamLogs: LogsBridgeProps["streamLogs"];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
@@ -226,7 +230,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 <span className={styles.orb} aria-hidden="true">
                   <span className={styles.orbCore} />
                 </span>
-                <div>
+                <div className={styles.statusText}>
                   <div className={styles.statusWord}>
                     {STATUS_WORD[overall]}
                   </div>
@@ -453,6 +457,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <SettingsDiagnosticsScreen
             loadHealth={props.loadHealth}
             onJumpToLogs={jumpToLogs}
+            {...(props.connections ? { connections: props.connections } : {})}
           />
         </div>
       ) : null}

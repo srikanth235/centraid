@@ -69,7 +69,7 @@ export interface UseBuilderInput {
     description?: string;
   }) => void;
   showToast: (message: string) => void;
-  /** The space a NEW app is created in (issue #599, Decision 14). Named by the
+  /** The vault a NEW app is created in (issue #599, Decision 14). Named by the
    *  route's target picker rather than inherited from an ambient pointer;
    *  omitted falls back to the shell's internal default scope. */
   targetScopeId?: string;
@@ -161,7 +161,7 @@ async function streamBuilderWithConsent(input: {
   runnerKind?: string;
   model?: string;
   thinking?: string;
-  /** Space the builder conversation is pinned to (#599) — explicit, never ambient. */
+  /** Vault the builder conversation is pinned to (#599) — explicit, never ambient. */
   scopeId?: string;
 }): Promise<void> {
   // Every provider approved during THIS send — a consent-gated failover asks
@@ -443,9 +443,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const publishing = useRef(false);
   const lastPublishedVersionId = useRef<string | undefined>(undefined);
   const conversationId = useRef<string | null>(null);
-  // The space this app was created into (issue #599). Every later request in
+  // The vault this app was created into (issue #599). Every later request in
   // the builder — turns, attachment uploads — must replay it explicitly, or a
-  // non-default-space app would stage blobs and run turns in the ambient space.
+  // non-default-vault app would stage blobs and run turns in the ambient vault.
   const targetScope = useRef<string | undefined>(input.targetScopeId);
   const agentAbort = useRef<AbortController | null>(null);
   const currentAiMsgIndex = useRef(-1);
@@ -871,7 +871,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             // recorded, while a transport retry still replays exactly once.
             idempotencyKey: crypto.randomUUID(),
             workspaceKind: workspaceKind.current,
-            // Explicit, never ambient: the turn lands in the space the
+            // Explicit, never ambient: the turn lands in the vault the
             // conversation was created in (issue #599).
             ...(targetScope.current ? { scopeId: targetScope.current } : {}),
             ...(runnerConfig.current?.selectedRunnerKind

@@ -3,22 +3,22 @@ import type { CSSProperties, JSX } from "react";
 
 import type { IconName } from "@centraid/design-tokens";
 
-import type { ActiveSpaceData } from "../shell/routes/settingsAccountData.js";
-import { PROFILE_COLORS, PROFILE_ICONS } from "../shell/routes/SpaceModal.js";
+import type { ActiveVaultData } from "../shell/routes/settingsAccountData.js";
+import { PROFILE_COLORS, PROFILE_ICONS } from "../shell/routes/VaultModal.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
 
-// Reuses SpaceModal's field vocabulary (`.prof*`) directly — same precedent
+// Reuses VaultModal's field vocabulary (`.prof*`) directly — same precedent
 // GatewayModal.tsx / ConnectFlowModal.tsx / RenameGatewayModal.tsx set for
 // the shared dialog chrome, extended here to a plain (non-modal) form
 // section so name/icon/color/blurb edits look identical everywhere they
 // appear (issue #382).
-import spaceModalStyles from "../shell/routes/SpaceModal.module.css";
+import vaultModalStyles from "../shell/routes/VaultModal.module.css";
 import controlsCss from "../styles/controls.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
 
-export interface SettingsSpaceScreenProps {
-  space: ActiveSpaceData;
+export interface SettingsVaultScreenProps {
+  vault: ActiveVaultData;
   onSave: (data: {
     name: string;
     icon: IconName;
@@ -26,6 +26,9 @@ export interface SettingsSpaceScreenProps {
     blurb: string;
   }) => Promise<void> | void;
   onDelete?: () => void;
+  /** Drop this vault's connection from this device (issue #665). Present only
+   *  for a vault on a REMOTE connection — the local host is this machine. */
+  onDisconnect?: () => void;
 }
 
 function Avatar({
@@ -68,42 +71,43 @@ function Avatar({
 }
 
 /**
- * Settings → Space (issue #382) — edits ONLY the active vault's
+ * Settings → Vault (issue #382) — edits ONLY the active vault's
  * presentation (name/icon/color/blurb) plus a danger-zone delete. The
  * cross-vault list and the gateway "Connections" group both moved to the
  * switcher, which is the (gateway, vault) pair manager now; this page is
  * scoped to the pair the user is currently in, matching that model.
  */
-export default function SettingsSpaceScreen({
-  space,
+export default function SettingsVaultScreen({
+  vault,
   onSave,
   onDelete,
-}: SettingsSpaceScreenProps): JSX.Element {
-  const [name, setName] = useState(space.name);
-  const [icon, setIcon] = useState<IconName>(space.icon);
-  const [color, setColor] = useState(space.color);
-  const [blurb, setBlurb] = useState(space.blurb);
+  onDisconnect,
+}: SettingsVaultScreenProps): JSX.Element {
+  const [name, setName] = useState(vault.name);
+  const [icon, setIcon] = useState<IconName>(vault.icon);
+  const [color, setColor] = useState(vault.color);
+  const [blurb, setBlurb] = useState(vault.blurb);
   const [saving, setSaving] = useState(false);
 
-  // Re-seed the form when the active vault itself changes (switching spaces
+  // Re-seed the form when the active vault itself changes (switching vaults
   // while this page is open) — a fresh identity, not a stale edit in flight.
   // Done during render (the React "adjust state when a prop changes" pattern)
-  // rather than in an effect, so the new space never paints through the old
-  // space's field values for a frame.
-  const [seeded, setSeeded] = useState(space);
-  if (seeded !== space) {
-    setSeeded(space);
-    setName(space.name);
-    setIcon(space.icon);
-    setColor(space.color);
-    setBlurb(space.blurb);
+  // rather than in an effect, so the new vault never paints through the old
+  // vault's field values for a frame.
+  const [seeded, setSeeded] = useState(vault);
+  if (seeded !== vault) {
+    setSeeded(vault);
+    setName(vault.name);
+    setIcon(vault.icon);
+    setColor(vault.color);
+    setBlurb(vault.blurb);
   }
 
   const dirty =
-    name.trim() !== space.name ||
-    icon !== space.icon ||
-    color !== space.color ||
-    blurb.trim() !== space.blurb;
+    name.trim() !== vault.name ||
+    icon !== vault.icon ||
+    color !== vault.color ||
+    blurb.trim() !== vault.blurb;
   const ready = name.trim().length > 0;
 
   const save = (): void => {
@@ -118,43 +122,43 @@ export default function SettingsSpaceScreen({
     <div className={drawerGroupCss.group}>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          This space is a vault — its own apps, conversations, and data. Switch
-          between reachable spaces, or add and manage gateways, from the
-          switcher at the top of the sidebar (⌘⇧G).
+          This vault holds its own apps, conversations, and data. Switch between
+          your vaults, or add another, from the switcher at the top of the
+          sidebar (⌘⇧G).
         </div>
 
-        <div className={spaceModalStyles.profModalPreview}>
+        <div className={vaultModalStyles.profModalPreview}>
           <span>
             <Avatar icon={icon} color={color} size={46} />
           </span>
-          <div className={spaceModalStyles.profModalPreviewText}>
-            <div className={spaceModalStyles.profModalPreviewName}>
+          <div className={vaultModalStyles.profModalPreviewText}>
+            <div className={vaultModalStyles.profModalPreviewName}>
               {name.trim() || "Untitled"}
             </div>
-            <div className={spaceModalStyles.profModalPreviewSub}>
-              {blurb.trim() || "How this space appears in the switcher."}
+            <div className={vaultModalStyles.profModalPreviewSub}>
+              {blurb.trim() || "How this vault appears in the switcher."}
             </div>
           </div>
         </div>
 
-        <label className={spaceModalStyles.profField}>
-          <span className={spaceModalStyles.profFieldLabel}>Name</span>
+        <label className={vaultModalStyles.profField}>
+          <span className={vaultModalStyles.profFieldLabel}>Name</span>
           <input
-            className={spaceModalStyles.profFieldInput}
+            className={vaultModalStyles.profFieldInput}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </label>
 
-        <label className={spaceModalStyles.profField}>
-          <span className={spaceModalStyles.profFieldLabel}>Icon</span>
-          <div className={spaceModalStyles.profIconGrid}>
+        <label className={vaultModalStyles.profField}>
+          <span className={vaultModalStyles.profFieldLabel}>Icon</span>
+          <div className={vaultModalStyles.profIconGrid}>
             {PROFILE_ICONS.map((ic) => (
               <button
                 key={ic}
                 type="button"
-                className={spaceModalStyles.profIconBtn}
+                className={vaultModalStyles.profIconBtn}
                 title={ic}
                 aria-label={ic}
                 data-selected={ic === icon ? "true" : "false"}
@@ -166,14 +170,14 @@ export default function SettingsSpaceScreen({
           </div>
         </label>
 
-        <label className={spaceModalStyles.profField}>
-          <span className={spaceModalStyles.profFieldLabel}>Color</span>
-          <div className={spaceModalStyles.profColorRow}>
+        <label className={vaultModalStyles.profField}>
+          <span className={vaultModalStyles.profFieldLabel}>Color</span>
+          <div className={vaultModalStyles.profColorRow}>
             {PROFILE_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
-                className={spaceModalStyles.profColorBtn}
+                className={vaultModalStyles.profColorBtn}
                 title={c}
                 aria-label={`Color ${c}`}
                 data-selected={c === color ? "true" : "false"}
@@ -184,13 +188,13 @@ export default function SettingsSpaceScreen({
           </div>
         </label>
 
-        <label className={spaceModalStyles.profField}>
-          <span className={spaceModalStyles.profFieldLabel}>
+        <label className={vaultModalStyles.profField}>
+          <span className={vaultModalStyles.profFieldLabel}>
             Description
-            <span className={spaceModalStyles.profFieldOptional}>optional</span>
+            <span className={vaultModalStyles.profFieldOptional}>optional</span>
           </span>
           <input
-            className={spaceModalStyles.profFieldInput}
+            className={vaultModalStyles.profFieldInput}
             type="text"
             placeholder="A short note — e.g. Focus & planning"
             value={blurb}
@@ -208,28 +212,47 @@ export default function SettingsSpaceScreen({
         </button>
       </div>
 
+      {onDisconnect ? (
+        <div className={drawerGroupCss.group}>
+          <div className={drawerGroupCss.groupLabel}>On this device</div>
+          <div className={drawerGroupCss.groupBody}>
+            <div className={controlsCss.note}>
+              Stop reaching this vault from this device. It stays intact on its
+              host, and you can connect to it again from the switcher.
+            </div>
+            <button
+              type="button"
+              className={cx(controlsCss.chip, vaultModalStyles.profModalDelete)}
+              onClick={onDisconnect}
+            >
+              <Icon name="Plug" size={12} />
+              Disconnect from this device
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {onDelete ? (
         <div className={drawerGroupCss.group}>
           <div className={drawerGroupCss.groupLabel}>Danger zone</div>
           <div className={drawerGroupCss.groupBody}>
             <div className={controlsCss.note}>
-              Delete this space — its vault and everything in it are removed.
-              This can't be undone.
+              Erase this vault and everything in it, everywhere — not just on
+              this device. This can’t be undone.
             </div>
             <button
               type="button"
-              className={cx(controlsCss.chip, spaceModalStyles.profModalDelete)}
+              className={cx(controlsCss.chip, vaultModalStyles.profModalDelete)}
               onClick={onDelete}
             >
               <Icon name="Trash" size={12} />
-              Delete this space
+              Erase this vault
             </button>
           </div>
         </div>
       ) : (
         <div className={controlsCss.note}>
-          This is the only space on this gateway, so it can't be deleted from
-          here.
+          This is your only vault here, so it can’t be deleted from this page.
         </div>
       )}
     </div>

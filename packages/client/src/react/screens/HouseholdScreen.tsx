@@ -16,7 +16,7 @@ import type { DevicesCardProps } from "./DevicesCard.js";
 import styles from "./HouseholdScreen.module.css";
 
 // Household (issue #599) — one page for the people side of this installation.
-// It shows every space at once, together with the people who hold roles in
+// It shows every vault at once, together with the people who hold roles in
 // them and the hardware acting on those people's behalf.
 //
 // Two sections, in the order the questions get asked:
@@ -24,27 +24,27 @@ import styles from "./HouseholdScreen.module.css";
 //   People & devices — the roster card, moved here from the Gateway page. It
 //     was never a runtime-health question; Gateway now answers only "is the
 //     gateway up" (heartbeat, components, logs, alerts).
-//   Spaces — every space this member holds a role in, their access in ownership
+//   Vaults — every vault this member holds a role in, their access in ownership
 //     words, and the settings surfaces that already exist for it.
 
 export interface HouseholdScreenProps {
   /** Live clock (route ticks it) — drives the devices card's humanized ages. */
   now: number;
-  /** Spaces the calling member holds a role in, own space first. */
-  spaces: MemberScope[];
+  /** Vaults the calling member holds a role in, own vault first. */
+  vaults: MemberScope[];
   /** The shell's default/active scope pointer — badges one card "Default". */
   defaultScopeId: string;
   /** True until the scope registry's first fetch settles. */
-  spacesLoading?: boolean;
+  vaultsLoading?: boolean;
   /** Local disk footprint + limits (Gateway → Storage). */
   onOpenStorage: () => void;
-  /** Open the "new space" sheet. Omitted (a gateway this client can't create
-   *  spaces on) hides the affordance rather than offering a failing button. */
-  onNewSpace?: () => void;
-  /** Settings → Space. Only offered for the default space: that settings page
-   *  edits whichever space the client currently resolves to, so pointing it at
-   *  another card's space would quietly edit the wrong one. */
-  onOpenSpaceSettings?: () => void;
+  /** Open the "new vault" sheet. Omitted (a gateway this client can't create
+   *  vaults on) hides the affordance rather than offering a failing button. */
+  onNewVault?: () => void;
+  /** Settings → Vault. Only offered for the default vault: that settings page
+   *  edits whichever vault the client currently resolves to, so pointing it at
+   *  another card's vault would quietly edit the wrong one. */
+  onOpenVaultSettings?: () => void;
   /** Devices-card wiring. Optional so a host that can't list devices (or a
    *  test) renders the page without the roster rather than crashing. */
   loadDevices?: DevicesCardProps["loadDevices"];
@@ -58,21 +58,21 @@ export interface HouseholdScreenProps {
   loadDeviceWorkStatus?: DevicesCardProps["loadWorkStatus"];
 }
 
-function SpaceCard({
-  space,
+function VaultCard({
+  vault,
   isDefault,
   onOpenStorage,
-  onOpenSpaceSettings,
+  onOpenVaultSettings,
 }: {
-  space: MemberScope;
+  vault: MemberScope;
   isDefault: boolean;
   onOpenStorage: () => void;
-  onOpenSpaceSettings?: () => void;
+  onOpenVaultSettings?: () => void;
 }): JSX.Element {
-  const finish = tileFinish(space.color ?? "#4E68DD", "gradient");
+  const finish = tileFinish(vault.color ?? "#4E68DD", "gradient");
   return (
-    <section className={styles.space}>
-      <div className={styles.spaceTop}>
+    <section className={styles.vault}>
+      <div className={styles.vaultTop}>
         <span
           className={styles.avatar}
           aria-hidden="true"
@@ -83,25 +83,25 @@ function SpaceCard({
           }}
         >
           <Icon
-            name={(space.icon as IconName) || "Sparkle"}
+            name={(vault.icon as IconName) || "Sparkle"}
             size={16}
             strokeWidth={1.9}
           />
         </span>
-        <span className={styles.spaceText}>
-          <span className={styles.spaceName} title={space.label}>
-            {space.label}
+        <span className={styles.vaultText}>
+          <span className={styles.vaultName} title={vault.label}>
+            {vault.label}
           </span>
-          <span className={styles.spaceRole}>{roleSentence(space.role)}</span>
+          <span className={styles.vaultRole}>{roleSentence(vault.role)}</span>
         </span>
         <span
           className={styles.badge}
           data-default={isDefault ? "true" : undefined}
         >
-          {isDefault ? "Default" : roleBadge(space.role)}
+          {isDefault ? "Default" : roleBadge(vault.role)}
         </span>
       </div>
-      <div className={styles.spaceLinks}>
+      <div className={styles.vaultLinks}>
         <button
           type="button"
           className={styles.link}
@@ -110,14 +110,14 @@ function SpaceCard({
           <Icon name="Save" size={12} />
           Storage &amp; backups
         </button>
-        {onOpenSpaceSettings ? (
+        {onOpenVaultSettings ? (
           <button
             type="button"
             className={styles.link}
-            onClick={() => onOpenSpaceSettings()}
+            onClick={() => onOpenVaultSettings()}
           >
             <Icon name="Settings" size={12} />
-            Space settings
+            Vault settings
           </button>
         ) : null}
       </div>
@@ -128,11 +128,11 @@ function SpaceCard({
 export default function HouseholdScreen(
   props: HouseholdScreenProps
 ): JSX.Element {
-  const { spaces, defaultScopeId } = props;
-  const spaceCount = spaces.length;
-  // Same source of truth as the "Viewer · <space>" copy below: the scope
-  // registry. A member who owns no space gets read-only roster rows (B11).
-  const canAdminister = canAdministerHousehold(spaces);
+  const { vaults, defaultScopeId } = props;
+  const vaultCount = vaults.length;
+  // Same source of truth as the "Viewer · <vault>" copy below: the scope
+  // registry. A member who owns no vault gets read-only roster rows (B11).
+  const canAdminister = canAdministerHousehold(vaults);
   return (
     <div className={styles.page}>
       <div className={styles.head}>
@@ -144,7 +144,7 @@ export default function HouseholdScreen(
         </div>
         <div className={styles.headMeta}>
           The people who share this installation, the devices acting for them,
-          and the spaces they can reach.
+          and the vaults they can reach.
         </div>
       </div>
 
@@ -180,49 +180,49 @@ export default function HouseholdScreen(
           />
         ) : (
           <div className={styles.empty}>
-            This gateway doesn’t report a roster.
+            This connection doesn’t report a roster.
           </div>
         )}
       </div>
 
       <div className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Spaces</h2>
-          {spaceCount > 0 ? (
+          <h2>Vaults</h2>
+          {vaultCount > 0 ? (
             <span className={styles.sectionMeta}>
-              {spaceCount} {spaceCount === 1 ? "space" : "spaces"} you can reach
+              {vaultCount} {vaultCount === 1 ? "vault" : "vaults"} you can reach
             </span>
           ) : null}
-          {props.onNewSpace ? (
+          {props.onNewVault ? (
             <button
               type="button"
               className={styles.link}
-              onClick={() => props.onNewSpace?.()}
+              onClick={() => props.onNewVault?.()}
             >
               <Icon name="Plus" size={12} />
-              New space
+              New vault
             </button>
           ) : null}
         </div>
-        {spaceCount > 0 ? (
-          <div className={styles.spaces}>
-            {spaces.map((space) => (
-              <SpaceCard
-                key={space.id}
-                space={space}
-                isDefault={space.id === defaultScopeId}
+        {vaultCount > 0 ? (
+          <div className={styles.vaults}>
+            {vaults.map((vault) => (
+              <VaultCard
+                key={vault.id}
+                vault={vault}
+                isDefault={vault.id === defaultScopeId}
                 onOpenStorage={props.onOpenStorage}
-                {...(space.id === defaultScopeId && props.onOpenSpaceSettings
-                  ? { onOpenSpaceSettings: props.onOpenSpaceSettings }
+                {...(vault.id === defaultScopeId && props.onOpenVaultSettings
+                  ? { onOpenVaultSettings: props.onOpenVaultSettings }
                   : {})}
               />
             ))}
           </div>
         ) : (
           <div className={styles.empty}>
-            {props.spacesLoading
-              ? "Loading spaces…"
-              : "No spaces are mounted on this gateway."}
+            {props.vaultsLoading
+              ? "Loading vaults…"
+              : "No vaults are reachable from this device."}
           </div>
         )}
       </div>

@@ -3,9 +3,9 @@ import { describe, expect, test } from "vitest";
 import {
   applyArtifactEdits,
   editableArtifactFields,
-} from "./inbox-artifact-editor";
+} from "./notifications-artifact-editor";
 
-describe("mobile Inbox artifact editing", () => {
+describe("mobile Notifications artifact editing", () => {
   test("edits scalar text without changing structured fields", () => {
     const artifact = {
       subject: "Original",

@@ -825,6 +825,20 @@ interface CentraidApi {
     rememberDevice?: boolean;
   }>;
   /**
+   * Turn this device's offline copy of the ACTIVE gateway on or off.
+   *
+   * The pairing flow no longer asks (it is on by default), so this is the
+   * single place the choice is made after enrollment — Settings → This
+   * device. Same semantics as the flag carried through
+   * `redeemGatewayPairing`: turning it OFF purges the tunnel caches and asks
+   * the shell to drop this gateway's replica; turning it ON requests durable
+   * storage. The enrollment itself is untouched either way — this is device
+   * state, not a re-pairing.
+   */
+  setGatewayRememberDevice: (input: {
+    rememberDevice: boolean;
+  }) => Promise<{ rememberDevice: boolean }>;
+  /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
    * over the iroh pairing plane (issue #376). On success the paired gateway AND the vault
    * it enrolled into are both active — treat the result like a combined

@@ -3,15 +3,17 @@ import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
-import ConnectFlow from "./ConnectFlow.js";
 import type { ConnectFlowProps } from "./ConnectFlow.js";
+import ConnectTicketPanel, {
+  CONNECT_TICKET_INTRO,
+} from "./ConnectTicketPanel.js";
 
 import controlsCss from "../../styles/controls.module.css";
-// Reuses SpaceModal's overlay/scrim/head/foot chrome verbatim, same
+// Reuses VaultModal's overlay/scrim/head/foot chrome verbatim, same
 // precedent the retired GatewayModal.tsx set (issue #376) for the "Add X"
 // dialog family — one implementation of the overlay/backdrop/pop-animation
 // CSS shared by every "Add ___" modal in Settings/the switcher.
-import spaceModalStyles from "./SpaceModal.module.css";
+import vaultModalStyles from "./VaultModal.module.css";
 
 export interface ConnectFlowModalProps extends Omit<
   ConnectFlowProps,
@@ -20,10 +22,15 @@ export interface ConnectFlowModalProps extends Omit<
   onCancel: () => void;
 }
 
-/** The switcher's "Add gateway…" modal (issue #382) — dialog chrome around
- *  the shared ConnectFlow wizard, offering "Existing gateway" only ('local'
- *  is always already registered, so re-offering it here would be a dead end
- *  rather than a new connection). */
+/** The switcher's "Add vault…" modal (issue #382) — dialog chrome around
+ *  ConnectTicketPanel, the SAME ticket step onboarding shows, offering the
+ *  ticket path only ('local' is always already registered, so re-offering it
+ *  here would be a dead end rather than a new connection).
+ *
+ *  A ticket pairs this device to a VAULT; which gateway happens to host it is
+ *  the ticket's business, so the dialog no longer asks the reader to think
+ *  about gateways at all. Internal names (`connectGateway`, `addGateway`, the
+ *  `'gateway'` method id) are unchanged — this is copy, not a rename. */
 const DEFAULT_METHODS: ConnectFlowModalProps["methods"] = ["gateway"];
 
 export default function ConnectFlowModal({
@@ -44,25 +51,25 @@ export default function ConnectFlowModal({
   }, [onCancel]);
 
   return (
-    <div className={spaceModalStyles.profOverlay}>
+    <div className={vaultModalStyles.profOverlay}>
       <button
         type="button"
-        className={spaceModalStyles.profScrim}
+        className={vaultModalStyles.profScrim}
         aria-label="Close"
         tabIndex={-1}
         onClick={onCancel}
       />
-      <dialog open className={spaceModalStyles.profModal} aria-modal="true">
-        <div className={spaceModalStyles.profModalHead}>
+      <dialog open className={vaultModalStyles.profModal} aria-modal="true">
+        <div className={vaultModalStyles.profModalHead}>
           <span
-            className={spaceModalStyles.profModalHeadIcon}
+            className={vaultModalStyles.profModalHeadIcon}
             // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Plug", 14) }}
           />
-          <h2 className={spaceModalStyles.profModalTitle}>Add gateway</h2>
+          <h2 className={vaultModalStyles.profModalTitle}>Add vault</h2>
           <button
             type="button"
-            className={cx(controlsCss.iconBtn, spaceModalStyles.profModalClose)}
+            className={cx(controlsCss.iconBtn, vaultModalStyles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onCancel}
@@ -70,8 +77,13 @@ export default function ConnectFlowModal({
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
-        <div className={spaceModalStyles.profModalBody}>
-          <ConnectFlow context={context} methods={methods} onDone={onDone} />
+        <div className={vaultModalStyles.profModalBody}>
+          <p className={controlsCss.note}>{CONNECT_TICKET_INTRO}</p>
+          <ConnectTicketPanel
+            context={context}
+            methods={methods}
+            onDone={onDone}
+          />
         </div>
       </dialog>
     </div>

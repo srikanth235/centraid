@@ -84,7 +84,7 @@ export interface ConnectFlowResult {
    *  — i.e. a vault first run may safely rename to the owner's display name.
    *  A reinstall over existing data has no "Personal" vault (it was already
    *  renamed), and the fallback there is the oldest vault, which is "Shared".
-   *  Renaming THAT would rename everyone's shared space, so the flag stays
+   *  Renaming THAT would rename everyone's shared vault, so the flag stays
    *  false and the host skips the rename. */
   ownerVault?: boolean;
 }
@@ -103,7 +103,15 @@ export interface ConnectFlowState {
   // "gateway" method details — one iroh pairing ticket.
   ticket: string;
   label: string;
-  /** Explicit consent for a durable replica, intent queue, and media cache. */
+  /**
+   * Durable replica, intent queue, and media cache on this device.
+   *
+   * Defaults to ON and is no longer asked during pairing/onboarding: an
+   * offline copy is what makes the product work on a flaky link, and a
+   * first-timer has no basis to answer the question. It stays a real,
+   * reversible choice — Settings → This device owns the toggle now, and
+   * turning it off there purges what was kept.
+   */
   rememberDevice: boolean;
 
   // test step.
@@ -140,7 +148,9 @@ export function createInitialConnectFlowState(
     newVaultName: "",
     report: null,
     result: null,
-    rememberDevice: false,
+    // ON by default — see the field's doc comment: the pairing UI no longer
+    // asks, so the initial state IS the product default.
+    rememberDevice: true,
     step: "method",
     testError: null,
     testing: false,
@@ -345,7 +355,7 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
     // Once the ticket has been redeemed the report says which vault the
     // enrollment actually grants. An enrollment that names none leaves the
     // vault step with nothing to pick, so "Continue" must not proceed
-    // (issue #603 D10) — it would commit against no space at all.
+    // (issue #603 D10) — it would commit against no vault at all.
     if (state.step === "vault" && state.report) return hasUsableVault(state);
     return true;
   }

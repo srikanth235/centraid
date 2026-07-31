@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Settings account / space data layer (issue #545 B8).
+ * Settings account / vault data layer (issue #545 B8).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,7 +29,7 @@ vi.mock(import("../../../gateway-client.js"), () => ({
 
 import {
   importCallbacks,
-  loadActiveSpaceData,
+  loadActiveVaultData,
   phoneCallbacks,
 } from "./settingsAccountData.js";
 
@@ -45,6 +45,9 @@ describe("settingsAccountData", () => {
         .mockResolvedValue({
           vaultId: "v1",
         }),
+      listGateways: vi
+        .fn<typeof window.CentraidApi.listGateways>()
+        .mockResolvedValue([]),
       beginPhonePairing: vi.fn<typeof window.CentraidApi.beginPhonePairing>(),
       onPhonePaired: vi.fn<typeof window.CentraidApi.onPhonePaired>(
         () => () => undefined
@@ -55,13 +58,13 @@ describe("settingsAccountData", () => {
     } as unknown as typeof window.CentraidApi;
   });
 
-  describe(loadActiveSpaceData, () => {
+  describe(loadActiveVaultData, () => {
     it("returns null when no active vault is found", async () => {
       listVaults.mockResolvedValue([]);
-      await expect(loadActiveSpaceData()).resolves.toBeNull();
+      await expect(loadActiveVaultData()).resolves.toBeNull();
     });
 
-    it("maps the active vault and deletable when more than one space exists", async () => {
+    it("maps the active vault and deletable when more than one vault exists", async () => {
       listVaults.mockResolvedValue([
         {
           vaultId: "v1",
@@ -79,7 +82,7 @@ describe("settingsAccountData", () => {
           color: "#222",
         },
       ]);
-      await expect(loadActiveSpaceData()).resolves.toStrictEqual({
+      await expect(loadActiveVaultData()).resolves.toStrictEqual({
         vaultId: "v1",
         name: "Home",
         icon: "Folder",
@@ -99,8 +102,57 @@ describe("settingsAccountData", () => {
           color: "#111",
         },
       ]);
-      const data = await loadActiveSpaceData();
+      const data = await loadActiveVaultData();
       expect(data?.deletable).toBe(false);
+    });
+
+    // "On this device → Disconnect" (issue #665) exists only for a vault on a
+    // REMOTE connection, and the confirm has to be able to name every vault
+    // that leaves with it — `listVaults()` already answers for exactly the
+    // connection in question, so the siblings come free.
+    describe("remote connection", () => {
+      const twoVaults = [
+        {
+          vaultId: "v1",
+          name: "Work",
+          ownerPartyId: "p1",
+          icon: "Folder" as const,
+          color: "#111",
+        },
+        {
+          vaultId: "v2",
+          name: "Family",
+          ownerPartyId: "p1",
+          icon: "Folder" as const,
+          color: "#222",
+        },
+      ];
+      const withGateway = (kind: "local" | "remote"): void => {
+        vi.spyOn(window.CentraidApi, "getGatewayAuth").mockResolvedValue({
+          gatewayId: "office",
+          vaultId: "v1",
+        } as Awaited<ReturnType<typeof window.CentraidApi.getGatewayAuth>>);
+        vi.spyOn(window.CentraidApi, "listGateways").mockResolvedValue([
+          { id: "office", kind, label: "Office" },
+        ] as Awaited<ReturnType<typeof window.CentraidApi.listGateways>>);
+      };
+
+      it("names every sibling vault the connection also serves", async () => {
+        listVaults.mockResolvedValue(twoVaults);
+        withGateway("remote");
+        const data = await loadActiveVaultData();
+        expect(data?.connection).toStrictEqual({
+          gatewayId: "office",
+          siblingNames: ["Family"],
+        });
+      });
+
+      it("offers nothing to disconnect on the primordial local host", async () => {
+        listVaults.mockResolvedValue(twoVaults);
+        withGateway("local");
+        const data = await loadActiveVaultData();
+        expect(data?.connection).toBeUndefined();
+      });
     });
   });
 

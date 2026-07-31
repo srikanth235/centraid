@@ -1,6 +1,6 @@
 // A labelled Settings section — a mono uppercase eyebrow over its content, with
 // consistent top spacing so the Settings screen reads as evenly-spaced bands
-// (You · Appearance · Space · Desktop link · Approvals · Advanced). Extracted so
+// (You · Appearance · Vault · Desktop link · Approvals · Advanced). Extracted so
 // every section shares one label treatment and rhythm (issue #498).
 
 import React, { useMemo } from "react";

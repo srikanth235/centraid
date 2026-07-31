@@ -102,10 +102,10 @@ export default function AssistantRoute({
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
   });
-  // The space this conversation addresses (issue #599). Chosen once, before the
+  // The vault this conversation addresses (issue #599). Chosen once, before the
   // first message; from then on the recorded scope is authoritative and every
   // request the thread makes repeats it, so a conversation reads exactly ONE
-  // space for its whole life. `undefined` — an older thread, or a gateway with
+  // vault for its whole life. `undefined` — an older thread, or a gateway with
   // no member layer — falls back to the internal default scope.
   const memberScopes = useMemberScopes();
   const [pickedScope, setPickedScope] = useState<string | undefined>(undefined);
@@ -651,7 +651,7 @@ export default function AssistantRoute({
             : {}),
           workspaceKind: m.current.workspaceKind,
           additionalDirectories: m.current.additionalDirectories,
-          // Explicit, never ambient: the turn must land in the space the
+          // Explicit, never ambient: the turn must land in the vault the
           // conversation was created in (issue #599).
           ...(conversationScope(conversationIdLocal)
             ? { scopeId: conversationScope(conversationIdLocal) }
@@ -1053,9 +1053,9 @@ export default function AssistantRoute({
 
   return (
     <div className={mainScrollCss.hasWall}>
-      {/* Which space this conversation reads (issue #599). A picker while the
+      {/* Which vault this conversation reads (issue #599). A picker while the
           conversation is still hypothetical; a plain statement once it exists,
-          because the space is part of the thread's identity from then on. */}
+          because the vault is part of the thread's identity from then on. */}
       {memberScopes.scopes.length > 0 ? (
         <div className={scopeBarCss.bar}>
           <ScopePicker

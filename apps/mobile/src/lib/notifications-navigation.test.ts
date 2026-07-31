@@ -1,13 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import type { MobileInboxNotice } from "./gateway";
-import { mobileInboxDestination } from "./inbox-navigation";
+import type { MobileNotice } from "./gateway";
+import { mobileNotificationsDestination } from "./notifications-navigation";
 
 function notice(
   kind: string,
   sourceRef: string,
   detail: Record<string, unknown>
-): MobileInboxNotice {
+): MobileNotice {
   return {
     noticeId: `${kind}-1`,
     kind,
@@ -23,10 +23,10 @@ function notice(
   };
 }
 
-describe(mobileInboxDestination, () => {
+describe(mobileNotificationsDestination, () => {
   test("routes every actionable notice to its exact native destination", () => {
     expect(
-      mobileInboxDestination(
+      mobileNotificationsDestination(
         notice("automation", "fallback/ref", {
           sourceType: "automation",
           automationRef: "daily/digest",
@@ -37,12 +37,12 @@ describe(mobileInboxDestination, () => {
       automationRef: "daily/digest",
     });
     expect(
-      mobileInboxDestination(
+      mobileNotificationsDestination(
         notice("gateway-health", "gateway", { sourceType: "app" })
       )
     ).toStrictEqual({ kind: "gateway-alerts" });
     expect(
-      mobileInboxDestination(
+      mobileNotificationsDestination(
         notice("outbox", "fallback-item", {
           sourceType: "agent",
           itemId: "item-1",
@@ -50,7 +50,7 @@ describe(mobileInboxDestination, () => {
       )
     ).toStrictEqual({ kind: "outbox", itemId: "item-1" });
     expect(
-      mobileInboxDestination(
+      mobileNotificationsDestination(
         notice("app", "tasks", { sourceType: "app", appId: "tasks" })
       )
     ).toStrictEqual({ kind: "app", appId: "tasks" });

@@ -19,7 +19,7 @@ import type {
   ApprovalsParkedRowDTO,
   ApprovalsScopeRequestRowDTO,
   ApprovalsScreenProps,
-  InboxNoticeRowDTO,
+  NoticeRowDTO,
 } from "./ApprovalsScreen.js";
 
 const outboxRow: ApprovalsOutboxRowDTO = {
@@ -91,7 +91,7 @@ const grantRow: ApprovalsGrantRowDTO = {
   createdAgo: "3d ago",
 };
 
-function noticeRow(over: Partial<InboxNoticeRowDTO> = {}): InboxNoticeRowDTO {
+function noticeRow(over: Partial<NoticeRowDTO> = {}): NoticeRowDTO {
   return {
     noticeId: "notice-1",
     kind: "automation",
@@ -322,7 +322,7 @@ describe("screens/ApprovalsScreen", () => {
       }
     });
 
-    it("says only that a notice filter is empty, never that the inbox is clear", () => {
+    it("says only that a notice filter is empty, never that Notifications is clear", () => {
       const el = mount(makeProps({ outbox: [outboxRow], notices: [] }));
       act(() => findButton(el, "Apps").click());
       expect(el.textContent).toContain("No notices here.");
@@ -347,6 +347,31 @@ describe("screens/ApprovalsScreen", () => {
       ).toBe("true");
       // Expanded, so the owner lands on the artifact rather than a collapsed row.
       expect(el.textContent).toContain("See you at 6.");
+    });
+
+    it("keeps info-severity notices out of Needs me but under their source chip", () => {
+      // "Needs me" means "requires attention" (#665): a gateway-recovered FYI
+      // must not sit in the default view as an unread obligation, while a
+      // warning/high notice keeps its place.
+      const recovered = noticeRow({
+        noticeId: "notice-recovered",
+        kind: "app",
+        sourceType: "app",
+        severity: "info",
+        headline: "Local recovered",
+        detail: { sourceType: "app" },
+      });
+      const failed = noticeRow(); // severity high
+      const el = mount(makeProps({ notices: [recovered, failed] }));
+
+      expect(el.textContent).toContain("Digest failed");
+      expect(el.textContent).not.toContain("Local recovered");
+
+      act(() => {
+        findButton(el, "Apps").click();
+      });
+      expect(el.textContent).toContain("Local recovered");
+      expect(el.textContent).not.toContain("Digest failed");
     });
 
     it("falls back to Needs me with nothing focused when the item is gone", () => {

@@ -1,5 +1,5 @@
 /**
- * Spaces owner (issue #545 C5) — device-local (gateway, vault) registry.
+ * Vaults owner (issue #545 C5) — device-local (gateway, vault) registry.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -33,17 +33,17 @@ vi.mock(import("./secure-storage"), () => ({
   },
 }));
 
-async function loadSpaces() {
+async function loadVaultLinks() {
   vi.resetModules();
   storeMem.clear();
   secureMem.clear();
-  return import("./spaces");
+  return import("./vault-links");
 }
 
-describe("Spaces registry", () => {
-  it("adds a space, projects the active slot, and lists it", async () => {
-    const spaces = await loadSpaces();
-    const space = await spaces.addSpace({
+describe("Vaults registry", () => {
+  it("adds a vault, projects the active slot, and lists it", async () => {
+    const vaults = await loadVaultLinks();
+    const vault = await vaults.addVaultLink({
       gatewayId: "gw-1",
       desktopName: "Mac mini",
       deviceId: "dev-1",
@@ -51,23 +51,23 @@ describe("Spaces registry", () => {
       endpointHint: "relay-hint-1",
       vaultName: "Personal",
     });
-    expect(space.gatewayId).toBe("gw-1");
-    expect(spaces.listSpaces()).toHaveLength(1);
-    expect(spaces.getActiveSpace()?.id).toBe(space.id);
-    expect(spaces.getActiveVaultId()).toBe("vault-a");
-    expect(secureMem.get(spaces.LINK_ENDPOINT_HINT_KEY)).toBe("relay-hint-1");
+    expect(vault.gatewayId).toBe("gw-1");
+    expect(vaults.listVaultLinks()).toHaveLength(1);
+    expect(vaults.getActiveVaultLink()?.id).toBe(vault.id);
+    expect(vaults.getActiveVaultId()).toBe("vault-a");
+    expect(secureMem.get(vaults.LINK_ENDPOINT_HINT_KEY)).toBe("relay-hint-1");
   });
 
   it("upserts the same (gateway, vault) tuple instead of duplicating", async () => {
-    const spaces = await loadSpaces();
-    const first = await spaces.addSpace({
+    const vaults = await loadVaultLinks();
+    const first = await vaults.addVaultLink({
       gatewayId: "gw-1",
       desktopName: "Desk",
       deviceId: "d1",
       vaultId: "v1",
       endpointHint: "hint-old",
     });
-    const second = await spaces.addSpace({
+    const second = await vaults.addVaultLink({
       gatewayId: "gw-1",
       desktopName: "Desk",
       deviceId: "d1",
@@ -76,60 +76,60 @@ describe("Spaces registry", () => {
       vaultName: "Home",
     });
     expect(second.id).toBe(first.id);
-    expect(spaces.listSpaces()).toHaveLength(1);
-    expect(spaces.getActiveSpace()?.vaultName).toBe("Home");
-    expect(secureMem.get(spaces.LINK_ENDPOINT_HINT_KEY)).toBe("hint-new");
+    expect(vaults.listVaultLinks()).toHaveLength(1);
+    expect(vaults.getActiveVaultLink()?.vaultName).toBe("Home");
+    expect(secureMem.get(vaults.LINK_ENDPOINT_HINT_KEY)).toBe("hint-new");
   });
 
-  it("switches active space and notifies subscribers", async () => {
-    const spaces = await loadSpaces();
-    const a = await spaces.addSpace({
+  it("switches active vault and notifies subscribers", async () => {
+    const vaults = await loadVaultLinks();
+    const a = await vaults.addVaultLink({
       gatewayId: "gw-a",
       desktopName: "A",
       deviceId: "d",
       vaultId: "va",
       endpointHint: "ha",
     });
-    const b = await spaces.addSpace({
+    const b = await vaults.addVaultLink({
       gatewayId: "gw-b",
       desktopName: "B",
       deviceId: "d",
       vaultId: "vb",
       endpointHint: "hb",
     });
-    expect(spaces.getActiveSpace()?.id).toBe(b.id);
+    expect(vaults.getActiveVaultLink()?.id).toBe(b.id);
     let ticks = 0;
-    const unsub = spaces.subscribeSpaces(() => {
+    const unsub = vaults.subscribeVaultLinks(() => {
       ticks += 1;
     });
-    await spaces.setActiveSpace(a.id);
-    expect(spaces.getActiveSpace()?.id).toBe(a.id);
+    await vaults.setActiveVaultLink(a.id);
+    expect(vaults.getActiveVaultLink()?.id).toBe(a.id);
     expect(ticks).toBeGreaterThanOrEqual(1);
     unsub();
   });
 
-  it("forgets a space and falls back when it was active", async () => {
-    const spaces = await loadSpaces();
-    const a = await spaces.addSpace({
+  it("forgets a vault and falls back when it was active", async () => {
+    const vaults = await loadVaultLinks();
+    const a = await vaults.addVaultLink({
       gatewayId: "gw-a",
       desktopName: "A",
       deviceId: "d",
       vaultId: "va",
       endpointHint: "ha",
     });
-    const b = await spaces.addSpace({
+    const b = await vaults.addVaultLink({
       gatewayId: "gw-b",
       desktopName: "B",
       deviceId: "d",
       vaultId: "vb",
       endpointHint: "hb",
     });
-    await spaces.removeSpace(b.id);
-    expect(spaces.listSpaces().map((s) => s.id)).toStrictEqual([a.id]);
-    expect(spaces.getActiveSpace()?.id).toBe(a.id);
-    await spaces.removeSpace(a.id);
-    expect(spaces.listSpaces()).toStrictEqual([]);
-    expect(spaces.getActiveSpace()).toBeUndefined();
-    expect(spaces.getActiveVaultId()).toBe("");
+    await vaults.removeVaultLink(b.id);
+    expect(vaults.listVaultLinks().map((s) => s.id)).toStrictEqual([a.id]);
+    expect(vaults.getActiveVaultLink()?.id).toBe(a.id);
+    await vaults.removeVaultLink(a.id);
+    expect(vaults.listVaultLinks()).toStrictEqual([]);
+    expect(vaults.getActiveVaultLink()).toBeUndefined();
+    expect(vaults.getActiveVaultId()).toBe("");
   });
 });

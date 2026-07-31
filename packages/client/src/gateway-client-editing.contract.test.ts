@@ -199,7 +199,7 @@ describe("draft file seam", () => {
 });
 
 describe("app lifecycle seam", () => {
-  it("law: creating an app names its target space and publishes a baseline", async () => {
+  it("law: creating an app names its target vault and publishes a baseline", async () => {
     await expect(
       editing.createApp({ id: "daily", name: "Daily", scopeId: "vault-shared" })
     ).resolves.toStrictEqual({ id: "daily", name: "Daily" });
@@ -214,7 +214,7 @@ describe("app lifecycle seam", () => {
     });
   });
 
-  it("law: an unscoped creation falls back to the shell's ambient space", async () => {
+  it("law: an unscoped creation falls back to the shell's ambient vault", async () => {
     await editing.createApp({ id: "daily" });
 
     expect(sent("POST /centraid/_apps").headers.get("x-centraid-vault")).toBe(

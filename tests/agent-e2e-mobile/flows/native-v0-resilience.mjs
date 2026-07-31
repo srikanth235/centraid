@@ -7,7 +7,7 @@ import {
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
-// covers opened from Home's launcher tiles; Settings is opened from the space
+// covers opened from Home's launcher tiles; Settings is opened from the vault
 // drawer. Each destination is asserted on copy unique to the screen it opens,
 // never on the tile label that remains visible on Home (issue #483, enforced
 // by scripts/lint-e2e-flows.mjs).
@@ -56,7 +56,7 @@ const SURFACES = [
     open: "Open Locker",
     name: "locker",
   },
-  // Settings is opened from the Space drawer, not the dock. The dock sits at
+  // Settings is opened from the Vault drawer, not the dock. The dock sits at
   // the very bottom of the screen, exactly where the dev build's LogBox toast
   // ("Open debugger to view warnings.") parks itself — it reappears whenever
   // Home's data load emits a warning, so a dock tap right after launch lands on
@@ -71,7 +71,7 @@ const SURFACES = [
   {
     marker: "APPEARANCE",
     openCommands: [
-      retryableTapCommands("Open space menu"),
+      retryableTapCommands("Open vault menu"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into

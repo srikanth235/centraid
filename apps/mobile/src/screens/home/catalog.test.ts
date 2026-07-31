@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Home / Spaces launcher owner (issue #545 C5/C7 surface) — pure catalog merge.
+ * Home / Vaults launcher owner (issue #545 C5/C7 surface) — pure catalog merge.
  * resolveAppMeta is mocked so vitest never loads react-native via gateway.
  */
 import { describe, expect, it, vi } from "vitest";

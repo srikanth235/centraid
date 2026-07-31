@@ -1,41 +1,47 @@
-import { openMenu } from "./contextMenu.js";
-import type { CtxItem } from "./contextMenu.js";
-import type { GatewayRow } from "./gatewayRegistry.js";
+import { buildVaultRows } from "./gatewayRegistry.js";
+import type {
+  GatewayRow,
+  MemberVaultScope,
+  SwitcherVaultRow,
+} from "./gatewayRegistry.js";
 import { iconSvg } from "./iconSvg.js";
 
 import styles from "./gatewaySwitcher.module.css";
 
-// Combined space and gateway switcher (issue #608). Spaces lead because they
-// are the frequent context change; gateways follow as transport profiles.
-// It is always reachable, even with one gateway, so Add gateway and the
-// keyboard shortcut never disappear behind an inventory-count gate.
+// The sidebar switcher (issues #608, #665). It lists VAULTS ONLY, flattened
+// across every registered gateway.
 //
-// Same body-portal mechanics as the popover it replaces (and as
-// `contextMenu.ts`, reused here for a row's overflow menu): the sidebar column
+// A gateway is transport, not something the owner picks: a pairing ticket lands
+// them in a vault and which gateway hosts it is not their problem. So the
+// Gateways section is gone — picking a vault on another gateway switches both
+// pointers in one click. This surface SWITCHES and nothing else (issue #665):
+// no overflow menus, no management affordances on a row. Leaving a connection
+// is a per-vault act on Settings → Vault ("On this device → Disconnect"), and
+// host plumbing (rename / remove / test connection) lives in the Connections
+// section of Gateway → Components.
+//
+// It is always reachable, even with one vault, so Add vault and the keyboard
+// shortcut never disappear behind an inventory-count gate.
+//
+// Same body-portal mechanics as the popover it replaces: the sidebar column
 // clips `overflow: hidden` and a themed sidebar's `backdrop-filter` would trap
 // a plain `position: fixed` descendant, so this appends to `document.body`.
 //
 // The module is IO-free — it renders whatever `GatewayRow[]` it is given
-// (`gatewayRegistry.ts` owns the fetch/cache/merge) and reports picks through
-// callbacks. `updateGatewaySwitcherRows` patches an open popover in place as
-// the stale-while-revalidate probes land.
+// (`gatewayRegistry.ts` owns the fetch/cache/merge and the flattening) and
+// reports picks through callbacks. `updateGatewaySwitcherRows` patches an open
+// popover in place as the stale-while-revalidate probes land.
 
 export interface GatewaySwitcherOpts {
   anchor: DOMRect;
-  spaces: ReadonlyArray<{
-    id: string;
-    label: string;
-    role: string;
-    isActive: boolean;
-  }>;
+  /** The active gateway's member scopes — the only vaults whose ROLE is known. */
+  scopes: ReadonlyArray<MemberVaultScope>;
+  activeGatewayId: string;
   rows: GatewayRow[];
-  onSelectSpace: (spaceId: string) => void;
-  onSelectGateway: (gatewayId: string) => void;
+  /** Pick a vault. `gatewayId` may differ from the active one, in which case
+   *  the caller must switch gateway AND vault. */
+  onSelectVault: (gatewayId: string, vaultId: string) => void;
   onAddGateway: () => void;
-  onTestConnection: (gatewayId: string) => void;
-  onRenameGateway: (gatewayId: string) => void;
-  /** Never offered for `'local'` — the overflow menu omits the item. */
-  onRemoveGateway: (gatewayId: string) => void;
   /** Called once, however the popover closes (row pick, backdrop, Escape, or a
    *  subsequent open) — lets the trigger drop its `data-open` styling. */
   onClose?: () => void;
@@ -44,7 +50,6 @@ export interface GatewaySwitcherOpts {
 let backdropEl: HTMLElement | null = null;
 let popEl: HTMLElement | null = null;
 let listEl: HTMLElement | null = null;
-let spaceListEl: HTMLElement | null = null;
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 let closeCb: (() => void) | null = null;
 let opts: GatewaySwitcherOpts | null = null;
@@ -63,115 +68,49 @@ export function closeGatewaySwitcher(): void {
   popEl?.remove();
   popEl = null;
   listEl = null;
-  spaceListEl = null;
   opts = null;
   const cb = closeCb;
   closeCb = null;
   cb?.();
 }
 
-function subtitleFor(row: GatewayRow): string {
-  switch (row.status) {
-    case "loading":
-      return "Checking…";
-    case "auth_failed":
-      return "Sign-in required";
-    case "bad_response":
-      return "Unexpected response";
-    case "unreachable":
-      return "Offline";
-    case "ready":
-      return row.spaceCount === undefined
-        ? "Connected"
-        : `${row.spaceCount} ${row.spaceCount === 1 ? "space" : "spaces"}`;
-    default:
-      return row.spaceCount === undefined
-        ? "Connected"
-        : `${row.spaceCount} ${row.spaceCount === 1 ? "space" : "spaces"}`;
-  }
-}
-
-function railStatus(row: GatewayRow): "ready" | "loading" | "error" {
-  if (row.status === "ready") return "ready";
-  if (row.status === "loading") return "loading";
-  return "error";
-}
-
-function buildRow(row: GatewayRow, o: GatewaySwitcherOpts): HTMLElement {
+function buildRow(row: SwitcherVaultRow, o: GatewaySwitcherOpts): HTMLElement {
   const el = document.createElement("button");
   el.type = "button";
   el.className = styles.row ?? "";
   el.setAttribute("role", "menuitem");
   el.dataset.active = String(row.isActive);
   el.dataset.gatewayId = row.gatewayId;
+  el.dataset.selectable = String(row.selectable);
+  // `data-vault-id` is the switcher's long-standing row hook (glossary: code
+  // identifiers keep their `vault` names until a mechanical rename).
+  if (row.vaultId !== undefined) el.dataset.vaultId = row.vaultId;
+  if (!row.selectable) el.disabled = true;
 
   const rail = document.createElement("span");
   rail.className = styles.rail ?? "";
-  rail.dataset.status = railStatus(row);
-  el.append(rail);
+  rail.dataset.status = row.status;
 
   const text = document.createElement("span");
   text.className = styles.text ?? "";
-  const nameEl = document.createElement("span");
-  nameEl.className = styles.name ?? "";
-  const labelEl = document.createElement("span");
-  labelEl.textContent = row.gatewayLabel;
-  nameEl.append(labelEl);
-  const badge = document.createElement("span");
-  badge.className = styles.badge ?? "";
-  badge.textContent = row.transportBadge;
-  nameEl.append(badge);
-  text.append(nameEl);
+  const name = document.createElement("span");
+  name.className = styles.name ?? "";
+  name.textContent = row.label;
   const sub = document.createElement("span");
   sub.className = styles.sub ?? "";
-  sub.textContent = subtitleFor(row);
-  text.append(sub);
-  el.append(text);
-
-  const more = document.createElement("span");
-  more.className = styles.more ?? "";
-  more.setAttribute("role", "button");
-  more.tabIndex = 0;
-  more.title = "More";
-  more.setAttribute("aria-label", `More actions for ${row.gatewayLabel}`);
-  more.innerHTML = iconSvg("MoreHoriz", 13, 2);
-  const openMore = (e: Event): void => {
-    e.stopPropagation();
-    e.preventDefault();
-    const rect = more.getBoundingClientRect();
-    const items: Array<CtxItem | "sep"> = [
-      { icon: "Wifi", id: "test", label: "Test connection…" },
-      { icon: "Pencil", id: "rename", label: "Rename…" },
-    ];
-    if (row.canRemove) {
-      items.push("sep", {
-        danger: true,
-        icon: "Trash",
-        id: "remove",
-        label: "Remove",
-      });
-    }
-    // Close this popover FIRST: its scrim sits at z-index 1100 and the context
-    // menu at 70/71, so leaving it open would swallow every click (found live
-    // on the switcher this replaces, issue #382). `rect` is already captured.
-    closeGatewaySwitcher();
-    openMenu(items, { kind: "rect", rect }, (id) => {
-      if (id === "test") o.onTestConnection(row.gatewayId);
-      else if (id === "rename") o.onRenameGateway(row.gatewayId);
-      else if (id === "remove") o.onRemoveGateway(row.gatewayId);
-    });
-  };
-  more.addEventListener("click", openMore);
-  el.append(more);
+  sub.textContent = row.subtitle;
+  text.append(name, sub);
 
   const check = document.createElement("span");
   check.className = styles.check ?? "";
   if (row.isActive) check.innerHTML = iconSvg("Check", 13, 2.2);
-  el.append(check);
 
+  el.append(rail, text, check);
   el.addEventListener("click", () => {
+    const vaultId = row.vaultId;
     closeGatewaySwitcher();
-    if (!row.isActive) o.onSelectGateway(row.gatewayId);
+    if (!row.selectable || vaultId === undefined || row.isActive) return;
+    o.onSelectVault(row.gatewayId, vaultId);
   });
   return el;
 }
@@ -179,42 +118,8 @@ function buildRow(row: GatewayRow, o: GatewaySwitcherOpts): HTMLElement {
 function renderRows(): void {
   if (!listEl || !opts) return;
   listEl.innerHTML = "";
-  for (const row of opts.rows) listEl.append(buildRow(row, opts));
-}
-
-function renderSpaces(): void {
-  if (!spaceListEl || !opts) return;
-  spaceListEl.innerHTML = "";
-  for (const space of opts.spaces) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = styles.row ?? "";
-    row.setAttribute("role", "menuitem");
-    row.dataset.active = String(space.isActive);
-    row.dataset.spaceId = space.id;
-    const rail = document.createElement("span");
-    rail.className = styles.rail ?? "";
-    rail.dataset.status = "ready";
-    const text = document.createElement("span");
-    text.className = styles.text ?? "";
-    const name = document.createElement("span");
-    name.className = styles.name ?? "";
-    name.textContent = space.label;
-    const sub = document.createElement("span");
-    sub.className = styles.sub ?? "";
-    sub.textContent = `${space.role} space`;
-    text.append(name, sub);
-    const check = document.createElement("span");
-    check.className = styles.check ?? "";
-    if (space.isActive) check.innerHTML = iconSvg("Check", 13, 2.2);
-    row.append(rail, text, check);
-    row.addEventListener("click", () => {
-      const onSelect = opts?.onSelectSpace;
-      closeGatewaySwitcher();
-      if (!space.isActive) onSelect?.(space.id);
-    });
-    spaceListEl.append(row);
-  }
+  const rows = buildVaultRows(opts.rows, opts.scopes, opts.activeGatewayId);
+  for (const row of rows) listEl.append(buildRow(row, opts));
 }
 
 /**
@@ -240,27 +145,11 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   popEl = document.createElement("div");
   popEl.className = styles.pop ?? "";
   popEl.setAttribute("role", "menu");
-  popEl.setAttribute("aria-label", "Spaces and gateways");
-
-  const spacesEyebrow = document.createElement("div");
-  spacesEyebrow.className = styles.eyebrow ?? "";
-  spacesEyebrow.textContent = "Spaces";
-  popEl.append(spacesEyebrow);
-
-  spaceListEl = document.createElement("div");
-  spaceListEl.className = styles.list ?? "";
-  popEl.append(spaceListEl);
-  renderSpaces();
-
-  popEl.append(
-    Object.assign(document.createElement("div"), {
-      className: styles.divider ?? "",
-    })
-  );
+  popEl.setAttribute("aria-label", "Vaults");
 
   const eyebrow = document.createElement("div");
   eyebrow.className = styles.eyebrow ?? "";
-  eyebrow.textContent = "Gateways";
+  eyebrow.textContent = "Vaults";
   popEl.append(eyebrow);
 
   listEl = document.createElement("div");
@@ -277,7 +166,10 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   const add = document.createElement("button");
   add.type = "button";
   add.className = styles.action ?? "";
-  add.innerHTML = `${iconSvg("Plug", 15)}<span>Add gateway…</span>`;
+  // "Add vault…" in the member's words — the same onAddGateway callback and the
+  // same modal behind it; a gateway is how a vault is reached, not the thing
+  // the member thinks they are adding.
+  add.innerHTML = `${iconSvg("Plug", 15)}<span>Add vault…</span>`;
   add.addEventListener("click", () => {
     closeGatewaySwitcher();
     o.onAddGateway();

@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MemberScope } from "../memberScope.js";
 import ScopePicker from "./ScopePicker.js";
 
-// The picker is what let the space switcher go (#599, Decision 14): the target
+// The picker is what let the vault switcher go (#599, Decision 14): the target
 // is named at the point of creation instead of being inherited from an ambient
-// "you are in this space" mode.
+// "you are in this vault" mode.
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -45,7 +45,7 @@ describe("ScopePicker suite", () => {
   ];
 
   describe(ScopePicker, () => {
-    it("offers only spaces this member can write to — a read-only space is not a target", () => {
+    it("offers only vaults this member can write to — a read-only vault is not a target", () => {
       const el = render(
         <ScopePicker
           scopes={MANY}
@@ -74,7 +74,7 @@ describe("ScopePicker suite", () => {
       expect(text).not.toMatch(/\bvault\b/iu);
     });
 
-    it("collapses to a plain statement when there is only one writable space", () => {
+    it("collapses to a plain statement when there is only one writable vault", () => {
       const el = render(
         <ScopePicker
           scopes={[
@@ -96,7 +96,7 @@ describe("ScopePicker suite", () => {
       expect(el.textContent).toContain("Personal");
     });
 
-    it("locks to a statement once the choice is made, however many spaces exist", () => {
+    it("locks to a statement once the choice is made, however many vaults exist", () => {
       const el = render(
         <ScopePicker
           scopes={MANY}
@@ -124,7 +124,7 @@ describe("ScopePicker suite", () => {
       expect(onChange).toHaveBeenCalledWith("v2");
     });
 
-    it("renders nothing at all when no space is known", () => {
+    it("renders nothing at all when no vault is known", () => {
       const el = render(
         <ScopePicker
           scopes={[]}

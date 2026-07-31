@@ -5,7 +5,7 @@ import type { GatewayVaultGrant } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import type { GroupedDevice } from "./device-groups.js";
-import { lastAdminSpace, roleLabel } from "./device-roles.js";
+import { lastAdminVault, roleLabel } from "./device-roles.js";
 import DeviceRow, { ageLabel } from "./DeviceRow.js";
 
 import controlsCss from "../styles/controls.module.css";
@@ -24,7 +24,7 @@ import styles from "./DevicesCard.module.css";
 
 export interface DeviceMemberGroupProps {
   label: string;
-  /** The person's (space, role) grants — devices only inherit these. */
+  /** The person's (vault, role) grants — devices only inherit these. */
   roles: readonly GatewayVaultGrant[];
   /** Live bindings. */
   devices: readonly GroupedDevice[];
@@ -43,7 +43,7 @@ export interface DeviceMemberGroupProps {
   /** Absent when the gateway exposes no roster surface to remove people with. */
   onRemoveMember?: (confirmLastAdmin?: string) => Promise<void>;
   /**
-   * False for a member who owns no space: the household verbs are hidden
+   * False for a member who owns no vault: the household verbs are hidden
    * rather than rendered dead (onboarding run B11). Signing THIS device out
    * stays available — it is the viewer's own hardware, not someone else's.
    */
@@ -66,7 +66,7 @@ export default function DeviceMemberGroup({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [strandedSpace, setStrandedSpace] = useState<string | null>(null);
+  const [strandedVault, setStrandedVault] = useState<string | null>(null);
 
   const remove = async (confirmLastAdmin?: string): Promise<void> => {
     if (!onRemoveMember) return;
@@ -75,9 +75,9 @@ export default function DeviceMemberGroup({
     try {
       await onRemoveMember(confirmLastAdmin);
     } catch (caughtError) {
-      const stranded = lastAdminSpace(caughtError);
+      const stranded = lastAdminVault(caughtError);
       if (stranded !== undefined && confirmLastAdmin === undefined) {
-        setStrandedSpace(stranded);
+        setStrandedVault(stranded);
       } else {
         setError(
           caughtError instanceof Error
@@ -85,7 +85,7 @@ export default function DeviceMemberGroup({
             : String(caughtError)
         );
         setConfirming(false);
-        setStrandedSpace(null);
+        setStrandedVault(null);
       }
     } finally {
       setBusy(false);
@@ -117,9 +117,9 @@ export default function DeviceMemberGroup({
               {devices.length} device{devices.length === 1 ? "" : "s"}
             </span>
           </div>
-          {strandedSpace ? (
+          {strandedVault ? (
             <div className={styles.rowWarn}>
-              {label} is the last owner of {strandedSpace}. Getting back in
+              {label} is the last owner of {strandedVault}. Getting back in
               would need the gateway machine and its command line.
             </div>
           ) : null}
@@ -137,13 +137,13 @@ export default function DeviceMemberGroup({
                   type="button"
                   className={cx(buttonCss.btn, buttonCss.sm, styles.confirmYes)}
                   disabled={busy}
-                  onClick={() => void remove(strandedSpace ?? undefined)}
+                  onClick={() => void remove(strandedVault ?? undefined)}
                 >
                   {busy ? (
                     <span className={styles.spin}>
                       <Icon name="Loader" size={13} />
                     </span>
-                  ) : strandedSpace ? (
+                  ) : strandedVault ? (
                     "Remove anyway"
                   ) : (
                     "Remove"
@@ -155,7 +155,7 @@ export default function DeviceMemberGroup({
                   disabled={busy}
                   onClick={() => {
                     setConfirming(false);
-                    setStrandedSpace(null);
+                    setStrandedVault(null);
                   }}
                 >
                   Cancel

@@ -13,11 +13,16 @@
  * `x-centraid-vault` header is irrelevant here and is deliberately ignored;
  * nothing in this file reads the ambient vault.
  *
- * ORDER is registry order — oldest vault first (ids are UUIDv7, so
- * lexicographic order IS creation order). That is the same order the composed
- * handler uses to pick a caller's default vault (`enrolled[0]`), so the
- * caller's own/primary vault — the oldest vault they hold a role in — comes
- * first among their rows without a second lookup.
+ * ORDER is registry order (`VaultRegistry.list()`): the gateway's DEFAULT
+ * vault — the owner's personal one, by the durable `personal` marker — first,
+ * then the remainder oldest-first (ids are UUIDv7, so lexicographic order IS
+ * creation order). Issue #665: before that hoist the head was simply the
+ * oldest vault, which on an auto-founded gateway is `Shared`, so a client
+ * taking `scopes[0]` as PRIMARY disagreed with the gateway's own
+ * `defaultVaultId()`. Filtering to the caller's roles preserves the order, so
+ * the caller's primary vault comes first among their rows without a second
+ * lookup. `GET /_vault/vaults` reads the same registry listing, so a client
+ * that degrades to it sees the identical order.
  *
  * AUTHORIZATION introduces no new machinery (decisions 3–4). Authority is the
  * acting MEMBER's, never the device's. Host custody (L0, the landlord with
@@ -65,7 +70,7 @@ export interface ScopeRow {
 
 export interface ScopesRouteDeps {
   enrollments: EnrollmentStore;
-  /** Every MOUNTED vault, oldest first. */
+  /** Every MOUNTED vault in registry listing order — default vault first. */
   listVaults: () => readonly ScopeVault[];
   /** The app ids installed in one mounted vault, or undefined when unknown. */
   installedApps: (vaultId: string) => ReadonlySet<string> | undefined;

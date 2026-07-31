@@ -89,7 +89,7 @@ function InsightsOverview({
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Insights</Text>
-        <Text style={styles.subtitle}>Your gateway and space, at a glance</Text>
+        <Text style={styles.subtitle}>Your gateway and vault, at a glance</Text>
       </View>
 
       <ScrollView

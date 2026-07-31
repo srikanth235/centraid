@@ -4,7 +4,7 @@ import type {
   CentraidGatewayDevice,
   GatewayMember,
 } from "../../gateway-client.js";
-import { groupDevicesByMember, spacesFromGroups } from "./device-groups.js";
+import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
 
 // `member_id` is NOT NULL on every binding (#599), so grouping is total: the
 // interesting cases are what happens when the ROSTER is missing, not what
@@ -72,10 +72,10 @@ describe(groupDevicesByMember, () => {
     expect(groups[1]?.devices).toStrictEqual([]);
   });
 
-  it("folds a device's per-space enrollments into one hardware row", () => {
-    // The devices route returns a row per (device, space). Two rows for one
+  it("folds a device's per-vault enrollments into one hardware row", () => {
+    // The devices route returns a row per (device, vault). Two rows for one
     // browser used to render as two devices — the card counted "4 devices"
-    // for two — each with a "Revoke device" button that dropped one space.
+    // for two — each with a "Revoke device" button that dropped one vault.
     const groups = groupDevicesByMember(
       [
         device({ deviceId: "enr_shared", vaultId: "v1", vaultName: "Shared" }),
@@ -113,7 +113,7 @@ describe(groupDevicesByMember, () => {
     ]);
   });
 
-  it("collects every space the caller can see, de-duplicated", () => {
+  it("collects every vault the caller can see, de-duplicated", () => {
     const groups = groupDevicesByMember(
       [
         device(),
@@ -126,7 +126,7 @@ describe(groupDevicesByMember, () => {
       ],
       []
     );
-    expect(spacesFromGroups(groups)).toStrictEqual([
+    expect(vaultsFromGroups(groups)).toStrictEqual([
       { vaultId: "v1", vaultName: "Personal", role: "write" },
       { vaultId: "v2", vaultName: "Photos", role: "read" },
     ]);

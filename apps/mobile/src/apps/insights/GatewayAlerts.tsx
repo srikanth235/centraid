@@ -16,15 +16,15 @@ import HomeKey from "../../kit/components/HomeKey";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
-  getInbox,
-  subscribeMobileInboxChanges,
-  updateMobileInboxNotice,
+  getNotifications,
+  subscribeMobileNotificationsChanges,
+  updateMobileNotice,
 } from "../../lib/gateway";
-import type { MobileInboxNotice } from "../../lib/gateway";
+import type { MobileNotice } from "../../lib/gateway";
 
 type State =
   | { kind: "loading" }
-  | { kind: "ready"; rows: MobileInboxNotice[] }
+  | { kind: "ready"; rows: MobileNotice[] }
   | { kind: "error"; message: string };
 
 export default function GatewayAlerts(props: {
@@ -39,10 +39,10 @@ export default function GatewayAlerts(props: {
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const inbox = await getInbox(true);
+      const notifications = await getNotifications(true);
       setState({
         kind: "ready",
-        rows: inbox.notices.filter(
+        rows: notifications.notices.filter(
           (notice) => notice.kind === "gateway-health"
         ),
       });
@@ -57,7 +57,7 @@ export default function GatewayAlerts(props: {
   useEffect(() => {
     const timer = setTimeout(() => void load(), 0);
     const controller = new AbortController();
-    void subscribeMobileInboxChanges(
+    void subscribeMobileNotificationsChanges(
       () => void load(),
       controller.signal
     ).catch(() => undefined);
@@ -69,7 +69,7 @@ export default function GatewayAlerts(props: {
 
   const update = (noticeId: string, action: "read" | "archive"): void => {
     setBusy(noticeId);
-    void updateMobileInboxNotice(noticeId, action)
+    void updateMobileNotice(noticeId, action)
       .then(load)
       .finally(() => setBusy(undefined));
   };

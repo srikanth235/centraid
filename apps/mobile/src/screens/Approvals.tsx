@@ -25,45 +25,47 @@ import {
   describeScopes,
 } from "../lib/decision-detail";
 import {
-  beginInboxConnectionAuthorization,
-  completeInboxConnectionAuthorization,
+  beginNotificationsConnectionAuthorization,
+  completeNotificationsConnectionAuthorization,
   confirmParked,
-  decideInboxOutbox,
-  decideInboxScope,
+  decideNotificationsOutbox,
+  decideNotificationsScope,
   GatewayError,
-  getInbox,
+  getNotifications,
   resolveGatewayBase,
-  subscribeMobileInboxChanges,
-  updateMobileInboxNotice,
+  subscribeMobileNotificationsChanges,
+  updateMobileNotice,
 } from "../lib/gateway";
-import type { MobileInbox, MobileInboxNotice } from "../lib/gateway";
-import { mobileInboxDestination } from "../lib/inbox-navigation";
-import { requestInboxNotificationPermission } from "../lib/notifications-core";
+import type { MobileNotifications, MobileNotice } from "../lib/gateway";
+import { requestNotificationPermission } from "../lib/notifications-core";
+import { mobileNotificationsDestination } from "../lib/notifications-navigation";
 import { registerReplicaPushWake } from "../lib/replica/background-sync";
 import type { SettingsScreenProps } from "../navigation";
 
-type InboxState =
+type NotificationsState =
   | { kind: "loading" }
   | { kind: "no-gateway" }
-  | { kind: "ready"; inbox: MobileInbox }
+  | { kind: "ready"; notifications: MobileNotifications }
   | { kind: "error"; message: string };
 
 type Filter = "needs" | "automations" | "agents" | "apps" | "archived";
 
-async function loadInbox(setState: (next: InboxState) => void): Promise<void> {
+async function loadNotifications(
+  setState: (next: NotificationsState) => void
+): Promise<void> {
   try {
     if (!(await resolveGatewayBase())) {
       setState({ kind: "no-gateway" });
       return;
     }
-    setState({ kind: "ready", inbox: await getInbox(true) });
+    setState({ kind: "ready", notifications: await getNotifications(true) });
   } catch (error) {
     setState({
       kind: "error",
       message:
         error instanceof GatewayError || error instanceof Error
           ? error.message
-          : "Could not load Inbox.",
+          : "Could not load Notifications.",
     });
   }
 }
@@ -73,7 +75,7 @@ export default function ApprovalsScreen({
 }: SettingsScreenProps<"Approvals">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [state, setState] = useState<InboxState>({ kind: "loading" });
+  const [state, setState] = useState<NotificationsState>({ kind: "loading" });
   const [filter, setFilter] = useState<Filter>("needs");
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | undefined>();
@@ -81,8 +83,8 @@ export default function ApprovalsScreen({
   const [focusedOutboxId, setFocusedOutboxId] = useState<string | undefined>();
 
   useEffect(() => {
-    void loadInbox(setState);
-    void requestInboxNotificationPermission()
+    void loadNotifications(setState);
+    void requestNotificationPermission()
       .then(async (granted) => {
         if (!granted) return;
         const base = await resolveGatewayBase();
@@ -90,11 +92,11 @@ export default function ApprovalsScreen({
       })
       .catch(() => undefined);
     const controller = new AbortController();
-    void subscribeMobileInboxChanges(
-      () => void loadInbox(setState),
+    void subscribeMobileNotificationsChanges(
+      () => void loadNotifications(setState),
       controller.signal
     ).catch(() => undefined);
-    const timer = setInterval(() => void loadInbox(setState), 60_000);
+    const timer = setInterval(() => void loadNotifications(setState), 60_000);
     return () => {
       controller.abort();
       clearInterval(timer);
@@ -104,7 +106,7 @@ export default function ApprovalsScreen({
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
     setActionError(undefined);
-    await loadInbox(setState);
+    await loadNotifications(setState);
     setRefreshing(false);
   }, []);
 
@@ -114,7 +116,7 @@ export default function ApprovalsScreen({
       setActionError(undefined);
       try {
         await action();
-        await loadInbox(setState);
+        await loadNotifications(setState);
       } catch (error) {
         setActionError(
           error instanceof Error ? error.message : "Could not save that action."
@@ -142,7 +144,7 @@ export default function ApprovalsScreen({
             strokeWidth={1.75}
           />
         </Pressable>
-        <Text style={styles.title}>Inbox</Text>
+        <Text style={styles.title}>Notifications</Text>
         <View style={styles.barSpacer} />
       </View>
       <ScrollView
@@ -168,7 +170,7 @@ export default function ApprovalsScreen({
           reconnectConnection: (connectionId) =>
             act(connectionId, async () => {
               const authUrl =
-                await beginInboxConnectionAuthorization(connectionId);
+                await beginNotificationsConnectionAuthorization(connectionId);
               // An IN-APP auth session, never `Linking.openURL`: the host app
               // must stay active so the phone-local tunnel proxy keeps serving
               // the gateway's own OAuth callback, and so the Assist return
@@ -184,14 +186,16 @@ export default function ApprovalsScreen({
               const failure = reconnectFailureMessage(outcome);
               if (failure) throw new Error(failure);
               if (outcome.kind === "assist-handoff")
-                await completeInboxConnectionAuthorization(outcome.handoff);
+                await completeNotificationsConnectionAuthorization(
+                  outcome.handoff
+                );
               // `closed` needs nothing: a BYO ceremony finishes at the
-              // gateway's callback, and `act` re-reads the Inbox either way —
+              // gateway's callback, and `act` re-reads Notifications either way —
               // an authorized connection stops being a decision.
             }),
           openNotice: (notice) => {
             const parent = navigation.getParent();
-            const destination = mobileInboxDestination(notice);
+            const destination = mobileNotificationsDestination(notice);
             switch (destination.kind) {
               case "automation-thread":
                 parent?.navigate("Automations", {
@@ -210,7 +214,7 @@ export default function ApprovalsScreen({
                   appId: destination.appId,
                 });
                 break;
-              case "inbox":
+              case "notifications":
                 setFilter("needs");
                 break;
             }
@@ -263,13 +267,13 @@ function FilterBar({
 }
 
 function renderBody(input: {
-  state: InboxState;
+  state: NotificationsState;
   filter: Filter;
   busy: string | undefined;
   styles: ReturnType<typeof makeStyles>;
   openSettings: () => void;
   reconnectConnection: (connectionId: string) => Promise<void>;
-  openNotice: (notice: MobileInboxNotice) => void;
+  openNotice: (notice: MobileNotice) => void;
   focusedOutboxId: string | undefined;
   act: (id: string, action: () => Promise<void>) => Promise<void>;
 }): React.JSX.Element {
@@ -291,7 +295,7 @@ function renderBody(input: {
       <View>
         <Text style={styles.emptyTitle}>Not connected.</Text>
         <Text style={styles.emptyCopy}>
-          Pair with your desktop to open Inbox.
+          Pair with your desktop to open Notifications.
         </Text>
         <View style={styles.emptyAction}>
           <Button
@@ -307,13 +311,13 @@ function renderBody(input: {
   if (state.kind === "error") {
     return (
       <View>
-        <Text style={styles.emptyTitle}>Could not load Inbox.</Text>
+        <Text style={styles.emptyTitle}>Could not load Notifications.</Text>
         <Text style={styles.emptyCopy}>{state.message}</Text>
         <Text style={styles.emptyHint}>Pull to refresh to retry.</Text>
       </View>
     );
   }
-  const { decisions, notices } = state.inbox;
+  const { decisions, notices } = state.notifications;
   const activeNotices = notices.filter((notice) => notice.archivedAt === null);
   const shownNotices =
     filter === "archived"
@@ -344,14 +348,16 @@ function renderBody(input: {
               focused={focusedOutboxId === row.itemId}
               onApprove={(artifact, alwaysAllow) =>
                 act(row.itemId, () =>
-                  decideInboxOutbox(row.itemId, "approve", {
+                  decideNotificationsOutbox(row.itemId, "approve", {
                     ...(artifact ? { artifact } : {}),
                     alwaysAllow,
                   })
                 )
               }
               onDeny={() =>
-                act(row.itemId, () => decideInboxOutbox(row.itemId, "discard"))
+                act(row.itemId, () =>
+                  decideNotificationsOutbox(row.itemId, "discard")
+                )
               }
             />
           ))
@@ -388,10 +394,14 @@ function renderBody(input: {
               busy={busy === row.requestId}
               styles={styles}
               onApprove={() =>
-                act(row.requestId, () => decideInboxScope(row.requestId, true))
+                act(row.requestId, () =>
+                  decideNotificationsScope(row.requestId, true)
+                )
               }
               onDeny={() =>
-                act(row.requestId, () => decideInboxScope(row.requestId, false))
+                act(row.requestId, () =>
+                  decideNotificationsScope(row.requestId, false)
+                )
               }
             />
           ))
@@ -434,12 +444,12 @@ function renderBody(input: {
           onOpen={() => openNotice(notice)}
           onRead={() =>
             act(notice.noticeId, () =>
-              updateMobileInboxNotice(notice.noticeId, "read")
+              updateMobileNotice(notice.noticeId, "read")
             )
           }
           onArchive={() =>
             act(notice.noticeId, () =>
-              updateMobileInboxNotice(notice.noticeId, "archive")
+              updateMobileNotice(notice.noticeId, "archive")
             )
           }
         />
@@ -493,7 +503,7 @@ function DecisionCard(props: {
 }
 
 function NoticeCard(props: {
-  row: MobileInboxNotice;
+  row: MobileNotice;
   busy: boolean;
   styles: ReturnType<typeof makeStyles>;
   onOpen: () => void;

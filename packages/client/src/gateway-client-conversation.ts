@@ -139,8 +139,8 @@ export interface StreamTurnInput {
   /** Centraid-owned primary workspace selector (the host resolves the path). */
   workspaceKind?: "vault-data" | "app" | "draft";
   /**
-   * The space this conversation reads and writes (issue #599). A conversation
-   * is pinned to exactly ONE space for its whole life: the picker records the
+   * The vault this conversation reads and writes (issue #599). A conversation
+   * is pinned to exactly ONE vault for its whole life: the picker records the
    * choice when the conversation is created, and every later turn/load repeats
    * it. Omitted degrades to the shell's internal default-scope pointer, which
    * is what every conversation created before the picker existed relies on.
@@ -239,7 +239,7 @@ export async function uploadConversationAttachment(
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
   // The blob CAS is vault-partitioned: an attachment staged in the ambient
-  // space while the turn resolves its hash in the conversation's space would
+  // vault while the turn resolves its hash in the conversation's vault would
   // silently break — so the conversation's scope rides the upload too (#599).
   const res = await doFetch(baseUrl, blobsPath(appId), {
     method: "POST",
