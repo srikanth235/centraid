@@ -151,7 +151,7 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
       vaultName: "personal",
       vaultIds: ["vlt_42", "vlt_family"],
       version: "0.1.0",
-      schemaEpoch: 7,
+      protocolVersion: 2,
     },
   },
 ];

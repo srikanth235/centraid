@@ -27,12 +27,9 @@ CREATE INDEX IF NOT EXISTS notifications_notice_retention_idx
 
 /**
  * The surface formerly called "Inbox" is **Notifications** (#665), and the
- * table came with it: `inbox_notice` → `notifications_notice`. Centraid is
- * pre-release v0 with no backward-compatibility debt, so this rung does NOT
- * copy rows — a development vault written by an earlier build simply loses its
- * notices (they are a rebuildable projection of automation/outbox outcomes,
- * not owner data). The rung exists so that such a vault does not crash on the
- * missing table, and it is a no-op on a fresh file.
+ * table came with it: `inbox_notice` → `notifications_notice`. The rename is
+ * part of the pre-release composed base. A fresh file never has `inbox_notice`,
+ * while a recreated dev vault starts with the new rebuildable projection.
  */
 export const RENAME_INBOX_NOTICE_DDL = `
 DROP INDEX IF EXISTS inbox_notice_active_idx;

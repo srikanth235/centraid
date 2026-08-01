@@ -153,7 +153,6 @@ export {
   GATEWAY_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
 } from "./version.js";
 export {
   platformDefaultDataDir,

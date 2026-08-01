@@ -5,48 +5,6 @@ import type {
 
 const PROBE_TIMEOUT_MS = 4000;
 const HEALTH_PATH = "/centraid/_gateway/health";
-const INFO_PATH = "/centraid/_gateway/info";
-
-/** Probe a legacy gateway's liveness endpoint when it has no health endpoint. */
-async function probeInfo(
-  baseUrl: string,
-  token: string | undefined
-): Promise<GatewayProbe> {
-  const startedAt = Date.now();
-  try {
-    const res = await fetch(new URL(INFO_PATH, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    const at = Date.now();
-    if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
-    return {
-      at,
-      ok: true,
-      latencyMs: at - startedAt,
-      ...(typeof body.startedAt === "number"
-        ? { gatewayStartedAt: body.startedAt }
-        : {}),
-      ...(typeof body.uptimeMs === "number"
-        ? { gatewayUptimeMs: body.uptimeMs }
-        : {}),
-      ...(typeof body.version === "string" ? { version: body.version } : {}),
-      ...(typeof body.schemaEpoch === "number"
-        ? { schemaEpoch: body.schemaEpoch }
-        : {}),
-    };
-  } catch (error) {
-    return {
-      at: Date.now(),
-      ok: false,
-      detail: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
 
 function extractComponentIssues(
   body: Record<string, unknown>
@@ -73,7 +31,7 @@ function extractComponentIssues(
   return issues;
 }
 
-/** Probe component health, falling back to the legacy liveness endpoint on 404. */
+/** Probe component health. */
 export async function probeGateway(
   baseUrl: string,
   token: string | undefined
@@ -84,7 +42,6 @@ export async function probeGateway(
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (res.status === 404) return probeInfo(baseUrl, token);
     const at = Date.now();
     if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
     const body = (await res.json().catch(() => ({}))) as Record<
@@ -109,6 +66,10 @@ export async function probeGateway(
         : {}),
       ...(typeof body.uptimeMs === "number"
         ? { gatewayUptimeMs: body.uptimeMs }
+        : {}),
+      ...(typeof body.version === "string" ? { version: body.version } : {}),
+      ...(typeof body.protocolVersion === "number"
+        ? { protocolVersion: body.protocolVersion }
         : {}),
     };
   } catch (error) {

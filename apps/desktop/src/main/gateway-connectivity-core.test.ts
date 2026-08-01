@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/protocol";
+
 import {
   assembleReport,
   buildTicketReport,
@@ -10,7 +12,7 @@ import {
 } from "./gateway-connectivity-core.js";
 import {
   EXPECTED_GATEWAY_VERSION,
-  EXPECTED_SCHEMA_EPOCH,
+  EXPECTED_PROTOCOL_VERSION,
 } from "./version-handshake.js";
 
 function encodeTicket(payload: unknown): string {
@@ -50,10 +52,10 @@ describe(foldUrlIdentityStages, () => {
       ok: true,
       info: {
         version: EXPECTED_GATEWAY_VERSION,
-        protocolVersion: EXPECTED_SCHEMA_EPOCH,
-        minSupportedProtocol: EXPECTED_SCHEMA_EPOCH,
-        schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+        protocolVersion: EXPECTED_PROTOCOL_VERSION,
+        minSupportedProtocol: EXPECTED_PROTOCOL_VERSION,
         instanceId: "inst-1",
+        capabilities: DEFAULT_GATEWAY_CAPABILITIES,
       },
     });
     expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
@@ -63,9 +65,8 @@ describe(foldUrlIdentityStages, () => {
     ]);
     expect(result.gateway).toStrictEqual({
       version: EXPECTED_GATEWAY_VERSION,
-      schemaEpoch: EXPECTED_SCHEMA_EPOCH,
-      protocolVersion: EXPECTED_SCHEMA_EPOCH,
-      minSupportedProtocol: EXPECTED_SCHEMA_EPOCH,
+      protocolVersion: EXPECTED_PROTOCOL_VERSION,
+      minSupportedProtocol: EXPECTED_PROTOCOL_VERSION,
       instanceId: "inst-1",
       compatible: true,
     });

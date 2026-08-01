@@ -71,9 +71,17 @@ const INFO = {
   version: "0.1.0",
   protocolVersion: 2,
   minSupportedProtocol: 2,
-  schemaEpoch: 7,
   instanceId: "inst-9",
-  capabilities: { webSessions: true },
+  capabilities: {
+    webSessions: true,
+    devicePairing: true,
+    tunnel: true,
+    backupWal: true,
+    assistOAuth: false,
+    automationTurns: true,
+    multiVaultReplica: true,
+    crossVaultPlacements: true,
+  },
 };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -236,9 +244,7 @@ describe("cli output shape", () => {
     ]);
     expect(run.code).toBeUndefined();
     const printed = JSON.parse(run.stdout) as Record<string, unknown>;
-    // The handshake normalises `capabilities` (absent flags default to false),
-    // so assert containment there and exactness everywhere else.
-    expect(printed.capabilities).toMatchObject(INFO.capabilities);
+    expect(printed.capabilities).toStrictEqual(INFO.capabilities);
     const { capabilities, ...rest } = printed;
     expect(capabilities).toBeTypeOf("object");
     expect(rest).toStrictEqual({
@@ -246,7 +252,6 @@ describe("cli output shape", () => {
       version: INFO.version,
       protocolVersion: INFO.protocolVersion,
       minSupportedProtocol: INFO.minSupportedProtocol,
-      schemaEpoch: INFO.schemaEpoch,
       instanceId: INFO.instanceId,
     });
     // Every advertised field is present — a dropped key is not "extra".
@@ -256,7 +261,6 @@ describe("cli output shape", () => {
       "minSupportedProtocol",
       "ok",
       "protocolVersion",
-      "schemaEpoch",
       "version",
     ]);
   });

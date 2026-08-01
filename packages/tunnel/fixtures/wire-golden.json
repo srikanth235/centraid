@@ -103,9 +103,9 @@
     {
       "name": "gatewayPairResponse",
       "note": "centraid/gw-pair/1 redemption response (all fields); the invitation binds a member and may grant several vaults.",
-      "json": "{\"ok\":true,\"gatewayId\":\"gw_9c8d\",\"gatewayName\":\"home\",\"memberId\":\"mbr_priya\",\"memberLabel\":\"Priya\",\"vaultId\":\"vlt_42\",\"vaultName\":\"personal\",\"vaultIds\":[\"vlt_42\",\"vlt_family\"],\"version\":\"0.1.0\",\"schemaEpoch\":7}",
-      "jsonByteLength": 210,
-      "frameBase64": "AAAA0nsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3XzljOGQiLCJnYXRld2F5TmFtZSI6ImhvbWUiLCJtZW1iZXJJZCI6Im1icl9wcml5YSIsIm1lbWJlckxhYmVsIjoiUHJpeWEiLCJ2YXVsdElkIjoidmx0XzQyIiwidmF1bHROYW1lIjoicGVyc29uYWwiLCJ2YXVsdElkcyI6WyJ2bHRfNDIiLCJ2bHRfZmFtaWx5Il0sInZlcnNpb24iOiIwLjEuMCIsInNjaGVtYUVwb2NoIjo3fQ=="
+      "json": "{\"ok\":true,\"gatewayId\":\"gw_9c8d\",\"gatewayName\":\"home\",\"memberId\":\"mbr_priya\",\"memberLabel\":\"Priya\",\"vaultId\":\"vlt_42\",\"vaultName\":\"personal\",\"vaultIds\":[\"vlt_42\",\"vlt_family\"],\"version\":\"0.1.0\",\"protocolVersion\":2}",
+      "jsonByteLength": 214,
+      "frameBase64": "AAAA1nsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3XzljOGQiLCJnYXRld2F5TmFtZSI6ImhvbWUiLCJtZW1iZXJJZCI6Im1icl9wcml5YSIsIm1lbWJlckxhYmVsIjoiUHJpeWEiLCJ2YXVsdElkIjoidmx0XzQyIiwidmF1bHROYW1lIjoicGVyc29uYWwiLCJ2YXVsdElkcyI6WyJ2bHRfNDIiLCJ2bHRfZmFtaWx5Il0sInZlcnNpb24iOiIwLjEuMCIsInByb3RvY29sVmVyc2lvbiI6Mn0="
     }
   ]
 }

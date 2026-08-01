@@ -104,9 +104,9 @@ export function runConversationArchival(
 
 function reclaimModeOf(
   journal: ConversationArchivalDeps["journal"]
-): "incremental" | "full" | "none" {
+): "incremental" | "none" {
   const av = (
     journal.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
   ).auto_vacuum;
-  return av === 2 ? "incremental" : av === 1 ? "full" : "none";
+  return av === 2 ? "incremental" : "none";
 }

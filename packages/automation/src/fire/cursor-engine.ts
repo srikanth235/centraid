@@ -351,11 +351,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           : { gapReason: priorPending.gapReason }),
       };
     } else if (registration.trigger.kind === "cron") {
-      const schedules =
-        registration.cronSchedules ??
-        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({
-          expr,
-        }));
+      const schedules = registration.cronSchedules ?? [
+        { expr: registration.trigger.expr },
+      ];
       result = readCronCursor(schedules, cursor, at);
     } else if (this.readCursor) {
       result = await this.readCursor({
@@ -536,7 +534,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       Array<{
         index: number;
         trigger: Trigger;
-        cronExprs?: readonly string[];
         cronSchedules?: CursorRegistration["cronSchedules"];
       }>
     >();
@@ -545,11 +542,8 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       list.push({
         index: registration.triggerIndex,
         trigger: registration.trigger,
-        // Collapsed cron expressions + zones are part of the definition:
+        // Collapsed cron schedules + zones are part of the definition:
         // editing the second cron or its timezone must still read as "updated".
-        ...(registration.cronExprs
-          ? { cronExprs: registration.cronExprs }
-          : {}),
         ...(registration.cronSchedules
           ? { cronSchedules: registration.cronSchedules }
           : {}),

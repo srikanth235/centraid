@@ -265,7 +265,7 @@ export function deriveOutageEvents(
       at: now,
       kind: "version-skew",
       ...base,
-      detail: `v${versionSkewAction.gatewayVersion} (schema ${versionSkewAction.gatewaySchemaEpoch})`,
+      detail: `v${versionSkewAction.gatewayVersion} (protocol ${versionSkewAction.gatewayProtocolVersion})`,
     });
   }
 

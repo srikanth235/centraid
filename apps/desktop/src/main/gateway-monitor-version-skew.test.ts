@@ -12,7 +12,7 @@ import type {
 } from "./gateway-monitor-core.js";
 import {
   EXPECTED_GATEWAY_VERSION,
-  EXPECTED_SCHEMA_EPOCH,
+  EXPECTED_PROTOCOL_VERSION,
 } from "./version-handshake.js";
 
 type GatewayIdentity = Parameters<typeof initialRuntimeState>[0];
@@ -36,7 +36,7 @@ const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({
   gatewayStartedAt: T0 - 60_000,
   gatewayUptimeMs: at - (T0 - 60_000),
   version: "0.1.0",
-  schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+  protocolVersion: EXPECTED_PROTOCOL_VERSION,
   ...extra,
 });
 const fail = (at: number): GatewayProbe => ({
@@ -50,7 +50,7 @@ const run = (probes: GatewayProbe[], gateway = LOCAL_GW): GatewayRuntimeState =>
 describe("applyProbe: version handshake", () => {
   it("never judges a local gateway — versionSkew stays undefined", () => {
     expect(
-      run([ok(T0, { version: "9.9.9", schemaEpoch: 99 })]).versionSkew
+      run([ok(T0, { version: "9.9.9", protocolVersion: 99 })]).versionSkew
     ).toBeUndefined();
   });
 
@@ -60,7 +60,7 @@ describe("applyProbe: version handshake", () => {
         [
           ok(T0, {
             version: EXPECTED_GATEWAY_VERSION,
-            schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+            protocolVersion: EXPECTED_PROTOCOL_VERSION,
           }),
         ],
         REMOTE_GW
@@ -68,17 +68,20 @@ describe("applyProbe: version handshake", () => {
     ).toStrictEqual({
       skewed: false,
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH,
-      gatewayProtocolVersion: EXPECTED_SCHEMA_EPOCH,
+      gatewayProtocolVersion: EXPECTED_PROTOCOL_VERSION,
       clientVersion: EXPECTED_GATEWAY_VERSION,
-      clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
-      clientProtocolVersion: EXPECTED_SCHEMA_EPOCH,
+      clientProtocolVersion: EXPECTED_PROTOCOL_VERSION,
     });
   });
 
   it("treats only protocol skew as unsafe and retains that verdict through outages", () => {
     const productOnly = run(
-      [ok(T0, { version: "9.9.9", schemaEpoch: EXPECTED_SCHEMA_EPOCH })],
+      [
+        ok(T0, {
+          version: "9.9.9",
+          protocolVersion: EXPECTED_PROTOCOL_VERSION,
+        }),
+      ],
       REMOTE_GW
     );
     expect(productOnly.versionSkew).toMatchObject({
@@ -90,23 +93,23 @@ describe("applyProbe: version handshake", () => {
       [
         ok(T0, {
           version: EXPECTED_GATEWAY_VERSION,
-          schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+          protocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
         }),
       ],
       REMOTE_GW
     );
     expect(applyProbe(skewed, fail(T0 + 5000)).versionSkew).toMatchObject({
       skewed: true,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      gatewayProtocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
     });
     expect(
       applyProbe(
         skewed,
-        ok(T0 + 10_000, { version: undefined, schemaEpoch: undefined })
+        ok(T0 + 10_000, { version: undefined, protocolVersion: undefined })
       ).versionSkew
     ).toMatchObject({
       skewed: true,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      gatewayProtocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
     });
   });
 });
@@ -118,7 +121,7 @@ describe(applyVersionSkewAlert, () => {
       [
         ok(T0, {
           version: EXPECTED_GATEWAY_VERSION,
-          schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+          protocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
         }),
       ],
       REMOTE_GW
@@ -128,7 +131,7 @@ describe(applyVersionSkewAlert, () => {
     let state = skewed();
     expect(applyVersionSkewAlert(state, config, T0).action).toStrictEqual({
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      gatewayProtocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
     });
     ({ state } = applyVersionSkewAlert(state, config, T0));
     expect(state.versionSkewAlertedAt).toBe(T0);
@@ -147,7 +150,7 @@ describe(applyVersionSkewAlert, () => {
           [
             ok(T0, {
               version: EXPECTED_GATEWAY_VERSION,
-              schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+              protocolVersion: EXPECTED_PROTOCOL_VERSION,
             }),
           ],
           REMOTE_GW
@@ -158,7 +161,7 @@ describe(applyVersionSkewAlert, () => {
     ).toBeUndefined();
     expect(
       applyVersionSkewAlert(
-        run([ok(T0, { version: "9.9.9", schemaEpoch: 99 })]),
+        run([ok(T0, { version: "9.9.9", protocolVersion: 99 })]),
         config,
         T0
       ).action
@@ -172,7 +175,7 @@ describe(applyVersionSkewAlert, () => {
       state,
       ok(T0 + 10_000, {
         version: EXPECTED_GATEWAY_VERSION,
-        schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+        protocolVersion: EXPECTED_PROTOCOL_VERSION,
       })
     );
     ({ state } = applyVersionSkewAlert(state, config, T0 + 10_000));
@@ -181,14 +184,14 @@ describe(applyVersionSkewAlert, () => {
       state,
       ok(T0 + 20_000, {
         version: EXPECTED_GATEWAY_VERSION,
-        schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+        protocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
       })
     );
     expect(
       applyVersionSkewAlert(state, config, T0 + 20_000).action
     ).toStrictEqual({
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      gatewayProtocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
     });
   });
 });

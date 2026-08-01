@@ -1,7 +1,5 @@
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
-
-import type { IconName } from "@centraid/design";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive navigation component owns desktop, mobile, and compact variants over one item model
 
 import Icon from "../ui/Icon.js";
@@ -51,15 +49,6 @@ export type SidebarPage =
   | "atlas"
   | "settings";
 
-/** @deprecated Sidebar no longer lists apps; kept for callers that still type app rows. */
-export interface SidebarApp {
-  id: string;
-  name: string;
-  iconKey: IconName;
-  color: string;
-  status?: "new" | "draft" | "live" | null;
-}
-
 /** One row in the sidebar's "Recents" list — a persisted vault-assistant
  *  conversation (mirrors `CentraidConversationSummary`, trimmed to what the
  *  row renders). */
@@ -81,10 +70,6 @@ export interface SidebarConversation {
 export interface SidebarProps {
   activeId?: string;
   activePage?: SidebarPage;
-  /** @deprecated Apps list is no longer shown in the sidebar. */
-  apps?: SidebarApp[];
-  /** @deprecated Apps list is no longer shown in the sidebar. */
-  drafts?: SidebarApp[];
   /** Vault-identity head row, rendered above the actions with a divider. */
   headSlot?: ReactNode;
   onHome: () => void;
@@ -109,8 +94,6 @@ export interface SidebarProps {
    *  the link is hidden and the sidebar shows the full recent list. */
   onSeeAllHistory?: () => void;
   onSearch?: () => void;
-  /** @deprecated Prefer onNewChat — Assistant is no longer a separate nav row. */
-  onAssistant?: () => void;
   /** Labelled "Analytics" in the column (#667). */
   onInsights?: () => void;
   onAutomations?: () => void;
@@ -129,14 +112,8 @@ export interface SidebarProps {
   gatewayStatus?: "up" | "down" | "unknown";
   /** People, devices and vaults (issue #599) — labelled "Devices" (#667). */
   onHousehold?: () => void;
-  /** @deprecated Storage is a Gateway tab; retained for caller compatibility. */
-  onStorage?: () => void;
   /** The ontology census — labelled "Data" in the column (#667). */
   onAtlas?: () => void;
-  /** @deprecated Apps list is no longer shown in the sidebar. */
-  onAppClick?: (id: string) => void;
-  /** @deprecated Apps list is no longer shown in the sidebar. */
-  onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
   /** Open the phone-pairing modal. Omitted = the menu offers no pairing. */
   onPairDevice?: () => void;

@@ -205,7 +205,7 @@ export interface CentraidGatewayRuntime {
   /** Server-reported uptime — clock-skew-safe companion. */
   gatewayUptimeMs?: number;
   version?: string;
-  schemaEpoch?: number;
+  protocolVersion?: number;
   lastError?: string;
   checksTotal: number;
   checksFailed: number;
@@ -224,7 +224,7 @@ export interface CentraidGatewayRuntime {
    * component statuses plus a sustained-high-latency check into one badge —
    * a "listening but hung" gateway reads as `'degraded'`, not `'up'`. Absent
    * until the first probe reaches `/health` (or for a gateway old enough to
-   * only answer `/info`); persists at its last value while unreachable, same
+   * only answer `/health`); persists at its last value while unreachable, same
    * posture as `version`.
    */
   healthStatus?: "ok" | "degraded" | "error";
@@ -240,10 +240,10 @@ export interface CentraidGatewayRuntime {
   versionSkew?: {
     skewed: boolean;
     gatewayVersion: string;
-    gatewaySchemaEpoch: number;
+    gatewayProtocolVersion: number;
     gatewayProtocolVersion?: number;
     clientVersion: string;
-    clientSchemaEpoch: number;
+    clientProtocolVersion: number;
     clientProtocolVersion?: number;
   };
 }
@@ -345,9 +345,8 @@ export interface CentraidConnectivityReport {
   stages: CentraidConnectivityStage[];
   gateway?: {
     version: string;
-    schemaEpoch: number;
-    protocolVersion?: number;
-    minSupportedProtocol?: number;
+    protocolVersion: number;
+    minSupportedProtocol: number;
     instanceId: string;
     compatible: boolean;
   };
@@ -1134,9 +1133,6 @@ export interface CentraidInsightsSourceRow {
   automationName?: string;
 }
 
-/** @deprecated Prefer CentraidInsightsSourceRow (#514). */
-export type CentraidInsightsAutomationRow = CentraidInsightsSourceRow;
-
 export interface CentraidInsightsRunnerRow {
   provider: string;
   runs: number;
@@ -1842,7 +1838,6 @@ declare global {
     costUsd: number;
     automationName?: string;
   }
-  type CentraidInsightsAutomationRow = CentraidInsightsSourceRow;
   interface CentraidInsightsRunnerRow {
     provider: string;
     runs: number;

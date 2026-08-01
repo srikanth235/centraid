@@ -26,5 +26,3 @@ export type {
   InsightsPeakDay,
   InsightsAttention,
 } from "./insights-types.js";
-/** @deprecated Prefer InsightsSourceRow (#514). */
-export type { InsightsSourceRow as InsightsAutomationRow } from "./insights-types.js";

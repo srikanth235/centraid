@@ -22,7 +22,7 @@ import type {
   GatewayProbe,
   GatewayRuntimeState,
 } from "./gateway-monitor-core.js";
-import { EXPECTED_SCHEMA_EPOCH } from "./version-handshake.js";
+import { EXPECTED_PROTOCOL_VERSION } from "./version-handshake.js";
 
 const GW = { id: "local", label: "Local", kind: "local" as const };
 const T0 = 1_000_000;
@@ -34,7 +34,7 @@ const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({
   gatewayStartedAt: T0 - 60_000,
   gatewayUptimeMs: at - (T0 - 60_000),
   version: "0.1.0",
-  schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+  protocolVersion: EXPECTED_PROTOCOL_VERSION,
   ...extra,
 });
 const fail = (at: number, detail = "fetch failed"): GatewayProbe => ({
@@ -257,17 +257,17 @@ describe("applyProbe: health reconciliation", () => {
     expect(state.healthStatus).toBe("ok");
   });
 
-  it("keeps the last-known healthStatus while the gateway is unreachable or the probe falls back to /info", () => {
+  it("keeps the last-known healthStatus while the gateway is unreachable or omits status", () => {
     const withHealth = run([ok(T0, { healthStatus: "ok" })]);
     const stillOk = applyProbe(withHealth, fail(T0 + 5000));
     expect(stillOk.healthStatus).toBe("ok");
-    // A probe that reached the gateway via the /info fallback (no healthStatus
-    // opinion) doesn't clobber the last-known health reconciliation either.
-    const infoFallback = applyProbe(
+    // A successful probe with no healthStatus opinion doesn't clobber the
+    // last-known health reconciliation either.
+    const noStatus = applyProbe(
       withHealth,
       ok(T0 + 10_000, { healthStatus: undefined, componentIssues: undefined })
     );
-    expect(infoFallback.healthStatus).toBe("ok");
+    expect(noStatus.healthStatus).toBe("ok");
   });
 
   it("starts undefined before any health-capable probe has landed", () => {

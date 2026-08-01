@@ -65,7 +65,8 @@ describe("routes/TestConnectionModal", () => {
         stages: [{ id: "reach", label: "Reach", status: "pass" }],
         gateway: {
           version: "0.5.2",
-          schemaEpoch: 3,
+          protocolVersion: 3,
+          minSupportedProtocol: 2,
           instanceId: "i1",
           compatible: true,
         },

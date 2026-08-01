@@ -5,7 +5,7 @@
  *    runtime control flow.
  * 2. Build numbers (mobile/stores) — derived from product semver by
  *    apps/mobile/src/version-core.cjs; not stored here.
- * 3. GATEWAY_PROTOCOL_VERSION — only number the handshake may compare.
+ * 3. GATEWAY_PROTOCOL_VERSION — the only number the handshake may compare.
  *
  * Surfaces may skip *shipping* a product version; monorepo stamps never diverge.
  */
@@ -30,10 +30,3 @@ export const GATEWAY_PROTOCOL_VERSION = 2;
  *   local.protocolVersion >= peer.minSupported
  */
 export const GATEWAY_MIN_PROTOCOL_VERSION = 2;
-
-/**
- * Vault / storage schema epoch. Keep equal to protocol until they diverge.
- * Prefer GATEWAY_PROTOCOL_VERSION for connect checks; still emit schemaEpoch
- * on the wire for older field readers.
- */
-export const GATEWAY_SCHEMA_EPOCH = 2;

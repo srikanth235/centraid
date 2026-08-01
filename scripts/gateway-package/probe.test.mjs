@@ -12,7 +12,7 @@ test("probeGatewayInfo accepts 200 with version", async () => {
   const server = createServer((req, res) => {
     if (req.url?.startsWith(INFO_PATH)) {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ version: "0.1.0", schemaEpoch: 1 }));
+      res.end(JSON.stringify({ version: "0.1.0", protocolVersion: 2 }));
       return;
     }
     res.writeHead(404);
@@ -54,7 +54,7 @@ test("probeGatewayInfo accepts 401 as listen proof", async () => {
 test("probeGatewayInfo rejects 200 without version string", async () => {
   const server = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ schemaEpoch: 1 }));
+    res.end(JSON.stringify({ protocolVersion: 2 }));
   });
   await new Promise((resolve) => {
     server.listen(0, "127.0.0.1", resolve);

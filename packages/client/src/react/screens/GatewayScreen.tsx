@@ -420,9 +420,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                     <dt>Version</dt>
                     <dd className={styles.idMono}>
                       {snapshot.version ?? "—"}
-                      {snapshot.schemaEpoch === undefined
+                      {snapshot.protocolVersion === undefined
                         ? ""
-                        : ` · epoch ${snapshot.schemaEpoch}`}
+                        : ` · protocol ${snapshot.protocolVersion}`}
                     </dd>
                   </div>
                   <div className={styles.idRow}>

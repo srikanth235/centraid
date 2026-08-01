@@ -37,9 +37,8 @@ export interface ConnectivityStage {
 
 export interface ConnectivityGatewayInfo {
   version: string;
-  schemaEpoch: number;
-  protocolVersion?: number;
-  minSupportedProtocol?: number;
+  protocolVersion: number;
+  minSupportedProtocol: number;
   instanceId: string;
   compatible: boolean;
 }
@@ -137,7 +136,6 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
       stages: [s("reach", "pass"), s("identify", "pass"), s("auth", "pass")],
       gateway: {
         version: handshake.info.version,
-        schemaEpoch: handshake.info.schemaEpoch,
         protocolVersion: handshake.info.protocolVersion,
         minSupportedProtocol: handshake.info.minSupportedProtocol,
         instanceId: handshake.info.instanceId ?? "",

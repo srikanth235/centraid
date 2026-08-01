@@ -5,13 +5,11 @@ import { describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import {
   JOURNAL_MIGRATIONS,
   migrate,
   ONTOLOGY_VERSION,
-  repairSyncCredentialOauthMode,
   VAULT_MIGRATIONS,
   VaultSchemaAheadError,
 } from "./migrate.js";
@@ -26,91 +24,10 @@ function userVersionOf(file: string): number {
   return row.user_version;
 }
 
-/** Reconstruct a historical migration frontier from a fresh current fixture. */
-function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
-  const raw = new DatabaseSync(file);
-  raw.exec(`
-    DROP TRIGGER IF EXISTS trg_replica_core_event_ai;
-    DROP TRIGGER IF EXISTS trg_replica_core_event_au;
-    DROP TRIGGER IF EXISTS trg_replica_core_event_ad;
-    DROP TRIGGER IF EXISTS trg_replica_schedule_task_ai;
-    DROP TRIGGER IF EXISTS trg_replica_schedule_task_au;
-    DROP TRIGGER IF EXISTS trg_replica_schedule_task_ad;
-    DROP TRIGGER IF EXISTS trg_replica_tally_expense_ai;
-    DROP TRIGGER IF EXISTS trg_replica_tally_expense_au;
-    DROP TRIGGER IF EXISTS trg_replica_tally_expense_ad;
-
-    DROP INDEX IF EXISTS tally_expense_recurring_instance_idx;
-    DROP INDEX IF EXISTS tally_recurring_expense_group_idx;
-    DROP INDEX IF EXISTS people_merge_source_active_idx;
-    DROP INDEX IF EXISTS social_contact_channel_preferred_idx;
-    DROP INDEX IF EXISTS social_contact_channel_duplicate_idx;
-    DROP INDEX IF EXISTS social_contact_channel_party_idx;
-    DROP INDEX IF EXISTS schedule_recurrence_exception_target_idx;
-    DROP INDEX IF EXISTS schedule_task_section_idx;
-    DROP INDEX IF EXISTS schedule_task_organize_idx;
-    DROP INDEX IF EXISTS schedule_section_project_idx;
-    DROP INDEX IF EXISTS schedule_project_owner_idx;
-    DROP INDEX IF EXISTS notifications_notice_active_idx;
-    DROP INDEX IF EXISTS notifications_notice_retention_idx;
-    DROP TABLE IF EXISTS notifications_notice;
-    DROP TABLE IF EXISTS tally_recurring_expense;
-    DROP TABLE IF EXISTS people_merge;
-    DROP TABLE IF EXISTS social_contact_channel;
-    DROP TABLE IF EXISTS schedule_recurrence_exception;
-    DROP TABLE IF EXISTS schedule_section;
-    DROP TABLE IF EXISTS schedule_project;
-    ALTER TABLE tally_expense DROP COLUMN recurring_template_id;
-    ALTER TABLE tally_expense DROP COLUMN rate_date;
-    ALTER TABLE tally_expense DROP COLUMN rate_source;
-    ALTER TABLE tally_expense DROP COLUMN rate_scale;
-    ALTER TABLE tally_expense DROP COLUMN rate_scaled;
-    ALTER TABLE tally_expense DROP COLUMN settlement_currency;
-    ALTER TABLE tally_expense DROP COLUMN original_currency;
-    ALTER TABLE tally_expense DROP COLUMN original_amount_minor;
-    ALTER TABLE schedule_task DROP COLUMN recurrence_tz;
-    ALTER TABLE schedule_task DROP COLUMN recurrence_anchor;
-    ALTER TABLE schedule_task DROP COLUMN sort_order;
-    ALTER TABLE schedule_task DROP COLUMN section_id;
-    ALTER TABLE schedule_task DROP COLUMN project_id;
-    ALTER TABLE core_event DROP COLUMN recurrence_semantics;
-    ALTER TABLE core_event DROP COLUMN end_tz;
-
-    DROP TRIGGER IF EXISTS tally_expense_line_allocation_touch_updated_at;
-    DROP TRIGGER IF EXISTS tally_expense_line_item_touch_updated_at;
-    DROP TRIGGER IF EXISTS tally_expense_receipt_touch_updated_at;
-    DROP INDEX IF EXISTS tally_expense_line_allocation_party_idx;
-    DROP INDEX IF EXISTS tally_expense_line_receipt_idx;
-    DROP TABLE IF EXISTS tally_expense_line_allocation;
-    DROP TABLE IF EXISTS tally_expense_line_item;
-    DROP TABLE IF EXISTS tally_expense_receipt;
-  `);
-  if (version <= 2) {
-    raw.exec(`
-      DROP TRIGGER IF EXISTS trg_replica_people_profile_ai;
-      DROP TRIGGER IF EXISTS trg_replica_people_profile_au;
-      DROP TRIGGER IF EXISTS trg_replica_people_profile_ad;
-      DROP INDEX IF EXISTS people_profile_purge_idx;
-      ALTER TABLE people_profile DROP COLUMN purge_at;
-      ALTER TABLE people_profile DROP COLUMN deleted_at;
-
-      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ai;
-      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_au;
-      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ad;
-      DROP INDEX IF EXISTS core_entity_revision_actor_idx;
-      DROP INDEX IF EXISTS core_entity_revision_undo_idx;
-      DROP INDEX IF EXISTS core_entity_revision_entity_idx;
-      DROP TABLE core_entity_revision;
-    `);
-  }
-  if (version === 1) {
-    raw.exec(`
-      DROP INDEX locker_auth_credential_kind_idx;
-      DROP TABLE locker_auth_credential;
-    `);
-  }
-  raw.exec(`PRAGMA user_version = ${version}`);
-  raw.close();
+function columnNames(db: DatabaseSync, table: string): string[] {
+  return (
+    db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  ).map((column) => column.name);
 }
 
 describe("schema/migrate", () => {
@@ -236,219 +153,122 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("people_merge is absent after the drop rung (fresh + upgrade)", () => {
-    // Fresh vaults still create people_merge inside TIME_ORGANIZE_DDL, then
-    // DROP_PEOPLE_MERGE_DDL removes it so the tip schema has no residual.
-    const fresh = openVaultDb();
-    expect(
-      fresh.vault
-        .prepare(
-          `SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name = 'people_merge'`
-        )
-        .get()
-    ).toBeUndefined();
-    fresh.close();
-
-    // Upgrade path: a vault stuck one rung behind still holds people_merge.
-    const dir = tempDirSync();
-    const seeded = openVaultDb({ dir });
-    seeded.close();
-    const file = path.join(dir, "vault.db");
-    const raw = new DatabaseSync(file);
-    raw.exec(`
-      DROP TABLE notifications_notice;
-      CREATE TABLE people_merge (
-        merge_id        TEXT PRIMARY KEY,
-        source_party_id TEXT NOT NULL,
-        target_party_id TEXT NOT NULL,
-        revision_id     TEXT NOT NULL,
-        merged_at       TEXT NOT NULL,
-        undone_at       TEXT
-      ) STRICT;
-      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 3};
-    `);
-    raw.close();
-    expect(
-      (
-        new DatabaseSync(file)
-          .prepare(
-            `SELECT name FROM sqlite_master
-              WHERE type = 'table' AND name = 'people_merge'`
-          )
-          .get() as { name: string }
-      ).name
-    ).toBe("people_merge");
-
-    const upgraded = openVaultDb({ dir });
-    expect(
-      upgraded.vault
-        .prepare(
-          `SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name = 'people_merge'`
-        )
-        .get()
-    ).toBeUndefined();
-    expect(userVersionOf(file)).toBe(VAULT_MIGRATIONS.length);
-    upgraded.close();
-  });
-
-  test("v1 Locker data survives the user-presence credential migration", () => {
-    const dir = tempDirSync();
-    const seeded = openVaultDb({ dir });
-    seeded.vault
-      .prepare(
-        `INSERT INTO locker_item
-          (item_id, type, title, created_at, updated_at)
-         VALUES ('existing-login', 'login', 'Before auth', ?, ?)`
-      )
-      .run("2026-07-29T00:00:00.000Z", "2026-07-29T00:00:00.000Z");
-    seeded.close();
-
-    // Reconstruct the exact previous schema frontier: the populated Locker
-    // base rung exists, while #630's credential table does not.
-    rewindVaultTo(path.join(dir, "vault.db"), 1);
-
-    const upgraded = openVaultDb({ dir });
-    const locker = upgraded.vault
-      .prepare(
-        `SELECT type, title FROM locker_item WHERE item_id = 'existing-login'`
-      )
-      .get() as { type: string; title: string };
-    expect({ ...locker }).toStrictEqual({
-      type: "login",
-      title: "Before auth",
-    });
-    expect(
-      (
-        upgraded.vault
-          .prepare(
-            `SELECT name FROM sqlite_master
-               WHERE type = 'table' AND name = 'locker_auth_credential'`
-          )
-          .get() as { name: string }
-      ).name
-    ).toBe("locker_auth_credential");
-    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
-      VAULT_MIGRATIONS.length
-    );
-    upgraded.close();
-  });
-
-  test("the pre-P5 frontier preserves People rows while adding lifecycle and revision storage", () => {
-    const dir = tempDirSync();
-    const seeded = openVaultDb({ dir });
-    const now = "2026-07-29T00:00:00.000Z";
-    seeded.vault
-      .prepare(
-        `INSERT INTO core_party
-          (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES ('existing-person', 'person', 'Maya', ?, ?, ?)`
-      )
-      .run(now, now, ONTOLOGY_VERSION);
-    seeded.vault
-      .prepare(
-        `INSERT INTO people_profile
-          (profile_id, party_id, role, cadence_days, created_at, updated_at)
-         VALUES ('existing-profile', 'existing-person', 'Friend', 14, ?, ?)`
-      )
-      .run(now, now);
-    seeded.close();
-
-    rewindVaultTo(path.join(dir, "vault.db"), 2);
-
-    const upgraded = openVaultDb({ dir });
-    const person = upgraded.vault
-      .prepare(
-        `SELECT p.display_name, pr.role, pr.deleted_at, pr.purge_at
-           FROM core_party p
-           JOIN people_profile pr ON pr.party_id = p.party_id
-          WHERE p.party_id = 'existing-person'`
-      )
-      .get() as {
-      display_name: string;
-      role: string;
-      deleted_at: string | null;
-      purge_at: string | null;
+  test("pre-release vaults use one composed schema rung", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(1);
+    const db = openVaultDb();
+    const version = db.vault.prepare("PRAGMA user_version").get() as {
+      user_version: number;
     };
-    expect({ ...person }).toStrictEqual({
-      display_name: "Maya",
-      role: "Friend",
-      deleted_at: null,
-      purge_at: null,
-    });
-    expect(
-      (
-        upgraded.vault
+    expect(version.user_version).toBe(1);
+    for (const table of [
+      "locker_auth_credential",
+      "core_entity_revision",
+      "tally_expense_receipt",
+      "social_contact_channel",
+      "notifications_notice",
+    ]) {
+      expect(
+        db.vault
           .prepare(
-            `SELECT name FROM sqlite_master
-              WHERE type = 'table' AND name = 'core_entity_revision'`
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
           )
-          .get() as { name: string }
-      ).name
-    ).toBe("core_entity_revision");
-    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
-      VAULT_MIGRATIONS.length
-    );
-    upgraded.close();
-  });
-
-  test("the pre-receipt frontier preserves Tally expenses while adding receipt storage", () => {
-    const dir = tempDirSync();
-    const seeded = openVaultDb({ dir });
-    const boot = bootstrapVault(seeded, { ownerName: "Priya" });
-    const now = "2026-07-29T00:00:00.000Z";
-    seeded.vault
-      .prepare(
-        `INSERT INTO social_circle
-          (circle_id, owner_party_id, name, kind)
-         VALUES ('receipt-circle', ?, 'Dinner', 'friends')`
-      )
-      .run(boot.ownerPartyId);
-    seeded.vault
-      .prepare(
-        `INSERT INTO tally_group
-          (group_id, circle_id, icon, color, created_at, updated_at)
-         VALUES ('receipt-group', 'receipt-circle', 'D', '#123456', ?, ?)`
-      )
-      .run(now, now);
-    seeded.vault
-      .prepare(
-        `INSERT INTO tally_expense
-          (expense_id, group_id, description, amount_minor, paid_by,
-           spent_on, category, created_at, updated_at)
-         VALUES ('existing-expense', 'receipt-group', 'Before receipts', 1200,
-                 ?, '2026-07-29', 'food', ?, ?)`
-      )
-      .run(boot.ownerPartyId, now, now);
-    seeded.close();
-
-    rewindVaultTo(path.join(dir, "vault.db"), 4);
-
-    const upgraded = openVaultDb({ dir });
+          .get(table),
+        table
+      ).toBeTruthy();
+    }
     expect(
-      upgraded.vault
+      db.vault
         .prepare(
-          `SELECT description, amount_minor FROM tally_expense
-            WHERE expense_id = 'existing-expense'`
+          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'people_merge'`
         )
         .get()
-    ).toMatchObject({
-      description: "Before receipts",
-      amount_minor: 1200,
-    });
+    ).toBeUndefined();
+    db.close();
+  });
+
+  test("the composed rung includes Locker authentication columns", () => {
+    const db = openVaultDb();
+    expect(columnNames(db.vault, "locker_auth_credential")).toStrictEqual(
+      expect.arrayContaining([
+        "credential_id",
+        "kind",
+        "label",
+        "salt",
+        "verifier",
+        "created_at",
+        "updated_at",
+      ])
+    );
+    db.close();
+  });
+
+  test("the composed rung includes People profile lifecycle columns", () => {
+    const db = openVaultDb();
+    expect(columnNames(db.vault, "people_profile")).toStrictEqual(
+      expect.arrayContaining(["deleted_at", "purge_at"])
+    );
     expect(
-      upgraded.vault
+      db.vault
         .prepare(
-          `SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name = 'tally_expense_receipt'`
+          `SELECT 1 FROM sqlite_master
+           WHERE type = 'index' AND name = 'people_profile_purge_idx'`
         )
         .get()
     ).toBeTruthy();
-    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
-      VAULT_MIGRATIONS.length
+    db.close();
+  });
+
+  test("the composed rung includes append-only entity revision storage", () => {
+    const db = openVaultDb();
+    expect(columnNames(db.vault, "core_entity_revision")).toStrictEqual(
+      expect.arrayContaining([
+        "revision_id",
+        "entity_type",
+        "entity_id",
+        "operation",
+        "snapshot_json",
+        "recorded_at",
+        "undo_until",
+        "undone_at",
+      ])
     );
-    upgraded.close();
+    db.vault
+      .prepare(
+        `INSERT INTO core_entity_revision
+         (revision_id, entity_type, entity_id, operation, snapshot_json, recorded_at, undo_until)
+         VALUES ('revision-1', 'core.party', 'party-1', 'update', '{}', ?, ?)`
+      )
+      .run(new Date().toISOString(), new Date().toISOString());
+    const revision = db.vault
+      .prepare(
+        `SELECT snapshot_json FROM core_entity_revision WHERE revision_id = 'revision-1'`
+      )
+      .get() as { snapshot_json: string };
+    expect(revision.snapshot_json).toBe("{}");
+    db.close();
+  });
+
+  test("the composed rung includes receipt line-item storage", () => {
+    const db = openVaultDb();
+    expect(columnNames(db.vault, "tally_expense_receipt")).toStrictEqual(
+      expect.arrayContaining([
+        "receipt_id",
+        "expense_id",
+        "content_id",
+        "created_at",
+        "updated_at",
+      ])
+    );
+    expect(columnNames(db.vault, "tally_expense_line_item")).toStrictEqual(
+      expect.arrayContaining([
+        "line_item_id",
+        "receipt_id",
+        "kind",
+        "amount_minor",
+        "sort_order",
+      ])
+    );
+    db.close();
   });
 
   test("the orphan-grace tombstone table exists on a fresh vault (issue #439 R4)", () => {
@@ -551,29 +371,6 @@ describe("schema/migrate", () => {
       user_version: number;
     };
     expect(afterReplay.user_version).toBe(JOURNAL_MIGRATIONS.length);
-    db.close();
-  });
-
-  test("oauth_mode is repaired on a pre-#526 credential sidecar", () => {
-    const db = new DatabaseSync(":memory:");
-    db.exec(`
-    CREATE TABLE sync_connection_credential (
-      connection_id TEXT PRIMARY KEY,
-      cred_kind TEXT NOT NULL
-    ) STRICT;
-    INSERT INTO sync_connection_credential (connection_id, cred_kind)
-    VALUES ('legacy', 'oauth2');
-  `);
-
-    repairSyncCredentialOauthMode(db);
-    repairSyncCredentialOauthMode(db);
-
-    const row = db
-      .prepare(
-        `SELECT oauth_mode FROM sync_connection_credential WHERE connection_id = 'legacy'`
-      )
-      .get() as { oauth_mode: string };
-    expect(row.oauth_mode).toBe("byo");
     db.close();
   });
 

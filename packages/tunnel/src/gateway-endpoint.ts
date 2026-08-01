@@ -91,7 +91,6 @@ export interface GatewayPairResponse {
   version?: string;
   protocolVersion?: number;
   minSupportedProtocol?: number;
-  schemaEpoch?: number;
 }
 
 export interface GatewayEndpointOptions {

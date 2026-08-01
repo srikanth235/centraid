@@ -6,7 +6,6 @@ Owns:
 
 - **Product** `GATEWAY_VERSION` (display only)
 - **Protocol** `GATEWAY_PROTOCOL_VERSION` / `GATEWAY_MIN_PROTOCOL_VERSION` (connect gate)
-- `GATEWAY_SCHEMA_EPOCH` (historical alias; equals protocol until vault epoch splits)
 - `GatewayInfo`, `judgeGatewayInfo`, `handshakeGateway`, `protocolsCompatible`
 - capability map (`GatewayCapabilities`) returned on `GET /centraid/_gateway/info`
 - shared `/centraid/_*` route-path constants

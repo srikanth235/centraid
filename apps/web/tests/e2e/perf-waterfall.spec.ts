@@ -8,9 +8,9 @@ import type { Frame, Page } from "@playwright/test";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
-// PWA fast-path waterfall probe (issue #404 workstream I). The desktop rig
-// (apps/desktop/tests/e2e-live/probe-open-waterfall.mjs) measures an app open
-// in the REAL Electron shell; this is its PWA sibling. It boots the same e2e
+// PWA fast-path waterfall probe (issue #404 workstream I). The former desktop
+// exploratory rig is retired; this is the only budgeted app-open probe. It
+// boots the same e2e
 // harness gateway (tests/e2e/server.ts installs the `web-e2e` app), opens that
 // app cold then warm, and captures `performance.getEntriesByType('resource')`
 // from BOTH the shell page and the app iframe's own window. It also exercises

@@ -87,7 +87,7 @@ export interface ConversationArchivalResult {
   /** Phase B — archive rows whose raw turns were custody-gated-deleted. */
   segmentsPruned: number;
   turnsPruned: number;
-  reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
+  reclaim: { mode: "incremental" | "none"; ranVacuum: boolean };
 }
 
 /** A raw sqlite row (`SELECT *` shape) — stored verbatim in a segment. */

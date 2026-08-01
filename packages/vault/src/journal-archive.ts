@@ -94,7 +94,7 @@ export interface JournalArchivalResult {
   /** One manifest per stream that produced a segment this run (0, 1, or 2). */
   manifests: JournalArchiveManifestRow[];
   rowsArchived: number;
-  reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
+  reclaim: { mode: "incremental" | "none"; ranVacuum: boolean };
   /**
    * `true` when a stream hit `maxRowsPerRun` — there is more to archive and
    * the host should run again rather than wait for the next daily gate.
@@ -561,25 +561,23 @@ function insertManifest(
   };
 }
 
-function reclaimModeOf(journal: DatabaseSync): "incremental" | "full" | "none" {
+function reclaimModeOf(journal: DatabaseSync): "incremental" | "none" {
   const av = (
     journal.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
   ).auto_vacuum;
-  return av === 2 ? "incremental" : av === 1 ? "full" : "none";
+  return av === 2 ? "incremental" : "none";
 }
 
 /**
  * Reclaim pages the deletes above freed. `journal.db` is opened with
  * `PRAGMA auto_vacuum = INCREMENTAL` (db.ts openFile + app-engine's openJournalDb,
- * issue #438), so `incremental_vacuum` is the normal path — it returns the
- * freelist to the OS without rewriting the whole file. The full `VACUUM`
- * fallback still covers a legacy file that has not yet been converted (or a
- * connection that opened it in freelist mode): slower, but it runs at most once
- * per archival cycle, never inline with a live write, and only when there is
- * anything to reclaim (`freelist_count > 0`).
+ * issue #438), so `incremental_vacuum` returns the freelist to the OS without
+ * rewriting the whole file. Open-time database setup converts any pre-#438
+ * file before this path runs; archival never falls back to a whole-file
+ * `VACUUM`.
  */
 function reclaimSpace(journal: DatabaseSync): {
-  mode: "incremental" | "full" | "none";
+  mode: "incremental" | "none";
   ranVacuum: boolean;
 } {
   const freelist = (
@@ -591,8 +589,7 @@ function reclaimSpace(journal: DatabaseSync): {
     journal.exec("PRAGMA incremental_vacuum");
     return { mode, ranVacuum: true };
   }
-  journal.exec("VACUUM");
-  return { mode: "full", ranVacuum: true };
+  return { mode, ranVacuum: false };
 }
 
 /**

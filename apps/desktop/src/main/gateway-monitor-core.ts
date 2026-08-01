@@ -3,8 +3,8 @@
  * it's unit-testable without pulling in `electron` (the monitor shell needs
  * Notification/BrowserWindow at module load).
  *
- * The model: the main process probes `GET /centraid/_gateway/health` (with
- * an `/info`-only fallback for older gateways) on a fixed cadence and feeds
+ * The model: the main process probes `GET /centraid/_gateway/health` on a
+ * fixed cadence and feeds
  * each result through `applyProbe`, which maintains a rolling sample strip,
  * transition-derived outage log, and counters — all in memory, scoped to
  * the app launch and the active gateway (a gateway switch resets tracking).
@@ -35,12 +35,11 @@
 import {
   EXPECTED_GATEWAY_VERSION,
   EXPECTED_PROTOCOL_VERSION,
-  EXPECTED_SCHEMA_EPOCH,
   GATEWAY_MIN_PROTOCOL_VERSION,
   protocolsCompatible,
 } from "./version-handshake.js";
 
-/** Result of one heartbeat probe (`/centraid/_gateway/health`, or `/info` on a fallback). */
+/** Result of one heartbeat probe (`/centraid/_gateway/health`). */
 export interface GatewayProbe {
   /** Probe completion time (epoch ms, desktop clock). */
   at: number;
@@ -51,7 +50,7 @@ export interface GatewayProbe {
   /** Server-reported uptime — clock-skew-safe companion to `gatewayStartedAt`. */
   gatewayUptimeMs?: number;
   version?: string;
-  schemaEpoch?: number;
+  protocolVersion?: number;
   /** Failure reason when `!ok` (fetch error / HTTP status). */
   detail?: string;
   /**
@@ -64,8 +63,7 @@ export interface GatewayProbe {
   bootPhase?: boolean;
   /**
    * Aggregate status from `/centraid/_gateway/health`'s payload. Undefined
-   * when the probe fell back to `/info` (older gateway, pre-#347/#351) —
-   * that gateway simply never reports component health.
+   * when the gateway omits the aggregate status.
    */
   healthStatus?: "ok" | "degraded" | "error";
   /** Non-'ok' components from the health snapshot, when `healthStatus` is set. */
@@ -87,17 +85,15 @@ export interface GatewayComponentIssue {
 export interface GatewayVersionSkew {
   skewed: boolean;
   gatewayVersion: string;
-  gatewaySchemaEpoch: number;
   gatewayProtocolVersion: number;
   clientVersion: string;
-  clientSchemaEpoch: number;
   clientProtocolVersion: number;
 }
 
 /** Action returned by {@link applyVersionSkewAlert} when a skew notification is due. */
 export type GatewayVersionSkewAction = {
   gatewayVersion: string;
-  gatewaySchemaEpoch: number;
+  gatewayProtocolVersion: number;
 };
 
 /** Per-component alert bookkeeping — mirrors `GatewayOutage`'s de-dupe shape. */
@@ -148,7 +144,7 @@ export interface GatewayRuntimeState {
   gatewayStartedAt?: number;
   gatewayUptimeMs?: number;
   version?: string;
-  schemaEpoch?: number;
+  protocolVersion?: number;
   /** Failure detail from the most recent failed probe. */
   lastError?: string;
   checksTotal: number;
@@ -162,8 +158,7 @@ export interface GatewayRuntimeState {
    * component status, upgraded to `'degraded'` on sustained high latency
    * even when every component reports `ok` (see {@link DEGRADED_LATENCY_MS}).
    * Undefined until the first successful probe reaches `/health`; persists
-   * at its last value while the gateway is unreachable or when a probe
-   * fell back to `/info` (same "last-known" posture as `version`).
+   * at its last value while the gateway is unreachable.
    */
   healthStatus?: "ok" | "degraded" | "error";
   /** Non-'ok' components from the most recent `/health` snapshot. */
@@ -175,9 +170,8 @@ export interface GatewayRuntimeState {
   /**
    * Version-handshake verdict, REMOTE gateways only (see file header) —
    * undefined for a local gateway (always in lockstep) and while no probe
-   * carrying `version`/`schemaEpoch` has landed yet. Persists at its last
-   * value across a failed probe or an `/info`-fallback probe, same posture
-   * as `version`/`schemaEpoch` themselves.
+   * carrying `version`/`protocolVersion` has landed yet. Persists at its last
+   * value across a failed probe, same posture as the identity fields.
    */
   versionSkew?: GatewayVersionSkew;
   /** De-dupe marker for the skew OS notification — internal, not on the wire snapshot. */
@@ -326,8 +320,6 @@ export function applyProbe(
 
   // healthStatus: 'error' from the probe wins outright; otherwise degraded
   // components OR sustained latency downgrade an 'ok' probe to 'degraded'.
-  // A probe that never reached `/health` (fell back to `/info`) carries no
-  // opinion — keep the last-known value, same as `version`.
   const healthStatus = probe.ok
     ? probe.healthStatus === "error"
       ? "error"
@@ -365,29 +357,27 @@ export function applyProbe(
             ? {}
             : { gatewayUptimeMs: probe.gatewayUptimeMs }),
           ...(probe.version === undefined ? {} : { version: probe.version }),
-          ...(probe.schemaEpoch === undefined
+          ...(probe.protocolVersion === undefined
             ? {}
-            : { schemaEpoch: probe.schemaEpoch }),
+            : { protocolVersion: probe.protocolVersion }),
           // Version handshake (wave 2 of #351) — REMOTE gateways only; a
           // local gateway is embedded in this same build and can never
-          // skew. `/info`-fallback probes (no version/schemaEpoch) leave
-          // the last-known verdict in place, same as `version` above.
+          // skew. Probes without version/protocol fields leave the last-known
+          // verdict in place, same as `version` above.
           ...(state.gatewayKind === "remote" &&
           probe.version !== undefined &&
-          probe.schemaEpoch !== undefined
+          probe.protocolVersion !== undefined
             ? {
                 versionSkew: {
                   skewed: !protocolsCompatible({
                     localProtocol: EXPECTED_PROTOCOL_VERSION,
                     localMin: GATEWAY_MIN_PROTOCOL_VERSION,
-                    peerProtocol: probe.schemaEpoch,
-                    peerMin: probe.schemaEpoch,
+                    peerProtocol: probe.protocolVersion,
+                    peerMin: probe.protocolVersion,
                   }),
                   gatewayVersion: probe.version,
-                  gatewaySchemaEpoch: probe.schemaEpoch,
-                  gatewayProtocolVersion: probe.schemaEpoch,
+                  gatewayProtocolVersion: probe.protocolVersion,
                   clientVersion: EXPECTED_GATEWAY_VERSION,
-                  clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
                   clientProtocolVersion: EXPECTED_PROTOCOL_VERSION,
                 } satisfies GatewayVersionSkew,
               }
@@ -539,7 +529,7 @@ export function applyVersionSkewAlert(
     state: { ...state, versionSkewAlertedAt: now },
     action: {
       gatewayVersion: skew.gatewayVersion,
-      gatewaySchemaEpoch: skew.gatewaySchemaEpoch,
+      gatewayProtocolVersion: skew.gatewayProtocolVersion,
     },
   };
 }
