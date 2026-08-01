@@ -13,6 +13,7 @@ This is the durable command and ownership contract for TypeScript quality work. 
 | Task graph execution | pinned Turbo |
 | Dead code and dependency hygiene | Knip |
 | Runtime behaviour | Vitest and e2e suites |
+| Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [docs/sonarcloud.md](sonarcloud.md) |
 
 Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine command runner. `toolchain:doctor` is its non-mutating drift check. Optional GitHub, Sonar, and react-doctor JavaScript-plugin presets remain declined as bundles; a future issue may admit one rule at a time through the rubric below.
 
