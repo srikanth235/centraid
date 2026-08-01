@@ -9,6 +9,37 @@
 
 const enc = encodeURIComponent;
 
+/**
+ * Narrow grammar for client-side path-segment ids (app ids, conversation
+ * session ids) that may have come from untrusted storage or DOM data.
+ *
+ * Accepts the server-minted shapes we actually emit (UUIDs via `randomUUID`,
+ * app slugs `[a-z][a-z0-9-]{0,63}`) and rejects path traversal, scheme
+ * injection, empty junk, and overlong values before they ever enter a URL
+ * builder or `fetch` (Sonar `tssecurity:S8476` on storage → request URL).
+ *
+ * @param {unknown} value Candidate id.
+ * @returns {value is string} True when `value` is a safe path segment.
+ */
+export function isSafeClientId(value) {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value)
+  );
+}
+
+/**
+ * Return `value` only when it passes {@link isSafeClientId}; otherwise `null`.
+ * Use the return value (not the raw input) when assembling fetch URLs so
+ * taint analysis sees a validated path segment.
+ *
+ * @param {unknown} value Candidate id.
+ * @returns {string|null} The same string when safe, else null.
+ */
+export function safeClientId(value) {
+  return isSafeClientId(value) ? value : null;
+}
+
 // ───────────────────────── route builders ─────────────────────
 
 /** This app's persisted chat sessions (list/create). */

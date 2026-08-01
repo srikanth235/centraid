@@ -12,6 +12,8 @@ import {
   vaultAppsPath,
   normalizeModelState,
   modelLabel,
+  isSafeClientId,
+  safeClientId,
 } from "./conversation-client.js";
 import {
   sha256FileStream,
@@ -1352,16 +1354,34 @@ export function wireThemeToggle(
     let cached = null;
     return {
       get() {
-        if (cached) return cached;
+        if (cached) {
+          if (isSafeClientId(cached)) return cached;
+          cached = null;
+          try {
+            sessionStorage.removeItem(key);
+          } catch {
+            // Storage may be unavailable; in-memory clear is enough.
+          }
+          return null;
+        }
         try {
           cached = sessionStorage.getItem(key);
         } catch {
           // Session storage is unavailable in privacy-restricted contexts.
         }
+        if (cached && !isSafeClientId(cached)) {
+          cached = null;
+          try {
+            sessionStorage.removeItem(key);
+          } catch {
+            // Storage may be unavailable; in-memory clear is enough.
+          }
+        }
         return cached;
       },
       set(v) {
-        cached = v || null;
+        // Only persist ids that can safely enter path segments / fetch URLs.
+        cached = v && isSafeClientId(v) ? v : null;
         try {
           if (cached) sessionStorage.setItem(key, cached);
           else sessionStorage.removeItem(key);
@@ -2028,8 +2048,13 @@ export function wireThemeToggle(
     }
 
     function openConversation(id) {
+      const safeId = safeClientId(id);
+      if (!safeId) {
+        historyNote("Couldn't load that conversation.");
+        return;
+      }
       historyNote("Loading…");
-      void fetchJson(conversationPath(appId() || "", id)).then((r) => {
+      void fetchJson(conversationPath(appId() || "", safeId)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) {
             loadHistoryList(); // a stale row — refresh the list in place
@@ -2038,17 +2063,19 @@ export function wireThemeToggle(
           historyNote("Couldn't load that conversation.");
           return;
         }
-        session.set(id);
+        session.set(safeId);
         renderTranscript(r.body && r.body.messages);
         setViewMode("chat");
       });
     }
 
     function deleteConversationRow(id) {
-      void fetch(conversationPath(appId() || "", id), {
+      const safeId = safeClientId(id);
+      if (!safeId) return;
+      void fetch(conversationPath(appId() || "", safeId), {
         method: "DELETE",
       }).then(() => {
-        if (session.get() === id) {
+        if (session.get() === safeId) {
           session.clear();
           resetLogToIntro();
         }
@@ -2088,7 +2115,9 @@ export function wireThemeToggle(
     function maybeAutoLoadStoredConversation() {
       if (autoLoadAttempted) return;
       autoLoadAttempted = true;
-      const id = session.get();
+      // session.get() already drops non-safe storage values; re-bind via
+      // safeClientId so the value that enters the URL is the sanitizer result.
+      const id = safeClientId(session.get());
       // "empty" == still just the intro bubble — a fresh page load, not a
       // conversation this panel has already rendered this session.
       if (!id || log.children.length > 1) return;

@@ -12,6 +12,8 @@ import { describe, expect, it } from "vitest";
 const PKG = path.resolve(import.meta.dirname, "..");
 const url = pathToFileURL(path.resolve(PKG, "kit/conversation-client.js")).href;
 const {
+  isSafeClientId,
+  safeClientId,
   conversationsPath,
   conversationPath,
   conversationStatusPath,
@@ -26,6 +28,41 @@ const {
   modelLabel,
   readJsonResponse,
 } = await import(url);
+
+describe("isSafeClientId / safeClientId", () => {
+  it("accepts server-minted UUID and app-slug shapes", () => {
+    expect(isSafeClientId("550e8400-e29b-41d4-a716-446655440000")).toBe(true);
+    expect(safeClientId("550e8400-e29b-41d4-a716-446655440000")).toBe(
+      "550e8400-e29b-41d4-a716-446655440000"
+    );
+    expect(isSafeClientId("todo")).toBe(true);
+    expect(safeClientId("todo")).toBe("todo");
+    expect(isSafeClientId("daily-notes")).toBe(true);
+    expect(isSafeClientId("a")).toBe(true);
+    expect(isSafeClientId("A_b.1-z")).toBe(true);
+  });
+
+  it("rejects empty, traversal, scheme injection, and junk", () => {
+    expect(isSafeClientId("")).toBe(false);
+    expect(safeClientId("")).toBeNull();
+    expect(isSafeClientId(null)).toBe(false);
+    expect(safeClientId(null)).toBeNull();
+    expect(isSafeClientId(undefined)).toBe(false);
+    expect(isSafeClientId(12)).toBe(false);
+    expect(safeClientId("../etc/passwd")).toBeNull();
+    expect(isSafeClientId("..")).toBe(false);
+    expect(isSafeClientId("a/b")).toBe(false);
+    expect(safeClientId("https://evil.example")).toBeNull();
+    // Built at runtime so lint's no-script-url rule does not fire on a
+    // string we only assert is rejected by the id grammar.
+    expect(isSafeClientId(["java", "script", ":", "alert(1)"].join(""))).toBe(
+      false
+    );
+    expect(isSafeClientId("//evil.example")).toBe(false);
+    expect(isSafeClientId("id with spaces")).toBe(false);
+    expect(isSafeClientId("x".repeat(129))).toBe(false);
+  });
+});
 
 describe("route builders", () => {
   it("build the conversation / turn / vault routes, encoding ids", () => {

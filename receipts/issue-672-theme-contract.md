@@ -134,11 +134,18 @@ flattening the ramp into four identical greys.
 - `packages/design/src/kit.ts` (new) — `KIT_DIR`, the kit layer's one seam
 - `packages/design/src/{assistant-rich,assistant-sanitize,code-highlight,conversation-client,edge-upload,kit-smoke,turn-stream}.test.ts` — kit-layer tests moved from blueprints
 - `packages/design/tsconfig.test.json` — ESM typecheck program (the kit layer is browser ESM; the build still emits CJS)
+- `packages/design/package.json`, `packages/design/tsconfig.json` — hermetic `@types/node` for Docker builds
+- `packages/design/kit/conversation-client.{js,d.ts}`, `packages/design/kit/kit.ts`, `packages/design/src/conversation-client.test.ts` — `isSafeClientId` / `safeClientId` for storage-sourced path segments
 - `packages/gateway/src/serve/build-gateway.ts` — `KIT_DIR` from `@centraid/design/kit`
 - `packages/blueprints/{package.json,vitest.config.ts,tsconfig.apps.json,types/virtual-kit/kit.ts,src/index.ts,src/app-boot-harness.ts,src/locker-online-only.test.ts,visual-harness/server.mjs}` — kit handed over
 - `apps/{web,desktop}/vite.config.ts`, `packages/client/{tsconfig.json,vitest.config.ts,vitest.mutation.config.ts}` — anchored root alias + kit directory alias
 - `tests/mutation-floors.json` — floor key follows the directory rename (value unchanged at 93)
 - `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `docs/traps/design-tokens.md` — two-layer model documented
+
+### PR #677 CI — hermetic design build + kit URL safety
+
+- `@centraid/design` declares `@types/node` and sets `compilerOptions.types: ["node"]` so the Docker gateway image build no longer fails on `node:path` / `__dirname` when hoisting is absent.
+- Kit conversation client exports `isSafeClientId` / `safeClientId`; kit Ask panel validates sessionStorage and history DOM ids before assembling `conversationPath` fetch URLs (Sonar `tssecurity:S8476`).
 
 ## Verification
 
@@ -149,8 +156,9 @@ NODE_PATH=$PWD/node_modules bun run --cwd apps/mobile test -- src/kit/theme/gene
 node scripts/lint-design-tokens.mjs
 ```
 
-`bun run check:push` — 25/25 gates green (round 2, including the `lint`,
-`typecheck:affected` and `test:affected` gates that the flag rename had broken).
+`bun run check:push` — 25/25 gates green after the hermetic types + safe-client-id fix.
+`bun run --cwd packages/design build` — exit 0 (Node typings via package deps).
+`bun run --cwd packages/design test` — 157 tests including `isSafeClientId` / `safeClientId` accept/reject cases.
 The semantic-token suite is 81 tests across 8 files. The desktop Electron smoke build
 completed; the live renderer did not reach its readiness selector in this
 headless session, so visual regression remains covered by the PR’s automated

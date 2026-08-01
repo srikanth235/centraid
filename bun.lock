@@ -294,6 +294,7 @@
       },
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
         "typescript": "catalog:",
       },
     },

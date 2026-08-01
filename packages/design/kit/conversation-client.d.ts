@@ -1,5 +1,7 @@
 // Types for the shared conversation-client wire contract (issue #420).
 
+export function isSafeClientId(value: unknown): value is string;
+export function safeClientId(value: unknown): string | null;
 export function conversationsPath(appId: string): string;
 export function conversationPath(appId: string, sessionId: string): string;
 export function conversationSearchPath(
