@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-01T10:08:06.672Z",
-  "passed": 884,
+  "generatedAt": "2026-08-01T11:48:38.568Z",
+  "passed": 887,
   "failed": 0,
   "skipped": 0,
   "skippedTests": 37,
@@ -150,8 +150,8 @@
   ],
   "newFailedCellIds": [],
   "floorSeries": {
-    "coverage:repo-wide:lines": 64.64,
-    "coverage:repo-wide:branches": 54.47,
+    "coverage:repo-wide:lines": 64.66,
+    "coverage:repo-wide:branches": 54.48,
     "coverage:packages/app-engine/src/**:lines": 85.83,
     "coverage:packages/app-engine/src/**:branches": 74.94,
     "coverage:packages/automation/src/**:lines": 84.6,
@@ -164,8 +164,8 @@
     "coverage:packages/blueprints/src/**:branches": 81.18,
     "coverage:packages/blueprints/apps/**:lines": 20.52,
     "coverage:packages/blueprints/apps/**:branches": 15.17,
-    "coverage:packages/blueprints/kit/**:lines": 55.17,
-    "coverage:packages/blueprints/kit/**:branches": 40.89,
+    "coverage:packages/design/kit/**:lines": 54.88,
+    "coverage:packages/design/kit/**:branches": 40.97,
     "coverage:packages/client/src/replica/**:lines": 77,
     "coverage:packages/client/src/replica/**:branches": 63.91,
     "coverage:packages/client/src/*.{ts,tsx}:lines": 80.28,
@@ -178,8 +178,8 @@
     "coverage:packages/agent-runtime/src/**:branches": 76.91,
     "coverage:packages/vault/src/**:lines": 88.18,
     "coverage:packages/vault/src/**:branches": 74.35,
-    "coverage:packages/design-tokens/src/**:lines": 100,
-    "coverage:packages/design-tokens/src/**:branches": 100,
+    "coverage:packages/design/src/**:lines": 97.04,
+    "coverage:packages/design/src/**:branches": 84.75,
     "coverage:packages/tunnel/src/**:lines": 71.84,
     "coverage:packages/tunnel/src/**:branches": 52.24,
     "coverage:packages/protocol/src/**:lines": 100,
@@ -190,8 +190,8 @@
     "coverage:apps/desktop/src/main/*-core.ts:branches": 92.87,
     "coverage:apps/oauth-worker/src/**:lines": 92.04,
     "coverage:apps/oauth-worker/src/**:branches": 88.18,
-    "coverage:packages/client/src/react/**:lines": 67.74,
-    "coverage:packages/client/src/react/**:branches": 57.86,
+    "coverage:packages/client/src/react/**:lines": 67.73,
+    "coverage:packages/client/src/react/**:branches": 57.85,
     "mutation:apps/oauth-worker": null,
     "mutation:packages/agent-runtime": null,
     "mutation:packages/app-engine": null,
@@ -201,7 +201,7 @@
     "mutation:packages/blueprints": null,
     "mutation:packages/cli": null,
     "mutation:packages/client/src/replica": null,
-    "mutation:packages/design-tokens": null,
+    "mutation:packages/design": null,
     "mutation:packages/gateway": null,
     "mutation:packages/protocol": null,
     "mutation:packages/time-engine": null,
@@ -222,15 +222,11 @@
       "scope": "packages/time-engine/src/** (branches)",
       "value": 86.51,
       "floor": 65
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/design-tokens/src/** (branches)",
-      "value": 100,
-      "floor": 70
     }
   ],
   "flakeRates": [],
-  "coverageBelowFloor": [],
+  "coverageBelowFloor": [
+    "packages/design/src/**"
+  ],
   "validationErrorCount": 0
 }
