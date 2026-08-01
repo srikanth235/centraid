@@ -454,6 +454,8 @@
   });
 
   self.addEventListener('message', (event) => {
+    // Only same-origin shell clients may configure wake or purge tunnel caches.
+    if (event.origin !== self.location.origin) return;
     if (event.data?.type === 'centraid:configure-iroh-wake') {
       event.waitUntil(saveIrohConfiguration(event.data.configuration));
       return;

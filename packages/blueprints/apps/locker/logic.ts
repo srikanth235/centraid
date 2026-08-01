@@ -366,23 +366,20 @@ function scheduleClipboardClear(secret: string) {
   if (!navigator.clipboard || !navigator.clipboard.writeText) return;
   clipClearTimer = setTimeout(() => {
     clipClearTimer = null;
-    try {
-      if (navigator.clipboard.readText) {
-        void (async () => {
-          try {
-            const current = await navigator.clipboard.readText();
-            if (current === secret) await navigator.clipboard.writeText("");
-            if (lastSecretCopied === secret) lastSecretCopied = null;
-          } catch {
-            /* clipboard permissions changed — leave its current value alone */
-          }
-        })();
-      }
+    if (!navigator.clipboard.readText) {
       // No read permission → leave the clipboard alone rather than risk
       // wiping something the user copied since.
-    } catch {
-      /* clipboard unavailable */
+      return;
     }
+    void navigator.clipboard
+      .readText()
+      .then(async (current) => {
+        if (current === secret) await navigator.clipboard.writeText("");
+        if (lastSecretCopied === secret) lastSecretCopied = null;
+      })
+      .catch(() => {
+        /* clipboard permissions changed — leave its current value alone */
+      });
   }, CLIP_CLEAR_S * 1000);
 }
 

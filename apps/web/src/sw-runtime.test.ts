@@ -5,6 +5,7 @@ import {
   BLOB_CACHE,
   IROH_CONFIG_CACHE,
   NOTIFICATION_CACHE,
+  ORIGIN,
   SHELL_CACHE,
   SHELL_PATHS,
   SHELL_ROUTES,
@@ -262,6 +263,7 @@ describe("service worker cache purge on unpair", () => {
       worker.caches.seed(name);
     const pending: Array<Promise<unknown>> = [];
     worker.listeners.get("message")?.({
+      origin: ORIGIN,
       data: { type: "centraid:purge-tunnel-cache" },
       waitUntil: (promise: Promise<unknown>) => {
         pending.push(promise);

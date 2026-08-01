@@ -5,6 +5,7 @@ import { themes } from "@centraid/design-tokens";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { appLiveUrl } from "../../../gateway-client.js";
+import { appFramePostMessageOrigin } from "./appFramePostMessage.js";
 import { attachAppFrameReplicaBridge } from "./appFrameReplicaBridge.js";
 import type {
   AppFrameResourceRequest,
@@ -165,7 +166,7 @@ export default function AppFrame({
         const t = themeRef.current;
         frame.contentWindow?.postMessage(
           { type: "centraid:theme", theme: t.themeKind, bgL: t.bgL },
-          "*"
+          appFramePostMessageOrigin(frame)
         );
       } catch {
         /* noop */
@@ -216,10 +217,12 @@ export default function AppFrame({
   // Live re-theme — postMessage the running frame on a global theme change
   // (vanilla broadcastSettingsToFrames). No src reset, so no reload.
   useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
     try {
-      frameRef.current?.contentWindow?.postMessage(
+      frame.contentWindow?.postMessage(
         { type: "centraid:theme", theme: themeKind, bgL },
-        "*"
+        appFramePostMessageOrigin(frame)
       );
     } catch {
       /* noop */

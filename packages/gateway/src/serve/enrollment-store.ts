@@ -146,10 +146,11 @@ const ENROLLMENT_VIEW_SQL = `
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
   const resolved = path.resolve(source);
+  // File path → parent dir; directory path → use as gateway root.
   const root =
     path.basename(resolved) === "gateway.db"
       ? path.dirname(resolved)
-      : path.dirname(resolved);
+      : resolved;
   return GatewayDatabase.open(root);
 }
 

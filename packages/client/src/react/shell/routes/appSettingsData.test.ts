@@ -72,6 +72,7 @@ describe(pushKnobToAppFrame, () => {
     pushKnobToAppFrame("appAccent", "#f00");
     pushKnobToAppFrame("appDensity", "compact");
 
+    const origin = window.location.origin;
     expect(post).toHaveBeenNthCalledWith(
       1,
       {
@@ -79,7 +80,7 @@ describe(pushKnobToAppFrame, () => {
         dataAttrs: {},
         cssVars: { "app-accent": "#f00" },
       },
-      "*"
+      origin
     );
     expect(post).toHaveBeenNthCalledWith(
       2,
@@ -88,7 +89,7 @@ describe(pushKnobToAppFrame, () => {
         dataAttrs: { "app-density": "compact" },
         cssVars: {},
       },
-      "*"
+      origin
     );
     frame.remove();
   });

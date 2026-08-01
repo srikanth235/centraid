@@ -4,6 +4,7 @@ import type { CSSProperties, JSX } from "react";
 import { draftPreviewUrl } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { parseAnchor } from "../../appearance.js";
+import { appFramePostMessageOrigin } from "../appFramePostMessage.js";
 
 import styles from "./BuilderPreview.module.css";
 
@@ -175,14 +176,15 @@ export default function BuilderPreview({
               data-centraid-app="1"
               allow="clipboard-write; clipboard-read"
               onLoad={(e) => {
+                const frame = e.currentTarget;
                 try {
-                  e.currentTarget.contentWindow?.postMessage(
+                  frame.contentWindow?.postMessage(
                     {
                       type: "centraid:theme",
                       theme: resolved.theme,
                       bgL: resolved.bgL,
                     },
-                    "*"
+                    appFramePostMessageOrigin(frame)
                   );
                 } catch {
                   /* noop */

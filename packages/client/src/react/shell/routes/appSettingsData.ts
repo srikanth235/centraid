@@ -18,6 +18,7 @@ import type {
   VaultBlockDTO,
   VaultBridgeProps,
 } from "../../screen-contracts.js";
+import { appFramePostMessageOrigin } from "./appFramePostMessage.js";
 
 // The gateway I/O + manifest parsing behind the React app-settings popover —
 // the successor to the helpers that lived in the deleted app-appview.ts /
@@ -131,7 +132,7 @@ export function pushKnobToAppFrame(key: string, value: string): void {
   const cssVars = isCss ? { [name]: value } : {};
   frame.contentWindow?.postMessage(
     { type: "centraid:settings", dataAttrs, cssVars },
-    "*"
+    appFramePostMessageOrigin(frame)
   );
 }
 

@@ -20,6 +20,11 @@
 - **`knip.json`** — ignoreBinaries lists `gitleaks`, `osv-scanner`, and `trivy` so knip does not require CI-only external scanners as package dependencies.
 - **SonarCloud config as code** — `docs/sonarcloud.md` documents Autoscan exclusions, silenced noise rules, and Free-plan profile/gate limits; `scripts/ci/configure-sonarcloud.mjs` re-applies API settings (exclusions + multicriteria + Centraid profile/gate); `AGENTS.md` and `docs/toolchain.md` index the doc.
 - **Sonar PR fail-closed only on product signal** — exclusions keep `scripts/**`, `.github/**`, tests/fixtures out of Autoscan so Sonar way (any new BUG/VULN fails) does not red hygiene/tooling PRs; multicriteria expanded for style/FP security rules; live API re-applied and PR #673 noise issues WONTFIX’d pending re-analysis.
+- **High-signal Sonar product fixes (not complexity/style burn-down)** —
+  - ReDoS `S5852`: `packages/vault/src/ingest/mbox.ts` iterative `threadKey`; `packages/vault/src/blob/pdf-text.ts` linear `Tj`/`TJ` walker; `packages/vault/src/blob/stream-ingress.ts` frame loop clarity.
+  - postMessage `S2819`: `packages/client/src/react/shell/routes/appFramePostMessage.ts`; `packages/client/src/react/shell/routes/AppFrame.tsx`; `packages/client/src/react/shell/routes/appFrameReplicaBridge.ts`; `packages/client/src/react/shell/routes/appFrameReplicaBridge.test.ts`; `packages/client/src/react/shell/routes/appSettingsData.ts`; `packages/client/src/react/shell/routes/appSettingsData.test.ts`; `packages/client/src/react/shell/routes/builder/BuilderPreview.tsx`.
+  - SW origin: `apps/web/public/sw.js`; `apps/web/src/sw-runtime.test.ts`; `apps/web/src/sw-notifications-wake.test.ts`.
+  - Control-flow: `apps/oauth-worker/src/worker.ts`; `apps/oauth-worker/stryker.config.mjs`; `packages/gateway/src/serve/enrollment-store.ts`; `packages/client/src/react/screens/AutomationThreadScreen.module.css`; `packages/blueprints/kit/assistant-rich.js`; `packages/blueprints/kit/turn-stream.js`; `packages/blueprints/apps/locker/logic.ts`; `packages/blueprints/apps/photos/app-root.tsx`; `packages/client/src/react/shell/routes/builder/BuilderAutomationConfigView.tsx`.
 
 ## Decisions
 
@@ -30,7 +35,7 @@
 
 ## Out of scope
 
-- Sonar high-signal code burn-down (ReDoS, postMessage, complexity).
+- Full Sonar backlog (cognitive complexity S3776, workflows, visual-harness, generated wasm, mobile gradle lockfiles, Dockerfile download-then-exec CI patterns).
 - Commercial Socket SCA without API key.
 - Scanning every app image beyond monorepo-root gateway Dockerfile.
 - Auto-remediating all HIGH lockfile advisories in this PR.
