@@ -148,14 +148,14 @@
   background: var(--text-faint);
 }
 .urlDot[data-state="live"] {
-  background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
 }
 .urlDot[data-state="local"] {
   background: var(--accent);
 }
 .urlDot[data-state="building"] {
-  background: var(--warn);
+  background: var(--warning);
   animation: rb-url-pulse 1.3s ease-in-out infinite;
 }
 .urlText {

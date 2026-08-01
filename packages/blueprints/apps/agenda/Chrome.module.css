@@ -23,15 +23,15 @@
   flex-direction: column;
   /* app.css :root escape hatches, absent from the blueprint token layer. */
   --accent-deep-fg: var(--accent-deep);
-  --warn: #b06a12;
+  --warning: #b06a12;
 }
 :global(:root[data-theme="dark"]) .root {
-  --warn: #e0a13c;
+  --warning: #e0a13c;
   --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .root {
-    --warn: #e0a13c;
+    --warning: #e0a13c;
     --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
   }
 }

@@ -39,7 +39,7 @@
     "appWeight": {
       "status": "measured",
       "volume": "n/a — build artifact, independent of vault size",
-      "probe": "scripts/perf/app-weight.mjs --bg-elev mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
+      "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
       "maxTotalBytes": 12582912,
       "maxLargestChunkBytes": 7000000,
       "_provenance": {

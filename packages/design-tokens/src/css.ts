@@ -29,6 +29,7 @@ function themeProps(t: Theme): Record<string, string> {
     "--accent-text": t.accentText,
     "--danger": t.danger,
     "--success": t.success,
+    "--warning": t.warning,
   };
   // --bg-l must precede --bg/--bg-elev/--bg-sunken/--bg-app on dark, since
   // those reference it via var(). Light theme omits it entirely.

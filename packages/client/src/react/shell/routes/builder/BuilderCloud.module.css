@@ -200,7 +200,7 @@
   border-bottom: none;
 }
 .logsRow[data-level="warn"] {
-  background: color-mix(in srgb, var(--warn) 6%, transparent);
+  background: color-mix(in srgb, var(--warning) 6%, transparent);
 }
 .logsRow[data-level="error"] {
   background: color-mix(in srgb, var(--danger) 8%, transparent);
@@ -213,7 +213,7 @@
   color: var(--text-soft);
 }
 .logsRow[data-level="warn"] .logsLevel {
-  color: var(--warn);
+  color: var(--warning);
 }
 .logsRow[data-level="error"] .logsLevel {
   color: var(--danger);

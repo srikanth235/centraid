@@ -164,7 +164,7 @@ export function strength(pw: string | null | undefined): Strength {
     s <= 2 ? "Weak" : s === 3 ? "Fair" : s === 4 ? "Good" : "Strong";
   const tone = s <= 2 ? "danger" : s === 3 ? "warn" : "ok";
   const color =
-    s <= 2 ? "var(--danger)" : s === 3 ? "var(--warn)" : "var(--ok)";
+    s <= 2 ? "var(--danger)" : s === 3 ? "var(--warning)" : "var(--success)";
   return { ratio: s / 5, tone, label, color };
 }
 

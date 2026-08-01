@@ -1,22 +1,13 @@
-/* Bridge: map @centraid/design-tokens vars onto the kit's app-level var
- * contract. The blueprint apps do this per-app (--surface: var(--bg-elev),
- * etc.); kit.css reads the app names, so a design system that ships kit.css
- * must provide the same bridge or every .kit-* component renders unstyled. */
+/* Bridge: supply the handful of kit-level names that are NOT part of the
+ * @centraid/design-tokens contract. The surface and text families used to be
+ * remapped here (--surface, --muted, --ink-3 …); with one shared vocabulary
+ * (#672) kit.css reads the contract names directly, so anything this file
+ * still declares is a genuine gap rather than a second spelling. */
 :root {
-  /* Surfaces */
-  --surface: var(--bg-elev);
-  --surface-2: var(--bg-sunken);
-  /* Text */
-  --text: var(--ink);
-  --muted: var(--ink-3);
-  --ink-faint: var(--ink-4);
-  /* Lines are already emitted by tokens (--line, --line-strong). */
-  /* Accent — --accent / --accent-deep come from tokens; add the soft tint. */
+  /* Accent tint — the contract ships --accent / --accent-deep / --accent-text
+   * but no soft wash. */
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-  /* Warn/danger/ok have no tokens; borrow the closest icon hues. */
-  --warn: var(--c-amber);
-  --danger: var(--c-rose);
-  --ok: var(--c-forest);
+  /* --danger / --success / --warning are contract tokens; nothing to bridge. */
   /* Radius + easing the kit derives from. */
   --radius: var(--r-lg);
   --radius-sm: var(--r-md);

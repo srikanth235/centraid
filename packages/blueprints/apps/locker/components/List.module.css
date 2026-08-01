@@ -100,7 +100,7 @@
   background: var(--accs);
 }
 .star {
-  color: var(--warn);
+  color: var(--warning);
   flex-shrink: 0;
 }
 .warnDot {

@@ -3,7 +3,15 @@
 // against. Once the seam between the vanilla app.ts shell and its route modules;
 // after the full-React flip (#325) app.ts is gone and this is just the types +
 // the ACCENT_PALETTE the appearance code shares.
-import { BRAND, palette } from "@centraid/design-tokens";
+import {
+  ACCENT_DEEP,
+  ACCENT_LIGHT,
+  ACCENT_TEXT_LIGHT,
+  accentRamp,
+  BRAND,
+  palette,
+} from "@centraid/design-tokens";
+import type { AccentRamp } from "@centraid/design-tokens";
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
@@ -13,20 +21,25 @@ export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
 export type AccentKey = "blue" | "violet" | "teal" | "ochre" | "rose";
 export type CardVariant = "flat" | "outlined" | "elevated";
 
-// Accent key → resolved hex swatches (Centraid Redesign Tweaks panel). Shared
-// between the appearance core in app.ts and the settings page in app-settings.
-// `teal` is the brand accent — its ramp matches @centraid/design-tokens'
-// ACCENT / ACCENT_LIGHT / ACCENT_DEEP (and the `--brand` logo hue), so the
-// default swatch and the token default paint identically.
-export const ACCENT_PALETTE: Record<
-  AccentKey,
-  { accent: string; light: string; deep: string }
-> = {
-  blue: { accent: palette.indigo, light: palette.violet, deep: palette.slate },
-  ochre: { accent: palette.ochre, light: palette.amber, deep: palette.forest },
-  rose: { accent: palette.rose, light: palette.violet, deep: palette.slate },
-  teal: { accent: BRAND, light: palette.teal, deep: palette.forest },
-  violet: { accent: palette.violet, light: palette.rose, deep: palette.indigo },
+// Accent key → resolved swatches (Centraid Redesign Tweaks panel). Shared
+// between the appearance core and the settings page.
+//
+// `teal` is the brand accent and uses the AUTHORED brand ramp, so picking it
+// paints exactly what the themes already declare. The other four are DERIVED
+// from their palette base (see `accentRamp`) rather than hand-picked, because
+// hand-picked variants drift off their own hue — this table once shipped a
+// green "deep" for teal and a violet "light" for rose.
+export const ACCENT_PALETTE: Record<AccentKey, AccentRamp> = {
+  blue: accentRamp(palette.indigo),
+  ochre: accentRamp(palette.ochre),
+  rose: accentRamp(palette.rose),
+  teal: {
+    accent: BRAND,
+    deep: ACCENT_DEEP,
+    light: ACCENT_LIGHT,
+    text: ACCENT_TEXT_LIGHT,
+  },
+  violet: accentRamp(palette.violet),
 };
 
 // A gateway profile as returned by the listGateways IPC.

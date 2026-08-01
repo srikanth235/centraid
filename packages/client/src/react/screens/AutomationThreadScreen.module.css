@@ -678,7 +678,7 @@
   border: 0.5px solid var(--line);
   /* No `--warn` in the shell theme — same documented fallback the Assistant
      and Providers screens use. */
-  border-left: 3px solid var(--warn);
+  border-left: 3px solid var(--warning);
   background: var(--bg-sunken);
 }
 

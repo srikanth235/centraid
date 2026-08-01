@@ -52,7 +52,7 @@
   color: var(--danger);
 }
 .flag.medium {
-  color: var(--warn);
+  color: var(--warning);
 }
 .flag.low {
   color: var(--text-faint);

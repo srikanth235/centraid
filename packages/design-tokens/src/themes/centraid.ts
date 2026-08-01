@@ -10,9 +10,13 @@ import {
   ACCENT_DEEP,
   ACCENT_LIGHT,
   ACCENT_MIDNIGHT,
+  ACCENT_TEXT_LIGHT,
   BRAND,
   DANGER,
   SUCCESS,
+  SUCCESS_LIGHT,
+  WARNING,
+  WARNING_LIGHT,
 } from "./shared";
 import type { Theme } from "./shared";
 
@@ -22,7 +26,7 @@ export const lightTheme: Theme = {
   accentDeep: ACCENT_DEEP,
   accentLight: ACCENT_LIGHT,
   accentMidnight: ACCENT_MIDNIGHT,
-  accentText: "#0F7A6C",
+  accentText: ACCENT_TEXT_LIGHT,
   bg: "#FCFCFC",
   bgApp: "#FFFFFF",
   bgElev: "#FFFFFF",
@@ -34,11 +38,22 @@ export const lightTheme: Theme = {
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
     "linear-gradient(180deg, #dee0e4 0%, #d2d5db 100%)",
+  // The alphas are not decorative: `--text-faint` and `--text-ghost` are
+  // `color:` on real prose (~670 call sites between them — metadata rows, hint
+  // lines, empty states), so each rung has to clear a text floor against the
+  // LIGHTEST surface it can land on as well as the sidebar and sunken greys.
+  // The previous ramp (0.72 / 0.50 / 0.28 over #1F1F23) put faint at 3.2:1 and
+  // ghost at 1.8:1 — below AA and below the 3:1 non-text floor respectively,
+  // which is why the light theme read as a wash. Measured against `--bg`:
+  //   text 17.6:1   soft 8.8:1   faint 5.0:1   ghost 3.2:1
   text: "#14161B",
   textSoft: "rgba(20,22,27,0.78)",
   textFaint: "rgba(20,22,27,0.62)",
   textGhost: "rgba(20,22,27,0.48)",
   textInv: "#F4F5F7",
+  // Hairlines were near-invisible at 0.07/0.13 on a near-white surface, so
+  // cards and inputs had no readable edge. These sit just above the threshold
+  // where a 1px rule resolves on a non-retina panel.
   line: "rgba(20,22,27,0.11)",
   lineStrong: "rgba(20,22,27,0.20)",
   scrim: "rgba(20,22,27,0.52)",
@@ -49,9 +64,10 @@ export const lightTheme: Theme = {
   shadowSm: "0 1px 2px rgba(20,22,27,.07)",
   sidebarBg: "#F4F5F7",
   sidebarBlur: "none",
-  sidebarDivider: "1px solid rgba(31,31,35,0.08)",
-  success: "#456B39",
+  sidebarDivider: "1px solid rgba(20,22,27,0.13)",
+  success: SUCCESS_LIGHT,
   danger: DANGER,
+  warning: WARNING_LIGHT,
 };
 
 export const darkTheme: Theme = {
@@ -99,6 +115,8 @@ export const darkTheme: Theme = {
   text: "#ECEEF2",
   textSoft: "rgba(236,238,242,0.72)",
   textFaint: "rgba(236,238,242,0.52)",
+  // 0.32 put this rung at 2.6:1 on the near-black app surface — under the 3:1
+  // non-text floor it needs for the borders and icons it carries here too.
   textGhost: "rgba(236,238,242,0.38)",
   textInv: "#141820",
   line: "rgba(220,230,245,0.08)",
@@ -112,4 +130,5 @@ export const darkTheme: Theme = {
   sidebarDivider: "0.5px solid rgba(255,255,255,0.10)",
   success: SUCCESS,
   danger: DANGER,
+  warning: WARNING,
 };

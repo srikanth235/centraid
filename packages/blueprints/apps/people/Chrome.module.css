@@ -58,7 +58,7 @@
   --line: rgba(40, 26, 30, 0.1);
   --line-strong: rgba(40, 26, 30, 0.17);
   --danger: #c8382f;
-  --ok: #3f9e6b;
+  --success: #3f9e6b;
 
   --r-card: 14px;
   --r-btn: 6px;
@@ -106,7 +106,7 @@
   --line: hsla(20 26% 80% / 0.11);
   --line-strong: hsla(20 26% 82% / 0.2);
   --danger: #f0645b;
-  --ok: #5fbd88;
+  --success: #5fbd88;
   --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
   --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --shadow-md:
@@ -131,7 +131,7 @@
     --line: hsla(20 26% 80% / 0.11);
     --line-strong: hsla(20 26% 82% / 0.2);
     --danger: #f0645b;
-    --ok: #5fbd88;
+    --success: #5fbd88;
     --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
     --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --shadow-md:

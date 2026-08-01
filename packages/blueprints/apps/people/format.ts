@@ -182,7 +182,7 @@ export function statusOf(p: CadencePerson): Status {
   const due = !over && days >= cad * 0.72;
   if (over) return { key: "overdue", label: "overdue", color: "var(--danger)" };
   if (due) return { key: "due", label: "due soon", color: "var(--c-family)" };
-  return { key: "ok", label: "on track", color: "var(--ok)" };
+  return { key: "ok", label: "on track", color: "var(--success)" };
 }
 
 export function metaLine(p: CadencePerson): string {

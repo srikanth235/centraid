@@ -572,11 +572,11 @@ kit-reference-strip,
   background: var(--danger);
 }
 .kit-bar-fill[data-tone="warn"] {
-  background: var(--warn);
+  background: var(--warning);
 }
 /* Healthy / passing reading (e.g. a strong password). */
 .kit-bar-fill[data-tone="ok"] {
-  background: var(--ok);
+  background: var(--success);
 }
 
 /* ---------- Trust / notice banner ------------------------------------------ */

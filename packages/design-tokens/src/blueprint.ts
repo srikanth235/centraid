@@ -58,8 +58,8 @@ function lightProps(): Record<string, string> {
     "--accent": palette.teal,
   };
 
-  // The 8 app-icon palette hexes, as --c-<name> (no --icon-* alias here —
-  // that's a desktop-only bridge name; blueprint apps never consumed it).
+  // The 8 app-icon palette hexes, as --c-<name> — the one spelling, matching
+  // what the shell emits (the old --icon-* alias is gone, #672).
   for (const [name, hex] of Object.entries(palette)) {
     props[`--c-${name}`] = hex;
   }
@@ -74,10 +74,16 @@ function lightProps(): Record<string, string> {
     "--sel": "var(--accent-soft)",
     "--selb": "color-mix(in oklab, var(--_accent) 34%, var(--line-strong))",
 
-    // Ink.
-    "--text": "hsl(var(--app-hue) 22% 13%)",
-    "--text-soft": "hsl(var(--app-hue) 9% 41%)",
-    "--text-faint": "hsl(var(--app-hue) 8% 50%)",
+    // Text. `--text-faint` is `color:` on captions and metadata in every app,
+    // so it has to clear AA against the DARKEST surface it can land on — the
+    // `--bg-sunken` recessed track, not just white. 50% lightness put it at
+    // 3.35:1 there, below the floor for body text at these sizes; 42% puts it
+    // at 4.51:1 on the track and 4.93:1 on white, with `--text-soft` at
+    // 5.70/6.22:1, so the three rungs stay visibly distinct from each other
+    // and from `--text`. `contrast.test.ts` pins these against the emitted CSS.
+    "--text": "hsl(var(--app-hue) 22% 12%)",
+    "--text-soft": "hsl(var(--app-hue) 9% 36%)",
+    "--text-faint": "hsl(var(--app-hue) 8% 42%)",
     "--text-inv": "#ffffff",
     // Surfaces — warm-neutral paper base, elevated card, recessed track.
     "--bg": "hsl(var(--app-hue) 20% 98%)",
@@ -89,6 +95,7 @@ function lightProps(): Record<string, string> {
 
     "--danger": "#c8382f",
     "--warning": "#9a6b1f",
+    "--success": "#2f7d4f",
 
     // Radii — hard-edged cards; buttons/chips are kit pills (kit.css).
     "--r-card": `${radii.xl}px`,
@@ -143,7 +150,9 @@ function darkProps(): Record<string, string> {
 
     "--text": "hsl(var(--app-hue) 16% 94%)",
     "--text-soft": "hsl(var(--app-hue) 9% 66%)",
-    "--text-faint": "hsl(var(--app-hue) 9% 55%)",
+    // 55% cleared AA on the card but only reached 4.05:1 on the `--bg-sunken`
+    // track, which carries the same captions. 59% clears both (4.55 / 5.29).
+    "--text-faint": "hsl(var(--app-hue) 9% 59%)",
     "--text-inv": "hsl(var(--app-hue) 12% calc(var(--bg-l) + 4%))",
 
     "--bg": "var(--bg-wall)",
@@ -156,6 +165,7 @@ function darkProps(): Record<string, string> {
 
     "--danger": "#f0645b",
     "--warning": "#e0a94a",
+    "--success": "#5cc98a",
 
     "--accent-deep":
       "color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%))",

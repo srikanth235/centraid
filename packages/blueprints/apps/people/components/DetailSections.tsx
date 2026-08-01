@@ -91,7 +91,7 @@ function DebtsSection({
           fontSize: "11px",
           textTransform: "none",
           letterSpacing: 0,
-          color: net >= 0 ? "var(--ok)" : "var(--text-faint)",
+          color: net >= 0 ? "var(--success)" : "var(--text-faint)",
         }}
       >
         {netLabel}
@@ -119,7 +119,7 @@ function DebtsSection({
                       display: "block",
                       font: "var(--t-body)",
                       fontWeight: 500,
-                      color: owe ? "var(--text)" : "var(--ok)",
+                      color: owe ? "var(--text)" : "var(--success)",
                     }}
                   >
                     {(owe ? "You owe " : "Owes you ") + amount}
@@ -446,12 +446,12 @@ export function Sections({
                   className={`kit-chip quiet ${styles.chipSm}`}
                   style={{
                     borderColor: given
-                      ? "color-mix(in oklab, var(--ok) 30%, transparent)"
+                      ? "color-mix(in oklab, var(--success) 30%, transparent)"
                       : "color-mix(in oklab, var(--c-family) 30%, transparent)",
                     background: given
-                      ? "color-mix(in oklab, var(--ok) 14%, transparent)"
+                      ? "color-mix(in oklab, var(--success) 14%, transparent)"
                       : "color-mix(in oklab, var(--c-family) 14%, transparent)",
-                    color: given ? "var(--ok)" : "var(--c-family)",
+                    color: given ? "var(--success)" : "var(--c-family)",
                   }}
                   onClick={() => onToggleGift(g.gift_id)}
                 >

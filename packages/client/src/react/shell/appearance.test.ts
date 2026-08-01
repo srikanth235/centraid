@@ -124,6 +124,7 @@ describe("appearance prefs", () => {
       expect(s.getPropertyValue("--accent")).toBe("");
       expect(s.getPropertyValue("--accent-light")).toBe("");
       expect(s.getPropertyValue("--accent-deep")).toBe("");
+      expect(s.getPropertyValue("--accent-text")).toBe("");
       expect(s.getPropertyValue("--bg-l")).toBe("");
     });
 
@@ -132,10 +133,26 @@ describe("appearance prefs", () => {
       const s = document.documentElement.style;
       expect(s.getPropertyValue("--accent")).toBe(ACCENT_PALETTE.ochre.accent);
       expect(s.getPropertyValue("--bg-l")).toBe("5%");
+      // The text rung has to move with the accent, or a picked accent gives
+      // ochre buttons and teal links. Dark takes the accent itself, which is
+      // already legible on near-black…
+      expect(s.getPropertyValue("--accent-text")).toBe(
+        ACCENT_PALETTE.ochre.accent
+      );
+      // …and light takes the deepened shade, which clears AA on near-white.
+      applyPrefsToDocument({
+        ...DEFAULT_PREFS,
+        accent: "ochre",
+        theme: "light",
+      });
+      expect(s.getPropertyValue("--accent-text")).toBe(
+        ACCENT_PALETTE.ochre.text
+      );
       // Clearing matters as much as setting: a stale inline value would keep
       // outranking the theme block forever.
       applyPrefsToDocument(DEFAULT_PREFS);
       expect(s.getPropertyValue("--accent")).toBe("");
+      expect(s.getPropertyValue("--accent-text")).toBe("");
       expect(s.getPropertyValue("--bg-l")).toBe("");
     });
 

@@ -47,13 +47,13 @@ function WatchItemRow({
     : item.weak
       ? {
           t: "Weak",
-          bg: "color-mix(in oklab, var(--warn) 16%, transparent)",
-          c: "var(--warn)",
+          bg: "color-mix(in oklab, var(--warning) 16%, transparent)",
+          c: "var(--warning)",
         }
       : {
           t: "Reused",
-          bg: "color-mix(in oklab, var(--warn) 16%, transparent)",
-          c: "var(--warn)",
+          bg: "color-mix(in oklab, var(--warning) 16%, transparent)",
+          c: "var(--warning)",
         };
   return (
     <button
@@ -113,13 +113,13 @@ function WatchtowerPane({
           <div className={styles.k}>Compromised</div>
         </div>
         <div className={styles.wtStat}>
-          <div className={styles.n} style={{ color: "var(--warn)" }}>
+          <div className={styles.n} style={{ color: "var(--warning)" }}>
             {watch.weak}
           </div>
           <div className={styles.k}>Weak passwords</div>
         </div>
         <div className={styles.wtStat}>
-          <div className={styles.n} style={{ color: "var(--warn)" }}>
+          <div className={styles.n} style={{ color: "var(--warning)" }}>
             {watch.reused}
           </div>
           <div className={styles.k}>Reused passwords</div>

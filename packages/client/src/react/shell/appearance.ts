@@ -116,6 +116,7 @@ export function toRemoteShape(
       out.accent = swatch.accent;
       out.accentLight = swatch.light;
       out.accentDeep = swatch.deep;
+      out.accentText = swatch.text;
     }
   }
   return out;
@@ -153,6 +154,15 @@ export function applyPrefsToDocument(
   setOrClear(html, "--accent", swatch?.accent);
   setOrClear(html, "--accent-light", swatch?.light);
   setOrClear(html, "--accent-deep", swatch?.deep);
+  // The accent-as-TEXT rung has to move with the accent, or an owner who picks
+  // rose gets rose buttons and teal links. On the dark ramp a saturated accent
+  // is already legible on near-black, so only light needs the deepened shade —
+  // the same split the themes themselves declare.
+  setOrClear(
+    html,
+    "--accent-text",
+    prefs.theme === "dark" ? swatch?.accent : swatch?.text
+  );
 }
 
 /**

@@ -11,7 +11,7 @@
  *
  * Colour is assigned per component id, not per rank: a component keeps its
  * hue as the numbers move, so the bar does not reshuffle its palette between
- * two polls. Hues come from the icon palette (`--icon-*`), which is the one
+ * two polls. Hues come from the icon palette (`--c-*`), which is the one
  * ramp in this codebase already designed to be told apart at a glance.
  */
 

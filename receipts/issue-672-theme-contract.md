@@ -42,6 +42,46 @@ no longer carries raw colors or literal font stacks, removing client CSS
 literals and tightening the token debt budget to the intentional app-identity
 exceptions.
 
+### Review round 2 — correctness fixes
+
+The first round shipped four defects, all found in review:
+
+1. **A CLI flag was renamed by the token sweep.** `--surface` → `--bg-elev`
+   also rewrote `scripts/perf/app-weight.mjs`'s *command-line flag*, so
+   `perf:app-weight -- --surface desktop|mobile` — how `ci.yml` invokes it —
+   failed, taking down the `desktop-e2e` and `mobile-smoke` lanes. The flag and
+   the two budget probe strings are restored.
+2. **The accent swatches lost hue coherence.** Purging the pre-teal hexes
+   remapped each accent's tint/shade onto unrelated palette hues (teal's
+   "deep" became a green, rose's "light" a violet). These are applied inline on
+   `<html>` and outrank the themes, so hover/pressed states painted the wrong
+   colour. `accentRamp()` now derives them from the accent's own hue; only
+   BRAND keeps an authored ramp.
+3. **`--accent-text` did not follow an accent override.** Picking rose gave
+   rose buttons and teal links. `applyPrefsToDocument` now injects it, using the
+   deepened shade on light and the accent itself on dark.
+4. **Two ramps still failed the floors the issue exists to enforce.** The
+   app-surface `--text-faint` measured 3.35:1 (light, on the recessed track)
+   and 4.05:1 (dark) where it carries body-sized captions. Fixed to 42% / 59%
+   lightness — 4.51:1 and 4.55:1. The dark miss was found by the rewritten
+   test, not by hand.
+
+**The kit fold finished the vocabulary.** Removing `--kit-*` left kit.css
+reading two names no emitter has ever defined: `var(--warn)` and `var(--ok)`.
+Three blueprint apps happened to declare `--warn`/`--ok` locally, so the badge
+and bar tones painted there and silently resolved to nothing everywhere else,
+including in the client shell. `--warning` is now a shell contract token (it
+already existed on the app surface), `--success` joins the app surface, and all
+30 `var(--warn)`/`var(--ok)` references across the client, kit and blueprints
+move onto the contract names. `--ok`/`--warn` no longer exist.
+
+`contrast.test.ts` was the reason (2) and (4) could hide: it re-typed the
+values it was guarding instead of reading them. It now parses the emitted CSS
+from `toCss()` / `toBlueprintCss()`, resolves `var()`/`calc()` the way mobile's
+generator does, and measures every rung against *every* surface it can land
+on — plus a ramp-ordering assertion so a failing rung cannot be "fixed" by
+flattening the ramp into four identical greys.
+
 ## Decisions
 
 - Text roles describe purpose rather than brightness, so call sites cannot
@@ -57,6 +97,27 @@ exceptions.
   vocabulary they consume.
 - Redesigning product flows or adding new animation beyond existing behavior.
 
+### Files
+
+- `packages/design-tokens/src/color.ts` (new) — WCAG contrast maths + accent ramp derivation
+- `packages/design-tokens/src/contrast.test.ts` — rewritten to measure the emitted CSS
+- `packages/design-tokens/src/color-accent.test.ts` (new) — hue-coherence + legibility of derived ramps
+- `packages/design-tokens/src/contract.ts` — `--warning` added to the shell contract, `--success` to the app surface
+- `packages/design-tokens/src/css.ts` — emits `--warning`
+- `packages/design-tokens/src/blueprint.ts` — `--text-faint` 42% light / 59% dark; `--success` added
+- `packages/design-tokens/src/themes/shared.ts` — `ACCENT_TEXT_LIGHT`, `SUCCESS_LIGHT`, `WARNING`, `WARNING_LIGHT`, `Theme.warning`
+- `packages/design-tokens/src/themes/centraid.ts` — named constants, light `sidebarDivider` on the current ink base
+- `packages/design-tokens/src/themes/index.ts`, `packages/design-tokens/src/index.ts` — accent exports
+- `packages/client/src/app-shell-context.ts` — `ACCENT_PALETTE` derived via `accentRamp`
+- `packages/client/src/react/shell/appearance.ts` — injects `--accent-text` with an accent override
+- `packages/client/src/react/shell/appearance.test.ts` — asserts that injection
+- `packages/client/src/react/screens/localUsageView.ts` — stale `--icon-*` comment
+- `packages/blueprints/kit/kit.css` — `--warn`/`--ok` → `--warning`/`--success`
+- `packages/blueprints/apps/{agenda,locker,people}/Chrome.module.css` — same rename for the local overrides
+- `apps/mobile/src/kit/theme/tokens.generated.ts` — regenerated from the corrected app surface
+- `scripts/perf/app-weight.mjs`, `tests/experience-budgets/{desktop,mobile}.json` — `--surface` CLI flag restored
+- `.design-sync/ds-src/styles/bridge.css` — dead `--ink*`/`--surface*` mappings dropped
+
 ## Verification
 
 ```sh
@@ -66,8 +127,9 @@ NODE_PATH=$PWD/node_modules bun run --cwd apps/mobile test -- src/kit/theme/gene
 node scripts/lint-design-tokens.mjs
 ```
 
-`check:fast`, the semantic-token suite, focused mobile theme tests, and the
-literal-token boundary lint passed locally. The desktop Electron smoke build
+`bun run check:push` — 25/25 gates green (round 2, including the `lint`,
+`typecheck:affected` and `test:affected` gates that the flag rename had broken).
+The semantic-token suite is 81 tests across 8 files. The desktop Electron smoke build
 completed; the live renderer did not reach its readiness selector in this
 headless session, so visual regression remains covered by the PR’s automated
 desktop Playwright lane.
@@ -97,6 +159,7 @@ handoff from diagnosis to completing the governed commit and draft PR.
 | codex-019fbc6b-05b-1785574869-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 12053 | 0 | 321792 | 1416 | 13469 | 0.1318 | 408098 | 0 | 18472448 | 51496 | feat(theme): unify token contract and improve legibility (#672) |
 | codex-019fbc6b-05b-1785574961-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 19779 | 0 | 993280 | 1306 | 21085 | 0.3174 | 427877 | 0 | 19465728 | 52802 | feat(theme): unify token contract and improve legibility (#672) |
 | codex-019fbc6b-05b-1785575180-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 22157 | 0 | 1496320 | 1158 | 23315 | 0.4468 | 450034 | 0 | 20962048 | 53960 | test(client): cover teal orbit logo (#672) |
+| claude-code-cbc1504a-314-1785577918-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 776 | 1642727 | 59632329 | 283586 | 1927089 | 47.1767 | 776 | 1642727 | 59632329 | 283586 |  |
 
 ### Steering
 

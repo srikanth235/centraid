@@ -28,9 +28,9 @@
  * (already-built artifacts, ~30 ms) rather than nightly.
  *
  * Usage:
- *   node scripts/perf/app-weight.mjs --bg-elev desktop
- *   node scripts/perf/app-weight.mjs --bg-elev mobile
- *   node scripts/perf/app-weight.mjs --bg-elev desktop --report   # print, never fail
+ *   node scripts/perf/app-weight.mjs --surface desktop
+ *   node scripts/perf/app-weight.mjs --surface mobile
+ *   node scripts/perf/app-weight.mjs --surface desktop --report   # print, never fail
  */
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -132,7 +132,7 @@ function compareWeight(weighed, budget, label) {
 function parseArgs(argv) {
   const out = { surface: null, report: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--bg-elev" && argv[i + 1]) out.surface = argv[++i];
+    if (argv[i] === "--surface" && argv[i + 1]) out.surface = argv[++i];
     else if (argv[i] === "--report") out.report = true;
   }
   return out;
@@ -143,7 +143,7 @@ async function main() {
   const surface = SURFACES[args.surface];
   if (!surface) {
     console.error(
-      `app-weight: --bg-elev must be one of ${Object.keys(SURFACES).join(", ")}`
+      `app-weight: --surface must be one of ${Object.keys(SURFACES).join(", ")}`
     );
     process.exitCode = 1;
     return;

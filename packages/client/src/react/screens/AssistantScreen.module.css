@@ -244,12 +244,12 @@
   max-width: 90%;
 }
 .notice[data-level="warn"] {
-  color: var(--warn);
+  color: var(--warning);
 }
 /* Offline hint beside a resend button (issue var(--text), Wave 6). */
 .offlineHint {
   font-size: 11px;
-  color: var(--warn);
+  color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }

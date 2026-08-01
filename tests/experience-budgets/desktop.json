@@ -47,7 +47,7 @@
     "appWeight": {
       "status": "measured",
       "volume": "n/a — build artifact, independent of vault size",
-      "probe": "scripts/perf/app-weight.mjs --bg-elev desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
+      "probe": "scripts/perf/app-weight.mjs --surface desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
       "maxTotalBytes": 6291456,
       "maxLargestChunkBytes": 1500000,
       "_provenance": {
@@ -57,7 +57,7 @@
         "observedShippedFiles": 33,
         "observedLargestChunkBytes": 1333046,
         "observedLargestChunk": "react-boot.js",
-        "note": "MEASURED by `node scripts/perf/app-weight.mjs --bg-elev desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
+        "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
         "headroom": "observed + 8%"
       }
     }

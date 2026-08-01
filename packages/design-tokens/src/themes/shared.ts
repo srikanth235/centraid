@@ -18,8 +18,29 @@ export const BRAND = "#3EC8B4";
 export const ACCENT_LIGHT = "#62D6C6";
 export const ACCENT_DEEP = "#2AA593";
 export const ACCENT_MIDNIGHT = "#12645A";
+
+// BRAND as TEXT. It is legible as a button face with white on it, and as text
+// on the dark ramp (9.4:1), but on a near-white surface it lands at 2.0:1 —
+// below the floor for text at any size. Every `color: var(--accent-text)` site
+// reads this instead, so a light surface gets a deepened teal that still reads
+// as the brand hue (5.1:1 on `--bg`). Fills and focus rings keep `--accent`.
+export const ACCENT_TEXT_LIGHT = "#0F7A6C";
+
+// SUCCESS is tuned for the dark ramp (4.8:1 there). On near-white it is 3.9:1
+// — fine for a status dot, short of AA for the label beside it, so the light
+// theme carries a deepened leaf of the same hue (6.0:1). DANGER clears AA on
+// both ramps as-is and is shared.
 export const SUCCESS = "#5C8A4E";
+export const SUCCESS_LIGHT = "#456B39";
 export const DANGER = "#C44A4A";
+
+// Warning. The kit and the client both painted `var(--warn)` — a name no
+// emitter ever defined, so those rules resolved to nothing (#672). The role is
+// real, so it becomes a contract token under the same spelling the app surface
+// already used: `--warning`. Amber is the hue; each ramp takes the lightness
+// that clears AA on its own surfaces (4.6:1 light, 9.2:1 dark).
+export const WARNING = "#E0A94A";
+export const WARNING_LIGHT = "#9A6B1F";
 
 // The phone-frame bezel constants that used to live here existed so six
 // emulation presets could share one value. With the registry cut to Centraid
@@ -47,6 +68,8 @@ export interface Theme {
   success: string;
   /** Negative state — destructive action confirmations, error states. */
   danger: string;
+  /** Cautionary state — over-budget readings, degraded status. */
+  warning: string;
 
   /**
    * Single "input" lightness for the dark ramp — surfaces below derive

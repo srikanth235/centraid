@@ -8,6 +8,12 @@ export { palette } from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";
 
 export { themes, lightTheme, darkTheme, THEME_PRESETS } from "./themes";
+export { ACCENT_DEEP, ACCENT_LIGHT, ACCENT_TEXT_LIGHT } from "./themes";
+
+// Accent ramp derivation — keeps a picked accent's tint/shade/text variants on
+// the accent's own hue instead of hand-picking them. See src/accent.ts.
+export { accentRamp } from "./color";
+export type { AccentRamp } from "./color";
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
 // Brand teal — theme-independent identity color shared by the logo /

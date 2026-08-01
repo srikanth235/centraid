@@ -28,7 +28,7 @@
   --accd: color-mix(in oklab, var(--_accent) 92%, hsl(var(--app-hue) 45% 7%));
   --accd-fg: var(--accd);
   --bg-side: hsl(var(--app-hue) 20% 97%);
-  --warn: #e0902e;
+  --warning: #e0902e;
   --t-strong: 600 0.855rem/1.4 var(--font-sans);
   --tk-eye: 0.09em;
 
@@ -143,7 +143,7 @@
   color: var(--text);
 }
 .banner.notice {
-  border-color: color-mix(in oklab, var(--warn) 40%, var(--line-strong));
+  border-color: color-mix(in oklab, var(--warning) 40%, var(--line-strong));
 }
 
 /* Floating "Ask" launcher mount — this app has no topbar to host it, so it

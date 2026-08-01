@@ -93,8 +93,8 @@
   background: var(--bg-sunken);
 }
 .badge[data-tone="warn"] {
-  color: var(--warn);
-  background: color-mix(in oklab, var(--warn) 14%, transparent);
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
 }
 .drawerBody {
   flex: 1;

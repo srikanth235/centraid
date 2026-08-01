@@ -78,8 +78,8 @@
   border-color: var(--line-strong);
 }
 .dtool.on {
-  color: var(--warn);
-  border-color: color-mix(in oklab, var(--warn) 40%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 40%, transparent);
 }
 .note {
   padding: 14px 16px;
