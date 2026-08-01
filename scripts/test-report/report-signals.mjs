@@ -152,16 +152,19 @@ export function collectPlaywrightEvidence(
         } else if (classifications.includes("flaky")) {
           status = "flaky";
         } else if (
+          // Prefer passed when any test expected/passed: a single deliberate
+          // test.skip must not classify the whole owner as skipped (#676 —
+          // builder.spec mixed skip+pass was unmapped as "skipped").
+          classifications.includes("expected") ||
+          attempts.some((attempt) => attempt.status === "passed")
+        ) {
+          status = "passed";
+        } else if (
           classifications.includes("skipped") ||
           (attempts.length &&
             attempts.every((attempt) => attempt.status === "skipped"))
         ) {
           status = "skipped";
-        } else if (
-          classifications.includes("expected") ||
-          attempts.some((attempt) => attempt.status === "passed")
-        ) {
-          status = "passed";
         }
         const failedAttempt = attempts.find(
           (attempt) => attempt.status === "failed"

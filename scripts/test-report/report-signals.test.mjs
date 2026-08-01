@@ -182,6 +182,35 @@ describe("Playwright evidence", () => {
       duration: 18,
     });
   });
+
+  test("mixed skip + expected tests classify the owner as passed, not skipped", () => {
+    const [result] = collectPlaywrightEvidence({
+      suites: [
+        {
+          file: "builder.spec.ts",
+          specs: [
+            {
+              tests: [
+                {
+                  status: "skipped",
+                  results: [{ status: "skipped", duration: 0 }],
+                },
+                {
+                  status: "expected",
+                  results: [{ status: "passed", duration: 12 }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(result).toMatchObject({
+      owner: "builder.spec.ts",
+      status: "passed",
+      duration: 12,
+    });
+  });
 });
 
 describe("detectDefaultCiEnvGate", () => {

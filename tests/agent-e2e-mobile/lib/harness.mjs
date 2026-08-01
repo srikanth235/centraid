@@ -450,11 +450,14 @@ export async function runFlow(slug, fn) {
     const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
     // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // a named roster member goes straight to Done, while an unnamed member is
-    // asked for a profile. The gateway URL is used only by the host-side
-    // harness to mint that ticket; the phone reaches the gateway through the
-    // ticket's iroh endpoint.
+    // a real one-time pairing ticket. #643/#644 made the default path
+    // scan-first (showPaste=false): open paste via the secondary control, then
+    // fill the ticket field and submit with the live primary label "Connect"
+    // (not the pre-scan-first "Continue with pasted code"). #634 made the
+    // profile step conditional: a named roster member goes straight to Done,
+    // while an unnamed member is asked for a profile. The gateway URL is used
+    // only by the host-side harness to mint that ticket; the phone reaches the
+    // gateway through the ticket's iroh endpoint.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -464,6 +467,11 @@ export async function runFlow(slug, fn) {
     visible:
       text: "Connect your gateway."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- tapOn: "Can't scan? Paste a code instead"
+- extendedWaitUntil:
+    visible:
+      text: "Paste the one-line ticket"
+    timeout: 15000
 - tapOn: "Paste the one-line ticket"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
@@ -479,12 +487,14 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # off screen — and Maestro matches (and "taps") off-screen elements, so the tap
 # reports COMPLETED while nothing happens and the flow dies later on an
 # unrelated assertion. Scroll it fully into view first.
+# Exact ^Connect$ — bare "Connect" also matches the h1 "Connect your gateway.".
 - scrollUntilVisible:
     element:
-      text: "Continue with pasted code"
+      text: "^Connect$"
     direction: DOWN
     visibilityPercentage: 100
-- tapOn: "Continue with pasted code"
+- tapOn:
+    text: "^Connect$"
 # Redemption dials the gateway over iroh; on a cold simulator that handshake is
 # the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:

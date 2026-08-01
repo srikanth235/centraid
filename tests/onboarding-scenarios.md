@@ -86,7 +86,7 @@ Load-bearing strings:
 
 | Step | Strings |
 | --- | --- |
-| connect | `Connect your gateway.` · `DEVICE NAME` · `PAIRING CODE` · placeholder `Paste the one-line ticket` · `Continue with pasted code` (→ `Connecting…`) · `Scan QR instead` |
+| connect | Default **scan-first** (`showPaste=false`): `Connect your gateway.` · `DEVICE NAME` · primary `Scan the QR code` (→ `Connecting…`) · secondary `Can't scan? Paste a code instead`. After opening paste: `PAIRING CODE` · placeholder `Paste the one-line ticket` · primary `Connect` (→ `Connecting…`) · `Scan the QR code instead` |
 | profile | `Who's using this phone?` · placeholder `Your name` · `COLOUR` · error `Enter a name so the people you share with know who you are.` |
 | done | `You're all set, <firstName>.` · `Enter Centraid` |
 | home | `YOUR APPS` · `Open vault menu` · `Pair desktop` / `Connect your computer` / `Desktop is offline` |
@@ -227,26 +227,26 @@ Reset with `xcrun simctl erase` unless a scenario says otherwise.
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| G1 | **[auto-ish]** Happy path, paste ticket | Erased sim → launch dev build → assert `Connect your gateway.` → device name defaults to `iPhone` → paste a fresh ticket → `Continue with pasted code` → name + colour → `Enter Centraid` | Button shows `Connecting…` during pair; profile step follows pairing; done heading personalises (`You're all set, <first name>.`); lands on Home with `YOUR APPS`. Gateway shows one new enrollment |
+| G1 | **[auto-ish]** Happy path, paste ticket | Erased sim → launch dev build → assert `Connect your gateway.` + scan-first controls → `Can't scan? Paste a code instead` → device name defaults to `iPhone` → paste a fresh ticket → `Connect` → name + colour → `Enter Centraid` | Button shows `Connecting…` during pair; profile step follows pairing; done heading personalises (`You're all set, <first name>.`); lands on Home with `YOUR APPS`. Gateway shows one new enrollment |
 | G2 | **⚠️ Keychain survives app delete** (highest-value) | Complete G1 → delete the app (or Maestro `clearState`) → reinstall → launch | **Suspected bug**: `phoneLink.secretKey` / `phoneLink.ticket` are keychain items and survive. `hydrateVaultLinks()` finds an empty registry; legacy-slot synthesis has been removed, so the expected-correct behaviour is a clean connect step. Verify first; file if confirmed |
 | G3 | Expired ticket | Mint `--ttl-minutes 1`, wait, paste | Client-side pre-check (gw-pair only): `This pairing ticket has expired — mint a new one on the gateway.` No dial |
 | G4 | Burned ticket | Redeem on the sim, then paste the same ticket again after erase | `pair_failed` with the gateway's refusal (`Pairing was refused by the gateway.` fallback) |
 | G5 | Garbage payload | Paste random text | `That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from \`centraid-gateway pair\`.`; `scannedRef` resets so retry works |
 | G6 | Ticket missing `vaultName` | Craft a valid gw-pair token with `vaultName` removed | Rejected at parse (parser requires `vaultName` to be a string) → `invalid_qr` copy, not a dial failure |
 | G7 | Stale desktop `centraid-pair` payload | Paste an old desktop-shape payload | Accepted by the parser (no expiry pre-check on this shape — gw-pair only) → dials → fails server-side with `pair_failed`. Note the asymmetry |
-| G8 | Empty submit gives no feedback | Tap `Continue with pasted code` with an empty field | **Current behaviour**: `submit()` returns silently — no error, no spinner. Record as a UX gap |
+| G8 | Empty submit gives no feedback | Open paste path, then tap `Connect` with an empty field | **Current behaviour**: `submit()` returns silently — no error, no spinner. Record as a UX gap |
 | G9 | Gateway down during pair | Stop the gateway; paste a valid ticket | `Could not reach your gateway: …` (`tunnel_failed`); no timeout is configured anywhere in the pairing path, so note how long it hangs — candidate issue |
 | G10 | No back navigation | On profile or done, try swipe-back and (Android) hardware back | **No back handling exists** anywhere in the flow — no `NavigationContainer` is mounted. Confirm the user cannot get stuck or crash |
 | G11 | Profile validation | Advance from profile with an empty/whitespace name | `Enter a name so the people you share with know who you are.` — the only validation in the flow |
 | G12 | Colour selection | Pick each swatch via a11y `Colour <hex>` | `accessibilityState.selected` moves; default is `#128A78` (BRAND_TEAL); choice persists to `centraid.v1.profile.color` |
 | G13 | Kill app mid-flow | Force-quit after pairing but before saving the profile | Relaunch: `profile.onboarded` is still false (written only at profile save) → onboarding restarts at **connect**, but a Space already exists → pasting a second ticket creates a duplicate/second enrollment. Verify and record |
-| G14 | Expo Go dead end | Launch under Expo Go | `isTunnelAvailable()` false → both `Continue with pasted code` and `Scan QR instead` are hidden; the note says "You can pair later from Settings" but Settings is unreachable. Confirm the dead end; candidate copy/flow fix |
+| G14 | Expo Go dead end | Launch under Expo Go | `isTunnelAvailable()` false → both `Scan the QR code` and `Can't scan? Paste a code instead` are hidden; the note says "You can pair later from Settings" but Settings is unreachable. Confirm the dead end; candidate copy/flow fix |
 
 ## H. Mobile — post-pair bootstrap & replica
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| H1 | Pairing does not block on sync | Time from `Continue with pasted code` to the profile step | Advances as soon as `pair()` resolves; nothing awaits the replica |
+| H1 | Pairing does not block on sync | Time from paste-path `Connect` to the profile step | Advances as soon as `pair()` resolves; nothing awaits the replica |
 | H2 | First Home render | Land on Home after G1 | `loading` → `ready`; all eight tiles render, uninstalled ones dimmed and routed to pair; `ReplicaStatusBar` appears **only** inside Photos/Docs, not Home |
 | H3 | Replica identity probe | Watch the first bootstrap after pairing | `vaultId` starts `""`; probe fills it via `fetchReplicaBootstrapPage`. ⚠️ `ReplicaProvider.tsx:141` sets `gatewayId` from the **desktop display name**, contradicting the "keys on EndpointId" contract in `spaces.ts` |
 | H4 | Two gateways with the same name | Pair gateway A and gateway B, both named `Gateway` | Exposes the H3 defect — replica DB namespace collision. Expect divergence/data mixing; high-value regression test |

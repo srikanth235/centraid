@@ -837,6 +837,13 @@ jobs:
       - id: coverage
         continue-on-error: true
         run: bun run coverage
+      # #676 — accessibility cells own scripts/accessibility-contract.test.mjs but
+      # node --test never lands in vitest.json. Run + write artifacts/e2e evidence
+      # so nightly zero-grey sees the 15 *:accessibility cells.
+      - id: accessibility
+        if: always()
+        continue-on-error: true
+        run: bun run test:accessibility
       # Durable trend source: the append-only summary series committed to
       # gh-pages. Unlike the quality-history cache above it is never evicted.
       - name: Restore durable report history (gh-pages)
@@ -872,6 +879,13 @@ jobs:
         env:
           TEST_REPORT_SCOPE: nightly
         run: bun run test:report
+      - name: Fail if accessibility contract failed
+        if: always()
+        run: |
+          if [ "${{ steps.accessibility.outcome }}" != "success" ]; then
+            echo "::error::Nightly accessibility contract failed — see step above"
+            exit 1
+          fi
       # Coverage still runs here so the report can render on failure. Perf and
       # scale have their own required nightly job above (#587 C1).
       - name: Fail if quality lanes failed

@@ -1490,6 +1490,42 @@
       "minimumTests": 13
     },
     {
+      "id": "desktop-builder-journey",
+      "name": "Desktop builder compose, preview, edit, and cloud logs",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/builder.spec.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "desktop-delete-app-journey",
+      "name": "Desktop app deletion and destructive confirm paths",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "desktop-settings-gateways-journey",
+      "name": "Desktop settings, appearance, and gateway management",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "minimumTests": 17
+    },
+    {
+      "id": "desktop-real-launch-time",
+      "name": "Real Electron cold launch to usable Home",
+      "surface": "desktop",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/launch-time.spec.ts",
+      "minimumTests": 3
+    },
+    {
       "id": "web-real-journey",
       "name": "Installable web app boot and session lifecycle",
       "surface": "web",
@@ -1541,7 +1577,7 @@
       "dimension": "journey",
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
-      "minimumTests": 3
+      "minimumTests": 5
     },
     {
       "id": "mobile-template-gate",
@@ -1551,6 +1587,24 @@
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/template-gate.mjs",
       "minimumTests": 7
+    },
+    {
+      "id": "mobile-cold-start",
+      "name": "Per-launch native cold start to ready Home",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-scroll-frames",
+      "name": "Photos and People scroll frame-drop probe",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+      "minimumTests": 4
     },
     {
       "id": "tunnel-wire",
