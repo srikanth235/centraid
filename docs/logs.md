@@ -8,7 +8,7 @@ JSONL rotation of the gateway log ring (survives restart — issue #351).
 
 | Host | Path |
 | --- | --- |
-| **Desktop embedded / supervised local gateway** | `<Electron userData>/gateways/local/gateway-logs/` |
+| **Desktop local gateway** | `<Electron userData>/gateways/local/gateway-logs/` |
 | **Other desktop gateways** | `<Electron userData>/gateways/<id>/gateway-logs/` |
 | **Daemon (`centraid-gateway`)** | `<dataDir>/gateway-logs/` |
 

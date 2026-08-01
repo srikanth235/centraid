@@ -14,7 +14,7 @@ node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # non-burning 
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs        # real relay transport, needs Docker
 ```
 
-The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds `Shared` + `Personal` at construction, and `--init-vault` no longer exists. Flows target **`Shared`** — it is created first, so it is the registry default and the target of a `pair` with no `--vault`. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
+The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds `Shared` + `Personal` at construction, and `--init-vault` no longer exists. The lifecycle flow explicitly targets **`Shared`**; the registry default is the marked Personal vault, and an unscoped `pair` targets Personal. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
 
 Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`. On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and `gateway.log` are the ground truth to inspect. The Docker flow copies `gateway.db` into its run workspace before tearing down the container.
 

@@ -115,7 +115,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | B4 | Expired ticket | `--ttl-minutes 1`, wait out expiry, paste | Client-side expiry check rejects before dialing; `ticket_expired` copy; no enrollment |
 | B5 | Burned ticket | Redeem once, paste the same ticket in a second fresh profile | `invalid_ticket` (single-use DELETE-on-consume); second device not enrolled |
 | B6 | Malformed / wrong-kind payload | Garbage; a desktop `centraid-pair` payload; truncated base64 | Rejected at decode (`kind !== "centraid-gw-pair"`, missing `gw`/`t`/`s`); no dial for undecodable input |
-| B7 | Wrong secret does NOT burn the ticket | Craft right `t` + wrong `s`; attempt; then redeem the genuine ticket | First fails; genuine ticket **still redeems** (code returns before DELETE on hash mismatch). ⚠️ contradicts `docs/recovery/pairing.md` — doc or code must change |
+| B7 | Wrong secret does NOT burn the ticket | Craft right `t` + wrong `s`; attempt; then redeem the genuine ticket | First fails; genuine ticket **still redeems** (hash mismatch returns before deletion) |
 | B8 | Gateway unreachable at redeem | Stop the gateway; paste a valid ticket | Fails at the `reach` stage / `unreachable` copy; retry without losing entered state; offline banner suppressed pre-onboarding |
 | B9 | Gateway down on revisit | With a remembered connection, stop the gateway, reload | App boots (no re-onboarding); offline state surfaced; recovers when the gateway returns, no re-pair |
 | B10 | Concurrent double-redeem race | Two profiles submit the same ticket simultaneously | Exactly one wins (`BEGIN IMMEDIATE`, `changes === 1`); loser gets `invalid_ticket`; one enrollment row |
@@ -311,33 +311,22 @@ Every mobile change ships both platforms; run K1–K7 on **both** before calling
 
 ---
 
-## Broken test assets (fix before relying on them)
+## Current test-asset notes
 
-Verified by grep in this worktree:
+1. Swift wire-conformance tests in `modules/centraid-tunnel/ios/Tests` are not wired into CI; the Kotlin suite is.
+2. Desktop E2E documentation reports 55 tests. Onboarding-save and settings-fetch fault injection remain documented but deliberately unautomated because the contextBridge is frozen.
+3. `shouldOfferServiceInstall` and `DEFAULT_OFFER_GATEWAY_SERVICE` are retained for the detached-gateway service preference and covered by their focused unit tests; the onboarding UI separately gates the service step by capability.
 
-1. **`tests/agent-e2e-mobile/lib/harness.mjs:438` waits for `"Everything you build, in one place."` — that string exists nowhere in `apps/` or `packages/`.** It survives only in test files and `tests/agent-e2e-mobile/README.md:117`. It was replaced by the springboard redesign (Home now renders `YOUR APPS`). **Consequence: `ctx.configureGateway()` fails at its last step, so `template-gate` and `native-v0-resilience` cannot pass.** Fix before running any mobile e2e.
-2. **`flows/native-v0-resilience.mjs` taps a tab bar that no longer exists.** `App.tsx` uses `createNativeStackNavigator` only — there is no `createBottomTabNavigator` in the repo. Navigation is Home tiles + `GlassDock`.
-3. **`flows/native-v0-resilience.mjs:46` asserts `"Gateway link"`; `Settings.tsx:192` renders `"Desktop link"`.** The inline comment has it backwards.
-4. **`flows/template-gate.mjs` asserts lowercase `"centraid"`** as its Home marker; the only wordmark is uppercase `CENTRAID` on the Onboarding screen. Maestro matching is case-sensitive — likely dead.
-5. **`flows/volume-proof.mjs` never calls `configureGateway`** — it is order-dependent on a prior flow having onboarded.
-6. Swift wire-conformance tests in `modules/centraid-tunnel/ios/Tests` are **not wired into CI** (the Kotlin ones are).
-7. Desktop `SCENARIOS.md` header claims "59 passing tests" (dated 2026-06-06) — treat the count as stale; scenarios 1.3 (onboarding save fails) and 1.5 (settings fetch fails) are documented but **deliberately not automated** (frozen contextBridge blocks fault injection).
-8. Desktop dead code: `shouldOfferServiceInstall` / `DEFAULT_OFFER_GATEWAY_SERVICE` (`detached-gateway-core.ts:85`) are referenced only by their own unit test — the real service-step gate is a capability check in `OnboardingScreen.tsx:180`.
+## Known code gaps and suspected bugs to resolve while testing
 
-## Known doc/code mismatches & suspected bugs to resolve while testing
-
-1. `docs/dev-environment.md:91` still says redeem happens over HTTP `POST /centraid/_gateway/pair` — removed by #555; redeem is iroh-ALPN only.
-2. `docs/recovery/pairing.md` says a wrong secret burns the ticket; `pairing-store.ts` returns before the DELETE on hash mismatch (**B7**).
-3. `docs/dev-environment.md` step 4 describes a two-method ConnectFlow grid during web onboarding; code passes `methods=['gateway']`.
-4. `docs/dev-environment.md:37` still says mobile pairs via "desktop Settings → Phone".
-5. No client-side handler for remote revocation on any surface (**FR3**, **I7**).
-6. No upper bound on `ttlMinutes` (**DM6**).
-7. No timeout or retry anywhere in the mobile pairing path (**G9**).
-8. ~~Desktop fresh path falls back to `vaults[0]` when no "Personal" vault exists → renames **Shared** on reinstall-over-data (**C10**).~~ FIXED: the owner vault carries a durable `personal` marker; pre-marker data dirs still fall back to Shared but are never renamed.
-9. Desktop tray never refreshes after the deferred local gateway starts — stuck on "Gateway: stopped" (**F4**).
-10. Desktop back-out after a successful ticket redeem leaves committed side effects with onboarding incomplete — no rollback (**D7**).
-11. Desktop ConnectFlow vault step can render an empty, actionless list with Continue enabled (**D10**).
-12. Desktop corrupt settings silently reset → returning user re-onboards (**E1**).
-13. Desktop `declineService` saves settings un-awaited — a failed save is invisible (**C7**).
-14. Chooser copy hardcodes "Start fresh on this Mac" on all platforms (**F16**).
-15. Mobile `ReplicaProvider` rewrites the vault entry's `gatewayId` to the desktop display name (**H3/H4**).
+1. No client-side handler for remote revocation on any surface (**FR3**, **I7**).
+2. No upper bound on `ttlMinutes` (**DM6**).
+3. No timeout or retry anywhere in the mobile pairing path (**G9**).
+4. ~~Desktop fresh path falls back to `vaults[0]` when no "Personal" vault exists → renames **Shared** on reinstall-over-data (**C10**).~~ FIXED: the owner vault carries a durable `personal` marker; pre-marker data dirs still fall back to Shared but are never renamed.
+5. Desktop tray never refreshes after the deferred local gateway starts — stuck on "Gateway: stopped" (**F4**).
+6. Desktop back-out after a successful ticket redeem leaves committed side effects with onboarding incomplete — no rollback (**D7**).
+7. Desktop ConnectFlow vault step can render an empty, actionless list with Continue enabled (**D10**).
+8. Desktop corrupt settings silently reset → returning user re-onboards (**E1**).
+9. Desktop `declineService` saves settings un-awaited — a failed save is invisible (**C7**).
+10. Chooser copy hardcodes "Start fresh on this Mac" on all platforms (**F16**).
+11. Mobile `ReplicaProvider` rewrites the vault entry's `gatewayId` to the desktop display name (**H3/H4**).

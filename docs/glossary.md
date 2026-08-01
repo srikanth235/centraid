@@ -30,7 +30,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` + `journal.db` (+ apps/, code/, …). | `packages/vault`; on-disk under `vault/<vaultId>/` |
-| **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automation and agent turns. Same core embedded or as `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
+| **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automation and agent turns. The same core runs under the desktop-controlled local daemon or as the standalone `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
 | **app** | Installed projection over the vault. Code serves from the release (UI blueprints) or cloned automation sources. Declared handlers in `app.json`. | `packages/app-engine`, `packages/blueprints` |
 | **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. The default for the 8 bundled system apps (#505). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
 | **served app** | An app rendered as an **opaque, same-origin iframe document** the gateway bakes and serves, under the blueprint CSP. Builder preview + mobile WebViews only since #505. | `packages/app-engine/src/http/static-server.ts`; `AppFrame.tsx` |
@@ -48,8 +48,8 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to a vault over the tunnel. | `packages/gateway` pairing/enrollment stores; `packages/tunnel` |
 | **pair ticket** | The **only** ticket kind (#603). Always means _join an existing gateway_. Minted by an owner, one-time, burns on redeem. | `pairing-ticket-codec.ts`; `centraid-gateway pair` |
-| **auto-found** | What a gateway does to **itself** when constructed over a **fresh data dir**: creates `Shared` (first, hence the registry default) then `Personal`, and enrols the host device as `admin` on both — silently, with no ceremony, ticket, kit, or screen. An existing data dir is never modified. | `buildGateway()` in `serve/build-gateway.ts`; `VaultRegistry.isFresh()` |
-| **Shared / Personal** | The **names** of the two auto-founded vaults, not types. Shared is the household vault new members land in by default; Personal is the founder's, renamed to their display name once the desktop profile step completes (headless keeps `Personal`). | `build-gateway.ts`; rename in `packages/client/src/react/boot.tsx` |
+| **auto-found** | What a gateway does to **itself** when constructed over a **fresh data dir**: creates `Shared` first, then marked-default `Personal`, and enrols the host device as `admin` on both — silently, with no ceremony, ticket, kit, or screen. An existing data dir is never modified. | `buildGateway()` in `serve/build-gateway.ts`; `VaultRegistry.isFresh()` |
+| **Shared / Personal** | The **names** of the two auto-founded vaults, not types. Shared is the household vault; Personal is the owner's default vault, renamed to their display name once the desktop profile step completes (headless keeps `Personal`). | `build-gateway.ts`; rename in `packages/client/src/react/boot.tsx` |
 | **member** | A human principal on the gateway — the L2 layer of the auth model (#599). Stable `member_id` + editable label in `gateway.db`; devices bind to a member and inherit its roles. Never a `core_party` row: people-as-_data_ and people-as-_principals_ are separate concepts, and a party row never confers authority. See [Members and roles](#members-and-roles-gateway-599). | `members` / `member_roles` in `gateway-db.ts` |
 | **role** | The authority a **member** holds in a vault — what they may **do**: `admin` / `write` / `read`, authored per `(member, vault)`; devices inherit. UI labels: Owner / Member / Viewer. See [Members and roles](#members-and-roles-gateway-599). | `DeviceRole` / `GrantableRole` / `canWrite()` in `enrollment-store.ts` |
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
@@ -63,8 +63,8 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 
 | Term | Meaning |
 | --- | --- |
-| **desktop** | Electron host; embeds or (policy H1) supervises the local gateway; thin React renderer. `apps/desktop` |
-| **web / PWA** | Installable Vite client; no embedded gateway; HTTP or ticket-only Iroh/WASM. `apps/web` |
+| **desktop** | Electron host; controls the detached local gateway by default and exposes an in-process test path; thin React renderer. `apps/desktop` |
+| **web / PWA** | Installable Vite client; it does not host a gateway, and connects through a gateway-served origin or ticket-only Iroh/WASM. `apps/web` |
 | **mobile** | Expo client; HTTP/tunnel to a gateway; native Photos/Docs/Agenda over replica. `apps/mobile` |
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |

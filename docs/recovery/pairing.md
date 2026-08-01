@@ -6,9 +6,9 @@ Use this runbook when a gateway's first boot did not produce the vaults you expe
 
 There is no founding ceremony, no founding ticket, and no `uninitialized` state. A gateway founds itself:
 
-1. Start `centraid-gateway serve` (or boot the desktop embed) on a **fresh** data dir. At construction the gateway creates two vaults, in this order:
-   - **Shared** — the household vault. Created first, so it is the registry default: a pair ticket minted without an explicit `--vault` targets it, and every member who pairs later lands there by default.
-   - **Personal** — the founder's private vault. On desktop it is renamed to the founder's display name once the profile step completes; a headless gateway that never sees a profile step keeps the name `Personal`.
+1. Start `centraid-gateway serve` (or start the desktop-controlled local gateway) on a **fresh** data dir. At construction the gateway creates two vaults, in this order:
+   - **Shared** — the household vault. Created first; explicit `--vault Shared` targets it.
+   - **Personal** — the founder's private vault and registry default. On desktop it is renamed to the founder's display name once the profile step completes; a headless gateway that never sees a profile step keeps the name `Personal`.
 2. The host's own device identity is enrolled as the owner **member**, `admin` on both vaults, in the same `gateway.db` transaction.
 3. Nothing else happens. No kit is minted, no capability is issued, and no screen blocks the user.
 
@@ -22,7 +22,7 @@ Restoring an existing vault onto a blank machine is the **backup plane**, not fo
 
 Once a gateway is running:
 
-1. On the gateway host, run `centraid-gateway pair --data-dir … [--vault …]` (`--qr` for a terminal QR). The command talks to the running loopback daemon on the configured port. With no member flag it pairs another device to the existing owner and carries all of that owner's current grants. Omitting `--vault` targets the registry default, which on an auto-founded gateway is **Shared**.
+1. On the gateway host, run `centraid-gateway pair --data-dir … [--vault …]` (`--qr` for a terminal QR). The command talks to the running loopback daemon on the configured port. With no member flag it pairs another device to the existing owner and carries all of that owner's current grants. Omitting `--vault` targets the registry default, which on an auto-founded gateway is the owner's **Personal** vault.
    - Use `--member <id-or-label>` to pair another device for an existing household member.
    - Creating a person is always explicit: `--new-member <label> [--grant <vault>:<role>]…`.
 2. The device redeems the one-time capability over the iroh pairing ALPN.
