@@ -22,14 +22,14 @@ body {
   height: 100%;
 }
 body {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
-  /* Safe-area for notched devices / PWA home-screen (issue var(--text) K6). */
+  /* Safe-area for notched devices / PWA home-screen (issue #468 K6). */
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
@@ -67,7 +67,7 @@ textarea {
   flex-direction: column;
 }
 
-/* Native elements adopted for their semantics (jsx-a11y profile, issue var(--text)).
+/* Native elements adopted for their semantics (jsx-a11y profile, issue #573).
    Each of these replaced a `div`/`span` that carried the matching ARIA role,
    so the UA chrome they ship with (dialog's centering box + border, fieldset's
    groove + min-inline-size floor, hr's inset rule, figure's 40px margins) is

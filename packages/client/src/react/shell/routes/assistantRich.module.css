@@ -3,7 +3,7 @@
 }
 .asstH {
   margin: 12px 0 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   color: var(--text);
 }
 .asstUl {
@@ -132,7 +132,7 @@
   background: var(--bg-elev);
 }
 .asstStatValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 24px;
   color: var(--text);
 }

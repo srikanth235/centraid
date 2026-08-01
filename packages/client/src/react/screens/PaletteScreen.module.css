@@ -1,4 +1,4 @@
-/* Command palette (⌘K) — co-located styles for PaletteScreen.tsx (issue var(--text),
+/* Command palette (⌘K) — co-located styles for PaletteScreen.tsx (issue #325,
    Phase 4 CSS refactor). Scoped by Vite CSS Modules; lifted from the old
    monolithic styles.css §F block, cd-palette-* → scoped local names. */
 .backdrop {

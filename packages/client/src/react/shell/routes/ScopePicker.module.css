@@ -1,4 +1,4 @@
-/* The "which vault?" picker (issue var(--text), Decision 14). Every flow that creates
+/* The "which vault?" picker (issue #599, Decision 14). Every flow that creates
    something names its target here, in place of the retired switcher's ambient
    "you are in this vault" mode. Deliberately quiet: it is a statement of where
    the thing will land, not a mode control. */

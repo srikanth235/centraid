@@ -1,4 +1,4 @@
-/* Sidebar identity row (issue var(--text), Decision 14). A rounded tile icon, the
+/* Sidebar identity row (issue #599, Decision 14). A rounded tile icon, the
    gateway eyebrow over the active vault name, and a native-select stepper at
    the right edge. The WHOLE row is the switcher — the stepper is decoration
    inside that one button, not a separate 26px hit area (var(--text)). */

@@ -47,7 +47,7 @@
   --tone: var(--danger);
 }
 .headlineFigure {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.03em;
@@ -121,7 +121,7 @@
   gap: 6px;
 }
 .railCapKind {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   letter-spacing: 0;
   text-transform: lowercase;
   color: var(--text-ghost);

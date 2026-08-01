@@ -40,7 +40,7 @@
   justify-content: center;
   color: var(--text-faint);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: inherit;
   font-size: 11.5px;
   font-weight: 500;
   transition:
@@ -209,7 +209,7 @@
   color: var(--text);
 }
 /* The name lockup renders as static <b> for automations and as a rename
-   <input> for apps (issue var(--text) — it used to be one contenteditable <b>
+   <input> for apps (issue #573 — it used to be one contenteditable <b>
    claiming `role="textbox"`). Both wear the same type. */
 .tlIdentity b,
 .tlIdentity input {

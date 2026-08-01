@@ -41,7 +41,7 @@
   line-height: 1;
 }
 .auDrawerName {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 600;
   color: var(--text);

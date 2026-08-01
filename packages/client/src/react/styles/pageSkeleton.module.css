@@ -1,5 +1,5 @@
 /* Loading placeholder that has the SHAPE of the page it is standing in for
-   (issue var(--text)), rather than the words "Loading…" centred in a void. Colours
+   (issue #659), rather than the words "Loading…" centred in a void. Colours
    come from the shared tokens only — never a hardcoded grey
    (docs/traps/design-tokens.md). */
 

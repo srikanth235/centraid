@@ -175,7 +175,7 @@
   background: color-mix(in oklab, var(--text) 8%, var(--bg-elev));
 }
 
-/* "Show N earlier lines" — the top edge of the rendered window (issue var(--text)).
+/* "Show N earlier lines" — the top edge of the rendered window (issue #659).
    The panel keeps only the newest lines mounted; this is how a reader walks
    back through the rest without two thousand rows in the DOM. */
 .showEarlier {

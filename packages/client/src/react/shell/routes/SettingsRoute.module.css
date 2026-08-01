@@ -116,7 +116,7 @@
 }
 .settingsNavTitle {
   margin-top: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -212,7 +212,7 @@
 }
 .settingsPageTitle {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 21px;
   letter-spacing: -0.02em;

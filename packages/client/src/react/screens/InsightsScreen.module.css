@@ -1,4 +1,4 @@
-/* Insights page — co-located styles for InsightsScreen.tsx (issue var(--text), Phase 4
+/* Insights page — co-located styles for InsightsScreen.tsx (issue #325, Phase 4
    CSS refactor). Scoped by Vite CSS Modules; lifted from the old monolithic
    styles.css, cd-ins-* → scoped local names.
 
@@ -37,7 +37,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -112,7 +112,7 @@
   color: var(--accent);
 }
 .kpiValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 33px;
   line-height: 1;
@@ -207,7 +207,7 @@
 }
 .panelHead h2 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
@@ -238,7 +238,7 @@
   margin-bottom: 3px;
 }
 .chartStatValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 17px;
   color: var(--text);
@@ -557,7 +557,7 @@
   color: var(--text-faint);
 }
 .heroValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 40px;
   line-height: 1;
@@ -588,7 +588,7 @@
   color: var(--text-ghost);
 }
 .heroStatValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 18px;
   color: var(--text);

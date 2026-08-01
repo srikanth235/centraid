@@ -1,5 +1,5 @@
 /* Settings → Storage. Mirrors SettingsConnectionsScreen.module.css's panel/
-   row/wizard shell (issue var(--text) §D4) — same list-of-rows + inline-expanding
+   row/wizard shell (issue #367 §D4) — same list-of-rows + inline-expanding
    add form anatomy, extended with kind/use badges, a test-result line, and
    the vault-attach section. */
 
@@ -33,7 +33,7 @@
   gap: 6px;
 }
 .rowName {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
