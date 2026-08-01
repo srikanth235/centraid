@@ -690,11 +690,18 @@ kit-reference-strip,
   border-color: var(--danger);
   color: var(--danger);
 }
+/* The filled destructive confirm is a FILL carrying ink, exactly like
+   `.kit-btn.primary` above, so it takes the same pair: the theme's inverse
+   ink, not `--text`. `--text` is the SAME-side ink — near-black on the light
+   ramp, near-white on the dark one — and `--danger` sits mid-lightness in
+   both, so that pairing measured 3.81:1 light / 4.09:1 dark, under the body
+   floor on both ramps at the button's 13px. `--text-inv` flips with the theme
+   the way the fill's solve does, so both halves land at 5.1:1 / 5.7:1. */
 .kit-btn.primary.danger,
 .kit-btn.primary.danger[data-kit-armed] {
   background: var(--danger);
   border-color: transparent;
-  color: var(--text);
+  color: var(--text-inv);
 }
 
 /* ---------- Icon buttons ----------------------------------------------------

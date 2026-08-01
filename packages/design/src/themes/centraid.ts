@@ -14,6 +14,7 @@ import {
   ACCENT_TEXT_LIGHT,
   BRAND,
   DANGER,
+  DANGER_DARK,
   SUCCESS,
   SUCCESS_LIGHT,
   WARNING,
@@ -136,6 +137,6 @@ export const darkTheme: Theme = {
   sidebarBlur: "blur(28px) saturate(180%)",
   sidebarDivider: "0.5px solid rgba(255,255,255,0.10)",
   success: SUCCESS,
-  danger: DANGER,
+  danger: DANGER_DARK,
   warning: WARNING,
 };

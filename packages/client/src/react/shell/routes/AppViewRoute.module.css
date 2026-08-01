@@ -59,7 +59,9 @@
   gap: 4px;
   padding: 1px 6px;
   border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--success) 18%, transparent);
+  /* 12% is the self-wash strength `--success` is solved against
+     (packages/design/src/color.ts). At 18% the chip's own ink fell to 4.4:1. */
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
   font-family: var(--font-mono);
   font-size: 9.5px;

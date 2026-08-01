@@ -319,7 +319,9 @@
   padding: 7px 9px;
   border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  /* The wash stays at or under the 12% `--danger` is solved against, so the
+     rest and hover states both keep the label's measured ratio. */
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   color: var(--danger);
   font-size: 12.5px;
   font-weight: 600;
@@ -328,7 +330,7 @@
   transition: background 120ms;
 }
 .sbAlarm:hover {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 .sbAlarm[disabled] {
   cursor: default;

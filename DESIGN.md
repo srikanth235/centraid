@@ -17,11 +17,12 @@ colors:
   on-accent: "#FFFFFF"
 
   # Semantic states. Never emphasis, never a second accent.
-  success: "#456B39"
-  success-dark: "#5C8A4E"
-  danger: "#C44A4A"
-  warning: "#9A6B1F"
-  warning-dark: "#E0A94A"
+  success: "#436837"
+  success-dark: "#6ba15b"
+  danger: "#a53636"
+  danger-dark: "#d37878"
+  warning: "#7c5619"
+  warning-dark: "#e0a94a"
 
   # App-icon palette — the saturated 8, identical across both themes.
   c-amber: "#E89A3C"
@@ -164,6 +165,15 @@ components:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.danger}"
     rounded: "{rounded.md}"
+  kit-btn-danger-filled:
+    backgroundColor: "{colors.danger}"
+    textColor: "{colors.light-text-inv}"
+    typography: "{typography.body-strong}"
+    rounded: "{rounded.md}"
+  kit-btn-danger-filled-dark:
+    backgroundColor: "{colors.danger-dark}"
+    textColor: "{colors.dark-text-inv}"
+    rounded: "{rounded.md}"
   kit-input:
     backgroundColor: "{colors.light-bg-sunken}"
     textColor: "{colors.light-text}"
@@ -233,6 +243,9 @@ components:
   kit-banner-warning-dark:
     backgroundColor: "{colors.dark-bg-elev}"
     textColor: "{colors.warning-dark}"
+  kit-banner-danger-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.danger-dark}"
   kit-btn-accent-text:
     backgroundColor: "{colors.light-bg}"
     textColor: "{colors.accent-text}"
@@ -458,13 +471,38 @@ Every cell clears 4.5:1, the binding hues are the brand teal on light (4.86) and
 
 ### Semantic states
 
-Not accents; never used for emphasis.
+Not accents; never used for emphasis — but they are, overwhelmingly, **text**. 131 `color:` rules across the client, the kit and the blueprint apps paint these three, essentially all of them between 9px and 13.7px, which is under every large-text exemption in WCAG 1.4.3. So the floor they owe is the **body** floor of 4.5:1, on every surface they land on — not the 3:1 non-text floor.
 
-| Role        | Dark      | Light     | Measured                |
-| ----------- | --------- | --------- | ----------------------- |
-| `--success` | `#5C8A4E` | `#456B39` | 4.8:1 dark, 6.0:1 light |
-| `--danger`  | `#C44A4A` | `#C44A4A` | clears AA on both ramps |
-| `--warning` | `#E0A94A` | `#9A6B1F` | 9.2:1 dark, 4.6:1 light |
+Nothing enforced that. `contrast.test.ts` pinned the ink roles and held these three to 3:1 on `--bg` alone, so the hand-picked literals drifted under the real floor and the claim in this file ("`--danger` clears AA on both ramps") was never measured. It did not: `#C44A4A` was **3.74:1** on dark `--bg-elev` and 4.20:1 on light `--bg-sunken`; `#9A6B1F` was 4.13:1 on light `--bg-sunken`; `#5C8A4E` was 4.40:1 on dark `--bg-elev`; the app ramp's `#f0645b` was 3.98:1 on its own track.
+
+They are now **solved**, by the same `walkUntil()` machinery as `--accent-text` and `--c-<name>-text` — lightness only, hue and saturation untouched, per ramp, against the hardest surface that emitter ships _and_ against a 12% wash of the state itself (`color: var(--danger)` on `color-mix(in oklab, var(--danger) 12%, transparent)` is the single commonest site, and the wash moves the background toward the ink). `--danger` can no longer be one shared literal: the two ramps pull the solve in opposite directions.
+
+| Role        | Light                 | Dark                  |
+| ----------- | --------------------- | --------------------- |
+| `--success` | `#456B39` → `#436837` | `#5C8A4E` → `#6ba15b` |
+| `--danger`  | `#C44A4A` → `#a53636` | `#C44A4A` → `#d37878` |
+| `--warning` | `#9A6B1F` → `#7c5619` | `#E0A94A` → `#e0a94a` |
+
+Measured on every surface each state can land on, bare and on its own 12% wash — `packages/design/src/contrast.test.ts` recomputes this from the emitted CSS on every run (worst cell per ramp, before → after):
+
+| Ramp             | `--danger`  | `--success` | `--warning` |
+| ---------------- | ----------- | ----------- | ----------- |
+| shell light bare | 4.20 → 5.84 | 5.44 → 5.68 | 4.13 → 5.80 |
+| shell light wash | 3.60 → 4.89 | 4.63 → 4.83 | 3.59 → 4.90 |
+| shell dark bare  | 3.74 → 5.69 | 4.40 → 5.81 | 8.41 → 8.41 |
+| shell dark wash  | 3.36 → 4.83 | 3.83 → 4.94 | 6.80 → 6.80 |
+| app light bare   | 4.74 → 6.04 | 4.62 → 5.95 | 4.28 → 6.01 |
+| app light wash   | 3.98 → 5.01 | 3.96 → 5.02 | 3.70 → 5.08 |
+| app dark bare    | 3.98 → 6.07 | 6.06 → 6.15 | 5.92 → 6.03 |
+| app dark wash    | 3.44 → 4.87 | 4.78 → 4.85 | 4.72 → 4.81 |
+
+Twelve of the twenty-four "before" cells were under 4.5; every "after" cell clears it, no state exceeds 11:1 (the guard against "darken until it passes"), and the three stay more than 0.06 apart in oklab so the code still codes.
+
+`--warning` on the dark ramp is the one value the solver left alone — `#E0A94A` already cleared. **`--warning-dark` is not for light surfaces**: at 12.5px on `--bg-elev` it is a wash, and the light ramp's `--warning` exists precisely so it never has to be.
+
+The filled destructive confirm (`.kit-btn.primary.danger`) is a `--danger` **fill**, so it takes `--text-inv` — the same contract `.kit-btn.primary` has. It inked with `--text` until #686: that is the _same-side_ ink (near-black on light, near-white on dark) over a mid-lightness red, and it measured 3.81:1 light / 4.09:1 dark at the button's 13px. With `--text-inv` it lands at 6.05:1 and 5.70:1.
+
+The tint idiom is **12%**. Four rules washed a state at 18–20% under its own ink (`AppViewRoute`, `BuilderShell`, the sidebar alarm's hover, the Atlas danger button's hover) and were brought back to 12% or below, for the same reason the `docs` file-kind tints were unified at 12%: the rung is solved for that strength, and a stronger wash spends the contrast the solve just bought.
 
 ### App-icon palette
 

@@ -281,6 +281,32 @@ const PALETTE_TEXT_SURFACE = {
 } as const;
 
 /**
+ * The same idea, per EMITTER × theme, for the semantic states below. The
+ * palette rung can take one surface for both emitters because it is solved to
+ * the union-hardest; the semantic states cannot, because the shell's darkest
+ * ramp (`--bg-elev` at `--bg-l: 5%`) is far darker than the blueprint's
+ * (`--bg-sunken` at `--bg-l: 10%`), and solving the shell against the
+ * blueprint's surface walks `--danger` from a red to a washed pink (`#e2a6a6`)
+ * to buy contrast it never needed. Each entry is the HARDEST surface that
+ * emitter actually paints:
+ *   - `shellLight`   `--bg-sunken` `#F0F1F3` — the darkest light surface.
+ *   - `shellDark`    `--bg-elev` at `--bg-l: 5%` — the lightest dark one.
+ *   - `blueprintLight` `--bg-sunken` at the hue that makes it darkest (237).
+ *   - `blueprintDark`  `--bg-sunken` at the default hue, `--bg-l: 10%`.
+ * A non-default `--app-hue` moves the blueprint surfaces by under 0.15 in
+ * ratio, which is inside the 0.3 margin `AA_SOLVED_TEXT` already carries.
+ */
+const SEMANTIC_SURFACE = {
+  blueprintDark: "#2b3634",
+  blueprintLight: "#f1f1f6",
+  shellDark: "#181818",
+  shellLight: "#F0F1F3",
+} as const;
+
+/** Which emitter × theme a semantic state is being solved for. */
+export type SemanticRamp = keyof typeof SEMANTIC_SURFACE;
+
+/**
  * …plus a wash of the hue itself. A palette hue on type is almost never on a
  * bare surface: a coloured chip, badge, or thumbnail label sits on a weak tint
  * of its OWN hue, which has already walked the background toward the ink. So
@@ -290,28 +316,29 @@ const PALETTE_TEXT_SURFACE = {
  * harder direction for both themes — darker under light ink's opposite, lighter
  * under dark's — so it is a genuine worst case rather than an average.
  */
-const PALETTE_TEXT_TINT = 0.12;
+const SELF_TINT = 0.12;
 
 /**
- * Floor the palette-text rungs are solved to. 0.3 above the 4.5 body floor for
- * the same reason `AA_FILL` is: the search walks 8-bit `hsl()` in 1-point
- * steps, and that margin is what keeps a rounding trip from shipping a 4.49.
+ * Floor the solved TEXT rungs — palette hues and semantic states alike — are
+ * walked to. 0.3 above the 4.5 body floor for the same reason `AA_FILL` is:
+ * the search walks 8-bit `hsl()` in 1-point steps, and that margin is what
+ * keeps a rounding trip from shipping a 4.49.
  */
-const AA_PALETTE_TEXT = 4.8;
+const AA_SOLVED_TEXT = 4.8;
 
 /** The palette hue `base` deepened (light) or lifted (dark) until it clears
  *  `AA_PALETTE_TEXT` on that theme's hardest surface under its own tint. */
 function paletteTextShade(base: string, kind: "light" | "dark"): string {
   const surface = toHex(
     composite(
-      { alpha: PALETTE_TEXT_TINT, rgb: parseColor(base).rgb },
+      { alpha: SELF_TINT, rgb: parseColor(base).rgb },
       parseColor(PALETTE_TEXT_SURFACE[kind]).rgb
     )
   );
   return walkUntil(
     base,
     (candidate) => contrastRatio(candidate, surface),
-    AA_PALETTE_TEXT,
+    AA_SOLVED_TEXT,
     kind === "light" ? -0.01 : 0.01
   );
 }
@@ -335,6 +362,49 @@ export const paletteText = {
   dark: paletteTextShades("dark"),
   light: paletteTextShades("light"),
 } as const;
+
+// ── Semantic states as TEXT ────────────────────────────────────────────────
+//
+// `--danger` / `--success` / `--warning` are documented as states, but what
+// they overwhelmingly ARE in this repo is `color:` on small prose: 100
+// `color: var(--danger)` rules, 23 `--success`, 8 `--warning`, essentially all
+// of them between 9px and 13.7px — under every large-text exemption. They were
+// hand-picked rather than solved, and nothing pinned them: `contrast.test.ts`
+// measured the three roles at the 3:1 NON-TEXT floor, on `--bg` only. Measured
+// against the emitted CSS, the shipped picks missed the body floor on the
+// surfaces they actually land on — shell `--danger` at 3.74:1 on dark
+// `--bg-elev`, blueprint `--danger` at 3.98:1 on the dark track — while the
+// root DESIGN.md claimed "clears AA on both ramps".
+//
+// Same machinery as the palette rung, and for the same reason: a state on type
+// is usually on a weak tint of ITSELF (`color-mix(in oklab, var(--danger) 12%,
+// transparent)` chips are the single largest bucket of `--danger` sites), so
+// the surface the walk is scored against carries that wash. Unlike the palette
+// rung the wash is of the CANDIDATE, not of the base — a `color-mix()` chip
+// tints with the shipped token, so a rung solved against the base's tint ships
+// a surface that has moved with it and lands ~0.5 short.
+
+/**
+ * `base` deepened (light ramps) or lifted (dark ramps) until it clears
+ * `AA_SOLVED_TEXT` on that emitter's hardest surface AND on a `SELF_TINT` wash
+ * of itself over that surface. Lightness only — hue and saturation never move,
+ * so red stays red and the three states stay tellable apart.
+ */
+export function semanticShade(base: string, ramp: SemanticRamp): string {
+  const bg = parseColor(SEMANTIC_SURFACE[ramp]).rgb;
+  return walkUntil(
+    base,
+    (candidate) =>
+      contrastRatio(
+        candidate,
+        toHex(
+          composite({ alpha: SELF_TINT, rgb: parseColor(candidate).rgb }, bg)
+        )
+      ),
+    AA_SOLVED_TEXT,
+    ramp.endsWith("Light") ? -0.01 : 0.01
+  );
+}
 
 /** Derive the full four-value ramp for an accent base colour. */
 export function accentRamp(base: string): AccentRamp {

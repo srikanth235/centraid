@@ -8,11 +8,15 @@
 // every surface it can land on, because a translucent rung that clears AA on
 // `--bg` can still miss it on the sunken track.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, test } from "vitest";
 
 import { toBlueprintCss } from "./blueprint.js";
 import { contrastRatio, parseColor, rgbToHsl, toHex } from "./color.js";
 import { toCss } from "./css.js";
+import { declarations, evalColorMix, oklabDistance } from "./oklab.js";
 import { palette } from "./palette.js";
 import { BRAND } from "./themes/shared.js";
 
@@ -30,17 +34,6 @@ const TEXT_FLOORS = {
 } as const;
 
 /** Parse the `--name: value;` pairs out of one `{ … }` block. */
-function declarations(css: string, selector: string): Record<string, string> {
-  const start = css.indexOf(`${selector} {`);
-  if (start < 0) throw new Error(`no ${selector} block in the emitted CSS`);
-  const body = css.slice(start, css.indexOf("\n}", start));
-  const out: Record<string, string> = {};
-  for (const line of body.split("\n")) {
-    const m = /^\s*(?<name>--[\w-]+)\s*:\s*(?<value>.+?);\s*$/u.exec(line);
-    if (m?.groups?.name && m.groups.value) out[m.groups.name] = m.groups.value;
-  }
-  return out;
-}
 
 /** Substitute the knobs the token CSS parameterizes colours by, so an
  *  `hsl(var(--app-hue) 8% 42%)` becomes a measurable colour, then evaluate the
@@ -59,103 +52,52 @@ function resolve(value: string, scope: Record<string, string>): string {
     );
 }
 
-// ── color-mix(in oklab, …) ─────────────────────────────────────────────────
-// The accent fills are `color-mix()` over a runtime hue, so a test that only
-// understands `hsl()` cannot see them — which is exactly how `--accent-deep`
-// shipped at 3.04:1 under its own ink. This is the browser's oklab mix, small
-// enough to keep beside the assertions that depend on it.
+// ── Semantic states ────────────────────────────────────────────────────────
+/** The three state roles, in the order the separation check reports them. */
+const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
+/** The self-wash strength `color.ts` solves these rungs for, and the strength
+ *  every `color-mix(… var(--danger) N%, transparent)` chip in the tree uses. */
+const SELF_TINT = 0.12;
+/** Past this a state has stopped being its hue and become near-black (light)
+ *  or near-white (dark). Same guard the accent fills carry. */
+const RECOGNISABLE_STATE = 12;
+/** …and the other way a solve can cheat: desaturate. A grey clears every
+ *  contrast floor on every surface and stays 0.06 from its neighbours in
+ *  oklab, and codes nothing — "this is an error" has to be legible as RED, not
+ *  just legible. So each role is held to its hue family and to real chroma.
+ *  Bands are wide (they are a sanity check, not a tuning knob) but they are
+ *  closed: nothing outside them can be the role. */
+const STATE_HUE = {
+  // Red, wrapping 0.
+  "--danger": [340, 20],
+  // Green.
+  "--success": [70, 160],
+  // Amber/ochre.
+  "--warning": [20, 60],
+} as const;
+const MIN_STATE_SATURATION = 0.2;
 
-type Triple = [number, number, number];
-
-const toLinear = (c: number): number =>
-  c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-const toGamma = (c: number): number =>
-  c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-
-function rgbToOklab(value: string): Triple {
-  const [r, g, b] = parseColor(value).rgb.map((n) => toLinear(n / 255)) as [
-    number,
-    number,
-    number,
-  ];
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
+/** True while `value` still reads as `role`'s colour: right hue family, and
+ *  saturated enough to be a hue at all rather than a grey. */
+function readsAsRole(value: string, role: keyof typeof STATE_HUE): boolean {
+  const [hue, sat] = rgbToHsl(parseColor(value).rgb);
+  const [lo, hi] = STATE_HUE[role];
+  const inBand = lo > hi ? hue >= lo || hue <= hi : hue >= lo && hue <= hi;
+  return inBand && sat >= MIN_STATE_SATURATION;
 }
 
-function oklabToHex([L, a, b]: Triple): string {
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const rgb = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((c) => Math.max(0, Math.min(255, toGamma(c) * 255)));
-  return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
-}
-
-/** Split on the top-level (paren-depth 0) commas of a function's argument
- *  list — `hsl(a, b, c)` nested inside a mix must survive intact. */
-function topLevelArgs(body: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < body.length; i++) {
-    const ch = body[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    else if (ch === "," && depth === 0) {
-      out.push(body.slice(start, i));
-      start = i + 1;
-    }
-  }
-  out.push(body.slice(start));
-  return out.map((s) => s.trim());
-}
-
-/** Evaluate every `color-mix(in oklab, A p%, B)` in `value`, innermost first,
- *  the way a browser composites it. Only the oklab form is supported — it is
- *  the only one this package emits, and an unrecognised space must not be
- *  silently averaged in the wrong one. */
-function evalColorMix(value: string): string {
-  let out = value;
-  for (;;) {
-    const open = out.lastIndexOf("color-mix(");
-    if (open < 0) return out;
-    let depth = 0;
-    let close = -1;
-    for (let i = open + "color-mix".length; i < out.length; i++) {
-      if (out[i] === "(") depth++;
-      else if (out[i] === ")" && --depth === 0) {
-        close = i;
-        break;
-      }
-    }
-    if (close < 0) throw new Error(`unbalanced color-mix in: ${value}`);
-    const args = topLevelArgs(out.slice(open + "color-mix(".length, close));
-    const [space, first, second] = args;
-    if (space?.trim() !== "in oklab" || !first || !second) {
-      throw new Error(`unsupported color-mix: ${out.slice(open, close + 1)}`);
-    }
-    const share = /^(?<color>.+?)\s+(?<pct>[\d.]+)%$/u.exec(first);
-    if (!share?.groups)
-      throw new Error(`color-mix needs a percentage: ${first}`);
-    const p = Number(share.groups.pct) / 100;
-    const a = rgbToOklab(share.groups.color ?? "");
-    const b = rgbToOklab(second);
-    const mixed = oklabToHex([
-      (a[0] ?? 0) * p + (b[0] ?? 0) * (1 - p),
-      (a[1] ?? 0) * p + (b[1] ?? 0) * (1 - p),
-      (a[2] ?? 0) * p + (b[2] ?? 0) * (1 - p),
-    ]);
-    out = out.slice(0, open) + mixed + out.slice(close + 1);
-  }
+/** `color-mix(in oklab, C 12%, transparent)` over `bg` — the alpha composite a
+ *  browser performs for a state-tinted chip. */
+function selfTint(value: string, bg: string): string {
+  const fg = parseColor(value).rgb;
+  const back = parseColor(bg).rgb;
+  return toHex(
+    [0, 1, 2].map((i) => {
+      const a = fg[i] ?? 0;
+      const b = back[i] ?? 0;
+      return a * SELF_TINT + b * (1 - SELF_TINT);
+    }) as unknown as [number, number, number]
+  );
 }
 
 function measurable(value: string): boolean {
@@ -261,12 +203,78 @@ describe("shell token contrast floors", () => {
         contrastRatio(resolve(tokens["--accent-text"] ?? "", scope), bg),
         `${name} --accent-text`
       ).toBeGreaterThanOrEqual(AA_BODY);
-      for (const token of ["--success", "--danger", "--warning"]) {
-        expect(
-          contrastRatio(resolve(tokens[token] ?? "", scope), bg),
-          `${name} ${token}`
-        ).toBeGreaterThanOrEqual(AA_LARGE);
+      // The semantic states get their own grid below — this loop used to hold
+      // them to AA_LARGE on `--bg` alone, which is what let `--danger` ship at
+      // 3.74:1 on dark `--bg-elev`.
+      for (const token of SEMANTIC_STATES) {
+        expect(tokens[token], `${name} ${token} is emitted`).toBeDefined();
       }
+    });
+
+    test(`${name}: semantic states clear the BODY floor on every surface`, () => {
+      // Not AA_LARGE. `--danger` / `--success` / `--warning` are documented as
+      // states, but 131 `color:` rules across the client, the kit and the
+      // blueprint apps paint them on 9–13.7px prose — under every large-text
+      // exemption in 1.4.3. So the floor they owe is the body floor, on every
+      // surface they can land on, not just `--bg`:
+      //   `.kit-popover-item.danger` 13.6px on `--bg-elev` (and `--bg-sunken`
+      //   on hover), `.kit-btn.danger` 13px on `--bg-elev`, `.tlError` 12px,
+      //   `.lineLevel[data-level=error]` 9.5px…
+      // The non-text uses (bar fills, hairlines, 1.05rem glyphs) are strictly
+      // easier at 3:1, so pinning the body floor covers them too.
+      for (const token of SEMANTIC_STATES) {
+        const value = resolve(tokens[token] ?? "", scope);
+        for (const surface of surfaces) {
+          expect(
+            contrastRatio(value, surface),
+            `${name} ${token} on ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+          // …and on a 12% wash of ITSELF over that surface, which is the
+          // commonest site of all: `color: var(--danger)` on
+          // `color-mix(in oklab, var(--danger) 12%, transparent)`. The wash
+          // moves the background toward the ink, so it is strictly harder
+          // than the bare surface and a rung can clear one and miss the other.
+          expect(
+            contrastRatio(value, selfTint(value, surface)),
+            `${name} ${token} on its own ${SELF_TINT * 100}% tint over ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+        }
+        // The counterpart of the accent fills' cap: a state walked past this
+        // has stopped being red/green/amber and become near-black or
+        // near-white, which is the failure mode of "darken until it passes".
+        expect(
+          Math.max(...surfaces.map((s) => contrastRatio(value, s))),
+          `${name} ${token} still reads as its hue`
+        ).toBeLessThan(RECOGNISABLE_STATE);
+        expect(
+          readsAsRole(value, token),
+          `${name} ${token} (${value}) is no longer a ${token.slice(2)} colour`
+        ).toBe(true);
+      }
+      // A colour code is only a code while its members are tellable apart, and
+      // solving three hues to one floor pulls them together.
+      const inks = SEMANTIC_STATES.map((t) => resolve(tokens[t] ?? "", scope));
+      for (let i = 0; i < inks.length; i++) {
+        for (let j = i + 1; j < inks.length; j++) {
+          expect(
+            oklabDistance(inks[i] ?? "", inks[j] ?? ""),
+            `${name} ${SEMANTIC_STATES[i]} vs ${SEMANTIC_STATES[j]} collapsed`
+          ).toBeGreaterThan(0.06);
+        }
+      }
+    });
+
+    test(`${name}: the filled destructive button carries its ink`, () => {
+      // `.kit-btn.primary.danger` — a `--danger` FILL under `--text-inv`, the
+      // same contract `.kit-btn.primary` has. It inked with `--text` until
+      // this gate existed, which is the SAME-side ink and measured 3.81:1 on
+      // light / 4.09:1 on dark at the button's 13px.
+      const fill = resolve(tokens["--danger"] ?? "", scope);
+      const ink = resolve(tokens["--text-inv"] ?? "", scope);
+      expect(
+        contrastRatio(ink, fill),
+        `${name} .kit-btn.primary.danger`
+      ).toBeGreaterThanOrEqual(AA_BODY);
     });
   });
 });
@@ -304,6 +312,61 @@ describe("blueprint token contrast floors", () => {
           ).toBeGreaterThanOrEqual(AA_BODY);
         }
       }
+    });
+
+    test(`${name}: semantic states clear the BODY floor on card and track`, () => {
+      // Same law as the shell grid above, re-measured off the OTHER emitter:
+      // the app ramp has its own `--bg-l` (10%, not 5%) and its own state
+      // literals, so a floor held on one emitter says nothing about the other.
+      // Blueprint apps paint these on 10–13.7px prose — `tasks` `.flag.high`
+      // 12px, `agenda` `.badge[data-tone=warn]` 10px on a `--warning` wash,
+      // `docs` `.custodyChip` 12.8px, `tally`'s `--pos`/`--neg` aliases.
+      // The floors are asserted on the shipped default hue for the same reason
+      // the ink ramp above is; a retuned `--app-hue` moves these surfaces by
+      // under 0.15 in ratio, inside the 0.3 margin the solve carries.
+      for (const token of SEMANTIC_STATES) {
+        const value = resolve(tokens[token] ?? "", scope);
+        expect(tokens[token], `blueprint ${name} ${token}`).toBeDefined();
+        for (const surface of surfaces) {
+          expect(
+            contrastRatio(value, surface),
+            `blueprint ${name} ${token} on ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+          expect(
+            contrastRatio(value, selfTint(value, surface)),
+            `blueprint ${name} ${token} on its own tint over ${surface}`
+          ).toBeGreaterThanOrEqual(AA_BODY);
+        }
+        expect(
+          Math.max(...surfaces.map((s) => contrastRatio(value, s))),
+          `blueprint ${name} ${token} still reads as its hue`
+        ).toBeLessThan(RECOGNISABLE_STATE);
+        expect(
+          readsAsRole(value, token),
+          `blueprint ${name} ${token} (${value}) is no longer a ${token.slice(2)} colour`
+        ).toBe(true);
+      }
+      const inks = SEMANTIC_STATES.map((t) => resolve(tokens[t] ?? "", scope));
+      for (let i = 0; i < inks.length; i++) {
+        for (let j = i + 1; j < inks.length; j++) {
+          expect(
+            oklabDistance(inks[i] ?? "", inks[j] ?? ""),
+            `blueprint ${name} ${SEMANTIC_STATES[i]} vs ${SEMANTIC_STATES[j]} collapsed`
+          ).toBeGreaterThan(0.06);
+        }
+      }
+    });
+
+    test(`${name}: the filled destructive button carries its ink`, () => {
+      // `.kit-btn.primary.danger` again — kit.css is shared, so the app ramp
+      // has to satisfy the same pairing with ITS `--danger` and `--text-inv`.
+      expect(
+        contrastRatio(
+          resolve(tokens["--text-inv"] ?? "", scope),
+          resolve(tokens["--danger"] ?? "", scope)
+        ),
+        `blueprint ${name} .kit-btn.primary.danger`
+      ).toBeGreaterThanOrEqual(AA_BODY);
     });
 
     test(`${name}: the app-surface text ramp stays ordered`, () => {
@@ -414,14 +477,6 @@ describe("blueprint token contrast floors", () => {
       );
     };
 
-    /** Perceptual distance in oklab — the space the mixes are already done in,
-     *  and the only one where "these two look the same" is a number. */
-    const distance = (a: string, b: string): number => {
-      const [al, aa, ab] = rgbToOklab(a);
-      const [bl, ba, bb] = rgbToOklab(b);
-      return Math.hypot(al - bl, aa - ba, ab - bb);
-    };
-
     describe.each([
       ["light", light, {}, ["--bg-elev", "--bg-sunken"]],
       ["dark", dark, { "--bg-l": "10%" }, ["--bg-elev", "--bg-sunken"]],
@@ -521,7 +576,7 @@ describe("blueprint token contrast floors", () => {
           for (const b of rungs) {
             if (a.name >= b.name) continue;
             expect(
-              distance(a.hex, b.hex),
+              oklabDistance(a.hex, b.hex),
               `${theme} ${a.name} vs ${b.name} collapsed`
             ).toBeGreaterThan(0.035);
           }
@@ -534,5 +589,35 @@ describe("blueprint token contrast floors", () => {
     // 222 (ink-blue) was the pre-teal default; it tinted every unbranded app's
     // greys, ink and shadows toward a second, competing brand.
     expect(light["--app-hue"]).toBe(HUE);
+  });
+});
+
+// ── The kit rules the grids above assume ───────────────────────────────────
+//
+// The token grids prove the PAIRINGS are legible; they cannot see which
+// pairing a stylesheet actually writes. `.kit-btn.primary.danger` inked a
+// `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
+// light / 4.09:1 on dark, so the value grid passed while the button did not.
+describe("kit.css honours the ink contract for filled states", () => {
+  const css = readFileSync(
+    path.resolve(import.meta.dirname, "../kit/kit.css"),
+    "utf8"
+  );
+
+  /** The declaration block that follows `selector`, sans nested rules. */
+  function ruleBody(selector: string): string {
+    const at = css.indexOf(selector);
+    expect(at, `${selector} exists in kit.css`).toBeGreaterThanOrEqual(0);
+    const open = css.indexOf("{", at);
+    return css.slice(open + 1, css.indexOf("}", open));
+  }
+
+  test("the filled destructive button carries --text-inv, not --text", () => {
+    const body = ruleBody(".kit-btn.primary.danger,");
+    expect(body).toContain("background: var(--danger)");
+    expect(body).toContain("color: var(--text-inv)");
+    // `--text` is the SAME-side ink in both themes; on a mid-lightness red it
+    // is a WCAG 1.4.3 failure on BOTH ramps, which is the exact bug this pins.
+    expect(body).not.toMatch(/color:\s*var\(--text\)/u);
   });
 });

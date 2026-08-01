@@ -2,6 +2,7 @@
 // Each preset under this folder builds a `Theme` literal; the
 // `themes/index.ts` barrel collects them into a typed registry.
 
+import { semanticShade } from "../color";
 import type { Palette } from "../palette";
 
 // Brand teal — the single source of truth for the Centraid identity.
@@ -55,21 +56,40 @@ export const ON_ACCENT = "#FFFFFF";
 // as the brand hue (5.1:1 on `--bg`). Fills and focus rings keep `--accent`.
 export const ACCENT_TEXT_LIGHT = "#0F7A6C";
 
-// SUCCESS is tuned for the dark ramp (4.8:1 there). On near-white it is 3.9:1
-// — fine for a status dot, short of AA for the label beside it, so the light
-// theme carries a deepened leaf of the same hue (6.0:1). DANGER clears AA on
-// both ramps as-is and is shared.
-export const SUCCESS = "#5C8A4E";
-export const SUCCESS_LIGHT = "#456B39";
-export const DANGER = "#C44A4A";
+// Semantic states, as TEXT. All three are overwhelmingly `color:` on small
+// prose in this repo (131 `color:` rules between them, 9–13.7px, none of them
+// large text), so each is SOLVED rather than hand-picked — `semanticShade()`
+// walks the base along its own hue to the lightest/deepest shade that clears
+// 4.8:1 on the hardest shell surface and on a 12% self-tint of itself there
+// (the `color-mix(… var(--danger) 12%, transparent)` chip is the commonest
+// site of all). Hue and saturation never move.
+//
+// The hand-picked values these replace all missed the body floor somewhere:
+// `#C44A4A` measured 3.74:1 on dark `--bg-elev` and 4.20:1 on light
+// `--bg-sunken` — DESIGN.md claimed it "clears AA on both ramps" and nothing
+// pinned the claim, because `contrast.test.ts` held these three roles to the
+// 3:1 NON-TEXT floor and only on `--bg`. `#9A6B1F` was 4.13:1 on light
+// `--bg-sunken` and `#5C8A4E` 4.40:1 on dark `--bg-elev`. `#E0A94A` was the
+// one that already cleared, and the solver leaves it untouched.
+//
+// DANGER is no longer shared across the ramps: the two surfaces pull in
+// opposite directions (deepen under near-white, lift under near-black), which
+// is why one literal could not clear both.
+const DANGER_BASE = "#C44A4A";
+const SUCCESS_BASE_DARK = "#5C8A4E";
+const SUCCESS_BASE_LIGHT = "#456B39";
+// Amber is the hue; each ramp takes the lightness its own surfaces allow. The
+// role became a contract token in #672, after the kit and the client both
+// painted `var(--warn)` — a name no emitter ever defined.
+const WARNING_BASE_DARK = "#E0A94A";
+const WARNING_BASE_LIGHT = "#9A6B1F";
 
-// Warning. The kit and the client both painted `var(--warn)` — a name no
-// emitter ever defined, so those rules resolved to nothing (#672). The role is
-// real, so it becomes a contract token under the same spelling the app surface
-// already used: `--warning`. Amber is the hue; each ramp takes the lightness
-// that clears AA on its own surfaces (4.6:1 light, 9.2:1 dark).
-export const WARNING = "#E0A94A";
-export const WARNING_LIGHT = "#9A6B1F";
+export const SUCCESS = semanticShade(SUCCESS_BASE_DARK, "shellDark");
+export const SUCCESS_LIGHT = semanticShade(SUCCESS_BASE_LIGHT, "shellLight");
+export const DANGER = semanticShade(DANGER_BASE, "shellLight");
+export const DANGER_DARK = semanticShade(DANGER_BASE, "shellDark");
+export const WARNING = semanticShade(WARNING_BASE_DARK, "shellDark");
+export const WARNING_LIGHT = semanticShade(WARNING_BASE_LIGHT, "shellLight");
 
 // The phone-frame bezel constants that used to live here existed so six
 // emulation presets could share one value. With the registry cut to Centraid

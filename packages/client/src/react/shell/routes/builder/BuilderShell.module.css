@@ -261,7 +261,8 @@
   animation: cd-pulse 1400ms ease-in-out infinite;
 }
 .tlStatus[data-state="idle-live"] {
-  background: color-mix(in srgb, var(--success) 18%, transparent);
+  /* 12%: the strength `--success` is solved against — see color.ts. */
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
 }
 .tlStatus[data-state="idle-live"] .tlStatusDot {

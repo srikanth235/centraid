@@ -36,6 +36,7 @@
 - **Visual QA found what the tests could not.** Every gate was green and CI fully passed, but rendering the real emitted tokens against the real `kit.css` across both themes and all eight palette hues exposed a regression F3 had introduced: eleven app rules across six apps filled with `--accent-deep` but inked with the theme-stable `--on-accent`. Because F3 *lifts* `--accent-deep` on the dark ramp, those became white-on-near-white. The numeric grid never caught it because it measured `kit-btn-primary`, not app-local rules that re-declare the same pairing. Fixed in `agenda`, `docs`, `notes`, `photos`, `tasks`, and their components, and pinned by a new `token-purity` test so the pairing cannot return. Lesson recorded: a token change needs a rendered pass, not only a measured one.
 - **Latent silent-failure class found and pinned, not fixed.** Auditing every `var()` in app CSS surfaced 12 fallback-less references that resolve to nothing (`--accent-deep-fg` in seven `tasks` files, `--r-lg` in three — the blueprint contract spells radii `--r-sm/--r-md/--r-card/--r-pill`, with no `--r-lg` — plus `--acc`, `--bg-l`, `--t-label`). Each silently drops its declaration. All 12 are byte-identical on `origin/main`, so this PR neither introduced nor fixed them; deliberately left as recorded debt rather than opportunistically changing visuals in a PR already this large. Pinned by `UNRESOLVED_VAR_DEBT` so the class can only shrink.
 - **The burn-down silently dropped SOLVED contrast values, and the contract had no rung to replace them.** Removing `docs`' six hand-picked file-kind hexes in favour of the raw `--c-*` palette hues looked like pure literal-elimination — the point of A2 — but those literals were doing solved-contrast work. `--c-*` is documented in `DESIGN.md` as **icon fills**, and as `color:` on a near-white app surface the fills measure 2.11–4.43:1; five of the six kinds fell below AA (`--kind-pdf` 4.74 → 2.11). The accent already had a solved answer to exactly this (`--accent-text` via `accentTextShade()`); the palette had none, which is *why* the app hand-picked in the first place. The fix closes the gap generally rather than restoring the literals: `packages/design/src/color.ts` now solves a **`--c-<name>-text`** rung per hue per theme with the same walk (`walkUntil`, lightness only, hue and saturation untouched), and **both** emitters publish it, so any surface wanting a palette hue on type has a correct token instead of a hand-pick. `packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole. Two consequences recorded: (a) the rung is solved against the hardest surface either emitter ships *plus a 12% wash of the hue itself*, because a hue on type almost always sits on a weak tint of itself; (b) the solve **cannot** keep two hues apart — `ochre` is `amber` at lower chroma, so solving both to one floor collapses them from 0.125 to 0.028 in oklab — so `docs` moved `pdf` to rose and `slide` to amber, which is also the conventional signal for both kinds.
+- **The semantic states were never pinned, and #686 increased the app surfaces' exposure to them.** `contrast.test.ts` held `--danger` / `--success` / `--warning` to the **3:1 non-text floor, on `--bg` only** — the ink roles had real per-surface floors, the states had a formality. So `DESIGN.md` could claim "`--danger` #C44A4A — clears AA on both ramps" with nothing measuring it, and it was false: **3.74:1** on dark `--bg-elev`, 4.20:1 on light `--bg-sunken`. The exposure is not theoretical and #686 widened it: the E burn-down replaced app-local semantic literals with these tokens (`tally` `--pos` #0fa678 / `--neg` #f0805a → `--success`/`--danger`, `people` #f0645b/#5fbd88 → the same), and the values it moved to measured *worse* on dark than the ones it removed. A full sweep of the tree found **131 `color:` rules** on the three roles across `packages/client/src`, `packages/blueprints/apps` and `packages/design/kit/kit.css` — essentially all of them 9px–13.7px, i.e. **body text under WCAG 1.4.3**, not the large-text or non-text cases the 3:1 floor was standing in for. Only two sites in the whole repo are large text (`tally` `.stat .v` 26px, `locker` `.wtStat .n` 28px). The states are now **solved**, not hand-picked, by the same `walkUntil()` machinery as `--accent-text` and `--c-<name>-text`, per emitter and per theme, against that emitter's hardest surface *and* a 12% wash of the state itself (`color: var(--danger)` on `color-mix(… var(--danger) 12%, transparent)` is the single commonest site). Two consequences recorded: (a) `--danger` can no longer be **one shared literal** — the two ramps pull the solve in opposite directions, which is precisely why one hex could not clear both, so `DESIGN.md` and `themes/` now carry `danger` **and** `danger-dark`; (b) a contrast gate alone cannot stop a solver from cheating by **desaturating** — a grey `--danger` cleared every floor on every surface *and* the oklab separation check — so the new gate additionally holds each role to its hue family and to real chroma. Proven by sabotage: greying `DANGER_BASE` is red on `readsAsRole`, and reverting any of the six solved values is red on its own surface × wash cell.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -268,6 +269,21 @@
   - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/kind-colours.test.ts` — **new**: pins the binding the contrast grid assumes (text rung for text, fill rung for fills, same hue per kind, six distinct hues, no `ochre`, no app-local dark re-declaration, `tintBg()` never mixes the text rung).
   - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/manifest.json` — regenerated (picks up the new test file, matching how the other apps' test files are already listed).
 
+
+- **Semantic states solved as TEXT, and the coverage gap that hid them closed**
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/color.ts` — new exported `semanticShade(base, ramp)` + `SemanticRamp` type and a per-emitter `SEMANTIC_SURFACE` map (`shellLight` `#F0F1F3`, `shellDark` `#181818`, `blueprintLight` `#f1f1f6`, `blueprintDark` `#2b3634` — each the hardest surface that emitter actually paints). The walk scores against the candidate's **own** 12% wash, not the base's, because a `color-mix()` chip tints with the shipped token. `PALETTE_TEXT_TINT` → `SELF_TINT` and `AA_PALETTE_TEXT` → `AA_SOLVED_TEXT`, now shared by both solvers.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/themes/shared.ts` — the six shell literals become named bases run through `semanticShade()`; new `DANGER_DARK` export (the ramps can no longer share one danger).
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/themes/centraid.ts` — the dark theme takes `DANGER_DARK`.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/blueprint.ts` — the app ramp's six literals run through `semanticShade()` against the **blueprint** surfaces (its `--bg-l` is 10%, not the shell's 5%, so the two ramps need different answers).
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/kit/kit.css` — `.kit-btn.primary.danger` re-inked `var(--text)` → `var(--text-inv)`. A `--danger` fill under `--text` is the *same-side* ink in both themes (near-black on light, near-white on dark) over a mid-lightness red: 3.81:1 light / 4.09:1 dark at the button's 13px. With `--text-inv` it is 6.05 / 5.70.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/contrast.test.ts` — the gate that should have caught this. The old three-token loop at the 3:1 floor on `--bg` is replaced by, per emitter × theme: the **body** floor on every surface the state lands on **and** on a 12% self-wash of each; a `RECOGNISABLE_STATE < 12` cap; a hue-family + minimum-chroma law (`readsAsRole`) so a solve cannot cheat by desaturating; an oklab separation floor between the three; the filled-destructive-button ink pairing; and a new `kit.css`-reading describe pinning that `.kit-btn.primary.danger` writes `--text-inv` — a value grid cannot see which pairing a stylesheet actually writes.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/design-md.test.ts` — `danger` / `danger-dark` pinned separately, with an assertion that they differ.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/DESIGN.md` — front matter gains `danger-dark` and the five moved hexes; three new component entries (`kit-btn-danger-filled`, `kit-btn-danger-filled-dark`, `kit-banner-danger-dark`); the "Semantic states" section replaces "clears AA on both ramps" with the measured 24-cell before/after grid, the 12%-wash rule, the body-floor rationale, and the filled-button contract.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/apps/mobile/src/kit/theme/tokens.generated.ts` — regenerated (`bun run generate:theme`); it lowers `toBlueprintCss()`, so it carried the stale app-ramp values.
+  - **Four over-strength self-washes brought back to the 12% the rung is solved for** — at 18–20% a chip spends the contrast the solve just bought: `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/AppViewRoute.module.css` (`.brandChipLive` 18% → 12%), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderShell.module.css` (`.tlStatus[data-state="idle-live"]` 18% → 12%), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/chrome.module.css` (`.sbAlarm` 12% → 8%, hover 18% → 12%), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AtlasBrowseTab.module.css` (`.dangerBtn` 12% → 8%, hover 20% → 12%). The 14–16% washes elsewhere measure ≥4.5 against the solved rungs and were deliberately left.
+
+
+- **oklab helper extraction** — `packages/design/src/oklab.ts` (new) carries the `color-mix(in oklab, …)` evaluator and `oklabDistance` out of `packages/design/src/contrast.test.ts`, which had grown past the 625-line repo-hygiene cap once the semantic-state grids landed. Extraction, not a waiver.
 
 ## Out of scope
 
@@ -514,6 +530,92 @@ Proof of red (each sabotage applied, run, reverted):
       1 failed | 16 passed
 ```
 
+### Semantic states — measured grid (worst cell per ramp, before → after)
+
+`--danger` / `--success` / `--warning` recomputed from the EMITTED CSS of both
+emitters, bare and on a 12% wash of the state itself. Twelve of the twenty-four
+"before" cells were under the 4.5 body floor; every "after" cell clears it.
+
+```text
+shell light --danger #C44A4A->#a53636 | --bg 4.63->6.44 | --bg-app 4.75->6.60 | --bg-elev 4.75->6.60 | --bg-sunken 4.20->5.84 | wash 3.60->4.89 | inv-ink 4.35->6.05
+shell light --success #456B39->#436837 | --bg 5.99->6.25 | --bg-app 6.15->6.41 | --bg-elev 6.15->6.41 | --bg-sunken 5.44->5.68 | wash 4.63->4.83 | inv-ink 5.64->5.88
+shell light --warning #9A6B1F->#7c5619 | --bg 4.55->6.39 | --bg-app 4.67->6.56 | --bg-elev 4.67->6.56 | --bg-sunken 4.13->5.80 | wash 3.59->4.90 | inv-ink 4.28->6.01
+shell dark  --danger #C44A4A->#d37878 | --bg 4.10->6.23 | --bg-app 4.43->6.73 | --bg-elev 3.74->5.69 | --bg-sunken 4.35->6.61 | wash 3.36->4.83 | inv-ink 3.75->5.70
+shell dark  --success #5C8A4E->#6ba15b | --bg 4.81->6.36 | --bg-app 5.20->6.87 | --bg-elev 4.40->5.81 | --bg-sunken 5.11->6.75 | wash 3.83->4.94 | inv-ink 4.40->5.82
+shell dark  --warning #E0A94A->#e0a94a | --bg 9.20->9.20 | --bg-app 9.94->9.94 | --bg-elev 8.41->8.41 | --bg-sunken 9.77->9.77 | wash 6.80->6.80 | inv-ink 8.42->8.42
+bp    light --danger #c8382f->#ab3028 | --bg 4.98->6.35 | --bg-elev 5.17->6.59 | --bg-sunken 4.74->6.04 | wash 3.98->5.01 | inv-ink 5.17->6.59
+bp    light --success #2f7d4f->#286a43 | --bg 4.85->6.25 | --bg-elev 5.04->6.50 | --bg-sunken 4.62->5.95 | wash 3.96->5.02 | inv-ink 5.04->6.50
+bp    light --warning #9a6b1f->#7c5619 | --bg 4.50->6.31 | --bg-elev 4.67->6.56 | --bg-sunken 4.28->6.01 | wash 3.70->5.08 | inv-ink 4.67->6.56
+bp    dark  --danger #f0645b->#f69d98 | --bg-elev 4.62->7.05 | --bg-sunken 3.98->6.07 | wash 3.44->4.87 | inv-ink 4.80->7.33
+bp    dark  --success #5cc98a->#60ca8d | --bg-elev 7.04->7.15 | --bg-sunken 6.06->6.15 | wash 4.78->4.85 | inv-ink 7.32->7.43
+bp    dark  --warning #e0a94a->#e1ab4e | --bg-elev 6.88->7.01 | --bg-sunken 5.92->6.03 | wash 4.72->4.81 | inv-ink 7.15->7.29
+
+.kit-btn.primary.danger — the FILLED destructive confirm, ink = --text-inv:
+  light  --text 3.81 FAIL  ->  --text-inv 6.05 PASS
+  dark   --text 4.09 FAIL  ->  --text-inv 5.70 PASS
+```
+
+Proof of red — each sabotage applied, measured, reverted:
+
+```text
+1  shell DANGER_DARK back to #C44A4A
+   × dark: semantic states clear the BODY floor on every surface
+     dark --danger on hsl(0 0% 5%): expected 4.0958 to be >= 4.5
+   × dark: the filled destructive button carries its ink
+     dark .kit-btn.primary.danger: expected 3.7464 to be >= 4.5
+2  blueprint dark --danger back to #f0645b
+   × dark: semantic states clear the BODY floor on card and track
+     blueprint dark --danger on its own tint over hsl(171 12% 15%): expected 3.9679 to be >= 4.5
+3  blueprint light --warning back to #9a6b1f
+   × light: semantic states clear the BODY floor on card and track
+     blueprint light --warning on its own tint over #ffffff: expected 4.0127 to be >= 4.5
+4  shell WARNING_LIGHT back to #9A6B1F
+   × light: semantic states clear the BODY floor on every surface
+     light --warning on its own 12% tint over #FCFCFC: expected 3.9306 to be >= 4.5
+5  DANGER_BASE desaturated to #6E6E6E (a grey)
+   FIRST ATTEMPT PASSED 61/61 — the contrast floors and the oklab separation
+   check are both satisfied by a grey. `readsAsRole` (hue family + minimum
+   chroma) was added because of this, and the sabotage is now red:
+   × light --danger (#5c5c5c) is no longer a danger colour
+   × dark  --danger (#929292) is no longer a danger colour
+6  .kit-btn.primary.danger re-inked with var(--text)
+   × the filled destructive button carries --text-inv, not --text
+```
+
+Gates:
+
+```text
+$ cd packages/design && ../../node_modules/.bin/vitest run
+  Test Files  17 passed (17)
+       Tests  236 passed (236)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+  Test Files  45 passed (45)
+       Tests  649 passed (649)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+  Test Files  213 passed (213)
+       Tests  1738 passed (1738)
+
+$ cd apps/mobile && ../../node_modules/.bin/vitest run
+  Test Files  68 passed (68)
+       Tests  381 passed (381)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     zero regressions
+
+$ bun run lint:design-md
+  "summary": { "errors": 0, "warnings": 0, "infos": 1 }
+
+$ bun run typecheck:affected
+  Tasks:    34 successful, 34 total
+
+$ bun run lint          # oxlint --deny-warnings
+$ bun run format        # oxfmt, 3395 files
+```
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -568,6 +670,12 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785615609-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 845 | 399555 | 254 | 1101 | 0.2114 | 1117 | 1594565 | 135633971 | 466704 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
 | claude-code-ab8b1729-92f-1785615967-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 12 | 1739 | 2406625 | 1014 | 2765 | 1.2396 | 1129 | 1596304 | 138040596 | 467718 |  |
 | claude-code-ab8b1729-92f-1785618533-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 27001 | 10243373 | 20804 | 47855 | 5.8108 | 1179 | 1623305 | 148283969 | 488522 | fix(design): solve a text-legible rung per palette hue (#686)The burn-down repla |
+| claude-code-ab8b1729-92f-1785621035-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 62 | 40948 | 13244470 | 31428 | 72438 | 7.6642 | 1241 | 1664253 | 161528439 | 519950 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621082-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 405 | 440805 | 202 | 609 | 0.2280 | 1243 | 1664658 | 161969244 | 520152 | fix(design): solve the semantic state ramps against every surface (#686)Co-Autho |
+| claude-code-ab8b1729-92f-1785621203-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 16 | 4187 | 3539750 | 2809 | 7012 | 1.8663 | 1259 | 1668845 | 165508994 | 522961 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621251-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 636 | 444769 | 203 | 841 | 0.2314 | 1261 | 1669481 | 165953763 | 523164 | fix(design): solve the semantic state ramps against every surface (#686)Co-Autho |
+| claude-code-ab8b1729-92f-1785621331-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 3907 | 1782452 | 4586 | 8501 | 1.0303 | 1269 | 1673388 | 167736215 | 527750 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621454-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 3985 | 4039188 | 2099 | 6102 | 2.0971 | 1287 | 1677373 | 171775403 | 529849 |  |
 
 ### Steering
 

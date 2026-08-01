@@ -176,8 +176,14 @@ describe("DESIGN.md front matter", () => {
   test("semantic state colors match both ramps", () => {
     expect(scalar(colors, "success")).toBe(themes.light.success);
     expect(scalar(colors, "success-dark")).toBe(themes.dark.success);
+    // `danger` used to be one shared literal. It cannot be: the two ramps pull
+    // the solve in opposite directions (deepen under a near-white surface,
+    // lift under a near-black one), which is exactly why the single `#C44A4A`
+    // measured 3.74:1 on dark `--bg-elev`. Both halves are written out, the
+    // same way `success` / `success-dark` are.
     expect(scalar(colors, "danger")).toBe(themes.light.danger);
-    expect(scalar(colors, "danger")).toBe(themes.dark.danger);
+    expect(scalar(colors, "danger-dark")).toBe(themes.dark.danger);
+    expect(scalar(colors, "danger")).not.toBe(scalar(colors, "danger-dark"));
     expect(scalar(colors, "warning")).toBe(themes.light.warning);
     expect(scalar(colors, "warning-dark")).toBe(themes.dark.warning);
   });

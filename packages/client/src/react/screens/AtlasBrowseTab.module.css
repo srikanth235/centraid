@@ -293,7 +293,9 @@
   padding: 7px 13px;
   border-radius: 8px;
   border: 0.5px solid var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  /* Rest 8% / hover 12% — the hover step stays inside the 12% self-wash
+     `--danger` is solved against, so the label keeps its ratio in both. */
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-sans);
   font-size: 12.5px;
@@ -301,7 +303,7 @@
   cursor: pointer;
 }
 .dangerBtn:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--danger) 20%, transparent);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
 .dangerBtn:disabled {
   opacity: 0.4;

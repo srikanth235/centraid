@@ -17,7 +17,7 @@
 // identity overrides now sit in Chrome.module.css; this module generalizes the
 // shared formulas so portable surfaces don't re-derive them per app.
 
-import { paletteText } from "./color";
+import { paletteText, semanticShade } from "./color";
 import { spacing } from "./density";
 import { palette } from "./palette";
 import { radii } from "./radii";
@@ -120,9 +120,18 @@ function lightProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 19% 13% / 0.165)",
     "--scrim": "hsl(var(--app-hue) 22% 8% / 0.48)",
 
-    "--danger": "#c8382f",
-    "--warning": "#9a6b1f",
-    "--success": "#2f7d4f",
+    // Semantic states, SOLVED as text rather than hand-picked — see the block
+    // comment on `semanticShade()` in color.ts. Apps paint these as `color:`
+    // on 10–13px prose (`tasks` flags, `agenda` guest stats, `docs` custody
+    // chips, `tally`'s `--pos`/`--neg` aliases), usually on a 12% self-tint,
+    // and the hand-picked literals missed AA there: `#9a6b1f` measured 4.13:1
+    // on the light track and `#c8382f` 3.86:1 on its own tint. The blueprint
+    // bases are solved against the BLUEPRINT surfaces, not the shell's — this
+    // ramp's `--bg-l` is 10%, so its darkest surface is much lighter than the
+    // shell's 5% one and the two need different answers.
+    "--danger": semanticShade("#c8382f", "blueprintLight"),
+    "--warning": semanticShade("#9a6b1f", "blueprintLight"),
+    "--success": semanticShade("#2f7d4f", "blueprintLight"),
 
     // Radii — hard-edged cards; buttons/chips are kit pills (kit.css).
     "--r-card": `${radii.xl}px`,
@@ -205,9 +214,12 @@ function darkProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 26% 76% / 0.2)",
     "--scrim": "hsl(0 0% 0% / 0.68)",
 
-    "--danger": "#f0645b",
-    "--warning": "#e0a94a",
-    "--success": "#5cc98a",
+    // The dark half of the same solve. `#f0645b` was 3.98:1 on the `--bg-sunken`
+    // track and 3.44:1 on its own 12% tint — the `agenda` declined-guest chip
+    // paints exactly that pairing.
+    "--danger": semanticShade("#f0645b", "blueprintDark"),
+    "--warning": semanticShade("#e0a94a", "blueprintDark"),
+    "--success": semanticShade("#5cc98a", "blueprintDark"),
 
     // Same role as the light rung — the accent as a FILLED surface — but
     // `--text-inv` is near-black here, so the fill is the LIGHT half of the
