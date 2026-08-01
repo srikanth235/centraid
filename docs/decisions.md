@@ -112,6 +112,15 @@ Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/
 | Google OAuth | **BYO-client first for Calendar/Contacts.** The shared Assist client does not request these sensitive scopes until Google's production verification evidence is accepted. BYO remains functional throughout and uses the same connector/sync contract. |
 | Push topology | **Expo Push Service is a wake-only relay, with local fallback.** The relay receives device tokens, timing, an opaque registration id, and a content-free wake/deep-link class—never titles, bodies, secrets, entity names, or sealed columns. The gateway remains canonical for content after open. Installations that disable the relay retain on-device scheduled notifications while the app is resident, with the availability limitation stated in Settings. |
 
+## #686 — typography is a contract of ROLES, not families
+
+Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://github.com/srikanth235/centraid/issues/686). Prose rulebook: [design-language.md](design-language.md).
+
+- **The contract names roles, never faces.** `sans` / `display` / `mono` / `serif`, plus the semantic scale in `packages/design/src/typography.ts` (`size`, `lineHeight`, `weight` per key). A surface binds roles to faces; a surface never adds a role, and no consumer may set an arbitrary `font-family`.
+- **Web and desktop use system stacks. #468 K11 stands.** `system-ui` / `ui-monospace` chains, no webfont family first, so the chrome never blocks on a network fetch. This is not up for renegotiation as part of #686.
+- **Mobile maps the same roles to platform-appropriate loaded faces.** React Native cannot combine `fontFamily` with `fontWeight` reliably across platforms, so each (role, weight) pair must be its own family name. The current mapping in `apps/mobile/src/kit/theme/index.ts` — Geist (sans), Space Grotesk (display), JetBrains Mono (mono), Playfair Display (serif) — is **recorded here as the sanctioned per-role mapping**, pending a future revisit toward native faces (San Francisco / Roboto) if the download weight or the cross-platform look argues for it.
+- **Therefore the web↔mobile face divergence is decided, not drift.** An audit that finds different family names on the two surfaces has found the intended state. The thing to check is that mobile still resolves _roles and the numeric scale_ from `@centraid/design`, and that the size/lineHeight/weight values are not re-typed by hand.
+
 ## Related docs
 
 | Doc | Covers |
@@ -120,5 +129,6 @@ Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/
 | [release.md](release.md) | D1–D6 prepare vs publish, patch/minor, beta |
 | [identifiers.md](identifiers.md) | J5 full `dev.centraid.*` table |
 | [enrollment.md](enrollment.md) | Apple / Azure / Play human steps |
+| [design-language.md](design-language.md) | The design rulebook the #686 typography entry implements |
 | [TESTING.md](../TESTING.md) | L1/E2 PR vs nightly |
 | [SECURITY.md](../SECURITY.md) | F2 threat model |

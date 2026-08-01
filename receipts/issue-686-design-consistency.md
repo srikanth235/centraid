@@ -12,11 +12,11 @@
 - [ ] B2 shell type-scale adoption + ratchet
 - [ ] B3 shell radius adoption + ratchet
 - [ ] B4 mono body face decided + documented
-- [ ] C1 `docs/design-language.md` + AGENTS.md index row + ui-grounding reference
-- [ ] C2 `.design-sync` stale conventions neutralized
-- [ ] C3 stale mobile-theming comments fixed
-- [ ] C4 `styles.css` eaten comment restored
-- [ ] D1 typeface decision recorded in docs/decisions.md
+- [x] C1 `docs/design-language.md` + AGENTS.md index row + ui-grounding reference
+- [x] C2 `.design-sync` stale conventions neutralized
+- [x] C3 stale mobile-theming comments fixed
+- [x] C4 `styles.css` eaten comment restored
+- [x] D1 typeface decision recorded in docs/decisions.md
 - [ ] D2 mobile color opt-outs migrated/waived
 - [ ] D3 post-generation CSS validation for agent apps
 - [ ] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
@@ -41,6 +41,12 @@
 
 - **A2 consumer-side token-purity ratchet test (blueprint apps)** and **A5 reserved-namespace guard (`--c-*` etc.) in the same test** — new `packages/blueprints/src/token-purity.test.ts` walks all 93 `packages/blueprints/apps/**/*.module.css` files asserting no hex, no `rgb()/rgba()/hsl()/hsla()` literals, no concrete `font-family` stacks, and no declarations of reserved custom properties (`--c-*`, `--t-*`, `--r-*`, `--sp-*`, `--bg-*`, `--text-*`, plus every `BLUEPRINT_TOKEN_CONTRACT` name imported from `@centraid/design`). `packages/blueprints/src/token-purity-allowlist.ts` pins the existing debt (28 files, 252 violations) with exact-equality in both directions, so cleanups must shrink it and new debt fails.
 - **A2 governance directive `no-hardcoded-colors`** — new directive (added-lines-only tripwire on blueprint app CSS, mirroring `no-hardcoded-model-ids`): `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh`, `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/directive.yaml`, `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/constitution.md`, plus the `### no-hardcoded-colors` section and amendment-log line in `CONSTITUTION.md`.
+
+- **C1 `docs/design-language.md` + AGENTS.md index row + ui-grounding reference** — new `docs/design-language.md` (canonical field-notebook rulebook: aesthetic POV, platform analogy, typography/color/spacing/motion rules, app may/may-not list); index row added in `AGENTS.md`; doc-comment reference on `buildUiGroundingBlocks()` in `packages/gateway/src/skills/ui-grounding.ts`.
+- **C2 `.design-sync` stale conventions neutralized** — `.design-sync/conventions.md` and `.design-sync/desktop.conventions.md` replaced with stale-version warnings naming the specific lies (deleted emulation themes, removed Geist/Space Grotesk stacks, phantom `--surface`/`--ink-*`/`--warn`/`--d-*` tokens) plus pointers to the real sources. Filenames preserved (referenced by `.design-sync/config.json`).
+- **C3 stale mobile-theming comments fixed** — `packages/design/src/themes/index.ts` and `packages/design/src/index.ts` now describe the real three-lowerings pipeline (shell `toCss()`, blueprint `toBlueprintCss()`, mobile AOT via `apps/mobile/scripts/generate-theme.ts`).
+- **C4 `styles.css` eaten comment restored** — `packages/client/src/styles.css` had already been fixed on main by c27cb65c (#681); our branch converged to identical content, so this item lands with no net diff.
+- **D1 typeface decision recorded in docs/decisions.md** — `docs/decisions.md` gains the `## #686 — typography is a contract of ROLES, not families` section (web/desktop system stacks per #468 K11; mobile per-role platform mapping sanctioned pending native-faces revisit).
 
 ## Out of scope
 
@@ -74,6 +80,16 @@ $ node scripts/lint-design-tokens.mjs
 ok   design-token-css — 82 grandfathered hex value(s), 4 literal font stack(s), zero regressions
 ```
 
+C1–C4 + D1:
+
+```
+$ ls docs/design-language.md && grep -c 'design-language' AGENTS.md packages/gateway/src/skills/ui-grounding.ts
+docs/design-language.md
+AGENTS.md:1
+packages/gateway/src/skills/ui-grounding.ts:1
+$ grep -n '#686' docs/decisions.md | head -1
+```
+
 Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/components/Row.module.css`: vitest ratchet and check.sh both fail; injection reverted (diff empty).
 
 Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
@@ -101,6 +117,10 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785603979-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 380 | 168961 | 205 | 587 | 0.1840 | 285 | 343824 | 16643791 | 135414 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
 | claude-code-ab8b1729-92f-1785604048-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 285 | 169341 | 211 | 498 | 0.1835 | 287 | 344109 | 16813132 | 135625 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
 | claude-code-ab8b1729-92f-1785604102-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 3460 | 339252 | 1214 | 4678 | 0.4432 | 291 | 347569 | 17152384 | 136839 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
+| claude-code-ab8b1729-92f-1785604170-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 2450 | 342712 | 3380 | 5834 | 0.5424 | 295 | 350019 | 17495096 | 140219 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604218-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 1763 | 172581 | 212 | 1977 | 0.2052 | 297 | 351782 | 17667677 | 140431 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604286-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 10 | 2245 | 873464 | 1388 | 3643 | 0.9710 | 307 | 354027 | 18541141 | 141819 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604343-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 395 | 175649 | 194 | 591 | 0.1903 | 309 | 354422 | 18716790 | 142013 | docs(design): design-language rulebook, design-sync cleanup, roles decision (#68 |
 
 ### Steering
 

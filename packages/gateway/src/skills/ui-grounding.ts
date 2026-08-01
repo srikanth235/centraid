@@ -20,6 +20,11 @@ import { icons, toBlueprintCss } from "@centraid/design";
  * Returns the ordered list of prompt blocks to splice in below the
  * `authoring-centraid-apps` skill. Each block is a single string starting with
  * its `###` heading so it renders cleanly in the system prompt.
+ *
+ * The prose rationale behind everything these blocks assert — the "field
+ * notebook" point of view, the token-contract-as-OS model, and the
+ * type/colour/spacing/motion rules — is `docs/design-language.md`. Read it
+ * before changing what is grounded here.
  */
 export function buildUiGroundingBlocks(): string[] {
   return [

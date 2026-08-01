@@ -1,8 +1,19 @@
 // Centraid — shared design system.
 // Single source of truth for colors, typography, spacing, density,
-// tile-finishes, icons, and built-in app metadata. Both surfaces
-// (Electron desktop, Expo mobile) consume this package; CSS for the
-// desktop is generated from these typed values via `toCss()`.
+// tile-finishes, icons, and built-in app metadata.
+//
+// Three lowerings of the one contract:
+//   - Desktop/web shell — CSS vars via `toCss()`, injected at boot.
+//   - Blueprint apps    — CSS vars via `toBlueprintCss()`, served to the
+//                         sandboxed app surface.
+//   - Expo mobile       — imports the typed values (`type`, `spacing`,
+//                         `radii`, …) and lowers `toBlueprintCss()` ahead of
+//                         time into `apps/mobile/src/kit/theme/
+//                         tokens.generated.ts` (see that app's
+//                         `scripts/generate-theme.ts`). It does not consume
+//                         `toCss()` or the `themes` presets.
+//
+// Prose rulebook: docs/design-language.md.
 
 export { palette } from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";

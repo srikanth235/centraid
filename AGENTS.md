@@ -44,6 +44,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
+| [docs/design-language.md](docs/design-language.md) | Canonical design language: field notebook, token contract as OS, type/colour/spacing/motion rules |
 | [docs/toolchain.md](docs/toolchain.md) | Tool ownership, stable commands, rule rubric, profiles, and upgrades |
 | [docs/sonarcloud.md](docs/sonarcloud.md) | SonarCloud Autoscan scope, silenced rules, Centraid profile/gate, apply script |
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
