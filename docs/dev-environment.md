@@ -5,7 +5,7 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 ## Prerequisites
 
 - [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`)
-- Node 24.4.1 (exactly; `.node-version` and `package.json#engines.node` are enforced)
+- Node 24.4.1 — `.node-version` and `package.json#engines.node` must agree, and CI runs exactly this version. Locally a different Node only **warns** (#668); match it with `nvm use` if you hit a toolchain difference
 - For desktop: platform deps for Electron
 - For mobile: Xcode / Android SDK as needed
 - Optional: Docker for `tests/agent-e2e-pairing` cross-network relay
@@ -125,8 +125,24 @@ Three tiers, each with a cost budget, each enforced by a hook. Nothing here is s
 | Tier | When | Cost | What runs |
 | --- | --- | --- | --- |
 | 0 | pre-commit | ~36s (see below) | Governance directives, plus `oxfmt` and `oxlint` **on staged files only** |
-| 1 | pre-push | ~90s + affected tests + diff coverage | `bun run check:pr` — the local superset of the CI `static` job |
+| 1 | pre-push | ~55s | `bun run check:push` — 25 gates run concurrently, wall clock bounded by affected tests |
+| 1.5 | want CI's answer early | ~4 min | `bun run check:pr` — `check:push` plus full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
 | 2 | before requesting merge | minutes | `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
+
+**Why tier 1 was rebuilt (#668).** `check:pr` was the pre-push gate, and it had three compounding problems. It ran **serially** — 28 `&&`-chained steps where almost none depend on each other. It **stopped at the first failure**, so three unrelated problems cost three full passes. And four gates dominated the clock while duplicating work CI recomputes authoritatively anyway:
+
+| Gate | Cost | Why it left the push tier |
+| --- | --- | --- |
+| `check:diff-coverage` | 89.4s | Instrumented full-suite run; the repo-wide `coverage` job in CI `verify` is the authoritative copy |
+| `typecheck` (full) | 66.0s | `typecheck:affected` is 11s and catches the same thing on your diff; CI still runs the full one |
+| `lint:types` | 21.3s | Type-aware lint over every package; low hit rate, and `static` already gates it |
+| `lint:workflow-pins` | 0.1s | Only meaningful when `.github/workflows/**` changed, which the push tier cannot cheaply know |
+
+Measured on an 8-core M-series with warm turbo caches. The remaining 25 gates run through `scripts/ci/run-gates.mjs` at a bounded concurrency, so the 24 non-test gates (including `typecheck:affected` at 24s cold) finish inside the `test:affected` window and cost nothing. **The gate now costs exactly what the affected tests cost.**
+
+The failure report changed too, and that matters as much as the clock: every gate runs even when an earlier one fails, and the summary lists all of them with the slowest five. One pass tells you everything that is wrong.
+
+**A gate that is always skipped enforces nothing.** `lint:node-version` demanded the _exact_ pinned Node at position three of the chain. CI satisfies that by construction (`setup-node` reads `.node-version`) and never ran the check; locally it hard-failed for anyone whose version manager defaulted elsewhere — so every push died five seconds in for a reason unrelated to the diff. It now warns locally, stays fatal under `CI`, and is wired into the `static` job where the claim is real.
 
 **Tier 0 is over budget and the reason is upstream.** The target is 2s. The gates this repo owns hit it easily — staged-file `oxfmt` 0.16s, staged-file `oxlint` 0.09s, every repo-local directive under 0.5s. The 36s is two vendored `governance-kit` directives that are repo-wide by construction: `repo-hygiene` (18.7s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue` (13.2s, re-reads the receipt corpus). Both carry digests in `.governance/packs.lock` and `managed-tree-integrity` exists to stop them being hand-edited, so scoping them to the staged set is an upstream change. Until then, `git commit` costs about half a minute; `SKIP_GOVERNANCE=1` is the pressure valve for a rapid commit loop, and CI still enforces.
 
@@ -137,7 +153,7 @@ Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time
 ### Escape hatches
 
 ```sh
-SKIP_CHECK_PR=1 git push     # skip the pre-push check:pr gate only
+SKIP_CHECK_PR=1 git push     # skip the pre-push check:push gate only
 SKIP_GOVERNANCE=1 git push   # skip every governance hook
 git push --no-verify         # skip all hooks entirely
 ```
@@ -165,7 +181,8 @@ Never raw `npx vitest`, `npx tsc`, etc. Use:
 ```sh
 bun run test
 bun run typecheck
-bun run check:pr    # required before push
+bun run check:push  # the pre-push gate (the hook runs it)
+bun run check:pr    # full local mirror of the CI PR gate
 bun run check:full  # required for shared infrastructure
 bun run format
 ```

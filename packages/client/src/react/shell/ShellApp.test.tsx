@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellRoute } from "../../app-shell-context.js";
 import ShellApp from "./ShellApp.js";
@@ -133,6 +133,150 @@ describe("shell/ShellApp", () => {
         />
       );
       expect(el.querySelector(".window")).toBeNull();
+    });
+  });
+
+  // Compact form factor (#667): the same sidebar, mounted as an overlay
+  // drawer. What changes is BEHAVIOUR — a scrim exists, navigating dismisses,
+  // and toggling must not write the desktop preference.
+  describe("compact drawer", () => {
+    function goCompact(): void {
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    }
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("starts closed regardless of the docked preference, and opens on toggle", () => {
+      goCompact();
+      // sidebarOpen=true is the DESKTOP pref; a phone must not open holding a
+      // drawer over the page.
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderSidebar={sidebarFor}
+          renderScreen={screenFor}
+          sidebarOpen
+        />
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "closed"
+      );
+      expect(el.querySelector(".scrim")).toBeNull();
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
+          ?.click()
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "open"
+      );
+      expect(el.querySelector(".scrim")).not.toBeNull();
+    });
+
+    it("never writes the docked preference — a dismiss is not a collapse", () => {
+      goCompact();
+      const changes: boolean[] = [];
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderSidebar={sidebarFor}
+          renderScreen={screenFor}
+          sidebarOpen
+          onSidebarOpenChange={(open) => changes.push(open)}
+        />
+      );
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
+          ?.click()
+      );
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[aria-label="Close navigation"]')
+          ?.click()
+      );
+      expect(changes).toStrictEqual([]);
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "closed"
+      );
+    });
+
+    it("dismisses itself when the member picks a destination", () => {
+      goCompact();
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderSidebar={sidebarFor}
+          renderScreen={screenFor}
+        />
+      );
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
+          ?.click()
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "open"
+      );
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[data-testid="go-insights"]')
+          ?.click()
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "closed"
+      );
+    });
+
+    it("dismisses on a row that opens an overlay instead of navigating", () => {
+      goCompact();
+      // Search opens the ⌘K palette and stays on the same route, so the
+      // route-keyed dismissal cannot see it — the rail would sit over the
+      // palette it just opened.
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderSidebar={() => (
+            <button type="button" className="sbItem" data-testid="search">
+              Search
+            </button>
+          )}
+          renderScreen={screenFor}
+        />
+      );
+      act(() =>
+        el
+          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
+          ?.click()
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "open"
+      );
+      act(() =>
+        el.querySelector<HTMLButtonElement>('[data-testid="search"]')?.click()
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "closed"
+      );
+    });
+
+    it("mounts no scrim when the rail is docked", () => {
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderSidebar={sidebarFor}
+          renderScreen={screenFor}
+          sidebarOpen
+        />
+      );
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
+        "open"
+      );
+      expect(el.querySelector(".scrim")).toBeNull();
     });
   });
 });

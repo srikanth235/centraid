@@ -135,7 +135,7 @@ describe("InsightsScreen (#514)", () => {
         onWindowDays={() => undefined}
       />
     );
-    expect(html).toContain("<h1>Insights</h1>");
+    expect(html).toContain("<h1>Analytics</h1>");
     expect(html).toContain("$3.40");
     expect(html).toContain("agent-reported");
     expect(html).toContain("estimated");

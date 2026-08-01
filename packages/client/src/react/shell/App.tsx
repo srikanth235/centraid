@@ -863,7 +863,6 @@ export default function App(): JSX.Element {
           onSearch={() => setPaletteOpen(true)}
           onAssistant={go({ kind: "assistant" })}
           onInsights={go({ kind: "insights" })}
-          onDiscover={go({ kind: "discover" })}
           onAutomations={go({ kind: "automations" })}
           onConnectors={go({ kind: "connectors" })}
           onApprovals={go({ kind: "approvals" })}

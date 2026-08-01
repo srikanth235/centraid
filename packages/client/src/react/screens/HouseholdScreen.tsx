@@ -138,9 +138,9 @@ export default function HouseholdScreen(
       <div className={styles.head}>
         <div className={styles.title}>
           <span className={styles.titleIcon}>
-            <Icon name="Users" size={16} />
+            <Icon name="Monitor" size={16} />
           </span>
-          <h1>Household</h1>
+          <h1>Devices</h1>
         </div>
         <div className={styles.headMeta}>
           The people who share this installation, the devices acting for them,

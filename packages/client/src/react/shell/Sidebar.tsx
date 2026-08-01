@@ -6,15 +6,10 @@ import type { IconName } from "@centraid/design-tokens";
 
 import Icon from "../ui/Icon.js";
 import Logo from "../ui/Logo.js";
-import StatusPill from "../ui/StatusPill.js";
 import { openMenu } from "./contextMenu.js";
-import {
-  ArrowRightGlyph,
-  HomeGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  SparkleGlyph,
-} from "./glyphs.js";
+import { ArrowRightGlyph, PlusGlyph, SparkleGlyph } from "./glyphs.js";
+import { buildNavSections } from "./navModel.js";
+import type { NavItem } from "./navModel.js";
 
 import chrome from "./chrome.module.css";
 
@@ -26,9 +21,20 @@ export type ShellMenuAnchor =
   | { kind: "point"; x: number; y: number }
   | { kind: "rect"; rect: DOMRect };
 
-// The shell sidebar — Search + New Chat, Automations/Connectors, Pages,
-// Operations, History (recent vault-assistant threads + See all), and
-// Settings. Styled by chrome.module.css (shared with ShellFrame).
+// The shell sidebar, in three zones (issue #667):
+//
+//   head    — the vault identity row (headSlot), supplied by App.
+//   scroll  — the nav sections from navModel, then Recents. One scroll region,
+//             so a short window clips nothing and Recents grows into whatever
+//             height is left over.
+//   foot    — pinned: gateway alarm (only when down), update pill, account.
+//
+// Order and grouping live in navModel.ts; this file owns how a row LOOKS and
+// the two lists it cannot express as flat data (conversation history, with its
+// pinned/archived grouping and per-row menus, and the foot).
+//
+// Styled by chrome.module.css, shared with ShellFrame — including the compact
+// breakpoint, where the whole column becomes an overlay drawer.
 
 export type SidebarPage =
   | "home"
@@ -54,7 +60,7 @@ export interface SidebarApp {
   status?: "new" | "draft" | "live" | null;
 }
 
-/** One row in the sidebar's "Chats" list — a persisted vault-assistant
+/** One row in the sidebar's "Recents" list — a persisted vault-assistant
  *  conversation (mirrors `CentraidConversationSummary`, trimmed to what the
  *  row renders). */
 export interface SidebarConversation {
@@ -79,7 +85,7 @@ export interface SidebarProps {
   apps?: SidebarApp[];
   /** @deprecated Apps list is no longer shown in the sidebar. */
   drafts?: SidebarApp[];
-  /** Profile-switcher head row, rendered above "Build new" with a divider. */
+  /** Vault-identity head row, rendered above the actions with a divider. */
   headSlot?: ReactNode;
   onHome: () => void;
   /** "Build new" — a builder entry point (issue #434, Phase 3). Omitted when
@@ -91,7 +97,7 @@ export interface SidebarProps {
   /** The conversation id of the current route, when it's the assistant
    *  route with one open — highlights that row. */
   activeConversationId?: string;
-  /** Top "New Chat" + History empty-state — starts a fresh (not-yet-created)
+  /** Top "New Chat" + Recents empty-state — starts a fresh (not-yet-created)
    *  vault-assistant conversation. */
   onNewChat?: () => void;
   onSelectConversation?: (id: string) => void;
@@ -99,28 +105,33 @@ export interface SidebarProps {
   /** Row ••• / right-click menu (Rename + Delete). Wired by App.tsx to the
    *  shared context menu; when present it supersedes the bare delete X. */
   onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
-  /** "See all" under History — full conversation list surface. When omitted
+  /** "See all" under Recents — full conversation list surface. When omitted
    *  the link is hidden and the sidebar shows the full recent list. */
   onSeeAllHistory?: () => void;
   onSearch?: () => void;
   /** @deprecated Prefer onNewChat — Assistant is no longer a separate nav row. */
   onAssistant?: () => void;
+  /** Labelled "Analytics" in the column (#667). */
   onInsights?: () => void;
-  onDiscover?: () => void;
   onAutomations?: () => void;
   onConnectors?: () => void;
+  /** Labelled "Notifications" in the column. */
   onApprovals?: () => void;
   /** Count badge next to Notifications — decisions only. */
   approvalsCount?: number;
   /** Notices are informational and use a dot instead of inflating the badge. */
   notificationsHasUnreadNotices?: boolean;
+  /** Gateway has no standing nav row (#667): a healthy daemon is the 99% case
+   *  and earns no pixels. Reached from the foot alarm below, the ⌘K palette,
+   *  and Analytics. */
   onGateway?: () => void;
-  /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
+  /** Live heartbeat. Only "down" renders anything — the foot alarm. */
   gatewayStatus?: "up" | "down" | "unknown";
-  /** People, devices and vaults (issue #599). */
+  /** People, devices and vaults (issue #599) — labelled "Devices" (#667). */
   onHousehold?: () => void;
   /** @deprecated Storage is a Gateway tab; retained for caller compatibility. */
   onStorage?: () => void;
+  /** The ontology census — labelled "Data" in the column (#667). */
   onAtlas?: () => void;
   /** @deprecated Apps list is no longer shown in the sidebar. */
   onAppClick?: (id: string) => void;
@@ -139,7 +150,7 @@ export interface SidebarProps {
   /**
    * A newer build is on disk (main's dist watcher): the version a relaunch
    * would load. Set alongside onRelaunchToUpdate to show the pill above
-   * Settings; omitted = no update, no pill.
+   * the account row; omitted = no update, no pill.
    */
   updateVersion?: string;
   onRelaunchToUpdate?: () => void;
@@ -147,7 +158,8 @@ export interface SidebarProps {
   updatePillTitle?: string;
   /** When false, pill is shown but disabled (download still running). */
   updateReadyToInstall?: boolean;
-  /** Open the "What's new" changelog modal. Omitted = the item is hidden. */
+  /** Open the "What's new" changelog modal. Lives in the account menu (#667),
+   *  not a standing row. Omitted = the menu item is hidden. */
   onWhatsNew?: () => void;
 }
 
@@ -168,10 +180,9 @@ function accountInitials(name: string): string {
 
 /**
  * The sidebar foot is the account row: who you are, not what you can
- * configure. Settings moved into its menu because a preferences dialog is an
- * action you take a handful of times, while your own name is the thing that
- * should be standing there — and it is the only place in the shell that shows
- * the household name at all.
+ * configure. Settings, pairing, and "What's new" moved into its menu because
+ * each is something you do a handful of times, while your own name is the
+ * thing that should be standing there.
  */
 function AccountRow(props: SidebarProps): JSX.Element {
   const name = props.accountName?.trim() || "You";
@@ -187,12 +198,13 @@ function AccountRow(props: SidebarProps): JSX.Element {
         // rail's edges rather than floating at some content width inside it.
         const row = event.currentTarget.getBoundingClientRect();
         const column =
-          event.currentTarget.parentElement?.getBoundingClientRect() ?? row;
+          event.currentTarget.closest(`.${chrome.sbColumn}`) ?? null;
+        const bounds = column?.getBoundingClientRect() ?? row;
         const gap = 8;
         const rect = new DOMRect(
-          column.left + gap,
+          bounds.left + gap,
           row.top,
-          Math.max(160, column.width - gap * 2),
+          Math.max(160, bounds.width - gap * 2),
           row.height
         );
         openMenu(
@@ -200,6 +212,11 @@ function AccountRow(props: SidebarProps): JSX.Element {
             { id: "settings", label: "Settings", icon: "Settings" },
             ...(props.onPairDevice
               ? ([{ id: "pair", label: "Pair device", icon: "Phone" }] as const)
+              : []),
+            ...(props.onWhatsNew
+              ? ([
+                  { id: "whats-new", label: "What's new", icon: "Gift" },
+                ] as const)
               : []),
             ...(props.onLogOut
               ? ([
@@ -217,6 +234,7 @@ function AccountRow(props: SidebarProps): JSX.Element {
           (id) => {
             if (id === "settings") props.onSettings();
             if (id === "pair") props.onPairDevice?.();
+            if (id === "whats-new") props.onWhatsNew?.();
             if (id === "logout") props.onLogOut?.();
           },
           { matchAnchorWidth: true }
@@ -261,6 +279,35 @@ function SbItem(props: {
       {props.meta ? <span className={chrome.sbMeta}>{props.meta}</span> : null}
       {props.trailing}
     </button>
+  );
+}
+
+/** Renders one NavItem from the IA model. */
+function NavRow({
+  item,
+  activePage,
+}: {
+  item: NavItem;
+  activePage?: SidebarPage;
+}): JSX.Element {
+  return (
+    <SbItem
+      icon={<Icon name={item.icon} size={15} />}
+      label={item.label}
+      {...(item.meta ? { meta: item.meta } : {})}
+      active={Boolean(item.page) && item.page === activePage}
+      disabled={!item.onSelect}
+      {...(item.accent ? { accent: true } : {})}
+      onClick={() => item.onSelect?.()}
+      trailing={
+        item.dot ? (
+          <span
+            className={chrome.notificationsUnreadDot}
+            aria-label="Unread updates"
+          />
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -367,11 +414,17 @@ function ConversationRow({
   );
 }
 
-/** Cap recent rows in the sidebar History section; "See all" opens the rest. */
-const HISTORY_SIDEBAR_CAP = 6;
+/**
+ * Cap recent rows before "See all" takes over. Recents is the column's body
+ * now — it owns every pixel the zones above it didn't use and scrolls — so the
+ * cap is a "when does this stop being a list and start being an archive"
+ * threshold, not the height budget it was when Recents was one of five
+ * sections fighting for space.
+ */
+const HISTORY_SIDEBAR_CAP = 15;
 
 /**
- * History list (ex-"Chats"): pinned first, then recent, with optional
+ * Recents (ex-"History", ex-"Chats"): pinned first, then recent, with optional
  * archived group. Caps the non-archived list when `onSeeAllHistory` is set.
  */
 function HistorySection(props: SidebarProps): JSX.Element {
@@ -411,7 +464,7 @@ function HistorySection(props: SidebarProps): JSX.Element {
 
   return (
     <>
-      <SbSection label="History" />
+      <SbSection label="Recents" />
       {activeCount === 0 ? (
         <SbItem
           icon={<SparkleGlyph />}
@@ -475,149 +528,70 @@ function HistorySection(props: SidebarProps): JSX.Element {
   );
 }
 
-export default function Sidebar(props: SidebarProps): JSX.Element {
+/**
+ * The gateway alarm. A healthy daemon says nothing at all — a standing "UP"
+ * pill is a permanent reassurance nobody reads, and it cost a prime nav slot.
+ * A DOWN daemon is the whole story, so it takes the foot, above the account
+ * row, in the danger tone, and it is the way into the Gateway page.
+ */
+function GatewayAlarm(props: SidebarProps): JSX.Element | null {
+  if (props.gatewayStatus !== "down") return null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <button
+      type="button"
+      className={chrome.sbAlarm}
+      disabled={!props.onGateway}
+      onClick={() => props.onGateway?.()}
+    >
+      <Icon name="Cellular" size={14} />
+      <span className={chrome.sbLabel}>Gateway offline</span>
+      <Icon name="ChevronRight" size={13} />
+    </button>
+  );
+}
+
+export default function Sidebar(props: SidebarProps): JSX.Element {
+  const sections = buildNavSections(props);
+  return (
+    <div className={chrome.sbColumn}>
       {props.headSlot}
 
-      {/* Primary actions — Grok-style: Search + New Chat first. */}
-      <SbItem
-        icon={<SearchGlyph />}
-        label="Search"
-        meta="⌘K"
-        onClick={() => props.onSearch?.()}
-        disabled={!props.onSearch}
-      />
-      <SbItem
-        icon={<Icon name="Plus" size={15} />}
-        label="New Chat"
-        active={props.activePage === "assistant" && !props.activeConversationId}
-        disabled={!props.onNewChat && !props.onAssistant}
-        onClick={() => (props.onNewChat ?? props.onAssistant)?.()}
-        accent
-      />
-      {props.onNewApp ? (
-        <SbItem
-          icon={<PlusGlyph />}
-          label="Build new"
-          meta="⌘N"
-          onClick={() => props.onNewApp?.()}
-        />
-      ) : null}
+      <div className={chrome.sbScroll}>
+        {sections.map((section) => (
+          <div key={section.id} className={chrome.sbGroup}>
+            {section.label ? <SbSection label={section.label} /> : null}
+            {section.items.map((item) => (
+              <NavRow key={item.id} item={item} activePage={props.activePage} />
+            ))}
+          </div>
+        ))}
 
-      {/* Automations + Connectors sit above Pages for quick access. */}
-      <SbItem
-        icon={<Icon name="Bolt" size={15} />}
-        label="Automations"
-        active={props.activePage === "automations"}
-        disabled={!props.onAutomations}
-        onClick={() => props.onAutomations?.()}
-      />
-      <SbItem
-        icon={<Icon name="Plug" size={15} />}
-        label="Connectors"
-        active={props.activePage === "connectors"}
-        disabled={!props.onConnectors}
-        onClick={() => props.onConnectors?.()}
-      />
+        <HistorySection {...props} />
+      </div>
 
-      <SbSection label="Pages" />
-      <SbItem
-        icon={<HomeGlyph />}
-        label="Home"
-        active={props.activePage === "home"}
-        onClick={() => props.onHome()}
-      />
-      <SbItem
-        icon={<Icon name="Activity" size={15} />}
-        label="Insights"
-        active={props.activePage === "insights"}
-        disabled={!props.onInsights}
-        onClick={() => props.onInsights?.()}
-      />
-      <SbItem
-        icon={<Icon name="Compass" size={15} />}
-        label="Discover"
-        active={props.activePage === "discover"}
-        disabled={!props.onDiscover}
-        onClick={() => props.onDiscover?.()}
-      />
-      <SbItem
-        icon={<Icon name="CheckCircle" size={15} />}
-        label="Notifications"
-        meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
-        active={props.activePage === "approvals"}
-        disabled={!props.onApprovals}
-        onClick={() => props.onApprovals?.()}
-        trailing={
-          props.notificationsHasUnreadNotices ? (
-            <span
-              className={chrome.notificationsUnreadDot}
-              aria-label="Unread updates"
-            />
-          ) : undefined
-        }
-      />
-      <SbSection label="Operations" />
-      <SbItem
-        icon={<Icon name="Cellular" size={15} />}
-        label="Gateway"
-        active={props.activePage === "gateway"}
-        disabled={!props.onGateway}
-        onClick={() => props.onGateway?.()}
-        trailing={
-          props.gatewayStatus && props.gatewayStatus !== "unknown" ? (
-            <StatusPill tone={props.gatewayStatus === "up" ? "live" : "down"}>
-              {props.gatewayStatus}
-            </StatusPill>
-          ) : undefined
-        }
-      />
-      <SbItem
-        icon={<Icon name="Users" size={15} />}
-        label="Household"
-        active={props.activePage === "household"}
-        disabled={!props.onHousehold}
-        onClick={() => props.onHousehold?.()}
-      />
-      <SbItem
-        icon={<Icon name="Globe" size={15} />}
-        label="Vault Atlas"
-        active={props.activePage === "atlas"}
-        disabled={!props.onAtlas}
-        onClick={() => props.onAtlas?.()}
-      />
-
-      <HistorySection {...props} />
-
-      <span style={{ flex: "1", minHeight: "12px" }} />
-      {props.onWhatsNew ? (
-        <SbItem
-          icon={<Icon name="Gift" size={15} />}
-          label="What's new"
-          onClick={() => props.onWhatsNew?.()}
-        />
-      ) : null}
-      {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
-        <button
-          className={chrome.sbUpdate}
-          type="button"
-          onClick={() => props.onRelaunchToUpdate?.()}
-          disabled={props.updateReadyToInstall === false}
-        >
-          <Logo size={26} />
-          <span className={chrome.sbUpdateBody}>
-            <span className={chrome.sbUpdateTitle}>
-              {props.updatePillTitle ?? "Relaunch to update"}
+      <div className={chrome.sbFoot}>
+        <GatewayAlarm {...props} />
+        {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
+          <button
+            className={chrome.sbUpdate}
+            type="button"
+            onClick={() => props.onRelaunchToUpdate?.()}
+            disabled={props.updateReadyToInstall === false}
+          >
+            <Logo size={26} />
+            <span className={chrome.sbUpdateBody}>
+              <span className={chrome.sbUpdateTitle}>
+                {props.updatePillTitle ?? "Relaunch to update"}
+              </span>
+              <span className={chrome.sbUpdateVersion}>
+                v{props.updateVersion}
+              </span>
             </span>
-            <span className={chrome.sbUpdateVersion}>
-              v{props.updateVersion}
-            </span>
-          </span>
-          <ArrowRightGlyph />
-        </button>
-      ) : null}
-      <AccountRow {...props} />
+            <ArrowRightGlyph />
+          </button>
+        ) : null}
+        <AccountRow {...props} />
+      </div>
     </div>
   );
 }

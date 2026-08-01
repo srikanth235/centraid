@@ -117,16 +117,16 @@ export default function AtlasScreen({
       <div className={styles.head}>
         <div className={styles.title}>
           <span className={styles.titleIcon}>
-            <Icon name="Globe" size={16} />
+            <Icon name="Folder" size={16} />
           </span>
-          <h1>Vault Atlas</h1>
+          <h1>Data</h1>
         </div>
         <div className={styles.headMeta}>
           What your vault knows, where it lives, and how it connects.
         </div>
       </div>
 
-      <div className={styles.tabs} role="tablist" aria-label="Vault Atlas">
+      <div className={styles.tabs} role="tablist" aria-label="Data">
         {TABS.map((t) => (
           <button
             key={t.id}

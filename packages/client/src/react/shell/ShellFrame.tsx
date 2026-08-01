@@ -85,6 +85,11 @@ export interface ShellFrameProps {
   showChatToggle?: boolean;
   chatPaneOpen?: boolean;
   onToggleChat?: () => void;
+  /** Compact form factor — the sidebar is an overlay drawer, so it gets a
+   *  dismiss scrim and is announced as a dialog. Layout only (#667). */
+  compact?: boolean;
+  /** Dismiss the drawer. Compact only; ignored while docked. */
+  onDismissSidebar?: () => void;
 }
 
 function SidebarToggle({
@@ -188,14 +193,57 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
 
   return (
     <div className={chrome.window} data-sidebar={open ? "open" : "closed"}>
-      <aside className={chrome.sidebar}>
+      <aside
+        className={chrome.sidebar}
+        {...(props.compact
+          ? {
+              // Overlaying content makes the rail modal in spirit: name it,
+              // and hide it from the accessibility tree while it is off-screen
+              // (the CSS already takes it out of the tab order).
+              role: "dialog" as const,
+              "aria-label": "Navigation",
+              "aria-modal": open ? ("true" as const) : ("false" as const),
+              "aria-hidden": open ? undefined : ("true" as const),
+            }
+          : {})}
+      >
         <div className={chrome.tlSide}>
           <Spacer />
           <Flex />
           <SidebarToggle open onClick={props.onToggleSidebar} />
         </div>
-        <div className={chrome.sidebarInner}>{props.sidebar}</div>
+        <div
+          className={chrome.sidebarInner}
+          {...(props.compact && props.onDismissSidebar
+            ? {
+                // Picking a row dismisses the drawer. Route changes already do
+                // this in ShellApp, but a row that opens an OVERLAY instead of
+                // navigating — Search (⌘K), and anything else that stays put —
+                // would otherwise leave the rail sitting over the thing it just
+                // opened. Delegated to the one class every such row shares, so
+                // the affordances that must NOT dismiss (the vault switcher,
+                // the ••• row menu, "See all", the Archived toggle, the account
+                // menu) are excluded by simply not being `.sbItem`.
+                onClick: (event: React.MouseEvent) => {
+                  const row = (event.target as HTMLElement).closest?.(
+                    `.${chrome.sbItem}`
+                  );
+                  if (row) props.onDismissSidebar?.();
+                },
+              }
+            : {})}
+        >
+          {props.sidebar}
+        </div>
       </aside>
+      {props.compact && open ? (
+        <button
+          type="button"
+          className={chrome.scrim}
+          aria-label="Close navigation"
+          onClick={props.onDismissSidebar ?? props.onToggleSidebar}
+        />
+      ) : null}
       <div className={chrome.main}>
         <div
           className={chrome.tlMain}

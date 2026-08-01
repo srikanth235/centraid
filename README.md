@@ -206,10 +206,12 @@ docker run --rm -p 8787:8787 \
 Turborepo + Bun. **Before every push**, run the early PR gates locally so CI does not burn minutes on format/lint/type errors:
 
 ```sh
-bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
+bun run check:push     # the pre-push gate — the hook runs it for you (~55s)
 ```
 
-`check:pr` is: frozen install → `format:check` → `lint` → package policy → `typecheck` → `lint:types` → Knip → policy checks → affected tests. Vitest alone is not enough — package `typecheck` includes test files and catches TS errors tests still run under. GitHub `ci` runs `static` and `verify` in parallel (`verify` = build, native tunnel, data-plane, gateway perf, coverage), then a thin required `check` aggregator. On **main** only, `publish-report` deploys the public HTML test-health report: `https://srikanth235.github.io/centraid/test-report/main/`.
+`check:push` runs every push-tier gate **concurrently** and reports _all_ failures in one pass: affected tests, affected typecheck, `format:check`, `lint`, Knip, package policy, and the repo policy checks. Wall clock is bounded by the affected tests; everything else finishes inside that window. Vitest alone is not enough — package `typecheck` includes test files and catches TS errors tests still run under.
+
+`check:pr` is the full local mirror of the CI PR gate: `check:push` plus the four gates CI recomputes authoritatively (full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage). Run it when you want CI's answer without waiting for CI; you do not need it to push. GitHub `ci` runs `static` and `verify` in parallel (`verify` = build, native tunnel, data-plane, gateway perf, coverage), then a thin required `check` aggregator. On **main** only, `publish-report` deploys the public HTML test-health report: `https://srikanth235.github.io/centraid/test-report/main/`.
 
 ```sh
 bun run build          # all apps + packages
@@ -217,8 +219,8 @@ bun run check:fast     # edit loop: format + lint + affected typecheck
 bun run check:full     # shared infra: dependents + coverage + e2e
 bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
-bun run typecheck      # turbo typecheck + tests/ tsc (included in check:pr)
-bun run lint:types     # type-aware lint (included in check:pr)
+bun run typecheck      # turbo typecheck + tests/ tsc (check:pr; push tier uses typecheck:affected)
+bun run lint:types     # type-aware lint (check:pr and CI, not the push tier)
 bun run toolchain:doctor # non-mutating Ultracite/config drift check
 bun run ci             # alias of check:pr
 ```

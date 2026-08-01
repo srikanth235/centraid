@@ -435,9 +435,9 @@ test("10.4 — empty Discover renders without cards", async () => {
   }
 });
 
-// ─────────────────────────── §11 Insights ───────────────────────────
+// ─────────────────────────── §11 Analytics (was Insights) ───────────────────────────
 
-test("11.1 — Insights renders the spend hero", async () => {
+test("11.1 — Analytics renders the spend hero", async () => {
   gateway.state.insights = {
     windowDays: 30,
     generatedAt: Date.now(),
@@ -479,7 +479,7 @@ test("11.1 — Insights renders the spend hero", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, "Insights");
+    await gotoNav(page, "Analytics");
     await expect(page.getByTestId("insights-hero")).toBeVisible();
     await expect(page.getByTestId("insights-hero")).toContainText("$1.23");
   } finally {

@@ -13,13 +13,21 @@ import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 // `run` closure the palette invokes on Enter/click. Kept pure + deps-injected
 // so it is unit-testable without a live shell.
 
+// Labels here must match the sidebar's (navModel.ts) — the palette is the
+// keyboard route to the same destinations, and a member who reads "Devices"
+// in the rail will type "devices" here (#667). Destinations the sidebar
+// dropped (Discover, Gateway, Storage) stay listed: the palette is the
+// complete index, which is exactly what lets the rail stay short.
 const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] = [
   { label: "Home", icon: "Home", route: { kind: "home" } },
   { label: "Assistant", icon: "Sparkle", route: { kind: "assistant" } },
-  { label: "Insights", icon: "Gauge", route: { kind: "insights" } },
-  { label: "Discover", icon: "Compass", route: { kind: "discover" } },
+  { label: "Notifications", icon: "Bell", route: { kind: "approvals" } },
   { label: "Automations", icon: "Bolt", route: { kind: "automations" } },
   { label: "Connectors", icon: "Plug", route: { kind: "connectors" } },
+  { label: "Devices", icon: "Monitor", route: { kind: "household" } },
+  { label: "Data", icon: "Folder", route: { kind: "atlas" } },
+  { label: "Analytics", icon: "Activity", route: { kind: "insights" } },
+  { label: "Discover", icon: "Compass", route: { kind: "discover" } },
   { label: "Gateway", icon: "Cellular", route: { kind: "gateway" } },
   { label: "Storage", icon: "Save", route: { kind: "storage" } },
   { label: "Settings", icon: "Settings", route: { kind: "settings" } },
