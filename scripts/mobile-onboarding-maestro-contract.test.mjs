@@ -14,6 +14,7 @@ const read = (relative) => readFileSync(path.join(root, relative), "utf8");
 const ONBOARDING = "apps/mobile/src/screens/Onboarding.tsx";
 const HOME_LOADS = "tests/agent-e2e-mobile/flows/home-loads.mjs";
 const HARNESS = "tests/agent-e2e-mobile/lib/harness.mjs";
+const FIRST_RUN = "tests/agent-e2e-mobile/lib/first-run.mjs";
 
 /** Drop // line comments so stale-copy bans do not trip on deliberate mentions. */
 function stripLineComments(source) {
@@ -60,18 +61,21 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
 
 test("configureGateway opens paste, then submits with live Connect label", () => {
   const harness = read(HARNESS);
-  const configure = harness.slice(harness.indexOf("ctx.configureGateway"));
-  assert.match(configure, /id:\s*"onboarding-paste"/u);
-  assert.match(configure, /id:\s*"pairing-code-input"/u);
-  assert.match(configure, /id:\s*"onboarding-connect"/u);
+  const firstRun = read(FIRST_RUN);
+  // Paste/connect YAML lives in pasteAndConnectPairingTicketCommands (size cap).
+  assert.match(harness, /pasteAndConnectPairingTicketCommands/u);
+  assert.match(firstRun, /id:\s*"onboarding-paste"/u);
+  assert.match(firstRun, /id:\s*"pairing-code-input"/u);
+  assert.match(firstRun, /id:\s*"onboarding-connect"/u);
+  assert.match(firstRun, /eraseText:\s*2000/u);
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
   assert.doesNotMatch(
-    stripLineComments(configure),
+    stripLineComments(firstRun),
     /(?:tapOn|assertVisible|text):\s*["']?Continue with pasted code/u,
     "harness must not tap/assert the pre-scan-first primary label"
   );
-  const openPaste = configure.indexOf("onboarding-paste");
-  const submit = configure.indexOf("onboarding-connect");
+  const openPaste = firstRun.indexOf("onboarding-paste");
+  const submit = firstRun.indexOf("onboarding-connect");
   assert.ok(openPaste >= 0 && submit > openPaste);
 });
 
@@ -98,25 +102,25 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
     ui,
     /accessibilityLabel="Scan the QR code instead"[\s\S]{0,80}accessibilityRole="button"/u
   );
-  const harness = read(HARNESS);
-  assert.match(harness, /id:\s*"onboarding-paste"/u);
+  const firstRun = read(FIRST_RUN);
+  assert.match(firstRun, /id:\s*"onboarding-paste"/u);
 });
 
 test("pairing code field is focused by testID so lede text is not mistaken for the input", () => {
   const ui = read(ONBOARDING);
   assert.match(ui, /testID="pairing-code-input"/u);
-  const harness = read(HARNESS);
-  assert.match(harness, /id:\s*"pairing-code-input"/u);
+  const firstRun = read(FIRST_RUN);
+  assert.match(firstRun, /id:\s*"pairing-code-input"/u);
 });
 
 test("Connect submit is targeted by testID so Maestro does not tap the TextView", () => {
   const ui = read(ONBOARDING);
   assert.match(ui, /testID="onboarding-connect"/u);
-  const harness = read(HARNESS);
-  assert.match(harness, /id:\s*"onboarding-connect"/u);
+  const firstRun = read(FIRST_RUN);
+  assert.match(firstRun, /id:\s*"onboarding-connect"/u);
   // Must not use bare text Connect as the submit tap (matches non-clickable label).
   assert.doesNotMatch(
-    stripLineComments(harness.slice(harness.indexOf("ctx.configureGateway"))),
+    stripLineComments(firstRun),
     /tapOn:\s*\n\s*text:\s*"\^Connect\$"/u
   );
 });

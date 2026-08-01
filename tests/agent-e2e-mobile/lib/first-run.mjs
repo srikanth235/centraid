@@ -94,6 +94,106 @@ ${conditionalRetry}`;
 }
 
 /**
+ * After onboarding is showing "Connect your gateway.", open paste, enter the
+ * MAESTRO_PAIRING_TICKET env, submit Connect, and wait for profile / Done /
+ * Home (or a visible pairing error). Extracted from harness.mjs for the
+ * file-size cap and so recovery comments stay next to the YAML they describe.
+ *
+ * @param {string} homeReadyMarker HOME_READY_MARKER from the harness
+ * @param {string} dismissKeyboardOnboarding DISMISS_KEYBOARD_ONBOARDING or ""
+ */
+export function pasteAndConnectPairingTicketCommands(
+  homeReadyMarker,
+  dismissKeyboardOnboarding = DISMISS_KEYBOARD_ONBOARDING
+) {
+  const progressOrError =
+    "Connecting…|Who's using|Enter Centraid|" +
+    homeReadyMarker +
+    "|Paste a pairing ticket first|not a Centraid pairing|expired|Could not reach";
+  return `# Open paste by testID — text taps can COMPLETE without flipping showPaste
+# on iOS (30711575336) even with accessibilityRole=button.
+- tapOn:
+    id: "onboarding-paste"
+    retryTapIfNoChange: true
+# Wait for the paste field by testID — lede/placeholder text is not a reliable
+# XCUITest match on iOS (30713590856).
+- extendedWaitUntil:
+    visible:
+      id: "pairing-code-input"
+    timeout: 15000
+# Focus the pairing TextInput by testID — not the lede text that also
+# contains "Paste the one-line ticket" (empty Connect is a silent no-op).
+- tapOn:
+    id: "pairing-code-input"
+# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
+# onboarding and is erased before the pairing ticket is entered.
+- inputText: "x"
+${dismissKeyboardOnboarding}# Bare eraseText only clears 50 characters (Maestro default) — a pairing
+# ticket is ~400 chars. Always pass an explicit high count so a retype never
+# appends onto leftover bytes (Android 30714733151: doubled ticket in field).
+- eraseText: 50
+# e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
+# multiline React Native TextInput values; successful redemption below is the
+# end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
+# resolved by Maestro without persisting the live capability in this YAML.
+- inputText: \${MAESTRO_PAIRING_TICKET}
+- hideKeyboard
+# The pasted ticket grows the field to ~14 lines, which pushes the submit button
+# off screen — and Maestro matches (and "taps") off-screen elements, so the tap
+# reports COMPLETED while nothing happens and the flow dies later on an
+# unrelated assertion. Scroll it fully into view first.
+# Tap the Pressable by testID — text "^Connect$" matches the non-clickable
+# child TextView and never fires submit (Android run 30708832841).
+- scrollUntilVisible:
+    element:
+      id: "onboarding-connect"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: "onboarding-connect"
+    retryTapIfNoChange: true
+# Submit must enter the pairing path (Connecting…) or land on a post-pair
+# screen. A silent no-op leaves the ticket field filled and Connect idle
+# (Android 30713590856). Re-tap once first; only full clear+retype if still idle
+# so we never append a second ticket onto a partial erase (30714733151).
+- runFlow:
+    when:
+      notVisible: "${progressOrError}"
+    commands:
+      - tapOn:
+          id: "onboarding-connect"
+          retryTapIfNoChange: true
+- runFlow:
+    when:
+      notVisible: "${progressOrError}"
+    commands:
+      - tapOn:
+          id: "pairing-code-input"
+# e2e-lint-allow: unasserted-input — same ticket; full clear then retype so
+# RN state and the native field stay one string.
+      - eraseText: 2000
+      - inputText: \${MAESTRO_PAIRING_TICKET}
+      - hideKeyboard
+      - scrollUntilVisible:
+          element:
+            id: "onboarding-connect"
+          direction: DOWN
+          visibilityPercentage: 100
+          centerElement: true
+      - tapOn:
+          id: "onboarding-connect"
+          retryTapIfNoChange: true
+# Iroh redemption can take >90s on cold CI. Done heading is split across
+# Text nodes so match Enter Centraid / Who's using / Home. Pairing errors
+# surface here too so a bad ticket fails fast instead of timing out.
+- extendedWaitUntil:
+    visible: "Who's using|Enter Centraid|${homeReadyMarker}|not a Centraid pairing|expired|Could not reach|Paste a pairing ticket first"
+    timeout: 180000
+`;
+}
+
+/**
  * Post-pair completion: profile form, Done → Enter Centraid, then the offline
  * capability wall ("Reconnect once") if the shell still needs a live info
  * probe, then Home ready. The wall is shell-only (App.tsx active={onboarded});

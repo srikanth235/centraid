@@ -183,9 +183,10 @@ function ConnectionStep({
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
-  const [code, setCode] = useState("");
-  // Mirror into a ref so Connect always submits the latest keystrokes even if a
-  // re-render races a Maestro paste (controlled TextInput desync class of miss).
+  // Uncontrolled pairing field: Maestro/UiAutomator ACTION_SET_TEXT can fill the
+  // native EditText without firing React onChangeText on a controlled input, so
+  // Connect would submit "" while the ticket still paints (Android 30713590856 /
+  // 30714733151). defaultValue + ref keeps the visible field authoritative.
   const codeRef = useRef("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -243,6 +244,9 @@ function ConnectionStep({
         onPaired(await readSelfMemberName());
       } catch (caughtError) {
         scannedRef.current = false;
+        // Keep the ticket in the field so the person can fix and retry without
+        // re-pasting. Maestro retype recovery uses eraseText: 2000 before a
+        // second paste so it never doubles the blob (Android 30714733151).
         setError(
           caughtError instanceof Error
             ? caughtError.message
@@ -315,10 +319,14 @@ function ConnectionStep({
             // burns the full pairing wait with no error).
             testID="pairing-code-input"
             accessibilityLabel="Paste the one-line ticket"
-            value={code}
+            defaultValue=""
             onChangeText={(next) => {
               codeRef.current = next;
-              setCode(next);
+            }}
+            // Also take the native event text — some automation paths only
+            // deliver it here when the field is uncontrolled.
+            onChange={(event) => {
+              codeRef.current = event.nativeEvent.text;
             }}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
@@ -353,9 +361,7 @@ function ConnectionStep({
               // never fired submit — ticket stayed on screen for the full wait).
               testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
-              onPress={() =>
-                pairing ? undefined : submit(codeRef.current || code)
-              }
+              onPress={() => (pairing ? undefined : submit(codeRef.current))}
             />
             <Pressable
               accessibilityLabel="Scan the QR code instead"

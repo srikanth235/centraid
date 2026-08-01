@@ -24,8 +24,8 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  DISMISS_KEYBOARD_ONBOARDING,
   completeOnboardingCommands,
+  pasteAndConnectPairingTicketCommands,
   waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
@@ -461,74 +461,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}# Open paste by testID — text taps can COMPLETE without flipping showPaste
-# on iOS (30711575336) even with accessibilityRole=button.
-- tapOn:
-    id: "onboarding-paste"
-    retryTapIfNoChange: true
-# Wait for the paste field by testID — lede/placeholder text is not a reliable
-# XCUITest match on iOS (30713590856).
-- extendedWaitUntil:
-    visible:
-      id: "pairing-code-input"
-    timeout: 15000
-# Focus the pairing TextInput by testID — not the lede text that also
-# contains "Paste the one-line ticket" (empty Connect is a silent no-op).
-- tapOn:
-    id: "pairing-code-input"
-# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
-# onboarding and is erased before the pairing ticket is entered.
-- inputText: "x"
-${DISMISS_KEYBOARD_ONBOARDING}- eraseText
-# e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
-# multiline React Native TextInput values; successful redemption below is the
-# end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
-# resolved by Maestro without persisting the live capability in this YAML.
-- inputText: \${MAESTRO_PAIRING_TICKET}
-- hideKeyboard
-# The pasted ticket grows the field to ~14 lines, which pushes the submit button
-# off screen — and Maestro matches (and "taps") off-screen elements, so the tap
-# reports COMPLETED while nothing happens and the flow dies later on an
-# unrelated assertion. Scroll it fully into view first.
-# Tap the Pressable by testID — text "^Connect$" matches the non-clickable
-# child TextView and never fires submit (Android run 30708832841).
-- scrollUntilVisible:
-    element:
-      id: "onboarding-connect"
-    direction: DOWN
-    visibilityPercentage: 100
-- tapOn:
-    id: "onboarding-connect"
-    retryTapIfNoChange: true
-# Submit must enter the pairing path (Connecting…) or land on a post-pair
-# screen. A silent no-op leaves the ticket field filled and Connect idle
-# (Android 30713590856). Re-focus + retype + retap once if that happens.
-- runFlow:
-    when:
-      notVisible: "Connecting…|Who's using|Enter Centraid|${HOME_READY_MARKER}|Paste a pairing ticket first"
-    commands:
-      - tapOn:
-          id: "pairing-code-input"
-# e2e-lint-allow: unasserted-input — same ticket; re-drive RN state after a
-# desynced native fill. Successful redemption is still the end-to-end check.
-      - eraseText
-      - inputText: \${MAESTRO_PAIRING_TICKET}
-      - hideKeyboard
-      - scrollUntilVisible:
-          element:
-            id: "onboarding-connect"
-          direction: DOWN
-          visibilityPercentage: 100
-      - tapOn:
-          id: "onboarding-connect"
-          retryTapIfNoChange: true
-# Iroh redemption can take >90s on cold CI. Done heading is split across
-# Text nodes ("You're all set, " + "Mobile" + ".") so match Enter Centraid
-# / Who's using / Home instead of the full greet string.
-- extendedWaitUntil:
-    visible: "Who's using|Enter Centraid|${HOME_READY_MARKER}"
-    timeout: 180000
-`,
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
       "configure-gateway",
       {
         maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
