@@ -96,6 +96,7 @@ handoff from diagnosis to completing the governed commit and draft PR.
 | codex-019fbc6b-05b-1785574807-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 19839 | 0 | 1886464 | 3251 | 23090 | 0.5700 | 396045 | 0 | 18150656 | 50080 | feat(theme): unify token contract and improve legibility (#672) |
 | codex-019fbc6b-05b-1785574869-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 12053 | 0 | 321792 | 1416 | 13469 | 0.1318 | 408098 | 0 | 18472448 | 51496 | feat(theme): unify token contract and improve legibility (#672) |
 | codex-019fbc6b-05b-1785574961-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 19779 | 0 | 993280 | 1306 | 21085 | 0.3174 | 427877 | 0 | 19465728 | 52802 | feat(theme): unify token contract and improve legibility (#672) |
+| codex-019fbc6b-05b-1785575180-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 22157 | 0 | 1496320 | 1158 | 23315 | 0.4468 | 450034 | 0 | 20962048 | 53960 | test(client): cover teal orbit logo (#672) |
 
 ### Steering
 
