@@ -85,6 +85,9 @@
   font-family: var(--font-sans);
 }
 .appRoot[data-app-font="serif"] {
+  /* The one --font-serif use in the repo, and a deliberate identity choice:
+     "roles, not families" sanctions serif as a ROLE, and this knob rebinds the
+     app's body face to it — it is not a hardcoded family. */
   font-family: var(--font-serif);
 }
 .appRoot[data-app-font="mono"] {
@@ -197,7 +200,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 2px 20px 48px;
+  padding: 2px 20px var(--sp-7);
 }
 .content {
   position: relative;
@@ -330,8 +333,8 @@
   width: 42px;
   height: 42px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 12px;
+  background: color-mix(in oklab, var(--scrim) 56%, transparent);
+  padding: var(--sp-3);
   box-sizing: border-box;
 }
 :global(.ph-tile-audio-badge) {
@@ -347,7 +350,7 @@
   width: 54px;
   height: 54px;
   border-radius: 999px;
-  padding: 13px;
+  padding: var(--sp-3);
   background: color-mix(in oklab, var(--bg-elev) 82%, transparent);
   box-shadow: var(--shadow-sm);
 }
@@ -356,9 +359,9 @@
   right: 7px;
   bottom: 7px;
   z-index: 2;
-  padding: 2px 5px;
+  padding: 2px var(--sp-1);
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.66);
+  background: color-mix(in oklab, var(--scrim) 92%, transparent);
   color: var(--on-accent);
   font-family: var(--mono);
   font-size: 10px;
@@ -372,7 +375,7 @@
   display: none;
 }
 :global(.lightbox-faces-title) {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-2);
   color: var(--text-faint);
   font: var(--t-tiny);
   text-transform: uppercase;
@@ -384,7 +387,7 @@
   flex-wrap: wrap;
   gap: 0.375rem;
   font-size: 0.85rem;
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 :global(.lightbox-face) select {
   flex: 1 1 8rem;
@@ -442,10 +445,10 @@
   position: absolute;
   inset: 0;
   z-index: 45;
-  background: hsl(var(--app-hue) 25% 8% / 0.4);
+  background: color-mix(in oklab, var(--scrim) 56%, transparent);
 }
 .shell.isNarrow .header,
 .shell.isNarrow .scroll {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }

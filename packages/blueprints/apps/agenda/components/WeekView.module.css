@@ -29,7 +29,7 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 8px 0 7px;
+  padding: var(--sp-2) 0 7px;
   border-left: 1px solid var(--line);
 }
 .weekDow {
@@ -52,7 +52,7 @@
 }
 .weekDayHead[data-today="true"] .weekNum {
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 .weekAllday {
@@ -65,7 +65,7 @@
   font-family: var(--mono);
   font-size: 9px;
   color: var(--text-faint);
-  padding: 6px 4px;
+  padding: 6px var(--sp-1);
   text-align: right;
 }
 .weekAlldayCell {
@@ -82,10 +82,10 @@
   font-size: 11px;
   line-height: 1.4;
   text-align: left;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--ev-color);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: 1px 6px;
   white-space: nowrap;
   overflow: hidden;
@@ -158,10 +158,10 @@
   gap: 1px;
   overflow: hidden;
   text-align: left;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--ev-color);
-  border: 1px solid color-mix(in srgb, var(--ev-color) 65%, #000);
-  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--ev-color) 65%, var(--text));
+  border-radius: var(--r-sm);
   padding: 2px 6px;
   cursor: pointer;
 }

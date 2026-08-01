@@ -4,14 +4,14 @@
 .balpanel {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-bottom: 18px;
 }
 .balchip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
+  gap: var(--sp-2);
+  padding: 7px var(--sp-3);
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elev);

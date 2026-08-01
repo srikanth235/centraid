@@ -23,7 +23,7 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: 3px;
+  gap: var(--sp-1);
   align-content: start;
 }
 .empty {

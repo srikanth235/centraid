@@ -232,7 +232,7 @@ export function Sections({
         }}
       >
         <div>
-          <div style={{ font: "var(--t-strong)", fontSize: "13px" }}>
+          <div style={{ font: "var(--t-body-strong)", fontSize: "13px" }}>
             Keep in touch
           </div>
           <div
@@ -447,11 +447,11 @@ export function Sections({
                   style={{
                     borderColor: given
                       ? "color-mix(in oklab, var(--success) 30%, transparent)"
-                      : "color-mix(in oklab, var(--c-family) 30%, transparent)",
+                      : "color-mix(in oklab, var(--warning) 30%, transparent)",
                     background: given
                       ? "color-mix(in oklab, var(--success) 14%, transparent)"
-                      : "color-mix(in oklab, var(--c-family) 14%, transparent)",
-                    color: given ? "var(--success)" : "var(--c-family)",
+                      : "color-mix(in oklab, var(--warning) 14%, transparent)",
+                    color: given ? "var(--success)" : "var(--warning)",
                   }}
                   onClick={() => onToggleGift(g.gift_id)}
                 >

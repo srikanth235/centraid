@@ -13,7 +13,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   transition: background 0.1s;
@@ -38,7 +38,7 @@
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: transparent;
   padding: 0;
 }
@@ -52,7 +52,7 @@
   cursor: pointer;
 }
 .rowTitle {
-  font: var(--t-strong);
+  font: var(--t-body-strong);
   font-size: 14px;
   color: var(--text);
   overflow: hidden;
@@ -136,7 +136,7 @@
   justify-content: center;
   border: none;
   background: none;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   color: var(--text-faint);
 }
 .kebab:hover {

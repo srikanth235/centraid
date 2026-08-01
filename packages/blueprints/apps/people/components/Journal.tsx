@@ -79,7 +79,7 @@ export function Journal({
   return (
     <div className={shared.jWrap}>
       <div className={styles.compose}>
-        <div style={{ font: "var(--t-strong)", fontSize: "14px" }}>
+        <div style={{ font: "var(--t-body-strong)", fontSize: "14px" }}>
           How was today?
         </div>
         <div className={styles.moodrow}>

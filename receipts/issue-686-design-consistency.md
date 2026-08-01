@@ -337,6 +337,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785605873-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 26 | 8051 | 3223768 | 5157 | 13234 | 3.5825 | 515 | 552951 | 40818663 | 271451 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
 | claude-code-ab8b1729-92f-1785605940-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 600 | 250053 | 400 | 1002 | 0.2776 | 517 | 553551 | 41068716 | 271851 | feat(blueprints): one component vocabulary, token-driven scaffold baseline (#686 |
 | claude-code-ab8b1729-92f-1785606006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 538 | 250653 | 268 | 808 | 0.2708 | 519 | 554089 | 41319369 | 272119 | refactor(client): radius and weight token adoption, four-metric css ratchet (#68 |
+| claude-code-ab8b1729-92f-1785606078-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 6 | 1623 | 753573 | 1248 | 2877 | 0.8363 | 525 | 555712 | 42072942 | 273367 | refactor(blueprints): burn eight system apps down onto the token contract (#686) |
 
 ### Steering
 

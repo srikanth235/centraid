@@ -7,7 +7,7 @@
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   overflow: hidden;
   background: var(--bg-elev);
   transition:
@@ -42,7 +42,7 @@
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
   backdrop-filter: blur(4px);
   padding: 0;
@@ -69,7 +69,7 @@
   justify-content: center;
   border: none;
   background: none;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   color: var(--text-faint);
   opacity: 0;
   transition: opacity 0.12s;
@@ -86,7 +86,7 @@
   cursor: pointer;
 }
 .cardTitle {
-  font: var(--t-strong);
+  font: var(--t-body-strong);
   font-size: 13.5px;
   line-height: 1.3;
   overflow: hidden;

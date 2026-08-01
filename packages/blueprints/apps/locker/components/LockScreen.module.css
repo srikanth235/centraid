@@ -49,9 +49,9 @@
 .lockIn {
   width: 280px;
   text-align: center;
-  padding: 12px;
+  padding: var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   font: var(--t-body);
   font-size: 15px;
@@ -75,21 +75,21 @@
 }
 .lockBtn {
   min-width: 180px;
-  padding: 12px;
+  padding: var(--sp-3);
   border: none;
-  border-radius: 11px;
+  border-radius: var(--r-md);
   background: var(--accd);
   color: var(--on-accent, white);
-  font: var(--t-strong);
+  font: var(--t-body-strong);
 }
 .cancelBtn {
   min-width: 90px;
-  padding: 12px;
+  padding: var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text);
-  font: var(--t-strong);
+  font: var(--t-body-strong);
 }
 .lockBtn:focus-visible,
 .cancelBtn:focus-visible {

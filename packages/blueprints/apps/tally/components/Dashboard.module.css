@@ -6,8 +6,8 @@
 .balRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line);
   width: 100%;
   border-left: none;
@@ -51,13 +51,13 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
-  margin-bottom: 24px;
+  margin-bottom: var(--sp-5);
 }
 .stat {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   background: var(--bg-elev);
-  padding: 16px 18px;
+  padding: var(--sp-4) 18px;
 }
 .stat .k {
   font: var(--t-tiny);
@@ -69,22 +69,22 @@
   font: var(--font-title);
   font-size: 26px;
   font-weight: 600;
-  margin-top: 8px;
+  margin-top: var(--sp-2);
   letter-spacing: -0.02em;
 }
 .cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: var(--sp-4);
 }
 .card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   background: var(--bg-elev);
   overflow: hidden;
 }
 .cardH {
-  padding: 13px 16px;
+  padding: 13px var(--sp-4);
   border-bottom: 1px solid var(--line);
   font: var(--t-tiny);
   text-transform: uppercase;
@@ -97,7 +97,7 @@
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
-  margin: 26px 0 12px;
+  margin: 26px 0 var(--sp-3);
 }
 .groupgrid {
   display: grid;
@@ -106,9 +106,9 @@
 }
 .gcard {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   background: var(--bg-elev);
-  padding: 16px;
+  padding: var(--sp-4);
   text-align: left;
   cursor: pointer;
 }
@@ -120,10 +120,10 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .gcardName {
-  font: var(--t-strong);
+  font: var(--t-body-strong);
   font-size: 14px;
 }
 .gcardMem {
@@ -139,8 +139,8 @@
 .trashRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line);
 }
 .trashRow:last-child {
@@ -164,9 +164,9 @@
 
 .dashEmpty {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   background: var(--bg-elev);
-  padding: 40px 24px;
+  padding: 40px var(--sp-5);
   text-align: center;
 }
 .dashEmpty .t {
@@ -178,11 +178,11 @@
   font: var(--t-small);
   color: var(--text-soft);
   max-width: 380px;
-  margin: 0 auto 16px;
+  margin: 0 auto var(--sp-4);
 }
 .dashEmpty .row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   justify-content: center;
   flex-wrap: wrap;
 }

@@ -7,11 +7,13 @@
    those directly and never loads tokens.css/wall.css.
 
    The docs-SPECIFIC tokens app.css's :root added ON TOP of that layer — the
-   file-type tints (--c-pdf/--c-image/--c-doc/--c-sheet/--c-slide/--c-media, read
-   as inline `var(--c-*)` styles in Grid/List/Details/shared), plus
-   --accent-deep-fg and --custody-warn (read by the reused components/*.module.css)
+   file-type tints (--kind-pdf/--kind-image/--kind-doc/--kind-sheet/--kind-slide/
+   --kind-media, read as inline `var(--kind-*)` styles in Grid/List/Details/shared),
+   plus --accent-deep-fg (read by the reused components/*.module.css)
    — are NOT in the shared layer, so they are folded in here on .shell with the
-   same light/dark split app.css uses (trap #3). App.css's own keyframes are
+   same light/dark split app.css uses (trap #3). The tints are DERIVED from the
+   8-hue app palette; `--c-*` is the design system's RESERVED namespace, so the
+   app-local names use a `--kind-*` prefix and only ever READ `--c-*`. App.css's own keyframes are
    `kit-rise`/`kit-fade`, both kit.css globals (loaded once by the host), so no
    @keyframes are folded here. */
 
@@ -19,54 +21,57 @@
   composes: kit-app-shell kit-app-defer-drawer from global;
   /* Docs-specific tokens folded from app.css :root (light). The shared blueprint
      layer supplies everything else. File-type tints live only inside thumbnails
-     and badges; --accent-deep-fg is accent-deep read AS a foreground on a soft/
-     dark surface; --custody-warn is the amber custody dot/label tone. */
-  --c-pdf: #c2410c;
-  --c-image: #0e7490;
-  --c-doc: #4058cf;
-  --c-sheet: #4e7a40;
-  --c-slide: #9a6528;
-  --c-media: #7c3aed;
+     and badges — each kind keeps a distinct hue FAMILY, now sourced from the
+     8-hue app palette instead of hand-picked hexes. --accent-deep-fg is
+     accent-deep read AS a foreground on a soft/dark surface. The custody dot/
+     label tone is the semantic --warning token (no app-local alias). */
+  --kind-pdf: var(--c-amber);
+  --kind-image: var(--c-teal);
+  --kind-doc: var(--c-indigo);
+  --kind-sheet: var(--c-forest);
+  --kind-slide: var(--c-ochre);
+  --kind-media: var(--c-violet);
   --accent-deep-fg: var(--accent-deep);
-  --custody-warn: #9a6b1f;
   --app-drawer-width: 274px;
 }
 
 /* Dark override for the folded tokens — mirrors app.css's dark block, emitted for
    both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
-   fallback (the same two-selector shape the token layer uses). */
+   fallback (the same two-selector shape the token layer uses). The tints are the
+   SAME palette hues lifted toward the dark theme's ink so they clear the deep
+   surface; --on-accent is the theme-stable white. */
 :global(:root[data-theme="dark"]) .shell {
-  --c-pdf: #ea9a52;
-  --c-image: #4fc3d6;
-  --c-doc: #8aa0ff;
-  --c-sheet: #93c17f;
-  --c-slide: #d9ab6d;
-  --c-media: #b69cff;
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  --custody-warn: #e0a94a;
+  --kind-pdf: color-mix(in oklab, var(--c-amber) 66%, var(--text));
+  --kind-image: color-mix(in oklab, var(--c-teal) 66%, var(--text));
+  --kind-doc: color-mix(in oklab, var(--c-indigo) 66%, var(--text));
+  --kind-sheet: color-mix(in oklab, var(--c-forest) 66%, var(--text));
+  --kind-slide: color-mix(in oklab, var(--c-ochre) 66%, var(--text));
+  --kind-media: color-mix(in oklab, var(--c-violet) 66%, var(--text));
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, var(--on-accent));
 }
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .shell {
-    --c-pdf: #ea9a52;
-    --c-image: #4fc3d6;
-    --c-doc: #8aa0ff;
-    --c-sheet: #93c17f;
-    --c-slide: #d9ab6d;
-    --c-media: #b69cff;
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-    --custody-warn: #e0a94a;
+    --kind-pdf: color-mix(in oklab, var(--c-amber) 66%, var(--text));
+    --kind-image: color-mix(in oklab, var(--c-teal) 66%, var(--text));
+    --kind-doc: color-mix(in oklab, var(--c-indigo) 66%, var(--text));
+    --kind-sheet: color-mix(in oklab, var(--c-forest) 66%, var(--text));
+    --kind-slide: color-mix(in oklab, var(--c-ochre) 66%, var(--text));
+    --kind-media: color-mix(in oklab, var(--c-violet) 66%, var(--text));
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, var(--on-accent));
   }
 }
 
 /* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
    inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
-   rules aren't loaded inline, so re-express them here keyed on that wrapper. */
+   rules aren't loaded inline, so re-express them here keyed on that wrapper.
+   Each branch REBINDS the sans role to another token-owned face rather than
+   naming a family: `unset` on a custom property falls back to inheritance, i.e.
+   the :root default stack, so "sans" needs no literal of its own. */
 :global(.centraid-inline-scope[data-app-font="sans"]) {
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-sans: unset;
 }
 :global(.centraid-inline-scope[data-app-font="serif"]) {
-  --font-sans: "New York", "Iowan Old Style", Georgia, Cambria, serif;
+  --font-sans: var(--font-serif);
 }
 :global(.centraid-inline-scope[data-app-font="mono"]) {
   --font-sans: var(--mono);
@@ -103,13 +108,13 @@
 .new {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--sp-2);
   width: 100%;
-  padding: 11px 14px;
+  padding: var(--sp-3) 14px;
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -137,7 +142,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
-  padding: 5px;
+  padding: var(--sp-1);
   animation: kit-rise 0.16s var(--ease);
 }
 
@@ -151,7 +156,7 @@
   color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  padding: 16px 10px 8px;
+  padding: var(--sp-4) 10px var(--sp-2);
 }
 .folders {
   display: flex;
@@ -164,14 +169,14 @@
 .storage {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px 13px;
+  padding: var(--sp-3) var(--sp-3);
   background: var(--bg-elev);
 }
 .consentLine {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 11px 4px 2px;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-1) 2px;
   color: var(--text-faint);
 }
 .consentLine svg {
@@ -234,7 +239,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 22px 12px;
+  padding: var(--sp-4) 22px var(--sp-3);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -254,12 +259,12 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 .chips {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 .toolbarDiv {
@@ -275,7 +280,7 @@
   align-items: center;
   gap: 10px;
   margin: 0 22px 10px;
-  padding: 8px 10px 8px 16px;
+  padding: var(--sp-2) 10px var(--sp-2) var(--sp-4);
   border: 1px solid var(--selb);
   border-radius: var(--r-pill);
   background: var(--sel);
@@ -306,8 +311,8 @@
 .listHead {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 14px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
 }
@@ -353,20 +358,20 @@
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .toolbar {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .bulk {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .scroll {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .grid {
   grid-template-columns: repeat(2, 1fr);

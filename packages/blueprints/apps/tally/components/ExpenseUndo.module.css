@@ -5,10 +5,10 @@
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
   display: flex;
-  gap: 12px;
+  gap: var(--sp-3);
   justify-content: space-between;
   margin: 0 0 14px;
-  padding: 10px 12px;
+  padding: 10px var(--sp-3);
 }
 
 .notice span {

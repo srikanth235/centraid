@@ -18,8 +18,8 @@
 .captureRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: var(--sp-3);
+  padding: 14px var(--sp-4);
 }
 .captureDot {
   width: 19px;
@@ -47,8 +47,8 @@
 .captureMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px 13px 47px;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) 13px 47px;
   flex-wrap: wrap;
 }
 /* The When/Flag capture chips read in the metadata voice — mono, a notch

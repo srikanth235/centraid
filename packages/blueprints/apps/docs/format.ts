@@ -60,20 +60,25 @@ export function purgeCountdown(iso: string | null | undefined): string {
 export function typeMeta(mediaType: string | null | undefined): TypeMeta {
   const t = String(mediaType ?? "").toLowerCase();
   if (t === "application/pdf")
-    return { label: "PDF", name: "PDF document", cat: "pdf", cv: "--c-pdf" };
+    return { label: "PDF", name: "PDF document", cat: "pdf", cv: "--kind-pdf" };
   if (t.startsWith("video/"))
-    return { label: "VID", name: "Video", cat: "media", cv: "--c-media" };
+    return { label: "VID", name: "Video", cat: "media", cv: "--kind-media" };
   if (t.startsWith("audio/"))
-    return { label: "AUD", name: "Audio", cat: "media", cv: "--c-media" };
+    return { label: "AUD", name: "Audio", cat: "media", cv: "--kind-media" };
   if (t.startsWith("image/"))
-    return { label: "IMG", name: "Image", cat: "image", cv: "--c-image" };
+    return { label: "IMG", name: "Image", cat: "image", cv: "--kind-image" };
   if (
     t.includes("spreadsheet") ||
     t === "application/vnd.ms-excel" ||
     t === "text/csv" ||
     t === "application/vnd.oasis.opendocument.spreadsheet"
   )
-    return { label: "XLS", name: "Spreadsheet", cat: "sheet", cv: "--c-sheet" };
+    return {
+      label: "XLS",
+      name: "Spreadsheet",
+      cat: "sheet",
+      cv: "--kind-sheet",
+    };
   if (
     t.includes("presentation") ||
     t === "application/vnd.ms-powerpoint" ||
@@ -83,7 +88,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
       label: "PPT",
       name: "Presentation",
       cat: "slide",
-      cv: "--c-slide",
+      cv: "--kind-slide",
     };
   if (
     t.includes("word") ||
@@ -92,7 +97,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
     t === "application/rtf" ||
     t.startsWith("text/")
   )
-    return { label: "DOC", name: "Document", cat: "doc", cv: "--c-doc" };
+    return { label: "DOC", name: "Document", cat: "doc", cv: "--kind-doc" };
   return { label: "FILE", name: "File", cat: "other", cv: "--text-faint" };
 }
 

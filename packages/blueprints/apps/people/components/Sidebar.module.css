@@ -13,7 +13,7 @@
   width: 100%;
   padding: 9px 11px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   font: var(--t-body);
   background: none;
   color: var(--text-soft);
@@ -51,7 +51,7 @@
   align-items: center;
 }
 .folder .navItem {
-  padding-right: 8px;
+  padding-right: var(--sp-2);
 }
 .folderTools {
   position: absolute;
@@ -76,7 +76,7 @@
   justify-content: center;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--text-faint);
 }
 .toolBtn:hover {
@@ -90,7 +90,7 @@
   display: flex;
   gap: 6px;
   width: 100%;
-  padding: 4px 2px;
+  padding: var(--sp-1) 2px;
 }
 .folderEdit input {
   flex: 1;
@@ -99,12 +99,12 @@
   color: var(--text);
   background: var(--bg-elev);
   border: 1px solid var(--selb);
-  border-radius: 7px;
-  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  padding: 6px var(--sp-2);
 }
 .folderEdit button {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-small);

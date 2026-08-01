@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 8px 2px;
+  padding: var(--sp-2) 2px;
   border-bottom: 1px solid var(--line);
 }
 .splitrow:last-child {
@@ -19,7 +19,7 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   border: 1.5px solid var(--line-strong);
   background: none;
   display: flex;
@@ -60,7 +60,7 @@
   font: var(--t-small);
   font-size: 12px;
   color: var(--text-faint);
-  margin-top: 8px;
+  margin-top: var(--sp-2);
   text-align: right;
 }
 .splitsum.bad {

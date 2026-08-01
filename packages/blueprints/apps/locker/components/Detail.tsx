@@ -21,7 +21,7 @@ function EmptyPane() {
       <div className={styles.ic}>
         <Icon name="lock" sw={1.6} size={28} />
       </div>
-      <div style={{ font: "var(--t-strong)", color: "var(--text-soft)" }}>
+      <div style={{ font: "var(--t-body-strong)", color: "var(--text-soft)" }}>
         Select an item
       </div>
       <div style={{ font: "var(--t-small)", marginTop: "4px" }}>

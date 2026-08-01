@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 14px 12px;
+  padding: 14px var(--sp-3);
   background: var(--bg-elev);
   border-right: 1px solid var(--line);
   height: 100vh;
@@ -43,48 +43,37 @@
     display: block;
     position: fixed;
     inset: 0;
-    background: hsl(var(--app-hue) 25% 8% / 0.4);
+    background: color-mix(in oklab, var(--scrim) 56%, transparent);
     z-index: 35;
   }
 }
+/* The sidebar identity block is the shared shell pattern verbatim — compose the
+   kit vocabulary instead of restating it (only the mark's on-fill ink differs
+   from the kit default). */
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 2px 4px 12px;
+  composes: kit-app-brand from global;
 }
 .brandMark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--accent-deep);
+  composes: kit-app-brand-mark from global;
   color: var(--on-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 .brandText {
-  min-width: 0;
-  flex: 1;
+  composes: kit-app-brand-text from global;
 }
 .brandName {
-  font: var(--t-body-strong);
-  letter-spacing: -0.01em;
+  composes: kit-app-brand-name from global;
 }
 .brandTag {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--text-faint);
+  composes: kit-app-brand-tag from global;
 }
 .uploadBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--sp-2);
   width: 100%;
   padding: 10px 14px;
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
@@ -105,7 +94,7 @@
 }
 .navShelves {
   margin-top: 6px;
-  padding-top: 8px;
+  padding-top: var(--sp-2);
   border-top: 1px solid var(--line);
 }
 .navItem {
@@ -113,7 +102,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 9px;
+  padding: var(--sp-2) var(--sp-2);
   border: none;
   border-radius: var(--r-sm);
   background: none;
@@ -194,9 +183,9 @@
 .newAlbum {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--sp-2);
   width: 100%;
-  padding: 8px 9px;
+  padding: var(--sp-2) var(--sp-2);
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-sm);
   background: none;
@@ -212,7 +201,7 @@
 .tagRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--sp-1);
   padding: 0 2px;
 }
 :global(.kit-chip).tagChip {
@@ -226,7 +215,7 @@
 .storage {
   border: 1px solid var(--line);
   border-radius: var(--r-card);
-  padding: 10px 12px;
+  padding: 10px var(--sp-3);
   background: var(--bg-elev);
 }
 .storageTop {
@@ -234,7 +223,7 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
   color: var(--text-faint);
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-1);
 }
 .storageLabel {
   font: var(--t-small);
@@ -243,8 +232,8 @@
 .trustLine {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px 3px 2px;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-1) 2px;
   color: var(--text-faint);
 }
 .trustLine span:last-child {
