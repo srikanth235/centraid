@@ -16,8 +16,37 @@ export const BRAND = "#3EC8B4";
 // only overrides it once the owner picks a different one (#608 group P).
 // The base accent is BRAND itself (see above); the ramp extends from it.
 export const ACCENT_LIGHT = "#62D6C6";
-export const ACCENT_DEEP = "#2AA593";
 export const ACCENT_MIDNIGHT = "#12645A";
+
+// The accent as a FILLED surface — the primary button, the brand mark, the
+// pressed chip. This rung is the one place the accent carries text, so it is
+// not a free hand-pick: it is solved so `--text-inv` clears AA **on** it.
+//
+// The old `#2AA593` was a lightness nudge off BRAND and measured 3.04:1 under
+// white — a real WCAG 1.4.3 failure the `@google/design.md` linter surfaced
+// (#686 F3). CSS has no shipped way to choose the ink from the background
+// (`color-contrast()` is unimplemented and `color-mix()` cannot branch), and
+// an app may retune the accent to any of the eight palette hues, so the FILL
+// is what moves: `accentFillShade()` in `../color.ts` walks BRAND down its own
+// hue to the lightest shade that clears 4.8:1. Saturation and hue are
+// untouched — this is still unmistakably the brand teal, one stop before
+// `--accent-midnight`.
+//
+// The two ramps take OPPOSITE halves of the same pair, because `--text-inv`
+// itself flips: near-white (#F4F5F7) on light, near-black (#141820) on dark.
+// So the light ramp fills deep and the dark ramp fills lifted — 4.91:1 and
+// 7.16:1 respectively. `contrast.test.ts` measures both off the emitted CSS.
+export const ACCENT_DEEP = "#22776B";
+export const ACCENT_DEEP_DARK = "#34B7A4";
+
+// Ink for a FULLY SATURATED accent or a media scrim — the photo lightbox
+// chrome, the capture overlay, an `--accent`-filled badge. Theme-independent
+// white, because those surfaces are dark in both themes (a photo, a 52%
+// scrim). It is NOT the ink for `--accent-deep`: that pair flips per theme
+// and is `--text-inv`. The shell never emitted this name, so the five
+// `var(--on-accent)` rules in `packages/client` resolved to nothing and
+// inherited the surrounding ink (#686 F3).
+export const ON_ACCENT = "#FFFFFF";
 
 // BRAND as TEXT. It is legible as a button face with white on it, and as text
 // on the dark ramp (9.4:1), but on a near-white surface it lands at 2.0:1 —
@@ -123,3 +152,11 @@ export interface Theme {
   /** App-icon palette — same hues across themes by design. */
   palette: Palette;
 }
+
+// Motion. One easing curve for the whole product: a calm, instrument-grade
+// ease-out that both emitters publish as `--ease`. Shell and blueprint
+// surfaces must not spell this role twice, so the literal lives here and
+// nowhere else. It sits with the brand constants rather than in its own
+// module because every extra module in this package widens the shell
+// barrel's load graph (oxlint `no-barrel-file`).
+export const EASE = "cubic-bezier(0.2, 0.7, 0.3, 1)";

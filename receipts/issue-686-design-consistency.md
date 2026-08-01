@@ -20,7 +20,9 @@
 - [x] D2 mobile color opt-outs migrated/waived
 - [x] D3 post-generation CSS validation for agent apps
 - [x] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
-- [x] F1 Root `DESIGN.md` per the getdesign.md convention (deepened: conforms to the official google-labs-code/design.md spec, `@google/design.md` linter wired)
+- [x] F1 Root `DESIGN.md` conforming to the official google-labs-code/design.md spec + `@google/design.md` linter wired
+- [x] F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)
+- [x] F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)
 
 ## Decisions (orchestrator recommendations, per user directive)
 
@@ -30,6 +32,7 @@
 - **Photos/docs "theater stage" gap:** 3 residual `hsl(var(--app-hue) 25% 4%)` backdrops exist because the contract has no opaque near-black `--stage` token; follow-up candidate for `packages/design`.
 - **kit.css itself still hardcodes type/spacing px** (e.g. `.kit-btn font-size: 0.8125rem`) — the served component layer is the remaining half of full token purity; now visible in the budget (80 rawFontSize in kit) and left as ratcheted debt.
 - **Consolidation (user direction): one canonical design document.** `docs/design-language.md` folded into root `DESIGN.md` (its unique content — three-lowerings note, `font` shorthand family-reset caveat, serif role — absorbed; every reference repointed: `AGENTS.md`, `docs/decisions.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`) and deleted. `.design-sync/` deleted entirely (user: it no longer makes sense; nothing in the build/test graph reads it) along with its `.gitignore` entries.
+- **`EASE` rehomed, `motion.ts` deleted.** A dedicated module for one constant pushed `packages/client/src/index.ts` to 101 modules and tripped oxlint `no-barrel-file` (threshold 100). Rather than weaken the rule, `EASE` moved into `packages/design/src/themes/shared.ts` beside the other measured design constants — no new graph node, still exactly one spelling of the curve. `DESIGN.md` updated to point at the new home. `ACCENT_DEEP_DARK` dropped from the `themes/index.ts` re-export (knip: consumed only inside `themes/centraid.ts`).
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -219,9 +222,24 @@
   - `packages/blueprints/apps/tasks/components/Sidebar.module.css`
   - `packages/blueprints/apps/tasks/components/shared.module.css`
 
-- **F1 Root `DESIGN.md` per the getdesign.md convention (deepened: conforms to the official google-labs-code/design.md spec, `@google/design.md` linter wired)** — root `DESIGN.md` rewritten to the official spec: YAML front matter (46 colors incl. both theme ramps with the dark `--bg-l` anchor resolved to hex, 7 typography roles, 5 rounded, 7 spacing, 46 component entries; `primary` aliased to brand via token ref) + canonical section order (Overview · Colors · Typography · Layout · Elevation & Depth · Shapes · Components · Do's and Don'ts). `@google/design.md@0.4.0` pinned exact in root `package.json` devDependencies (`bun.lock` updated); new `lint:design-md` script wired into the `check:push`/`check:pr`/`check:full` gate chain next to `lint:design-tokens` (red-capable, proven on a broken token ref). `packages/design/src/design-md.test.ts` rewritten to parse the front matter and pin 16 checks directly against the TS token source (red-capable, proven on a radii change). `docs/toolchain.md` gains the owner + command-contract rows. The linter surfaced a REAL finding: `--on-accent: #ffffff` fails WCAG AA on the accent fills (3.04:1 / 2.07:1) — documented as a Known finding in `DESIGN.md` and fixed in a follow-up commit on this branch. Also `packages/blueprints/apps/tasks/Chrome.module.css` — restored one `var(--on-accent)` substitution that an orchestrator red-capability `git restore` had accidentally reverted.
+- **F1 Root `DESIGN.md` conforming to the official google-labs-code/design.md spec + `@google/design.md` linter wired** — root `DESIGN.md` rewritten to the official spec: YAML front matter (46 colors incl. both theme ramps with the dark `--bg-l` anchor resolved to hex, 7 typography roles, 5 rounded, 7 spacing, 46 component entries; `primary` aliased to brand via token ref) + canonical section order (Overview · Colors · Typography · Layout · Elevation & Depth · Shapes · Components · Do's and Don'ts). `@google/design.md@0.4.0` pinned exact in root `package.json` devDependencies (`bun.lock` updated); new `lint:design-md` script wired into the `check:push`/`check:pr`/`check:full` gate chain next to `lint:design-tokens` (red-capable, proven on a broken token ref). `packages/design/src/design-md.test.ts` rewritten to parse the front matter and pin 16 checks directly against the TS token source (red-capable, proven on a radii change). `docs/toolchain.md` gains the owner + command-contract rows. The linter surfaced a REAL finding: `--on-accent: #ffffff` fails WCAG AA on the accent fills (3.04:1 / 2.07:1) — documented as a Known finding in `DESIGN.md` and fixed in a follow-up commit on this branch. Also `packages/blueprints/apps/tasks/Chrome.module.css` — restored one `var(--on-accent)` substitution that an orchestrator red-capability `git restore` had accidentally reverted.
 
-- **Consolidation** — deleted `docs/design-language.md` (folded into `DESIGN.md`) and `.design-sync/conventions.md`, `.design-sync/desktop.conventions.md`, `.design-sync/config.json`, `.design-sync/desktop.config.json` (directory removed); `.gitignore` design-sync/ds-bundle entries dropped; references repointed in `AGENTS.md`, `docs/decisions.md`, `DESIGN.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`.
+- **F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)** — deleted `docs/design-language.md` (folded into `DESIGN.md`) and `.design-sync/conventions.md`, `.design-sync/desktop.conventions.md`, `.design-sync/config.json`, `.design-sync/desktop.config.json` (directory removed); `.gitignore` design-sync/ds-bundle entries dropped; references repointed in `AGENTS.md`, `docs/decisions.md`, `DESIGN.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`.
+
+- **F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)** — the filled primary carried `--on-accent: #FFFFFF` on `--accent-deep`: 3.04:1 at rest, 2.07:1 on hover in the shell, and 3.49:1 / 1.98:1 at the worst palette hue on the app surface. A fixed ink cannot serve eight retunable hues and CSS cannot pick one (`color-contrast()` unimplemented), so the FILL moved and the button's ink became `--text-inv`, which already flips per theme. Shell rungs are now SOLVED rather than offset (`accentFillShade()` beside `accentTextShade()` in `src/color.ts`), so an owner-picked accent gets a legible button too; app rungs are the same `color-mix()` retuned (62% over a near-black hue anchor on light, 70% under a near-white one on dark). `.kit-btn.primary:hover` stops brightening — it steps the fill 12% toward `--text`, away from its own ink, so a hover can only raise the ratio. Seven further accent-deep fills in the kit took the same re-ink — the app brand mark, the active chip, the empty-state CTA, the user bubble, the ask send button, the ask icon button and the ask-applied dot, all of which painted the NORMAL `--text` (or `--on-accent`) on a filled accent. `--on-accent` stays white and keeps its real role (saturated accent + media stage) and is now EMITTED by the shell, which never declared it — five `var(--on-accent)` rules in `packages/client` had been resolving to nothing. Measured grid (all 8 palette hues + both teals × both themes, rest and hover) is in `DESIGN.md`'s Colors section and recomputed from the emitted CSS by `contrast.test.ts`, which grew an oklab `color-mix()` evaluator so a hue-parameterised fill can be measured at all; both new guards proven red-capable. `lint:design-md` is 0 errors / 0 warnings. `apps/mobile/src/kit/theme/tokens.generated.ts` is unchanged — the RN lowering skips `color-mix()`, so no accent-fill token reaches it. Files:
+  - `DESIGN.md`
+  - `packages/design/src/color.ts`
+  - `packages/design/src/themes/shared.ts`
+  - `packages/design/src/themes/centraid.ts`
+  - `packages/design/src/themes/index.ts`
+  - `packages/design/src/css.ts`
+  - `packages/design/src/contract.ts`
+  - `packages/design/src/blueprint.ts`
+  - `packages/design/kit/kit.css`
+  - `packages/design/src/contrast.test.ts`
+  - `packages/design/src/color-accent.test.ts`
+  - `packages/design/src/design-md.test.ts`
+  - `packages/client/src/react/shell/appearance.ts`
 
 ## Out of scope
 
@@ -358,6 +376,9 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785607061-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 3680 | 281343 | 215 | 3897 | 0.3381 | 639 | 632945 | 57158262 | 321472 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
 | claude-code-ab8b1729-92f-1785607135-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 802 | 570046 | 1060 | 1866 | 0.6331 | 643 | 633747 | 57728308 | 322532 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
 | claude-code-ab8b1729-92f-1785607352-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 276280 | 6187703 | 14111 | 290435 | 5.1736 | 687 | 910027 | 63916011 | 336643 | docs(design): DESIGN.md becomes the single canonical design document (#686)Folds |
+| claude-code-ab8b1729-92f-1785608039-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 28 | 490654 | 3347224 | 8546 | 499228 | 4.9540 | 715 | 1400681 | 67263235 | 345189 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
+| claude-code-ab8b1729-92f-1785608166-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 839 | 276697 | 211 | 1052 | 0.1489 | 717 | 1401520 | 67539932 | 345400 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
+| claude-code-ab8b1729-92f-1785609891-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 98 | 40235 | 14289478 | 25612 | 65945 | 8.0370 | 815 | 1441755 | 81829410 | 371012 | fix(design): make the filled primary button clear WCAG AA on every accent (#686) |
 
 ### Steering
 

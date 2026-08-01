@@ -6,10 +6,9 @@
 
 import { spacing } from "./density";
 import { library } from "./library";
-import { EASE } from "./motion";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { BRAND, themes } from "./themes";
+import { BRAND, EASE, ON_ACCENT, themes } from "./themes";
 import type { Theme, ThemeName } from "./themes";
 import { fontStacks, marketingType, type, typeShorthand } from "./typography";
 
@@ -82,6 +81,11 @@ export function toCss(): string {
   staticProps["--ease"] = EASE;
   // Brand teal — theme-independent, matches the logo / app-icon SVGs.
   staticProps["--brand"] = BRAND;
+  // Ink for a saturated-accent or scrim surface. Theme-independent for the
+  // same reason `--brand` is: the surfaces it lands on (a photo, a 52% scrim,
+  // an `--accent` badge) are dark in both themes. The ink for `--accent-deep`
+  // is `--text-inv`, which DOES flip — see themes/shared.ts.
+  staticProps["--on-accent"] = ON_ACCENT;
   // Typography — web font stacks + the semantic type scale as CSS `font`
   // shorthands (`font: var(--t-title)`). camelCase keys emit kebab-case
   // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).

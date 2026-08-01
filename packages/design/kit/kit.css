@@ -15,6 +15,9 @@
      --bg-elev   card / raised fill
      --line      hairline border
      --text      primary ink            --text-soft     secondary ink
+     --text-inv  ink ON an --accent-deep fill (flips per theme; NOT
+                 --on-accent, which is the fixed white for saturated
+                 accent + scrim surfaces)
      --accent    per-app accent (may be overridden by --app-color)
 
    Optional tokens the redesigned apps ALSO define — kit degrades gracefully
@@ -67,7 +70,7 @@
   height: 30px;
   border-radius: var(--app-brand-radius, 8px);
   background: var(--app-brand-background, var(--accent-deep));
-  color: var(--text);
+  color: var(--text-inv);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -657,16 +660,27 @@ kit-reference-strip,
   opacity: 0.55;
   cursor: default;
 }
+/* The filled primary is the one control where the accent carries text, so the
+   pair is `--accent-deep` + `--text-inv` — NOT `--on-accent`. `--accent-deep`
+   is solved per theme against `--text-inv` (deep under near-white ink on the
+   light ramp, lifted under near-black ink on the dark one); `--on-accent` is
+   the fixed white for saturated/scrim surfaces and fails here at every hue
+   (#686 F3).
+
+   Hover steps the fill 12% toward `--text`, i.e. always AWAY from the ink it
+   carries — darker on light, lighter on dark — so the state can only raise
+   the measured ratio. The old `filter: brightness(1.08)` moved one direction
+   regardless of theme and cost the light ramp ~20% of its luminance headroom. */
 .kit-btn.primary {
   border-color: transparent;
   background: var(--accent-deep);
-  color: var(--on-accent);
+  color: var(--text-inv);
   font-weight: 600;
 }
 .kit-btn.primary:hover {
   border-color: transparent;
-  color: var(--on-accent);
-  filter: brightness(1.08);
+  background: color-mix(in oklab, var(--accent-deep) 88%, var(--text));
+  color: var(--text-inv);
 }
 .kit-btn.primary:active {
   transform: scale(0.98);
@@ -869,7 +883,7 @@ kit-reference-strip,
 .kit-chip[data-active="true"] {
   background: var(--accent-deep);
   border-color: transparent;
-  color: var(--on-accent);
+  color: var(--text-inv);
   font-weight: 500;
 }
 .kit-chip.quiet[aria-pressed="true"],
@@ -1152,7 +1166,7 @@ kit-reference-strip,
   border: none;
   border-radius: 10px;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font-weight: 600;
   font-size: 12.5px;
   padding: 9px 16px;
@@ -1487,7 +1501,7 @@ kit-reference-strip,
 .kit-msg.user {
   align-self: flex-end;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   border-bottom-right-radius: 0.35rem;
 }
 .kit-msg.ai {
@@ -1785,7 +1799,7 @@ kit-reference-strip,
   border: none;
   border-radius: 0.5rem;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
@@ -1928,7 +1942,7 @@ kit-reference-strip,
   border: none;
   border-radius: 999px;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -2125,7 +2139,7 @@ kit-reference-strip,
   height: 1.3rem;
   border-radius: 50%;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -18,6 +18,7 @@ const shellStatic = [
   ...Object.keys(spacing).map((key) => `--sp-${key}`),
   "--ease",
   "--brand",
+  "--on-accent",
   ...Object.keys(fontStacks).map((key) => `--font-${key}`),
   ...Object.keys({ ...type, ...marketingType }).map(
     (key) => `--t-${kebab(key)}`

@@ -153,7 +153,16 @@ export function applyPrefsToDocument(
     prefs.accent === undefined ? undefined : ACCENT_PALETTE[prefs.accent];
   setOrClear(html, "--accent", swatch?.accent);
   setOrClear(html, "--accent-light", swatch?.light);
-  setOrClear(html, "--accent-deep", swatch?.deep);
+  // `--accent-deep` is the FILLED rung, and the ink it carries (`--text-inv`)
+  // flips per theme — near-white on light, near-black on dark. So the override
+  // has to flip with it, exactly as `--accent-text` below does: the deepened
+  // shade under light ink, the lightened one under dark ink. Writing `deep`
+  // unconditionally put a dark fill under dark ink on the dark ramp (#686 F3).
+  setOrClear(
+    html,
+    "--accent-deep",
+    prefs.theme === "dark" ? swatch?.light : swatch?.deep
+  );
   // The accent-as-TEXT rung has to move with the accent, or an owner who picks
   // rose gets rose buttons and teal links. On the dark ramp a saturated accent
   // is already legible on near-black, so only light needs the deepened shade —

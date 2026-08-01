@@ -8,6 +8,9 @@ import { accentRamp, contrastRatio, parseColor, rgbToHsl } from "./color";
 import { palette } from "./palette";
 import { ACCENT_DEEP, ACCENT_LIGHT, ACCENT_TEXT_LIGHT, BRAND } from "./themes";
 
+/** `--text-inv` on the light ramp — the ink a filled accent surface carries. */
+const LIGHT_INVERSE_INK = "#F4F5F7";
+
 const hueOf = (value: string): number => rgbToHsl(parseColor(value).rgb)[0];
 const lightnessOf = (value: string): number =>
   rgbToHsl(parseColor(value).rgb)[2];
@@ -30,10 +33,25 @@ describe("derived accent ramps", () => {
     }
   });
 
-  test.each(bases)("%s orders light > accent > deep", (_name, base) => {
+  test.each(bases)("%s orders light > accent >= deep", (_name, base) => {
     const ramp = accentRamp(base);
     expect(lightnessOf(ramp.light)).toBeGreaterThan(lightnessOf(ramp.accent));
-    expect(lightnessOf(ramp.deep)).toBeLessThan(lightnessOf(ramp.accent));
+    // `deep` is SOLVED, not offset: it is the lightest shade of the base that
+    // can carry `--text-inv` at AA, so an already-dark base (`--c-slate`) is
+    // its own fill and the rung is an equality rather than a step.
+    expect(lightnessOf(ramp.deep)).toBeLessThanOrEqual(
+      lightnessOf(ramp.accent)
+    );
+  });
+
+  test.each(bases)("%s carries the inverse ink on its fill", (_name, base) => {
+    // The property that made `deep` a solved rung: an owner can pick any of
+    // these five accents, and `applyPrefsToDocument` writes the pick straight
+    // into `--accent-deep`, which the filled primary button paints. A ramp
+    // whose `deep` misses AA ships an illegible button for that pick.
+    expect(
+      contrastRatio(LIGHT_INVERSE_INK, accentRamp(base).deep)
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   test.each(bases)(

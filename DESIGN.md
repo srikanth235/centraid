@@ -10,7 +10,8 @@ colors:
   brand: "#3EC8B4"
   accent: "#3EC8B4"
   accent-light: "#62D6C6"
-  accent-deep: "#2AA593"
+  accent-deep: "#22776B"
+  accent-deep-dark: "#34B7A4"
   accent-midnight: "#12645A"
   accent-text: "#0F7A6C"
   on-accent: "#FFFFFF"
@@ -121,16 +122,19 @@ components:
     padding: "{spacing.2}"
   kit-btn-primary:
     backgroundColor: "{colors.accent-deep}"
-    textColor: "{colors.on-accent}"
+    textColor: "{colors.light-text-inv}"
     typography: "{typography.body-strong}"
     rounded: "{rounded.md}"
     padding: "{spacing.2}"
   kit-btn-primary-hover:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-  kit-btn-primary-pressed:
-    backgroundColor: "{colors.accent-midnight}"
-    textColor: "{colors.on-accent}"
+    backgroundColor: "{colors.accent-deep}"
+    textColor: "{colors.light-text-inv}"
+  kit-btn-primary-dark:
+    backgroundColor: "{colors.accent-deep-dark}"
+    textColor: "{colors.dark-text-inv}"
+    typography: "{typography.body-strong}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.2}"
   kit-badge-new:
     backgroundColor: "{colors.accent-light}"
     textColor: "{colors.dark-text-inv}"
@@ -235,6 +239,11 @@ components:
     backgroundColor: "{colors.c-teal}"
   kit-avatar-violet:
     backgroundColor: "{colors.c-violet}"
+  kit-chart-series:
+    backgroundColor: "{colors.accent}"
+  kit-media-stage:
+    backgroundColor: "{colors.dark-bg-app}"
+    textColor: "{colors.on-accent}"
   kit-scrim:
     backgroundColor: "{colors.light-scrim}"
     textColor: "{colors.light-text-inv}"
@@ -333,13 +342,34 @@ Accent ramp derived from brand, all four exposed as tokens:
 | --- | --- | --- |
 | `--accent` | `#3EC8B4` | FAB, sparkle, primary CTA, focus ring |
 | `--accent-light` | `#62D6C6` | "new" badges, hovered active rows |
-| `--accent-deep` | `#2AA593` | pressed states, depth |
+| `--accent-deep` | `#22776B` light / `#34B7A4` dark | the accent as a FILLED surface — primary button, brand mark, pressed chip. Carries `--text-inv`, so it is solved per theme rather than picked: 4.91:1 and 7.16:1. |
 | `--accent-midnight` | `#12645A` | deepest rung |
 | `--accent-text` | `#0F7A6C` (light theme) | brand-as-text; raw brand is 2.0:1 on near-white and fails at any size. 5.1:1 on `--bg`. |
 
-Derive tints with `accentRamp()`. Do not hand-pick.
+Derive tints with `accentRamp()`. Do not hand-pick — `deep` and `text` are **solved** rungs (`accentFillShade()` / `accentTextShade()` in `src/color.ts`), each walking the base down its own hue to the lightest shade that clears its floor, so an owner-picked accent gets a legible button and a legible link for free.
 
-**Known finding.** `bun run lint:design-md` reports two `contrast-ratio` warnings against `kit-btn-primary` and `kit-btn-primary-hover`: `--on-accent` is `#FFFFFF` (see `src/blueprint.ts`), which lands at 3.04:1 on `--accent-deep` and 2.07:1 on `--accent`. That is a real gap, not a modelling artefact — the filled primary button is the one place the accent carries text. It is left visible rather than papered over; the fix is a deepened `--on-accent` or a deepened accent fill, tracked as a design-token debt item. Warnings do not fail the gate; errors do.
+**Two inks, two roles.** `--text-inv` is the ink on a `--accent-deep` fill; it flips per theme (`#F4F5F7` / `#141820`), which is why the fill flips with it. `--on-accent` is the fixed white for a _saturated_ accent or a scrim — a photo lightbox, a `--accent` badge — surfaces that are dark in both themes. They are not interchangeable.
+
+**Fixed: the filled primary button (#686 F3).** `--accent-deep` used to be a lightness nudge off brand (`#2AA593`) painted under `--on-accent: #FFFFFF`, which measured **3.04:1** at rest and **2.07:1** on hover — a WCAG 1.4.3 failure the `@google/design.md` linter surfaced, and worse on the app surface, where `--accent-deep` was a `color-mix()` over a runtime hue and fell to **3.49:1** under `--c-amber` and **1.98:1** in dark.
+
+A fixed ink cannot be right for every hue (amber wants dark ink, violet wants light) and CSS has no shipped way to choose one — `color-contrast()` is unimplemented, `color-mix()` cannot branch. So the **fill** moved, per theme, and the button's ink became `--text-inv`, which already flips. The shell rungs are solved in TypeScript; the app rungs are the same `color-mix()` machinery retuned (`62%` accent over a near-black hue anchor on light, `70%` under a near-white one on dark). Hover no longer brightens: it steps the fill 12% toward `--text`, i.e. always _away_ from its own ink, so a hover can only raise the ratio.
+
+Measured against the ink each surface actually carries — `packages/design/src/contrast.test.ts` recomputes this grid from the emitted CSS on every run:
+
+| Accent               | Light fill | rest  | hover | Dark fill | rest | hover |
+| -------------------- | ---------- | ----- | ----- | --------- | ---- | ----- |
+| brand / default teal | `#2A7E71`  | 4.86  | 5.68  | `#81D8C8` | 9.05 | 9.49  |
+| `--c-amber`          | `#906128`  | 5.35  | 6.16  | `#EFB67A` | 8.55 | 9.06  |
+| `--c-forest`         | `#3B5A31`  | 7.80  | 8.61  | `#88AB7D` | 5.88 | 6.54  |
+| `--c-indigo`         | `#31428A`  | 9.22  | 10.10 | `#7A93E9` | 5.49 | 6.22  |
+| `--c-ochre`          | `#724F29`  | 7.33  | 8.17  | `#CA9F75` | 6.41 | 7.09  |
+| `--c-rose`           | `#8E3747`  | 7.53  | 8.45  | `#F08897` | 6.63 | 7.33  |
+| `--c-slate`          | `#394253`  | 10.11 | 10.90 | `#858FA1` | 4.89 | 5.62  |
+| `--c-teal`           | `#206762`  | 6.61  | 7.38  | `#73BBB4` | 6.83 | 7.48  |
+| `--c-violet`         | `#4D3988`  | 9.31  | 10.18 | `#9C89E6` | 5.51 | 6.23  |
+| shell chrome         | `#22776B`  | 4.91  | 5.82  | `#34B7A4` | 7.16 | 7.92  |
+
+Every cell clears 4.5:1, the binding hues are the brand teal on light (4.86) and `--c-slate` on dark (4.89), and no fill exceeds 11:1 — the guard that stops "darken until it passes" from turning every button black. Each fill also clears 3:1 against the card behind it (4.7:1 at worst), which is why the dark ramp lifts rather than deepens: on a 15%-lightness surface, "dark enough for white ink" and "separated from the background" have no overlap.
 
 ### Semantic states
 
@@ -354,6 +384,8 @@ Not accents; never used for emphasis.
 ### App-icon palette
 
 Eight saturated hues that read on graphite, exposed as `--c-<name>`: `amber #E89A3C` · `forest #5C8A4E` · `indigo #4E68DD` · `ochre #B47B3F` · `rose #E55772` · `slate #5C677D` · `teal #2EA098` · `violet #7C5BD9`.
+
+`kit-chart-series` is the same kind of entry: `--accent` painted as an SVG mark (`.kit-chart-barrect`, `.kit-chart-line`), never as a text surface. `kit-media-stage` is the one place `--on-accent` is recorded — a photo lightbox or slideshow is a fixed near-black stage in both themes, so its chrome takes the fixed white rather than the theme's inverse ink.
 
 These are icon fills, not text surfaces — the `kit-avatar-*` component entries carry `backgroundColor` only. An avatar that must render initials uses `kit-avatar-fallback` (slate + inverse ink), the one pairing tuned to clear AA.
 
@@ -403,7 +435,7 @@ Depth reads through surface lightness before it reads through shadow: `--bg-sunk
 
 ### Motion
 
-- One curve for the whole product: **`--ease: cubic-bezier(0.2, 0.7, 0.3, 1)`** — a calm, instrument-grade ease-out. The literal lives in `src/motion.ts` and nowhere else.
+- One curve for the whole product: **`--ease: cubic-bezier(0.2, 0.7, 0.3, 1)`** — a calm, instrument-grade ease-out. The literal lives in `src/themes/shared.ts` and nowhere else.
 - **Standard transitions ≤ 200ms.** Anything longer needs a reason a member could name.
 - Motion animates state changes and entrances. Nothing loops; nothing draws attention to itself while idle.
 
@@ -421,7 +453,7 @@ Canonical and only copy of the kit: `packages/design/kit/kit.css`. Apps do not c
 
 **Custom elements**: `<kit-avatar>`, `<kit-bar-chart>`, `<kit-line-chart>`, `<kit-mention-chip>`, `<kit-meter>`, `<kit-reference-strip>`, `<kit-skeleton>`, `<kit-toast>`.
 
-**Tokens every `app.css` MUST define**: `--bg-elev`, `--line`, `--text`, `--text-soft`, `--accent`. Optional, degrading gracefully when absent: `--bg-sunken`, `--line-strong`, `--text-faint`, `--radius`, `--shadow-md`, `--accent-soft`.
+**Tokens every `app.css` MUST define**: `--bg-elev`, `--line`, `--text`, `--text-inv`, `--text-soft`, `--accent`. Optional, degrading gracefully when absent: `--bg-sunken`, `--line-strong`, `--text-faint`, `--radius`, `--shadow-md`, `--accent-soft`.
 
 The `components:` front matter is a representative slice, not the full kit — it records the contrast pair, type role, radius, and padding rung each family binds, so an agent can check its own work without reading `kit.css`.
 

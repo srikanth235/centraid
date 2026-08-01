@@ -159,23 +159,34 @@ export function contrastRatio(foreground: string, background: string): number {
 // ── Accent ramps ───────────────────────────────────────────────────────────
 
 export interface AccentRamp {
-  /** The accent as a fill — buttons, the FAB, focus rings. */
+  /** The accent at full saturation — the FAB, focus rings, selection edges. */
   accent: string;
-  /** Lighter tint for hover / "new" badges. */
+  /** Lighter tint for "new" badges, and the FILLED rung on the dark ramp,
+   *  where the inverse ink is near-black and the fill has to be the light
+   *  half of the pair. */
   light: string;
-  /** Darker shade for pressed states and depth. */
+  /** The accent as a FILLED surface on the light ramp: solved so `--text-inv`
+   *  clears AA on it (see `accentFillShade`). */
   deep: string;
   /** The accent as TEXT on a light surface. See `LIGHT_TEXT_SURFACE`. */
   text: string;
 }
 
 const LIGHT_SHIFT = 0.1;
-const DEEP_SHIFT = -0.11;
 
 /** The lightest surface an accent can be painted as text on (`--bg`). Text
  *  has to clear AA against it, so it is the one the shade is solved for. */
 const LIGHT_TEXT_SURFACE = "#FCFCFC";
+/** The ink a filled accent surface carries on the light ramp — `--text-inv`,
+ *  which is a near-white, not pure white. Solving the fill against the ink
+ *  that actually lands on it (rather than against `#fff`) is the difference
+ *  between a button that measures 4.9:1 and one that measures 4.5:1. */
+const LIGHT_INVERSE_INK = "#F4F5F7";
 const AA_BODY = 4.5;
+/** Floor the FILL is solved to. Deliberately 0.3 above the 4.5 body floor:
+ *  the search walks lightness in 1-point steps through 8-bit `hsl()`, so the
+ *  margin is what keeps a rounding trip from landing a shipped fill at 4.49. */
+const AA_FILL = 4.8;
 
 function shiftLightness(base: string, delta: number): string {
   const [h, s, l] = rgbToHsl(parseColor(base).rgb);
@@ -184,19 +195,45 @@ function shiftLightness(base: string, delta: number): string {
 
 /**
  * Darken `base` until it clears AA as body text on a light surface. A
- * saturated mid-lightness accent (BRAND is 2.0:1 on `--bg`) is legible as a
- * button face with white on it and illegible as a link, so every accent needs
- * this shade before it can be assigned to `color:`.
+ * saturated mid-lightness accent (BRAND is 2.0:1 on `--bg`) is illegible as a
+ * link, so every accent needs this shade before it can be assigned to
+ * `color:`.
  */
 function accentTextShade(base: string): string {
+  return darkenUntil(base, (candidate) =>
+    contrastRatio(candidate, LIGHT_TEXT_SURFACE)
+  );
+}
+
+/**
+ * Darken `base` until `--text-inv` clears AA **on** it — the fill counterpart
+ * of `accentTextShade`. The filled primary button is the one place the accent
+ * carries text, and a mid-lightness accent cannot carry any fixed ink: BRAND
+ * is 2.07:1 under white, and an app that retunes the accent to `--c-amber`
+ * lands even lighter. Deepening the FILL is the only lever that works for
+ * every hue, because CSS has no shipped way to pick the ink per background
+ * (`color-contrast()` is still unimplemented).
+ */
+function accentFillShade(base: string): string {
+  return darkenUntil(
+    base,
+    (candidate) => contrastRatio(LIGHT_INVERSE_INK, candidate),
+    AA_FILL
+  );
+}
+
+/** Walk `base` down its own hue in 1-point lightness steps and return the
+ *  FIRST (lightest) shade whose `score` clears `floor` — staying as close to
+ *  the owner's pick as the floor allows. */
+function darkenUntil(
+  base: string,
+  score: (candidate: string) => number,
+  floor: number = AA_BODY
+): string {
   const [h, s, l] = rgbToHsl(parseColor(base).rgb);
-  // 1-point steps: fine enough that the result is the lightest passing shade
-  // (staying as close to the owner's pick as the floor allows).
   for (let lightness = l; lightness >= 0.05; lightness -= 0.01) {
     const candidate = toHex(hslToRgb(h, s, lightness));
-    if (contrastRatio(candidate, LIGHT_TEXT_SURFACE) >= AA_BODY) {
-      return candidate;
-    }
+    if (score(candidate) >= floor) return candidate;
   }
   return toHex(hslToRgb(h, s, 0.05));
 }
@@ -205,7 +242,7 @@ function accentTextShade(base: string): string {
 export function accentRamp(base: string): AccentRamp {
   return {
     accent: base,
-    deep: shiftLightness(base, DEEP_SHIFT),
+    deep: accentFillShade(base),
     light: shiftLightness(base, LIGHT_SHIFT),
     text: accentTextShade(base),
   };

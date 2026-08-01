@@ -13,7 +13,7 @@
  *   - this file checks the values are TRUE — every number and hex in the front
  *     matter is compared against the TypeScript source of truth, so the brief
  *     cannot silently rot when someone edits `palette.ts` / `radii.ts` /
- *     `density.ts` / `motion.ts` / `typography.ts` / `themes/*`.
+ *     `density.ts` / `typography.ts` / `themes/*`.
  *
  * The front matter is parsed with a deliberately small hand parser (the shape
  * is ours, two levels deep, and we do not want a YAML dependency here just to
@@ -27,11 +27,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 import { spacing } from "./density.js";
-import { EASE } from "./motion.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
 import { themes } from "./themes/index.js";
-import { BRAND } from "./themes/shared.js";
+import { BRAND, EASE } from "./themes/shared.js";
 import { fonts, type } from "./typography.js";
 
 const DESIGN_MD = fileURLToPath(new URL("../../../DESIGN.md", import.meta.url));
@@ -165,6 +164,10 @@ describe("DESIGN.md front matter", () => {
   test("accent ramp hexes match the shipped light theme", () => {
     expect(scalar(colors, "accent-light")).toBe(themes.light.accentLight);
     expect(scalar(colors, "accent-deep")).toBe(themes.light.accentDeep);
+    // The filled rung takes opposite halves of the `--text-inv` pair per
+    // theme, so the brief carries both — the dark one is not a derivation of
+    // the light one and a checker cannot infer it.
+    expect(scalar(colors, "accent-deep-dark")).toBe(themes.dark.accentDeep);
     expect(scalar(colors, "accent-midnight")).toBe(themes.light.accentMidnight);
     expect(scalar(colors, "accent-text")).toBe(themes.light.accentText);
   });

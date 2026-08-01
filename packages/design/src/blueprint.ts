@@ -18,9 +18,9 @@
 // shared formulas so portable surfaces don't re-derive them per app.
 
 import { spacing } from "./density";
-import { EASE } from "./motion";
 import { palette } from "./palette";
 import { radii } from "./radii";
+import { EASE } from "./themes/shared";
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -67,11 +67,26 @@ function lightProps(): Record<string, string> {
   }
 
   Object.assign(props, {
+    // Ink for a SATURATED accent or a scrim — the photo lightbox chrome, an
+    // `--accent`-filled badge. White in both themes, because those surfaces
+    // are dark in both. The ink for `--accent-deep` is `--text-inv`, which
+    // flips per theme; the two are different roles (#686 F3).
     "--on-accent": "#ffffff",
     "--_accent": "var(--app-color, var(--accent))",
     "--accent-soft": "color-mix(in oklab, var(--_accent) 12%, transparent)",
+    // The accent as a FILLED surface — the one place the accent carries text.
+    // 80% measured 3.49:1 under white for `--c-amber` and 3.16:1 for the brand
+    // teal: a WCAG 1.4.3 failure at every retuned hue, not just the default.
+    // An app moves `--accent`/`--app-color` to any of the eight palette hues,
+    // and CSS still has no shipped way to pick ink from a background
+    // (`color-contrast()` is unimplemented), so the FILL is the only lever
+    // that can be correct for all of them at once. 62% is the largest accent
+    // share at which all eight hues plus both teals clear 4.5:1 — the binding
+    // hue is the brand teal at 4.86:1, and the deepest, `--c-slate`, still
+    // lands at 10.1:1 rather than black. `contrast.test.ts` measures the whole
+    // hue × theme grid off this emit.
     "--accent-deep":
-      "color-mix(in oklab, var(--_accent) 80%, hsl(var(--app-hue) 45% 7%))",
+      "color-mix(in oklab, var(--_accent) 62%, hsl(var(--app-hue) 45% 6%))",
     "--accent-text": "var(--accent-deep)",
     "--sel": "var(--accent-soft)",
     "--selb": "color-mix(in oklab, var(--_accent) 34%, var(--line-strong))",
@@ -175,8 +190,15 @@ function darkProps(): Record<string, string> {
     "--warning": "#e0a94a",
     "--success": "#5cc98a",
 
+    // Same role as the light rung — the accent as a FILLED surface — but
+    // `--text-inv` is near-black here, so the fill is the LIGHT half of the
+    // pair. 82% left the ink at 3.96:1 on `--c-slate`; 70% clears 4.5:1 for
+    // every hue (slate is the binding one at 4.89:1) and keeps the fill 4.7:1
+    // clear of the card behind it. There is no percentage that would let this
+    // ramp carry white ink instead: a fill dark enough for white cannot also
+    // separate from a 15%-lightness surface.
     "--accent-deep":
-      "color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%))",
+      "color-mix(in oklab, var(--_accent) 70%, hsl(var(--app-hue) 60% 96%))",
 
     // Shadows are hue-agnostic (pure black in both source apps) — no hue
     // substitution needed, just deeper/darker than the light-mode values.
