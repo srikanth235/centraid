@@ -9,6 +9,7 @@ const clean = {
   rawFontSize: 0,
   rawFontWeight: 0,
   rawRadius: 0,
+  paletteHueAsText: 0,
 };
 
 test("analyzeCss ignores comments and accepts token-owned font stacks", () => {
@@ -75,6 +76,29 @@ test("analyzeCss counts off-scale radii and honours the documented carve-outs", 
       .shouty { border-radius: 12px !important; }
     `),
     { ...clean, rawRadius: 3 }
+  );
+});
+
+test("analyzeCss counts a bare palette hue as ink, never as a fill", () => {
+  assert.deepEqual(
+    analyzeCss(`
+      /* Ink — off-contract, the fills are 2.04–5.03:1 on light. */
+      .a { color: var(--c-amber); }
+      .b { color: color-mix(in srgb, var(--c-amber) 65%, var(--text)); }
+      .c { -webkit-text-fill-color: var(--c-rose); }
+      /* Fills — every one of these stays on the raw hue. */
+      .d { background: var(--c-teal); }
+      .e { background-color: var(--c-teal); }
+      .f { border-color: var(--c-teal); }
+      .g { border-top-color: var(--c-teal); }
+      .h { box-shadow: 0 0 0 4px var(--c-teal); }
+      .i { --notice-hue: var(--c-teal); }
+      /* Ink on the solved rung — the whole point of the metric. */
+      .j { color: var(--c-amber-text); }
+      /* Not a palette hue at all. */
+      .k { color: var(--ccc-amber); }
+    `),
+    { ...clean, paletteHueAsText: 3 }
   );
 });
 

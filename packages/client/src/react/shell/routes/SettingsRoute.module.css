@@ -232,7 +232,7 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .settingsPage {
   display: block;

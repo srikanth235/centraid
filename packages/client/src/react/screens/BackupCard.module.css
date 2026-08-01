@@ -82,7 +82,7 @@
   color: var(--success);
 }
 .metricValue[data-tone="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .metricValue[data-tone="bad"] {
   color: var(--danger);
@@ -136,7 +136,7 @@
   align-self: flex-start;
 }
 .exitMeteredNote {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -260,7 +260,7 @@
   color: var(--text-faint);
 }
 .vaultMeta span[data-emphasis="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .vaultError {
   font-family: var(--font-mono);
@@ -439,7 +439,7 @@
 }
 .inventoryHead > span[data-state="degraded"] {
   background: color-mix(in srgb, var(--c-amber) 10%, transparent);
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .inventoryHead > span[data-state="error"] {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -483,7 +483,7 @@
 }
 .inventoryStore em {
   flex-basis: 100%;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   text-align: right;
 }
 .inventoryStore[data-state="error"] em {
@@ -578,7 +578,7 @@
 .sealNudge svg {
   flex: none;
   margin-top: 1px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .sealNudge code {
   font-family: var(--font-mono);

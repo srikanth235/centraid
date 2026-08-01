@@ -365,10 +365,10 @@
   color: var(--text-faint);
 }
 .diffRow[data-type="add"] .diffSign {
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .diffRow[data-type="del"] .diffSign {
-  color: var(--c-rose);
+  color: var(--c-rose-text);
 }
 .diffText {
   flex: 1;
@@ -470,18 +470,25 @@
 }
 
 /* Syntax-token colors for the tokenized <pre> — passed into `tokenize()`
-   as its class map so the emitted HTML stays module-scoped. */
+   as its class map so the emitted HTML stays module-scoped. 12px mono prose,
+   so each token takes the palette's solved TEXT rung, not the icon fill (the
+   fills measured 2.8–4.7:1 on light `--bg`).
+   `.tokAttr` was violet, one hue off `.tokKey`'s indigo: the fills were
+   already only 0.068 apart in oklab and solving both to the same contrast
+   floor pulled them to 0.075 light / 0.040 dark — two token classes the eye
+   cannot separate. Amber is the far corner of the palette from the other
+   three, and takes the set's closest pair back to 0.119 / 0.126. */
 .tokTag {
-  color: var(--c-rose);
+  color: var(--c-rose-text);
 }
 .tokAttr {
-  color: var(--c-violet);
+  color: var(--c-amber-text);
 }
 .tokStr {
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .tokKey {
-  color: var(--c-indigo);
+  color: var(--c-indigo-text);
   font-weight: 500;
 }
 .tokCom {

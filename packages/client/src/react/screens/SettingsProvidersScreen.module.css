@@ -282,7 +282,7 @@
   background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .usedByChip[data-warn="true"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
 }
 .usedByNone {

@@ -25,6 +25,12 @@ export { ACCENT_DEEP, ACCENT_LIGHT, ACCENT_TEXT_LIGHT } from "./themes";
 // the accent's own hue instead of hand-picking them. See src/accent.ts.
 export { accentRamp } from "./color";
 export type { AccentRamp } from "./color";
+
+// Contrast/oklab maths lives behind the `@centraid/design/oklab` subpath, NOT
+// this barrel: it is measurement machinery, not a token, and `packages/client`
+// re-exports this index — pulling one more module through it trips the
+// 100-module barrel ceiling. See react/shell/routes/builder/
+// BuilderCode.tokens.test.ts for the consumer.
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
 // Brand teal — theme-independent identity color shared by the logo /

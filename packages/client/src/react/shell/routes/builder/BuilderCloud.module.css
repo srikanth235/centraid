@@ -427,7 +427,7 @@
 }
 .heroTile[data-status="live"] {
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .heroTile svg {
   display: block;
@@ -461,7 +461,7 @@
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .hero[data-live="false"] .heroEyebrow {
   color: var(--text-faint);
@@ -540,7 +540,7 @@
   display: grid;
   place-items: center;
   background: hsla(101 28% 42% / 0.14);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .feedTile svg {
   display: block;
@@ -565,7 +565,7 @@
   padding: 1px 6px;
   border-radius: var(--r-sm);
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .feedWhen {
   flex: none;

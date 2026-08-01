@@ -40,9 +40,11 @@
 .statusLabel[data-status="live"] {
   --log-status: var(--success);
 }
+/* The dot above keeps the FILL; this label is 9.5px mono type, so its copy of
+   `--log-status` takes the ink rung. */
 .statusLabel[data-status="connecting"],
 .statusLabel[data-status="reconnecting"] {
-  --log-status: var(--c-amber);
+  --log-status: var(--c-amber-text);
 }
 .countLabel {
   font-family: var(--font-mono);
@@ -135,7 +137,7 @@
   color: var(--text-faint);
 }
 .lineLevel[data-level="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .lineLevel[data-level="error"] {
   color: var(--danger);

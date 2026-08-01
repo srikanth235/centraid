@@ -125,7 +125,7 @@
   line-height: 1;
   padding: 2px 5px;
   border-radius: 999px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
 }
 /* Overview lays itself out with `.grid`; the other tabs are a plain stack of
@@ -282,7 +282,7 @@
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 
 /* Gauge figures — mono numerals, hairline dividers between them. A grid of
@@ -826,7 +826,7 @@
 .resourceKnobWarn {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .resourceKnobPending {
   font-family: var(--font-mono);
@@ -951,7 +951,7 @@
   text-transform: uppercase;
   white-space: nowrap;
   margin-top: calc((var(--outage-line) - 12px) / 2);
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 14%, transparent);
   border-radius: var(--r-sm);
   padding: 2px 5px;

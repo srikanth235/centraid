@@ -109,6 +109,40 @@ export function oklabDistance(a: string, b: string): number {
   return Math.hypot(al - bl, aa - ba, ab - bb);
 }
 
+/** `color-mix(in oklab, C p%, transparent)` composited over `bg` — the alpha
+ *  blend a browser performs for every hue-wash chip in the tree. Separate from
+ *  `evalColorMix` because the second operand there is a colour, not the
+ *  surface the mix ends up painted on. */
+export function alphaOver(color: string, bg: string, share: number): string {
+  const fg = parseColor(color).rgb;
+  const back = parseColor(bg).rgb;
+  return toHex(
+    [0, 1, 2].map(
+      (i) => (fg[i] ?? 0) * share + (back[i] ?? 0) * (1 - share)
+    ) as unknown as [number, number, number]
+  );
+}
+
+/** Substitute the knobs the token CSS parameterizes colours by, so an
+ *  `hsl(0 0% calc(var(--bg-l) + 4.5%))` becomes a measurable colour. Mirrors
+ *  what `apps/mobile/src/kit/theme/generate.ts` does when it lowers the same
+ *  CSS for React Native. */
+export function resolveVars(
+  value: string,
+  scope: Record<string, string>
+): string {
+  return value
+    .replace(
+      /var\((?<name>--[\w-]+)\)/gu,
+      (whole: string, name: string) => scope[name] ?? whole
+    )
+    .replace(
+      /calc\(\s*(?<a>[\d.]+)%\s*(?<op>[+-])\s*(?<b>[\d.]+)%\s*\)/gu,
+      (_whole: string, a: string, op: string, b: string) =>
+        `${op === "+" ? Number(a) + Number(b) : Number(a) - Number(b)}%`
+    );
+}
+
 // Emitted-CSS readers: pull a selector's declarations out of a generated
 // stylesheet and resolve a value's var() references within that scope.
 export function declarations(

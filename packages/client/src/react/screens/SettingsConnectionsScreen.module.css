@@ -359,7 +359,7 @@
 }
 .rowAuthNote {
   font-size: 11px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 
 .healthLabel {
@@ -374,8 +374,9 @@
 .healthLabel[data-health="ok"] {
   --conn-health: var(--success);
 }
+/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
 .healthLabel[data-health="needs-auth"] {
-  --conn-health: var(--c-amber);
+  --conn-health: var(--c-amber-text);
 }
 .healthLabel[data-health="paused"] {
   --conn-health: var(--text-faint);
@@ -566,7 +567,7 @@
   color: var(--text-ghost);
 }
 .wizardHint[data-tone="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .textInput {
   width: 100%;

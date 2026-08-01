@@ -33,7 +33,40 @@ export const METRICS = [
   "rawFontSize",
   "rawFontWeight",
   "rawRadius",
+  "paletteHueAsText",
 ];
+
+/** The eight app-icon hues (`palette.ts`). Kept as a literal list rather than
+ * imported so this script stays a dependency-free .mjs the pre-commit hook can
+ * run before any package is built. */
+const PALETTE_HUES = "amber|forest|indigo|ochre|rose|slate|teal|violet";
+
+/** `--c-<hue>` is an icon FILL. As `color:` on the shell's own surfaces the
+ * fills measure 2.04–5.03:1 on light and 3.12–8.44:1 on dark — 17 of 32 cells
+ * below AA, and amber misses even the 3:1 non-text floor. The solved rung
+ * `--c-<hue>-text` exists for type, so a `color:` (or its `-webkit-` fill
+ * twin) that names a bare hue is off-contract.
+ *
+ * Reach and limits: this sees the `color:` declaration itself, including one
+ * wrapped in `color-mix()`. It cannot see a hue laundered through an
+ * intermediate custom property (`--au-hue: var(--c-rose)` then
+ * `color: var(--au-hue)`) — that indirection is what the split
+ * fill/ink variable pairs in the client exist to keep honest, and what the
+ * `--c-*-text` grids in packages/design/src/contrast.test.ts measure. */
+function countPaletteHueAsText(css) {
+  // `declarations()` has no left boundary, so it cannot be reused here:
+  // `color` is a suffix of `background-color`, `border-color`,
+  // `border-top-color`… all of which are FILLS and stay on the raw hue.
+  const ink =
+    /(?<![\w-])(?:color|-webkit-text-fill-color)\s*:\s*(?<value>[^;}]+)/giu;
+  const bare = new RegExp(
+    String.raw`var\(\s*--c-(?:${PALETTE_HUES})\s*[),]`,
+    "u"
+  );
+  return [...css.matchAll(ink)].filter((match) =>
+    bare.test(match.groups?.value ?? "")
+  ).length;
+}
 
 /** The two-weight chrome rule (DESIGN.md, typography.ts):
  * 400 + 500/600. `normal` is 400. 700 exists only in `marketingType`, which
@@ -105,6 +138,7 @@ export function analyzeCss(css) {
     rawFontSize: countRawFontSize(stripped),
     rawFontWeight: countRawFontWeight(stripped),
     rawRadius: countRawRadius(stripped),
+    paletteHueAsText: countPaletteHueAsText(stripped),
   };
 }
 
@@ -173,7 +207,8 @@ export function formatTotals(actual) {
     `${totals.literalFontFamily} literal font stack(s), ` +
     `${totals.rawFontSize} raw font-size(s), ` +
     `${totals.rawFontWeight} off-scale font-weight(s), ` +
-    `${totals.rawRadius} raw border-radius(es)`
+    `${totals.rawRadius} raw border-radius(es), ` +
+    `${totals.paletteHueAsText} palette-hue-as-text`
   );
 }
 

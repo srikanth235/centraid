@@ -238,12 +238,16 @@
 .planBanner[data-state="compiling"] {
   --plan-tone: var(--accent);
 }
+/* `--plan-tone` is the FILL (2px rail + 6% wash); `--plan-ink` is the glyph on
+   top of it. The other two branches are ink-grade roles and set both at once
+   by falling through; only the palette hue needs the split. */
 .planBanner[data-state="never"] {
   --plan-tone: var(--c-amber);
+  --plan-ink: var(--c-amber-text);
 }
 .planIc {
   display: inline-flex;
-  color: var(--plan-tone, var(--text-faint));
+  color: var(--plan-ink, var(--plan-tone, var(--text-faint)));
   flex: none;
 }
 .planIc[data-spin="true"] {
@@ -303,7 +307,7 @@
   flex: none;
   display: inline-flex;
   margin-top: 1px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .consentBody {
   flex: 1;
@@ -487,7 +491,8 @@
     var(--au-hue, var(--accent)) 55%,
     transparent
   );
-  color: var(--au-hue, var(--accent));
+  /* The ring is the fill; the digit inside it is type, so it takes the ink. */
+  color: var(--au-ink, var(--accent));
 }
 .node[data-spin="true"] {
   animation: auNodeSpin 0.9s linear infinite;

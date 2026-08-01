@@ -274,7 +274,7 @@
 }
 .trigIcon {
   display: inline-flex;
-  color: var(--tk-hue, var(--accent));
+  color: var(--tk-ink, var(--accent));
 }
 .use {
   position: absolute;

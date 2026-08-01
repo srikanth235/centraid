@@ -41,7 +41,7 @@
   background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .item[data-danger="true"] {
-  color: var(--c-rose);
+  color: var(--c-rose-text);
 }
 .item[data-danger="true"]:hover {
   background: color-mix(in oklab, var(--c-rose) 12%, transparent);
@@ -51,7 +51,7 @@
   flex: none;
 }
 .item[data-danger="true"] svg {
-  color: var(--c-rose);
+  color: var(--c-rose-text);
 }
 .sep {
   height: 1px;

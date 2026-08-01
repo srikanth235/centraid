@@ -185,8 +185,9 @@
 .healthLabel[data-health="ok"] {
   --diag-health: var(--success);
 }
+/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
 .healthLabel[data-health="degraded"] {
-  --diag-health: var(--c-amber);
+  --diag-health: var(--c-amber-text);
 }
 .healthLabel[data-health="error"] {
   --diag-health: var(--danger);
@@ -225,7 +226,7 @@
   letter-spacing: 0.06em;
 }
 .eventLevel[data-level="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .eventLevel[data-level="error"] {
   color: var(--danger);

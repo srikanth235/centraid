@@ -40,8 +40,10 @@
   flex-wrap: wrap;
   --tone: var(--text-faint);
 }
+/* `--tone` is only ever a `color:` (`.headlineNote`, 12.5px prose), so the
+   amber branch takes the palette's ink rung, not the icon fill. */
 .headline[data-status="degraded"] {
-  --tone: var(--c-amber);
+  --tone: var(--c-amber-text);
 }
 .headline[data-status="error"] {
   --tone: var(--danger);

@@ -4,7 +4,11 @@
   }
 }
 
-/* Per-automation identity hue → --au-hue. Identity is DECORATIVE ONLY:
+/* Per-automation identity hue → --au-hue (the FILL: washes, dots, rails) and
+   --au-ink (the same hue's solved TEXT rung, for a glyph or label painted ON
+   one of those washes — `color: var(--au-hue)` over a 16% `--au-hue` wash
+   measured 1.9:1 at amber, under even the 3:1 non-text floor).
+   Identity is DECORATIVE ONLY:
    it tints the glyph tile, the trigger-hero rail, and status dots. CTAs,
    focus rings, toggles and active states keep the single --accent action
    colour and never read --au-hue. Attribute selectors pass through CSS
@@ -12,27 +16,35 @@
    shares the same mapping. */
 :global([data-hue="indigo"]) {
   --au-hue: var(--c-indigo);
+  --au-ink: var(--c-indigo-text);
 }
 :global([data-hue="rose"]) {
   --au-hue: var(--c-rose);
+  --au-ink: var(--c-rose-text);
 }
 :global([data-hue="violet"]) {
   --au-hue: var(--c-violet);
+  --au-ink: var(--c-violet-text);
 }
 :global([data-hue="teal"]) {
   --au-hue: var(--c-teal);
+  --au-ink: var(--c-teal-text);
 }
 :global([data-hue="forest"]) {
   --au-hue: var(--c-forest);
+  --au-ink: var(--c-forest-text);
 }
 :global([data-hue="amber"]) {
   --au-hue: var(--c-amber);
+  --au-ink: var(--c-amber-text);
 }
 :global([data-hue="ochre"]) {
   --au-hue: var(--c-ochre);
+  --au-ink: var(--c-ochre-text);
 }
 :global([data-hue="slate"]) {
   --au-hue: var(--c-slate);
+  --au-ink: var(--c-slate-text);
 }
 
 .auChips {
@@ -109,7 +121,7 @@
 }
 .auGlyph[data-hue] {
   background: color-mix(in srgb, var(--au-hue) 16%, transparent);
-  color: var(--au-hue);
+  color: var(--au-ink);
 }
 .auGlyph[data-on="true"] {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -137,8 +149,12 @@
 .auStatus[data-tone="paused"] {
   --au-status-tone: var(--text-faint);
 }
+/* The other four branches are ink-grade roles (`--success`, `--danger`,
+   `--accent`, `--text-faint`) used for border, wash AND label alike, so the
+   amber branch takes the palette's ink rung rather than the raw fill — which
+   painted 10.5px mono at 2.0:1 on its own 12% wash. */
 .auStatus[data-tone="draft"] {
-  --au-status-tone: var(--c-amber);
+  --au-status-tone: var(--c-amber-text);
 }
 .auStatus[data-tone="running"] {
   --au-status-tone: var(--accent);

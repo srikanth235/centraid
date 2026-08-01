@@ -70,7 +70,14 @@ function TemplateCard({
     <button
       type="button"
       className={cx(appCard.card, appCard.small, styles.templateVariant)}
-      style={{ "--tk-hue": `var(--c-${meta.hue})` } as CSSProperties}
+      // Two rungs: `--tk-hue` is the FILL (the 2px edge, the hover wash),
+      // `--tk-ink` the solved TEXT rung for the trigger glyph beside the label.
+      style={
+        {
+          "--tk-hue": `var(--c-${meta.hue})`,
+          "--tk-ink": `var(--c-${meta.hue}-text)`,
+        } as CSSProperties
+      }
       onClick={() => onOpen(t)}
     >
       <span className={styles.use}>
