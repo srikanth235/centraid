@@ -19,8 +19,16 @@ await runFlow("home-loads", async (ctx) => {
     clearState: true
 ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
-- tapOn: "Can't scan? Paste a code instead"
-- assertVisible: "Paste the one-line ticket"
+# Product control must expose accessibilityRole=button so XCUITest fires onPress
+# (iOS re-run 30706136941: tap COMPLETED while showPaste stayed false).
+- tapOn:
+    text: "Can't scan? Paste a code instead"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "Paste the one-line ticket"
+    timeout: 15000
+- assertVisible: "PAIRING CODE"
 # Exact ^Connect$ — bare "Connect" also matches the h1 "Connect your gateway.".
 - assertVisible:
     text: "^Connect$"

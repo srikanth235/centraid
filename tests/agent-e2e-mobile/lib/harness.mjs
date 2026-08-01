@@ -464,7 +464,9 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- tapOn: "Can't scan? Paste a code instead"
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- tapOn:
+    text: "Can't scan? Paste a code instead"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       text: "Paste the one-line ticket"

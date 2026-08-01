@@ -37,6 +37,10 @@ accessibility zero-grey (15 cells).
 
 - **home-loads minimumTests.** After extracting the onboarding connect wait into `first-run.mjs`, `countDeclaredTests` on `home-loads.mjs` is 4; matrix `mobile-real-journey` floor set to 4.
 
+- **iOS paste Pressable a11y.** Re-run 30706136941: Maestro tap on `Can't scan? Paste a code instead` COMPLETED while the scan-first UI stayed put — the Pressable lacked `accessibilityRole="button"`, so XCUITest never fired `onPress`. Wired button roles on paste / scan-instead / Cancel controls.
+
+- `apps/mobile/src/screens/Onboarding.tsx` — button a11y roles for paste/scan-instead/Cancel so Maestro XCUITest fires onPress.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

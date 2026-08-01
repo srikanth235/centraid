@@ -257,7 +257,12 @@ function ConnectionStep({
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
-        <Pressable onPress={() => setScanning(false)} style={styles.textBtn}>
+        <Pressable
+          accessibilityLabel="Cancel"
+          accessibilityRole="button"
+          onPress={() => setScanning(false)}
+          style={styles.textBtn}
+        >
           <Text style={styles.textBtnLabel}>Cancel</Text>
         </Pressable>
       </View>
@@ -328,6 +333,8 @@ function ConnectionStep({
               onPress={() => (pairing ? undefined : submit(code))}
             />
             <Pressable
+              accessibilityLabel="Scan the QR code instead"
+              accessibilityRole="button"
               onPress={() => (pairing ? undefined : setShowPaste(false))}
               style={styles.textBtn}
             >
@@ -350,7 +357,12 @@ function ConnectionStep({
                 {pairing ? "Connecting…" : "Scan the QR code"}
               </Text>
             </Pressable>
+            {/* accessibilityRole=button is required for XCUITest/Maestro to
+                fire onPress — a bare Pressable+Text tap COMPLETED without
+                flipping showPaste on the iOS nightly re-run for #676. */}
             <Pressable
+              accessibilityLabel="Can't scan? Paste a code instead"
+              accessibilityRole="button"
               onPress={() => setShowPaste(true)}
               style={styles.textBtn}
             >

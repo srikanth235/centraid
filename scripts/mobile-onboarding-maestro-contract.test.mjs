@@ -80,3 +80,16 @@ test("first-run dismisses Android system ANR overlays during onboarding wait", (
   const harness = read(HARNESS);
   assert.match(harness, /waitForOnboardingConnectCommands/u);
 });
+
+test("paste secondary control is an accessibility button for XCUITest/Maestro", () => {
+  const ui = read(ONBOARDING);
+  // Label + role must be on the Pressable that opens paste (not only the Text).
+  assert.match(
+    ui,
+    /accessibilityLabel="Can't scan\? Paste a code instead"[\s\S]{0,80}accessibilityRole="button"/u
+  );
+  assert.match(
+    ui,
+    /accessibilityLabel="Scan the QR code instead"[\s\S]{0,80}accessibilityRole="button"/u
+  );
+});
