@@ -20,19 +20,19 @@
   box-shadow: var(--shadow-sm);
 }
 .dow {
-  background: var(--surface);
+  background: var(--bg-elev);
   text-align: center;
   padding: 8px 0 6px;
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .dayCell {
   /* Containing block for .dayOpen, the cell's stretched "propose here" button. */
   position: relative;
-  background: var(--surface);
+  background: var(--bg-elev);
   padding: 4px 5px;
   display: flex;
   flex-direction: column;
@@ -51,10 +51,10 @@
   outline-offset: -2px;
 }
 .dayCell[data-outside="true"] {
-  background: color-mix(in oklab, var(--bg-sunken) 55%, var(--surface));
+  background: color-mix(in oklab, var(--bg-sunken) 55%, var(--bg-elev));
 }
 .dayCell[data-outside="true"] .dayNum {
-  color: var(--ink-3);
+  color: var(--text-faint);
   opacity: 0.6;
 }
 .dayNum {
@@ -62,7 +62,7 @@
   font: var(--t-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
+  color: var(--text-soft);
   border-radius: 999px;
   min-width: 22px;
   height: 22px;
@@ -95,7 +95,7 @@
   font-size: 11px;
   line-height: 1.4;
   text-align: left;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   border-radius: 5px;
@@ -113,7 +113,7 @@
   filter: brightness(1.08);
 }
 .pill[data-status="tentative"] {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .pill :global(.ag-dot) {
   background: var(--ev-color);
@@ -133,7 +133,7 @@
   border: none;
   border-radius: 5px;
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .more:hover {
   background: var(--accent-soft);

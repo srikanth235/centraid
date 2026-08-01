@@ -45,7 +45,7 @@ function ActivityItem({
           style={{
             margin: "4px 0 14px",
             font: "var(--t-body)",
-            color: "var(--ink-2)",
+            color: "var(--text-soft)",
             lineHeight: 1.5,
           }}
         >

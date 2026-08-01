@@ -42,7 +42,7 @@ function indentBlockBody(
 function lightProps(): Record<string, string> {
   const props: Record<string, string> = {
     // Apps override this — it drives every neutral below via hsl(var(--app-hue) …).
-    "--app-hue": "222",
+    "--app-hue": "171",
 
     // Faces — system stacks only; see file header for why (sandboxed iframe,
     // no font loading). Deliberately NOT the desktop's `fontStacks`.
@@ -55,7 +55,7 @@ function lightProps(): Record<string, string> {
       "ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace",
 
     // Identity accent — apps override with one of the --c-* palette values below.
-    "--accent": palette.indigo,
+    "--accent": palette.teal,
   };
 
   // The 8 app-icon palette hexes, as --c-<name> (no --icon-* alias here —
@@ -70,29 +70,22 @@ function lightProps(): Record<string, string> {
     "--accent-soft": "color-mix(in oklab, var(--_accent) 12%, transparent)",
     "--accent-deep":
       "color-mix(in oklab, var(--_accent) 80%, hsl(var(--app-hue) 45% 7%))",
+    "--accent-text": "var(--accent-deep)",
     "--sel": "var(--accent-soft)",
     "--selb": "color-mix(in oklab, var(--_accent) 34%, var(--line-strong))",
 
     // Ink.
-    "--ink": "hsl(var(--app-hue) 22% 13%)",
-    "--ink-2": "hsl(var(--app-hue) 9% 41%)",
-    "--ink-3": "hsl(var(--app-hue) 8% 58%)",
-    "--ink-inv": "#ffffff",
-    // Permanent bridge aliases — 4 of the 8 apps use this family (agenda,
-    // people, photos, tally) instead of --ink-2/--ink-3 directly.
-    "--ink-soft": "var(--ink-2)",
-    "--ink-faint": "var(--ink-3)",
-
+    "--text": "hsl(var(--app-hue) 22% 13%)",
+    "--text-soft": "hsl(var(--app-hue) 9% 41%)",
+    "--text-faint": "hsl(var(--app-hue) 8% 50%)",
+    "--text-inv": "#ffffff",
     // Surfaces — warm-neutral paper base, elevated card, recessed track.
     "--bg": "hsl(var(--app-hue) 20% 98%)",
-    "--surface": "#ffffff",
-    "--surface-2": "hsl(var(--app-hue) 20% 95.5%)",
-    // Bridge aliases — the docs-family apps read --bg-elev/--bg-sunken.
-    "--bg-elev": "var(--surface)",
-    "--bg-sunken": "var(--surface-2)",
-
+    "--bg-elev": "#ffffff",
+    "--bg-sunken": "hsl(var(--app-hue) 20% 95.5%)",
     "--line": "hsl(var(--app-hue) 19% 13% / 0.095)",
     "--line-strong": "hsl(var(--app-hue) 19% 13% / 0.165)",
+    "--scrim": "hsl(var(--app-hue) 22% 8% / 0.48)",
 
     "--danger": "#c8382f",
     "--warning": "#9a6b1f",
@@ -107,6 +100,7 @@ function lightProps(): Record<string, string> {
     "--radius-sm": "0.5rem",
 
     "--ease": "cubic-bezier(0.2, 0.7, 0.3, 1)",
+    "--focus-ring": "0 0 0 3px var(--accent-soft)",
     "--shadow-sm": "0 0 0 0.5px var(--line-strong)",
     "--shadow-md":
       "0 10px 26px -14px hsl(var(--app-hue) 30% 9% / 0.27), 0 2px 6px -3px hsl(var(--app-hue) 30% 9% / 0.11)",
@@ -124,9 +118,6 @@ function lightProps(): Record<string, string> {
     "--t-small": "400 0.8rem/1.45 var(--font-sans)",
     "--t-tiny": "600 0.6rem/1.4 var(--mono)",
     "--t-mono": "500 0.72rem/1.4 var(--mono)",
-
-    "--text": "var(--ink)",
-    "--muted": "var(--ink-2)",
   });
 
   return props;
@@ -140,14 +131,9 @@ function lightProps(): Record<string, string> {
  *
  * Only tokens that actually change between light/dark are listed here;
  * everything else (radii, tracking, type shorthands, --accent itself…)
- * carries over unchanged from the light `:root` block. `--surface`/
- * `--surface-2` are redefined directly (not `--bg-elev`/`--bg-sunken`) to
- * match the alias direction the light block established
- * (`--bg-elev: var(--surface)`); because that alias is a `var()` reference
- * rather than a literal, it re-resolves against the dark `--surface` value
- * automatically without needing its own dark-block entry — same for
- * `--ink-soft`/`--ink-faint` riding `--ink-2`/`--ink-3`, and `--text`/
- * `--muted` riding `--ink`/`--ink-2`.
+ * carries over unchanged from the light `:root` block. The semantic surface
+ * and text tokens below are direct declarations, so neither emitter carries
+ * the old compatibility aliases.
  */
 function darkProps(): Record<string, string> {
   return {
@@ -155,17 +141,18 @@ function darkProps(): Record<string, string> {
     // resolves every calc() below — docs/photos both set this same default.
     "--bg-l": "10%",
 
-    "--ink": "hsl(var(--app-hue) 16% 94%)",
-    "--ink-2": "hsl(var(--app-hue) 9% 66%)",
-    "--ink-3": "hsl(var(--app-hue) 9% 50%)",
-    "--ink-inv": "hsl(var(--app-hue) 12% calc(var(--bg-l) + 4%))",
+    "--text": "hsl(var(--app-hue) 16% 94%)",
+    "--text-soft": "hsl(var(--app-hue) 9% 66%)",
+    "--text-faint": "hsl(var(--app-hue) 9% 55%)",
+    "--text-inv": "hsl(var(--app-hue) 12% calc(var(--bg-l) + 4%))",
 
     "--bg": "var(--bg-wall)",
-    "--surface": "hsl(var(--app-hue) 12% calc(var(--bg-l) + 5%))",
-    "--surface-2": "hsl(var(--app-hue) 11% calc(var(--bg-l) + 9%))",
+    "--bg-elev": "hsl(var(--app-hue) 12% calc(var(--bg-l) + 5%))",
+    "--bg-sunken": "hsl(var(--app-hue) 11% calc(var(--bg-l) + 9%))",
 
     "--line": "hsl(var(--app-hue) 26% 74% / 0.11)",
     "--line-strong": "hsl(var(--app-hue) 26% 76% / 0.2)",
+    "--scrim": "hsl(0 0% 0% / 0.68)",
 
     "--danger": "#f0645b",
     "--warning": "#e0a94a",

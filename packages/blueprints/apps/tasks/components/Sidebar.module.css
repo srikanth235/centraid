@@ -13,7 +13,7 @@
   border-radius: 9px;
   font: var(--t-body);
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .navItem span:first-of-type {
   flex: 1;
@@ -24,7 +24,7 @@
 }
 .navItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
@@ -39,7 +39,7 @@
 
 .projectLabel {
   margin: 16px 10px 6px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-label);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -66,7 +66,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
 }
 
 .progress {
@@ -84,7 +84,7 @@
 .progressPct {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .progressTrack {
   height: 6px;
@@ -100,7 +100,7 @@
 }
 .progressLabel {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 8px;
 }
 .consentLine {
@@ -108,7 +108,7 @@
   align-items: center;
   gap: 7px;
   padding: 11px 4px 2px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .consentLine svg {
   color: var(--accent-deep-fg);

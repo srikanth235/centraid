@@ -11,7 +11,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .badge svg {
   display: block;
@@ -20,7 +20,7 @@
   color: var(--accent);
 }
 .badge[data-kind="assistant"] {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 /* Rows layout — the badge takes a fixed slot (shared `--lib-row-badge-w`
    token) so APP / AUTOMATION align into a column across Home and Discover

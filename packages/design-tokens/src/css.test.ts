@@ -11,7 +11,6 @@
 import { describe, expect, test } from "vitest";
 
 import { toCss } from "./css.js";
-import { densities } from "./density.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
 import { BRAND, themes } from "./themes/index.js";
@@ -26,12 +25,10 @@ function blockFor(selector: string): string {
 }
 
 describe("css", () => {
-  test("every palette hue is emitted under both its legacy and redesign name", () => {
+  test("every palette hue is emitted under its canonical name", () => {
     const root = blockFor(":root");
     for (const [key, value] of Object.entries(palette)) {
-      // `--icon-*` is a portability alias for `--c-*`; they must not drift.
       expect(root).toContain(`--c-${key}: ${value};`);
-      expect(root).toContain(`--icon-${key}: ${value};`);
     }
   });
 
@@ -53,12 +50,9 @@ describe("css", () => {
     expect(root).not.toMatch(/--t-[a-z-]*[A-Z]/u);
   });
 
-  test("each registered theme and density gets its own override block", () => {
+  test("each registered theme gets its own override block", () => {
     for (const name of Object.keys(themes)) {
       expect(css).toContain(`[data-theme='${name}'] {`);
-    }
-    for (const name of Object.keys(densities)) {
-      expect(css).toContain(`[data-density='${name}'] {`);
     }
   });
 

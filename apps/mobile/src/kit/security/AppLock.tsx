@@ -129,7 +129,7 @@ export function AppLockProvider({
   if (!hydrated)
     return (
       <SafeAreaView style={styles.screen}>
-        <ActivityIndicator color={colors.ink3} />
+        <ActivityIndicator color={colors.textFaint} />
       </SafeAreaView>
     );
   if (enabled && !unlocked)
@@ -154,7 +154,7 @@ export function AppLockProvider({
             style={styles.button}
           >
             {authenticating ? (
-              <ActivityIndicator color={colors.inkInv} />
+              <ActivityIndicator color={colors.textInv} />
             ) : (
               <Text style={styles.buttonText}>Unlock</Text>
             )}
@@ -182,7 +182,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     buttonText: {
-      color: colors.inkInv,
+      color: colors.textInv,
       fontFamily: family.sansBold,
       fontSize: 15,
     },
@@ -195,11 +195,11 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[5],
       width: "88%",
     },
-    copy: { ...t("body"), color: colors.ink2, marginTop: spacing[3] },
+    copy: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     eyebrow: {
       ...t("tiny"),
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoBold,
       letterSpacing: 1.2,
     },
@@ -209,5 +209,5 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       justifyContent: "center",
     },
-    title: { ...t("title"), color: colors.ink, marginTop: spacing[2] },
+    title: { ...t("title"), color: colors.text, marginTop: spacing[2] },
   });

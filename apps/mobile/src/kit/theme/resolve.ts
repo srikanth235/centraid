@@ -14,11 +14,10 @@ import {
 
 export type Scheme = "light" | "dark";
 
-// The generated palettes plus a derived `ink4` — the source has no `--ink-4`,
-// but the app uses a fourth, fainter ink (e.g. the home pager dots), so we
-// derive it here as a low-alpha ink rather than snapping to ink3.
+// The generated palettes plus a mobile-only `textGhost` value for the home
+// pager dots and other non-text marks.
 export type ThemeColors = Record<keyof typeof lightPalette, string> & {
-  ink4: string;
+  textGhost: string;
 };
 
 export interface ThemeValue {
@@ -50,24 +49,19 @@ const SOLAR_LIGHT: ThemeColors = {
   bg: "#f1ece1", // design screenBg — the solar cream canvas
   bgElev: "#fbf8f1", // warm off-white, lifts cards above the canvas
   bgSunken: "#e7dfcf", // deeper warm sand for search pills / inputs
-  surface: "#fbf8f1",
-  surface2: "#e7dfcf",
-  ink: "#231f18", // warm near-black
-  ink2: "#645c4e",
-  inkSoft: "#645c4e",
-  muted: "#645c4e",
-  ink3: "#938a78",
-  inkFaint: "#938a78",
+  text: "#231f18", // warm near-black
+  textSoft: "#645c4e",
+  textFaint: "#938a78",
   line: "rgba(60, 48, 22, 0.1)",
   lineStrong: "rgba(60, 48, 22, 0.18)",
-  ink4: "rgba(35, 31, 24, 0.28)",
+  textGhost: "rgba(35, 31, 24, 0.28)",
   accent: BRAND_TEAL, // teal on cream carries white glyphs cleanly
 };
 
 const LIGHT_COLORS: ThemeColors = SOLAR_LIGHT;
 const DARK_COLORS: ThemeColors = {
   ...darkPalette,
-  ink4: "rgba(237, 239, 242, 0.28)",
+  textGhost: "rgba(237, 239, 242, 0.28)",
   accent: BRAND_TEAL, // same teal reads on the near-black ground (matches the greeting highlight)
 };
 
@@ -105,7 +99,7 @@ function navTheme(t: ThemeValue): NavigationTheme {
       card: colors.bgElev,
       notification: colors.accent,
       primary: colors.accent,
-      text: colors.ink,
+      text: colors.text,
     },
     fonts: {
       regular: { fontFamily: fonts.sans.regular, fontWeight: "400" },

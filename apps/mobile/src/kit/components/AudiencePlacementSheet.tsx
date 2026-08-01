@@ -59,10 +59,10 @@ export default function AudiencePlacementSheet({
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { color: colors.ink }]}>
+            <Text style={[styles.title, { color: colors.text }]}>
               Share {noun.toLowerCase()}
             </Text>
-            <Text style={[styles.copy, { color: colors.ink2 }]}>
+            <Text style={[styles.copy, { color: colors.textSoft }]}>
               Choose a household audience. Read-only audiences are not shown.
             </Text>
           </View>
@@ -75,7 +75,7 @@ export default function AudiencePlacementSheet({
           </Pressable>
         </View>
         {targets.length === 0 ? (
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
+          <Text style={[styles.empty, { color: colors.textSoft }]}>
             No writable household audience is available. An admin can invite
             members and grant a vault role from Household settings.
           </Text>
@@ -91,10 +91,10 @@ export default function AudiencePlacementSheet({
                 { backgroundColor: colors.bgElev, borderColor: colors.line },
               ]}
             >
-              <Text style={[styles.rowTitle, { color: colors.ink }]}>
+              <Text style={[styles.rowTitle, { color: colors.text }]}>
                 {scope.label}
               </Text>
-              <Text style={[styles.role, { color: colors.ink3 }]}>
+              <Text style={[styles.role, { color: colors.textFaint }]}>
                 {scope.role}
               </Text>
             </Pressable>

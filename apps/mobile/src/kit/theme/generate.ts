@@ -244,7 +244,7 @@ export function cssLengthToPx(resolved: string): number | null {
   return null;
 }
 
-/** `--ink-2` → `ink2`, `--bg-elev` → `bgElev`, `--on-accent` → `onAccent`. */
+/** `--text-soft` → `ink2`, `--bg-elev` → `bgElev`, `--on-accent` → `onAccent`. */
 function camelKey(name: string): string {
   return name
     .replace(/^--/u, "")
@@ -396,6 +396,5 @@ ${renderRecord(theme.spacing as unknown as Record<string, number>, "  ")}
 export const fonts = {
 ${renderFonts("  ")}
 } as const;
-
 `;
 }

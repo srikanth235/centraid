@@ -20,7 +20,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -30,11 +30,11 @@
 }
 .railItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .railItem[data-active="true"] {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .railItem svg {
   flex: none;
@@ -63,11 +63,11 @@
   margin: 0 0 4px 0;
   font-size: 20px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .stageHead p {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 13px;
 }
 .refreshBtn {
@@ -86,7 +86,7 @@
   padding: 40px 24px;
   border: 1px dashed var(--line);
   border-radius: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 13px;
   text-align: center;
 }
@@ -110,7 +110,7 @@
   border: 0.5px solid var(--line);
   border-radius: 12px;
   padding: 14px 16px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .statValue {
   margin-top: 4px;
@@ -118,16 +118,16 @@
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
-  color: var(--ink);
+  color: var(--text);
   word-break: break-all;
 }
 .statValue.statMono {
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
 }
 .statValue.statMuted {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-weight: 500;
   font-size: 14px;
   letter-spacing: -0.01em;
@@ -136,7 +136,7 @@
 .statSub {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .logs {
   display: flex;
@@ -155,16 +155,16 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
 }
 .logsChip:hover {
   background: var(--bg-sunken);
 }
 .logsChip[data-active="true"] {
-  background: var(--ink);
+  background: var(--text);
   color: var(--bg);
-  border-color: var(--ink);
+  border-color: var(--text);
 }
 .logsSearch {
   flex: 1;
@@ -174,7 +174,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   outline: none;
 }
@@ -193,39 +193,39 @@
   gap: 8px;
   padding: 6px 10px;
   font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
   border-bottom: 1px solid var(--line);
 }
 .logsRow:last-child {
   border-bottom: none;
 }
 .logsRow[data-level="warn"] {
-  background: color-mix(in srgb, var(--warn, #d49000) 6%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
 }
 .logsRow[data-level="error"] {
-  background: color-mix(in srgb, var(--danger, #e25555) 8%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 .logsTs {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .logsLevel {
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .logsRow[data-level="warn"] .logsLevel {
-  color: var(--warn, #d49000);
+  color: var(--warn);
 }
 .logsRow[data-level="error"] .logsLevel {
-  color: var(--danger, #e25555);
+  color: var(--danger);
 }
 .logsSource {
-  color: var(--ink-3);
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .logsMsg {
-  color: var(--ink);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -260,13 +260,13 @@
 }
 .automationName {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   font-size: 13px;
 }
 .automationCron {
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-sunken);
@@ -277,14 +277,14 @@
   gap: 6px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .automationToggleText {
   min-width: 22px;
 }
 .automationPrompt {
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -295,16 +295,16 @@
 }
 .automationMetaItem {
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-sunken);
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
 }
 .automationMetaFaint {
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: transparent;
-  font-family: inherit;
+  font-family: var(--font-mono);
 }
 .automationActions {
   display: flex;
@@ -316,15 +316,15 @@
   margin-left: auto;
   padding: 3px 8px;
   border-radius: 4px;
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
 }
 .automationResult[data-ok="true"] {
-  color: var(--success, #2f9d3f);
-  background: color-mix(in srgb, var(--success, #2f9d3f) 10%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 .automationResult[data-ok="false"] {
-  color: var(--danger, #e25555);
-  background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 .railGroupHead {
   padding: 14px 12px 4px;
@@ -332,15 +332,15 @@
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .railItem[data-ready="false"] {
   cursor: default;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .railItem[data-ready="false"]:hover {
   background: transparent;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .railItem[data-ready="false"] svg {
   opacity: 0.55;
@@ -348,7 +348,7 @@
 .railItem[data-active="true"] {
   position: relative;
   background: hsla(229 91% 63% / 0.1);
-  color: var(--ink);
+  color: var(--text);
 }
 .railItem[data-active="true"]::before {
   content: "";
@@ -398,7 +398,7 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .hero {
   display: flex;
@@ -422,12 +422,12 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink-3);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-faint);
 }
 .heroTile[data-status="live"] {
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest, #5c8a4e);
+  color: var(--c-forest);
 }
 .heroTile svg {
   display: block;
@@ -437,14 +437,14 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--ink-4);
+  background: var(--text-ghost);
 }
 .heroDot[data-status="live"] {
-  background: var(--c-forest, #5c8a4e);
+  background: var(--c-forest);
   box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
 }
 .heroDot[data-status="off"] {
-  background: var(--ink-4);
+  background: var(--text-ghost);
 }
 .heroMeta {
   display: flex;
@@ -461,23 +461,23 @@
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: var(--c-forest, #5c8a4e);
+  color: var(--c-forest);
 }
 .hero[data-live="false"] .heroEyebrow {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .heroUrl {
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .heroUrlMuted {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-weight: 400;
 }
 .heroActions {
@@ -493,7 +493,7 @@
   font: inherit;
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   padding: 6px 12px;
@@ -506,7 +506,7 @@
 }
 .heroBtn:hover {
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
 }
 .heroBtn svg {
   display: block;
@@ -520,7 +520,7 @@
 .feedEmpty {
   padding: 18px 16px;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .feedRow {
   display: flex;
@@ -540,7 +540,7 @@
   display: grid;
   place-items: center;
   background: hsla(101 28% 42% / 0.14);
-  color: var(--c-forest, #5c8a4e);
+  color: var(--c-forest);
 }
 .feedTile svg {
   display: block;
@@ -555,7 +555,7 @@
 .feedTitle {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .feedLive {
   font-size: 9.5px;
@@ -565,13 +565,13 @@
   padding: 1px 6px;
   border-radius: 4px;
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest, #5c8a4e);
+  color: var(--c-forest);
 }
 .feedWhen {
   flex: none;
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .statEyebrow {
   display: inline-flex;
@@ -581,21 +581,21 @@
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .statusDot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--ink-4);
+  background: var(--text-ghost);
 }
 .statusDot[data-status="live"] {
-  background: var(--c-forest, #5c8a4e);
+  background: var(--c-forest);
   box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
 }
 .statusDot[data-status="off"] {
-  background: var(--danger, #c44a4a);
+  background: var(--danger);
   box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
 }
 .statValue.statMid {

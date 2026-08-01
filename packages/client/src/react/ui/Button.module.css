@@ -16,8 +16,8 @@
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.01em;
-  background: var(--ink);
-  color: var(--ink-inv);
+  background: var(--text);
+  color: var(--text-inv);
   transition:
     opacity 0.15s,
     transform 0.1s;
@@ -55,19 +55,19 @@
   background: color-mix(in oklab, var(--accent) 88%, black);
 }
 .soft {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .soft:hover {
-  background: color-mix(in oklab, var(--ink) 10%, transparent);
+  background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .ghost {
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .ghost:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .btn.ghost {
   padding: 8px 12px;
@@ -88,11 +88,11 @@
   place-items: center;
   background: transparent;
   border: 0;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .icon:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text);
 }
 
 .btn[disabled] {

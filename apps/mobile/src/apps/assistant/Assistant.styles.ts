@@ -18,7 +18,7 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    assistantText: { ...t("body"), color: colors.ink },
+    assistantText: { ...t("body"), color: colors.text },
     attachButton: {
       alignItems: "center",
       height: 36,
@@ -67,9 +67,9 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[2],
       paddingVertical: spacing[1],
     },
-    statusText: { ...t("tiny"), color: colors.ink2 },
+    statusText: { ...t("tiny"), color: colors.textSoft },
     activityDot: {
-      backgroundColor: colors.ink3,
+      backgroundColor: colors.textFaint,
       borderRadius: 4,
       height: 7,
       width: 7,
@@ -90,11 +90,11 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     emptyBody: {
       ...t("body"),
-      color: colors.ink2,
+      color: colors.textSoft,
       marginTop: spacing[2],
       textAlign: "center",
     },
-    emptyTitle: { ...t("title"), color: colors.ink, textAlign: "center" },
+    emptyTitle: { ...t("title"), color: colors.text, textAlign: "center" },
     emptyWrap: {
       alignItems: "center",
       flex: 1,
@@ -115,7 +115,7 @@ export const makeStyles = (colors: ThemeColors) =>
     headerText: { flex: 1, minWidth: 0 },
     input: {
       ...t("body"),
-      color: colors.ink,
+      color: colors.text,
       flex: 1,
       maxHeight: 120,
       paddingVertical: spacing[2],
@@ -126,7 +126,7 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[4],
     },
-    pendingText: { ...t("body"), color: colors.ink3, fontStyle: "italic" },
+    pendingText: { ...t("body"), color: colors.textFaint, fontStyle: "italic" },
     rowLeft: { alignItems: "flex-start" },
     rowRight: { alignItems: "flex-end" },
     safe: { backgroundColor: colors.bg, flex: 1 },
@@ -148,9 +148,9 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.danger,
       paddingBottom: spacing[2],
     },
-    subtitle: { ...t("small"), color: colors.ink2, marginTop: 2 },
+    subtitle: { ...t("small"), color: colors.textSoft, marginTop: 2 },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 26,
       letterSpacing: -0.3,
@@ -162,5 +162,5 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    userText: { ...t("body"), color: colors.inkInv },
+    userText: { ...t("body"), color: colors.textInv },
   });

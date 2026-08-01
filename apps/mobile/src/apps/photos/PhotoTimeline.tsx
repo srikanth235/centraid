@@ -435,13 +435,13 @@ export default function PhotoTimeline({
               <View
                 style={[styles.monthHeader, { backgroundColor: colors.bg }]}
               >
-                <Text style={[styles.monthText, { color: colors.ink }]}>
+                <Text style={[styles.monthText, { color: colors.text }]}>
                   {item.title}
                 </Text>
               </View>
             ) : item.type === "header" ? (
               <View style={[styles.header, { backgroundColor: colors.bg }]}>
-                <Text style={[styles.headerText, { color: colors.ink }]}>
+                <Text style={[styles.headerText, { color: colors.text }]}>
                   {item.title}
                 </Text>
                 {selecting ? (
@@ -499,7 +499,7 @@ export default function PhotoTimeline({
           <View style={[styles.rail, { backgroundColor: colors.line }]} />
         </View>
         {scrubLabel ? (
-          <View style={[styles.scrubBubble, { backgroundColor: colors.ink }]}>
+          <View style={[styles.scrubBubble, { backgroundColor: colors.text }]}>
             <Text style={[styles.scrubText, { color: colors.bg }]}>
               {scrubLabel}
             </Text>

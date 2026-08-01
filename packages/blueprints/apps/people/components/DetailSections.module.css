@@ -10,7 +10,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin: 22px 0 10px;
   display: flex;
   align-items: center;
@@ -30,7 +30,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
@@ -38,7 +38,7 @@
 }
 .addToggle:hover {
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--text);
 }
 .kv {
   border: 1px solid var(--line);
@@ -57,14 +57,14 @@
   border-bottom: none;
 }
 .kvRow svg {
-  color: var(--ink-3);
+  color: var(--text-faint);
   flex-shrink: 0;
 }
 .kvV {
   flex: 1;
   min-width: 0;
   font: var(--t-body);
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -73,7 +73,7 @@
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .rel {
   display: flex;
@@ -89,8 +89,8 @@
   width: 34px;
   height: 34px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,13 +108,13 @@
 .note p {
   margin: 0;
   font: var(--t-body);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .note .when {
   margin-top: 6px;
   font: var(--t-mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .taskrow {
   display: flex;

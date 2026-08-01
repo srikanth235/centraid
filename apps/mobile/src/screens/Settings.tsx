@@ -177,7 +177,7 @@ export default function SettingsScreen({
           hitSlop={10}
           onPress={() => navigation.getParent()?.goBack()}
         >
-          <Feather name="arrow-left" size={26} color={colors.ink} />
+          <Feather name="arrow-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Settings</Text>
       </View>
@@ -247,7 +247,7 @@ export default function SettingsScreen({
                     value={pasteTicket}
                     onChangeText={setPasteTicket}
                     placeholder="one-line pairing ticket"
-                    placeholderTextColor={colors.ink3}
+                    placeholderTextColor={colors.textFaint}
                     style={styles.input}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -287,14 +287,14 @@ export default function SettingsScreen({
             <Icon
               name="CheckCircle"
               size={18}
-              color={colors.ink2}
+              color={colors.textSoft}
               strokeWidth={1.75}
             />
             <Text style={styles.rowLabel}>Decisions and updates</Text>
             <Icon
               name="ChevronRight"
               size={16}
-              color={colors.ink3}
+              color={colors.textFaint}
               strokeWidth={1.75}
             />
           </Pressable>
@@ -309,14 +309,14 @@ export default function SettingsScreen({
             <Icon
               name="Folder"
               size={18}
-              color={colors.ink2}
+              color={colors.textSoft}
               strokeWidth={1.75}
             />
             <Text style={styles.rowLabel}>Vault storage on this phone</Text>
             <Icon
               name="ChevronRight"
               size={16}
-              color={colors.ink3}
+              color={colors.textFaint}
               strokeWidth={1.75}
             />
           </Pressable>
@@ -331,14 +331,14 @@ export default function SettingsScreen({
             <Icon
               name="Code"
               size={18}
-              color={colors.ink2}
+              color={colors.textSoft}
               strokeWidth={1.75}
             />
             <Text style={styles.rowLabel}>Gateway connection</Text>
             <Icon
               name={advancedOpen ? "ChevronDown" : "ChevronRight"}
               size={16}
-              color={colors.ink3}
+              color={colors.textFaint}
               strokeWidth={1.75}
             />
           </Pressable>
@@ -355,7 +355,7 @@ export default function SettingsScreen({
                 value={urlValue}
                 onChangeText={setUrlValue}
                 placeholder="http://127.0.0.1:18789"
-                placeholderTextColor={colors.ink3}
+                placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -373,7 +373,7 @@ export default function SettingsScreen({
                 value={tokenValue}
                 onChangeText={setTokenValue}
                 placeholder="paste token here"
-                placeholderTextColor={colors.ink3}
+                placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -423,7 +423,7 @@ function PairScanner({
           <Icon
             name="ArrowLeft"
             size={20}
-            color={colors.ink}
+            color={colors.text}
             strokeWidth={1.75}
           />
         </Pressable>
@@ -485,23 +485,26 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[4],
     },
     camera: { borderRadius: radii.md, flex: 1, overflow: "hidden" },
-    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
+    emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
     fieldLabel: {
       ...t("small"),
-      color: colors.ink2,
+      color: colors.textSoft,
       fontWeight: "500",
       marginBottom: 6,
     },
     fieldLabelSpaced: { marginTop: spacing[4] },
-    help: { ...t("small"), color: colors.ink3, marginBottom: spacing[3] },
-    helpMono: { fontFamily: "JetBrainsMono_400Regular", color: colors.ink2 },
+    help: { ...t("small"), color: colors.textFaint, marginBottom: spacing[3] },
+    helpMono: {
+      fontFamily: "JetBrainsMono_400Regular",
+      color: colors.textSoft,
+    },
     input: {
       ...t("body"),
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      color: colors.ink,
+      color: colors.text,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
@@ -513,8 +516,8 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       padding: spacing[4],
     },
-    linkName: { ...t("bodyStrong"), color: colors.ink },
-    linkStatus: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    linkName: { ...t("bodyStrong"), color: colors.text },
+    linkStatus: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     pairError: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     row: {
       alignItems: "center",
@@ -527,17 +530,17 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
-    rowLabel: { ...t("body"), color: colors.ink, flex: 1 },
+    rowLabel: { ...t("body"), color: colors.text, flex: 1 },
     safe: { backgroundColor: colors.bg, flex: 1 },
     scanDenied: { padding: spacing[5] },
     scanHint: {
       ...t("small"),
-      color: colors.ink3,
+      color: colors.textFaint,
       marginTop: spacing[3],
       textAlign: "center",
     },
     scanSafe: { backgroundColor: colors.bg, flex: 1 },
-    scanTitle: { ...t("title"), color: colors.ink },
+    scanTitle: { ...t("title"), color: colors.text },
     scanWrap: { flex: 1, padding: spacing[5] },
     spacer: { height: spacing[5] },
     header: {
@@ -548,10 +551,10 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[2],
     },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 26,
       letterSpacing: -0.3,
     },
-    unavailable: { ...t("small"), color: colors.ink3 },
+    unavailable: { ...t("small"), color: colors.textFaint },
   });

@@ -22,7 +22,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .fieldV {
   font: var(--t-body);
@@ -48,14 +48,14 @@
   border: none;
   background: none;
   border-radius: 8px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .fbtn:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .dheadTools {
   margin-left: auto;
@@ -68,13 +68,13 @@
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .dtool:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--line-strong);
 }
 .dtool.on {
@@ -102,14 +102,14 @@
   padding: 4px 11px;
   border-radius: 999px;
   background: var(--bg-sunken);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   font-size: 12px;
 }
 .meta {
   font: var(--t-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 20px;
 }
 

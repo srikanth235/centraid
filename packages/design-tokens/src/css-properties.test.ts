@@ -12,7 +12,6 @@
 import { describe, expect, test } from "vitest";
 
 import { toCss } from "./css.js";
-import { densities } from "./density.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
 import { themes } from "./themes/index.js";
@@ -54,34 +53,18 @@ describe("token stylesheet values", () => {
     }
   });
 
-  test("palette hues carry identical values under both names", () => {
+  test("palette hues carry their canonical values", () => {
     const root = parseBlocks(toCss()).get(":root");
     for (const [key, value] of Object.entries(palette)) {
       expect(root?.get(`--c-${key}`), key).toBe(value);
-      // `--icon-*` is a portability alias — same bytes, never a copy that
-      // silently drifts.
-      expect(root?.get(`--icon-${key}`), key).toBe(value);
     }
   });
 
-  test("numeric scales are emitted in px, not as bare numbers", () => {
+  test("radii are emitted in px, not as bare numbers", () => {
     const blocks = parseBlocks(toCss());
     const root = blocks.get(":root");
     for (const [key, value] of Object.entries(radii)) {
       expect(root?.get(`--r-${key}`), key).toBe(`${value}px`);
-    }
-    // :root carries the default (regular) density…
-    for (const [key, value] of Object.entries(densities.regular)) {
-      expect(root?.get(`--d-${key}`), key).toBe(`${value}px`);
-    }
-    // …and each tier's own block carries that tier's numbers.
-    for (const [name, scale] of Object.entries(densities)) {
-      const block = blocks.get(`[data-density='${name}']`);
-      expect(block, name).toBeDefined();
-      for (const [key, value] of Object.entries(scale)) {
-        expect(block?.get(`--d-${key}`), `${name}/${key}`).toBe(`${value}px`);
-      }
-      expect(block?.size).toBe(Object.keys(scale).length);
     }
   });
 
@@ -186,10 +169,8 @@ describe("token stylesheet values", () => {
     );
     expect(css.endsWith("\n")).toBe(true);
     expect(css.split("{")).toHaveLength(css.split("}").length);
-    // One block per theme + one per density + :root.
-    expect(parseBlocks(css).size).toBe(
-      1 + Object.keys(themes).length + Object.keys(densities).length
-    );
+    // One block per theme plus the default :root.
+    expect(parseBlocks(css).size).toBe(1 + Object.keys(themes).length);
   });
 
   test("generation is deterministic — same input, same bytes", () => {

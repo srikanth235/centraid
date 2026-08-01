@@ -7,6 +7,6 @@
 .empty {
   text-align: center;
   padding: 60px 20px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 14px;
 }

@@ -1,4 +1,4 @@
-/* ConnectFlow (issue #382) — the shared connect wizard. Field/textarea/
+/* ConnectFlow (issue var(--text)) — the shared connect wizard. Field/textarea/
    advanced/hint/foot vocabulary is ported verbatim from the retired
    GatewayPairingForm.module.css (same look, absorbed into one wizard step)
    so Settings/onboarding/switcher keep reading as one system. Method cards
@@ -33,7 +33,7 @@
   padding: 16px 14px;
   border-radius: 14px;
   border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
   text-align: left;
   cursor: pointer;
   transition:
@@ -43,7 +43,7 @@
 }
 .methodCard:hover {
   transform: translateY(-1px);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 .methodCard:has(:focus-visible) {
   outline: none;
@@ -65,13 +65,13 @@
   font: var(--t-title);
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .methodDesc {
   font: var(--t-small);
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ── Shared panel / field vocabulary ──────────────────────────────────── */
@@ -95,12 +95,12 @@
   font: var(--t-body);
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .fieldOptional {
   font: var(--t-small);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-weight: 400;
 }
 .input,
@@ -108,12 +108,12 @@
   width: 100%;
   box-sizing: border-box;
   padding: 9px 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
   font: var(--t-body);
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--text);
   outline: none;
   transition:
     border-color 120ms,
@@ -122,7 +122,7 @@
 .textarea {
   resize: vertical;
   min-height: 64px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.5;
 }
@@ -136,16 +136,16 @@
   font: var(--t-small);
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .hint code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
 }
 
 .advanced {
   border: 0.5px solid var(--line);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
 }
 .advancedSummary {
   cursor: pointer;
@@ -154,14 +154,14 @@
   user-select: none;
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .advancedSummary::-webkit-details-marker {
   display: none;
 }
 .advancedSummary::before {
   content: "▸ ";
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .advanced[open] > .advancedSummary::before {
   content: "▾ ";
@@ -198,9 +198,9 @@
   border-radius: 8px;
   font: var(--t-small);
   font-size: 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .testSummary[data-ok="false"] {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
@@ -233,7 +233,7 @@
   font: var(--t-title);
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .lockedVault .hint {
   flex-basis: 100%;
@@ -256,7 +256,7 @@
   border-radius: 9px;
   border: 0.5px solid var(--line);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-body);
   font-size: 13px;
   cursor: pointer;
@@ -266,7 +266,7 @@
     border-color 100ms;
 }
 .vaultRow:hover {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 /* The radio inside is invisible, so it cannot carry the UA focus ring —
    the label draws it, using this module's own focus idiom (.methodCard). */
@@ -293,8 +293,8 @@
 .vaultDotAdd {
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-soft);
 }
 .createRow {
   display: flex;
@@ -305,7 +305,7 @@
 /* ── Step D/E: committing / error ─────────────────────────────────────── */
 .spinner {
   display: inline-flex;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .spinner[data-spin="true"] {
   animation: cf-spin 900ms linear infinite;
@@ -323,7 +323,7 @@
   margin: 0;
   font: var(--t-body);
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .errorBanner {
   width: 100%;
@@ -343,11 +343,11 @@
   border: none;
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
 }
 .startOver:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 
 @media (prefers-reduced-motion: reduce) {

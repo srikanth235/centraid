@@ -105,7 +105,7 @@ export function AgentGlyph({
   connected: boolean;
 }): JSX.Element {
   const glyph = AGENT_GLYPHS[kind];
-  const color = connected ? accent : "var(--ink-4)";
+  const color = connected ? accent : "var(--text-ghost)";
   const viewBox = glyph?.viewBox ?? "0 0 16 16";
   // Verbatim vendored inner markup for a known kind; a plain filled circle for
   // an unknown one. Both are `currentColor`, so `color` above is the only tint.

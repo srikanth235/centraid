@@ -74,10 +74,10 @@ export default function PlacesMap({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.ink }]}>Places</Text>
-        <Text style={[styles.count, { color: colors.ink2 }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Places</Text>
+        <Text style={[styles.count, { color: colors.textSoft }]}>
           {points.length}
         </Text>
       </View>
@@ -97,7 +97,7 @@ export default function PlacesMap({
           <Text
             style={[
               styles.emptyText,
-              { backgroundColor: colors.bgElev, color: colors.ink2 },
+              { backgroundColor: colors.bgElev, color: colors.textSoft },
             ]}
           >
             Geotagged assets appear here. Set-place changes sync as replica

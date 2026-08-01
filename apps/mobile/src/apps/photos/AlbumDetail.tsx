@@ -205,13 +205,13 @@ export default function AlbumDetail({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.ink }]}>
+          <Text style={[styles.title, { color: colors.text }]}>
             {String(album?.name ?? "Album")}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             {assets.length} items
           </Text>
         </View>
@@ -262,10 +262,10 @@ export default function AlbumDetail({
       <ReplicaStatusBar />
       <View style={[styles.keepRow, { borderBottomColor: colors.line }]}>
         <View style={styles.copy}>
-          <Text style={[styles.keepTitle, { color: colors.ink }]}>
+          <Text style={[styles.keepTitle, { color: colors.text }]}>
             Keep originals on device
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             Excluded from Free up space
           </Text>
         </View>
@@ -288,7 +288,7 @@ export default function AlbumDetail({
         />
       ) : (
         <View style={styles.empty}>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             This album is empty.
           </Text>
         </View>
@@ -304,7 +304,7 @@ export default function AlbumDetail({
           onPress={() => setRenameOpen(false)}
         />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+          <Text style={[styles.dialogTitle, { color: colors.text }]}>
             Rename album
           </Text>
           <TextInput
@@ -313,7 +313,7 @@ export default function AlbumDetail({
             onChangeText={setName}
             style={[
               styles.input,
-              { borderColor: colors.lineStrong, color: colors.ink },
+              { borderColor: colors.lineStrong, color: colors.text },
             ]}
           />
           <Pressable

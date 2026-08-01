@@ -8,7 +8,7 @@
   width: 100%;
   font: var(--t-body-strong);
   font-size: 14px;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   border-bottom: 1px solid var(--line);
@@ -23,7 +23,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 8px;
 }
 .detailsTaken {
@@ -31,7 +31,7 @@
 }
 .detailsTaken :global(.kit-input) {
   font-family: var(--mono);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 0.78rem;
 }
 .detailsGrid {
@@ -44,10 +44,10 @@
 .detailsK {
   font: var(--t-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .detailsV {
-  color: var(--ink-2);
+  color: var(--text-soft);
   word-break: break-word;
 }
 .custodyOk {
@@ -81,14 +81,14 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-sunken);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   font-size: 12px;
   margin-bottom: 18px;
 }
 .placeChip:hover {
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--text);
 }
 .chipRow {
   display: flex;
@@ -105,7 +105,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   font-size: 12px;
 }
@@ -129,7 +129,7 @@
   padding: 6px 9px;
 }
 .coverButton:disabled {
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: default;
 }
 .tagChipX,
@@ -138,7 +138,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-mono);
   font-size: 11px;
 }
@@ -175,7 +175,7 @@
 }
 .activityText {
   font: var(--t-small);
-  color: var(--ink);
+  color: var(--text);
 }
 .activityMeta {
   display: flex;
@@ -186,7 +186,7 @@
 .activityMeta span:first-child {
   font: var(--t-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .receiptChip {
   font: var(--t-mono);
@@ -211,7 +211,7 @@
   background: color-mix(in oklab, var(--danger) 8%, transparent);
 }
 .note {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 0.78rem;
   margin: 8px 0 0;
 }

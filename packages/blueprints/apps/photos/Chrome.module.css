@@ -76,7 +76,7 @@
 }
 .appRoot button:focus-visible {
   outline: none;
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 
 /* App-level knobs — read off the app ROOT element (the host stamps data-app-*
@@ -108,8 +108,8 @@
 
 .shell {
   composes: kit-app-shell from global;
-  --kit-app-topbar-gap: 10px;
-  --kit-app-topbar-padding: 14px 20px;
+  --app-topbar-gap: 10px;
+  --app-topbar-padding: 14px 20px;
   /* Positioning context for the drawer + the lightbox/slideshow/selection-bar
      overlays, so they overlay the app pane inline — never the shell chrome. */
   -webkit-font-smoothing: antialiased;
@@ -275,11 +275,11 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   flex-shrink: 0;
 }
 :global(.ph-header-icon-btn):hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--line-strong);
 }
 :global(.ph-header-icon-btn)[data-active="true"] {
@@ -306,7 +306,7 @@
   background: linear-gradient(
     100deg,
     var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--ink-3)) 50%,
+    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
     var(--bg-sunken) 70%
   );
   background-size: 220% 100%;
@@ -341,7 +341,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  color: color-mix(in oklab, var(--ink-2) 82%, var(--_accent));
+  color: color-mix(in oklab, var(--text-soft) 82%, var(--_accent));
 }
 :global(.ph-tile-audio-badge) svg {
   width: 54px;
@@ -373,7 +373,7 @@
 }
 :global(.lightbox-faces-title) {
   margin: 0 0 8px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);

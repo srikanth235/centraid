@@ -41,8 +41,10 @@ export default function ReplicaStateCard({
         size={28}
         color={colors.danger}
       />
-      <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-      <Text style={[styles.message, { color: colors.ink2 }]}>{message}</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.textSoft }]}>
+        {message}
+      </Text>
       {onRetry ? (
         <Pressable
           accessibilityRole="button"

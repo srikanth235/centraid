@@ -31,7 +31,7 @@
   margin-right: auto;
   font-family: var(--mono);
   font-size: 0.8rem;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .cluster {
   display: flex;
@@ -91,6 +91,6 @@
 .tileMeta {
   font-family: var(--mono);
   font-size: 0.68rem;
-  color: var(--ink-2);
+  color: var(--text-soft);
   text-align: center;
 }

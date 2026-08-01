@@ -115,13 +115,12 @@ describe("useAppearance", () => {
     });
 
     it("reconciles recognised keys from the gateway after mount", async () => {
-      getUserPrefs.mockResolvedValue({ theme: "light", density: "comfy" });
+      getUserPrefs.mockResolvedValue({ theme: "light" });
       await mount();
       await act(async () => {
         await Promise.resolve();
       });
       expect(ctl.prefs.theme).toBe("light");
-      expect(ctl.prefs.density).toBe("comfy");
     });
 
     it("setPrefs updates state, caches to Store, and mirrors to the gateway", async () => {

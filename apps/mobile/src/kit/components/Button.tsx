@@ -53,7 +53,7 @@ export default function Button({
           <Icon
             name={icon}
             size={14}
-            color={isPrimary ? colors.inkInv : colors.ink}
+            color={isPrimary ? colors.textInv : colors.text}
             strokeWidth={isPrimary ? 2 : 1.75}
           />
         ) : null}
@@ -75,10 +75,10 @@ const makeStyles = (colors: ThemeColors) =>
     },
     disabled: { opacity: 0.4 },
     ghost: { backgroundColor: "transparent", borderColor: "transparent" },
-    label: { ...t("small"), color: colors.ink, fontWeight: "500" },
-    labelPrimary: { color: colors.inkInv },
+    label: { ...t("small"), color: colors.text, fontWeight: "500" },
+    labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
-    primary: { backgroundColor: colors.ink, borderColor: colors.ink },
+    primary: { backgroundColor: colors.text, borderColor: colors.text },
     row: {
       alignItems: "center",
       flexDirection: "row",

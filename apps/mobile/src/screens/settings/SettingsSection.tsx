@@ -32,7 +32,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     label: {
       ...t("small"),
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       letterSpacing: 0.8,
       marginBottom: spacing[3],

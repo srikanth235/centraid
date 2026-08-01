@@ -21,7 +21,7 @@ function Section({
     <section style={{ marginBottom: 36 }}>
       <h2
         style={{
-          color: "var(--ink-3, #6b7280)",
+          color: "var(--text-faint, #6b7280)",
           fontSize: 12,
           fontWeight: 600,
           letterSpacing: "0.08em",
@@ -55,7 +55,7 @@ export default function Gallery(): JSX.Element {
   return (
     <div
       style={{
-        color: "var(--ink, #141820)",
+        color: "var(--text, #141820)",
         fontFamily: "var(--font-ui, system-ui, sans-serif)",
         margin: "0 auto",
         maxWidth: 880,
@@ -73,7 +73,7 @@ export default function Gallery(): JSX.Element {
         <Logo size={36} />
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>desktop-ui</div>
-          <div style={{ color: "var(--ink-3, #6b7280)", fontSize: 13 }}>
+          <div style={{ color: "var(--text-faint, #6b7280)", fontSize: 13 }}>
             React DOM primitives · pixel-identical to the vanilla shell
           </div>
         </div>
@@ -91,7 +91,10 @@ export default function Gallery(): JSX.Element {
           <span
             key={name}
             title={name}
-            style={{ color: "var(--ink-2, #374151)", display: "inline-flex" }}
+            style={{
+              color: "var(--text-soft, #374151)",
+              display: "inline-flex",
+            }}
           >
             <Icon name={name} size={22} />
           </span>

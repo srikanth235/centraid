@@ -47,7 +47,7 @@
 .addTriggerBtn {
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -86,7 +86,7 @@
   border-radius: 8px;
   font: inherit;
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
 }
 .addTriggerItem:hover {
@@ -135,7 +135,7 @@
   gap: 5px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 12px;
   font-weight: 550;
@@ -145,24 +145,24 @@
 }
 .selectedConnChip:hover {
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--text);
 }
 .selectedConnMark {
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .selectedConnOk {
   color: var(--success);
   font-size: 11px;
 }
 .selectedConnWarn {
-  color: var(--c-amber, #d4a017);
+  color: var(--c-amber);
   font-size: 11px;
   font-weight: 700;
 }
 .selectedConnX {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 13px;
   line-height: 1;
   margin-left: 2px;
@@ -187,7 +187,7 @@
   gap: 6px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 550;
@@ -198,11 +198,11 @@
 .instrChip:hover,
 .instrChip[data-open="true"] {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  color: var(--ink);
+  color: var(--text);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
 }
 .instrChipCount {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-weight: 500;
   min-width: 0.8em;
 }
@@ -213,7 +213,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -227,7 +227,7 @@
   position: relative;
 }
 .agentChipValue {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-weight: 500;
 }
 .agentPicker {
@@ -246,27 +246,27 @@
 }
 .agentPickerTitle {
   font-size: 14px;
-  color: var(--ink);
+  color: var(--text);
 }
 .agentPickerHint {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .agentPickerField {
   display: grid;
   gap: 5px;
   font-size: 11px;
   font-weight: 650;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .agentPickerField select {
   width: 100%;
   border: 0.5px solid var(--line);
   border-radius: 9px;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -297,25 +297,25 @@
 .connPickerTitle {
   font-size: 14px;
   font-weight: 650;
-  color: var(--ink);
+  color: var(--text);
 }
 .connPickerHint {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .connPickerClose {
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   padding: 4px;
   border-radius: 8px;
   line-height: 0;
 }
 .connPickerClose:hover {
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-sunken);
 }
 .connPickerSearch {
@@ -331,7 +331,7 @@
 .connPickerEmpty {
   margin: 12px 4px;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .connPickerRow {
   display: flex;
@@ -380,11 +380,11 @@
 .connPickerName {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .connPickerSub {
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .connPickerCheck {
   width: 22px;
@@ -421,7 +421,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   padding: 7px 8px;
   text-align: left;
@@ -446,13 +446,13 @@
 }
 .connAccountPrincipal {
   overflow: hidden;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .connAccountHealth {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 10.5px;
   white-space: nowrap;
 }
@@ -463,14 +463,14 @@
 .connAccountHealth[data-health="needs-auth"] {
   color: var(--danger);
 }
-/* The saved binding names a connection the vault no longer lists (#541). */
+/* The saved binding names a connection the vault no longer lists (var(--text)). */
 .connAccountWarn {
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 .connDanglingNote {
@@ -495,7 +495,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .connField {
   display: flex;
@@ -507,7 +507,7 @@
 .connFieldHint {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .connGuideToggle {
   border: 0;
@@ -525,7 +525,7 @@
   padding-left: 18px;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .connFormActions {
   display: flex;
@@ -537,7 +537,7 @@
   appearance: none;
   font: inherit;
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -551,7 +551,7 @@
   display: block;
   padding: 48px 0;
   font-size: 14px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
 }
 
@@ -589,7 +589,7 @@
 }
 .headName {
   font: var(--t-h2);
-  color: var(--ink);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -621,12 +621,12 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .input {
   font: inherit;
   font-size: 14px;
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -639,7 +639,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .input::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .mono {
   font-family: var(--font-mono);
@@ -650,7 +650,7 @@
   font: inherit;
   font-size: 15.5px;
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -665,7 +665,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .textarea::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .instructionsField {
   position: relative;
@@ -682,7 +682,7 @@
   padding: 4px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 11px;
 }
 .entityToken code {
@@ -711,7 +711,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
@@ -722,7 +722,7 @@
   outline: none;
 }
 .mentionOption code {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 10.5px;
 }
 /* Entity-KIND picker (data/condition trigger inputs) — reuses the @-mention
@@ -735,7 +735,7 @@
 .pickerKind {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--text);
 }
 @keyframes mention-in {
   from {
@@ -758,7 +758,7 @@
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .sectionHeading {
   display: flex;
@@ -773,7 +773,7 @@
 }
 .sectionHint {
   margin: 4px 0 0;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 12px;
 }
 .addTrigger {
@@ -785,7 +785,7 @@
 .addTrigger button {
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
@@ -803,7 +803,7 @@
    state showed three stacked hairlines for one line of text. */
 .triggerEmpty {
   margin: 0;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 12.5px;
   line-height: 1.5;
 }
@@ -831,13 +831,13 @@
 .triggerIndex {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .triggerSelect {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -905,8 +905,8 @@
   display: grid;
   place-items: center;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink-3);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-faint);
 }
 .trigCardSelected .trigIcon {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -921,11 +921,11 @@
 .trigTitle {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .trigDesc {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .trigDetail {
   padding: 0 15px 15px 59px;
@@ -947,18 +947,18 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   text-transform: uppercase;
 }
 .trigHint {
   margin: 0;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .trigHint code {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 .cronPreview {
@@ -973,7 +973,7 @@
 .cronPreviewPill {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 999px;
@@ -1002,7 +1002,7 @@
   appearance: none;
   font: inherit;
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -1017,14 +1017,14 @@
   flex: 1 1 120px;
   min-width: 0;
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-style: italic;
 }
 .whereAddBtn {
   align-self: flex-start;
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
@@ -1040,12 +1040,12 @@
   gap: 9px;
   flex-wrap: wrap;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .webhookUrl {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 7px;
@@ -1061,7 +1061,7 @@
   gap: 5px;
   font: inherit;
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: none;
   border: 0.5px solid var(--line-strong);
   border-radius: 7px;
@@ -1069,7 +1069,7 @@
   cursor: pointer;
 }
 .regenBtn:hover {
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-sunken);
 }
 .regenBtn:disabled {
@@ -1095,7 +1095,7 @@
 }
 .chip {
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 999px;
@@ -1108,7 +1108,7 @@
 .vaultPurpose {
   margin: 0;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* Notifications tab — onFailure handoff + model meta line. */
@@ -1121,16 +1121,16 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .notifLine code {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .notifMeta {
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Behavior tab — enable toggle + standing grants + explainer. */
@@ -1148,11 +1148,11 @@
 .enableLabel {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .enableHint {
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .switch {
   position: relative;
@@ -1173,7 +1173,7 @@
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: var(--ink-4);
+  background: var(--text-ghost);
   transition: background 0.16s ease;
 }
 .switchTrack::after {
@@ -1184,7 +1184,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text);
   transition: transform 0.16s ease;
 }
 .switch input:checked + .switchTrack {
@@ -1197,7 +1197,7 @@
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .grants {
   display: flex;
@@ -1219,7 +1219,7 @@
 .grantVerb {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border-radius: 5px;
   padding: 2px 6px;
@@ -1228,7 +1228,7 @@
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1239,7 +1239,7 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .grantRevokeBtn {
   flex: none;
@@ -1280,7 +1280,7 @@
   flex: 1 1 12ch;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   min-width: 0;
 }
 .footerActions {
@@ -1311,7 +1311,7 @@
 .enableText {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-faint);
   min-width: 1.6em;
 }
 .triggerEmptyCard {
@@ -1331,7 +1331,7 @@
 .triggerEmptyBtn {
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 12.5px;
   font-weight: 550;

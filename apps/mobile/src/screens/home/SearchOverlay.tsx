@@ -133,7 +133,7 @@ export default function SearchOverlay({
             <Icon
               name="Search"
               size={17}
-              color={colors.ink3}
+              color={colors.textFaint}
               strokeWidth={1.8}
             />
             <TextInput
@@ -142,7 +142,7 @@ export default function SearchOverlay({
               value={query}
               onChangeText={setQuery}
               placeholder="Search everything"
-              placeholderTextColor={colors.ink3}
+              placeholderTextColor={colors.textFaint}
               style={styles.input}
               returnKeyType="search"
               autoCorrect={false}
@@ -182,7 +182,7 @@ export default function SearchOverlay({
                 <Text
                   style={[
                     styles.filterText,
-                    { color: appFilter ? colors.ink2 : colors.bg },
+                    { color: appFilter ? colors.textSoft : colors.bg },
                   ]}
                 >
                   All
@@ -208,7 +208,9 @@ export default function SearchOverlay({
                       styles.filterText,
                       {
                         color:
-                          appFilter === target.appId ? colors.bg : colors.ink2,
+                          appFilter === target.appId
+                            ? colors.bg
+                            : colors.textSoft,
                       },
                     ]}
                   >
@@ -265,7 +267,7 @@ export default function SearchOverlay({
             <Icon
               name="Sparkle"
               size={15}
-              color={colors.ink3}
+              color={colors.textFaint}
               strokeWidth={1.7}
             />
             <Text style={styles.hintText}>
@@ -288,14 +290,14 @@ const makeStyles = (colors: ThemeColors) =>
       fontFamily: family.sansMedium,
     },
     content: { flex: 1, paddingHorizontal: H_PADDING },
-    empty: { ...t("small"), color: colors.ink2, paddingVertical: 8 },
+    empty: { ...t("small"), color: colors.textSoft, paddingVertical: 8 },
     entityCopy: { flex: 1 },
     entityDetail: {
       ...t("small"),
-      color: colors.ink2,
+      color: colors.textSoft,
       marginTop: 2,
     },
-    entityLabel: { ...t("body"), color: colors.ink },
+    entityLabel: { ...t("body"), color: colors.text },
     entityResults: { marginBottom: 22, marginTop: 18 },
     entityRow: {
       alignItems: "center",
@@ -323,8 +325,13 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: 28,
       paddingRight: 12,
     },
-    hintText: { ...t("small"), color: colors.ink3, flex: 1, lineHeight: 18 },
-    input: { ...t("body"), color: colors.ink, flex: 1, padding: 0 },
+    hintText: {
+      ...t("small"),
+      color: colors.textFaint,
+      flex: 1,
+      lineHeight: 18,
+    },
+    input: { ...t("body"), color: colors.text, flex: 1, padding: 0 },
     results: { paddingTop: 22 },
     filters: { gap: 7, paddingVertical: 10 },
     filter: {
@@ -337,7 +344,7 @@ const makeStyles = (colors: ThemeColors) =>
     filterText: { ...t("small"), fontFamily: family.sansMedium },
     sectionLabel: {
       ...t("small"),
-      color: colors.ink3,
+      color: colors.textFaint,
       letterSpacing: 0.8,
       marginBottom: 3,
     },

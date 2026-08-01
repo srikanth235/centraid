@@ -21,7 +21,7 @@
   gap: 8px;
 }
 
-/* ── The §6 five-metric health surface (issue #436) ─────────────────────── */
+/* ── The §6 five-metric health surface (issue var(--text)) ─────────────────────── */
 .metrics {
   display: flex;
   flex-direction: column;
@@ -45,15 +45,15 @@
   height: 11px;
   margin-top: 4px;
   border-radius: 50%;
-  background: var(--ink-4);
+  background: var(--text-ghost);
 }
 .metricDot[data-tone="ok"] {
   background: var(--success);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 14%, transparent);
 }
 .metricDot[data-tone="warn"] {
-  background: var(--icon-amber);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--icon-amber) 14%, transparent);
+  background: var(--c-amber);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-amber) 14%, transparent);
 }
 .metricDot[data-tone="bad"] {
   background: var(--danger);
@@ -63,7 +63,7 @@
   flex: none;
   display: inline-flex;
   margin-top: 1px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .metricBody {
   flex: 1;
@@ -75,27 +75,27 @@
 .metricValue {
   font-size: 13.5px;
   font-weight: 550;
-  color: var(--ink);
+  color: var(--text);
   letter-spacing: -0.01em;
 }
 .metricValue[data-tone="ok"] {
   color: var(--success);
 }
 .metricValue[data-tone="warn"] {
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 .metricValue[data-tone="bad"] {
   color: var(--danger);
 }
 .metricValue[data-tone="unknown"] {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .metricLabel {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .metricHow {
   font-size: 11.5px;
@@ -109,7 +109,7 @@
 .metricHow p,
 .exitHow {
   margin: 6px 0 0;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -117,7 +117,7 @@
   position: relative;
   height: 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   overflow: hidden;
 }
 .costFill {
@@ -127,7 +127,7 @@
   background: var(--success);
 }
 .costTrack[data-severity="warn"] .costFill {
-  background: var(--icon-amber);
+  background: var(--c-amber);
 }
 .costTrack[data-severity="bad"] .costFill {
   background: var(--danger);
@@ -136,7 +136,7 @@
   align-self: flex-start;
 }
 .exitMeteredNote {
-  color: var(--icon-amber);
+  color: var(--c-amber);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -151,7 +151,7 @@
 .diagnostics summary {
   width: fit-content;
   cursor: pointer;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 11.5px;
   font-weight: 550;
 }
@@ -172,10 +172,10 @@
   gap: 10px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .clockLine span:last-child {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 @media (min-width: 720px) {
   .clockGrid {
@@ -184,7 +184,7 @@
   }
 }
 .providerLine {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 11.5px;
 }
 .providerLine svg {
@@ -200,12 +200,12 @@
   margin: 0;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .notConfigured code {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 .runError {
@@ -239,7 +239,7 @@
 .vaultName {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .runningBadge {
   font-family: var(--font-mono);
@@ -257,10 +257,10 @@
   gap: 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .vaultMeta span[data-emphasis="warn"] {
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 .vaultError {
   font-family: var(--font-mono);
@@ -289,7 +289,7 @@
 }
 .policyGroup h4 {
   margin: 0;
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   font-weight: 620;
   letter-spacing: -0.01em;
@@ -303,21 +303,21 @@
   min-width: 0;
 }
 .destinationGrid dt {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 10.5px;
 }
 .destinationGrid dd {
   margin: 2px 0 0;
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 .localWarning {
   margin: 0;
   padding: 8px 10px;
-  border-left: 2px solid var(--icon-amber);
-  background: color-mix(in srgb, var(--icon-amber) 7%, transparent);
-  color: var(--ink-2);
+  border-left: 2px solid var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 7%, transparent);
+  color: var(--text-soft);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -326,7 +326,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 7px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .policySetting > span {
   display: flex;
@@ -335,12 +335,12 @@
   min-width: 0;
 }
 .policySetting strong {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 11.5px;
   font-weight: 500;
 }
 .policySetting small {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 9.5px;
   line-height: 1.4;
@@ -364,7 +364,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 10.5px;
 }
@@ -377,8 +377,8 @@
   transition: background 180ms ease;
 }
 .pendingLine[data-state="pending"] .pendingDot {
-  background: var(--icon-amber);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--icon-amber) 12%, transparent);
+  background: var(--c-amber);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-amber) 12%, transparent);
 }
 .advancedPolicy {
   padding: 11px 0 3px;
@@ -386,7 +386,7 @@
 }
 .advancedPolicy summary {
   width: fit-content;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   font-size: 11.5px;
   font-weight: 550;
@@ -422,7 +422,7 @@
 .inventoryStore small {
   display: block;
   margin-top: 3px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 9px;
   line-height: 1.35;
@@ -438,8 +438,8 @@
   text-transform: uppercase;
 }
 .inventoryHead > span[data-state="degraded"] {
-  background: color-mix(in srgb, var(--icon-amber) 10%, transparent);
-  color: var(--icon-amber);
+  background: color-mix(in srgb, var(--c-amber) 10%, transparent);
+  color: var(--c-amber);
 }
 .inventoryHead > span[data-state="error"] {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -453,11 +453,11 @@
 }
 .inventoryWarning {
   padding-left: 9px;
-  border-left: 2px solid var(--icon-amber);
-  color: var(--ink-2);
+  border-left: 2px solid var(--c-amber);
+  color: var(--text-soft);
 }
 .inventoryEmpty {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .inventoryStores {
   border-block: 1px solid var(--line);
@@ -465,13 +465,13 @@
 .inventoryStore {
   padding: 9px 0;
   flex-wrap: wrap;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .inventoryStore + .inventoryStore {
   border-top: 1px solid var(--line);
 }
 .inventoryStore strong {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 11px;
   font-weight: 550;
 }
@@ -483,7 +483,7 @@
 }
 .inventoryStore em {
   flex-basis: 100%;
-  color: var(--icon-amber);
+  color: var(--c-amber);
   text-align: right;
 }
 .inventoryStore[data-state="error"] em {
@@ -499,11 +499,11 @@
   font-size: 10.5px;
 }
 .inventoryFacts dt {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .inventoryFacts dd {
   margin: 0;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   text-align: right;
 }
@@ -511,19 +511,19 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 9.5px;
   line-height: 1.4;
 }
 .inventoryHistory strong {
-  color: var(--ink-2);
-  font-family: var(--font-sans);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 550;
 }
 .inventoryHistory b {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 550;
 }
 .verifyBucket {
@@ -569,21 +569,21 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 0.5px solid color-mix(in srgb, var(--icon-amber) 35%, var(--line));
-  background: color-mix(in srgb, var(--icon-amber) 8%, transparent);
-  color: var(--ink-2);
+  border: 0.5px solid color-mix(in srgb, var(--c-amber) 35%, var(--line));
+  background: color-mix(in srgb, var(--c-amber) 8%, transparent);
+  color: var(--text-soft);
   font-size: 11.5px;
   line-height: 1.5;
 }
 .sealNudge svg {
   flex: none;
   margin-top: 1px;
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 .sealNudge code {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .sealNudgeBody {
   display: flex;
@@ -606,7 +606,7 @@
   width: 100%;
   flex-direction: column;
   gap: 4px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 10.5px;
 }
 .kitField input {
@@ -614,8 +614,8 @@
   padding: 7px 9px;
   border: 0.5px solid var(--line);
   border-radius: 7px;
-  background: var(--surface-raised);
-  color: var(--ink);
+  background: var(--bg-elev-raised);
+  color: var(--text);
   font: inherit;
 }
 .hiddenFile {
@@ -625,7 +625,7 @@
   display: flex;
   align-items: flex-start;
   gap: 7px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .lossConsent input {
   margin-top: 2px;
@@ -637,7 +637,7 @@
   align-items: center;
   gap: 7px;
   padding: 6px 2px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 11.5px;
 }
 .sealConfirmed svg {

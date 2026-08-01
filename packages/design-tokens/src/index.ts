@@ -14,8 +14,8 @@ export type { Theme, ThemeName, ThemePreset } from "./themes";
 // app-icon SVGs and emitted as `--brand`. Also aliased as `brand`.
 export { BRAND, BRAND as brand } from "./themes";
 
-export { densities, spacing } from "./density";
-export type { DensityScale, DensityName } from "./density";
+export { spacing } from "./density";
+export type { DensityScale } from "./density";
 
 export { radii } from "./radii";
 export type { RadiusKey } from "./radii";
@@ -42,6 +42,7 @@ export { tileFinish, TILE_VARIANTS } from "./tile";
 export type { TileVariant, TileFinish } from "./tile";
 
 export { toCss } from "./css";
+export { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "./contract";
 
 // Blueprint-app ("field notebook") token layer — a separate design
 // language for the sandboxed blueprint apps, not a variant of `toCss()`'s
@@ -53,10 +54,3 @@ export type { IconName, IconPath } from "./icons";
 
 export { apps } from "./apps";
 export type { AppMeta, AppMetaResolved } from "./apps";
-
-// ---- Backwards-compat aliases ----
-// `colors` was the original (light-only) export consumed by mobile and
-// the desktop preload. Kept as an alias for `themes.light` so existing
-// call sites don't have to change in this migration. New code should
-// prefer `themes.light` / `themes.dark`.
-export { lightTheme as colors, darkTheme as colorsDark } from "./themes";

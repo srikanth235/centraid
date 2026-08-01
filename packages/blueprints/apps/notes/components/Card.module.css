@@ -62,7 +62,7 @@
   border: none;
   background: none;
   border-radius: 8px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   opacity: 0;
   transition:
     opacity 0.15s var(--ease),
@@ -75,7 +75,7 @@
 .cardPreview {
   font: var(--t-body);
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   line-height: 1.5;
   margin-top: 7px;
   white-space: pre-wrap;
@@ -105,7 +105,7 @@
 .progressLabel {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .cardMeta {
   display: flex;
@@ -119,13 +119,13 @@
   gap: 5px;
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .cardWhen {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .card:global(.kit-pending) {
   padding-left: 15px;

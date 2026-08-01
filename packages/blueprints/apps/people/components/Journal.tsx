@@ -125,7 +125,7 @@ export function Journal({
           <p
             style={{
               font: "var(--t-small)",
-              color: "var(--ink-3)",
+              color: "var(--text-faint)",
               padding: "16px 0",
             }}
           >

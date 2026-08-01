@@ -98,7 +98,7 @@ export default function VaultDrawer({
       ? colors.accent
       : status.tone === "offline"
         ? (colors.danger ?? colors.accent)
-        : colors.ink4;
+        : colors.textGhost;
 
   useEffect(() => {
     if (!open) return;
@@ -158,49 +158,53 @@ export default function VaultDrawer({
             </View>
             <View style={styles.headerMeta}>
               <Text
-                style={[styles.headerName, { color: colors.ink }]}
+                style={[styles.headerName, { color: colors.text }]}
                 numberOfLines={1}
               >
                 {profile.name || "Your vault"}
               </Text>
               <Text
-                style={[styles.headerSub, { color: colors.ink3 }]}
+                style={[styles.headerSub, { color: colors.textFaint }]}
                 numberOfLines={1}
               >
                 {status.label}
               </Text>
             </View>
             {/* Stacked chevrons = "switch", distinguishing this from the plain nav rows. */}
-            <Feather name="chevrons-down" size={17} color={colors.ink4} />
+            <Feather name="chevrons-down" size={17} color={colors.textGhost} />
           </Pressable>
 
           <View style={styles.scroll}>
             <Text style={styles.sectionLabel}>GO TO</Text>
 
             <Pressable style={styles.row} onPress={go(onAssistant)}>
-              <Feather name="message-circle" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather
+                name="message-circle"
+                size={19}
+                color={colors.textFaint}
+              />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Assistant
               </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onAutomations)}>
-              <Feather name="zap" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="zap" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Automations
               </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onInsights)}>
-              <Feather name="bar-chart-2" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="bar-chart-2" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Insights
               </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onApprovals)}>
-              <Feather name="bell" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="bell" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Notifications
               </Text>
               {approvals > 0 ? (
@@ -219,8 +223,8 @@ export default function VaultDrawer({
             <Text style={styles.sectionLabel}>SYSTEM</Text>
 
             <Pressable style={styles.row} onPress={go(onSettings)}>
-              <Feather name="settings" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="settings" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Settings
               </Text>
             </Pressable>
@@ -228,10 +232,14 @@ export default function VaultDrawer({
             {/* Status, not a nav target of its own — pairing lives in Settings. */}
             <Pressable style={styles.row} onPress={go(onSettings)}>
               <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 {status.label}
               </Text>
-              <Feather name="chevron-right" size={17} color={colors.ink4} />
+              <Feather
+                name="chevron-right"
+                size={17}
+                color={colors.textGhost}
+              />
             </Pressable>
           </View>
         </Animated.View>
@@ -302,7 +310,7 @@ const makeStyles = (colors: ThemeColors) =>
     scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
     scroll: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
     sectionLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 0.9,

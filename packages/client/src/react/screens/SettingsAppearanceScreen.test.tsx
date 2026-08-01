@@ -23,10 +23,8 @@ function makeProps(
 ): SettingsAppearanceBridgeProps {
   return {
     themeMode: "dark",
-    density: "regular",
     cardVariant: "outlined",
     onSetThemeMode: vi.fn<SettingsAppearanceBridgeProps["onSetThemeMode"]>(),
-    onSetDensity: vi.fn<SettingsAppearanceBridgeProps["onSetDensity"]>(),
     onSetCards: vi.fn<SettingsAppearanceBridgeProps["onSetCards"]>(),
     ...over,
   };
@@ -84,12 +82,12 @@ describe("screens/SettingsAppearanceScreen", () => {
       expect(el.querySelectorAll(".swatch")).toHaveLength(0);
       expect(el.querySelectorAll(".previewTile")).toHaveLength(0);
       expect(el.querySelector('.seg[aria-label="Treatment"]')).toBeNull();
-      // Layout folded in (#608), so Density and Cards are groups here now.
+      // Cards are the remaining layout control.
       // The sidebar switch did NOT come with them — the chrome already has a
       // toggle for it.
       expect(
         [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
-      ).toStrictEqual(["Theme", "Density", "Cards", "Automations"]);
+      ).toStrictEqual(["Theme", "Cards", "Automations"]);
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
     });
 
@@ -105,21 +103,15 @@ describe("screens/SettingsAppearanceScreen", () => {
       );
     });
 
-    it("carries Layout's density and card controls, and drives them", async () => {
+    it("carries the card control and the cron setting", async () => {
       const props = makeProps();
       const el = mount(props);
       await act(async () => {});
       const group = (n: number): HTMLButtonElement[] => [
         ...el.querySelectorAll(".seg")[n]!.querySelectorAll("button"),
       ];
-      // Theme, Density, Cards — three segmented groups on one page now.
-      expect(el.querySelectorAll(".seg")).toHaveLength(3);
-      expect(
-        group(1).find((b) => b.textContent === "regular")?.dataset.active
-      ).toBe("true");
-      click(group(1).find((b) => b.textContent === "compact")!);
-      expect(props.onSetDensity).toHaveBeenCalledWith("compact");
-      click(group(2).find((b) => b.textContent === "elevated")!);
+      expect(el.querySelectorAll(".seg")).toHaveLength(2);
+      click(group(1).find((b) => b.textContent === "elevated")!);
       expect(props.onSetCards).toHaveBeenCalledWith("elevated");
       expect(
         el.querySelector('[data-testid="settings-default-cron-timezone"]')

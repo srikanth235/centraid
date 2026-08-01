@@ -71,7 +71,7 @@ body {
   margin: 0;
   padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
@@ -102,7 +102,7 @@ main {
   letter-spacing: -0.02em;
   margin: 0 0 0.1rem;
 }
-.muted { color: var(--ink-3); font-size: 0.85rem; margin: 0; }
+.muted { color: var(--text-faint); font-size: 0.85rem; margin: 0; }
 .small { font-size: 0.8rem; }
 
 /* --- Surface / card --- */
@@ -121,7 +121,7 @@ input[type='text'], input[type='search'], textarea {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 1rem;
   -webkit-appearance: none;
@@ -139,7 +139,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: var(--r-md);
   border: none;
   background: var(--app-color, var(--accent));
-  color: var(--ink-inv, #fff);
+  color: var(--text-inv, #fff);
   font-weight: 600;
   font-size: 0.9375rem;
   -webkit-tap-highlight-color: transparent;
@@ -153,7 +153,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 500;
 }
 .ghost:hover { background: var(--bg-elev); }
@@ -176,18 +176,18 @@ button { font: inherit; cursor: pointer; }
 }
 .row:last-child { border-bottom: none; }
 .row-text { flex: 1; min-width: 0; font-size: 0.95rem; line-height: 1.35; word-break: break-word; }
-.row[data-done='true'] .row-text { color: var(--ink-3); text-decoration: line-through; }
+.row[data-done='true'] .row-text { color: var(--text-faint); text-decoration: line-through; }
 
 /* --- Circle toggle (used inside list rows) --- */
 .circle {
   width: 1.75rem; height: 1.75rem;
   min-width: 1.75rem;
   border-radius: 50%;
-  border: 1.5px solid var(--ink-3);
+  border: 1.5px solid var(--text-faint);
   background: transparent;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
-  color: var(--ink-inv, #fff);
+  color: var(--text-inv, #fff);
   -webkit-tap-highlight-color: transparent;
 }
 .circle[aria-pressed='true'] { background: var(--app-color, var(--accent)); border-color: var(--app-color, var(--accent)); }
@@ -198,18 +198,18 @@ button { font: inherit; cursor: pointer; }
   background: transparent; border: none;
   width: 2.25rem; height: 2.25rem;
   border-radius: var(--r-sm);
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
-.del:hover { color: var(--ink-2); }
+.del:hover { color: var(--text-soft); }
 .del:active { color: var(--danger); }
 .del:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
 
 /* --- State triad --- */
-.empty { color: var(--ink-3); font-size: 0.9rem; text-align: center; padding: 2rem 0; }
-.loading { color: var(--ink-3); font-size: 0.9rem; text-align: center; padding: 1rem 0; }
+.empty { color: var(--text-faint); font-size: 0.9rem; text-align: center; padding: 2rem 0; }
+.loading { color: var(--text-faint); font-size: 0.9rem; text-align: center; padding: 1rem 0; }
 .error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);

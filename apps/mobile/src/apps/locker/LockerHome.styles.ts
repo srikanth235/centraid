@@ -13,8 +13,8 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       marginBottom: spacing[4],
       padding: spacing[4],
     },
-    biometricCopy: { ...t("small"), color: colors.ink3, marginTop: 3 },
-    biometricTitle: { ...t("bodyStrong"), color: colors.ink },
+    biometricCopy: { ...t("small"), color: colors.textFaint, marginTop: 3 },
+    biometricTitle: { ...t("bodyStrong"), color: colors.text },
     center: { flex: 1 },
     copyButton: { paddingVertical: spacing[2] },
     copyText: { ...t("small"), color: colors.accent },
@@ -28,7 +28,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     },
     detailList: { padding: spacing[5] },
     detailSafe: { backgroundColor: colors.bg, flex: 1 },
-    detailTitle: { ...t("title"), color: colors.ink },
+    detailTitle: { ...t("title"), color: colors.text },
     disabled: { opacity: 0.5 },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     field: {
@@ -39,18 +39,18 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     fieldCopy: { gap: 4 },
     fieldLabel: {
       ...t("tiny"),
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       textTransform: "uppercase",
     },
-    fieldValue: { ...t("body"), color: colors.ink, marginTop: spacing[1] },
+    fieldValue: { ...t("body"), color: colors.text, marginTop: spacing[1] },
     input: {
       ...t("body"),
       backgroundColor: colors.bgElev,
       borderColor: colors.lineStrong,
       borderRadius: radii.md,
       borderWidth: 1,
-      color: colors.ink,
+      color: colors.text,
       marginTop: spacing[4],
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
@@ -63,7 +63,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       justifyContent: "space-between",
       marginBottom: spacing[2],
     },
-    listTitle: { ...t("title"), color: colors.ink },
+    listTitle: { ...t("title"), color: colors.text },
     locked: {
       alignItems: "center",
       flex: 1,
@@ -101,7 +101,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       padding: spacing[5],
       width: "100%",
     },
-    modalTitle: { ...t("title"), color: colors.ink },
+    modalTitle: { ...t("title"), color: colors.text },
     primary: {
       alignItems: "center",
       alignSelf: "stretch",
@@ -112,7 +112,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: spacing[4],
     },
-    primaryText: { ...t("bodyStrong"), color: colors.inkInv },
+    primaryText: { ...t("bodyStrong"), color: colors.textInv },
     row: {
       alignItems: "center",
       borderBottomColor: colors.line,
@@ -130,8 +130,8 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 38,
     },
-    rowSubtitle: { ...t("small"), color: colors.ink3, marginTop: 2 },
-    rowTitle: { ...t("bodyStrong"), color: colors.ink },
+    rowSubtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
+    rowTitle: { ...t("bodyStrong"), color: colors.text },
     safe: { backgroundColor: colors.bg, flex: 1 },
     secondary: {
       alignItems: "center",
@@ -144,15 +144,15 @@ export const makeLockerStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: spacing[4],
     },
-    secondaryText: { ...t("bodyStrong"), color: colors.ink2 },
+    secondaryText: { ...t("bodyStrong"), color: colors.textSoft },
     stateCopy: {
       ...t("body"),
-      color: colors.ink2,
+      color: colors.textSoft,
       marginTop: spacing[2],
       maxWidth: 420,
       textAlign: "center",
     },
-    stateTitle: { ...t("title"), color: colors.ink, marginTop: spacing[3] },
+    stateTitle: { ...t("title"), color: colors.text, marginTop: spacing[3] },
   });
 
 export type LockerStyles = ReturnType<typeof makeLockerStyles>;

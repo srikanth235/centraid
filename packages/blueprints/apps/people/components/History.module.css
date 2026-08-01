@@ -1,5 +1,5 @@
 .status {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
   margin: 8px 0;
 }
@@ -28,6 +28,6 @@
 }
 .row span,
 .done {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
 }

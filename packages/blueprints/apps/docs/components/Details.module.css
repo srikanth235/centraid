@@ -62,7 +62,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 /* Close button: kit.css's .kit-icon-btn. */
 .detailsBody {
@@ -100,7 +100,7 @@
 .detailExt {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
   margin-top: 3px;
 }
@@ -142,7 +142,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 8px;
 }
 .detailGrid {
@@ -155,11 +155,11 @@
 .detailGrid dt {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin: 0;
 }
 .detailGrid dd {
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -185,7 +185,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .versionToggle svg {
   width: 13px;

@@ -422,7 +422,9 @@ export default function LockerHome({
   const content = (() => {
     switch (screen.kind) {
       case "loading":
-        return <ActivityIndicator color={colors.ink3} style={styles.center} />;
+        return (
+          <ActivityIndicator color={colors.textFaint} style={styles.center} />
+        );
       case "offline":
         return (
           <StateCard
@@ -490,7 +492,7 @@ export default function LockerHome({
               <RefreshControl
                 refreshing={screen.refreshing}
                 onRefresh={() => void loadItems(sessionToken)}
-                tintColor={colors.ink3}
+                tintColor={colors.textFaint}
               />
             }
             ListHeaderComponent={
@@ -553,7 +555,7 @@ export default function LockerHome({
         error={itemError}
         item={pendingItem}
         passphrase={itemPassphrase}
-        placeholderColor={colors.ink3}
+        placeholderColor={colors.textFaint}
         styles={styles}
         working={working}
         onChangePassphrase={setItemPassphrase}
@@ -588,7 +590,7 @@ export default function LockerHome({
           accessibilityLabel="Locker hidden while Centraid is in the background"
           style={styles.mask}
         >
-          <Icon name="Key" size={32} color={colors.ink2} />
+          <Icon name="Key" size={32} color={colors.textSoft} />
           <Text style={styles.stateTitle}>Locker is hidden</Text>
         </View>
       ) : null}

@@ -91,7 +91,7 @@ function DebtsSection({
           fontSize: "11px",
           textTransform: "none",
           letterSpacing: 0,
-          color: net >= 0 ? "var(--ok)" : "var(--ink-3)",
+          color: net >= 0 ? "var(--ok)" : "var(--text-faint)",
         }}
       >
         {netLabel}
@@ -119,7 +119,7 @@ function DebtsSection({
                       display: "block",
                       font: "var(--t-body)",
                       fontWeight: 500,
-                      color: owe ? "var(--ink)" : "var(--ok)",
+                      color: owe ? "var(--text)" : "var(--ok)",
                     }}
                   >
                     {(owe ? "You owe " : "Owes you ") + amount}
@@ -129,7 +129,7 @@ function DebtsSection({
                       display: "block",
                       font: "var(--t-small)",
                       fontSize: "12px",
-                      color: "var(--ink-3)",
+                      color: "var(--text-faint)",
                     }}
                   >
                     {b.reason || ""}
@@ -138,7 +138,10 @@ function DebtsSection({
                 <button
                   type="button"
                   className={`kit-chip quiet ${styles.chipSm}`}
-                  style={{ borderColor: "var(--line)", color: "var(--ink-2)" }}
+                  style={{
+                    borderColor: "var(--line)",
+                    color: "var(--text-soft)",
+                  }}
                   onClick={() => onSettleDebt(b.debt_id)}
                 >
                   settle
@@ -236,7 +239,7 @@ export function Sections({
             style={{
               font: "var(--t-small)",
               fontSize: "12px",
-              color: "var(--ink-2)",
+              color: "var(--text-soft)",
               marginTop: "2px",
             }}
           >
@@ -258,7 +261,7 @@ export function Sections({
             style={{
               margin: 0,
               font: "var(--t-body)",
-              color: "var(--ink-2)",
+              color: "var(--text-soft)",
               lineHeight: 1.5,
             }}
           >
@@ -297,7 +300,7 @@ export function Sections({
                 style={{
                   font: "var(--t-small)",
                   fontSize: "11.5px",
-                  color: "var(--ink-3)",
+                  color: "var(--text-faint)",
                 }}
               >
                 {r.kind}
@@ -335,7 +338,7 @@ export function Sections({
                     display: "block",
                     font: "var(--t-small)",
                     fontSize: "12px",
-                    color: "var(--ink-3)",
+                    color: "var(--text-faint)",
                   }}
                 >
                   {fmtMonthDay(d.month_day)} ·{" "}
@@ -349,8 +352,8 @@ export function Sections({
                 style={{
                   background: d.reminder_on
                     ? "color-mix(in oklab, var(--_accent) 12%, transparent)"
-                    : "color-mix(in oklab, var(--ink) 5%, transparent)",
-                  color: d.reminder_on ? "var(--_accent)" : "var(--ink-3)",
+                    : "color-mix(in oklab, var(--text) 5%, transparent)",
+                  color: d.reminder_on ? "var(--_accent)" : "var(--text-faint)",
                 }}
                 onClick={() => onToggleReminder(d.date_id)}
               >
@@ -388,7 +391,7 @@ export function Sections({
                 style={{
                   flex: 1,
                   font: "var(--t-body)",
-                  color: t.done ? "var(--ink-3)" : "var(--ink)",
+                  color: t.done ? "var(--text-faint)" : "var(--text)",
                   textDecoration: t.done ? "line-through" : "none",
                 }}
               >
@@ -432,7 +435,7 @@ export function Sections({
                   style={{
                     flex: 1,
                     font: "var(--t-body)",
-                    color: given ? "var(--ink-3)" : "var(--ink)",
+                    color: given ? "var(--text-faint)" : "var(--text)",
                     textDecoration: given ? "line-through" : "none",
                   }}
                 >
@@ -494,7 +497,7 @@ export function Sections({
                   >
                     <span
                       className={shared.activityKind}
-                      style={{ color: "var(--ink-2)" }}
+                      style={{ color: "var(--text-soft)" }}
                     >
                       {t.kind}
                     </span>
@@ -510,7 +513,7 @@ export function Sections({
                       marginTop: "2px",
                       font: "var(--t-body)",
                       fontSize: "13.5px",
-                      color: "var(--ink-2)",
+                      color: "var(--text-soft)",
                     }}
                   >
                     {t.text || ""}

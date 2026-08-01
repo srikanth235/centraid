@@ -13,7 +13,7 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  background: color-mix(in oklab, var(--text) 30%, rgba(10, 12, 16, 0.55));
   backdrop-filter: blur(2px);
   animation: kit-fade-in 0.18s ease;
 }
@@ -43,7 +43,7 @@
 .saveLabel {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   min-width: 92px;
 }
 .editorTools {
@@ -67,7 +67,7 @@
 }
 .nbSelect {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -91,14 +91,14 @@
   font-size: 24px;
   font-weight: 600;
   letter-spacing: var(--tracking-h);
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   outline: none;
   margin-bottom: 12px;
 }
 .editorTitle::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .editorTextarea {
   width: 100%;
@@ -106,7 +106,7 @@
   font: var(--t-body);
   font-size: 15px;
   line-height: 1.65;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   outline: none;
@@ -149,7 +149,7 @@
   margin: 14px 0 4px;
   font-family: var(--font-title);
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .mdH1 {
   font-size: 20px;
@@ -163,7 +163,7 @@
 .mdP {
   padding: 3px 0;
   margin: 0;
-  color: var(--ink);
+  color: var(--text);
   white-space: pre-wrap;
 }
 .mdGap {
@@ -174,7 +174,7 @@
   display: flex;
   gap: 9px;
   padding: 2px 0;
-  color: var(--ink);
+  color: var(--text);
 }
 .mdBullet {
   color: var(--accent-deep-fg);
@@ -212,10 +212,10 @@
 }
 .checkText {
   flex: 1;
-  color: var(--ink);
+  color: var(--text);
 }
 .checkLine.done .checkText {
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-decoration: line-through;
 }
 
@@ -224,11 +224,11 @@
    ink at a higher specificity so the box never depends on stylesheet order. */
 .bodyRender .mdP {
   padding: 3px 0;
-  color: var(--ink);
+  color: var(--text);
 }
 .bodyRender .mdLi {
   padding: 2px 0;
-  color: var(--ink);
+  color: var(--text);
 }
 
 .editorAttach {
@@ -271,7 +271,7 @@
   border-radius: 999px;
   padding: 4px 10px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   min-width: 90px;
 }
 .tagInput:focus {
@@ -300,7 +300,7 @@
 }
 .activityLine {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

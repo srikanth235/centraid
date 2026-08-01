@@ -7,9 +7,9 @@
   --paper: #f6f0e3;
   --paper-2: #efe7d4;
   --card: #fbf7ec;
-  --ink: #20261f;
-  --ink-2: #55604f;
-  --ink-3: #83907c;
+  --text: #20261f;
+  --text-soft: #55604f;
+  --text-faint: #83907c;
   --line: rgba(32, 38, 31, 0.16);
   --line-soft: rgba(32, 38, 31, 0.09);
   --accent: #0d7263;
@@ -54,9 +54,9 @@
   --paper: #111612;
   --paper-2: #0c110d;
   --card: #171d17;
-  --ink: #ece5d2;
-  --ink-2: #a8ab97;
-  --ink-3: #6f7565;
+  --text: #ece5d2;
+  --text-soft: #a8ab97;
+  --text-faint: #6f7565;
   --line: rgba(236, 229, 210, 0.2);
   --line-soft: rgba(236, 229, 210, 0.1);
   --accent: #4ed0bc;
@@ -109,7 +109,7 @@ body {
   font-size: 18px;
   line-height: 1.65;
   background: var(--paper);
-  color: var(--ink);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   transition:
@@ -225,7 +225,7 @@ button {
   font-size: 12.5px;
   letter-spacing: 0.05em;
   text-transform: lowercase;
-  color: var(--ink-2);
+  color: var(--text-soft);
   text-decoration: none;
   padding: 7px 10px;
   border-radius: 6px;
@@ -237,7 +237,7 @@ button {
 }
 .head-nav a[aria-current="page"] {
   color: var(--paper);
-  background: var(--ink);
+  background: var(--text);
 }
 .toggle {
   width: 32px;
@@ -246,7 +246,7 @@ button {
   border-radius: 50%;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -290,7 +290,7 @@ button {
 .nav-toggle .bars i {
   height: 2px;
   border-radius: 2px;
-  background: var(--ink-2);
+  background: var(--text-soft);
   transition:
     transform 0.25s ease,
     opacity 0.2s ease;
@@ -337,7 +337,7 @@ button {
   font-size: 10.5px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 8px;
 }
 .mm-pages,
@@ -361,7 +361,7 @@ button {
   font-size: 19px;
   font-weight: 560;
   text-transform: lowercase;
-  color: var(--ink);
+  color: var(--text);
 }
 .mm-pages a:hover,
 .mm-rail a:hover {
@@ -377,17 +377,17 @@ button {
   color: var(--accent);
 }
 .mm-ext .mm-arrow {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .mm-rail a {
   padding: 9px 12px;
   font-family: var(--mono);
   font-size: 13.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   justify-content: flex-start;
 }
 .mm-rail a.on {
-  color: var(--ink);
+  color: var(--text);
   background: color-mix(in oklab, var(--accent) 9%, transparent);
 }
 .mm-rail a .n {
@@ -395,7 +395,7 @@ button {
   flex: none;
   font-size: 11px;
   letter-spacing: 0.08em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ---------- header search (⌘K) ---------- */
@@ -410,7 +410,7 @@ button {
   border-radius: 10px;
   border: 1px solid var(--line);
   background: color-mix(in oklab, var(--card) 55%, transparent);
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--mono);
   font-size: 13px;
   cursor: text;
@@ -420,7 +420,7 @@ button {
 }
 .doc-search:hover {
   border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .doc-search svg {
   width: 16px;
@@ -444,7 +444,7 @@ button {
   padding: 2px 6px;
   border-radius: 6px;
   border: 1px solid var(--line);
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: color-mix(in oklab, var(--paper) 70%, transparent);
 }
 .doc-search-key span {
@@ -460,7 +460,7 @@ button {
   justify-content: center;
   align-items: flex-start;
   padding: clamp(56px, 12vh, 132px) 20px 20px;
-  background: color-mix(in oklab, var(--ink) 34%, transparent);
+  background: color-mix(in oklab, var(--text) 34%, transparent);
   backdrop-filter: blur(3px);
 }
 .search-overlay.open {
@@ -488,25 +488,25 @@ button {
   width: 18px;
   height: 18px;
   flex: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .search-input-row input {
   flex: 1;
   border: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font-family: var(--body);
   font-size: 17px;
   outline: none;
 }
 .search-input-row input::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .search-esc {
   flex: none;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 2px 7px;
@@ -538,7 +538,7 @@ button {
   font-family: var(--display);
   font-weight: 600;
   font-size: 15px;
-  color: var(--ink);
+  color: var(--text);
 }
 .search-hit .hit-page {
   font-family: var(--mono);
@@ -551,7 +551,7 @@ button {
   margin-top: 3px;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -566,7 +566,7 @@ button {
 .search-empty {
   padding: 26px 18px 30px;
   text-align: center;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 14px;
 }
 
@@ -591,7 +591,7 @@ button {
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.35;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-decoration: none;
   border-radius: 6px;
 }
@@ -602,10 +602,10 @@ button {
   opacity: 0.75;
 }
 .rail a:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .rail a.on {
-  color: var(--ink);
+  color: var(--text);
   background: color-mix(in oklab, var(--accent) 9%, transparent);
 }
 .rail a.on::before {
@@ -742,25 +742,25 @@ h3 {
 .lede {
   font-size: clamp(17.5px, 1.9vw, 20px);
   line-height: 1.6;
-  color: var(--ink-2);
+  color: var(--text-soft);
   max-width: 38em;
   margin-bottom: 26px;
 }
 .lede b,
 .prose b {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .prose p {
   margin-top: 16px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   max-width: 36em;
 }
 .note {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.7;
-  color: var(--ink-3);
+  color: var(--text-faint);
   max-width: 46em;
 }
 .aside {
@@ -768,7 +768,7 @@ h3 {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.7;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border-left: 2px solid var(--accent);
   padding-left: 14px;
   max-width: 34em;
@@ -852,7 +852,7 @@ section.dark .note a {
 .artifact {
   position: relative;
   background: var(--card);
-  border: 1px solid var(--ink);
+  border: 1px solid var(--text);
   box-shadow: 9px 9px 0 var(--shadow);
   font-family: var(--mono);
   font-size: 13px;
@@ -883,7 +883,7 @@ section.dark .note a {
   font-size: 11.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .artifact-head .tag {
   color: var(--accent);
@@ -913,7 +913,7 @@ section.dark .artifact-head .tag {
   padding: 5px 0;
 }
 .t-who {
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: right;
   user-select: none;
 }
@@ -924,10 +924,10 @@ section.dark .artifact-head .tag {
   color: var(--accent);
 }
 .t-msg {
-  color: var(--ink);
+  color: var(--text);
 }
 .t-msg .dim {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .t-msg .nl {
   display: block;
@@ -966,7 +966,7 @@ section.dark .tool-chip {
 /* ---------- terminal block ---------- */
 .term {
   background: var(--card);
-  border: 1px solid var(--ink);
+  border: 1px solid var(--text);
   box-shadow: 9px 9px 0 var(--shadow);
 }
 .term-bar {
@@ -979,7 +979,7 @@ section.dark .tool-chip {
   font-size: 11.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .term-body {
   position: relative;
@@ -990,7 +990,7 @@ section.dark .tool-chip {
   overflow-x: auto;
 }
 .term-body .cm {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-style: italic;
 }
 .term-body .ln {
@@ -1005,14 +1005,14 @@ section.dark .tool-chip {
   user-select: none;
 }
 .term-body .out {
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding-left: 22px;
   white-space: pre;
 }
 .term-body code {
   all: unset;
   font-family: var(--mono);
-  color: var(--ink);
+  color: var(--text);
 }
 .copy-btn {
   position: absolute;
@@ -1022,7 +1022,7 @@ section.dark .tool-chip {
   height: 30px;
   border: 1px solid var(--line);
   background: var(--paper);
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1062,7 +1062,7 @@ section.dark .tool-chip {
     border-color 0.2s ease;
 }
 .card:hover {
-  border-color: var(--ink);
+  border-color: var(--text);
   box-shadow: 6px 6px 0 var(--shadow);
   transform: translate(-1px, -1px);
 }
@@ -1084,7 +1084,7 @@ section.dark .tool-chip {
   margin-top: 8px;
   font-size: 15.5px;
   line-height: 1.55;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .card .aside {
   margin-top: 14px;
@@ -1182,7 +1182,7 @@ body:not(.ontology-page) section.dark .pill {
 .step p {
   margin-top: 6px;
   font-size: 15.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   max-width: 40em;
 }
 .step .term {
@@ -1225,7 +1225,7 @@ table.dt {
   font-size: 10.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border-bottom: 1px solid var(--line);
   background: var(--paper-2);
   font-weight: 500;
@@ -1235,13 +1235,13 @@ table.dt {
   border-bottom: 0;
 }
 .dt td {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .dt td:first-child,
 .dt th[scope="row"] {
   font-family: var(--mono);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1306,7 +1306,7 @@ section.dark .dt td:first-child {
 .path {
   display: block;
   text-decoration: none;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--text);
   background: var(--card);
   box-shadow: 9px 9px 0 var(--shadow);
   padding: 30px 30px 32px;
@@ -1334,7 +1334,7 @@ section.dark .dt td:first-child {
 }
 .path p {
   margin-top: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 16.5px;
 }
 .path .go {
@@ -1366,9 +1366,9 @@ section.dark .dt td:first-child {
   color: var(--accent);
 }
 .chip[aria-pressed="true"] {
-  background: var(--ink);
+  background: var(--text);
   color: var(--paper);
-  border-color: var(--ink);
+  border-color: var(--text);
 }
 section.dark .chip {
   border-color: var(--night-line);
@@ -1407,10 +1407,10 @@ footer.site-foot {
   flex-wrap: wrap;
   font-family: var(--mono);
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .foot-row a {
-  color: var(--ink-2);
+  color: var(--text-soft);
   text-decoration: none;
   border-bottom: 1px solid var(--line);
   transition: color 0.15s ease;
@@ -1431,7 +1431,7 @@ footer.site-foot {
   font-family: var(--mono);
   font-size: 11.5px;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .foot-stamp code {
   font-size: 11.5px;
@@ -1460,8 +1460,8 @@ footer.site-foot {
   font-family: var(--mono);
   font-size: 13px;
   text-decoration: none;
-  color: var(--ink);
-  border: 1.5px solid var(--ink);
+  color: var(--text);
+  border: 1.5px solid var(--text);
   padding: 12px 22px;
   box-shadow: 5px 5px 0 transparent;
   transition:

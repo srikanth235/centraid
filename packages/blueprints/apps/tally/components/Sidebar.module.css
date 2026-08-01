@@ -11,7 +11,7 @@
   border-radius: 9px;
   font: var(--t-body);
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .navItem .lbl {
   flex: 1;
@@ -22,7 +22,7 @@
 }
 .navItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .navItem[aria-current="true"] {
   background: var(--accs);
@@ -39,7 +39,7 @@
   background: none;
   border-radius: 9px;
   text-align: left;
-  color: var(--ink);
+  color: var(--text);
 }
 .listitem:hover {
   background: var(--bg-sunken);

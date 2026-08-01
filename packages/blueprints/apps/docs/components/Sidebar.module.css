@@ -15,7 +15,7 @@
   border-radius: 9px;
   font: var(--t-body);
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .navItem span:first-of-type {
   flex: 1;
@@ -26,7 +26,7 @@
 }
 .navItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
@@ -74,7 +74,7 @@
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   padding: 0 10px;
 }
@@ -89,15 +89,15 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .storageTop .val {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .storageLabel {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 8px;
 }

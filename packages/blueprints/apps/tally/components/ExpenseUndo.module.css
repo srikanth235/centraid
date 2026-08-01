@@ -12,6 +12,6 @@
 }
 
 .notice span {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-body);
 }

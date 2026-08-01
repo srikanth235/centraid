@@ -12,7 +12,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-small);
   padding: 8px 10px;
 }
@@ -28,7 +28,7 @@
 .select:focus-visible,
 .input:focus-visible {
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
   outline: none;
 }
 .pair {
@@ -40,13 +40,13 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 .field > span {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .scope {
   padding: 10px;
@@ -64,7 +64,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 .guest[aria-pressed="true"] {

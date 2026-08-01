@@ -4,7 +4,7 @@
 .bulkCount {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--text);
 }
 .bulkActions {
   margin-left: auto;

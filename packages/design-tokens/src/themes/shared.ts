@@ -18,8 +18,6 @@ export const BRAND = "#3EC8B4";
 export const ACCENT_LIGHT = "#62D6C6";
 export const ACCENT_DEEP = "#2AA593";
 export const ACCENT_MIDNIGHT = "#12645A";
-export const ACCENT_VIOLET = "#7C5BD9";
-
 export const SUCCESS = "#5C8A4E";
 export const DANGER = "#C44A4A";
 
@@ -42,8 +40,8 @@ export interface Theme {
   accentDeep: string;
   /** Deepest accent — used sparingly for "midnight" treatments. */
   accentMidnight: string;
-  /** Cool-violet sub-accent. Used as the legacy "Centraid purple". */
-  accentViolet: string;
+  /** Accent value chosen for text against the current theme's surface. */
+  accentText: string;
 
   /** Positive state — green check, "live" status pill. */
   success: string;
@@ -67,16 +65,18 @@ export interface Theme {
   bezel: string;
   bezelInner: string;
 
-  // Ink (text + icon foreground)
-  ink: string;
-  ink2: string;
-  ink3: string;
-  ink4: string;
-  inkInv: string;
+  // Text (text + icon foreground). Roles, not arbitrary brightness rungs.
+  text: string;
+  textSoft: string;
+  textFaint: string;
+  textGhost: string;
+  textInv: string;
 
   // Hairlines
   line: string;
   lineStrong: string;
+  /** Modal and image-overlay veil. */
+  scrim: string;
 
   // Shadows
   shadowSm: string;

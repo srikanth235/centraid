@@ -27,13 +27,13 @@
   --pulse: var(--success);
 }
 .page[data-status="degraded"] {
-  --pulse: var(--icon-amber);
+  --pulse: var(--c-amber);
 }
 .page[data-status="down"] {
   --pulse: var(--danger);
 }
 .page[data-status="unknown"] {
-  --pulse: var(--ink-4);
+  --pulse: var(--text-ghost);
 }
 
 /* Header — title cluster + heartbeat cadence readout. */
@@ -55,23 +55,23 @@
   border-radius: 9px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
   background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 .headMeta {
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Tab strip — Overview / Components / Logs / Alerts. Plain underline
@@ -99,7 +99,7 @@
   text-transform: uppercase;
   padding: 10px 4px 9px;
   margin: 0 8px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -112,10 +112,10 @@
   margin-left: 0;
 }
 .tab:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .tabActive {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--accent);
 }
 .tabBadge {
@@ -125,8 +125,8 @@
   line-height: 1;
   padding: 2px 5px;
   border-radius: 999px;
-  color: var(--icon-amber);
-  background: color-mix(in srgb, var(--icon-amber) 16%, transparent);
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 16%, transparent);
 }
 /* Overview lays itself out with `.grid`; the other tabs are a plain stack of
    `.panel`s, which had no gap between them — the cards sat flush and their
@@ -246,12 +246,12 @@
 }
 
 .statusWord {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 30px;
   line-height: 1.05;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 /* Reflows onto more lines rather than overflowing: the gateway label is
    user-supplied and can be a long path-like string. */
@@ -261,7 +261,7 @@
   font-size: 11px;
   letter-spacing: 0.03em;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
   overflow-wrap: anywhere;
 }
 /* One ellipsized line — the full text is in the logs; a raw fetch error can
@@ -282,7 +282,7 @@
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 
 /* Gauge figures — mono numerals, hairline dividers between them. A grid of
@@ -309,7 +309,7 @@
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -320,7 +320,7 @@
   font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -333,7 +333,7 @@
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.4;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Heartbeat strip — one tick per probe, seismograph tail. */
@@ -361,7 +361,7 @@
 .stripEmpty {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   align-self: center;
 }
 .stripAxis {
@@ -372,7 +372,7 @@
   font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Two packed columns below the hero. Each column stacks its own cards, so a
@@ -391,14 +391,14 @@
   min-width: 0;
 }
 
-/* Resource mode card (#521). */
+/* Resource mode card (var(--text)). */
 .resourceLead {
   margin: 10px 18px 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
-/* Segmented mode picker (issue #528 follow-up): a compact 4-cell tray, not a
+/* Segmented mode picker (issue var(--text) follow-up): a compact 4-cell tray, not a
    stack of full-width cards. Each cell is a plain styled button (no shell
    `.btn`, so no dark-on-dark inheritance), carrying the mode name + a mono
    preset hint (workers · memory). The full blurb lives on the title tooltip
@@ -409,7 +409,7 @@
   gap: 5px;
   margin: 12px 14px 0;
   padding: 4px;
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
 }
@@ -452,11 +452,11 @@
     color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .resourceModeLabel {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 12.5px;
   letter-spacing: -0.01em;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .resourceModeBtnActive .resourceModeLabel {
   color: var(--accent);
@@ -465,7 +465,7 @@
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.01em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
 }
 .resourceModeBtnActive .resourceModeHint {
@@ -491,10 +491,10 @@
   gap: 7px;
   padding: 9px 10px;
   cursor: pointer;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -504,15 +504,15 @@
     background 0.16s;
 }
 .resourceAction:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourceActionIcon {
   display: inline-flex;
   width: 14px;
   height: 14px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceActionIcon svg {
   width: 14px;
@@ -525,7 +525,7 @@
   padding: 0 18px 14px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceError {
   padding: 0 18px 14px;
@@ -534,7 +534,7 @@
   color: var(--danger);
 }
 
-/* ── L0 pause background work (issue #528) ──
+/* ── L0 pause background work (issue var(--text)) ──
    A temporary override, set off from the mode controls above by a hairline
    rule and offered as one quiet, clearly-clickable chip. It was a bare ghost
    button before — transparent, borderless — which read as a caption, not a
@@ -551,10 +551,10 @@
   gap: 7px;
   padding: 8px 14px 8px 11px;
   cursor: pointer;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
@@ -564,9 +564,9 @@
     background 0.16s;
 }
 .resourcePauseBtn:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourcePauseBtn:disabled {
   opacity: 0.6;
@@ -576,7 +576,7 @@
   display: inline-flex;
   width: 13px;
   height: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourcePauseIcon svg {
   width: 13px;
@@ -596,7 +596,7 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourcePauseActive {
   display: flex;
@@ -611,10 +611,10 @@
 .resourcePauseLabel {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 
-/* ── L1 budget summary (issue #528) ──
+/* ── L1 budget summary (issue var(--text)) ──
    The consequence of the mode choice, framed as one inset "here's what you
    get" unit directly under the mode picker — not a stack of loose text lines. */
 .resourceSummary {
@@ -625,19 +625,19 @@
   gap: 5px;
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourceSummaryLine {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
-  color: var(--ink);
+  color: var(--text);
 }
 .resourceSummaryAttr {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 /* Running / saved status, folded into the budget block instead of floating
    as separate note lines below the pause control. */
@@ -645,30 +645,30 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceSummaryStatusSaved {
   color: var(--accent);
 }
 
-/* ── Power-context posture note (issue #528 Phase D) ── */
+/* ── Power-context posture note (issue var(--text) Phase D) ── */
 .resourcePosture {
   padding: 0 18px 12px;
 }
 .resourcePostureLine {
   font-size: 12.5px;
   line-height: 1.45;
-  color: var(--ink);
+  color: var(--text);
 }
 .resourcePostureAttr {
   margin-top: 2px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
-/* ── L2 "how we sized this" disclosure (issue #528) ── */
+/* ── L2 "how we sized this" disclosure (issue var(--text)) ── */
 .resourceDetails {
   border-top: 0.5px solid var(--line);
 }
@@ -684,13 +684,13 @@
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceDetailsToggle:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .resourceDetailsChevron {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourceDetailsBody {
   display: flex;
@@ -708,7 +708,7 @@
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourceDetailsList {
   margin: 0;
@@ -724,7 +724,7 @@
   font-size: 12px;
 }
 .resourceDetailsRow dt {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceDetailsRow dd {
   margin: 0;
@@ -732,11 +732,11 @@
 .resourceDetailsValue {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink);
+  color: var(--text);
   text-align: right;
 }
 
-/* ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ── */
+/* ── L3 "Tune" rung: advanced knobs (issue var(--text) Phase F) ── */
 .resourceAdvanced {
   border-top: 0.5px solid var(--line);
 }
@@ -750,7 +750,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceKnobRow {
   display: flex;
@@ -765,13 +765,13 @@
 }
 .resourceKnobLabel {
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .resourceKnobTagLinked {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourceKnobTagCustom {
   font-family: var(--font-mono);
@@ -786,7 +786,7 @@
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourceKnobControls {
   display: flex;
@@ -801,22 +801,22 @@
   background: var(--bg-elev);
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--text);
 }
 .resourceKnobInput:disabled {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   opacity: 0.8;
 }
 .resourceKnobMeta {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .resourceKnobHelp {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .resourceKnobError {
   font-family: var(--font-mono);
@@ -826,13 +826,13 @@
 .resourceKnobWarn {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 .resourceKnobPending {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* Panel — shared card shell (Insights family). */
@@ -855,11 +855,11 @@
 }
 .panelHead h2 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
 }
 /* `flex: none` — under space-between the meta would shrink and wrap before the
    h2 did, since the h2 is the longer flex item. */
@@ -869,13 +869,13 @@
   font-size: 10px;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .panelEmpty {
   padding: 22px 18px 24px;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* Outage log rows. */
@@ -928,7 +928,7 @@
   font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: var(--outage-line);
-  color: var(--ink-2);
+  color: var(--text-soft);
   white-space: nowrap;
 }
 /* `overflow-wrap: anywhere` — component errors carry absolute vault paths and
@@ -937,7 +937,7 @@
   min-width: 0;
   font-size: 12.5px;
   line-height: var(--outage-line);
-  color: var(--ink-3);
+  color: var(--text-faint);
   overflow-wrap: anywhere;
 }
 .outage[data-ongoing] .outageDuration {
@@ -951,8 +951,8 @@
   text-transform: uppercase;
   white-space: nowrap;
   margin-top: calc((var(--outage-line) - 12px) / 2);
-  color: var(--icon-amber);
-  background: color-mix(in srgb, var(--icon-amber) 14%, transparent);
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 14%, transparent);
   border-radius: var(--r-sm);
   padding: 2px 5px;
 }
@@ -965,7 +965,7 @@
 }
 .outageDot[data-kind="degraded"],
 .outageDot[data-kind="version-skew"] {
-  background: var(--icon-amber);
+  background: var(--c-amber);
   opacity: 1;
 }
 .outageDot[data-kind="down"],
@@ -990,13 +990,13 @@
 .alertToggleLabel {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .alertToggleSub {
   margin-top: 3px;
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .switch {
   flex: none;
@@ -1005,8 +1005,8 @@
   height: 20px;
   margin-top: 1px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
-  background: color-mix(in srgb, var(--ink) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+  background: color-mix(in srgb, var(--text) 24%, transparent);
   cursor: pointer;
   padding: 0;
   transition:
@@ -1028,10 +1028,10 @@
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--text);
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.18),
-    0 1px 2px rgb(0 0 0 / 0.25);
+    0 0 0 1px var(--scrim),
+    0 1px 2px var(--scrim);
   transition: transform 0.18s var(--ease, ease);
 }
 .switch[data-on] .switchThumb {
@@ -1049,7 +1049,7 @@
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   margin-bottom: 8px;
 }
 .presets {
@@ -1065,7 +1065,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line-strong);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1106,7 +1106,7 @@
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 /* `min-width: 0` — a flex item floors at its content's min-content width, so
    without it `text-overflow: ellipsis` never engages and a long gateway label
@@ -1115,7 +1115,7 @@
   margin: 0;
   min-width: 0;
   font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;

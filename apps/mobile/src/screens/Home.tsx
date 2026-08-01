@@ -434,7 +434,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 6,
     },
     railLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 0.9,

@@ -23,7 +23,7 @@
   font: var(--t-display-1);
   font-size: 34px;
   letter-spacing: -0.03em;
-  color: var(--ink);
+  color: var(--text);
 }
 .headText p {
   margin: 10px 0 0;
@@ -31,7 +31,7 @@
   font: var(--t-body);
   font-size: 13.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .toolbar {
   display: flex;
@@ -59,12 +59,12 @@
   font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
 }
 .catCount {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .grid {
   /* Compact template tiles, sized to match the Home shelf exactly — the same
@@ -176,7 +176,7 @@
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -186,7 +186,7 @@
   font: var(--t-small);
   font-size: 12.5px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -205,10 +205,10 @@
   align-items: center;
   gap: 5px;
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 /* "Installed" marker on an app card whose app is already in this vault
-   (issue #434) — the card opens instead of installing. */
+   (issue var(--text)) — the card opens instead of installing. */
 .installedTag {
   display: inline-flex;
   align-items: center;
@@ -241,5 +241,5 @@
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }

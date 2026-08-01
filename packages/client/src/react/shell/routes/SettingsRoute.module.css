@@ -12,7 +12,7 @@
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgb(5 6 10 / 62%);
+  background: var(--scrim);
   backdrop-filter: blur(3px) saturate(0.9);
   animation: settings-veil 140ms ease both;
 }
@@ -31,13 +31,13 @@
   border: 0.5px solid var(--line-strong, var(--line));
   border-radius: 16px;
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   /* Two shadows: a tight contact edge so the border doesn't float, and a wide
      soft one for the lift. A single shadow reads as either flat or smeared. */
   box-shadow:
     0 1px 0 0 color-mix(in srgb, var(--on-accent) 6%, transparent) inset,
-    0 2px 6px rgb(0 0 0 / 28%),
-    0 28px 70px -18px rgb(0 0 0 / 55%);
+    0 2px 6px var(--scrim),
+    0 28px 70px -18px var(--scrim);
   overflow: hidden;
   animation: settings-rise 180ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
   container: settings-shell / inline-size;
@@ -74,7 +74,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   transition:
     background 120ms,
@@ -82,8 +82,8 @@
 }
 .dialogClose:hover,
 .dialogClose:focus-visible {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
   outline: none;
 }
 
@@ -100,7 +100,7 @@
   display: flex;
   flex-direction: column;
   padding: 22px 12px 16px 18px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
   border-right: 0.5px solid var(--line);
   overflow-y: auto;
 }
@@ -112,21 +112,21 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .settingsNavTitle {
   margin-top: 6px;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .settingsNavSection {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding: 14px 10px 4px;
 }
 .settingsNavSection:first-of-type {
@@ -147,23 +147,23 @@
   font: inherit;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   transition:
     background 100ms,
     color 100ms;
 }
 .settingsNavItem:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
 }
 .settingsNavItem:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .settingsNavItem[data-active="true"] {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 /* A hairline rail on the leading edge, not a coloured fill: the tab list is
    read as a column of labels, and a 2px mark tells you where you are without
@@ -190,7 +190,7 @@
 .settingsNavVer {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .settingsContent {
   min-width: 0;
@@ -212,17 +212,17 @@
 }
 .settingsPageTitle {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 21px;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 .settingsPageSub {
   margin: 8px 0 0;
   font-size: 13.5px;
   line-height: 1.55;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-wrap: pretty;
 }
 .settingsAutosaved {

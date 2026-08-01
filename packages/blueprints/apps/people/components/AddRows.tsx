@@ -46,8 +46,8 @@ function AddRow({
         style={{
           background: canCommit
             ? "var(--accd)"
-            : "color-mix(in oklab, var(--ink) 8%, transparent)",
-          color: canCommit ? "#fff" : "var(--ink-3)",
+            : "color-mix(in oklab, var(--text) 8%, transparent)",
+          color: canCommit ? "#fff" : "var(--text-faint)",
         }}
       >
         <Icon svg={I.plus} />

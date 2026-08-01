@@ -51,7 +51,7 @@
 }
 .tile:focus-visible {
   outline: none;
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
   outline-offset: -2px;
 }
 .tile[aria-pressed="true"] {
@@ -82,7 +82,7 @@
 }
 .count {
   margin-right: auto;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--mono);
   font-size: 0.8rem;
 }

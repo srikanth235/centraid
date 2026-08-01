@@ -112,7 +112,7 @@ function DockSlot({
       onPress={onPress}
       style={({ pressed }) => [styles.slot, pressed && { opacity: 0.6 }]}
     >
-      <Icon name={icon} size={22} color={colors.ink2} strokeWidth={1.8} />
+      <Icon name={icon} size={22} color={colors.textSoft} strokeWidth={1.8} />
       <Text style={styles.slotLabel}>{label}</Text>
     </Pressable>
   );
@@ -160,7 +160,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 4,
     },
     slotLabel: {
-      color: colors.ink2,
+      color: colors.textSoft,
       fontFamily: family.sansMedium,
       fontSize: 10,
     },

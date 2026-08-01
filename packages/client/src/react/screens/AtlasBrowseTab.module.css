@@ -1,4 +1,4 @@
-/* Browse tab — the vault-aware table editor (issue #441 B3). Co-located with
+/* Browse tab — the vault-aware table editor (issue var(--text) B3). Co-located with
    AtlasBrowseTab.tsx. Mobile-first: the table picker is a collapsible sheet
    above a full-width editor; at >=720px it becomes a sticky left rail beside the
    grid. Colours are design tokens only (no hardcoded hex, no `red`) — reusing
@@ -13,7 +13,7 @@
 .loading {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 24px 4px;
 }
 .gridError {
@@ -67,13 +67,13 @@
   border: 0.5px solid var(--line);
   border-radius: 10px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
 }
 .pickToggleLabel {
   flex: 1;
   text-align: left;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
 }
@@ -110,7 +110,7 @@
   padding: 6px 9px;
   border-radius: 8px;
   background: var(--bg-sunken);
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .pickInput {
   flex: 1;
@@ -118,12 +118,12 @@
   border: none;
   background: none;
   outline: none;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .pickInput::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 .pickList {
@@ -143,7 +143,7 @@
   font-size: 9.5px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding: 4px 6px 3px;
 }
 .pickDivider {
@@ -154,7 +154,7 @@
   font-size: 9.5px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .pickOption {
   display: flex;
@@ -165,21 +165,21 @@
   border: none;
   border-radius: 7px;
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   text-align: left;
   transition: background 0.12s var(--ease, ease);
 }
 .pickOption:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .pickOptionActive {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
-  color: var(--ink);
+  color: var(--text);
 }
 .pickLabel {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   min-width: 0;
   overflow: hidden;
@@ -189,15 +189,15 @@
 .pickCount {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
   flex: none;
 }
 .pickEmpty {
   padding: 12px 6px;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* ── Main header ────────────────────────────────────────────────────────── */
@@ -218,12 +218,12 @@
 .mainName {
   margin: 0;
   font: var(--t-title);
-  color: var(--ink);
+  color: var(--text);
 }
 .mainLogical {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .machineryTag {
   font-family: var(--font-mono);
@@ -232,7 +232,7 @@
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: 999px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
 }
@@ -251,8 +251,8 @@
   border-radius: 8px;
   border: 0.5px solid var(--accent);
   background: var(--accent);
-  color: var(--ink-inv);
-  font-family: var(--font-sans);
+  color: var(--text-inv);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -273,14 +273,14 @@
   border-radius: 8px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-2);
-  font-family: var(--font-sans);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   cursor: pointer;
   transition: color 0.12s var(--ease, ease);
 }
 .ghostBtn:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
 }
 .ghostBtn:disabled {
   opacity: 0.45;
@@ -295,7 +295,7 @@
   border: 0.5px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, transparent);
   color: var(--danger);
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -316,12 +316,12 @@
   border-radius: 7px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   transition: color 0.12s var(--ease, ease);
 }
 .iconBtn:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
 }
 .iconBtnDanger:hover:not(:disabled) {
   color: var(--danger);
@@ -351,7 +351,7 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
 }
@@ -359,7 +359,7 @@
   margin: 0;
   max-width: 46ch;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ── Machinery lock bar ─────────────────────────────────────────────────── */
@@ -371,16 +371,16 @@
   border-radius: 10px;
   border: 0.5px solid var(--line-strong);
   background: var(--bg-sunken);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .machineryBarOpen {
   border-color: var(--danger);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .machineryNote {
   margin: 0;
   flex: 1;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.4;
 }
@@ -390,7 +390,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
@@ -427,17 +427,17 @@
   padding: 8px 12px;
   border: none;
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10.5px;
   text-align: left;
 }
 .sortBtn:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .sortBtn[data-sorted] {
-  color: var(--ink);
+  color: var(--text);
 }
 .colName {
   letter-spacing: 0.02em;
@@ -448,7 +448,7 @@
   text-transform: uppercase;
   padding: 1px 4px;
   border-radius: 4px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   background: var(--bg-sunken);
 }
 .sortArrow {
@@ -468,7 +468,7 @@
   border-bottom: 0.5px solid var(--line);
   max-width: 320px;
   vertical-align: top;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .gridActions {
   padding: 5px 10px;
@@ -482,21 +482,21 @@
 .gridEmpty {
   padding: 32px 16px;
   text-align: center;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   border: 0.5px dashed var(--line-strong);
   border-radius: 12px;
 }
 
 .nullCell {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-style: italic;
 }
 .fkCell {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: help;
   border-bottom: 1px dotted var(--line-strong);
 }
@@ -505,7 +505,7 @@
   background: none;
   padding: 0;
   text-align: left;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   font: inherit;
 }
@@ -520,7 +520,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
@@ -532,14 +532,14 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.03em;
   cursor: pointer;
 }
 .loadMore:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
 }
 .loadMore:disabled {
   opacity: 0.5;
@@ -557,7 +557,7 @@
 .drawerBackdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--ink) 32%, transparent);
+  background: color-mix(in oklab, var(--text) 32%, transparent);
 }
 .drawer {
   position: relative;
@@ -584,12 +584,12 @@
   align-items: baseline;
   gap: 9px;
   font: var(--t-title);
-  color: var(--ink);
+  color: var(--text);
 }
 .drawerTable {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .fields {
   flex: 1;
@@ -610,14 +610,14 @@
   gap: 7px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .reqStar {
   color: var(--danger);
 }
 .fieldType {
   font-size: 9.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   letter-spacing: 0.04em;
 }
 .input {
@@ -626,8 +626,8 @@
   border-radius: 8px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink);
-  font-family: var(--font-sans);
+  color: var(--text);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   outline: none;
 }
@@ -635,7 +635,7 @@
   border-color: var(--accent);
 }
 .input:read-only {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   background: var(--bg-sunken);
 }
 .sealedField {
@@ -646,8 +646,8 @@
   border-radius: 8px;
   border: 0.5px dashed var(--line-strong);
   background: var(--bg-sunken);
-  color: var(--ink-4);
-  font-family: var(--font-sans);
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
   font-size: 11.5px;
 }
 .autoField {
@@ -655,7 +655,7 @@
   border-radius: 8px;
   border: 0.5px dashed var(--line);
   background: var(--bg-sunken);
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -669,7 +669,7 @@
 .fkChosen {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   word-break: break-all;
 }
 .fkHits {
@@ -704,14 +704,14 @@
   background: var(--bg-sunken);
 }
 .fkHitDisplay {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .fkHitId {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 .drawerError {
@@ -721,7 +721,7 @@
   border: 0.5px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -751,7 +751,7 @@
 .dialogBackdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--ink) 32%, transparent);
+  background: color-mix(in oklab, var(--text) 32%, transparent);
 }
 .dialog {
   position: relative;
@@ -785,18 +785,18 @@
 .dialogTitle {
   margin: 0;
   font: var(--t-title);
-  color: var(--ink);
+  color: var(--text);
 }
 .dialogBody {
   margin: 0;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .dialogSummary {
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
 }
 .depList {
   list-style: none;
@@ -821,12 +821,12 @@
 .depTable {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .depVia {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .depBadge {
   font-family: var(--font-mono);
@@ -841,14 +841,14 @@
   background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
 .depBadgePoly {
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-sunken);
 }
 .depCount {
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 .dialogBlocked {
@@ -857,8 +857,8 @@
   border-radius: 8px;
   border-left: 2px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 7%, transparent);
-  color: var(--ink-2);
-  font-family: var(--font-sans);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -868,8 +868,8 @@
   border-radius: 8px;
   border-left: 2px solid var(--line-strong);
   background: var(--bg-sunken);
-  color: var(--ink-3);
-  font-family: var(--font-sans);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
 }

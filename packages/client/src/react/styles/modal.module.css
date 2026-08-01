@@ -20,7 +20,7 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--scrim);
   z-index: 50;
   animation: m-fade 0.18s ease-out;
 }
@@ -44,17 +44,17 @@
   right: 16px;
 }
 .card h3 {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 26px;
   letter-spacing: -0.025em;
   margin: 0 0 6px;
-  color: var(--ink);
+  color: var(--text);
 }
 .card p {
   margin: 0 0 18px;
   font-size: 13.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   line-height: 1.45;
 }
 .input {
@@ -62,10 +62,10 @@
   box-sizing: border-box;
   margin: 0 0 4px;
   padding: 10px 12px;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 14px;
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
   border: 1px solid var(--line);
   border-radius: 8px;
   outline: none;

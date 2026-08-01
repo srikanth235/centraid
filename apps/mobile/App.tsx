@@ -320,7 +320,7 @@ function ReplicaCompatibilityGate({
       >
         <Text
           style={{
-            color: colors.ink,
+            color: colors.text,
             fontFamily: "SpaceGrotesk_600SemiBold",
             fontSize: 26,
           }}
@@ -329,7 +329,7 @@ function ReplicaCompatibilityGate({
         </Text>
         <Text
           style={{
-            color: colors.ink2,
+            color: colors.textSoft,
             fontFamily: "Geist_400Regular",
             fontSize: 16,
             lineHeight: 23,
@@ -352,7 +352,7 @@ function ReplicaCompatibilityGate({
         >
           <Text
             style={{
-              color: colors.inkInv,
+              color: colors.textInv,
               fontFamily: "Geist_600SemiBold",
               fontSize: 15,
             }}

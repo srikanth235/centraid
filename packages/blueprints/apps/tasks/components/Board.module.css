@@ -23,7 +23,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .eyebrow.toneDanger {
   color: var(--danger);
@@ -34,7 +34,7 @@
 .eyebrowCount {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .hairline {
   flex: 1;
@@ -60,6 +60,6 @@
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }

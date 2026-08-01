@@ -42,7 +42,7 @@
   overscroll-behavior: contain;
 }
 
-/* ── People-first grouping (#599) ────────────────────────────────────────
+/* ── People-first grouping (var(--text)) ────────────────────────────────────────
    A group is one PERSON: the header carries what is authored on them (their
    access, and the wide "Remove <person>" verb), the list under it carries the
    hardware that merely inherits. */
@@ -70,8 +70,8 @@
   width: 30px;
   height: 30px;
   border-radius: 999px;
-  color: var(--ink-2);
-  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  color: var(--text-soft);
+  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
 }
 .group[data-self] .groupGlyph {
@@ -92,7 +92,7 @@
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   overflow-wrap: break-word;
 }
 /* Ownership words (Owner / Member / Viewer) beside the vault they apply to —
@@ -110,7 +110,7 @@
 .groupEmpty {
   margin: 0 0 0 42px;
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .rowWarn {
@@ -124,7 +124,7 @@
 .tombstones {
   margin-left: 42px;
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .tombstones summary {
   cursor: pointer;
@@ -145,7 +145,7 @@
   font-size: 10.5px;
 }
 .tombstones li span[data-quiet="true"] {
-  color: color-mix(in srgb, var(--ink-3) 72%, transparent);
+  color: color-mix(in srgb, var(--text-faint) 72%, transparent);
 }
 
 .row {
@@ -171,8 +171,8 @@
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  color: var(--ink-2);
-  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  color: var(--text-soft);
+  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
 }
 .row[data-current] .glyph {
@@ -197,7 +197,7 @@
 .name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
   overflow-wrap: break-word;
 }
 .renameForm {
@@ -212,7 +212,7 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   padding: 3px 6px;
 }
@@ -221,15 +221,15 @@
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   font: var(--t-tiny);
   padding: 3px 5px;
 }
 .renameAction:hover,
 .renameIcon:hover {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
 }
 
 .currentChip,
@@ -250,8 +250,8 @@
    carries a faint success tint (the private-by-default path); direct is
    neutral ink. */
 .transportChip {
-  color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .transportChip[data-transport="iroh"] {
   color: var(--success);
@@ -265,10 +265,10 @@
   gap: 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .meta span[data-quiet="true"] {
-  color: color-mix(in srgb, var(--ink-3) 72%, transparent);
+  color: color-mix(in srgb, var(--text-faint) 72%, transparent);
 }
 .metaVault {
   display: inline-flex;
@@ -276,7 +276,7 @@
   gap: 4px;
 }
 .metaVault svg {
-  color: var(--ink-3);
+  color: var(--text-faint);
   opacity: 0.8;
 }
 
@@ -295,8 +295,8 @@
   font-size: 9px;
 }
 .grantProfile span:first-child {
-  color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .computeToggle {
@@ -305,7 +305,7 @@
   align-items: center;
   gap: 7px;
   margin-top: 4px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   font-size: 11px;
   line-height: 1.35;
@@ -314,7 +314,7 @@
   accent-color: var(--accent);
 }
 .computeToggle small {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 9.5px;
 }
@@ -368,16 +368,16 @@
   min-width: 0;
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--ink-2);
+  color: var(--text-soft);
   overflow-wrap: anywhere;
 }
 .confirmYes {
-  color: #fff;
+  color: var(--text);
   background: var(--danger);
   border-color: var(--danger);
 }
 .confirmYes:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 88%, #000);
+  background: color-mix(in srgb, var(--danger) 88%, var(--text));
 }
 
 .spin {

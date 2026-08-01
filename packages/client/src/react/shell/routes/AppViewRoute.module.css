@@ -34,7 +34,7 @@
   align-items: center;
   gap: 9px;
   padding: 4px 10px 4px 6px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
 }
@@ -45,13 +45,13 @@
   border-radius: 6px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
 }
 .brandChipName {
-  font-family: var(--font-display, var(--font-sans));
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .brandChipLive {
   display: inline-flex;
@@ -80,7 +80,7 @@
   height: 28px;
   padding: 2px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   border: 0.5px solid var(--line);
 }
 .modeSeg {
@@ -92,7 +92,7 @@
   border-radius: 999px;
   border: none;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -102,11 +102,11 @@
     color 120ms;
 }
 .modeSeg:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .modeSeg[data-active="true"] {
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   box-shadow: 0 0 0 0.5px var(--line);
 }
 .modeSegIcon {

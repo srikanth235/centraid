@@ -34,7 +34,7 @@ export function buildUiGroundingBlocks(): string[] {
 /**
  * `### Design tokens` — the live CSS-variable contract emitted by
  * `@centraid/design-tokens`. The agent should consume these via
- * `var(--accent)`, `var(--ink)`, etc. — never hardcode colors, radii,
+ * `var(--accent)`, `var(--text)`, etc. — never hardcode colors, radii,
  * font sizes, or spacing values.
  *
  * The scaffold generator writes this baseline into `app.css`, so this block is
@@ -53,7 +53,7 @@ function renderDesignTokensBlock(): string {
     "**Rules:**",
     "",
     "- App identity: set `--app-hue` (drives the whole neutral ramp — ink, lines, surfaces, shadows) and `--accent` (one of the palette vars `--c-amber`/`--c-forest`/`--c-indigo`/`--c-ochre`/`--c-rose`/`--c-slate`/`--c-teal`/`--c-violet`) in your app.css `:root`. Everything else derives.",
-    "- Colors: `var(--accent)`, `var(--accent-soft)`, `var(--accent-deep)`, `var(--ink)`, `var(--ink-2)`, `var(--ink-3)`, `var(--ink-inv)`, `var(--bg)`, `var(--surface)`, `var(--surface-2)`, `var(--line)`, `var(--line-strong)`, `var(--danger)`. **Never** write `#hexcodes` or `rgb()` literals for foreground/background/border.",
+    "- Colors: `var(--accent)`, `var(--accent-soft)`, `var(--accent-deep)`, `var(--text)`, `var(--text-soft)`, `var(--text-faint)`, `var(--text-inv)`, `var(--bg)`, `var(--bg-elev)`, `var(--bg-sunken)`, `var(--line)`, `var(--line-strong)`, `var(--danger)`. **Never** write `#hexcodes` or `rgb()` literals for foreground/background/border.",
     "- Accent indirection: paint with `var(--_accent)` (resolves the appColor knob over `--accent`) wherever the accent shows; `--sel`/`--selb` for selection tint/border.",
     "- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-card)`, `var(--r-pill)` — do not pick px values by feel.",
     "- Type: `font: var(--t-title|--t-body|--t-body-strong|--t-small|--t-tiny|--t-mono)` shorthands; mono (`var(--mono)`) for counts, dates, metadata.",
@@ -120,7 +120,7 @@ function renderIconSetBlock(): string {
     "canonical Lucide-style set the shell itself uses.",
     "",
     'Usage: copy the `<svg>` snippet verbatim. `currentColor` + `stroke="currentColor"`',
-    "mean the icon inherits color from its parent — set `color: var(--ink-3)` on",
+    "mean the icon inherits color from its parent — set `color: var(--text-faint)` on",
     "the container, never hardcode a fill.",
     "",
     ...entries,
@@ -187,7 +187,7 @@ function renderComponentPrimitivesBlock(): string {
     '<p class="error" role="alert" hidden>Something went wrong. <button class="link" type="button">Retry</button></p>',
     "```",
     "",
-    '**Secondary / quiet button** — same shape as `.primary`, swap to `class="ghost"` (transparent bg, `var(--ink-2)` text).',
+    '**Secondary / quiet button** — same shape as `.primary`, swap to `class="ghost"` (transparent bg, `var(--text-soft)` text).',
     "",
     '**Card / surface** — wrap in `<div class="surface">` for an elevated panel; the scaffold styles it with `background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-card);`.',
   ].join("\n");

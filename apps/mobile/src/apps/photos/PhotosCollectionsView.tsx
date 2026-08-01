@@ -72,10 +72,12 @@ function CollectionRow({
     >
       <View style={[styles.rowTile, { backgroundColor: color }]}>{icon}</View>
       <View style={styles.rowText}>
-        <Text style={[styles.rowTitle, { color: colors.ink }]}>{title}</Text>
-        <Text style={[styles.rowMeta, { color: colors.ink3 }]}>{count}</Text>
+        <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+          {count}
+        </Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.ink4} />
+      <Feather name="chevron-right" size={18} color={colors.textGhost} />
     </Pressable>
   );
 }
@@ -174,7 +176,7 @@ export default function PhotosCollectionsView({
       </View>
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: colors.ink }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
           People &amp; pets
         </Text>
       </View>
@@ -193,7 +195,7 @@ export default function PhotosCollectionsView({
             />
             <Text
               numberOfLines={1}
-              style={[styles.personName, { color: colors.ink2 }]}
+              style={[styles.personName, { color: colors.textSoft }]}
             >
               {person.name}
             </Text>
@@ -205,14 +207,18 @@ export default function PhotosCollectionsView({
           accessibilityLabel="Add a person"
         >
           <View style={[styles.avatarAdd, { borderColor: colors.lineStrong }]}>
-            <Feather name="plus" size={20} color={colors.ink3} />
+            <Feather name="plus" size={20} color={colors.textFaint} />
           </View>
-          <Text style={[styles.personName, { color: colors.ink3 }]}>Add</Text>
+          <Text style={[styles.personName, { color: colors.textFaint }]}>
+            Add
+          </Text>
         </Pressable>
       </ScrollView>
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: colors.ink }]}>Albums</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Albums
+        </Text>
         <Pressable
           style={styles.newAlbum}
           onPress={() => navigation.navigate("PhotosLibrary")}
@@ -244,24 +250,24 @@ export default function PhotosCollectionsView({
               />
               <Text
                 numberOfLines={1}
-                style={[styles.albumTitle, { color: colors.ink }]}
+                style={[styles.albumTitle, { color: colors.text }]}
               >
                 {String(album.name ?? "Album")}
               </Text>
-              <Text style={[styles.albumMeta, { color: colors.ink3 }]}>
+              <Text style={[styles.albumMeta, { color: colors.textFaint }]}>
                 {String(album.item_count ?? album.count ?? 0)} photos
               </Text>
             </Pressable>
           ))}
         </View>
       ) : (
-        <Text style={[styles.emptyAlbums, { color: colors.ink3 }]}>
+        <Text style={[styles.emptyAlbums, { color: colors.textFaint }]}>
           Group photos into an album to see it here.
         </Text>
       )}
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: colors.ink }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
           Categories
         </Text>
       </View>

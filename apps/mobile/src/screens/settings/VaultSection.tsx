@@ -196,7 +196,7 @@ export default function VaultSection(): React.JSX.Element {
           value={name}
           onChangeText={setName}
           placeholder="Vault name"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           style={styles.input}
           returnKeyType="done"
         />
@@ -228,7 +228,7 @@ export default function VaultSection(): React.JSX.Element {
                 <Icon
                   name={iconName}
                   size={18}
-                  color={active ? colors.inkInv : colors.ink2}
+                  color={active ? colors.textInv : colors.textSoft}
                 />
               </Pressable>
             );
@@ -242,7 +242,7 @@ export default function VaultSection(): React.JSX.Element {
           value={blurb}
           onChangeText={setBlurb}
           placeholder="A short note — e.g. Focus & planning"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           style={styles.input}
           returnKeyType="done"
         />
@@ -280,9 +280,9 @@ const makeStyles = (colors: ThemeColors) =>
       padding: 16,
     },
     error: { ...t("small"), color: colors.danger, marginTop: 8 },
-    fieldLabel: { ...t("small"), color: colors.ink2, fontWeight: "500" },
+    fieldLabel: { ...t("small"), color: colors.textSoft, fontWeight: "500" },
     fieldLabelSpaced: { marginTop: 8 },
-    hint: { ...t("small"), color: colors.ink3 },
+    hint: { ...t("small"), color: colors.textFaint },
     iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     iconTile: {
       alignItems: "center",
@@ -304,7 +304,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      color: colors.ink,
+      color: colors.text,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },

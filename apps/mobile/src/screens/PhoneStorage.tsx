@@ -83,13 +83,13 @@ export default function PhoneStorage({
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.ink }]}>
+          <Text style={[styles.title, { color: colors.text }]}>
             Phone storage
           </Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
             {formatBytes(total)} used by offline data
           </Text>
         </View>
@@ -115,10 +115,10 @@ export default function PhoneStorage({
                   )
                 }
               >
-                <Text style={[styles.cardTitle, { color: colors.ink }]}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
                   {row.label}
                 </Text>
-                <Text style={[styles.total, { color: colors.ink }]}>
+                <Text style={[styles.total, { color: colors.text }]}>
                   {formatBytes(used)}
                 </Text>
               </Pressable>
@@ -127,17 +127,17 @@ export default function PhoneStorage({
                   <StorageLine
                     label="Database · Docs, Photos & app metadata"
                     bytes={row.databaseBytes}
-                    color={colors.ink2}
+                    color={colors.textSoft}
                   />
                   <StorageLine
                     label={`Offline thumbnails · ${formatBytes(THUMBNAIL_SOURCE_BUDGET_BYTES)} budget`}
                     bytes={row.thumbnailBytes}
-                    color={colors.ink2}
+                    color={colors.textSoft}
                   />
                   <StorageLine
                     label="Pending uploads"
                     bytes={row.pendingUploadBytes}
-                    color={colors.ink2}
+                    color={colors.textSoft}
                   />
                 </>
               ) : null}
@@ -149,7 +149,7 @@ export default function PhoneStorage({
             style={[styles.explainer, { backgroundColor: colors.bgSunken }]}
           >
             <Feather name="alert-circle" size={18} color={colors.accent} />
-            <Text style={[styles.explainerText, { color: colors.ink2 }]}>
+            <Text style={[styles.explainerText, { color: colors.textSoft }]}>
               {formatBytes(unassignedPendingBytes)} of legacy pending uploads
               predate vault-target accounting. They remain durable and are not
               assigned to whichever vault is currently focused.
@@ -158,7 +158,7 @@ export default function PhoneStorage({
         ) : null}
         <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
           <Feather name="shield" size={18} color={colors.accent} />
-          <Text style={[styles.explainerText, { color: colors.ink2 }]}>
+          <Text style={[styles.explainerText, { color: colors.textSoft }]}>
             Databases live in protected app storage, survive cache eviction, and
             are excluded from iCloud Backup and Android Auto Backup. Originals
             are never counted as cache because they stay on demand.

@@ -3,12 +3,12 @@
 // against. Once the seam between the vanilla app.ts shell and its route modules;
 // after the full-React flip (#325) app.ts is gone and this is just the types +
 // the ACCENT_PALETTE the appearance code shares.
+import { BRAND, palette } from "@centraid/design-tokens";
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
 /** What the owner asked for. `system` tracks the OS appearance live. */
 export type ThemeMode = ThemeName | "system";
-export type Density = "compact" | "regular" | "comfy";
 export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
 export type AccentKey = "blue" | "violet" | "teal" | "ochre" | "rose";
 export type CardVariant = "flat" | "outlined" | "elevated";
@@ -22,11 +22,11 @@ export const ACCENT_PALETTE: Record<
   AccentKey,
   { accent: string; light: string; deep: string }
 > = {
-  blue: { accent: "#4950F6", light: "#6B72FF", deep: "#2D34D9" },
-  ochre: { accent: "#B47B3F", light: "#CB9359", deep: "#92622F" },
-  rose: { accent: "#E55772", light: "#EE7D92", deep: "#BF3E57" },
-  teal: { accent: "#3EC8B4", light: "#62D6C6", deep: "#2AA593" },
-  violet: { accent: "#7C5BD9", light: "#9D80E6", deep: "#5D3EB3" },
+  blue: { accent: palette.indigo, light: palette.violet, deep: palette.slate },
+  ochre: { accent: palette.ochre, light: palette.amber, deep: palette.forest },
+  rose: { accent: palette.rose, light: palette.violet, deep: palette.slate },
+  teal: { accent: BRAND, light: palette.teal, deep: palette.forest },
+  violet: { accent: palette.violet, light: palette.rose, deep: palette.indigo },
 };
 
 // A gateway profile as returned by the listGateways IPC.
@@ -48,7 +48,6 @@ export interface AppearancePrefs {
   themeMode: ThemeMode;
   /** The resolved theme actually applied — `themeMode` unless it is `system`. */
   theme: ThemeName;
-  density: Density;
   tileVariant: TileVariant;
   sidebarOpen: boolean;
   /** Dark ramp lightness override, in percent. Absent = the theme's `bgL`. */

@@ -37,7 +37,7 @@ export function LockerUnlockScreen({
 }): React.JSX.Element {
   return (
     <View style={styles.locked}>
-      <Icon name="Key" size={32} color={colors.ink2} />
+      <Icon name="Key" size={32} color={colors.textSoft} />
       <Text style={styles.stateTitle}>
         {configured ? "Locker is locked" : "Protect Locker"}
       </Text>
@@ -55,7 +55,7 @@ export function LockerUnlockScreen({
         onChangeText={onChangePassphrase}
         onSubmitEditing={onUnlock}
         placeholder={configured ? "Primary passphrase" : "New passphrase"}
-        placeholderTextColor={colors.ink3}
+        placeholderTextColor={colors.textFaint}
         secureTextEntry
         style={styles.input}
         value={passphrase}

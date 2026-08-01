@@ -941,7 +941,7 @@ export interface AutomationThreadBridgeProps {
 /** The three positions of the Appearance control. `system` is a standing mode
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
-/** Appearance is the one visual-treatment page: theme, density, and card
+/** Appearance is the one visual-treatment page: theme and card
  *  surface. Layout was folded into it (#608). The accent swatches and the
  *  app-tile treatment picker were cut but keep their prefs; the dark ramp's
  *  surface temperature was removed outright, so dark has exactly one ramp —
@@ -953,10 +953,8 @@ export type SettingsThemeMode = "light" | "dark" | "system";
  *  the chrome toggle still writes it. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
-  density: "compact" | "regular" | "comfy";
   cardVariant: "flat" | "outlined" | "elevated";
   onSetThemeMode: (mode: SettingsThemeMode) => void;
-  onSetDensity: (v: "compact" | "regular" | "comfy") => void;
   onSetCards: (v: "flat" | "outlined" | "elevated") => void;
 }
 

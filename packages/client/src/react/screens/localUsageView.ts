@@ -37,54 +37,54 @@ export const COMPONENT_PRESENTATION: Readonly<
 > = Object.freeze({
   attachments: {
     label: "Attachments",
-    color: "var(--icon-indigo)",
+    color: "var(--c-indigo)",
     blurb:
       "Files, photos, and the previews and archive segments derived from them.",
   },
   ledger: {
     label: "Ledger",
-    color: "var(--icon-teal)",
+    color: "var(--c-teal)",
     blurb:
       "Conversations, runs, and the audit trail — the file the ledger limit governs.",
   },
   "vault-db": {
     label: "Vault database",
-    color: "var(--icon-violet)",
+    color: "var(--c-violet)",
     blurb: "The ontology itself: every entity, link, and setting.",
   },
   code: {
     label: "App code",
-    color: "var(--icon-forest)",
+    color: "var(--c-forest)",
     blurb: "The code store behind your apps — every version you have built.",
   },
   apps: {
     label: "App data",
-    color: "var(--icon-ochre)",
+    color: "var(--c-ochre)",
     blurb: "Per-app working directories.",
   },
   backup: {
     label: "Backup staging",
-    color: "var(--icon-amber)",
+    color: "var(--c-amber)",
     blurb: "Snapshot keyring, engine state, and bytes waiting to go offsite.",
   },
   cache: {
     label: "Runner cache",
-    color: "var(--icon-slate)",
+    color: "var(--c-slate)",
     blurb: "Coding-agent scratch space. Derived — safe to delete at any time.",
   },
   logs: {
     label: "Logs",
-    color: "var(--icon-rose)",
+    color: "var(--c-rose)",
     blurb: "Rotated gateway logs.",
   },
   templates: {
     label: "Templates",
-    color: "var(--icon-slate)",
+    color: "var(--c-slate)",
     blurb: "Cached app templates pulled from the remote manifest.",
   },
   storage: {
     label: "Gateway state",
-    color: "var(--icon-slate)",
+    color: "var(--c-slate)",
     blurb: "Storage-connection records and the recovery-kit flag.",
   },
 });

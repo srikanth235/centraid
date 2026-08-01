@@ -15,7 +15,7 @@
 }
 .in:focus {
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .in.mono {
   font-family: var(--mono);
@@ -55,5 +55,5 @@
   grid-row: 2;
   display: block;
   margin-top: 2px;
-  color: var(--muted);
+  color: var(--text-soft);
 }

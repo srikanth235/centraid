@@ -22,7 +22,7 @@
 .titleInput {
   font: var(--t-title);
   letter-spacing: var(--tracking-h);
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   border-bottom: 1px solid var(--selb);
@@ -35,7 +35,7 @@
 }
 .sub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 4px;
 }
 

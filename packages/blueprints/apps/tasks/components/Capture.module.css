@@ -33,13 +33,13 @@
   min-width: 0;
   font: var(--t-body-strong);
   font-size: 15px;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   outline: none;
 }
 .captureInput::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .captureAdd {
   flex-shrink: 0;

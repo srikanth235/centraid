@@ -257,9 +257,11 @@ export default function BackupHealth({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.ink }]}>Backup health</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Backup health
+        </Text>
         <View style={{ width: 26 }} />
       </View>
       <ReplicaStatusBar />
@@ -283,15 +285,15 @@ export default function BackupHealth({
             size={30}
             color={pending.length ? colors.accent : "#2f9d6a"}
           />
-          <Text style={[styles.heroValue, { color: colors.ink }]}>
+          <Text style={[styles.heroValue, { color: colors.text }]}>
             {pending.length ? `${pending.length} pending` : "Backup is healthy"}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             {pending.length
               ? `${formatBytes(bytes)} remaining`
               : "The durable queue is empty."}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             Last successful sync:{" "}
             {lastSuccessfulSync ? formatSyncTime(lastSuccessfulSync) : "Never"}
           </Text>
@@ -309,7 +311,7 @@ export default function BackupHealth({
             </Text>
           </View>
         ) : null}
-        <Text style={[styles.section, { color: colors.ink2 }]}>
+        <Text style={[styles.section, { color: colors.textSoft }]}>
           TRANSFER RULES
         </Text>
         <Rule
@@ -338,7 +340,7 @@ export default function BackupHealth({
           onValueChange={(value) => update({ ...rules, chargerOnly: value })}
           colors={colors}
         />
-        <Text style={[styles.section, { color: colors.ink2 }]}>
+        <Text style={[styles.section, { color: colors.textSoft }]}>
           DEVICE ALBUMS
         </Text>
         {albumError ? (
@@ -387,7 +389,9 @@ export default function BackupHealth({
           <Feather
             name="upload-cloud"
             size={18}
-            color={rules.selectedAlbums.length ? colors.onAccent : colors.ink3}
+            color={
+              rules.selectedAlbums.length ? colors.onAccent : colors.textFaint
+            }
           />
           <Text
             style={[
@@ -395,7 +399,7 @@ export default function BackupHealth({
               {
                 color: rules.selectedAlbums.length
                   ? colors.onAccent
-                  : colors.ink3,
+                  : colors.textFaint,
               },
             ]}
           >
@@ -404,8 +408,10 @@ export default function BackupHealth({
               : "Back up selected albums now"}
           </Text>
         </Pressable>
-        <Text style={[styles.section, { color: colors.ink2 }]}>STORAGE</Text>
-        <Text style={[styles.storage, { color: colors.ink }]}>{storage}</Text>
+        <Text style={[styles.section, { color: colors.textSoft }]}>
+          STORAGE
+        </Text>
+        <Text style={[styles.storage, { color: colors.text }]}>{storage}</Text>
         {pending
           .filter((item) => item.lastError)
           .map((item, index) => (
@@ -421,7 +427,7 @@ export default function BackupHealth({
             onPress={() => void Linking.openSettings()}
           >
             <Feather name="battery-charging" size={18} color={colors.accent} />
-            <Text style={[styles.settingsText, { color: colors.ink }]}>
+            <Text style={[styles.settingsText, { color: colors.text }]}>
               Review battery optimization
             </Text>
           </Pressable>
@@ -449,7 +455,7 @@ function Rule({
       <Text
         style={[
           styles.ruleLabel,
-          { color: disabled ? colors.ink3 : colors.ink },
+          { color: disabled ? colors.textFaint : colors.text },
         ]}
       >
         {label}

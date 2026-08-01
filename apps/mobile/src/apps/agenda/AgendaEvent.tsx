@@ -194,9 +194,9 @@ export default function AgendaEvent({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.ink }]}>Event</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Event</Text>
         <Pressable onPress={() => void remind()}>
           <Feather name="bell" size={21} color={colors.accent} />
         </Pressable>
@@ -211,10 +211,10 @@ export default function AgendaEvent({
             .format(new Date(event.start))
             .toUpperCase()}
         </Text>
-        <Text style={[styles.title, { color: colors.ink }]}>
+        <Text style={[styles.title, { color: colors.text }]}>
           {event.summary}
         </Text>
-        <Text style={[styles.when, { color: colors.ink2 }]}>
+        <Text style={[styles.when, { color: colors.textSoft }]}>
           {new Intl.DateTimeFormat(undefined, {
             hour: "numeric",
             minute: "2-digit",
@@ -227,7 +227,7 @@ export default function AgendaEvent({
           }).format(new Date(event.end))}
         </Text>
         {event.description ? (
-          <Text style={[styles.description, { color: colors.ink }]}>
+          <Text style={[styles.description, { color: colors.text }]}>
             {event.description}
           </Text>
         ) : null}
@@ -239,13 +239,13 @@ export default function AgendaEvent({
             }
           >
             <Feather name="clock" size={17} color={colors.accent} />
-            <Text style={[styles.pendingText, { color: colors.ink }]}>
+            <Text style={[styles.pendingText, { color: colors.text }]}>
               {pending}
             </Text>
-            <Feather name="chevron-right" size={17} color={colors.ink3} />
+            <Feather name="chevron-right" size={17} color={colors.textFaint} />
           </Pressable>
         ) : null}
-        <Text style={[styles.section, { color: colors.ink2 }]}>GUESTS</Text>
+        <Text style={[styles.section, { color: colors.textSoft }]}>GUESTS</Text>
         {attendees.length ? (
           attendees.map((attendee) => (
             <View
@@ -259,16 +259,16 @@ export default function AgendaEvent({
                   {partyNames.get(String(attendee.party_id))?.slice(0, 1)}
                 </Text>
               </View>
-              <Text style={[styles.guestName, { color: colors.ink }]}>
+              <Text style={[styles.guestName, { color: colors.text }]}>
                 {partyNames.get(String(attendee.party_id))}
               </Text>
-              <Text style={[styles.guestState, { color: colors.ink2 }]}>
+              <Text style={[styles.guestState, { color: colors.textSoft }]}>
                 {String(attendee.partstat)}
               </Text>
             </View>
           ))
         ) : (
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
+          <Text style={[styles.empty, { color: colors.textSoft }]}>
             No attendees.
           </Text>
         )}
@@ -284,18 +284,20 @@ export default function AgendaEvent({
                 style={[styles.rsvpButton, { borderColor: colors.lineStrong }]}
                 onPress={() => void rsvp(state!)}
               >
-                <Text style={[styles.rsvpText, { color: colors.ink }]}>
+                <Text style={[styles.rsvpText, { color: colors.text }]}>
                   {label}
                 </Text>
               </Pressable>
             ))}
           </View>
         ) : attendees.length ? (
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
+          <Text style={[styles.empty, { color: colors.textSoft }]}>
             You are not on this guest list, so there is no RSVP to give.
           </Text>
         ) : null}
-        <Text style={[styles.section, { color: colors.ink2 }]}>ACTIONS</Text>
+        <Text style={[styles.section, { color: colors.textSoft }]}>
+          ACTIONS
+        </Text>
         <Pressable
           style={[styles.action, { borderBottomColor: colors.line }]}
           accessibilityRole="button"
@@ -303,10 +305,10 @@ export default function AgendaEvent({
           onPress={() => setEditOpen(true)}
         >
           <Feather name="edit-3" size={18} color={colors.accent} />
-          <Text style={[styles.actionText, { color: colors.ink }]}>
+          <Text style={[styles.actionText, { color: colors.text }]}>
             Edit event
           </Text>
-          <Text style={[styles.risk, { color: colors.ink2 }]}>
+          <Text style={[styles.risk, { color: colors.textSoft }]}>
             {event.isRecurrenceInstance ? "scope" : "all fields"}
           </Text>
         </Pressable>
@@ -331,7 +333,9 @@ export default function AgendaEvent({
           <Text style={[styles.actionText, { color: colors.danger }]}>
             Ask to cancel
           </Text>
-          <Text style={[styles.risk, { color: colors.ink2 }]}>approval</Text>
+          <Text style={[styles.risk, { color: colors.textSoft }]}>
+            approval
+          </Text>
         </Pressable>
       </ScrollView>
       <AgendaEventEditor

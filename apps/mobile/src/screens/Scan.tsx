@@ -340,7 +340,7 @@ export default function ScanScreen({
       <ScrollView contentContainerStyle={styles.content}>
         {fileUri ? (
           <>
-            <Text style={[styles.help, { color: colors.ink2 }]}>
+            <Text style={[styles.help, { color: colors.textSoft }]}>
               {busy
                 ? "Extracting text locally…"
                 : extraction
@@ -373,7 +373,7 @@ export default function ScanScreen({
                         },
                       ]}
                     >
-                      <Text style={{ color: colors.ink }}>{label}</Text>
+                      <Text style={{ color: colors.text }}>{label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -418,7 +418,9 @@ export default function ScanScreen({
                           },
                         ]}
                       >
-                        <Text style={[styles.lineKind, { color: colors.ink3 }]}>
+                        <Text
+                          style={[styles.lineKind, { color: colors.textFaint }]}
+                        >
                           {line.kind}
                         </Text>
                         <Field
@@ -443,7 +445,10 @@ export default function ScanScreen({
                           colors={colors}
                         />
                         <Text
-                          style={[styles.fieldLabel, { color: colors.ink2 }]}
+                          style={[
+                            styles.fieldLabel,
+                            { color: colors.textSoft },
+                          ]}
                         >
                           Allocate to
                         </Text>
@@ -472,7 +477,7 @@ export default function ScanScreen({
                                   },
                                 ]}
                               >
-                                <Text style={{ color: colors.ink }}>
+                                <Text style={{ color: colors.text }}>
                                   {String(
                                     party?.display_name ??
                                       (partyId ===
@@ -489,7 +494,7 @@ export default function ScanScreen({
                         </View>
                       </View>
                     ))}
-                    <Text style={[styles.total, { color: colors.ink }]}>
+                    <Text style={[styles.total, { color: colors.text }]}>
                       Reviewed total: {(receipt.amountMinor / 100).toFixed(2)}{" "}
                       {receipt.currency}
                     </Text>
@@ -521,7 +526,7 @@ export default function ScanScreen({
                 <CameraView ref={camera} style={StyleSheet.absoluteFill} />
               ) : (
                 <View style={styles.permission}>
-                  <Text style={{ color: colors.ink2 }}>
+                  <Text style={{ color: colors.textSoft }}>
                     Camera access is requested only when you choose Scan.
                   </Text>
                 </View>

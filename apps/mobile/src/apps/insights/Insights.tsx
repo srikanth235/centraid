@@ -102,7 +102,7 @@ function InsightsOverview({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void refresh()}
-            tintColor={colors.ink3}
+            tintColor={colors.textFaint}
           />
         }
       >
@@ -577,7 +577,7 @@ function Kpi({
   return (
     <View style={styles.kpi}>
       <View style={styles.kpiLabel}>
-        <Feather name={icon} size={12} color={colors.ink3} />
+        <Feather name={icon} size={12} color={colors.textFaint} />
         <Text style={styles.kpiLabelText}>{label}</Text>
       </View>
       <Text style={styles.kpiValue}>{value}</Text>

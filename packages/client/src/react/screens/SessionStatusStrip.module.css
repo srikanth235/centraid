@@ -18,7 +18,7 @@
 }
 .telemetry {
   justify-content: flex-end;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-tiny);
 }
 .context {
@@ -31,7 +31,7 @@
   height: 4px;
   overflow: hidden;
   border-radius: var(--r-sm);
-  background: color-mix(in oklab, var(--ink) 9%, transparent);
+  background: color-mix(in oklab, var(--text) 9%, transparent);
 }
 .contextFill {
   display: block;

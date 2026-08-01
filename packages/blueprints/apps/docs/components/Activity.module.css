@@ -28,7 +28,7 @@
 }
 .activityText {
   font: var(--t-small);
-  color: var(--ink);
+  color: var(--text);
 }
 .activityMeta {
   display: flex;
@@ -39,7 +39,7 @@
 .activityDate {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .receiptChip {
   font-family: var(--mono);
@@ -51,6 +51,6 @@
 }
 .activityStatus {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 4px 0 10px;
 }

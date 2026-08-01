@@ -160,7 +160,7 @@ export function ListRow({
           <button
             type="button"
             className="kit-icon-btn"
-            style={{ "--kit-icon-btn-size": "1.875rem" } as CSSProperties}
+            style={{ "--icon-button-size": "1.875rem" } as CSSProperties}
             aria-label={`Actions for ${title}`}
             aria-haspopup="menu"
             onClick={(e) => {

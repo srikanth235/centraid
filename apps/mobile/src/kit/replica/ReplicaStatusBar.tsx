@@ -82,7 +82,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     <>
       <View style={[styles.wrap, { borderColor: colors.line }]}>
         <View style={[styles.dot, { backgroundColor: tint }]} />
-        <Text style={[styles.label, { color: colors.ink2 }]}>{label}</Text>
+        <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
         <Pressable
           accessibilityLabel={action}
           disabled={!refresh}
@@ -104,16 +104,16 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           }}
           style={[styles.pending, { backgroundColor: colors.bgSunken }]}
         >
-          <Text style={[styles.pendingText, { color: colors.ink }]}>
+          <Text style={[styles.pendingText, { color: colors.text }]}>
             Pending changes {pending.length}
           </Text>
-          <Feather name="chevron-right" size={14} color={colors.ink3} />
+          <Feather name="chevron-right" size={14} color={colors.textFaint} />
         </Pressable>
       </View>
       {bootstrapLabel ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
           <Feather name="download-cloud" size={13} color={colors.accent} />
-          <Text style={[styles.bootstrapText, { color: colors.ink2 }]}>
+          <Text style={[styles.bootstrapText, { color: colors.textSoft }]}>
             {bootstrapLabel}
           </Text>
         </View>
@@ -122,14 +122,14 @@ export default function ReplicaStatusBar(): React.JSX.Element {
         <View style={[styles.divergence, { backgroundColor: colors.bgSunken }]}>
           <View style={styles.divergenceHeading}>
             <Feather name="alert-circle" size={14} color={colors.danger} />
-            <Text style={[styles.divergenceText, { color: colors.ink2 }]}>
+            <Text style={[styles.divergenceText, { color: colors.textSoft }]}>
               Sources last updated at different times.
             </Text>
           </View>
           {scopes.map((scope) => (
             <Text
               key={scope.vaultId}
-              style={[styles.source, { color: colors.ink3 }]}
+              style={[styles.source, { color: colors.textFaint }]}
             >
               {scope.label}:{" "}
               {scope.updatedAt
@@ -148,20 +148,20 @@ export default function ReplicaStatusBar(): React.JSX.Element {
         <View style={[styles.sheet, { backgroundColor: colors.bg }]}>
           <View style={styles.sheetHeader}>
             <View>
-              <Text style={[styles.title, { color: colors.ink }]}>
+              <Text style={[styles.title, { color: colors.text }]}>
                 Pending changes
               </Text>
-              <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+              <Text style={[styles.subtitle, { color: colors.textSoft }]}>
                 Saved on this phone until each target accepts them
               </Text>
             </View>
             <Pressable onPress={() => setOpen(false)}>
-              <Feather name="x" size={24} color={colors.ink} />
+              <Feather name="x" size={24} color={colors.text} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.list}>
             {pending.length === 0 ? (
-              <Text style={[styles.empty, { color: colors.ink2 }]}>
+              <Text style={[styles.empty, { color: colors.textSoft }]}>
                 Nothing is waiting.
               </Text>
             ) : (
@@ -181,10 +181,12 @@ export default function ReplicaStatusBar(): React.JSX.Element {
                     ]}
                   >
                     <View style={styles.cardCopy}>
-                      <Text style={[styles.cardTitle, { color: colors.ink }]}>
+                      <Text style={[styles.cardTitle, { color: colors.text }]}>
                         {item.label}
                       </Text>
-                      <Text style={[styles.cardMeta, { color: colors.ink2 }]}>
+                      <Text
+                        style={[styles.cardMeta, { color: colors.textSoft }]}
+                      >
                         {item.vaultLabel} · {humanStatus(item.status)}
                       </Text>
                       {item.reason ? (
@@ -216,7 +218,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
                         style={[
                           styles.action,
                           {
-                            color: terminal ? colors.ink2 : colors.danger,
+                            color: terminal ? colors.textSoft : colors.danger,
                           },
                         ]}
                       >
@@ -230,7 +232,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             {scopes.map((scope) => (
               <Text
                 key={scope.vaultId}
-                style={[styles.source, { color: colors.ink3 }]}
+                style={[styles.source, { color: colors.textFaint }]}
               >
                 {scope.label}:{" "}
                 {scope.updatedAt

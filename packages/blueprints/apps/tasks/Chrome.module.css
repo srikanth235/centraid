@@ -1,15 +1,15 @@
 /* Tasks chrome shared by the served and inline routes (issue #505). Common
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
-   Design tokens (--ink, --accent,
+   Design tokens (--text, --accent,
    --bg-elev, --line, --r-md, --t-title, …) are supplied by the shell document
    (the scoped blueprint-token block InlineAppRoute injects), so this file
    references them directly. */
 
 .shell {
   composes: kit-app-shell from global;
-  --kit-app-side-width: 250px;
-  --kit-app-drawer-width: 270px;
-  --kit-app-topbar-padding: 16px 26px;
+  --app-side-width: 250px;
+  --app-drawer-width: 270px;
+  --app-topbar-padding: 16px 26px;
 }
 
 .shell.shell :focus-visible {
@@ -86,7 +86,7 @@
 }
 .sub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 1px;
 }
 .topbarTools {

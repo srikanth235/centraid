@@ -19,7 +19,7 @@
   font: var(--t-display-1);
   font-size: 44px;
   letter-spacing: -0.03em;
-  color: var(--ink);
+  color: var(--text);
   text-wrap: balance;
 }
 .composer {
@@ -33,7 +33,7 @@
   flex-direction: column;
   gap: 12px;
   box-shadow:
-    0 24px 48px -24px rgba(0, 0, 0, 0.45),
+    0 24px 48px -24px var(--scrim),
     0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent);
   text-align: left;
 }
@@ -44,13 +44,13 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-body);
   font-size: 15px;
   line-height: 1.45;
 }
 .composerInput::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .composerToolbar {
   display: flex;
@@ -76,8 +76,8 @@
   border: 0.5px solid var(--line);
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .composerMode svg {
   display: block;
@@ -85,11 +85,11 @@
 .composerKbd {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   letter-spacing: 0;
   padding: 2px 7px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .composerSend {
   display: inline-flex;
@@ -99,7 +99,7 @@
   height: 32px;
   border-radius: 999px;
   border: none;
-  background: var(--ink);
+  background: var(--text);
   color: var(--bg);
   cursor: pointer;
   padding: 0;
@@ -112,7 +112,7 @@
   cursor: default;
 }
 .composerSend:hover:not([disabled]) {
-  background: color-mix(in srgb, var(--ink) 86%, var(--bg));
+  background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .heroSuggestions {
   margin-top: 12px;
@@ -132,7 +132,7 @@
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .heroComposerWrap {
   width: 100%;
@@ -161,12 +161,12 @@
 }
 .briefHead h2 {
   margin: 2px 0 0;
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-heading);
 }
 .briefEyebrow,
 .briefDate {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -182,8 +182,8 @@
   text-align: left;
   border: 0;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
   cursor: pointer;
 }
 .briefFact:hover {
@@ -210,10 +210,10 @@
   font: var(--t-small);
 }
 .briefFactLabel {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .briefFactDetail {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 @media (max-width: 760px) {
   .briefGrid {
@@ -258,10 +258,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .hsecStat[data-tone="active"] {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .hsecStat[data-tone="attention"] {
   color: var(--danger);
@@ -276,14 +276,14 @@
   padding: 6px 10px;
   border: none;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-body);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
 }
 .hsecBrowse:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .hsecBrowse svg {
   display: block;
@@ -348,16 +348,16 @@
   display: grid;
   place-items: center;
   background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
-  color: #fff;
+  color: var(--text);
 }
 .shelfEmptyTitle {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink-1);
+  color: var(--text-1);
 }
 .shelfEmptySub {
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
   max-width: 360px;
 }
@@ -373,7 +373,7 @@
   align-items: center;
   gap: 5px;
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
 }
 .appCardTrig svg {

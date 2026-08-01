@@ -10,7 +10,7 @@
   height: 224px;
   border-radius: 10px;
   border: 0.5px solid var(--line);
-  background: #fff;
+  background: var(--text);
   padding: 8px;
 }
 .devices {
@@ -36,12 +36,12 @@
 .deviceName {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink-1, var(--ink));
+  color: var(--text-1);
   overflow-wrap: anywhere;
 }
 .deviceMeta {
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .revokeBtn {
   flex: none;
@@ -57,11 +57,11 @@
 }
 .revokeBtn:hover {
   background: var(--danger);
-  color: #fff;
+  color: var(--text);
 }
 .btnPrimary {
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 .btnPrimary:hover {
   background: color-mix(in oklab, var(--accent) 88%, white 12%);

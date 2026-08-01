@@ -1,4 +1,4 @@
-/* The "which vault?" picker (issue #599, Decision 14). Every flow that creates
+/* The "which vault?" picker (issue var(--text), Decision 14). Every flow that creates
    something names its target here, in place of the retired switcher's ambient
    "you are in this vault" mode. Deliberately quiet: it is a statement of where
    the thing will land, not a mode control. */
@@ -15,14 +15,14 @@
 .label {
   font: var(--t-small);
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
 }
 .select {
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-body);
   font-size: 12.5px;
   font-weight: 500;
@@ -50,10 +50,10 @@
   gap: 6px;
   font: var(--t-small);
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .fixedName {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 600;
 }
 
@@ -90,12 +90,12 @@
 .gateTitle {
   margin: 0;
   font: var(--t-h3);
-  color: var(--ink);
+  color: var(--text);
 }
 .gateText {
   margin: 0;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .gateActions {
   display: flex;

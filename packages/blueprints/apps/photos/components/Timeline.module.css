@@ -21,7 +21,7 @@
 .dayLabel {
   font: var(--t-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin: 6px 0 6px 2px;
 }
 .row {
@@ -64,7 +64,7 @@
 }
 .tileMedia:focus-visible {
   outline: none;
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
   outline-offset: -2px;
 }
 .tileMedia img,

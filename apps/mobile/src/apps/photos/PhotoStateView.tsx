@@ -106,11 +106,11 @@ export default function PhotoStateView({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             {assets.length} items
             {mode === "trash" ? " · device originals untouched" : ""}
           </Text>
@@ -147,7 +147,7 @@ export default function PhotoStateView({
         />
       ) : (
         <View style={styles.empty}>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             Nothing here.
           </Text>
         </View>

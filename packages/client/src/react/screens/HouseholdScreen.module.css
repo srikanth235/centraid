@@ -1,4 +1,4 @@
-/* Household (issue #599, Decision 14) — the page that answers "who is in this
+/* Household (issue var(--text), Decision 14) — the page that answers "who is in this
    household, what hardware do they use, and which vaults do we have". It took
    the People & devices card off the Gateway page, which is now purely "is the
    gateway healthy". */
@@ -35,7 +35,7 @@
 .title h1 {
   margin: 0;
   font: var(--t-h1);
-  color: var(--ink);
+  color: var(--text);
 }
 .titleIcon {
   display: grid;
@@ -48,7 +48,7 @@
 }
 .headMeta {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .section {
@@ -65,11 +65,11 @@
 .sectionHead h2 {
   margin: 0;
   font: var(--t-h3);
-  color: var(--ink);
+  color: var(--text);
 }
 .sectionMeta {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* `min(248px, 100%)`, not a bare 248px: a bare track floor cannot shrink, so
@@ -114,7 +114,7 @@
   font: var(--t-title);
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -123,7 +123,7 @@
   margin-top: 1px;
   font: var(--t-small);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .badge {
   flex-shrink: 0;
@@ -133,10 +133,10 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 2px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 .badge[data-default="true"] {
   color: var(--accent);
@@ -155,7 +155,7 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   font-size: 11.5px;
   cursor: pointer;
@@ -165,8 +165,8 @@
 }
 .link:hover,
 .link:focus-visible {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
   outline: none;
 }
 
@@ -175,5 +175,5 @@
   border-radius: 13px;
   border: 0.5px dashed var(--line);
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }

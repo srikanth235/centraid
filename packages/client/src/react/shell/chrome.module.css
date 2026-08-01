@@ -150,7 +150,7 @@
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -164,8 +164,8 @@
   display: block;
 }
 .tbBtn:hover {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 .tbBtn[disabled],
 .tbBtn[aria-disabled="true"] {
@@ -182,8 +182,8 @@
 /* Popover anchor state — `data-open` is set while an anchored panel is
    mounted so the button stays visually "pressed". */
 .tbBtn[data-open="true"] {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 .tooltip {
   position: absolute;
@@ -195,7 +195,7 @@
   gap: 6px;
   padding: 4px 8px;
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  color: var(--ink);
+  color: var(--text);
   border: 0.5px solid var(--line);
   border-radius: 6px;
   font-size: 11.5px;
@@ -225,11 +225,11 @@
   display: inline-block;
   padding: 1px 5px;
   margin-left: 2px;
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 /* Sidebar column */
@@ -261,7 +261,7 @@
   border-right: none;
 }
 
-/* The sidebar's three zones (issue #667). Head and foot are fixed; the
+/* The sidebar's three zones (issue var(--text)). Head and foot are fixed; the
    middle scrolls, so Recents grows into whatever height the nav groups
    didn't take and the account row never drifts off-screen. */
 .sbColumn {
@@ -281,7 +281,7 @@
   transition: scrollbar-color 160ms;
 }
 .sbColumn:hover .sbScroll {
-  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent;
 }
 .sbScroll::-webkit-scrollbar {
   width: 6px;
@@ -291,7 +291,7 @@
   background: transparent;
 }
 .sbColumn:hover .sbScroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--ink) 20%, transparent);
+  background: color-mix(in srgb, var(--text) 20%, transparent);
 }
 /* The leading group carries no section label, so it needs its own top
    breathing room to sit off the identity head. */
@@ -345,7 +345,7 @@
   border: none;
   background: transparent;
   border-radius: 6px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -355,8 +355,8 @@
     color 100ms;
 }
 .sbItem:hover {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
 }
 .sbItem[aria-current="true"],
 .sbItem[data-active="true"] {
@@ -378,7 +378,7 @@
 .sbItem .sbMeta,
 .sbAccount .sbMeta {
   flex: 0 0 auto;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -406,7 +406,7 @@
   border-top: 0.5px solid var(--line);
   border-radius: 0 0 6px 6px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -414,11 +414,11 @@
 }
 .sbAccount:hover,
 .sbAccount[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 .sbAccount:focus-visible {
   outline: none;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .sbAccountAvatar {
@@ -449,10 +449,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -472,27 +472,27 @@
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .sbSectionBtn:hover {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 
-/* Conversation grouping (issue #420): a lightweight sub-label under the Chats
+/* Conversation grouping (issue var(--text)): a lightweight sub-label under the Chats
    header for the "Pinned"/"Recent" split, and the collapsible "Archived"
    toggle at the bottom of the list. */
 .sbSubLabel {
   margin: 6px 0 2px;
   padding: 0 12px;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -505,10 +505,10 @@
   padding: 5px 12px;
   border: none;
   background: transparent;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: pointer;
   text-align: left;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -523,7 +523,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: inherit;
   font-size: 12.5px;
   font-weight: 550;
@@ -531,11 +531,11 @@
   text-align: left;
 }
 .sbSeeAll:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .sbArchivedToggle:hover {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 /* Relaunch-to-update pill — pinned above Settings when the main process
@@ -551,21 +551,21 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
   transition:
     background 100ms,
     box-shadow 100ms;
 }
 .sbUpdate:hover {
-  background: color-mix(in srgb, var(--ink) 4%, var(--bg-elev));
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, var(--bg-elev));
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 10%, transparent);
 }
 .sbUpdate > svg:last-child {
   flex: 0 0 auto;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .sbUpdateBody {
   flex: 1 1 auto;
@@ -584,7 +584,7 @@
 .sbUpdateVersion {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Small icon tile rendered inline in sidebar app rows. Matches the
@@ -598,7 +598,7 @@
   display: inline-grid;
   place-items: center;
   color: var(--on-accent);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 0.5px var(--scrim);
 }
 .sbAppIcon svg {
   width: 11px;
@@ -643,7 +643,7 @@
   background: transparent;
   /* Muted resting tone — sidebar rows already carry a status dot at the
      same edge, so the action reads as a supporting glyph until hover. */
-  color: var(--ink-4);
+  color: var(--text-ghost);
   border-radius: var(--r-sm);
   cursor: pointer;
   opacity: 0;
@@ -663,18 +663,18 @@
   opacity: 1;
 }
 .rowMore:hover {
-  background: color-mix(in oklab, var(--ink) 12%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 12%, transparent);
+  color: var(--text);
 }
 .rowMore:active {
-  background: color-mix(in oklab, var(--ink) 18%, transparent);
+  background: color-mix(in oklab, var(--text) 18%, transparent);
 }
 /* When the action is open, the row's own hover state would compete with
    the `•••` background; nudge the row back to its resting tone so focus
    reads as "this menu owns the moment". */
 .sbAppRow:has(.rowMore[data-open="true"]) .sbItem {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
 }
 
 /* Main area — shares the wall surface with the titlebar (inside .main)
@@ -706,7 +706,7 @@
   padding: 7px 14px;
   background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
   border-bottom: 0.5px solid color-mix(in srgb, var(--danger) 40%, var(--line));
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
 }
 .connectionBanner button {
@@ -783,7 +783,7 @@
     z-index: 199;
     border: 0;
     padding: 0;
-    background: color-mix(in srgb, var(--ink) 34%, transparent);
+    background: color-mix(in srgb, var(--text) 34%, transparent);
     backdrop-filter: blur(1px);
     -webkit-backdrop-filter: blur(1px);
     opacity: 1;
@@ -811,7 +811,7 @@
     opacity: 1;
     width: 32px;
     height: 32px;
-    color: var(--ink-4);
+    color: var(--text-ghost);
   }
   .connectionBanner {
     left: 0;
@@ -858,7 +858,7 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  color: var(--ink-3);
+  color: var(--text-faint);
   box-shadow: var(--shadow-sm);
   font-size: 10px;
   pointer-events: none;

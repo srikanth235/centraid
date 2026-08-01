@@ -13,17 +13,17 @@
   outline: none;
   font: var(--t-body);
   font-size: 15px;
-  color: var(--ink);
+  color: var(--text);
 }
 .input:focus {
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .modalLabel {
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin: 16px 0 8px;
 }
 .pick {

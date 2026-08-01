@@ -69,10 +69,10 @@ export default function DailyBriefCard({
             onPress={cell.handlePress}
             style={styles.cell}
           >
-            <Text style={[styles.value, { color: colors.ink }]}>
+            <Text style={[styles.value, { color: colors.text }]}>
               {cell.value}
             </Text>
-            <Text style={[styles.label, { color: colors.ink2 }]}>
+            <Text style={[styles.label, { color: colors.textSoft }]}>
               {cell.label}
             </Text>
           </Pressable>
@@ -81,7 +81,7 @@ export default function DailyBriefCard({
       {[...brief.events.slice(0, 2), ...brief.tasks.slice(0, 2)].length ? (
         <Text
           numberOfLines={2}
-          style={[styles.timeline, { color: colors.ink2 }]}
+          style={[styles.timeline, { color: colors.textSoft }]}
         >
           {[...brief.events.slice(0, 2), ...brief.tasks.slice(0, 2)]
             .map((item) => item.title)

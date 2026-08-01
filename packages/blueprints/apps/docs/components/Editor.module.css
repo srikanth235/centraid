@@ -10,7 +10,7 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  background: color-mix(in oklab, var(--text) 30%, rgba(10, 12, 16, 0.55));
   animation: kit-fade 0.2s ease;
 }
 .editor {
@@ -45,7 +45,7 @@
   margin-left: auto;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   flex-shrink: 0;
 }
 .editorBody {
@@ -55,7 +55,7 @@
 }
 .editorStatus {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 12px 0;
 }
 .editorTextarea {
@@ -66,7 +66,7 @@
   font-family: var(--mono);
   font-size: 14px;
   line-height: 1.65;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   outline: none;

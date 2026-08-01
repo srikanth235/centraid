@@ -25,13 +25,13 @@
 .title {
   margin: 0;
   font: var(--t-h2);
-  color: var(--ink);
+  color: var(--text);
 }
 .subtitle {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
   max-width: 42rem;
 }
 .toolbarActions {
@@ -49,7 +49,7 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: var(--bg-elev);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .searchWrap:focus-within {
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);
@@ -61,12 +61,12 @@
   border: 0;
   background: transparent;
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
   outline: none;
   caret-color: var(--accent);
 }
 .searchInput::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Section labels */
@@ -81,7 +81,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Featured 2-col tile grid */
@@ -114,7 +114,7 @@
   border-radius: 14px;
   background: var(--bg-elev);
   font: inherit;
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
   transition:
     background 0.14s ease,
@@ -122,8 +122,8 @@
     box-shadow 0.14s ease;
 }
 .tile:hover {
-  background: color-mix(in srgb, var(--ink) 3%, var(--bg-elev));
-  border-color: color-mix(in srgb, var(--ink) 12%, var(--line));
+  background: color-mix(in srgb, var(--text) 3%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--text) 12%, var(--line));
 }
 .tile:focus-visible {
   outline: none;
@@ -141,37 +141,37 @@
   border-radius: 10px;
   display: grid;
   place-items: center;
-  background: #fff;
-  border: 0.5px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+  background: var(--text);
+  border: 0.5px solid color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
   overflow: hidden;
-  color: #24292f;
+  color: var(--text);
 }
 .brandMark[data-tone="github"] {
-  color: #24292f;
+  color: var(--text);
 }
 :global([data-theme="dark"]) .brandMark,
 :global(.theme-dark) .brandMark,
 :global([data-color-scheme="dark"]) .brandMark {
-  background: color-mix(in srgb, #fff 10%, var(--bg-elev, #1a1a1a));
-  border-color: color-mix(in srgb, #fff 14%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--text) 14%, transparent);
   box-shadow: none;
-  color: #f0f6fc;
+  color: var(--text);
 }
 :global([data-theme="dark"]) .brandMark[data-tone="github"],
 :global(.theme-dark) .brandMark[data-tone="github"],
 :global([data-color-scheme="dark"]) .brandMark[data-tone="github"] {
-  color: #f0f6fc;
+  color: var(--text);
 }
 /* Fallback: prefer-color-scheme when theme attrs aren't set on ancestors. */
 @media (prefers-color-scheme: dark) {
   .brandMark {
-    background: color-mix(in srgb, #fff 10%, #1c1c1e);
-    border-color: color-mix(in srgb, #fff 14%, transparent);
-    color: #f0f6fc;
+    background: color-mix(in srgb, var(--text) 10%, var(--text));
+    border-color: color-mix(in srgb, var(--text) 14%, transparent);
+    color: var(--text);
   }
   .brandMark[data-tone="github"] {
-    color: #f0f6fc;
+    color: var(--text);
   }
 }
 .brandMark svg {
@@ -189,11 +189,11 @@
 .tileName {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .tileMeta {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -266,12 +266,12 @@
 }
 .syncMeta {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .healthBlock {
   margin: 10px 0 4px;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 .authKindBanner {
@@ -284,14 +284,14 @@
   border: 0.5px solid var(--line);
   background: var(--bg-sunken, var(--bg-elev));
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   line-height: 1.4;
 }
 .authKindBanner strong {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 .authKindBanner[data-kind="oauth2"] {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
@@ -308,7 +308,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 3px 6px;
   border-radius: 6px;
   border: 0.5px solid var(--line);
@@ -319,18 +319,18 @@
   height: 9px;
   border-radius: 50%;
   flex: none;
-  background: var(--conn-health, var(--ink-3));
+  background: var(--conn-health, var(--text-faint));
   box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--conn-health, var(--ink-3)) 16%, transparent);
+    color-mix(in oklab, var(--conn-health, var(--text-faint)) 16%, transparent);
 }
 .dot[data-health="ok"] {
   --conn-health: var(--success);
 }
 .dot[data-health="needs-auth"] {
-  --conn-health: var(--icon-amber);
+  --conn-health: var(--c-amber);
 }
 .dot[data-health="paused"] {
-  --conn-health: var(--ink-3);
+  --conn-health: var(--text-faint);
 }
 .dot[data-health="failing"] {
   --conn-health: var(--danger);
@@ -344,7 +344,7 @@
   gap: 2px;
 }
 .rowName {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -352,14 +352,14 @@
 .rowSub {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rowAuthNote {
   font-size: 11px;
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 
 .healthLabel {
@@ -369,16 +369,16 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--conn-health, var(--ink-3));
+  color: var(--conn-health, var(--text-faint));
 }
 .healthLabel[data-health="ok"] {
   --conn-health: var(--success);
 }
 .healthLabel[data-health="needs-auth"] {
-  --conn-health: var(--icon-amber);
+  --conn-health: var(--c-amber);
 }
 .healthLabel[data-health="paused"] {
-  --conn-health: var(--ink-3);
+  --conn-health: var(--text-faint);
 }
 .healthLabel[data-health="failing"] {
   --conn-health: var(--danger);
@@ -396,7 +396,7 @@
   border: 0.5px dashed var(--line-strong);
   border-radius: 14px;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
 }
 
@@ -408,7 +408,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, #000 45%, transparent);
+  background: color-mix(in srgb, var(--text) 45%, transparent);
 }
 .sheet {
   width: min(440px, 100%);
@@ -417,7 +417,7 @@
   border-radius: 18px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  box-shadow: 0 24px 64px color-mix(in srgb, #000 28%, transparent);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--text) 28%, transparent);
   display: flex;
   flex-direction: column;
 }
@@ -438,12 +438,12 @@
   margin: 0;
   font-size: 17px;
   font-weight: 650;
-  color: var(--ink);
+  color: var(--text);
 }
 .sheetTag {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .sheetClose {
   flex: none;
@@ -452,14 +452,14 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   display: grid;
   place-items: center;
 }
 .sheetClose:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .sheetBody {
   padding: 16px 20px 20px;
@@ -471,7 +471,7 @@
   margin: 0;
   font-size: 13.5px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .about {
   border: 0.5px solid var(--line);
@@ -482,9 +482,9 @@
   padding: 10px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border-bottom: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
 }
 .aboutItem {
   display: flex;
@@ -501,8 +501,8 @@
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-soft);
 }
 .aboutText {
   min-width: 0;
@@ -513,12 +513,12 @@
 .aboutTitle {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .aboutDesc {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .sheetFoot {
   display: flex;
@@ -529,7 +529,7 @@
 .sheetNote {
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Credential form inside sheet */
@@ -554,7 +554,7 @@
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 /* Helper caption under a wizard input — explains naming / multi-account, and
    flips amber when the typed label would overwrite an existing connection. */
@@ -563,7 +563,7 @@
   margin-top: 6px;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .wizardHint[data-tone="warn"] {
   color: var(--c-amber);
@@ -572,11 +572,11 @@
   width: 100%;
   box-sizing: border-box;
   padding: 9px 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
   outline: none;
   caret-color: var(--accent);
   transition:
@@ -602,7 +602,7 @@
   padding: 9px 10px;
   border: 0.5px solid var(--line);
   border-radius: 9px;
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   cursor: pointer;
 }
@@ -616,22 +616,22 @@
   gap: 2px;
 }
 .scopeOption small {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 10.5px;
 }
 .scopeOption[data-disabled="true"] {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: not-allowed;
-  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
 }
 .manualHandoff {
   margin-top: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 12px;
 }
 .manualHandoff summary {
   cursor: pointer;
-  color: var(--ink);
+  color: var(--text);
 }
 .manualHandoff p {
   margin: 8px 0;
@@ -658,14 +658,14 @@
   gap: 6px;
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 11px;
   cursor: pointer;
   padding: 2px 0;
 }
 .setupToggle:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .setupList {
   margin: 0;
@@ -675,7 +675,7 @@
   gap: 6px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .wizardFoot {
   display: flex;
@@ -700,11 +700,11 @@
   border-radius: 12px;
   background: transparent;
   font: inherit;
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
 }
 .pickerItem:hover {
-  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
 .pickerName {
   font-size: 14px;
@@ -712,5 +712,5 @@
 }
 .pickerSub {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }

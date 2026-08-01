@@ -23,11 +23,11 @@
 .value {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: var(--ink);
+  color: var(--text);
 }
 
 .meta {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
 }
 

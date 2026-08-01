@@ -75,7 +75,7 @@
 .brandTag {
   font: var(--t-mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .uploadBtn {
   display: flex;
@@ -117,7 +117,7 @@
   border: none;
   border-radius: var(--r-sm);
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-body);
   font-size: 13.5px;
   text-align: left;
@@ -200,7 +200,7 @@
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-sm);
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-body);
   font-size: 13px;
   margin-top: 2px;
@@ -233,19 +233,19 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 4px;
 }
 .storageLabel {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .trustLine {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 10px 3px 2px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .trustLine span:last-child {
   font: var(--t-small);

@@ -350,7 +350,7 @@ export default function VaultsSwitcher({
               <Icon
                 name="ChevronRight"
                 size={16}
-                color={colors.ink4}
+                color={colors.textGhost}
                 strokeWidth={1.75}
               />
             </Pressable>
@@ -384,7 +384,7 @@ function ActiveCard({
         <Icon
           name={iconOf(vault.icon)}
           size={24}
-          color={colors.inkInv}
+          color={colors.textInv}
           strokeWidth={1.75}
         />
       </View>
@@ -433,7 +433,7 @@ function VaultLinkRow({
           <Icon
             name={iconOf(vault.icon)}
             size={16}
-            color={colors.inkInv}
+            color={colors.textInv}
             strokeWidth={1.75}
           />
         </View>
@@ -455,7 +455,12 @@ function VaultLinkRow({
         onPress={onForget}
         style={({ pressed }) => [styles.forget, pressed && styles.pressed]}
       >
-        <Icon name="Trash" size={17} color={colors.ink3} strokeWidth={1.75} />
+        <Icon
+          name="Trash"
+          size={17}
+          color={colors.textFaint}
+          strokeWidth={1.75}
+        />
       </Pressable>
     </View>
   );
@@ -527,7 +532,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 20,
       padding: 16,
     },
-    activeName: { ...t("title"), color: colors.ink, fontFamily: family.serif },
+    activeName: { ...t("title"), color: colors.text, fontFamily: family.serif },
     activePill: {
       borderRadius: 8,
       paddingHorizontal: 8,
@@ -539,7 +544,7 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 9,
       letterSpacing: 1,
     },
-    activeSub: { ...t("small"), color: colors.ink3, marginTop: 3 },
+    activeSub: { ...t("small"), color: colors.textFaint, marginTop: 3 },
     addRow: { marginBottom: 8 },
     dot: {
       alignItems: "center",
@@ -558,12 +563,12 @@ const makeStyles = (colors: ThemeColors) =>
     },
     empty: {
       ...t("body"),
-      color: colors.ink3,
+      color: colors.textFaint,
       marginBottom: 20,
       paddingVertical: 8,
     },
     eyebrow: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 1,
@@ -598,7 +603,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
-    pairTitle: { ...t("bodyStrong"), color: colors.ink },
+    pairTitle: { ...t("bodyStrong"), color: colors.text },
     pressed: { opacity: 0.55 },
     root: { flex: 1, justifyContent: "flex-end" },
     row: {
@@ -614,12 +619,12 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 10,
     },
     rowMeta: { flex: 1, minWidth: 0 },
-    rowName: { ...t("bodyStrong"), color: colors.ink },
-    rowSub: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    rowName: { ...t("bodyStrong"), color: colors.text },
+    rowSub: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     scroll: { flexGrow: 0 },
     scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
     sectionLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 0.9,
@@ -635,7 +640,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 28,
       letterSpacing: -0.4,

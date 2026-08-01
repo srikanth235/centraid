@@ -297,8 +297,8 @@ export default function PeopleHome({
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View>
-          <Text style={[styles.title, { color: colors.ink }]}>People</Text>
-          <Text style={[styles.meta, { color: colors.ink3 }]}>
+          <Text style={[styles.title, { color: colors.text }]}>People</Text>
+          <Text style={[styles.meta, { color: colors.textFaint }]}>
             Normalized contacts and duplicate-safe merges
           </Text>
         </View>
@@ -322,22 +322,22 @@ export default function PeopleHome({
           accessibilityLabel="Person name"
           value={name}
           placeholder="Name"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setName}
           style={[
             styles.input,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <TextInput
           accessibilityLabel="Person role"
           value={role}
           placeholder="Role"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setRole}
           style={[
             styles.input,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <Pressable
@@ -374,7 +374,7 @@ export default function PeopleHome({
         >
           {selected ? (
             <>
-              <Text style={[styles.detailTitle, { color: colors.ink }]}>
+              <Text style={[styles.detailTitle, { color: colors.text }]}>
                 {String(selected.name)}
               </Text>
               <Pressable onPress={() => setMergeOpen(true)}>
@@ -403,11 +403,11 @@ export default function PeopleHome({
                         setPreferred(Boolean(channel.is_preferred));
                       }}
                     >
-                      <Text style={[styles.personName, { color: colors.ink }]}>
+                      <Text style={[styles.personName, { color: colors.text }]}>
                         {channel.is_preferred ? "★ " : ""}
                         {String(channel.value)}
                       </Text>
-                      <Text style={[styles.meta, { color: colors.ink3 }]}>
+                      <Text style={[styles.meta, { color: colors.textFaint }]}>
                         {String(channel.label ?? channel.kind)} ·{" "}
                         {channel.provenance_json
                           ? "provenance saved"
@@ -438,7 +438,9 @@ export default function PeopleHome({
                         <Text
                           style={{
                             color:
-                              kind === choice ? colors.accent : colors.ink3,
+                              kind === choice
+                                ? colors.accent
+                                : colors.textFaint,
                           }}
                         >
                           {choice}
@@ -450,25 +452,25 @@ export default function PeopleHome({
                 <TextInput
                   value={label}
                   placeholder="Label"
-                  placeholderTextColor={colors.ink3}
+                  placeholderTextColor={colors.textFaint}
                   onChangeText={setLabel}
                   style={[
                     styles.input,
-                    { borderColor: colors.line, color: colors.ink },
+                    { borderColor: colors.line, color: colors.text },
                   ]}
                 />
                 <TextInput
                   value={channelValue}
                   placeholder={`New ${kind}`}
-                  placeholderTextColor={colors.ink3}
+                  placeholderTextColor={colors.textFaint}
                   onChangeText={setChannelValue}
                   style={[
                     styles.input,
-                    { borderColor: colors.line, color: colors.ink },
+                    { borderColor: colors.line, color: colors.text },
                   ]}
                 />
                 <View style={styles.switchRow}>
-                  <Text style={{ color: colors.ink2 }}>Preferred</Text>
+                  <Text style={{ color: colors.textSoft }}>Preferred</Text>
                   <Switch value={preferred} onValueChange={setPreferred} />
                   <Pressable
                     onPress={() => void saveChannel()}
@@ -482,7 +484,9 @@ export default function PeopleHome({
               </View>
             </>
           ) : (
-            <Text style={{ color: colors.ink3 }}>Add your first person.</Text>
+            <Text style={{ color: colors.textFaint }}>
+              Add your first person.
+            </Text>
           )}
         </ScrollView>
       </View>

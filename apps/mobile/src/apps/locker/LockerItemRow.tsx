@@ -36,7 +36,7 @@ export const LockerItemRow = memo(
       style={styles.row}
     >
       <View style={styles.rowIcon}>
-        <Icon name="Key" size={18} color={colors.ink2} />
+        <Icon name="Key" size={18} color={colors.textSoft} />
       </View>
       <View style={styles.rowCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
@@ -46,7 +46,7 @@ export const LockerItemRow = memo(
           {row.subtitle}
         </Text>
       </View>
-      <Icon name="ChevronRight" size={16} color={colors.ink3} />
+      <Icon name="ChevronRight" size={16} color={colors.textFaint} />
     </Pressable>
   )
 );

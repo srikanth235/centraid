@@ -1,4 +1,4 @@
-/* Approvals page (issues #306/#308) — co-located styles for
+/* Approvals page (issues var(--text)/var(--text)) — co-located styles for
    ApprovalsScreen.tsx. Scoped by Vite CSS Modules. Mirrors the
    InsightsScreen header/panel look: paper/ink tokens, 0.5px hairlines,
    quiet color-mix hovers — no bespoke palette. */
@@ -27,22 +27,22 @@
   border-radius: 9px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
   background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 .subtitle {
   margin: 0;
   font: var(--t-body);
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .groups {
@@ -59,21 +59,21 @@
 }
 .groupIcon {
   display: inline-flex;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .groupHead h2 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 14px;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
 }
 .groupCount {
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding: 1px 6px;
   border-radius: 999px;
   border: 0.5px solid var(--line);
@@ -110,12 +110,12 @@ button.rowMain {
   transition: background 0.12s ease;
 }
 button.rowMain:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
 }
 .row[data-expanded="true"] .rowMain {
   background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
-/* Deep-linked from an outbox notice (#647 D10): mark WHICH row the tap meant,
+/* Deep-linked from an outbox notice (var(--text) D10): mark WHICH row the tap meant,
    so landing in a list of similar sends is not a guess. */
 .row[data-focused="true"] {
   box-shadow: inset 2px 0 0 0 var(--accent);
@@ -127,12 +127,12 @@ button.rowMain:hover {
   height: 26px;
   border-radius: 8px;
   flex: none;
-  color: var(--ink-3);
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  color: var(--text-faint);
+  background: color-mix(in oklab, var(--text) 5%, transparent);
 }
 .warnIcon {
-  color: var(--danger, #c4453b);
-  background: color-mix(in oklab, var(--danger, #c4453b) 12%, transparent);
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
 .rowBody {
   flex: 1 1 auto;
@@ -144,14 +144,14 @@ button.rowMain:hover {
 .rowTitle {
   font-size: 13.5px;
   font-weight: 550;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rowSub {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -168,7 +168,7 @@ button.rowMain:hover {
 .rowMeta {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   flex: none;
 }
 .inlineActions {
@@ -201,20 +201,20 @@ button.rowMain:hover {
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   text-transform: uppercase;
 }
 .field dd {
   margin: 0;
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
 }
 .detailNote {
   margin: 0;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-style: italic;
 }
 .editInput,
@@ -225,9 +225,9 @@ button.rowMain:hover {
   border-radius: 8px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  font-family: inherit;
+  font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--text);
 }
 .editTextarea {
   min-height: 76px;
@@ -244,12 +244,12 @@ button.rowMain:hover {
   align-items: center;
   gap: 8px;
   font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .editNote {
   margin: 0;
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .inputPreview {
   margin: 0;
@@ -259,7 +259,7 @@ button.rowMain:hover {
   background: var(--bg-sunken);
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 180px;
@@ -271,7 +271,7 @@ button.rowMain:hover {
   gap: 8px;
 }
 .denyBtn {
-  color: var(--danger, #c4453b);
+  color: var(--danger);
 }
 
 /* Standing grants — always rendered, own empty state. */
@@ -294,19 +294,19 @@ button.rowMain:hover {
   padding: 10px 16px;
   border-bottom: 0.5px solid var(--line);
   font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .grantRow:last-child {
   border-bottom: none;
 }
 .grantActor {
   font-weight: 550;
-  color: var(--ink);
+  color: var(--text);
 }
 .grantVerb {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .grantTarget {
   flex: 1 1 auto;
@@ -320,13 +320,13 @@ button.rowMain:hover {
 .grantMeta {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   flex: none;
 }
 .grantsEmpty {
   margin: 10px 0 0;
   font-size: 12.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 .notificationsFilters {
@@ -339,7 +339,7 @@ button.rowMain:hover {
 }
 /* Notices are FLAT — transparent + one hairline — so the elevated decision
    list above them reads as the heavier thing. Elevation arrives on hover
-   only. (`var(--surface)` used to sit here; it is not a token.) */
+   only. (`var(--bg-elev)` used to sit here; it is not a token.) */
 .noticeRow {
   display: flex;
   align-items: center;
@@ -364,12 +364,8 @@ button.rowMain:hover {
   height: 27px;
   border-radius: 8px;
   flex: none;
-  color: var(--notice-hue, var(--ink-3));
-  background: color-mix(
-    in oklab,
-    var(--notice-hue, var(--ink)) 18%,
-    transparent
-  );
+  color: var(--notice-hue, var(--text-faint));
+  background: color-mix(in oklab, var(--notice-hue) 18%, transparent);
 }
 .noticeTile[data-hue="amber"] {
   --notice-hue: var(--c-amber);
@@ -418,11 +414,11 @@ button.rowMain:hover {
   vertical-align: baseline;
 }
 .noticeRow[data-severity="high"] .severityPill {
-  color: color-mix(in oklab, var(--danger) 80%, var(--ink));
+  color: color-mix(in oklab, var(--danger) 80%, var(--text));
   background: color-mix(in oklab, var(--danger) 14%, transparent);
 }
 .noticeRow[data-severity="warning"] .severityPill {
-  color: color-mix(in srgb, var(--c-amber) 65%, var(--ink));
+  color: color-mix(in srgb, var(--c-amber) 65%, var(--text));
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
 }
 :root[data-theme="dark"] .noticeRow[data-severity="warning"] .severityPill {
@@ -438,7 +434,7 @@ button.rowMain:hover {
 .streakOverflow {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .streakBars {
   display: inline-flex;
@@ -449,7 +445,7 @@ button.rowMain:hover {
   width: 3px;
   height: 10px;
   border-radius: 1px;
-  background: color-mix(in oklab, var(--ink) 20%, transparent);
+  background: color-mix(in oklab, var(--text) 20%, transparent);
 }
 .noticeRow[data-severity="high"] .streakBar {
   background: color-mix(in oklab, var(--danger) 55%, transparent);
@@ -476,7 +472,7 @@ button.rowMain:hover {
   min-width: 0;
   font-size: 13px;
   font-weight: 590;
-  color: var(--ink);
+  color: var(--text);
 }
 .noticeHeadlineText {
   overflow: hidden;
@@ -486,7 +482,7 @@ button.rowMain:hover {
 .noticeMeta,
 .noticeDetail {
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .noticeDetail {
   overflow: hidden;
@@ -500,7 +496,7 @@ button.rowMain:hover {
   padding-right: 10px;
 }
 
-/* Recent activity (issue #552) — decision accents, risk rail, collapse ×N. */
+/* Recent activity (issue var(--text)) — decision accents, risk rail, collapse ×N. */
 .activityHead {
   display: flex;
   align-items: center;
@@ -523,13 +519,13 @@ button.rowMain:hover {
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
 }
 .filterChip[data-active="true"] {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-  color: var(--ink);
+  color: var(--text);
 }
 .activityRow {
   position: relative;
@@ -544,19 +540,19 @@ button.rowMain:hover {
   bottom: 10px;
   width: 3px;
   border-radius: 0 2px 2px 0;
-  background: color-mix(in oklab, var(--danger, #c4453b) 70%, var(--accent));
+  background: color-mix(in oklab, var(--danger) 70%, var(--accent));
 }
 .decisionAllow .activityIcon {
-  color: color-mix(in oklab, #2f9e6b 90%, var(--ink));
-  background: color-mix(in oklab, #2f9e6b 14%, transparent);
+  color: color-mix(in oklab, var(--text) 90%, var(--text));
+  background: color-mix(in oklab, var(--text) 14%, transparent);
 }
 .decisionDeny .activityIcon {
-  color: color-mix(in oklab, var(--danger, #c4453b) 90%, var(--ink));
-  background: color-mix(in oklab, var(--danger, #c4453b) 14%, transparent);
+  color: color-mix(in oklab, var(--danger) 90%, var(--text));
+  background: color-mix(in oklab, var(--danger) 14%, transparent);
 }
 .decisionParked .activityIcon {
-  color: color-mix(in oklab, #c48a1a 90%, var(--ink));
-  background: color-mix(in oklab, #c48a1a 14%, transparent);
+  color: color-mix(in oklab, var(--text) 90%, var(--text));
+  background: color-mix(in oklab, var(--text) 14%, transparent);
 }
 .decisionBadge {
   display: inline-block;
@@ -568,24 +564,24 @@ button.rowMain:hover {
   padding: 1px 6px;
   border-radius: 999px;
   vertical-align: middle;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border: 0.5px solid var(--line);
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
 }
 .decisionAllow .decisionBadge {
-  color: color-mix(in oklab, #2f9e6b 95%, var(--ink));
-  border-color: color-mix(in oklab, #2f9e6b 35%, var(--line));
-  background: color-mix(in oklab, #2f9e6b 10%, transparent);
+  color: color-mix(in oklab, var(--text) 95%, var(--text));
+  border-color: color-mix(in oklab, var(--text) 35%, var(--line));
+  background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .decisionDeny .decisionBadge {
-  color: color-mix(in oklab, var(--danger, #c4453b) 95%, var(--ink));
-  border-color: color-mix(in oklab, var(--danger, #c4453b) 35%, var(--line));
-  background: color-mix(in oklab, var(--danger, #c4453b) 10%, transparent);
+  color: color-mix(in oklab, var(--danger) 95%, var(--text));
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 .decisionParked .decisionBadge {
-  color: color-mix(in oklab, #c48a1a 95%, var(--ink));
-  border-color: color-mix(in oklab, #c48a1a 35%, var(--line));
-  background: color-mix(in oklab, #c48a1a 10%, transparent);
+  color: color-mix(in oklab, var(--text) 95%, var(--text));
+  border-color: color-mix(in oklab, var(--text) 35%, var(--line));
+  background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .countMarker {
   display: inline-block;
@@ -593,12 +589,12 @@ button.rowMain:hover {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 550;
-  color: var(--ink-3);
+  color: var(--text-faint);
   vertical-align: middle;
 }
 .attribution {
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-style: italic;
 }
 .monoId {

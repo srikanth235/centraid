@@ -40,8 +40,8 @@
      insets stay literal: they're a material edge, not an elevation step, and
      no token describes them. */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 0 0.5px color-mix(in srgb, var(--ink) 4%, transparent),
+    inset 0 1px 0 var(--scrim),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--text) 4%, transparent),
     var(--shadow-lg);
   z-index: 13;
   animation: cd-app-settings-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -58,7 +58,7 @@
   border-radius: 9px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
   flex: none;
 }
 .settingsIcon svg {
@@ -70,16 +70,16 @@
   flex: 1;
 }
 .settingsName {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 15px;
   line-height: 1.05;
-  color: var(--ink);
+  color: var(--text);
 }
 .settingsEyebrow {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   margin-top: 2px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -93,7 +93,7 @@
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   flex: none;
 }
 .settingsTabsWrap {
@@ -110,7 +110,7 @@
    the import order — the same rule-1 escape `.paneSeg` uses below. */
 .settingsTabs {
   border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .settingsTabsWrap .settingsTabs button {
   display: inline-flex;
@@ -128,7 +128,7 @@
   display: inline-flex;
 }
 .settingsTabsWrap .settingsTabs button:hover {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .settingsTabsWrap .settingsTabs button[data-active="true"] {
   box-shadow: 0 0 0 0.5px var(--line);
@@ -141,8 +141,8 @@
   height: 14px;
   padding: 0 4px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
@@ -152,7 +152,7 @@
 }
 .settingsTabsWrap .settingsTabs button[data-active="true"] .settingsTabBadge {
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 .settingsPane {
   flex: 1;
@@ -179,7 +179,7 @@
   cursor: pointer;
 }
 .settingsPaneLink:hover {
-  color: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
+  color: color-mix(in oklab, var(--accent) 80%, var(--text) 20%);
 }
 .settingsDanger {
   margin-top: 8px;
@@ -234,7 +234,7 @@
 }
 .settingsPane .settingsRowLabel {
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .settingsPane .settingsRow:has(.paneSwatches) {
   margin-top: 4px;
@@ -248,7 +248,7 @@
   gap: 2px;
   border: 0.5px solid var(--line);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .settingsPane .paneSeg button {
   padding: 5px 10px;
@@ -289,11 +289,11 @@
   align-items: start;
   padding: 10px 10px 10px 0;
   border-radius: 8px;
-  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+  background: color-mix(in oklab, var(--text) 2.5%, transparent);
   transition: background 0.15s ease;
 }
 .order:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
 }
 .orderRail {
   align-self: stretch;
@@ -301,17 +301,17 @@
   border-radius: 0 2px 2px 0;
   background: var(
     --accent-color,
-    color-mix(in oklab, var(--ink) 35%, transparent)
+    color-mix(in oklab, var(--text) 35%, transparent)
   );
   transition:
     background 0.18s ease,
     opacity 0.18s ease;
 }
 .order[data-enabled="false"] .orderRail {
-  background: color-mix(in oklab, var(--ink) 16%, transparent);
+  background: color-mix(in oklab, var(--text) 16%, transparent);
 }
 .order[data-enabled="false"] .orderSchedule {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .order[data-enabled="false"] .orderPrompt {
   opacity: 0.6;
@@ -334,7 +334,7 @@
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 .orderRun {
@@ -345,9 +345,9 @@
   margin: 0;
   font-size: 11px;
   letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--ink) 18%, transparent);
+  text-decoration-color: color-mix(in oklab, var(--text) 18%, transparent);
   text-underline-offset: 3px;
   cursor: pointer;
   transition:
@@ -355,23 +355,23 @@
     text-decoration-color 0.15s ease;
 }
 .orderRun:hover:not(:disabled) {
-  color: var(--ink);
-  text-decoration-color: var(--ink-2);
+  color: var(--text);
+  text-decoration-color: var(--text-soft);
 }
 .orderRun:disabled {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: progress;
   text-decoration-color: transparent;
 }
 .orderPrompt {
   margin: 0;
   padding: 0 0 0 10px;
-  border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--text) 12%, transparent);
   font-size: 12.5px;
   font-style: italic;
   font-weight: 400;
   line-height: 1.45;
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -386,7 +386,7 @@
 .orderHandler {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   letter-spacing: 0.01em;
 }
 .orderResult {
@@ -409,12 +409,12 @@
   font-size: 11px;
   background: none;
   border: none;
-  color: color-mix(in oklab, var(--ink) 55%, transparent);
+  color: color-mix(in oklab, var(--text) 55%, transparent);
   cursor: pointer;
   padding: 0;
 }
 .orderRunsToggle:hover {
-  color: var(--ink);
+  color: var(--text);
   text-decoration: underline;
 }
 .orderRuns {
@@ -444,7 +444,7 @@
 .orderToggleTrack {
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--ink) 14%, transparent);
+  background: color-mix(in oklab, var(--text) 14%, transparent);
   border-radius: 999px;
   transition:
     background 0.18s ease,
@@ -459,13 +459,13 @@
   height: 14px;
   border-radius: 999px;
   background: var(--bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px var(--scrim);
   transition: transform 0.18s cubic-bezier(0.34, 1.32, 0.7, 1);
 }
 .orderToggle input:checked + .orderToggleTrack {
   background: var(
     --accent-color,
-    color-mix(in oklab, var(--ink) 70%, transparent)
+    color-mix(in oklab, var(--text) 70%, transparent)
   );
 }
 .orderToggle input:checked + .orderToggleTrack::after {
@@ -474,14 +474,14 @@
 .orderToggle input:focus-visible + .orderToggleTrack {
   box-shadow:
     0 0 0 2px var(--bg),
-    0 0 0 4px color-mix(in oklab, var(--ink) 35%, transparent);
+    0 0 0 4px color-mix(in oklab, var(--text) 35%, transparent);
 }
 .settingsSectionLabel {
   font-family: var(--font-mono);
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .settingsRow {
   display: flex;
@@ -492,7 +492,7 @@
 }
 .settingsRowLabel {
   font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .settingsManage {
   display: flex;
@@ -508,7 +508,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -521,9 +521,9 @@
   border-radius: 7px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   border: 0.5px solid var(--line);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .settingsMenuText {
   flex: 1;
@@ -533,21 +533,21 @@
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
   line-height: 1.1;
 }
 .settingsMenuSub {
   display: block;
   margin-top: 3px;
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .settingsMenuItem:hover {
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  background: color-mix(in oklab, var(--text) 5%, transparent);
 }
 .settingsMenuItem[data-danger="true"] .settingsMenuLabel {
   color: var(--danger);

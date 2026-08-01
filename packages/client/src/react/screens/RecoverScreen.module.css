@@ -1,4 +1,4 @@
-/* Fresh-gateway "Recover my vault" branch (issue #439). Shares the first-run
+/* Fresh-gateway "Recover my vault" branch (issue var(--text)). Shares the first-run
    onboarding visual language — a dim atmospheric stage with one editorial card —
    so the recovery flow reads as part of the same welcome moment rather than a
    separate tool. Forced-dark surface with literal hex (mirrors
@@ -11,17 +11,12 @@
   z-index: 1000;
   display: grid;
   place-items: center;
-  --rec-accent: #5b8def;
-  background: #07080d;
+  --rec-accent: var(--text);
+  background: var(--text);
   overflow: hidden;
   isolation: isolate;
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  color: #e8eaf2;
+  font-family: var(--font-sans);
+  color: var(--text);
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
@@ -42,15 +37,11 @@
   background:
     radial-gradient(
       ellipse 80% 60% at 50% 0%,
-      color-mix(in srgb, #1a1f33 80%, transparent),
+      color-mix(in srgb, var(--text) 80%, transparent),
       transparent 70%
     ),
-    radial-gradient(
-      ellipse 60% 50% at 50% 100%,
-      rgba(16, 18, 28, 1),
-      transparent 70%
-    ),
-    #07080d;
+    radial-gradient(ellipse 60% 50% at 50% 100%, var(--scrim), transparent 70%),
+    var(--text);
 }
 
 .stageGlow {
@@ -78,12 +69,12 @@
   width: min(460px, 92vw);
   padding: 36px 36px 28px;
   border-radius: 18px;
-  background: color-mix(in srgb, #11131c 88%, transparent);
+  background: color-mix(in srgb, var(--text) 88%, transparent);
   border: 0.5px solid color-mix(in srgb, white 8%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 6px 18px rgba(0, 0, 0, 0.35);
+    0 24px 60px var(--scrim),
+    0 6px 18px var(--scrim);
   backdrop-filter: blur(8px) saturate(120%);
   animation: cardRise 540ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms both;
 }
@@ -103,11 +94,11 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.22em;
-  color: color-mix(in srgb, #b9bcd1 80%, transparent);
+  color: color-mix(in srgb, var(--text) 80%, transparent);
 }
 .eyebrowDot {
   display: inline-block;
@@ -119,16 +110,13 @@
 }
 
 .title {
-  font-family:
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 32px;
   line-height: 1.06;
   font-weight: 600;
   letter-spacing: -0.025em;
   margin: 14px 0 8px;
-  color: #f3f4fb;
+  color: var(--text);
 }
 .title em {
   font-style: italic;
@@ -146,7 +134,7 @@
 .sub {
   font-size: 13.5px;
   line-height: 1.55;
-  color: color-mix(in srgb, #b9bcd1 78%, transparent);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   margin: 0 0 20px;
   max-width: 40ch;
 }
@@ -154,14 +142,14 @@
 .foundLead {
   font-size: 15px;
   line-height: 1.5;
-  color: #eef0f8;
+  color: var(--text);
   margin: 4px 0 6px;
 }
 .foundMeta {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.02em;
-  color: color-mix(in srgb, #b9bcd1 60%, transparent);
+  color: color-mix(in srgb, var(--text) 60%, transparent);
   margin: 0 0 22px;
 }
 
@@ -188,10 +176,10 @@
   min-height: 96px;
   resize: vertical;
   padding: 10px 12px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
-  color: #eef0f8;
+  color: var(--text);
   background: color-mix(in srgb, black 24%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
   border-radius: 8px;
@@ -201,7 +189,7 @@
     box-shadow 160ms;
 }
 .textarea::placeholder {
-  color: color-mix(in srgb, #b9bcd1 32%, transparent);
+  color: color-mix(in srgb, var(--text) 32%, transparent);
 }
 .textarea:focus {
   border-color: color-mix(in srgb, var(--rec-accent) 60%, transparent);
@@ -209,7 +197,7 @@
 }
 .dropHint {
   font-size: 11.5px;
-  color: color-mix(in srgb, #b9bcd1 55%, transparent);
+  color: color-mix(in srgb, var(--text) 55%, transparent);
   padding: 0 2px;
 }
 .linkBtn {
@@ -232,12 +220,12 @@
   gap: 6px;
 }
 .fieldLabel {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: color-mix(in srgb, #b9bcd1 50%, transparent);
+  color: color-mix(in srgb, var(--text) 50%, transparent);
   margin-bottom: 2px;
 }
 .input {
@@ -247,7 +235,7 @@
   font: inherit;
   font-size: 16px;
   font-weight: 500;
-  color: #f3f4fb;
+  color: var(--text);
   background: color-mix(in srgb, white 4%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
   border-radius: 10px;
@@ -290,7 +278,7 @@
 }
 .stageLabel {
   font-size: 14px;
-  color: color-mix(in srgb, #b9bcd1 55%, transparent);
+  color: color-mix(in srgb, var(--text) 55%, transparent);
   transition: color 200ms;
 }
 .stage[data-state="active"] .stageDot {
@@ -300,7 +288,7 @@
   animation: pulseDot 1400ms ease-in-out infinite;
 }
 .stage[data-state="active"] .stageLabel {
-  color: #f3f4fb;
+  color: var(--text);
   font-weight: 600;
 }
 .stage[data-state="done"] .stageDot {
@@ -308,7 +296,7 @@
   background: color-mix(in srgb, var(--rec-accent) 70%, transparent);
 }
 .stage[data-state="done"] .stageLabel {
-  color: color-mix(in srgb, #b9bcd1 75%, transparent);
+  color: color-mix(in srgb, var(--text) 75%, transparent);
 }
 @keyframes pulseDot {
   0%,
@@ -335,12 +323,12 @@
   border: none;
   font: inherit;
   font-size: 12.5px;
-  color: color-mix(in srgb, #b9bcd1 60%, transparent);
+  color: color-mix(in srgb, var(--text) 60%, transparent);
   cursor: pointer;
   transition: color 160ms;
 }
 .backBtn:hover {
-  color: #e8eaf2;
+  color: var(--text);
 }
 
 .error {
@@ -348,9 +336,9 @@
   padding: 8px 12px;
   font-size: 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, #c43c3c 18%, transparent);
-  border: 0.5px solid color-mix(in srgb, #c43c3c 50%, transparent);
-  color: #ffb8b8;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--text) 50%, transparent);
+  color: var(--text);
 }
 
 /* First-run choice (FirstRunGate) — two stacked option cards. */
@@ -380,7 +368,7 @@
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--rec-accent) 55%, transparent);
   background: color-mix(in srgb, var(--rec-accent) 10%, transparent);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 22px var(--scrim);
 }
 .choiceBtn:focus-visible {
   outline: none;
@@ -388,19 +376,14 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec-accent) 22%, transparent);
 }
 .choiceBtnTitle {
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #f3f4fb;
+  color: var(--text);
 }
 .choiceBtnSub {
   font-size: 12.5px;
   line-height: 1.45;
-  color: color-mix(in srgb, #b9bcd1 65%, transparent);
+  color: color-mix(in srgb, var(--text) 65%, transparent);
 }

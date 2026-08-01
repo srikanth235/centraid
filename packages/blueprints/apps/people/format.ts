@@ -158,7 +158,7 @@ export function avatarColor(p: CadencePerson): string {
 }
 // List chrome dot: deterministic from the list id.
 export function listColor(listId: string | null | undefined): string {
-  if (listId == null) return "var(--ink-3)";
+  if (listId == null) return "var(--text-faint)";
   return PALETTE[hashInt(listId) % PALETTE.length]!;
 }
 export function listName(data: AppData, id: string | null): string {

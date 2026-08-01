@@ -7,12 +7,12 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
 }
 .iconBtn:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .chip {
   display: inline-flex;
@@ -22,15 +22,15 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 140ms;
 }
 .chip:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
 }
 /* The destructive chip — Remove / Delete. Composes with `.chip`; it only
    re-tints, so the geometry stays in one place. Was copied byte-for-byte
@@ -44,14 +44,14 @@
   color: var(--danger);
 }
 .soft {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .soft:hover {
-  background: color-mix(in oklab, var(--ink) 10%, transparent);
+  background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .note {
-  color: var(--ink-3, rgba(0, 0, 0, 0.55));
+  color: var(--text-faint, var(--scrim));
   font-size: 12px;
   line-height: 1.45;
   padding: 2px 0 8px;

@@ -66,15 +66,15 @@ const ExpenseRow = memo(
       ]}
     >
       <View style={styles.expenseCopy}>
-        <Text style={[styles.personName, { color: colors.ink }]}>
+        <Text style={[styles.personName, { color: colors.text }]}>
           {asString(row.description)}
         </Text>
-        <Text style={[styles.meta, { color: colors.ink3 }]}>
+        <Text style={[styles.meta, { color: colors.textFaint }]}>
           {groupLabel} · {asString(row.spent_on)}
           {row.rate_source ? ` · ${asString(row.rate_source)}` : ""}
         </Text>
       </View>
-      <Text style={[styles.amount, { color: colors.ink }]}>
+      <Text style={[styles.amount, { color: colors.text }]}>
         {money(Number(row.amount_minor ?? 0), currency)}
       </Text>
     </View>
@@ -358,8 +358,8 @@ export default function TallyHome({
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View>
-          <Text style={[styles.title, { color: colors.ink }]}>Tally</Text>
-          <Text style={[styles.meta, { color: colors.ink3 }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Tally</Text>
+          <Text style={[styles.meta, { color: colors.textFaint }]}>
             Fixed-point multi-currency ledger, available offline
           </Text>
         </View>
@@ -399,7 +399,7 @@ export default function TallyHome({
             >
               <Text
                 style={{
-                  color: activeGroupId === id ? colors.bg : colors.ink2,
+                  color: activeGroupId === id ? colors.bg : colors.textSoft,
                 }}
               >
                 {groupName(id)}
@@ -410,12 +410,12 @@ export default function TallyHome({
         <TextInput
           value={groupDraft}
           placeholder="New group"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setGroupDraft}
           onSubmitEditing={() => void createGroup()}
           style={[
             styles.groupInput,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
       </ScrollView>
@@ -435,11 +435,11 @@ export default function TallyHome({
         <TextInput
           value={description}
           placeholder="Expense description"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setDescription}
           style={[
             styles.input,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <View style={styles.row}>
@@ -447,11 +447,11 @@ export default function TallyHome({
             value={amount}
             placeholder="0.00"
             inputMode="decimal"
-            placeholderTextColor={colors.ink3}
+            placeholderTextColor={colors.textFaint}
             onChangeText={setAmount}
             style={[
               styles.input,
-              { borderColor: colors.line, color: colors.ink },
+              { borderColor: colors.line, color: colors.text },
             ]}
           />
           <TextInput
@@ -461,7 +461,7 @@ export default function TallyHome({
             onChangeText={(value) => setOriginalCurrency(value.toUpperCase())}
             style={[
               styles.code,
-              { borderColor: colors.line, color: colors.ink },
+              { borderColor: colors.line, color: colors.text },
             ]}
           />
           <Text>→</Text>
@@ -472,7 +472,7 @@ export default function TallyHome({
             onChangeText={(value) => setSettlementCurrency(value.toUpperCase())}
             style={[
               styles.code,
-              { borderColor: colors.line, color: colors.ink },
+              { borderColor: colors.line, color: colors.text },
             ]}
           />
         </View>
@@ -485,7 +485,7 @@ export default function TallyHome({
               onChangeText={setRate}
               style={[
                 styles.input,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
             <TextInput
@@ -494,7 +494,7 @@ export default function TallyHome({
               onChangeText={setRateSource}
               style={[
                 styles.input,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
             <TextInput
@@ -503,13 +503,13 @@ export default function TallyHome({
               onChangeText={setRateDate}
               style={[
                 styles.input,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
           </View>
         )}
         <View style={styles.row}>
-          <Text style={{ color: colors.ink2 }}>Repeat monthly</Text>
+          <Text style={{ color: colors.textSoft }}>Repeat monthly</Text>
           <Switch value={recurring} onValueChange={setRecurring} />
           <Pressable
             onPress={() => void saveExpense()}
@@ -532,15 +532,15 @@ export default function TallyHome({
                   { backgroundColor: colors.bgElev, borderColor: colors.line },
                 ]}
               >
-                <Text style={[styles.personName, { color: colors.ink }]}>
+                <Text style={[styles.personName, { color: colors.text }]}>
                   {asString(template.description)}
                 </Text>
-                <Text style={[styles.meta, { color: colors.ink3 }]}>
+                <Text style={[styles.meta, { color: colors.textFaint }]}>
                   {describeRecurrence(asString(template.rrule)) ??
                     asString(template.rrule)}{" "}
                   · {asString(template.original_currency)}
                 </Text>
-                <Text style={[styles.meta, { color: colors.ink3 }]}>
+                <Text style={[styles.meta, { color: colors.textFaint }]}>
                   {upcoming.length
                     ? upcoming
                         .map((start) => new Date(start).toLocaleDateString())
@@ -628,7 +628,7 @@ export default function TallyHome({
         windowSize={9}
         removeClippedSubviews
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: colors.ink3 }]}>
+          <Text style={[styles.empty, { color: colors.textFaint }]}>
             No expenses yet. Your offline queue is shown above.
           </Text>
         }
@@ -642,7 +642,7 @@ export default function TallyHome({
       >
         <View accessibilityViewIsModal style={styles.modalBackdrop}>
           <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
-            <Text style={[styles.personName, { color: colors.ink }]}>
+            <Text style={[styles.personName, { color: colors.text }]}>
               Edit{" "}
               {editing?.scope === "occurrence"
                 ? "this occurrence"
@@ -656,7 +656,7 @@ export default function TallyHome({
               onChangeText={setEditDescription}
               style={[
                 styles.input,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
             <TextInput
@@ -666,12 +666,12 @@ export default function TallyHome({
               onChangeText={setEditAmount}
               style={[
                 styles.input,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
             <View style={styles.row}>
               <Pressable onPress={() => setEditing(undefined)}>
-                <Text style={{ color: colors.ink2 }}>Cancel</Text>
+                <Text style={{ color: colors.textSoft }}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => void saveRecurringEdit()}

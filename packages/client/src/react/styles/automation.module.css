@@ -45,7 +45,7 @@
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 20px;
@@ -62,20 +62,20 @@
   margin: 0 auto;
   padding: 48px 0;
   font-size: 14px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .auCrumb {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 11px;
 }
 .auCrumb button {
   font: inherit;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: none;
   border: none;
   padding: 0;
@@ -96,8 +96,8 @@
   display: grid;
   place-items: center;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink-3);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-faint);
 }
 .auGlyph[data-size="sm"] {
   width: 38px;
@@ -126,24 +126,19 @@
   text-transform: uppercase;
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid
-    color-mix(in srgb, var(--au-status-tone, var(--ink)) 28%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--au-status-tone, var(--ink)) 12%,
-    transparent
-  );
-  color: var(--au-status-tone, var(--ink-3));
+  border: 1px solid color-mix(in srgb, var(--au-status-tone) 28%, transparent);
+  background: color-mix(in srgb, var(--au-status-tone) 12%, transparent);
+  color: var(--au-status-tone, var(--text-faint));
 }
 .auStatus[data-tone="active"],
 .auStatus[data-tone="success"] {
   --au-status-tone: var(--success);
 }
 .auStatus[data-tone="paused"] {
-  --au-status-tone: var(--ink-3);
+  --au-status-tone: var(--text-faint);
 }
 .auStatus[data-tone="draft"] {
-  --au-status-tone: var(--icon-amber);
+  --au-status-tone: var(--c-amber);
 }
 .auStatus[data-tone="running"] {
   --au-status-tone: var(--accent);
@@ -167,11 +162,11 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .auTrigbadgeIc {
   display: inline-flex;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .auTrigbadge[data-mono="true"] {
   font-family: var(--font-mono);
@@ -206,7 +201,7 @@
 }
 .auBtnPrimary {
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 .auBtnPrimary:not(:disabled):hover {
   filter: brightness(1.08);
@@ -214,7 +209,7 @@
 }
 .auBtnGhost {
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   border: 0.5px solid var(--line-strong);
 }
 .auBtnGhost:hover {
@@ -245,7 +240,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--ink-4);
+  background: var(--text-ghost);
   transition: width 0.16s ease;
 }
 .auOvRow[data-on="true"]::before {
@@ -276,7 +271,7 @@
 .auOvName {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .auOvRight {
   flex: none;
@@ -288,12 +283,12 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
 }
 .auOvChev {
   display: inline-flex;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .auOvDots {
   flex: none;
@@ -310,7 +305,7 @@
 .auOvDotMore {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .auOvRun {
   display: flex;
@@ -356,14 +351,14 @@
 .auOvRunName {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .auOvRunSum {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -373,16 +368,16 @@
   text-align: right;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .auOvRunWhen b {
   display: block;
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .auOvRunMeta {
   display: block;
   font-size: 9.5px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }

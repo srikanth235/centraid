@@ -107,6 +107,6 @@
 .cardMeta {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 5px;
 }

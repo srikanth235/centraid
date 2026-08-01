@@ -18,16 +18,16 @@
   height: 9px;
   border-radius: 50%;
   flex: none;
-  background: var(--log-status, var(--ink-3));
+  background: var(--log-status, var(--text-faint));
   box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--log-status, var(--ink-3)) 16%, transparent);
+    color-mix(in oklab, var(--log-status, var(--text-faint)) 16%, transparent);
 }
 .statusDot[data-status="live"] {
   --log-status: var(--success);
 }
 .statusDot[data-status="connecting"],
 .statusDot[data-status="reconnecting"] {
-  --log-status: var(--icon-amber);
+  --log-status: var(--c-amber);
 }
 .statusLabel {
   font-family: var(--font-mono);
@@ -35,19 +35,19 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--log-status, var(--ink-3));
+  color: var(--log-status, var(--text-faint));
 }
 .statusLabel[data-status="live"] {
   --log-status: var(--success);
 }
 .statusLabel[data-status="connecting"],
 .statusLabel[data-status="reconnecting"] {
-  --log-status: var(--icon-amber);
+  --log-status: var(--c-amber);
 }
 .countLabel {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-right: auto;
 }
 
@@ -56,8 +56,8 @@
   gap: 6px;
 }
 .chipActive {
-  background: color-mix(in oklab, var(--ink) 10%, transparent);
-  color: var(--ink);
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+  color: var(--text);
   border-color: transparent;
 }
 
@@ -67,15 +67,15 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   outline: none;
 }
 .search:focus {
-  border-color: color-mix(in oklab, var(--ink) 30%, transparent);
+  border-color: color-mix(in oklab, var(--text) 30%, transparent);
 }
 .search::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .exportStatus {
@@ -119,11 +119,11 @@
   background: color-mix(in oklab, var(--danger) 7%, transparent);
 }
 .line[data-level="warn"] {
-  background: color-mix(in oklab, var(--icon-amber) 6%, transparent);
+  background: color-mix(in oklab, var(--c-amber) 6%, transparent);
 }
 .lineTime {
   flex: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .lineLevel {
   flex: none;
@@ -132,10 +132,10 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .lineLevel[data-level="warn"] {
-  color: var(--icon-amber);
+  color: var(--c-amber);
 }
 .lineLevel[data-level="error"] {
   color: var(--danger);
@@ -143,19 +143,19 @@
 .lineMsg {
   flex: 1;
   min-width: 0;
-  color: var(--ink-2);
+  color: var(--text-soft);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .line[data-level="error"] .lineMsg {
-  color: var(--ink);
+  color: var(--text);
 }
 
 .empty {
   padding: 28px 16px;
   text-align: center;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .jumpBtn {
@@ -166,16 +166,16 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 14px var(--scrim);
 }
 .jumpBtn:hover {
-  background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+  background: color-mix(in oklab, var(--text) 8%, var(--bg-elev));
 }
 
-/* "Show N earlier lines" — the top edge of the rendered window (issue #659).
+/* "Show N earlier lines" — the top edge of the rendered window (issue var(--text)).
    The panel keeps only the newest lines mounted; this is how a reader walks
    back through the rest without two thousand rows in the DOM. */
 .showEarlier {
@@ -185,12 +185,12 @@
   border: 0;
   border-bottom: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 11.5px;
   text-align: center;
   cursor: pointer;
 }
 
 .showEarlier:hover {
-  color: var(--ink-1);
+  color: var(--text-1);
 }

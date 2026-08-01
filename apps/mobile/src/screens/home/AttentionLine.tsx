@@ -234,7 +234,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 8,
     },
-    allClearText: { ...t("small"), color: colors.ink2 },
+    allClearText: { ...t("small"), color: colors.textSoft },
     badge: {
       alignItems: "center",
       borderRadius: 10,
@@ -266,11 +266,11 @@ const makeStyles = (colors: ThemeColors) =>
     },
     bannerSub: {
       ...t("small"),
-      color: colors.ink2,
+      color: colors.textSoft,
       lineHeight: 18,
       marginTop: 2,
     },
-    bannerTitle: { ...t("bodyStrong"), color: colors.ink },
+    bannerTitle: { ...t("bodyStrong"), color: colors.text },
     chip: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -290,10 +290,10 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 32,
     },
-    chipSub: { ...t("tiny"), color: colors.ink3, marginTop: 1 },
+    chipSub: { ...t("tiny"), color: colors.textFaint, marginTop: 1 },
     chipTitle: {
       ...t("small"),
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.sansBold,
     },
     dot: { borderRadius: 3, height: 6, width: 6 },

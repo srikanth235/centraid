@@ -5,7 +5,7 @@
 
 .versionStatus {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 10px 0;
 }
 .versionList {
@@ -38,7 +38,7 @@
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 2px 5px;
@@ -53,12 +53,12 @@
 }
 .versionDate {
   font: var(--t-small);
-  color: var(--ink);
+  color: var(--text);
 }
 .versionSize {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .versionTag {
   font-family: var(--mono);

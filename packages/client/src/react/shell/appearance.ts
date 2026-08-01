@@ -1,4 +1,4 @@
-// Appearance prefs — the renderer-owned theme/density/accent settings, ported
+// Appearance prefs — the renderer-owned theme/accent settings, ported
 // out of the vanilla app.ts. Pure helpers here (validation + wire mapping +
 // the document side-effect); the React hook that owns the live value and the
 // gateway round-trip lives in useAppearance.ts.
@@ -22,7 +22,6 @@ import type {
 
 export const DEFAULT_PREFS: AppearancePrefs = {
   cardVariant: "outlined",
-  density: "regular",
   sidebarOpen: true,
   theme: "dark",
   themeMode: "dark",
@@ -66,13 +65,6 @@ export function pickAppearance(
   }
   if (out.themeMode !== undefined) out.theme = resolveThemeMode(out.themeMode);
   if (
-    remote.density === "compact" ||
-    remote.density === "regular" ||
-    remote.density === "comfy"
-  ) {
-    out.density = remote.density;
-  }
-  if (
     remote.cards === "flat" ||
     remote.cards === "outlined" ||
     remote.cards === "elevated"
@@ -115,7 +107,6 @@ export function toRemoteShape(
   const out: Record<string, unknown> = {};
   if (patch.themeMode !== undefined) out.themeMode = patch.themeMode;
   if (patch.theme !== undefined) out.theme = patch.theme;
-  if (patch.density !== undefined) out.density = patch.density;
   if (patch.cardVariant !== undefined) out.cards = patch.cardVariant;
   if (patch.bgL !== undefined) out.bgL = patch.bgL;
   if (patch.accent !== undefined) {
@@ -151,7 +142,6 @@ export function applyPrefsToDocument(
 ): void {
   const html = doc.documentElement;
   html.dataset.theme = String(prefs.theme);
-  html.dataset.density = prefs.density;
   html.dataset.cards = prefs.cardVariant;
   setOrClear(
     html,

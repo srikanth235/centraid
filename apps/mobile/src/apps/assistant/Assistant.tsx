@@ -180,7 +180,7 @@ export default function AssistantScreen({
           hitSlop={10}
           onPress={() => navigation.goBack()}
         >
-          <Feather name="arrow-left" size={26} color={colors.ink} />
+          <Feather name="arrow-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Assistant</Text>
@@ -328,11 +328,15 @@ export default function AssistantScreen({
                     onPress={() => removeAttachment(attachment.hash)}
                     style={styles.attachmentChip}
                   >
-                    <Feather name="paperclip" size={12} color={colors.ink2} />
+                    <Feather
+                      name="paperclip"
+                      size={12}
+                      color={colors.textSoft}
+                    />
                     <Text numberOfLines={1} style={styles.statusText}>
                       {attachment.filename}
                     </Text>
-                    <Feather name="x" size={12} color={colors.ink2} />
+                    <Feather name="x" size={12} color={colors.textSoft} />
                   </Pressable>
                 ))}
               </View>
@@ -346,14 +350,14 @@ export default function AssistantScreen({
                   disabled={attaching || sending}
                   style={styles.attachButton}
                 >
-                  <Feather name="paperclip" size={18} color={colors.ink2} />
+                  <Feather name="paperclip" size={18} color={colors.textSoft} />
                 </Pressable>
               ) : null}
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
                 placeholder="Message your assistant"
-                placeholderTextColor={colors.ink3}
+                placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 multiline
                 editable={phase === "ready"}
@@ -373,7 +377,7 @@ export default function AssistantScreen({
                 <Feather
                   name={sending ? "square" : "arrow-up"}
                   size={sending ? 16 : 20}
-                  color={sending || canSend ? colors.inkInv : colors.ink3}
+                  color={sending || canSend ? colors.textInv : colors.textFaint}
                 />
               </Pressable>
             </View>

@@ -17,11 +17,11 @@ describe("tokens", () => {
     expect(Object.keys(palette).length).toBeGreaterThan(5);
   });
 
-  test("light and dark themes both define background and ink", () => {
+  test("light and dark themes both define background and text", () => {
     expect(themes.light.bg).toBeTruthy();
     expect(themes.dark.bg).toBeTruthy();
-    expect(themes.light.ink).toBeTruthy();
-    expect(themes.dark.ink).toBeTruthy();
+    expect(themes.light.text).toBeTruthy();
+    expect(themes.dark.text).toBeTruthy();
   });
 
   test("spacing and radii scales are non-empty", () => {

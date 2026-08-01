@@ -78,19 +78,22 @@ function NoteRow({
       onPress={onOpen}
       style={[styles.note, { borderBottomColor: colors.line }]}
     >
-      <Text numberOfLines={1} style={[styles.noteTitle, { color: colors.ink }]}>
+      <Text
+        numberOfLines={1}
+        style={[styles.noteTitle, { color: colors.text }]}
+      >
         {note.pinned ? "◆ " : ""}
         {note.title}
       </Text>
       {preview ? (
         <Text
           numberOfLines={2}
-          style={[styles.notePreview, { color: colors.ink2 }]}
+          style={[styles.notePreview, { color: colors.textSoft }]}
         >
           {preview}
         </Text>
       ) : null}
-      <Text style={[styles.noteMeta, { color: colors.ink3 }]}>
+      <Text style={[styles.noteMeta, { color: colors.textFaint }]}>
         {new Date(note.updatedAt).toLocaleString()}
         {note.references.length ? ` · ${note.references.length} links` : ""}
         {note.backlinks.length ? ` · ${note.backlinks.length} backlinks` : ""}
@@ -342,8 +345,10 @@ export default function NotesHome({
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
-          <Text style={[styles.headerTitle, { color: colors.ink }]}>Notes</Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Notes
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
             Portable CommonMark · links stay in your vault
           </Text>
         </View>
@@ -364,14 +369,14 @@ export default function NotesHome({
             { backgroundColor: colors.bgElev, borderColor: colors.line },
           ]}
         >
-          <Feather name="search" size={17} color={colors.ink3} />
+          <Feather name="search" size={17} color={colors.textFaint} />
           <TextInput
             accessibilityLabel="Search notes"
             value={query}
             onChangeText={setQuery}
             placeholder="Search notes"
-            placeholderTextColor={colors.ink3}
-            style={[styles.searchInput, { color: colors.ink }]}
+            placeholderTextColor={colors.textFaint}
+            style={[styles.searchInput, { color: colors.text }]}
           />
         </View>
         <Pressable
@@ -390,7 +395,7 @@ export default function NotesHome({
           <Text
             style={[
               styles.chipText,
-              { color: showTrash ? colors.bg : colors.ink2 },
+              { color: showTrash ? colors.bg : colors.textSoft },
             ]}
           >
             {showTrash ? "Notes" : "Trash"}
@@ -424,16 +429,16 @@ export default function NotesHome({
               <Feather
                 name={showTrash ? "trash-2" : "book-open"}
                 size={32}
-                color={colors.ink3}
+                color={colors.textFaint}
               />
-              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {query.trim()
                   ? "No matching notes"
                   : showTrash
                     ? "Trash is empty"
                     : "Start with one note"}
               </Text>
-              <Text style={[styles.emptyBody, { color: colors.ink2 }]}>
+              <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
                 {showTrash
                   ? "Deleted notes remain recoverable here for 30 days."
                   : "Your source stays portable CommonMark; [[wikilinks]] can point to anything in Centraid."}
@@ -460,9 +465,9 @@ export default function NotesHome({
               onPress={closeEditor}
               style={styles.iconButton}
             >
-              <Feather name="x" size={23} color={colors.ink} />
+              <Feather name="x" size={23} color={colors.text} />
             </Pressable>
-            <Text style={[styles.modalTitle, { color: colors.ink }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
               {creating
                 ? "New note"
                 : selected?.trashed
@@ -480,7 +485,7 @@ export default function NotesHome({
                 <Feather
                   name="bookmark"
                   size={21}
-                  color={selected.pinned ? colors.accent : colors.ink3}
+                  color={selected.pinned ? colors.accent : colors.textFaint}
                 />
               </Pressable>
             ) : null}
@@ -496,10 +501,10 @@ export default function NotesHome({
               value={title}
               onChangeText={setTitle}
               placeholder="Title"
-              placeholderTextColor={colors.ink3}
+              placeholderTextColor={colors.textFaint}
               style={[
                 styles.title,
-                { borderBottomColor: colors.line, color: colors.ink },
+                { borderBottomColor: colors.line, color: colors.text },
               ]}
             />
             <TextInput
@@ -509,8 +514,8 @@ export default function NotesHome({
               value={body}
               onChangeText={setBody}
               placeholder={"Write in CommonMark…\nUse [[anything]] to link it."}
-              placeholderTextColor={colors.ink3}
-              style={[styles.body, { color: colors.ink }]}
+              placeholderTextColor={colors.textFaint}
+              style={[styles.body, { color: colors.text }]}
             />
             {selected && !selected.trashed ? (
               <View style={styles.linkWrap}>
@@ -525,7 +530,7 @@ export default function NotesHome({
                     <Text style={[styles.linkTitle, { color: colors.danger }]}>
                       Broken link: {token.label}
                     </Text>
-                    <Text style={[styles.linkMeta, { color: colors.ink2 }]}>
+                    <Text style={[styles.linkMeta, { color: colors.textSoft }]}>
                       Choose a note, person, event, task, expense, photo, or
                       document.
                     </Text>
@@ -535,7 +540,7 @@ export default function NotesHome({
             ) : null}
             {selected?.backlinks.length ? (
               <View style={styles.backlinks}>
-                <Text style={[styles.linkTitle, { color: colors.ink }]}>
+                <Text style={[styles.linkTitle, { color: colors.text }]}>
                   Backlinks
                 </Text>
                 {selected.backlinks.map((reference) => (
@@ -543,11 +548,15 @@ export default function NotesHome({
                     key={String(reference.link_id)}
                     style={[styles.backlink, { borderColor: colors.line }]}
                   >
-                    <Text style={[styles.backlinkLabel, { color: colors.ink }]}>
+                    <Text
+                      style={[styles.backlinkLabel, { color: colors.text }]}
+                    >
                       {String(reference.from_type)} ·{" "}
                       {String(reference.from_id)}
                     </Text>
-                    <Text style={[styles.backlinkMeta, { color: colors.ink3 }]}>
+                    <Text
+                      style={[styles.backlinkMeta, { color: colors.textFaint }]}
+                    >
                       references this note
                     </Text>
                   </View>
@@ -614,7 +623,7 @@ export default function NotesHome({
           style={[styles.sheet, { backgroundColor: colors.bg }]}
         >
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.ink }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
               Link “{linkToken?.label}”
             </Text>
             <Pressable
@@ -623,20 +632,20 @@ export default function NotesHome({
               onPress={() => setLinkToken(undefined)}
               style={styles.iconButton}
             >
-              <Feather name="x" size={23} color={colors.ink} />
+              <Feather name="x" size={23} color={colors.text} />
             </Pressable>
           </View>
           <ScrollView style={styles.picker}>
-            <Text style={[styles.pickerCopy, { color: colors.ink2 }]}>
+            <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
               The text stays CommonMark. Your choice creates a typed, temporal
               vault link and a text anchor separately.
             </Text>
             {findingTargets ? (
-              <Text style={[styles.pickerCopy, { color: colors.ink2 }]}>
+              <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
                 Searching every app…
               </Text>
             ) : targets.length === 0 ? (
-              <Text style={[styles.pickerCopy, { color: colors.ink2 }]}>
+              <Text style={[styles.pickerCopy, { color: colors.textSoft }]}>
                 No matching entity. The broken link remains readable text.
               </Text>
             ) : (
@@ -648,10 +657,10 @@ export default function NotesHome({
                   onPress={() => void linkTarget(target)}
                   style={[styles.note, { borderBottomColor: colors.line }]}
                 >
-                  <Text style={[styles.noteTitle, { color: colors.ink }]}>
+                  <Text style={[styles.noteTitle, { color: colors.text }]}>
                     {target.label}
                   </Text>
-                  <Text style={[styles.noteMeta, { color: colors.ink3 }]}>
+                  <Text style={[styles.noteMeta, { color: colors.textFaint }]}>
                     {target.appLabel}
                     {target.detail ? ` · ${target.detail}` : ""}
                   </Text>

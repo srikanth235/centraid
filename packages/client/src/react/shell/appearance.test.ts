@@ -29,18 +29,15 @@ describe("appearance prefs", () => {
   it("picks only recognised keys off a remote object", () => {
     const got = pickAppearance({
       theme: "dark",
-      density: "comfy",
       cards: "elevated",
       // Retired in #608 — a gateway still holding one must not resurrect it.
       surfaceTemp: "warm",
       accentKey: "rose",
       bogus: "nope",
-      density2: "x",
     });
     expect(got).toStrictEqual({
       theme: "dark",
       themeMode: "dark",
-      density: "comfy",
       cardVariant: "elevated",
       accent: "rose",
     });
@@ -49,7 +46,6 @@ describe("appearance prefs", () => {
   it("rejects invalid union values", () => {
     expect(
       pickAppearance({
-        density: "huge",
         cards: "shiny",
         accentKey: "chartreuse",
       })
@@ -102,7 +98,6 @@ describe("appearance prefs", () => {
     expect(back).toMatchObject({
       theme: DEFAULT_PREFS.theme,
       themeMode: DEFAULT_PREFS.themeMode,
-      density: DEFAULT_PREFS.density,
       cardVariant: DEFAULT_PREFS.cardVariant,
     });
   });
@@ -112,11 +107,9 @@ describe("appearance prefs", () => {
       ...DEFAULT_PREFS,
       theme: "light",
       themeMode: "light",
-      density: "compact",
     });
     const html = document.documentElement;
     expect(html.dataset.theme).toBe("light");
-    expect(html.dataset.density).toBe("compact");
     // Dark has exactly one ramp now, so nothing writes a surface temperature.
     expect(html.dataset.surfaceTemp).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-/* Kinds tab — the periodic table of the ontology (issue #441 B1). Co-located
+/* Kinds tab — the periodic table of the ontology (issue var(--text) B1). Co-located
    with AtlasKindsTab.tsx. A census sentence up top, then one grid section per
    ontology pack where every kind holds a permanent cell (populated cells carry
    a count + write-pulse sparkline; empty kinds are dashed ghosts), and a
@@ -20,12 +20,12 @@
 .censusSentence {
   margin: 0;
   font: var(--t-h2);
-  font-family: var(--font-display);
-  color: var(--ink-2);
+  font-family: var(--font-mono);
+  color: var(--text-soft);
   max-width: 62ch;
 }
 .num {
-  color: var(--ink);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -58,14 +58,14 @@
   border: none;
   border-radius: 999px;
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   transition:
     color 0.15s var(--ease, ease),
     background 0.15s var(--ease, ease);
 }
 .metricOption[data-active="true"] {
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
@@ -86,12 +86,12 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   transition: color 0.15s var(--ease, ease);
 }
 .refresh:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .refresh:disabled {
   opacity: 0.5;
@@ -120,14 +120,14 @@
 .packLabel {
   margin: 0;
   font: var(--t-title);
-  color: var(--ink);
+  color: var(--text);
 }
 .packMeta {
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 .grid {
@@ -152,7 +152,7 @@
   border-radius: 11px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
   transition:
     border-color 0.15s var(--ease, ease),
@@ -167,14 +167,14 @@
 .cardGhost {
   border-style: dashed;
   background: none;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: pointer;
 }
 .cardGhost:hover {
   border-color: var(--line-strong);
 }
 .cardLabel {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.25;
@@ -186,14 +186,14 @@
   font-size: 9.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .cardValue {
   font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 .cardQuiet {
@@ -202,7 +202,7 @@
   font-size: 9.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .cardSparkPad {
   margin-top: auto;
@@ -237,13 +237,13 @@
   padding: 8px 0;
   border: none;
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   border-top: 0.5px solid var(--line);
   transition: color 0.15s var(--ease, ease);
 }
 .machineryToggle:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .machineryTitle {
   font: var(--t-title);
@@ -254,7 +254,7 @@
   font-size: 10.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .machineryTable {
   width: 100%;
@@ -268,13 +268,13 @@
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding: 6px 10px;
   border-bottom: 0.5px solid var(--line);
 }
 .machineryRow {
   cursor: pointer;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .machineryRow:hover {
   background: var(--bg-sunken);
@@ -284,7 +284,7 @@
   border-bottom: 0.5px solid var(--line);
 }
 .machineryPack {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-family: var(--font-mono);
   font-size: 11px;
 }

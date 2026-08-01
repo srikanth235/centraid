@@ -38,7 +38,7 @@ export default function ColorSwatchRow({
               styles.swatch,
               {
                 backgroundColor: hex,
-                borderColor: active ? colors.ink : "transparent",
+                borderColor: active ? colors.text : "transparent",
               },
               pressed && styles.pressed,
             ]}

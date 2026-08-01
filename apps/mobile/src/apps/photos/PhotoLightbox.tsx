@@ -285,7 +285,7 @@ export default function PhotoLightbox({
                 { backgroundColor: colors.lineStrong },
               ]}
             />
-            <Text style={[styles.sheetTitle, { color: colors.ink }]}>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>
               {current.filename ?? "Photo details"}
             </Text>
             {[
@@ -326,20 +326,20 @@ export default function PhotoLightbox({
               ],
             ].map(([label, value]) => (
               <View key={label} style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.ink2 }]}>
+                <Text style={[styles.infoLabel, { color: colors.textSoft }]}>
                   {label}
                 </Text>
                 <Text
                   selectable
                   numberOfLines={2}
-                  style={[styles.infoValue, { color: colors.ink }]}
+                  style={[styles.infoValue, { color: colors.text }]}
                 >
                   {value}
                 </Text>
               </View>
             ))}
             {current.exif ? (
-              <Text style={[styles.exif, { color: colors.ink2 }]}>
+              <Text style={[styles.exif, { color: colors.textSoft }]}>
                 {[
                   current.exif.Make,
                   current.exif.Model,
@@ -380,7 +380,7 @@ export default function PhotoLightbox({
                       { backgroundColor: colors.bgSunken },
                     ]}
                   >
-                    <Text style={[styles.placeText, { color: colors.ink }]}>
+                    <Text style={[styles.placeText, { color: colors.text }]}>
                       {String(place.name ?? "Place")}
                     </Text>
                   </Pressable>
@@ -403,7 +403,7 @@ export default function PhotoLightbox({
                     { backgroundColor: colors.bgSunken },
                   ]}
                 >
-                  <Text style={[styles.placeText, { color: colors.ink2 }]}>
+                  <Text style={[styles.placeText, { color: colors.textSoft }]}>
                     Clear place
                   </Text>
                 </Pressable>

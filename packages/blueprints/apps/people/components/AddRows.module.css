@@ -20,7 +20,7 @@
   background: none;
   outline: none;
   font: var(--t-body);
-  color: var(--ink);
+  color: var(--text);
 }
 .noteadd select {
   cursor: pointer;
@@ -32,7 +32,7 @@
   flex: 0 1 92px;
 }
 .noteadd .dash {
-  color: var(--ink-3);
+  color: var(--text-faint);
   flex-shrink: 0;
 }
 .seg {

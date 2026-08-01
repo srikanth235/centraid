@@ -64,7 +64,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line-strong);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   box-shadow: var(--shadow-md, var(--shadow-sm));
   cursor: pointer;
   display: inline-flex;
@@ -76,7 +76,7 @@
   transform: rotate(90deg);
 }
 .jumpToBottom:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--accent);
 }
 .jumpToBottom:focus-visible {
@@ -111,7 +111,7 @@
   border: 0;
   border-radius: var(--r-sm, 5px);
   background: transparent;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
@@ -120,8 +120,8 @@
     background 100ms;
 }
 .msgActionBtn:hover {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .msgActionBtn:focus-visible {
   outline: 2px solid var(--accent);
@@ -133,7 +133,7 @@
 .msgTime {
   margin-left: 4px;
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
 }
 /* Retry pager ("‹ 2/2 ›", §1). */
@@ -152,12 +152,12 @@
   border: 0;
   border-radius: var(--r-sm, 5px);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
 }
 .pagerBtn:hover:not(:disabled) {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .pagerBtn:disabled {
   opacity: 0.35;
@@ -165,7 +165,7 @@
 }
 .pagerLabel {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   min-width: 26px;
   text-align: center;
@@ -185,7 +185,7 @@
   border-radius: 14px 14px 4px 14px;
   padding: 8px 12px;
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
   white-space: pre-wrap;
 }
 .msgAttachments {
@@ -206,13 +206,13 @@
   border-radius: 10px;
   padding: 5px 10px;
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   max-width: 100%;
 }
 .msgAi {
   font-size: 13.5px;
   line-height: 1.55;
-  color: var(--ink);
+  color: var(--text);
 }
 .msgAi[data-error="true"] {
   color: var(--danger);
@@ -229,7 +229,7 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
-/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+/* Runner notice row (issue var(--text), Wave 6) — e.g. dropped-PDF warning. */
 .notice {
   display: flex;
   align-items: center;
@@ -239,27 +239,27 @@
   border-radius: 10px;
   background: var(--bg-sunken);
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   align-self: flex-start;
   max-width: 90%;
 }
 .notice[data-level="warn"] {
-  color: var(--warn, #a06a00);
+  color: var(--warn);
 }
-/* Offline hint beside a resend button (issue #420, Wave 6). */
+/* Offline hint beside a resend button (issue var(--text), Wave 6). */
 .offlineHint {
   font-size: 11px;
-  color: var(--warn, #a06a00);
+  color: var(--warn);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-/* Reconnect catch-up hint (issue #420, Wave 6). */
+/* Reconnect catch-up hint (issue var(--text), Wave 6). */
 .catchUp {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-style: italic;
 }
 .tools {
@@ -267,7 +267,7 @@
   border-radius: 10px;
   background: var(--bg-sunken);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .tools > summary {
   cursor: pointer;
@@ -277,7 +277,7 @@
 }
 .tools > summary::before {
   content: "▸ ";
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .tools[open] > summary::before {
   content: "▾ ";
@@ -293,7 +293,7 @@
 }
 .toolMeta {
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding-top: 3px;
 }
 .toolArtifacts {
@@ -311,7 +311,7 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -350,7 +350,7 @@
     border-color 140ms ease;
 }
 
-/* Composer autocomplete popover (@-mentions + slash commands, issue #420) —
+/* Composer autocomplete popover (@-mentions + slash commands, issue var(--text)) —
    floats just above the composer, anchored to its top edge. */
 .acPopover {
   position: absolute;
@@ -376,7 +376,7 @@
   border: none;
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   font-size: 13px;
@@ -395,12 +395,12 @@
 }
 .acItemHint {
   flex: none;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 11px;
 }
 .acEmpty {
   padding: 8px 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 12px;
 }
 .composerRow:focus-within {
@@ -421,7 +421,7 @@
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: 13.5px;
   padding: 4px 4px 6px;
@@ -430,7 +430,7 @@
   outline: none;
 }
 .input::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* Bottom controls strip — attach on the left, model picker + send on the
@@ -457,7 +457,7 @@
   border-radius: var(--r-md);
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -468,8 +468,8 @@
     background 100ms;
 }
 .attachBtn:hover {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .attachBtn:focus-visible {
   outline: 2px solid var(--accent);
@@ -481,7 +481,7 @@
   border-radius: 999px;
   border: 0;
   background: var(--accent);
-  color: var(--ink-inv);
+  color: var(--text-inv);
   font-size: 14px;
   cursor: pointer;
   flex: none;
@@ -514,13 +514,13 @@
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-tiny);
   cursor: pointer;
 }
 .effortPicker select:hover {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .effortPicker select:focus-visible {
   outline: 2px solid var(--accent);
@@ -543,7 +543,7 @@
   border: 0;
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: inherit;
   font-size: 11.5px;
   font-weight: 500;
@@ -554,12 +554,12 @@
     color 100ms;
 }
 .modelBtn:hover {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .modelBtn[aria-expanded="true"] {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 8%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 8%, transparent);
 }
 .modelBtn:focus-visible {
   outline: 2px solid var(--accent);
@@ -611,7 +611,7 @@
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   text-align: left;
   font: inherit;
   font-size: 12.5px;
@@ -620,7 +620,7 @@
 }
 .modelItem:hover,
 .modelItem:focus-visible {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
   outline: none;
 }
 .modelItem[data-active="true"] {
@@ -628,7 +628,7 @@
 }
 .modelItemHint {
   flex: none;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 10.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -662,7 +662,7 @@
   border-radius: 8px;
   padding: 5px 6px 5px 9px;
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   max-width: 220px;
 }
 .attachChip[data-state="error"] {
@@ -676,7 +676,7 @@
   max-width: 140px;
 }
 .attachSize {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 10.5px;
   flex: none;
 }
@@ -686,7 +686,7 @@
 .attachRemove {
   border: 0;
   background: transparent;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -695,8 +695,8 @@
   border-radius: var(--r-sm, 4px);
 }
 .attachRemove:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .attachRemove:focus-visible {
   outline: 2px solid var(--accent);
@@ -722,13 +722,13 @@
   padding: 40px 20px;
 }
 .emptyTitle {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 22px;
-  color: var(--ink);
+  color: var(--text);
 }
 .emptySub {
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .suggest {
   display: flex;
@@ -740,7 +740,7 @@
 .suggestChip {
   border: 0.5px solid var(--line-strong);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   border-radius: 999px;
   padding: 7px 14px;
   font: inherit;
@@ -749,20 +749,20 @@
 }
 .suggestChip:hover {
   border-color: var(--accent);
-  color: var(--ink);
+  color: var(--text);
 }
 
-/* ── Reasoning row (issue #420, Wave 2) ─────────────────────────────────── */
+/* ── Reasoning row (issue var(--text), Wave 2) ─────────────────────────────────── */
 .msgThinking {
   align-items: stretch;
 }
 .thinking {
   border: 0.5px solid var(--line);
   border-radius: 10px;
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
   padding: 2px 10px;
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   max-width: 100%;
 }
 .thinkingSummary {
@@ -772,7 +772,7 @@
   cursor: pointer;
   list-style: none;
   padding: 5px 0;
-  color: var(--ink-3);
+  color: var(--text-faint);
   user-select: none;
 }
 .thinkingSummary::-webkit-details-marker {
@@ -800,7 +800,7 @@
 .thinkingBody {
   white-space: pre-wrap;
   padding: 2px 0 8px 13px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   border-left: 1.5px solid var(--line);
   margin-left: 2px;
 }
@@ -810,15 +810,15 @@
   }
 }
 
-/* ── Per-turn usage/cost (issue #420, Wave 2) ───────────────────────────── */
+/* ── Per-turn usage/cost (issue var(--text), Wave 2) ───────────────────────────── */
 .msgUsage {
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
   cursor: default;
 }
 
-/* ── Image attachment thumbnails (issue #420, Wave 2) ───────────────────── */
+/* ── Image attachment thumbnails (issue var(--text), Wave 2) ───────────────────── */
 .msgAttachChipImage {
   padding: 0;
   overflow: hidden;
@@ -833,7 +833,7 @@
 .msgAttachThumb[data-loading="true"] {
   width: 96px;
   height: 96px;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .attachChipImage {
   padding-left: 5px;
@@ -847,7 +847,7 @@
 }
 
 /* "Show earlier messages" — the top edge of the mounted transcript window
-   (issue #659). A real button, so it is reachable and operable by keyboard;
+   (issue var(--text)). A real button, so it is reachable and operable by keyboard;
    the transcript above it is deferred, never discarded. */
 .showEarlier {
   align-self: center;
@@ -856,11 +856,11 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 12px;
   cursor: pointer;
 }
 
 .showEarlier:hover {
-  color: var(--ink-1);
+  color: var(--text-1);
 }

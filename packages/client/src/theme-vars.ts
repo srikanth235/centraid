@@ -3,7 +3,7 @@
 // renderer script so by the time styles.css resolves against actual
 // elements, every var() lookup has a value.
 //
-// All token values (light + dark themes, density tiers, palette, radii,
+// All token values (light + dark themes, palette, radii,
 // shadows, device-wall) live in the design-tokens package. This file
 // owns the *delivery* mechanism, nothing more — tweaks to design values
 // happen in TS, not here.
@@ -19,7 +19,7 @@
   const style = document.createElement("style");
   style.id = "centraid-tokens";
   style.textContent = tokens.cssText;
-  // Prepend so anything in styles.css can override (e.g., density-aware
+  // Prepend so anything in styles.css can override (for screen-specific
   // component rules). The token rules themselves only define vars.
   document.head.prepend(style);
 })();

@@ -109,7 +109,7 @@ export default function AgendaCreateModal({
     options?: { multiline?: boolean; autoFocus?: boolean }
   ) => (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         autoCapitalize="none"
@@ -120,7 +120,7 @@ export default function AgendaCreateModal({
         style={[
           styles.input,
           options?.multiline && styles.multiline,
-          { borderColor: colors.lineStrong, color: colors.ink },
+          { borderColor: colors.lineStrong, color: colors.text },
         ]}
       />
     </View>
@@ -140,9 +140,9 @@ export default function AgendaCreateModal({
             accessibilityLabel="Close event composer"
             onPress={onClose}
           >
-            <Feather name="x" size={23} color={colors.ink} />
+            <Feather name="x" size={23} color={colors.text} />
           </Pressable>
-          <Text style={[styles.title, { color: colors.ink }]}>New event</Text>
+          <Text style={[styles.title, { color: colors.text }]}>New event</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Create tentative event"
@@ -167,7 +167,7 @@ export default function AgendaCreateModal({
           {field("End · ISO 8601", end, setEnd)}
           {field("Start timezone", startTz, setStartTz)}
           {field("End timezone", endTz, setEndTz)}
-          <Text style={[styles.label, { color: colors.ink2 }]}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
             Time semantics
           </Text>
           <View style={styles.chips}>
@@ -180,7 +180,7 @@ export default function AgendaCreateModal({
                   styles.chip,
                   {
                     backgroundColor:
-                      semantics === value ? colors.ink : colors.bgSunken,
+                      semantics === value ? colors.text : colors.bgSunken,
                   },
                 ]}
                 onPress={() => setSemantics(value)}
@@ -188,7 +188,9 @@ export default function AgendaCreateModal({
                 <Text
                   style={[
                     styles.chipText,
-                    { color: semantics === value ? colors.bg : colors.ink2 },
+                    {
+                      color: semantics === value ? colors.bg : colors.textSoft,
+                    },
                   ]}
                 >
                   {value}
@@ -196,7 +198,9 @@ export default function AgendaCreateModal({
               </Pressable>
             ))}
           </View>
-          <Text style={[styles.label, { color: colors.ink2 }]}>Calendar</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Calendar
+          </Text>
           <View style={styles.chips}>
             {calendars.map((calendar) => {
               const id = String(calendar.calendar_id);
@@ -209,7 +213,7 @@ export default function AgendaCreateModal({
                     styles.chip,
                     {
                       backgroundColor:
-                        calendarId === id ? colors.ink : colors.bgSunken,
+                        calendarId === id ? colors.text : colors.bgSunken,
                     },
                   ]}
                   onPress={() => setCalendarId(id)}
@@ -218,7 +222,7 @@ export default function AgendaCreateModal({
                     style={[
                       styles.chipText,
                       {
-                        color: calendarId === id ? colors.bg : colors.ink2,
+                        color: calendarId === id ? colors.bg : colors.textSoft,
                       },
                     ]}
                   >
@@ -229,16 +233,16 @@ export default function AgendaCreateModal({
             })}
           </View>
           {field("RRULE", rrule, setRrule)}
-          <Text style={[styles.help, { color: colors.ink3 }]}>
+          <Text style={[styles.help, { color: colors.textFaint }]}>
             Example: FREQ=WEEKLY;BYDAY=MO,WE
           </Text>
           {field("Location place ID", location, setLocation)}
           {field("Video call URL", conference, setConference)}
           {field("Reminder minutes", reminders, setReminders)}
-          <Text style={[styles.help, { color: colors.ink3 }]}>
+          <Text style={[styles.help, { color: colors.textFaint }]}>
             Comma-separated minutes before the event. Leave blank for none.
           </Text>
-          <Text style={[styles.label, { color: colors.ink2 }]}>Guests</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Guests</Text>
           <View style={styles.chips}>
             {partyOptions.map((party) => (
               <Pressable
@@ -249,7 +253,7 @@ export default function AgendaCreateModal({
                   styles.chip,
                   {
                     backgroundColor: guestIds.has(party.id)
-                      ? colors.ink
+                      ? colors.text
                       : colors.bgSunken,
                   },
                 ]}
@@ -266,7 +270,9 @@ export default function AgendaCreateModal({
                   style={[
                     styles.chipText,
                     {
-                      color: guestIds.has(party.id) ? colors.bg : colors.ink2,
+                      color: guestIds.has(party.id)
+                        ? colors.bg
+                        : colors.textSoft,
                     },
                   ]}
                 >

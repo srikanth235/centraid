@@ -33,7 +33,7 @@ export default function AppHeader({
         hitSlop={12}
         style={styles.backBtn}
       >
-        <Icon name="ArrowLeft" size={20} color={colors.ink} />
+        <Icon name="ArrowLeft" size={20} color={colors.text} />
       </Pressable>
       <View style={[styles.iconWrap, { backgroundColor: color }]}>
         <Icon name={iconKey} size={16} color="#fff" strokeWidth={2} />
@@ -73,7 +73,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 32,
     },
-    subtitle: { ...t("tiny"), color: colors.ink3, marginTop: 2 },
-    title: { ...t("bodyStrong"), color: colors.ink },
+    subtitle: { ...t("tiny"), color: colors.textFaint, marginTop: 2 },
+    title: { ...t("bodyStrong"), color: colors.text },
     titleWrap: { flex: 1, minWidth: 0 },
   });

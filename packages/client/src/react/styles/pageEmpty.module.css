@@ -17,10 +17,10 @@
   display: grid;
   place-items: center;
   background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
-  color: #fff;
+  color: var(--text);
 }
 .pageEmptyText {
   font-size: 14px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
 }
