@@ -58,7 +58,7 @@ export function warnColor(it: {
   reused?: boolean;
 }): string {
   if (it.severity === "danger" || it.compromised) return "var(--danger)";
-  if (it.severity === "warn" || it.weak || it.reused) return "var(--warn)";
+  if (it.severity === "warn" || it.weak || it.reused) return "var(--warning)";
   return "";
 }
 

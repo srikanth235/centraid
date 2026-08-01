@@ -169,22 +169,24 @@ export default function CaptureScreen({
           accessibilityLabel="Close quick capture"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="x" size={24} color={colors.ink} />
+          <Feather name="x" size={24} color={colors.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Scan")}
           style={[styles.previewButton, { borderColor: colors.lineStrong }]}
         >
-          <Text style={[styles.previewText, { color: colors.ink }]}>
+          <Text style={[styles.previewText, { color: colors.text }]}>
             Scan with camera
           </Text>
         </Pressable>
-        <Text style={[styles.title, { color: colors.ink }]}>Quick capture</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Quick capture
+        </Text>
         <View style={styles.headerGap} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.help, { color: colors.ink2 }]}>
+        <Text style={[styles.help, { color: colors.textSoft }]}>
           Type naturally. Centraid routes obvious captures offline and asks the
           configured local agent only when the destination is ambiguous.
         </Text>
@@ -197,13 +199,13 @@ export default function CaptureScreen({
             setPreview(undefined);
           }}
           placeholder="Remind me to call Priya…"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           style={[
             styles.editor,
             {
               backgroundColor: colors.bgElev,
               borderColor: colors.lineStrong,
-              color: colors.ink,
+              color: colors.text,
             },
           ]}
         />
@@ -213,13 +215,13 @@ export default function CaptureScreen({
           onPress={() => void classify()}
           style={[styles.previewButton, { borderColor: colors.lineStrong }]}
         >
-          <Text style={[styles.previewText, { color: colors.ink }]}>
+          <Text style={[styles.previewText, { color: colors.text }]}>
             {busy && !preview ? "Classifying…" : "Preview"}
           </Text>
         </Pressable>
         {preview ? (
           <>
-            <Text style={[styles.review, { color: colors.ink2 }]}>
+            <Text style={[styles.review, { color: colors.textSoft }]}>
               Review before saving · {preview.confidence.replace("-", " ")}
             </Text>
             <View style={styles.kindGrid}>
@@ -250,7 +252,7 @@ export default function CaptureScreen({
                     <Text
                       style={[
                         styles.kindText,
-                        { color: active ? colors.accent : colors.ink2 },
+                        { color: active ? colors.accent : colors.textSoft },
                       ]}
                     >
                       {kind}
@@ -348,16 +350,18 @@ function Field({
 }): React.JSX.Element {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.textSoft }]}>
+        {label}
+      </Text>
       <TextInput
         {...input}
-        placeholderTextColor={colors.ink3}
+        placeholderTextColor={colors.textFaint}
         style={[
           styles.input,
           {
             backgroundColor: colors.bgElev,
             borderColor: colors.lineStrong,
-            color: colors.ink,
+            color: colors.text,
           },
         ]}
       />
@@ -380,7 +384,9 @@ function ChoiceRows({
 }): React.JSX.Element {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.textSoft }]}>
+        {label}
+      </Text>
       <View style={styles.choices}>
         {rows.map((row, index) => {
           const active = (selected || rows[0]?.id) === row.id;
@@ -398,7 +404,7 @@ function ChoiceRows({
                 },
               ]}
             >
-              <Text style={{ color: colors.ink }}>
+              <Text style={{ color: colors.text }}>
                 {row.label || `${label} ${index + 1}`}
               </Text>
             </Pressable>

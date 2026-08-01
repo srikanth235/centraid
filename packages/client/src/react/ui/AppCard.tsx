@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-import type { AppMetaResolved, TileVariant } from "@centraid/design-tokens";
+import type { AppMetaResolved, TileVariant } from "@centraid/design";
 
 import { cx } from "./cx.js";
 import Icon from "./Icon.js";

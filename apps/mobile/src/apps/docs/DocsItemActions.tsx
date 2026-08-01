@@ -249,7 +249,7 @@ export default function DocsItemActions({
         accessibilityViewIsModal
         style={[styles.sheet, { backgroundColor: colors.bgElev }]}
       >
-        <Text style={[styles.title, { color: colors.ink }]}>
+        <Text style={[styles.title, { color: colors.text }]}>
           {item.kind === "folder" ? item.folder.name : item.document.title}
         </Text>
         {mode === "rename" ? (
@@ -263,7 +263,7 @@ export default function DocsItemActions({
               onChangeText={setName}
               style={[
                 styles.input,
-                { borderColor: colors.lineStrong, color: colors.ink },
+                { borderColor: colors.lineStrong, color: colors.text },
               ]}
             />
             <ActionRow
@@ -291,7 +291,7 @@ export default function DocsItemActions({
               />
             ))}
             {destinations.length === 0 && !item.document.folderId ? (
-              <Text style={[styles.empty, { color: colors.ink2 }]}>
+              <Text style={[styles.empty, { color: colors.textSoft }]}>
                 No other folders are available.
               </Text>
             ) : null}
@@ -381,13 +381,19 @@ function ActionRow({
       <Feather
         name={icon}
         size={18}
-        color={disabled ? colors.ink3 : danger ? colors.danger : colors.accent}
+        color={
+          disabled ? colors.textFaint : danger ? colors.danger : colors.accent
+        }
       />
       <Text
         style={[
           styles.actionText,
           {
-            color: disabled ? colors.ink3 : danger ? colors.danger : colors.ink,
+            color: disabled
+              ? colors.textFaint
+              : danger
+                ? colors.danger
+                : colors.text,
           },
         ]}
       >

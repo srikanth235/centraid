@@ -78,7 +78,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     copy: { flex: 1, paddingRight: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
-    help: { ...t("small"), color: colors.ink3, marginTop: 3 },
+    help: { ...t("small"), color: colors.textFaint, marginTop: 3 },
     lockButton: {
       alignItems: "center",
       borderColor: colors.lineStrong,
@@ -87,8 +87,8 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: spacing[3],
       paddingVertical: spacing[3],
     },
-    lockButtonText: { ...t("bodyStrong"), color: colors.ink2 },
-    note: { ...t("small"), color: colors.ink3, marginTop: spacing[3] },
+    lockButtonText: { ...t("bodyStrong"), color: colors.textSoft },
+    note: { ...t("small"), color: colors.textFaint, marginTop: spacing[3] },
     row: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -98,5 +98,5 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       padding: spacing[4],
     },
-    title: { ...t("bodyStrong"), color: colors.ink },
+    title: { ...t("bodyStrong"), color: colors.text },
   });

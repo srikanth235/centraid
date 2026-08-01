@@ -13,13 +13,13 @@
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .iconbtn:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--line-strong);
 }
 
@@ -54,7 +54,7 @@
 .isub {
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -66,14 +66,14 @@
   padding: 40px 20px;
   text-align: center;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .listEmpty .ic {
   width: 40px;
   height: 40px;
   border-radius: 11px;
   background: var(--bg-sunken);
-  color: var(--ink-3);
+  color: var(--text-faint);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -81,11 +81,11 @@
 }
 .listEmptyTitle {
   font: var(--t-strong);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .listEmptySub {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 3px;
 }
 
@@ -122,7 +122,7 @@
 }
 .dsub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 2px;
 }
 .fields {
@@ -135,7 +135,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin: 22px 4px 10px;
 }
 
@@ -160,7 +160,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 6px;
 }
 .genrow {

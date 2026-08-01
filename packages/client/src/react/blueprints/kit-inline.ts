@@ -33,13 +33,13 @@ import {
   isPendingOffsite,
   renderAttachments as baseRenderAttachments,
   sha256File,
-} from "@centraid/blueprints/kit/kit.js";
-import type { Attachment, VaultOutcome } from "@centraid/blueprints/kit/kit.js";
+} from "@centraid/design/kit/kit.js";
+import type { Attachment, VaultOutcome } from "@centraid/design/kit/kit.js";
 
 import { auth, authHeaders, doFetch } from "../../gateway-client-core.js";
 import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
 
-export * from "@centraid/blueprints/kit/kit.js";
+export * from "@centraid/design/kit/kit.js";
 // `authorizeBlobUrl` moved to the leaf `blob-auth.js` module so importing it
 // no longer pulls the full kit barrel into a caller's chunk (boot-size fix).
 // Re-exported here so served-kit consumers that reach it through the `./kit.ts`

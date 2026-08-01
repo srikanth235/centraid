@@ -117,12 +117,12 @@ export default function PhotosDrawer({
             </View>
             <View style={styles.profileMeta}>
               <Text
-                style={[styles.profileName, { color: colors.ink }]}
+                style={[styles.profileName, { color: colors.text }]}
                 numberOfLines={1}
               >
                 {name || "You"}
               </Text>
-              <Text style={[styles.profileSub, { color: colors.ink3 }]}>
+              <Text style={[styles.profileSub, { color: colors.textFaint }]}>
                 Personal vault
               </Text>
             </View>
@@ -146,11 +146,13 @@ export default function PhotosDrawer({
                 style={[styles.vaultDot, { backgroundColor: vaultColor }]}
               />
               <View style={styles.switchMeta}>
-                <Text style={[styles.switchEyebrow, { color: colors.ink3 }]}>
+                <Text
+                  style={[styles.switchEyebrow, { color: colors.textFaint }]}
+                >
                   CURRENT VAULT
                 </Text>
                 <Text
-                  style={[styles.switchName, { color: colors.ink }]}
+                  style={[styles.switchName, { color: colors.text }]}
                   numberOfLines={1}
                 >
                   {vaultName}
@@ -174,7 +176,7 @@ export default function PhotosDrawer({
             >
               <View style={styles.storageHead}>
                 <Feather name="cloud" size={20} color={colors.accent} />
-                <Text style={[styles.storageText, { color: colors.ink }]}>
+                <Text style={[styles.storageText, { color: colors.text }]}>
                   0.86 GB of 5 TB
                 </Text>
               </View>
@@ -209,13 +211,13 @@ export default function PhotosDrawer({
               </View>
             </View>
 
-            <Text style={[styles.sectionLabel, { color: colors.ink3 }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>
               MORE FROM PHOTOS
             </Text>
 
             <View style={[styles.row, { borderBottomColor: colors.line }]}>
-              <Feather name="cloud" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="cloud" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Backup
               </Text>
               <View
@@ -227,32 +229,40 @@ export default function PhotosDrawer({
             </View>
 
             <Pressable style={[styles.row, { borderBottomColor: colors.line }]}>
-              <Feather name="smartphone" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="smartphone" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Free up vault on device
               </Text>
-              <Feather name="chevron-right" size={17} color={colors.ink4} />
+              <Feather
+                name="chevron-right"
+                size={17}
+                color={colors.textGhost}
+              />
             </Pressable>
 
             <Pressable style={styles.row}>
-              <Feather name="shield" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              <Feather name="shield" size={19} color={colors.textFaint} />
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Your data in Centraid
               </Text>
-              <Feather name="chevron-right" size={17} color={colors.ink4} />
+              <Feather
+                name="chevron-right"
+                size={17}
+                color={colors.textGhost}
+              />
             </Pressable>
 
             <View style={[styles.divider, { backgroundColor: colors.line }]} />
 
             <Pressable style={styles.footerItem} onPress={onHome}>
-              <Feather name="home" size={17} color={colors.ink2} />
-              <Text style={[styles.footerLabel, { color: colors.ink }]}>
+              <Feather name="home" size={17} color={colors.textSoft} />
+              <Text style={[styles.footerLabel, { color: colors.text }]}>
                 Home
               </Text>
             </Pressable>
             <Pressable style={styles.footerItem} onPress={onSettings}>
-              <Feather name="settings" size={17} color={colors.ink2} />
-              <Text style={[styles.footerLabel, { color: colors.ink }]}>
+              <Feather name="settings" size={17} color={colors.textSoft} />
+              <Text style={[styles.footerLabel, { color: colors.text }]}>
                 Settings
               </Text>
             </Pressable>

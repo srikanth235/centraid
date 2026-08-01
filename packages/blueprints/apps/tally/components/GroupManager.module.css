@@ -30,7 +30,7 @@
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  color: var(--ink);
+  color: var(--text);
   flex: 1;
   font: var(--t-body);
   min-width: 0;
@@ -56,7 +56,7 @@
 }
 
 .hint {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
   margin: 10px 0 0;
 }

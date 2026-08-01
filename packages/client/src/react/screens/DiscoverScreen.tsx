@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { palette, tileFinish } from "@centraid/design-tokens";
-import type { ColorHex, IconName } from "@centraid/design-tokens";
+import { palette, tileFinish } from "@centraid/design";
+import type { ColorHex, IconName } from "@centraid/design";
 
 import { INTEGRATION_HUES } from "../format.js";
 import type {

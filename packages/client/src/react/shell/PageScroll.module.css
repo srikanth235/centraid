@@ -4,14 +4,14 @@
 }
 .pageHead h1 {
   margin: 0 0 6px;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 26px;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--text);
 }
 .pageHead p {
   margin: 0;
   font-size: 14px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }

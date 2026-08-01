@@ -90,29 +90,29 @@ export function MergePicker({
       <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.detailTitle, { color: colors.ink }]}>
+            <Text style={[styles.detailTitle, { color: colors.text }]}>
               Merge into…
             </Text>
-            <Text style={[styles.meta, { color: colors.ink2 }]}>
+            <Text style={[styles.meta, { color: colors.textSoft }]}>
               {keepingName
                 ? `${keepingName} is folded into whoever you pick.`
                 : "Pick the person to keep."}
             </Text>
           </View>
           <Pressable accessibilityLabel="Cancel merge" onPress={onClose}>
-            <Feather name="x" size={24} color={colors.ink} />
+            <Feather name="x" size={24} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.mergeSearch}>
           <TextInput
             placeholder="Search people"
-            placeholderTextColor={colors.ink3}
+            placeholderTextColor={colors.textFaint}
             value={query}
             onChangeText={setQuery}
             autoCorrect={false}
             style={[
               styles.input,
-              { borderColor: colors.line, color: colors.ink },
+              { borderColor: colors.line, color: colors.text },
             ]}
           />
         </View>
@@ -129,7 +129,7 @@ export function MergePicker({
           removeClippedSubviews
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
-            <Text style={[styles.mergeEmpty, { color: colors.ink2 }]}>
+            <Text style={[styles.mergeEmpty, { color: colors.textSoft }]}>
               Nobody matches that name.
             </Text>
           }

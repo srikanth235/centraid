@@ -9,7 +9,7 @@
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.
 
-import type { AppMetaResolved } from "@centraid/design-tokens";
+import type { AppMetaResolved } from "@centraid/design";
 
 import { resolveAppMeta } from "../../lib/gateway";
 

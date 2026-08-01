@@ -204,8 +204,8 @@ export default function AgendaHome({
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.ink }]}>Agenda</Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Agenda</Text>
+          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
             Your time, in one view
           </Text>
         </View>
@@ -214,7 +214,7 @@ export default function AgendaHome({
             accessibilityLabel="Search events"
             onPress={() => setSearchOpen((open) => !open)}
           >
-            <Feather name="search" size={21} color={colors.ink} />
+            <Feather name="search" size={21} color={colors.text} />
           </Pressable>
           <Pressable
             accessibilityLabel="Create event"
@@ -227,14 +227,14 @@ export default function AgendaHome({
       <ReplicaStatusBar />
       {searchOpen ? (
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="search" size={16} color={colors.ink2} />
+          <Feather name="search" size={16} color={colors.textSoft} />
           <TextInput
             autoFocus
             value={query}
             onChangeText={setQuery}
             placeholder="Search title or notes"
-            placeholderTextColor={colors.ink3}
-            style={[styles.searchInput, { color: colors.ink }]}
+            placeholderTextColor={colors.textFaint}
+            style={[styles.searchInput, { color: colors.text }]}
           />
           <Pressable
             onPress={() => {
@@ -242,7 +242,7 @@ export default function AgendaHome({
               setSearchOpen(false);
             }}
           >
-            <Feather name="x" size={17} color={colors.ink2} />
+            <Feather name="x" size={17} color={colors.textSoft} />
           </Pressable>
         </View>
       ) : null}
@@ -259,7 +259,7 @@ export default function AgendaHome({
             <Text
               style={[
                 styles.segmentText,
-                { color: item === mode ? colors.ink : colors.ink2 },
+                { color: item === mode ? colors.text : colors.textSoft },
               ]}
             >
               {item === "agenda"
@@ -274,17 +274,17 @@ export default function AgendaHome({
           style={[styles.today, { borderColor: colors.lineStrong }]}
           onPress={goToday}
         >
-          <Text style={[styles.todayText, { color: colors.ink }]}>Today</Text>
+          <Text style={[styles.todayText, { color: colors.text }]}>Today</Text>
         </Pressable>
         <View style={styles.navArrows}>
           <Pressable onPress={() => move(-1)}>
-            <Feather name="chevron-left" size={22} color={colors.ink2} />
+            <Feather name="chevron-left" size={22} color={colors.textSoft} />
           </Pressable>
           <Pressable onPress={() => move(1)}>
-            <Feather name="chevron-right" size={22} color={colors.ink2} />
+            <Feather name="chevron-right" size={22} color={colors.textSoft} />
           </Pressable>
         </View>
-        <Text style={[styles.rangeTitle, { color: colors.ink }]}>
+        <Text style={[styles.rangeTitle, { color: colors.text }]}>
           {mode === "month"
             ? new Intl.DateTimeFormat(undefined, {
                 month: "long",
@@ -324,7 +324,7 @@ export default function AgendaHome({
                 <View
                   style={[styles.calendarDot, { backgroundColor: swatch }]}
                 />
-                <Text style={[styles.calendarText, { color: colors.ink2 }]}>
+                <Text style={[styles.calendarText, { color: colors.textSoft }]}>
                   {String(calendar.name ?? "Calendar")}
                 </Text>
                 {shown ? (
@@ -371,7 +371,7 @@ export default function AgendaHome({
         }
         ListEmptyComponent={
           agenda.connection === "unavailable" || agenda.error ? null : (
-            <Text style={[styles.empty, { color: colors.ink2 }]}>
+            <Text style={[styles.empty, { color: colors.textSoft }]}>
               {agenda.loading
                 ? "Opening your calendar…"
                 : agenda.connection === "offline"
@@ -405,7 +405,7 @@ const DayHeaderRow = memo(
     colors: ReturnType<typeof useTheme>["colors"];
   }): React.JSX.Element => (
     <View style={styles.dayHeader}>
-      <Text style={[styles.dayHeaderTitle, { color: colors.ink }]}>
+      <Text style={[styles.dayHeaderTitle, { color: colors.text }]}>
         {new Intl.DateTimeFormat(undefined, {
           weekday: "long",
           month: "long",
@@ -434,13 +434,13 @@ const EventRow = memo(
       style={[styles.event, { borderBottomColor: colors.line }]}
     >
       <View style={styles.time}>
-        <Text style={[styles.timeText, { color: colors.ink }]}>
+        <Text style={[styles.timeText, { color: colors.text }]}>
           {new Intl.DateTimeFormat(undefined, {
             hour: "numeric",
             minute: "2-digit",
           }).format(new Date(event.start))}
         </Text>
-        <Text style={[styles.dayText, { color: colors.ink2 }]}>
+        <Text style={[styles.dayText, { color: colors.textSoft }]}>
           –{" "}
           {new Intl.DateTimeFormat(undefined, {
             hour: "numeric",
@@ -450,15 +450,15 @@ const EventRow = memo(
       </View>
       <View style={[styles.eventLine, { backgroundColor: colors.accent }]} />
       <View style={styles.eventCopy}>
-        <Text style={[styles.eventTitle, { color: colors.ink }]}>
+        <Text style={[styles.eventTitle, { color: colors.text }]}>
           {event.summary}
         </Text>
-        <Text style={[styles.eventMeta, { color: colors.ink2 }]}>
+        <Text style={[styles.eventMeta, { color: colors.textSoft }]}>
           {event.timezone ?? "Local time"}
           {event.isRecurrenceInstance ? " · repeating" : ""}
         </Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.ink3} />
+      <Feather name="chevron-right" size={18} color={colors.textFaint} />
     </Pressable>
   )
 );
@@ -497,8 +497,8 @@ function MonthGrid({
                   {
                     color:
                       day.getMonth() === cursor.getMonth()
-                        ? colors.ink
-                        : colors.ink3,
+                        ? colors.text
+                        : colors.textFaint,
                   },
                 ]}
               >
@@ -537,12 +537,12 @@ function WeekStrip({
             key={day.toISOString()}
             style={[styles.weekDay, { backgroundColor: colors.bgSunken }]}
           >
-            <Text style={[styles.weekName, { color: colors.ink2 }]}>
+            <Text style={[styles.weekName, { color: colors.textSoft }]}>
               {new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
                 day
               )}
             </Text>
-            <Text style={[styles.weekNumber, { color: colors.ink }]}>
+            <Text style={[styles.weekNumber, { color: colors.text }]}>
               {day.getDate()}
             </Text>
             <Text style={[styles.weekCount, { color: colors.accent }]}>

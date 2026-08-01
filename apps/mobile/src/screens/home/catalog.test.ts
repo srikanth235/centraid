@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import type { AppMetaResolved } from "@centraid/design-tokens";
+import type { AppMetaResolved } from "@centraid/design";
 
 vi.mock(import("../../lib/gateway"), () => ({
   resolveAppMeta: (row: {

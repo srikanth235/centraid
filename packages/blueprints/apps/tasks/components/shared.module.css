@@ -11,7 +11,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ---------- Task row primitives (Board pending-add + Row) ---------- */
@@ -52,13 +52,13 @@
 .rowTitle {
   font: var(--t-body);
   font-size: 14px;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rowTitle.done {
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-decoration: line-through;
 }
 .rowTitle mark {
@@ -74,7 +74,7 @@
   font-family: var(--mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .due.overdue {
   color: var(--danger);
@@ -119,7 +119,7 @@
 .circle[data-cancelled="true"] {
   background: var(--bg-sunken);
   border-color: var(--line-strong);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .circle.lg {
   width: 26px;

@@ -237,7 +237,7 @@ export default function AppDetailScreen({
           ) : null}
           {loading ? (
             <View style={styles.loadingOverlay} pointerEvents="none">
-              <ActivityIndicator color={colors.ink3} />
+              <ActivityIndicator color={colors.textFaint} />
             </View>
           ) : null}
         </View>
@@ -280,8 +280,8 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[5],
     },
     emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
-    emptyMsg: { ...t("body"), color: colors.ink2 },
-    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
+    emptyMsg: { ...t("body"), color: colors.textSoft },
+    emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
     loadingOverlay: {
       alignItems: "center",
       backgroundColor: "transparent",

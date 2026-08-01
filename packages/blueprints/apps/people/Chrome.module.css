@@ -44,9 +44,9 @@
   --sel: color-mix(in oklab, var(--_accent) 11%, transparent);
   --selb: color-mix(in oklab, var(--_accent) 34%, var(--line-strong));
 
-  --ink: hsl(345 12% 15%);
-  --ink-2: hsl(345 7% 40%);
-  --ink-3: hsl(345 6% 56%);
+  --text: hsl(345 12% 15%);
+  --text-soft: hsl(345 7% 40%);
+  --text-faint: hsl(345 6% 56%);
 
   --bg: hsl(18 40% 98%);
   --bg-elev: #fff;
@@ -58,7 +58,7 @@
   --line: rgba(40, 26, 30, 0.1);
   --line-strong: rgba(40, 26, 30, 0.17);
   --danger: #c8382f;
-  --ok: #3f9e6b;
+  --success: #3f9e6b;
 
   --r-card: 14px;
   --r-btn: 6px;
@@ -88,24 +88,13 @@
   --c-friends: #2ea098;
   --c-work: #4e68dd;
   --c-network: #e0567a;
-
-  /* Kit contract bridge (toast / skeleton / ask render on-brand). */
-  --surface: var(--bg-elev);
-  --surface-2: var(--bg-sunken);
-  --text: var(--ink);
-  --muted: var(--ink-2);
-  --ink-faint: var(--ink-3);
-  --radius: 0.75rem;
-  --accent-soft: var(--accs);
-  --accent-deep: var(--accd);
-  --accd-fg: var(--accd);
 }
 
 :global(:root[data-theme="dark"]) .appRoot.appRoot {
   --bg-l: 10%;
-  --ink: hsl(20 14% 92%);
-  --ink-2: hsl(20 8% 64%);
-  --ink-3: hsl(20 8% 48%);
+  --text: hsl(20 14% 92%);
+  --text-soft: hsl(20 8% 64%);
+  --text-faint: hsl(20 8% 48%);
   --bg: hsl(345 10% 10%);
   --bg-elev: hsl(345 9% 15%);
   --bg-sunken: hsl(345 8% 19%);
@@ -117,7 +106,7 @@
   --line: hsla(20 26% 80% / 0.11);
   --line-strong: hsla(20 26% 82% / 0.2);
   --danger: #f0645b;
-  --ok: #5fbd88;
+  --success: #5fbd88;
   --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
   --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --shadow-md:
@@ -128,9 +117,9 @@
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .appRoot.appRoot {
     --bg-l: 10%;
-    --ink: hsl(20 14% 92%);
-    --ink-2: hsl(20 8% 64%);
-    --ink-3: hsl(20 8% 48%);
+    --text: hsl(20 14% 92%);
+    --text-soft: hsl(20 8% 64%);
+    --text-faint: hsl(20 8% 48%);
     --bg: hsl(345 10% 10%);
     --bg-elev: hsl(345 9% 15%);
     --bg-sunken: hsl(345 8% 19%);
@@ -142,7 +131,7 @@
     --line: hsla(20 26% 80% / 0.11);
     --line-strong: hsla(20 26% 82% / 0.2);
     --danger: #f0645b;
-    --ok: #5fbd88;
+    --success: #5fbd88;
     --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
     --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --shadow-md:
@@ -177,22 +166,22 @@
 .appRoot :global(.kit-modal) p.hint {
   margin: 0 0 16px;
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 /* ---------- Shell ---------- */
 
 .shell {
   composes: kit-app-shell from global;
-  --kit-app-drawer-width: 274px;
-  --kit-app-brand-radius: 9px;
-  --kit-app-brand-background: linear-gradient(
+  --app-drawer-width: 274px;
+  --app-brand-radius: 9px;
+  --app-brand-background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--_accent) 78%, #fff),
     var(--accd)
   );
-  --kit-app-brand-font: var(--t-strong);
-  --kit-app-scrim-background: rgba(30, 15, 20, 0.4);
+  --app-brand-font: var(--t-strong);
+  --app-scrim-background: rgba(30, 15, 20, 0.4);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -225,11 +214,11 @@
   border: none;
   background: none;
   border-radius: 8px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .sideClose:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .newWrap {
   position: relative;
@@ -279,7 +268,7 @@
 }
 .sectionLabel {
   font: var(--t-tiny);
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   padding: 16px 10px 8px;
@@ -303,7 +292,7 @@
   align-items: center;
   gap: 7px;
   padding: 11px 4px 2px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .consentLine svg {
   color: var(--accd-fg);
@@ -341,13 +330,13 @@
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--ink-3);
+  color: var(--text-faint);
   pointer-events: none;
 }
 .search input {
   width: 100%;
   font: var(--t-body);
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
@@ -357,11 +346,11 @@
   appearance: none;
 }
 .search input::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .search input:focus {
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .topbarTools {
   composes: kit-app-tools from global;
@@ -382,10 +371,10 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .themebtn:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--line-strong);
 }
 .askMount {
@@ -416,7 +405,7 @@
 }
 .sub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 1px;
 }
 .toolbarTools {
@@ -445,12 +434,12 @@
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 .sort:hover {
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--text);
 }
 .bulk {
   display: flex;
@@ -502,7 +491,7 @@
   gap: 8px;
   padding: 20px 0 4px;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   flex-wrap: wrap;
   text-align: center;
 }
@@ -510,13 +499,13 @@
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   padding: 5px 12px;
 }
 .windowFoot button:hover {
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--text);
 }
 
 /* ---------- Keyframes ---------- */

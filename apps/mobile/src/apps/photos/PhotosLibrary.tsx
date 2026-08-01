@@ -79,11 +79,11 @@ const AlbumCard = memo(
       )}
       <Text
         numberOfLines={1}
-        style={[styles.albumTitle, { color: colors.ink }]}
+        style={[styles.albumTitle, { color: colors.text }]}
       >
         {String(album.name ?? "Album")}
       </Text>
-      <Text style={[styles.rowMeta, { color: colors.ink2 }]}>
+      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
         {count} items
       </Text>
     </Pressable>
@@ -360,9 +360,9 @@ export default function PhotosLibrary({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.ink }]}>Library</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Library</Text>
         <Pressable
           accessibilityLabel="Create album"
           accessibilityRole="button"
@@ -386,14 +386,14 @@ export default function PhotosLibrary({
         contentContainerStyle={styles.content}
         ListEmptyComponent={
           <View style={styles.pageSection}>
-            <Text style={[styles.empty, { color: colors.ink2 }]}>
+            <Text style={[styles.empty, { color: colors.textSoft }]}>
               No albums yet. Tap + to create one.
             </Text>
           </View>
         }
         ListHeaderComponent={
           <View style={styles.pageSection}>
-            <Text style={[styles.section, { color: colors.ink2 }]}>
+            <Text style={[styles.section, { color: colors.textSoft }]}>
               YOUR LIBRARY
             </Text>
             <Pressable
@@ -474,12 +474,14 @@ export default function PhotosLibrary({
                 colors={colors}
               />
             </Pressable>
-            <Text style={[styles.section, { color: colors.ink2 }]}>ALBUMS</Text>
+            <Text style={[styles.section, { color: colors.textSoft }]}>
+              ALBUMS
+            </Text>
           </View>
         }
         ListFooterComponent={
           <View style={styles.pageSection}>
-            <Text style={[styles.section, { color: colors.ink2 }]}>
+            <Text style={[styles.section, { color: colors.textSoft }]}>
               BACKUP &amp; STORAGE
             </Text>
             <Pressable
@@ -542,7 +544,7 @@ export default function PhotosLibrary({
           onPress={() => setNewAlbum(false)}
         />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+          <Text style={[styles.dialogTitle, { color: colors.text }]}>
             New album
           </Text>
           <TextInput
@@ -550,10 +552,10 @@ export default function PhotosLibrary({
             value={title}
             onChangeText={setTitle}
             placeholder="Album name"
-            placeholderTextColor={colors.ink3}
+            placeholderTextColor={colors.textFaint}
             style={[
               styles.albumInput,
-              { borderColor: colors.lineStrong, color: colors.ink },
+              { borderColor: colors.lineStrong, color: colors.text },
             ]}
           />
           <Pressable
@@ -587,10 +589,10 @@ function Row({
         <Feather name={icon} size={18} color={colors.accent} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={[styles.rowTitle, { color: colors.ink }]}>{title}</Text>
-        <Text style={[styles.rowMeta, { color: colors.ink2 }]}>{meta}</Text>
+        <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>{meta}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.ink3} />
+      <Feather name="chevron-right" size={18} color={colors.textFaint} />
     </View>
   );
 }

@@ -243,7 +243,7 @@ export default function AgendaEventEditor({
     multiline = false
   ) => (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -252,7 +252,7 @@ export default function AgendaEventEditor({
         style={[
           styles.input,
           multiline && styles.multiline,
-          { borderColor: colors.lineStrong, color: colors.ink },
+          { borderColor: colors.lineStrong, color: colors.text },
         ]}
       />
     </View>
@@ -272,9 +272,9 @@ export default function AgendaEventEditor({
             accessibilityLabel="Close event editor"
             onPress={onClose}
           >
-            <Feather name="x" size={23} color={colors.ink} />
+            <Feather name="x" size={23} color={colors.text} />
           </Pressable>
-          <Text style={[styles.title, { color: colors.ink }]}>Edit event</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Edit event</Text>
           <Pressable
             accessibilityRole="button"
             disabled={saving}
@@ -297,7 +297,7 @@ export default function AgendaEventEditor({
                     styles.scope,
                     {
                       backgroundColor:
-                        scope === value ? colors.ink : colors.bgSunken,
+                        scope === value ? colors.text : colors.bgSunken,
                     },
                   ]}
                   onPress={() => setScope(value)}
@@ -305,7 +305,7 @@ export default function AgendaEventEditor({
                   <Text
                     style={[
                       styles.scopeText,
-                      { color: scope === value ? colors.bg : colors.ink2 },
+                      { color: scope === value ? colors.bg : colors.textSoft },
                     ]}
                   >
                     {value === "occurrence"
@@ -324,7 +324,7 @@ export default function AgendaEventEditor({
           {field("End · ISO 8601", end, setEnd)}
           {field("Start timezone", startTz, setStartTz)}
           {field("End timezone", endTz, setEndTz)}
-          <Text style={[styles.label, { color: colors.ink2 }]}>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
             Time semantics
           </Text>
           <View style={styles.scopeRow}>
@@ -337,7 +337,7 @@ export default function AgendaEventEditor({
                   styles.scope,
                   {
                     backgroundColor:
-                      semantics === value ? colors.ink : colors.bgSunken,
+                      semantics === value ? colors.text : colors.bgSunken,
                   },
                 ]}
                 onPress={() => setSemantics(value)}
@@ -345,7 +345,9 @@ export default function AgendaEventEditor({
                 <Text
                   style={[
                     styles.scopeText,
-                    { color: semantics === value ? colors.bg : colors.ink2 },
+                    {
+                      color: semantics === value ? colors.bg : colors.textSoft,
+                    },
                   ]}
                 >
                   {value}
@@ -353,7 +355,9 @@ export default function AgendaEventEditor({
               </Pressable>
             ))}
           </View>
-          <Text style={[styles.label, { color: colors.ink2 }]}>Calendar</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Calendar
+          </Text>
           <View style={styles.scopeRow}>
             {calendars.map((calendar) => {
               const id = String(calendar.calendar_id);
@@ -366,7 +370,7 @@ export default function AgendaEventEditor({
                     styles.scope,
                     {
                       backgroundColor:
-                        calendarId === id ? colors.ink : colors.bgSunken,
+                        calendarId === id ? colors.text : colors.bgSunken,
                     },
                   ]}
                   onPress={() => setCalendarId(id)}
@@ -375,7 +379,7 @@ export default function AgendaEventEditor({
                     style={[
                       styles.scopeText,
                       {
-                        color: calendarId === id ? colors.bg : colors.ink2,
+                        color: calendarId === id ? colors.bg : colors.textSoft,
                       },
                     ]}
                   >
@@ -389,7 +393,9 @@ export default function AgendaEventEditor({
           {field("Location place ID", location, setLocation)}
           {field("Video call URL", conference, setConference)}
           {field("Reminder minutes", reminders, setReminders)}
-          <Text style={[styles.label, { color: colors.ink2 }]}>Attendees</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>
+            Attendees
+          </Text>
           <View style={styles.scopeRow}>
             {partyOptions.map((party) => (
               <Pressable
@@ -400,7 +406,7 @@ export default function AgendaEventEditor({
                   styles.scope,
                   {
                     backgroundColor: guestIds.has(party.id)
-                      ? colors.ink
+                      ? colors.text
                       : colors.bgSunken,
                   },
                 ]}
@@ -417,7 +423,9 @@ export default function AgendaEventEditor({
                   style={[
                     styles.scopeText,
                     {
-                      color: guestIds.has(party.id) ? colors.bg : colors.ink2,
+                      color: guestIds.has(party.id)
+                        ? colors.bg
+                        : colors.textSoft,
                     },
                   ]}
                 >

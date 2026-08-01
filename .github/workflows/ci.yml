@@ -76,12 +76,12 @@ jobs:
               - 'apps/web/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
-              - 'packages/design-tokens/**'
+              - 'packages/design/**'
             desktop:
               - 'apps/desktop/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
-              - 'packages/design-tokens/**'
+              - 'packages/design/**'
             # #496 E7 — gateway/app-engine changes break artifact boot without
             # client UI edits; boot-smoke must still run for those PRs.
             client:
@@ -91,7 +91,7 @@ jobs:
               - 'packages/app-engine/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
-              - 'packages/design-tokens/**'
+              - 'packages/design/**'
             gateway:
               - 'packages/gateway/**'
               - 'packages/app-engine/**'
@@ -103,7 +103,7 @@ jobs:
               - 'packages/backup/**'
               - 'packages/blueprints/**'
               - 'packages/tunnel/**'
-              - 'packages/design-tokens/**'
+              - 'packages/design/**'
               - 'packages/blob-format/**'
               - 'Dockerfile'
               - '.dockerignore'
@@ -138,7 +138,7 @@ jobs:
               - 'apps/mobile/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
-              - 'packages/design-tokens/**'
+              - 'packages/design/**'
               - '.github/workflows/ci.yml'
 
   static:

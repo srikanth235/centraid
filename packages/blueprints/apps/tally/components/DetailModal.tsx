@@ -98,7 +98,7 @@ export function DetailModal({
                 style={{
                   font: "var(--t-mono)",
                   fontSize: "12px",
-                  color: "var(--ink-2)",
+                  color: "var(--text-soft)",
                 }}
               >
                 {money(s.share_minor, currency)}

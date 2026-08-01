@@ -13,7 +13,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const TARGETS = [
   "packages/client/src",
   "packages/blueprints/apps",
-  "packages/blueprints/kit",
+  "packages/design/kit",
 ];
 const BUDGET_FILE = path.join(ROOT, "tests/design-token-css-budget.json");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);

@@ -1,11 +1,11 @@
 .heading {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-body-strong);
   margin: 18px 0 8px;
 }
 
 .status {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
   margin: 8px 0;
 }
@@ -39,6 +39,6 @@
 
 .copy span,
 .done {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
 }

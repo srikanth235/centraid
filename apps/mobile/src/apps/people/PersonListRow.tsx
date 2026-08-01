@@ -85,11 +85,14 @@ export const PersonListRow = memo(
     >
       <Text
         numberOfLines={1}
-        style={[styles.personName, { color: colors.ink }]}
+        style={[styles.personName, { color: colors.text }]}
       >
         {String(person.name)}
       </Text>
-      <Text numberOfLines={1} style={[styles.meta, { color: colors.ink3 }]}>
+      <Text
+        numberOfLines={1}
+        style={[styles.meta, { color: colors.textFaint }]}
+      >
         {String(person.role ?? "No role")}
       </Text>
     </Pressable>

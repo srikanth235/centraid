@@ -18,7 +18,7 @@ describe(resolveTheme, () => {
     // design's parchment-cream canvas; it must NOT be the generated cool bg.
     expect(resolveTheme("light").colors.bg).toBe("#f1ece1");
     expect(resolveTheme("light").colors.bg).not.toBe(lightPalette.bg);
-    expect(resolveTheme("light").colors.ink).toBe("#231f18");
+    expect(resolveTheme("light").colors.text).toBe("#231f18");
   });
 
   it("defaults to light for null/undefined (no OS preference)", () => {
@@ -27,9 +27,9 @@ describe(resolveTheme, () => {
   });
 
   it("derives ink4, which the kit tokens lack", () => {
-    expect(resolveTheme("light").colors.ink4).toMatch(/^rgba\(/u);
-    expect(resolveTheme("dark").colors.ink4).not.toBe(
-      resolveTheme("light").colors.ink4
+    expect(resolveTheme("light").colors.textGhost).toMatch(/^rgba\(/u);
+    expect(resolveTheme("dark").colors.textGhost).not.toBe(
+      resolveTheme("light").colors.textGhost
     );
   });
 

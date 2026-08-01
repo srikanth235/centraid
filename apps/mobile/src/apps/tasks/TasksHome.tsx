@@ -85,10 +85,10 @@ const DragTaskRow = memo(
           style={[styles.check, { borderColor: colors.accent }]}
         />
         <View style={styles.taskMain}>
-          <Text style={[styles.taskTitle, { color: colors.ink }]}>
+          <Text style={[styles.taskTitle, { color: colors.text }]}>
             {String(row.title ?? "Untitled task")}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink3 }]}>
+          <Text style={[styles.meta, { color: colors.textFaint }]}>
             {row.due_at ? String(row.due_at).slice(0, 10) : "Anytime"}
             {sectionName ? ` · ${sectionName}` : ""}
             {row.recurrence_anchor === "completion"
@@ -104,9 +104,9 @@ const DragTaskRow = memo(
           onPress={() => onMove(row)}
           style={styles.iconButton}
         >
-          <Feather name="folder" size={17} color={colors.ink2} />
+          <Feather name="folder" size={17} color={colors.textSoft} />
         </Pressable>
-        <Feather name="menu" size={18} color={colors.ink3} />
+        <Feather name="menu" size={18} color={colors.textFaint} />
       </View>
     );
   }
@@ -356,8 +356,8 @@ export default function TasksHome({
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View>
-          <Text style={[styles.title, { color: colors.ink }]}>Tasks</Text>
-          <Text style={[styles.meta, { color: colors.ink3 }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Tasks</Text>
+          <Text style={[styles.meta, { color: colors.textFaint }]}>
             Inbox, projects and offline repeat rules
           </Text>
         </View>
@@ -390,7 +390,7 @@ export default function TasksHome({
               },
             ]}
           >
-            <Text style={{ color: view === key ? colors.bg : colors.ink2 }}>
+            <Text style={{ color: view === key ? colors.bg : colors.textSoft }}>
               {key[0]!.toUpperCase() + key.slice(1)}
             </Text>
           </Pressable>
@@ -410,7 +410,9 @@ export default function TasksHome({
                 },
               ]}
             >
-              <Text style={{ color: view === key ? colors.bg : colors.ink2 }}>
+              <Text
+                style={{ color: view === key ? colors.bg : colors.textSoft }}
+              >
                 {String(project.name ?? "Project")}
                 {project.area ? ` · ${String(project.area)}` : ""}
               </Text>
@@ -423,12 +425,12 @@ export default function TasksHome({
           accessibilityLabel="New task title"
           value={title}
           placeholder="Add a task"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setTitle}
           onSubmitEditing={() => void addTask()}
           style={[
             styles.input,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <Pressable
@@ -443,14 +445,16 @@ export default function TasksHome({
         {(["none", "today", "tomorrow"] as const).map((choice) => (
           <Pressable key={choice} onPress={() => setDue(choice)}>
             <Text
-              style={{ color: due === choice ? colors.accent : colors.ink3 }}
+              style={{
+                color: due === choice ? colors.accent : colors.textFaint,
+              }}
             >
               {choice}
             </Text>
           </Pressable>
         ))}
         <Pressable onPress={() => setRepeat((current) => !current)}>
-          <Text style={{ color: repeat ? colors.accent : colors.ink3 }}>
+          <Text style={{ color: repeat ? colors.accent : colors.textFaint }}>
             weekly
           </Text>
         </Pressable>
@@ -460,7 +464,8 @@ export default function TasksHome({
         >
           <Text
             style={{
-              color: repeat && completionAnchor ? colors.accent : colors.ink3,
+              color:
+                repeat && completionAnchor ? colors.accent : colors.textFaint,
             }}
           >
             after completion
@@ -483,7 +488,7 @@ export default function TasksHome({
         // drag-to-reorder, and clipping detaches those touch targets on Android.
         ListEmptyComponent={
           queryState.loading ? null : (
-            <Text style={[styles.empty, { color: colors.ink3 }]}>
+            <Text style={[styles.empty, { color: colors.textFaint }]}>
               Nothing here yet. Changes remain available offline.
             </Text>
           )
@@ -494,21 +499,21 @@ export default function TasksHome({
         <TextInput
           value={projectDraft}
           placeholder="New project"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setProjectDraft}
           style={[
             styles.smallInput,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <TextInput
           value={areaDraft}
           placeholder="Area (optional)"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           onChangeText={setAreaDraft}
           style={[
             styles.smallInput,
-            { borderColor: colors.line, color: colors.ink },
+            { borderColor: colors.line, color: colors.text },
           ]}
         />
         <Pressable onPress={() => void createProject()}>
@@ -519,11 +524,11 @@ export default function TasksHome({
             <TextInput
               value={sectionDraft}
               placeholder="New section"
-              placeholderTextColor={colors.ink3}
+              placeholderTextColor={colors.textFaint}
               onChangeText={setSectionDraft}
               style={[
                 styles.smallInput,
-                { borderColor: colors.line, color: colors.ink },
+                { borderColor: colors.line, color: colors.text },
               ]}
             />
             <Pressable onPress={() => void createSection()}>
@@ -540,7 +545,7 @@ export default function TasksHome({
       >
         <View accessibilityViewIsModal style={styles.modalBackdrop}>
           <View style={[styles.modal, { backgroundColor: colors.bgElev }]}>
-            <Text style={[styles.taskTitle, { color: colors.ink }]}>
+            <Text style={[styles.taskTitle, { color: colors.text }]}>
               Move task
             </Text>
             <ScrollView contentContainerStyle={styles.destinations}>
@@ -549,7 +554,7 @@ export default function TasksHome({
                 onPress={() => void moveTo()}
                 style={[styles.destination, { borderColor: colors.line }]}
               >
-                <Text style={{ color: colors.ink }}>Inbox</Text>
+                <Text style={{ color: colors.text }}>Inbox</Text>
               </Pressable>
               {projects.rows.map((project) => (
                 <View key={String(project.project_id)}>
@@ -562,7 +567,7 @@ export default function TasksHome({
                     }
                     style={[styles.destination, { borderColor: colors.line }]}
                   >
-                    <Text style={{ color: colors.ink }}>
+                    <Text style={{ color: colors.text }}>
                       {String(project.name ?? "Project")} · Unsectioned
                     </Text>
                   </Pressable>
@@ -586,7 +591,7 @@ export default function TasksHome({
                           { borderColor: colors.line },
                         ]}
                       >
-                        <Text style={{ color: colors.ink2 }}>
+                        <Text style={{ color: colors.textSoft }}>
                           {String(section.name ?? "Section")}
                         </Text>
                       </Pressable>
@@ -598,7 +603,7 @@ export default function TasksHome({
               accessibilityRole="button"
               onPress={() => setMovingTask(undefined)}
             >
-              <Text style={{ color: colors.ink2 }}>Cancel</Text>
+              <Text style={{ color: colors.textSoft }}>Cancel</Text>
             </Pressable>
           </View>
         </View>

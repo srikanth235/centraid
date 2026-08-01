@@ -1,4 +1,4 @@
-// Lucide-style line icons. Path data lives in @centraid/design-tokens
+// Lucide-style line icons. Path data lives in @centraid/design
 // (single source of truth across desktop + mobile). This file only wraps
 // the path data into SVG strings the renderer can innerHTML.
 

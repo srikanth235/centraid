@@ -9,7 +9,7 @@
     "types": [],
     "paths": {
       "@centraid/client/*": ["../../packages/client/src/*"],
-      "@centraid/design-tokens": ["../../packages/design-tokens/src/index.ts"],
+      "@centraid/design": ["../../packages/design/src/index.ts"],
       // Blueprint inline-app entries resolve to contract stubs so this program
       // never type-checks their .tsx sources (which rely on the blueprints
       // ambients); Vite still code-splits the real import (issue #505).

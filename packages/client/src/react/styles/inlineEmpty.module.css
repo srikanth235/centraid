@@ -13,7 +13,7 @@
 .inlineEmpty {
   padding: 20px 16px;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .inlineEmpty p {
   margin: 0;

@@ -58,7 +58,7 @@ export default function AppearanceSection(): React.JSX.Element {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    help: { ...t("small"), color: colors.ink3, marginTop: spacing[3] },
+    help: { ...t("small"), color: colors.textFaint, marginTop: spacing[3] },
     seg: {
       alignItems: "center",
       borderRadius: 8,
@@ -66,7 +66,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 9,
     },
     segActive: { backgroundColor: colors.accent },
-    segLabel: { ...t("body"), color: colors.ink2 },
+    segLabel: { ...t("body"), color: colors.textSoft },
     segLabelActive: { color: "#fff" },
     segment: {
       backgroundColor: colors.bgElev,

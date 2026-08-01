@@ -46,7 +46,7 @@ export default function YouSection(): React.JSX.Element {
             value={name}
             onChangeText={onName}
             placeholder="Your name"
-            placeholderTextColor={colors.ink3}
+            placeholderTextColor={colors.textFaint}
             style={styles.input}
             returnKeyType="done"
           />
@@ -85,7 +85,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     fieldLabel: {
       ...t("small"),
-      color: colors.ink2,
+      color: colors.textSoft,
       fontWeight: "500",
       marginTop: spacing[1],
     },
@@ -96,7 +96,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      color: colors.ink,
+      color: colors.text,
       flex: 1,
       paddingHorizontal: 12,
       paddingVertical: 10,

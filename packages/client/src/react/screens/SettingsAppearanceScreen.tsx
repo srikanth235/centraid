@@ -21,7 +21,6 @@ const THEME_MODE_LABELS: Record<SettingsThemeMode, string> = {
   system: "Match system",
 };
 
-const DENSITIES = ["compact", "regular", "comfy"] as const;
 const CARDS = ["flat", "outlined", "elevated"] as const;
 
 /**
@@ -34,9 +33,9 @@ const CARDS = ["flat", "outlined", "elevated"] as const;
  * of the three positions rather than a button that fires a one-shot snap — it
  * is a standing mode the shell keeps tracking.
  *
- * Density and Cards were their own **Layout** page until #608 folded them in.
- * Two adjacent pages both answering "how does Centraid look" is a split with
- * nothing behind it, and Layout had been reduced to those two rows anyway.
+ * Cards were moved from the former Layout page when its density control was
+ * removed. Spacing is now a product decision, not a preference that leaves
+ * different layouts to support and test.
  *
  * Four controls were cut rather than moved: accent swatches, app-tile
  * treatment, the dark ramp's surface temperature, and the sidebar switch. The
@@ -47,14 +46,11 @@ const CARDS = ["flat", "outlined", "elevated"] as const;
  */
 export default function SettingsAppearanceScreen({
   themeMode,
-  density,
   cardVariant,
   onSetThemeMode,
-  onSetDensity,
   onSetCards,
 }: SettingsAppearanceBridgeProps): JSX.Element {
   const [curMode, setCurMode] = useState(themeMode);
-  const [curDensity, setCurDensity] = useState(density);
   const [curCards, setCurCards] = useState(cardVariant);
   const [cronTz, setCronTz] = useState("");
   const [cronTzError, setCronTzError] = useState<string | null>(null);
@@ -92,22 +88,6 @@ export default function SettingsAppearanceScreen({
             onSelect={(next) => {
               setCurMode(next);
               onSetThemeMode(next);
-            }}
-          />
-        </DrawerRow>
-      </DrawerGroup>
-      <DrawerGroup label="Density">
-        <DrawerRow
-          label="Spacing"
-          hint="Affects row height, type sizes, and spacing across all apps."
-        >
-          <Segmented
-            options={DENSITIES}
-            selected={curDensity}
-            ariaLabel="Density"
-            onSelect={(v) => {
-              setCurDensity(v);
-              onSetDensity(v);
             }}
           />
         </DrawerRow>

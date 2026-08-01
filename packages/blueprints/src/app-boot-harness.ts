@@ -52,7 +52,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // pending-chip assertions consume the production intent-invalidation
 // derivation, so the harness cannot invent a terminal browser signal that the
 // real coordinator would never publish.
-import { replicaIntentInvalidations } from "../kit/intent-invalidations.js";
+import { replicaIntentInvalidations } from "@centraid/design/kit/intent-invalidations.js";
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
@@ -428,7 +428,12 @@ export function describeAppBoot(
         mirrorSources(sharedDir, path.join(bootRoot, "_shared"));
       for (const file of SHARED) {
         if (!existsSync(path.join(dir, file))) {
-          symlinkSync(path.join(PKG, "kit", file), path.join(dir, file));
+          // The kit layer lives in the design package (#672); the app-engine
+          // serves it at the app-relative path this mirrors.
+          symlinkSync(
+            path.join(PKG, "..", "design", "kit", file),
+            path.join(dir, file)
+          );
         }
       }
       if (app === "photos") {

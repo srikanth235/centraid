@@ -33,7 +33,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   flex-shrink: 0;
 }
 .listTitle {
@@ -47,7 +47,7 @@
 .listCount {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .search {
   position: relative;
@@ -57,7 +57,7 @@
   left: 11px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--ink-3);
+  color: var(--text-faint);
   pointer-events: none;
 }
 .search input {
@@ -73,7 +73,7 @@
 .search input:focus {
   border-color: var(--selb);
   background: var(--bg-elev);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .items {
   flex: 1;
@@ -91,7 +91,7 @@
   background: none;
   border-radius: 10px;
   text-align: left;
-  color: var(--ink);
+  color: var(--text);
 }
 .item:hover {
   background: var(--bg-sunken);
@@ -100,7 +100,7 @@
   background: var(--accs);
 }
 .star {
-  color: var(--warn);
+  color: var(--warning);
   flex-shrink: 0;
 }
 .warnDot {

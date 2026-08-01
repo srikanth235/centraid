@@ -37,14 +37,14 @@
 }
 .lockSub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: -10px;
 }
 .label {
   width: 280px;
   margin-bottom: -13px;
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .lockIn {
   width: 280px;
@@ -60,7 +60,7 @@
 .lockIn:focus-visible {
   outline: none;
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .error {
   min-height: 18px;
@@ -88,13 +88,13 @@
   border: 1px solid var(--line);
   border-radius: 11px;
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   font: var(--t-strong);
 }
 .lockBtn:focus-visible,
 .cancelBtn:focus-visible {
   outline: none;
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .lockBtn:disabled,
 .cancelBtn:disabled,

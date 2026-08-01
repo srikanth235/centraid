@@ -1,4 +1,4 @@
-import { palette } from "@centraid/design-tokens";
+import { palette } from "@centraid/design";
 
 import { isAutomationTemplate } from "../../../app-format.js";
 import type { TemplateEntry } from "../../../app-shell-context.js";

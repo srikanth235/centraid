@@ -50,7 +50,7 @@
 .title b {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .tag {
   font-size: 11px;
@@ -58,12 +58,12 @@
 }
 .when {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .prompt {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   line-height: 1.4;
   overflow: hidden;
   display: -webkit-box;

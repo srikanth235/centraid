@@ -1,4 +1,4 @@
-// Appearance prefs — the renderer-owned theme/density/accent settings, ported
+// Appearance prefs — the renderer-owned theme/accent settings, ported
 // out of the vanilla app.ts. Pure helpers here (validation + wire mapping +
 // the document side-effect); the React hook that owns the live value and the
 // gateway round-trip lives in useAppearance.ts.
@@ -10,7 +10,7 @@
 // at the pref layer's anchor whatever `darkTheme` declared, and why a theme's
 // own accent never rendered. A theme's values are the floor; `bgL` and `accent` go inline only
 // when the owner has actually chosen one, and are cleared when they have not.
-import { themes } from "@centraid/design-tokens";
+import { themes } from "@centraid/design";
 
 import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import type {
@@ -22,7 +22,6 @@ import type {
 
 export const DEFAULT_PREFS: AppearancePrefs = {
   cardVariant: "outlined",
-  density: "regular",
   sidebarOpen: true,
   theme: "dark",
   themeMode: "dark",
@@ -66,13 +65,6 @@ export function pickAppearance(
   }
   if (out.themeMode !== undefined) out.theme = resolveThemeMode(out.themeMode);
   if (
-    remote.density === "compact" ||
-    remote.density === "regular" ||
-    remote.density === "comfy"
-  ) {
-    out.density = remote.density;
-  }
-  if (
     remote.cards === "flat" ||
     remote.cards === "outlined" ||
     remote.cards === "elevated"
@@ -115,7 +107,6 @@ export function toRemoteShape(
   const out: Record<string, unknown> = {};
   if (patch.themeMode !== undefined) out.themeMode = patch.themeMode;
   if (patch.theme !== undefined) out.theme = patch.theme;
-  if (patch.density !== undefined) out.density = patch.density;
   if (patch.cardVariant !== undefined) out.cards = patch.cardVariant;
   if (patch.bgL !== undefined) out.bgL = patch.bgL;
   if (patch.accent !== undefined) {
@@ -125,6 +116,7 @@ export function toRemoteShape(
       out.accent = swatch.accent;
       out.accentLight = swatch.light;
       out.accentDeep = swatch.deep;
+      out.accentText = swatch.text;
     }
   }
   return out;
@@ -151,7 +143,6 @@ export function applyPrefsToDocument(
 ): void {
   const html = doc.documentElement;
   html.dataset.theme = String(prefs.theme);
-  html.dataset.density = prefs.density;
   html.dataset.cards = prefs.cardVariant;
   setOrClear(
     html,
@@ -163,6 +154,15 @@ export function applyPrefsToDocument(
   setOrClear(html, "--accent", swatch?.accent);
   setOrClear(html, "--accent-light", swatch?.light);
   setOrClear(html, "--accent-deep", swatch?.deep);
+  // The accent-as-TEXT rung has to move with the accent, or an owner who picks
+  // rose gets rose buttons and teal links. On the dark ramp a saturated accent
+  // is already legible on near-black, so only light needs the deepened shade —
+  // the same split the themes themselves declare.
+  setOrClear(
+    html,
+    "--accent-text",
+    prefs.theme === "dark" ? swatch?.accent : swatch?.text
+  );
 }
 
 /**

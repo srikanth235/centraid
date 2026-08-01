@@ -1,6 +1,6 @@
 /* First-run onboarding — the fullscreen welcome view that owns `#root` until
    the user personalizes their profile. Co-located with OnboardingScreen.tsx
-   (issue #325, Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
+   (issue var(--text), Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
    so the old `cd-onb-*` global prefix is gone — the file name is the namespace.
 
    Sets a deliberate first-impression tone — the rest of the chrome is dense
@@ -15,18 +15,13 @@
   place-items: center;
   /* Default accent before the user has nudged the swatch — matches
      the script's initial random palette pick. Overridden inline. */
-  --onb-accent: #5b8def;
-  background: #07080d;
+  --onb-accent: var(--text);
+  background: var(--text);
   overflow: hidden;
   isolation: isolate;
-  /* System UI stack (issue #468 K11) — no webfont network load. */
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  color: #e8eaf2;
+  /* System UI stack (issue var(--text) K11) — no webfont network load. */
+  font-family: var(--font-sans);
+  color: var(--text);
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
@@ -47,15 +42,11 @@
   background:
     radial-gradient(
       ellipse 80% 60% at 50% 0%,
-      color-mix(in srgb, #1a1f33 80%, transparent),
+      color-mix(in srgb, var(--text) 80%, transparent),
       transparent 70%
     ),
-    radial-gradient(
-      ellipse 60% 50% at 50% 100%,
-      rgba(16, 18, 28, 1),
-      transparent 70%
-    ),
-    #07080d;
+    radial-gradient(ellipse 60% 50% at 50% 100%, var(--scrim), transparent 70%),
+    var(--text);
 }
 
 .stageGlow {
@@ -86,12 +77,12 @@
   width: min(440px, 92vw);
   padding: 36px 36px 32px;
   border-radius: 18px;
-  background: color-mix(in srgb, #11131c 88%, transparent);
+  background: color-mix(in srgb, var(--text) 88%, transparent);
   border: 0.5px solid color-mix(in srgb, white 8%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 6px 18px rgba(0, 0, 0, 0.35);
+    0 24px 60px var(--scrim),
+    0 6px 18px var(--scrim);
   /* Subtle backdrop-blur if the renderer + theme support it. Safari +
      Chromium both do; degrades cleanly when it doesn't. */
   backdrop-filter: blur(8px) saturate(120%);
@@ -118,11 +109,11 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.22em;
-  color: color-mix(in srgb, #b9bcd1 80%, transparent);
+  color: color-mix(in srgb, var(--text) 80%, transparent);
 }
 .eyebrowDot {
   display: inline-block;
@@ -135,16 +126,13 @@
 }
 
 .title {
-  font-family:
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 34px;
   line-height: 1.04;
   font-weight: 600;
   letter-spacing: -0.025em;
   margin: 14px 0 8px;
-  color: #f3f4fb;
+  color: var(--text);
 }
 .title em {
   font-style: italic;
@@ -166,7 +154,7 @@
 .sub {
   font-size: 13.5px;
   line-height: 1.55;
-  color: color-mix(in srgb, #b9bcd1 78%, transparent);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   margin: 0 0 24px;
   max-width: 36ch;
 }
@@ -216,12 +204,7 @@
   display: inline-grid;
   place-items: center;
   color: white;
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -229,9 +212,9 @@
   /* Inset bevel reads as "this is a 3D disc" — same trick the sidebar
      avatar uses, scaled up for the bigger size. */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.12),
-    0 4px 14px rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 var(--scrim),
+    inset 0 -8px 16px var(--scrim),
+    0 4px 14px var(--scrim);
   transition:
     background 280ms,
     transform 220ms ease-out;
@@ -247,12 +230,12 @@
   gap: 8px;
 }
 .fieldLabel {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: color-mix(in srgb, #b9bcd1 50%, transparent);
+  color: color-mix(in srgb, var(--text) 50%, transparent);
   margin-top: 8px;
   margin-bottom: 2px;
 }
@@ -268,7 +251,7 @@
   font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.005em;
-  color: #f3f4fb;
+  color: var(--text);
   background: color-mix(in srgb, white 4%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
   border-radius: 10px;
@@ -279,7 +262,7 @@
     box-shadow 160ms;
 }
 .input::placeholder {
-  color: color-mix(in srgb, #b9bcd1 35%, transparent);
+  color: color-mix(in srgb, var(--text) 35%, transparent);
   font-weight: 400;
 }
 .input:focus {
@@ -308,8 +291,8 @@
     transform 140ms ease-out,
     box-shadow 200ms ease-out;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -4px 8px rgba(0, 0, 0, 0.14);
+    inset 0 1px 0 var(--scrim),
+    inset 0 -4px 8px var(--scrim);
 }
 .swatch:hover {
   transform: scale(1.08);
@@ -317,7 +300,7 @@
 .swatch:has(:focus-visible) {
   outline: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 var(--scrim),
     0 0 0 3px color-mix(in srgb, white 25%, transparent);
 }
 .swatch[data-selected="true"] {
@@ -325,9 +308,9 @@
      ring's weight so the user sees the connection between swatch
      pick and avatar update. */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 0 0 2px #07080d,
-    0 0 0 3.5px #f3f4fb;
+    inset 0 1px 0 var(--scrim),
+    0 0 0 2px var(--text),
+    0 0 0 3.5px var(--text);
 }
 
 .importChoice,
@@ -386,9 +369,9 @@
   /* Inner top highlight + outer drop shadow = "lit button" look that
      the dark stage can support. */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 1px 0 var(--scrim),
     0 8px 22px color-mix(in srgb, var(--onb-accent) 32%, transparent),
-    0 2px 6px rgba(0, 0, 0, 0.3);
+    0 2px 6px var(--scrim);
   transition:
     transform 120ms ease-out,
     box-shadow 200ms,
@@ -399,9 +382,9 @@
   transform: translateY(-1px);
   filter: brightness(1.06);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 1px 0 var(--scrim),
     0 12px 28px color-mix(in srgb, var(--onb-accent) 38%, transparent),
-    0 4px 10px rgba(0, 0, 0, 0.35);
+    0 4px 10px var(--scrim);
 }
 .cta:active:not(:disabled) {
   transform: translateY(0);
@@ -425,9 +408,9 @@
   padding: 8px 12px;
   font-size: 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, #c43c3c 18%, transparent);
-  border: 0.5px solid color-mix(in srgb, #c43c3c 50%, transparent);
-  color: #ffb8b8;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--text) 50%, transparent);
+  color: var(--text);
 }
 
 /* The sentence the owner acts on. Carries the block's ink and weight; the
@@ -456,7 +439,7 @@
   color: color-mix(in srgb, currentColor 78%, transparent);
 }
 
-/* Why the CTA is disabled, said once and quietly (issue #603 UX-4). Shares
+/* Why the CTA is disabled, said once and quietly (issue var(--text) UX-4). Shares
    `.keychainNote`'s register deliberately — this is a heads-up, not a
    validation error, so it must not read louder than the note beneath it.
    Dimmed from the card's own ink rather than a fresh hex, so the
@@ -468,7 +451,7 @@
   color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
-/* "Back" to the desktop first-run chooser (issue #603) — a quiet text link,
+/* "Back" to the desktop first-run chooser (issue var(--text)) — a quiet text link,
    deliberately not competing with the primary CTA above it. */
 .backBtn {
   display: block;
@@ -478,12 +461,12 @@
   border: none;
   font: inherit;
   font-size: 12.5px;
-  color: color-mix(in srgb, #b9bcd1 60%, transparent);
+  color: color-mix(in srgb, var(--text) 60%, transparent);
   cursor: pointer;
   transition: color 160ms;
 }
 .backBtn:hover:not(:disabled) {
-  color: #e8eaf2;
+  color: var(--text);
 }
 .backBtn:disabled {
   opacity: 0.5;
@@ -492,12 +475,12 @@
 
 /* One-line heads-up shown only where the OS keychain will prompt on the
    first secret write (dev/unsigned builds, some Linux keyrings — issue
-   #603): the dialog should be expected, not spooky. */
+   var(--text)): the dialog should be expected, not spooky. */
 .keychainNote {
   margin-top: 12px;
   font-size: 12px;
   line-height: 1.5;
-  color: color-mix(in srgb, #b9bcd1 70%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
 /* Fresh-path "we are working" line. Deliberately quiet: the fresh path has no
@@ -539,7 +522,7 @@
 
 /* Hosts the shared ConnectFlow wizard (kit-token styled — the switcher's
    Add-gateway modal uses it unwrapped too). `data-theme="dark"` on this
-   element re-anchors --ink/--line/--accent/etc to the dark ramp regardless
+   element re-anchors --text/--line/--accent/etc to the dark ramp regardless
    of the OS/user theme pref, since this whole screen is a forced-dark
    surface (see the file header comment). */
 .connectPanel {

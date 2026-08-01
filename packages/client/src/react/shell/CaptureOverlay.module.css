@@ -9,7 +9,7 @@
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 20%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--text) 20%, transparent);
   font: 600 14px var(--font-sans);
   cursor: pointer;
 }
@@ -23,12 +23,12 @@
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: 0 28px 90px color-mix(in srgb, var(--ink) 42%, transparent);
+  color: var(--text);
+  box-shadow: 0 28px 90px color-mix(in srgb, var(--text) 42%, transparent);
 }
 
 .dialog::backdrop {
-  background: color-mix(in srgb, var(--ink) 52%, transparent);
+  background: color-mix(in srgb, var(--text) 52%, transparent);
   backdrop-filter: blur(4px);
 }
 
@@ -54,7 +54,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   cursor: pointer;
 }
@@ -69,7 +69,7 @@
 .label {
   display: grid;
   gap: 7px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 12px;
   font-weight: 600;
 }
@@ -82,7 +82,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   padding: 10px 12px;
   font: 400 14px var(--font-sans);
 }
@@ -117,7 +117,7 @@
 .hint,
 .status {
   margin: 0;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -139,7 +139,7 @@
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 
 .participants legend {
@@ -161,7 +161,7 @@
 }
 
 .receiptLine span {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -171,7 +171,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   padding: 8px;
 }
 

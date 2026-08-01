@@ -26,7 +26,7 @@ import { runOnJS, useSharedValue } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { AppMetaResolved } from "@centraid/design-tokens";
+import type { AppMetaResolved } from "@centraid/design";
 
 import { family, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
@@ -434,7 +434,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 6,
     },
     railLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 0.9,

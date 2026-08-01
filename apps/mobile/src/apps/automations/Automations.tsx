@@ -137,7 +137,7 @@ function AutomationsList({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void refresh()}
-            tintColor={colors.ink3}
+            tintColor={colors.textFaint}
           />
         }
         ListEmptyComponent={
@@ -373,7 +373,7 @@ const AutomationCard = memo(
             <Text
               style={[
                 styles.toggleText,
-                { color: row.enabled ? colors.inkInv : colors.ink3 },
+                { color: row.enabled ? colors.textInv : colors.textFaint },
               ]}
             >
               {row.enabled ? "On" : "Off"}
@@ -382,7 +382,7 @@ const AutomationCard = memo(
         </View>
 
         <View style={styles.scheduleRow}>
-          <Feather name="clock" size={12} color={colors.ink3} />
+          <Feather name="clock" size={12} color={colors.textFaint} />
           <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
         </View>
 

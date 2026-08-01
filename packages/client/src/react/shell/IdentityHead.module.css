@@ -1,7 +1,7 @@
-/* Sidebar identity row (issue #599, Decision 14). A rounded tile icon, the
+/* Sidebar identity row (issue var(--text), Decision 14). A rounded tile icon, the
    gateway eyebrow over the active vault name, and a native-select stepper at
    the right edge. The WHOLE row is the switcher — the stepper is decoration
-   inside that one button, not a separate 26px hit area (#608). */
+   inside that one button, not a separate 26px hit area (var(--text)). */
 
 .row {
   display: flex;
@@ -28,17 +28,17 @@
 }
 .head:hover,
 .head:focus-visible {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   outline: none;
 }
 .head:focus-visible {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .row[data-open="true"] .head {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .head:active:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 .head:disabled {
   cursor: default;
@@ -70,7 +70,7 @@
   line-height: 1.25;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -84,7 +84,7 @@
   font-size: 13.5px;
   line-height: 1.2;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -92,7 +92,7 @@
 .head:hover .eyebrow,
 .head:focus-visible .eyebrow,
 .row[data-open="true"] .eyebrow {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ⌃ over ⌄ — the stepper a native select wears. Two 11px chevrons pulled
@@ -104,7 +104,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   transition:
     color 140ms ease-out,
     transform 140ms ease-out;
@@ -120,7 +120,7 @@
 .head:hover .stepper,
 .head:focus-visible .stepper,
 .row[data-open="true"] .stepper {
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .row[data-open="true"] .stepper {
   transform: scale(1.06);

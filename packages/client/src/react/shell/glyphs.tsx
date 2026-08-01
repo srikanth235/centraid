@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
 // Chrome-local line glyphs — the sidebar/titlebar marks that are NOT in
-// @centraid/design-tokens (design-token icons render via <Icon name=…>).
+// @centraid/design (design-token icons render via <Icon name=…>).
 // Faithful ports of the inline `Glyph` SVGs in the vanilla chrome.ts: same
 // viewBox, stroke treatment, and path data, so a React-drawn glyph is
 // pixel-equal to the leftover vanilla one during the migration.

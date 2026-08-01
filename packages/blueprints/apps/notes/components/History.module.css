@@ -1,5 +1,5 @@
 .status {
-  color: var(--ink-3);
+  color: var(--text-faint);
   font: var(--t-small);
   margin: 8px 0 18px;
 }
@@ -18,7 +18,7 @@
   display: flex;
   justify-content: space-between;
   cursor: pointer;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 .version summary strong {
@@ -29,6 +29,6 @@
   max-height: 180px;
   overflow: auto;
   white-space: pre-wrap;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }

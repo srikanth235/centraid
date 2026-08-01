@@ -7,7 +7,7 @@ test("analyzeCss ignores comments and accepts token-owned font stacks", () => {
   assert.deepEqual(
     analyzeCss(`
       /* issue #505 and color: #fff are prose */
-      .ok { color: var(--ink); font-family: var(--font-sans); }
+      .ok { color: var(--text); font-family: var(--font-sans); }
     `),
     { rawHex: 0, literalFontFamily: 0 }
   );

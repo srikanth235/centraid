@@ -25,11 +25,11 @@ import {
   resolvePath,
   conversationStatusPath,
   blobsPath,
-} from "@centraid/blueprints/kit/conversation-client.js";
+} from "@centraid/design/kit/conversation-client.js";
 // Shared chat-client core (issue #420): the ONE SSE parser + wire-route
 // builders + the documented TurnStreamEvent union, from the canonical kit copy.
-import { consumeSse } from "@centraid/blueprints/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+import { consumeSse } from "@centraid/design/kit/turn-stream.js";
+import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 
 import type {
   CentraidAgentsStatus,
@@ -44,7 +44,7 @@ import {
   GatewayClientError,
 } from "./gateway-client-core.js";
 
-export { type TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+export { type TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 
 // Re-exported so every consumer keeps importing the union from this barrel; the
 // definition now lives in one place (the wire contract, turn-stream.d.ts).

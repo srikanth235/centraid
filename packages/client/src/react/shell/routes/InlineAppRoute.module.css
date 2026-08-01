@@ -1,4 +1,4 @@
-/* Inline app host (issue #505). The running-app pane fills the frame edge to
+/* Inline app host (issue var(--text)). The running-app pane fills the frame edge to
    edge, mirroring AppViewRoute's full-bleed body — but the app is a React
    subtree, not an iframe. `.scope` carries the blueprint token layer
    (InlineAppRoute injects a rescoped `:root` block onto this class) so the app's
@@ -22,6 +22,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-2, #a8adb8);
+  color: var(--text-soft);
   font: var(--t-small, 400 0.85rem/1.4 system-ui, sans-serif);
 }

@@ -32,7 +32,7 @@
   font-family: var(--font-title);
   font-size: 19px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   border-bottom: 2px solid var(--line);
@@ -72,12 +72,12 @@
   background: var(--bg-elev);
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .calChip[aria-pressed="true"] {
   border-color: var(--selb);
   background: var(--sel);
-  color: var(--ink);
+  color: var(--text);
   font-weight: 600;
 }
 /* A guest chip carries a small initials avatar ahead of the name; selecting
@@ -93,21 +93,21 @@
   height: 18px;
   border-radius: 999px;
   background: var(--sel);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-size: 9px;
   font-weight: 600;
   line-height: 1;
 }
 .calChip[aria-pressed="true"] .guestChipAvatar {
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
 }
 .createDesc {
   width: 100%;
   min-height: 64px;
   font: var(--t-body);
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -118,7 +118,7 @@
 }
 .createDesc:focus {
   border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
+  box-shadow: var(--focus-ring);
 }
 .createModal :global(.kit-modal-foot) {
   margin: 0;

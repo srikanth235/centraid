@@ -21,7 +21,7 @@ export default defineConfig({
   // resolve to file:///assets/… — a path that exists nowhere — so the worker
   // request was canceled and the offline replica never started.
   base: "./",
-  // Bundle @centraid/design-tokens from its TS source, not its built dist: it
+  // Bundle @centraid/design from its TS source, not its built dist: it
   // emits CommonJS (it's also consumed by the Electron preload), and Rollup
   // can't statically read named exports from a CJS file reached through a
   // workspace symlink. Pulling source also frees the island build from
@@ -29,12 +29,19 @@ export default defineConfig({
   // packages now live locally under src/renderer/react/ui — no alias needed.)
   resolve: {
     // Array form so the inline-app `./kit.ts` adapter alias sits alongside
-    // the design-tokens source alias (issue #505).
+    // the design token source alias (issue #505).
     alias: [
       ...inlineBlueprintAliases(),
+      // The kit layer is a directory of served assets; the token layer is a
+      // single module. Anchor the root so `@centraid/design/kit/*` subpath
+      // imports resolve to files instead of into the token module's path.
       {
-        find: "@centraid/design-tokens",
-        replacement: fromHere("../../packages/design-tokens/src/index.ts"),
+        find: "@centraid/design/kit",
+        replacement: fromHere("../../packages/design/kit"),
+      },
+      {
+        find: /^@centraid\/design$/u,
+        replacement: fromHere("../../packages/design/src/index.ts"),
       },
     ],
   },

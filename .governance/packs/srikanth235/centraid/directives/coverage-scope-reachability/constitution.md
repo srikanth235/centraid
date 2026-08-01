@@ -1,7 +1,7 @@
 # coverage-scope-reachability
 
 Top-level `packages/*` / `apps/*` source trees and the co-located executable
-`packages/blueprints/apps` / `packages/blueprints/kit` runtime trees must not
+`packages/blueprints/apps` / `packages/design/kit` runtime trees must not
 fall outside every coverage floor, matrix owner, and intentional-ungated
 allowlist.
 

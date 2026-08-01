@@ -154,10 +154,12 @@ export default function FaceReview({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.ink }]}>People review</Text>
-        <Text style={[styles.count, { color: colors.ink2 }]}>
+        <Text style={[styles.title, { color: colors.text }]}>
+          People review
+        </Text>
+        <Text style={[styles.count, { color: colors.textSoft }]}>
           {proposals.length}
         </Text>
       </View>
@@ -170,7 +172,7 @@ export default function FaceReview({
         onRefresh={refreshNow}
         ListHeaderComponent={
           <View>
-            <Text style={[styles.section, { color: colors.ink2 }]}>
+            <Text style={[styles.section, { color: colors.textSoft }]}>
               CONFIRMED PEOPLE
             </Text>
             {confirmedPeople.length ? (
@@ -197,30 +199,30 @@ export default function FaceReview({
                     </View>
                     <Text
                       numberOfLines={1}
-                      style={[styles.personName, { color: colors.ink }]}
+                      style={[styles.personName, { color: colors.text }]}
                     >
                       {String(
                         party.display_name ?? party.name ?? "Unknown person"
                       )}
                     </Text>
-                    <Text style={[styles.meta, { color: colors.ink2 }]}>
+                    <Text style={[styles.meta, { color: colors.textSoft }]}>
                       {count} photos
                     </Text>
                   </View>
                 ))}
               </ScrollView>
             ) : (
-              <Text style={[styles.emptyPeople, { color: colors.ink2 }]}>
+              <Text style={[styles.emptyPeople, { color: colors.textSoft }]}>
                 Confirmed people will appear here.
               </Text>
             )}
-            <Text style={[styles.section, { color: colors.ink2 }]}>
+            <Text style={[styles.section, { color: colors.textSoft }]}>
               FACE PROPOSALS
             </Text>
           </View>
         }
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
+          <Text style={[styles.empty, { color: colors.textSoft }]}>
             No face proposals need review.
           </Text>
         }
@@ -264,10 +266,10 @@ const FaceProposalRow = memo(
           <Feather name="user" size={20} color={colors.accent} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.name, { color: colors.ink }]}>
+          <Text style={[styles.name, { color: colors.text }]}>
             {partyId ? name : "Unmatched face"}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             {Math.round(Number(row.confidence ?? 0) * 100)}% confidence
           </Text>
         </View>

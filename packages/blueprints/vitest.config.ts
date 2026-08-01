@@ -19,8 +19,10 @@ export default nodeProject({
         if ((source !== "./kit.ts" && source !== "../kit.ts") || !importer)
           return null;
         const appsRoot = path.join(import.meta.dirname, "apps");
+        // The kit is the design package's kit layer (#672); apps still import
+        // it by the app-relative path the app-engine serves it at.
         return importer.startsWith(`${appsRoot}${path.sep}`)
-          ? path.join(import.meta.dirname, "kit/kit.ts")
+          ? path.join(import.meta.dirname, "..", "design", "kit", "kit.ts")
           : null;
       },
     },

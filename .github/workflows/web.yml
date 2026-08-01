@@ -21,7 +21,7 @@ on:
     paths:
       - "apps/web/**"
       - "packages/client/**"
-      - "packages/design-tokens/**"
+      - "packages/design/**"
       - ".github/workflows/web.yml"
       - "package.json"
       - "bun.lock"

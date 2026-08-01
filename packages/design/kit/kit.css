@@ -1,0 +1,2753 @@
+/* ============================================================================
+   Centraid blueprint kit — shared UX primitives for every template app.
+   Canonical (and ONLY) copy: packages/design/kit/kit.css. Apps don't carry
+   their own copies — the app-engine runtime serves kit.css from this dir
+   (sharedAssetsDir → KIT_DIR) when the app folder has no override. Edit here
+   and every app picks it up on next load.
+
+   ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
+   Calm, instrument-grade, personal. Humanist system sans for content; system
+   mono for metadata, counts, dates and eyebrows (the signature). Neutrals do
+   the work; a single per-app accent (--accent / --app-color) is structural, not
+   decorative. Hairline borders, soft depth, motion under 200ms.
+
+   Shared tokens every app.css MUST define (contract):
+     --bg-elev   card / raised fill
+     --line      hairline border
+     --text      primary ink            --text-soft     secondary ink
+     --accent    per-app accent (may be overridden by --app-color)
+
+   Optional tokens the redesigned apps ALSO define — kit degrades gracefully
+   when they're absent (older apps):
+     --bg-sunken   recessed / track fill      --line-strong  stronger hairline
+     --text-faint   tertiary ink               --radius       base radius (0.75rem)
+     --shadow-md   soft elevation             --accent-soft  ~12% accent tint
+
+   Motion: --ease: cubic-bezier(.2,.7,.3,1); standard <=200ms.
+   ========================================================================== */
+
+/* ---------- App chrome ---------------------------------------------------- */
+/* Shared geometry for the system blueprints. CSS Modules compose these
+   classes and retain only each app's deliberate variations (width, padding,
+   accent treatment). Keeping the structural contract here prevents every
+   blueprint from growing its own copy of the same shell and phone drawer. */
+
+.kit-app-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-body);
+}
+
+.kit-app-side {
+  width: var(--app-side-width, 250px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-side-padding, 18px 14px);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.kit-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--app-brand-padding, 2px 6px 14px);
+}
+
+.kit-app-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--app-brand-radius, 8px);
+  background: var(--app-brand-background, var(--accent-deep));
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kit-app-brand-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.kit-app-brand-name {
+  font: var(--app-brand-font, var(--t-body-strong));
+  letter-spacing: -0.01em;
+}
+
+.kit-app-brand-tag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.kit-app-side-close {
+  margin-left: auto;
+  display: none;
+}
+
+.kit-app-side-foot {
+  margin-top: auto;
+  padding-top: var(--app-side-foot-padding, 16px);
+}
+
+.kit-app-scrim {
+  display: none;
+}
+
+.kit-app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kit-app-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--app-topbar-gap, 12px);
+  padding: var(--app-topbar-padding, 16px 22px);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.kit-app-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+.kit-app-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kit-app-ask-mount {
+  display: flex;
+  align-items: center;
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--app-drawer-width, 274px);
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+}
+
+.kit-app-shell.kit-app-narrow:not(.kit-app-defer-drawer) .kit-app-side,
+.kit-app-shell.kit-app-narrow.kit-app-ready .kit-app-side {
+  transition: transform 0.26s var(--ease);
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-side {
+  transform: translateX(0);
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side-close,
+.kit-app-shell.kit-app-narrow .kit-app-hamburger {
+  display: flex;
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: var(--app-scrim-background);
+}
+
+/* The `hidden` attribute must ALWAYS hide, even when a class on the same
+   element sets `display:` (an author display beats the UA's plain
+   `[hidden] { display: none }`, so `.kit-ask-ov { display: flex }` alone
+   made the Ask panel permanently visible in any app without its own global
+   guard — photos shipped that way; docs was masked by an identical rule in
+   its app.css). One kit-wide guard retires the per-element
+   `.kit-*[hidden]` whack-a-mole for every current and future app. */
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Native Web Component hosts (issue var(--text)) ----------------------- */
+/* The kit's presentation primitives are custom elements (elements.js) that
+   render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
+   is `display: contents` so it contributes no box of its own — the emitted
+   `.kit-*` tree lays out exactly as the former vanilla builders' output did,
+   and every rule in this file continues to style it unchanged.
+
+   `[data-kit-host]` is stamped by the exported `KitElement` base on connect,
+   so APP-level components inherit the same contract without registering their
+   tag here. The kit's own tags stay listed explicitly: they cover the pre-
+   upgrade window before `connectedCallback` runs. An app component whose host
+   should BE a box overrides via `x-foo[data-kit-host] { display: block; }`. */
+kit-avatar,
+kit-meter,
+kit-line-chart,
+kit-bar-chart,
+kit-skeleton,
+kit-toast,
+kit-mention-chip,
+kit-reference-strip,
+[data-kit-host] {
+  display: contents;
+}
+
+/* ---------- Toasts -------------------------------------------------------- */
+/* Bottom-center. Solid (never blurred) — a toast has a job to do. Rises in on
+   a short spring-free curve; a leading dot carries tone. */
+
+.kit-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 80;
+  width: min(27rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.kit-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.6rem 0.7rem 0.6rem 0.85rem;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg-elev);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  letter-spacing: 0.005em;
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 0.5px var(--scrim);
+  pointer-events: auto;
+  animation: kit-toast-in 0.22s var(--ease) both;
+}
+
+/* A small tone dot before the label. Neutral by default; apps may set
+   data-tone="accent|danger" for confirmations / failures. */
+.kit-toast::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--bg-elev) 55%, transparent);
+}
+.kit-toast[data-tone="accent"]::before {
+  background: var(--_accent);
+}
+.kit-toast[data-tone="danger"]::before {
+  background: var(--danger);
+}
+
+.kit-toast span {
+  flex: 1;
+  min-width: 0;
+}
+
+.kit-toast-action {
+  border: none;
+  background: color-mix(in oklab, var(--bg-elev) 14%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  min-height: 2rem;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.kit-toast-action:hover,
+.kit-toast-action:focus-visible {
+  background: color-mix(in oklab, var(--bg-elev) 24%, transparent);
+  outline: none;
+}
+
+.kit-toast-close {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 0.4rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.kit-toast-close:hover,
+.kit-toast-close:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+@keyframes kit-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Loading skeletons -------------------------------------------- */
+/* A calm left-to-right sweep over a recessed base — not a flash. Compose
+   width with inline style or the modifier classes below. */
+
+.kit-skeleton {
+  height: 1rem;
+  border-radius: 0.5rem;
+  background: var(--bg-sunken);
+  position: relative;
+  overflow: hidden;
+}
+
+.kit-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text) 6%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: kit-sweep 1.4s var(--ease) infinite;
+}
+
+/* Convenience shapes used by list/detail loaders. */
+.kit-skeleton-line {
+  height: 0.85rem;
+  margin: 0.4rem 0;
+}
+.kit-skeleton-title {
+  height: 1.1rem;
+  width: 62%;
+  margin: 0.4rem 0;
+}
+.kit-skeleton-row {
+  height: 2.75rem;
+  margin: 0.5rem 0;
+  border-radius: var(--radius);
+}
+.kit-skeleton-circle {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+}
+
+@keyframes kit-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kit-skeleton::after {
+    animation: none;
+    opacity: 0.5;
+    transform: none;
+  }
+  .kit-toast {
+    animation: none;
+  }
+}
+
+/* ---------- Parked / pending (a write awaiting owner approval) ------------ */
+/* Deliberately calm — this is a designed state, not an error. The row keeps
+   its ink (no global opacity dimming); a hairline "ticket" rail and a mono
+   chip say "waiting", reassuringly. */
+
+.kit-pending {
+  position: relative;
+  color: var(--text-soft);
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--_accent) 4%, transparent);
+}
+.kit-pending::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--_accent) 0 4px,
+    transparent 4px 8px
+  );
+  opacity: 0.7;
+}
+
+.kit-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: color-mix(in oklab, var(--_accent) 72%, var(--text));
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.kit-pending-chip::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: kit-spin 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-pending-chip::before {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+@keyframes kit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Letter / photo avatars --------------------------------------- */
+/* Structural only — apps set the fill (a hashed hue) inline. Default fill is a
+   quiet accent tint so an un-colored avatar still reads on brand. */
+
+.kit-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--_accent);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  flex: none;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 0.5px var(--scrim),
+    inset 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent);
+  user-select: none;
+}
+.kit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Optional square-ish variant for docs/photos/files. */
+.kit-avatar[data-shape="rounded"] {
+  border-radius: 0.6rem;
+}
+
+/* ---------- Charts (line / area / bar) ------------------------------------ */
+/* Accent-tinted, hairline-quiet. app.js draws the SVG geometry; kit styles the
+   strokes/fills so every chart across the family reads the same. */
+
+.kit-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.kit-chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.kit-chart-axis {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.kit-chart-line {
+  fill: none;
+  stroke: var(--_accent);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.kit-chart-area {
+  fill: var(--_accent);
+  opacity: 0.1;
+  stroke: none;
+}
+.kit-chart-dot {
+  fill: var(--bg-elev);
+  stroke: var(--_accent);
+  stroke-width: 1.75;
+}
+.kit-chart-dot[data-peak="true"] {
+  fill: var(--_accent);
+}
+
+.kit-chart-barrect {
+  fill: var(--_accent);
+  opacity: 0.85;
+  rx: 3;
+}
+.kit-chart-barrect[data-muted="true"] {
+  fill: var(--text-faint);
+  opacity: 0.4;
+}
+/* A faint track behind each bar (optional; app draws it as its own rect). */
+.kit-chart-track {
+  fill: var(--bg-sunken);
+  rx: 3;
+}
+
+.kit-chart-ticklabel {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Progress / meter bars ---------------------------------------- */
+
+.kit-bar {
+  display: block;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.kit-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--_accent);
+  transition: width 0.35s var(--ease);
+}
+/* Over-budget / over-target reading. */
+.kit-bar-fill[data-tone="danger"] {
+  background: var(--danger);
+}
+.kit-bar-fill[data-tone="warn"] {
+  background: var(--warning);
+}
+/* Healthy / passing reading (e.g. a strong password). */
+.kit-bar-fill[data-tone="ok"] {
+  background: var(--success);
+}
+
+/* ---------- Trust / notice banner ------------------------------------------ */
+/* The consent + outcome banner every app renders above its content: accent
+   dot = trust framing, .notice tone = a quieter outcome/notice voice. */
+
+.kit-banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+}
+.kit-banner::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--_accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.kit-banner strong {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.kit-banner.notice::before {
+  background: var(--text-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--text-faint) 16%, transparent);
+}
+
+/* ---------- Buttons --------------------------------------------------------
+   ONE canonical button, pill-shaped (the kit's own chips/toasts/bars are
+   already pills): quiet hairline base, `.primary` accent fill, `.danger`
+   arm/hover tone. Chosen over the per-app radius/sizing drift the apps grew
+   (notes/tasks radius-sm primaries, docs 10px, locker/tally rounded rects) —
+   contextual size overrides stay in app.css where a layout truly needs them. */
+
+.kit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.9rem;
+  min-height: 2.4rem;
+  cursor: pointer;
+  text-decoration: none; /* anchors-as-buttons (e.g. a download link) */
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    filter 0.15s var(--ease);
+}
+.kit-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.kit-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.kit-btn.primary {
+  border-color: transparent;
+  background: var(--accent-deep);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.kit-btn.primary:hover {
+  border-color: transparent;
+  color: var(--on-accent);
+  filter: brightness(1.08);
+}
+.kit-btn.primary:active {
+  transform: scale(0.98);
+}
+.kit-btn.danger:hover,
+.kit-btn.danger[data-kit-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.kit-btn.primary.danger,
+.kit-btn.primary.danger[data-kit-armed] {
+  background: var(--danger);
+  border-color: transparent;
+  color: var(--text);
+}
+
+/* ---------- Icon buttons ----------------------------------------------------
+   Square, icon-only. Generalizes the six near-identical hand-rolled icon
+   buttons docs grew (theme toggle, sidebar close, tool row, kebab, details
+   close, quick-look controls) plus photos' equivalents. Size is a custom
+   prop so a dense row (e.g. a kebab at 30px) can dial it down per instance:
+     <button class="kit-icon-btn" style="--icon-button-size: 1.875rem">…</button>
+   Transparent base — this sits on app chrome, not a card. */
+
+.kit-icon-btn {
+  --icon-button-size: 2.1rem;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: calc(var(--radius) * 0.55);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.kit-icon-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+.kit-icon-btn:hover {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+.kit-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kit-icon-btn.danger:hover {
+  color: var(--danger);
+}
+
+/* ---------- Text input ------------------------------------------------------
+   THE text input primitive — apps had none and hand-rolled bare `input`
+   rules per family. `.bare` drops the border/fill for inline-editing
+   contexts (rename a row/folder/chip in place); it still earns a full
+   accent border + focus ring on focus, never a half-drawn underline. */
+
+.kit-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) * 0.7);
+  padding: 0.5rem 0.7rem;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.kit-input::placeholder {
+  color: var(--text-faint);
+}
+.kit-input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--_accent) 50%, var(--line-strong));
+  box-shadow: var(--focus-ring);
+}
+.kit-input.bare {
+  border-color: transparent;
+  background: transparent;
+  padding: 0.3rem 0.4rem;
+}
+.kit-input.bare:focus {
+  border-color: var(--_accent);
+  background: var(--bg-elev);
+}
+
+/* ---------- Search pill ------------------------------------------------------
+   Union of docs' `.d-search` and photos' `.search`: a leading icon, a plain
+   `<input>` child (no extra class needed — this selector owns its look),
+   an optional trailing `kbd` shortcut hint. App-specific width/placement
+   (max-width, flex basis, margin) stays in app.css.
+     <label class="kit-search">
+       <svg>…</svg>
+       <input type="search" placeholder="Search">
+       <kbd>/</kbd>
+     </label> */
+
+.kit-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  padding: 0 0.6rem 0 0.9rem;
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.kit-search:focus-within {
+  border-color: color-mix(in oklab, var(--_accent) 50%, var(--line-strong));
+  box-shadow: var(--focus-ring);
+}
+.kit-search svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.kit-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0;
+  color: var(--text);
+  font: inherit;
+}
+.kit-search input:focus {
+  outline: none;
+}
+.kit-search input::placeholder {
+  color: var(--text-faint);
+}
+.kit-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.kit-search kbd {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
+/* ---------- Chips -----------------------------------------------------------
+   Filter/toggle pills. Selected speaks in two registers: the default fills
+   with the deep accent (notes/photos voice); `.quiet` selects with the soft
+   tint + accent ink (docs/people/tally voice) for dense chip rows. Both
+   `aria-pressed` and `data-active` mark selection. */
+
+.kit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.85rem;
+  min-height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.kit-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.kit-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kit-chip[aria-pressed="true"],
+.kit-chip[data-active="true"] {
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 500;
+}
+.kit-chip.quiet[aria-pressed="true"],
+.kit-chip.quiet[data-active="true"] {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--_accent) 34%, var(--line-strong));
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- Segmented control -----------------------------------------------
+   Pill track on the recessed surface; the selected segment raises. Selection
+   marks with `aria-pressed` or `.on`. `.stretch` fills its row (equal-width
+   segments). */
+
+.kit-seg {
+  display: inline-flex;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.15rem;
+}
+.kit-seg.stretch {
+  display: flex;
+}
+.kit-seg.stretch > button {
+  flex: 1;
+}
+.kit-seg > button {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-soft);
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.85rem;
+  min-height: 2.1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+.kit-seg > button:hover {
+  color: var(--text);
+}
+.kit-seg > button[aria-pressed="true"],
+.kit-seg > button.on {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-sm, 0 0 0 0.5px var(--line-strong)),
+    0 1px 2px var(--scrim);
+}
+:root[data-theme="dark"] .kit-seg > button[aria-pressed="true"],
+:root[data-theme="dark"] .kit-seg > button.on {
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.kit-seg > button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---------- Modal shell -----------------------------------------------------
+   Backdrop + centered card. The backdrop dims with the theme's own ink (never
+   a fixed tint); the card is the standard raised surface. Width is the one
+   knob apps keep — set it with an app class on the same element. Layering:
+   app chrome < modal 70 < popover 75 < toasts 80. */
+
+.kit-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: color-mix(in oklab, var(--text) 45%, transparent);
+  backdrop-filter: blur(2px);
+  animation: kit-fade-in 0.18s ease-out;
+}
+.kit-modal-back[hidden] {
+  display: none;
+}
+/* The dismiss-on-outside-click target. It used to be a click handler on
+   `.kit-modal-back` itself, which no keyboard could reach; it is a real
+   button now, laid under the card (the card is `position: relative`, so it
+   paints above this one) and labelled "Close". Transparent — the dim still
+   comes from `.kit-modal-back`. */
+.kit-modal-scrim {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+.kit-modal {
+  position: relative;
+  width: min(28rem, 100%);
+  max-height: min(88vh, 42rem);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 1.15rem;
+  box-shadow: var(--shadow-md);
+  padding: 1.3rem 1.4rem;
+  animation: kit-rise-lg 0.18s var(--ease);
+}
+.kit-modal:focus {
+  outline: none;
+}
+.kit-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+@keyframes kit-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kit-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@keyframes kit-rise-lg {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-modal-back,
+  .kit-modal {
+    animation: none;
+  }
+}
+
+/* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
+
+.kit-popover {
+  position: fixed;
+  z-index: 75;
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 5px;
+  animation: kit-rise 0.14s var(--ease);
+}
+.kit-popover-head {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  padding: 8px 10px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-popover-scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.kit-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-popover-item:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+.kit-popover-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+.kit-popover-item.danger {
+  color: var(--danger);
+}
+.kit-popover-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 8px;
+}
+/* Colour swatch dot inside a menu row (e.g. "move to circle"). */
+.kit-dotmini {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+@keyframes kit-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-popover {
+    animation: none;
+  }
+}
+
+/* ---------- Empty states ---------------------------------------------------- */
+
+/* The quiet one-line empty card ("Nothing to do — enjoy your day."). */
+.kit-empty-card {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  text-align: center;
+  padding: 3rem 1rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+}
+
+/* The full icon/title/sub empty state (emptyState() helper). */
+.kit-empty {
+  text-align: center;
+  padding: 64px 20px;
+}
+.kit-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--text-faint);
+}
+.kit-empty-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.kit-empty-sub {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.kit-empty-sub button {
+  margin-top: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent-deep);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+/* ---------- Attachment tiles (renderAttachments) --------------------------- */
+
+.kit-attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.kit-attach-strip:empty {
+  display: none;
+}
+.kit-attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 0.5rem);
+  overflow: hidden;
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kit-attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kit-attach-zoom {
+  cursor: zoom-in;
+}
+.kit-attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--accent-text);
+  word-break: break-word;
+  text-decoration: none;
+}
+.kit-attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  text-align: center;
+  color: var(--text);
+  background: var(--scrim);
+  padding: 0.1rem 0;
+}
+.kit-attach-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: var(--scrim);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kit-bar-fill {
+    transition: none;
+  }
+}
+
+/* ---------- Viewer nav arrows ----------------------------------------------
+   Circular prev/next overlay for full-screen media viewers (docs' quick-look,
+   photos' lightbox — the two were near-byte-identical). Lives on a dark
+   viewer surface, so the on-dark whites below are hardcoded, not routed
+   through ink tokens. `.prev`/`.next` position it; the viewer sets the
+   containing box to `position: relative`. */
+
+.kit-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: var(--scrim);
+  color: var(--text);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s var(--ease);
+}
+.kit-viewer-nav:hover {
+  background: var(--scrim);
+}
+.kit-viewer-nav:disabled,
+.kit-viewer-nav[disabled] {
+  opacity: 0.25;
+  pointer-events: none;
+}
+.kit-viewer-nav.prev {
+  left: 0.75rem;
+}
+.kit-viewer-nav.next {
+  right: 0.75rem;
+}
+
+/* ---------- Drag-and-drop scrim --------------------------------------------
+   Full-viewport drop target: an accent-tinted scrim (`.kit-drop`) behind a
+   centered message card (`.kit-drop-card`). Union of docs' opaque, themed
+   card and photos' translucent white-on-black one — the themed surface card
+   wins (it stays legible in both themes); the accent tint splits the
+   difference between docs' 14% and photos' 20% mix. Scrim itself ignores
+   pointer events so the drop target underneath keeps receiving drag events;
+   toggle visibility with `[hidden]`. */
+
+.kit-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--_accent) 16%, var(--scrim));
+  pointer-events: none;
+  animation: kit-fade 0.14s ease-out;
+}
+.kit-drop[hidden] {
+  display: none;
+}
+.kit-drop-card {
+  border: 2px dashed var(--_accent);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 1.6rem 2.4rem;
+  box-shadow: var(--shadow-md);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-drop {
+    animation: none;
+  }
+}
+
+/* ---------- Bounded-browse footer ------------------------------------------
+   The quiet "showing N of M" line under a windowed list (docs' window foot,
+   photos' equivalent). Mono for the numbers, tiny, centered, wraps on narrow
+   widths. */
+
+.kit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 1.25rem 0 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+/* ---------- Ask / assistant (chat to your vault) -------------------------- */
+/* The AI proposes a write; it lands as a consent-gated (parked) action the
+   owner approves — same trust language as .kit-pending. Shared across all 14
+   apps so “Ask” looks and behaves identically everywhere. */
+
+.kit-ask-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--_accent) 35%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kit-ask-btn .kit-spark {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.kit-ask-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in oklab, var(--text) 42%, transparent);
+  backdrop-filter: blur(2px);
+  animation: kit-fade 0.16s ease-out;
+}
+@media (min-width: 720px) {
+  .kit-ask-ov {
+    justify-content: flex-end;
+  }
+}
+@keyframes kit-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.kit-ask-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 32rem;
+  max-height: 88vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 1.15rem 1.15rem 0 0;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: kit-ask-up 0.24s var(--ease) both;
+}
+@media (min-width: 720px) {
+  .kit-ask-panel {
+    max-width: 25rem;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    animation: kit-ask-in 0.24s var(--ease) both;
+  }
+}
+@keyframes kit-ask-up {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes kit-ask-in {
+  from {
+    transform: translateX(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-ov,
+  .kit-ask-panel {
+    animation: none;
+  }
+}
+
+.kit-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.kit-ask-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.kit-ask-head .kit-ask-note {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+.kit-ask-x {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-soft);
+  font-size: 1rem;
+  cursor: pointer;
+  flex: none;
+}
+
+.kit-ask-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.kit-msg {
+  max-width: 85%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.kit-msg.user {
+  align-self: flex-end;
+  background: var(--accent-deep);
+  color: var(--text);
+  border-bottom-right-radius: 0.35rem;
+}
+.kit-msg.ai {
+  align-self: flex-start;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border-bottom-left-radius: 0.35rem;
+}
+
+/* Rich assistant answers (issue var(--text)) — the shared assistant-rich.js renderer
+   emits these class names inside a `.kit-msg.ai` bubble; ported from the React
+   shell's assistantRich.module.css and mapped onto kit tokens so the Ask panel
+   renders ref-chips + typed block:table/chart/stat identically to the shell.
+   `--accent` is aliased here because the chart SVG references `var(--accent)`. */
+.kit-msg.ai .asstRich {
+  --accent: var(--_accent);
+}
+.kit-msg.ai .asstRich > :first-child {
+  margin-top: 0;
+}
+.kit-msg.ai .asstRich > :last-child {
+  margin-bottom: 0;
+}
+.kit-msg.ai .asstP {
+  margin: 0 0 0.5rem;
+}
+.kit-msg.ai .asstH {
+  margin: 0.75rem 0 0.375rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.kit-msg.ai .asstUl {
+  margin: 0 0 0.5rem;
+  padding-left: 1.25rem;
+}
+.kit-msg.ai .asstRich code {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  background: color-mix(in oklab, var(--_accent) 8%, transparent);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.kit-msg.ai .asstRef {
+  display: inline-flex;
+  align-items: center;
+  border: 0.5px solid color-mix(in oklab, var(--_accent) 45%, transparent);
+  background: color-mix(in oklab, var(--_accent) 12%, transparent);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0 7px;
+  font: inherit;
+  font-size: 0.82em;
+  line-height: 1.5;
+  cursor: default;
+}
+.kit-msg.ai .asstRef[data-state="missing"] {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.kit-msg.ai .asstBlock {
+  margin: 0.25rem 0 0.625rem;
+}
+.kit-msg.ai .asstTableWrap {
+  overflow-x: auto;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+.kit-msg.ai .asstTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.kit-msg.ai .asstTable th {
+  text-align: left;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-soft);
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--line-strong);
+}
+.kit-msg.ai .asstTable td {
+  padding: 7px 12px;
+  border-bottom: 0.5px solid var(--line);
+}
+.kit-msg.ai .asstTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+.kit-msg.ai .asstCaption {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+  padding: 6px 2px 0;
+}
+.kit-msg.ai .asstStat {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  width: fit-content;
+  min-width: 180px;
+  background: var(--bg-sunken);
+}
+.kit-msg.ai .asstStatValue {
+  font-size: 1.5rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.kit-msg.ai .asstStatLabel {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+.kit-msg.ai .asstStatSub {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+.kit-msg.ai .asstChart {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px 8px;
+  background: var(--bg-sunken);
+}
+.kit-msg.ai .asstChartPlot {
+  height: 160px;
+}
+.kit-msg.ai .asstChartSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.kit-msg.ai .asstChartX {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.625rem;
+  color: var(--text-soft);
+  padding-top: 4px;
+  gap: 4px;
+  overflow: hidden;
+}
+.kit-msg.ai .asstChartLegend {
+  display: flex;
+  gap: 12px;
+  font-size: 0.7rem;
+  color: var(--text-soft);
+  padding-top: 6px;
+}
+.kit-msg.ai .asstPre {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: color-mix(in oklab, var(--_accent) 6%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+}
+
+/* Fenced code block with a hover "Copy" button (var(--text)). */
+.kit-msg.ai .asstCodeWrap {
+  position: relative;
+}
+.kit-msg.ai .asstCopyBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  padding: 3px 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kit-msg.ai .asstCodeWrap:hover .asstCopyBtn,
+.kit-msg.ai .asstCopyBtn:focus-visible {
+  opacity: 1;
+}
+.kit-msg.ai .asstCopyBtn[data-copied="true"] {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
+/* GFM — ordered/nested lists, links, images, blockquote, hr, strikethrough (var(--text) W2). */
+.kit-msg.ai .asstOl {
+  margin: 0 0 0.5rem;
+  padding-left: 1.4rem;
+}
+.kit-msg.ai .asstOl .asstOl,
+.kit-msg.ai .asstOl .asstUl,
+.kit-msg.ai .asstUl .asstOl,
+.kit-msg.ai .asstUl .asstUl {
+  margin-bottom: 0;
+}
+.kit-msg.ai .asstA {
+  color: var(--_accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.kit-msg.ai .asstImg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.25rem 0;
+}
+.kit-msg.ai .asstQuote {
+  margin: 0 0 0.5rem;
+  padding: 2px 0 2px 12px;
+  border-left: 2.5px solid color-mix(in oklab, var(--_accent) 40%, transparent);
+  color: var(--text-soft);
+}
+.kit-msg.ai .asstHr {
+  border: 0;
+  border-top: 0.5px solid var(--line-strong);
+  margin: 0.75rem 0;
+}
+.kit-msg.ai .asstDel {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* Dependency-free syntax highlighting tokens (var(--text) W2). */
+.kit-msg.ai .asstPre .hlKeyword {
+  color: var(--text);
+}
+.kit-msg.ai .asstPre .hlString {
+  color: var(--text);
+}
+.kit-msg.ai .asstPre .hlComment {
+  color: var(--text-soft);
+  font-style: italic;
+}
+.kit-msg.ai .asstPre .hlNumber {
+  color: var(--text);
+}
+.kit-msg.ai .asstPre .hlBuiltin {
+  color: var(--text);
+}
+
+/* The proposed write — dashed accent, consent-gated, same feel as parked. */
+.kit-ask-action {
+  align-self: stretch;
+  border: 1.5px dashed color-mix(in oklab, var(--_accent) 45%, var(--line));
+  border-radius: 0.8rem;
+  background: color-mix(in oklab, var(--_accent) 5%, transparent);
+  padding: 0.75rem 0.85rem;
+}
+.kit-ask-action .aa-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-text);
+  margin-bottom: 0.45rem;
+}
+.kit-ask-action .aa-label::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: kit-spin 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-action .aa-label::before {
+    animation: none;
+    border-right-color: currentColor;
+  }
+}
+.kit-ask-action .aa-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.kit-ask-action .aa-detail {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--text-soft);
+  margin-top: 0.2rem;
+}
+.kit-ask-action .aa-btns {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+.kit-aa-approve {
+  flex: 1;
+  min-height: 2.4rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--accent-deep);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kit-aa-ghost {
+  min-height: 2.4rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+/* Busy = the owner's decision is in flight at the vault plane. */
+.kit-ask-action.aa-busy {
+  opacity: 0.65;
+}
+.kit-ask-action button:disabled {
+  cursor: wait;
+}
+/* A refusal or failure the vault reported for this card — shown, not hidden. */
+.kit-ask-action .aa-note {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--accent-text);
+  margin-top: 0.5rem;
+}
+
+.kit-ask-suggest {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0;
+  flex-wrap: wrap;
+  flex: none;
+}
+.kit-ask-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── Composer — modeled on Claude Code's composer, adapted to kit tokens ──
+   One cohesive rounded frame (`.kit-ask-compose` IS the frame — it's the
+   `<form>` itself, not a wrapper) holding staged-attachment chips, the
+   input, and a slim bottom controls strip (attach left, model picker +
+   send right). The frame is the focus target — a soft ring grows around
+   the whole card, not just the input, so opening the model menu or
+   attaching a file never reflows anything else. Core functionality (not a
+   desktop-only enhancement) — works unchanged down to the narrowest phone
+   width the panel supports. */
+.kit-ask-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.55rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--radius) * 1.1);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--line-strong));
+  flex: none;
+  transition:
+    border-color 0.14s var(--ease),
+    box-shadow 0.14s var(--ease);
+}
+.kit-ask-compose:focus-within {
+  border-color: var(--_accent);
+  box-shadow: var(--focus-ring);
+}
+.kit-ask-input {
+  min-height: 2.1rem;
+  padding: 0.3rem 0.35rem;
+  border: none;
+  border-radius: calc(var(--radius) * 0.6);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.kit-ask-input:focus {
+  outline: none;
+}
+.kit-ask-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* Bottom controls strip — attach on the left, model picker + send on the
+   right, separated from the input by a hairline so it reads as its own
+   quiet row inside the same card. */
+.kit-ask-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+.kit-ask-controls-spacer {
+  flex: 1;
+  min-width: 0;
+}
+.kit-ask-attach {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: none;
+  border-radius: calc(var(--radius) * 0.55);
+  background: transparent;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition:
+    color 0.1s var(--ease),
+    background 0.1s var(--ease);
+}
+.kit-ask-attach:hover {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+.kit-ask-attach:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 1px;
+}
+.kit-ask-send {
+  width: 1.9rem;
+  height: 1.9rem;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.1s var(--ease),
+    transform 0.1s var(--ease);
+}
+.kit-ask-send:hover:not(:disabled) {
+  background: var(--_accent);
+}
+.kit-ask-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.kit-ask-send:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 2px;
+}
+.kit-ask-send:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+/* Busy send-button state — a small spinner swapped in for the arrow glyph
+   (see kit.ts `setBusy`), the same recipe as `.kit-ask-action .aa-label::before`. */
+.kit-ask-send-spin {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--scrim);
+  border-right-color: transparent;
+  animation: kit-spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-send-spin {
+    animation: none;
+    border-right-color: var(--scrim);
+  }
+}
+
+/* Inline model picker (subsystem `ask`) — a quiet text control, not a
+   boxed button, so it reads as metadata about the composer rather than a
+   competing action. Mirrors the desktop Assistant composer's picker. */
+.kit-ask-model {
+  position: relative;
+  flex: none;
+}
+.kit-ask-model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 1.9rem;
+  padding: 0 0.5rem;
+  border: none;
+  border-radius: calc(var(--radius) * 0.55);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.1s var(--ease),
+    color 0.1s var(--ease);
+}
+.kit-ask-model-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+.kit-ask-model-btn[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--bg-sunken);
+}
+.kit-ask-model-btn:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 1px;
+}
+.kit-ask-model-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.kit-ask-model-label {
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ask-model-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 5;
+  min-width: 12rem;
+  max-width: min(17rem, calc(100vw - 2rem));
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+  border-radius: calc(var(--radius) * 0.85);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  animation: kit-ask-model-pop 0.13s cubic-bezier(0.2, 0.7, 0.3, 1.2);
+}
+@keyframes kit-ask-model-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-model-menu {
+    animation: none;
+  }
+}
+.kit-ask-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: none;
+  border-radius: calc(var(--radius) * 0.45);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.1s var(--ease);
+}
+.kit-ask-model-item:hover,
+.kit-ask-model-item:focus-visible {
+  background: var(--bg-sunken);
+  outline: none;
+}
+.kit-ask-model-item.is-active {
+  background: var(--accent-soft);
+}
+.kit-ask-model-hint {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7rem;
+}
+.kit-ask-model-divider {
+  height: 1px;
+  margin: 0.25rem 0.1rem;
+  background: var(--line);
+}
+
+/* Elevated flow: scope, applied-receipt, diff, typing indicator */
+.kit-ask-context {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0;
+  flex: none;
+  flex-wrap: wrap;
+}
+.kit-ask-scope {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  background: var(--bg-sunken);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+}
+.kit-ask-applied {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: var(--bg-elev);
+  padding: 0.65rem 0.8rem;
+}
+.kit-ask-applied .ck {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: var(--accent-deep);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  margin-top: 0.05rem;
+}
+.kit-ask-applied .ac-t {
+  flex: 1;
+  font-size: 0.84rem;
+  color: var(--text);
+}
+.kit-ask-applied .ac-t .ac-s {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  margin-top: 0.15rem;
+}
+.kit-ask-applied .ac-undo {
+  border: none;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.kit-aa-diff {
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+.kit-aa-diff .d1 {
+  color: var(--text-soft);
+  text-decoration: line-through;
+}
+.kit-aa-diff .d2 {
+  color: var(--accent-text);
+}
+.kit-ask-typing {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: 0.28rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--bg-sunken);
+  border-radius: 1.1rem;
+  border-bottom-left-radius: 0.35rem;
+}
+.kit-ask-typing i {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: kit-blink 1.2s infinite;
+}
+.kit-ask-typing i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.kit-ask-typing i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes kit-blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-typing i {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* ---------- Ask · conversation history (issue var(--text) read side) -------------
+   A toggleable in-panel view: past conversations for this app, newest
+   first, with a "New conversation" action and per-row delete. Replaces the
+   log/suggest/compose stack while open — same tokens, same trust language.
+   Core functionality (not a desktop-only enhancement), so it works down to
+   the narrowest phone width the panel already supports. */
+
+.kit-ask-history-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-soft);
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.kit-ask-history-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.kit-ask-history {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.kit-ask-history-head {
+  padding: 0.7rem 1rem 0.3rem;
+  flex: none;
+}
+.kit-ask-history-new {
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.7rem;
+  background: var(--bg-elev);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kit-ask-history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.kit-ask-history-empty {
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+.kit-ask-history-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+.kit-ask-history-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--bg-elev);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+.kit-ask-history-item:hover,
+.kit-ask-history-item:focus-visible {
+  background: var(--bg-sunken);
+}
+.kit-ask-history-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.kit-ask-history-meta {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+}
+.kit-ask-history-del {
+  width: 2.2rem;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+/* Collapsed tool-call run inside a loaded transcript — raw tool args/
+   results never render, just an honest "N tools ran" marker. */
+.kit-ask-toolnote {
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  padding: 0.2rem 0.6rem;
+}
+
+/* ---------- Ask · message attachment chips --------------------------------
+   Rendered inside a `.kit-msg` bubble — currentColor-based so it reads on
+   both the accent-deep user bubble and the neutral ai bubble. */
+
+.kit-ask-msg-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+.kit-ask-msg-att {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, currentColor 30%, transparent);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  font-size: 0.72rem;
+}
+.kit-ask-msg-att svg {
+  flex: none;
+  width: 0.85em;
+  height: 0.85em;
+}
+
+/* ---------- Ask · pending attachments (compose strip) ---------------------
+   Files picked/dropped/pasted upload immediately to the per-app
+   conversation blob CAS (issue var(--text)); the strip tracks upload state until
+   Send folds the resolved refs into the turn body and clears it. */
+
+.kit-ask-attach {
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--text-soft);
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Nested inside `.kit-ask-compose` (its parent's flex `gap` + padding
+   already space it from the input above) — no padding of its own. */
+.kit-ask-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.15rem 0.15rem 0;
+  flex: none;
+}
+.kit-ask-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--bg-sunken);
+  font-size: 0.74rem;
+  color: var(--text);
+}
+.kit-ask-pending-chip.is-error {
+  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
+  color: var(--accent-text);
+}
+.kit-ask-pending-name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ask-pending-size {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+}
+.kit-ask-pending-chip.is-error .kit-ask-pending-size {
+  color: inherit;
+}
+.kit-ask-pending-remove {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.kit-ask-pending-spin {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  border-right-color: transparent;
+  animation: kit-spin 0.9s linear infinite;
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-pending-spin {
+    animation: none;
+  }
+}
+
+/* Drag-drop target state on the whole panel. */
+.kit-ask-panel.is-dragover {
+  outline: 2px dashed color-mix(in oklab, var(--_accent) 50%, var(--line));
+  outline-offset: -2px;
+}
+
+/* ── Inline anchored references (issue var(--text)) ────────────────────────────────
+   The `@`-mention popover — the SOLE cross-reference creation gesture
+   (caret-anchored) — and the inline chip a resolved anchor renders as. The
+   chip shows the resolver's LIVE card title, never a byte snapshot. */
+
+.kit-mention-pop {
+  position: fixed;
+  z-index: 72;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) * 0.75);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+}
+
+.kit-mention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.kit-mention-list[data-state="loading"] {
+  min-height: 2.5rem;
+  opacity: 0.55;
+}
+
+.kit-mention-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) * 0.6);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-mention-row:hover,
+.kit-mention-row[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.kit-mention-kind {
+  flex: none;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-soft);
+  text-transform: lowercase;
+}
+
+.kit-mention-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kit-mention-empty,
+.kit-mention-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-soft);
+}
+.kit-mention-empty {
+  padding: 0.6rem 0.25rem;
+  text-align: center;
+}
+
+.kit-mention-chip {
+  display: inline;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.45rem;
+  background: var(--accent-soft);
+  color: var(--accent-text, var(--text));
+  white-space: normal;
+  cursor: default;
+}
+.kit-mention-chip.ref-gone {
+  border-style: dashed;
+  background: none;
+  color: var(--text-soft);
+  text-decoration: line-through;
+}
+
+/* ── Reference strip (issues var(--text) + var(--text)) ───────────────────────────────────
+   The canonical strip renderer's styling. The durable home of a note/doc's
+   cross-references and the landing zone an orphaned inline anchor degrades
+   to. Same token idiom as the picker/mention surfaces. */
+
+.kit-ref-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.kit-ref-strip:empty {
+  display: none;
+}
+
+.kit-ref-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.3rem 0.35rem 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken, var(--bg-elev));
+  font-size: 0.8rem;
+}
+
+.kit-ref-kind {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text-soft);
+  text-transform: lowercase;
+}
+
+/* Anchored-reference state: resolved inline vs orphaned to the strip. */
+.kit-ref-flag {
+  flex: none;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kit-ref-flag.is-inline {
+  color: var(--accent-text, var(--accent));
+}
+
+.kit-ref-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ref-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9rem;
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+.kit-ref-tile.is-gone .kit-ref-title {
+  color: var(--text-soft);
+  font-style: italic;
+}
+
+.kit-ref-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.kit-ref-remove:hover,
+.kit-ref-remove:focus-visible {
+  background: var(--line);
+}
+
+.kit-ref-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+/* ---------- Text utilities -------------------------------------------------- */
+/* Promoted from photos' `.muted`/`.small` verbatim, onto kit tokens. Small,
+   composable riders for a line that just needs quieter ink or smaller type
+   (a caption, a hint, a secondary label) — not a family of their own. */
+
+.kit-muted {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.kit-small {
+  font-size: 0.8rem;
+}
+
+/* ---------- Accessibility primitives ---------------------------------------- */
+/* Issue var(--text) (full jsx-a11y profile). Apps swapped ARIA roles for the native
+   elements behind them; these are the riders that swap costs nothing visually.
+
+   Element resets first: a `dialog`/`fieldset`/`hr` that replaced a div must
+   not drag in UA chrome (dialog's centering box + border, fieldset's groove
+   and min-inline-size floor, hr's inset rule) the layout never had. */
+
+dialog {
+  position: static;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+legend {
+  padding: 0;
+}
+hr {
+  margin: 0;
+  border: 0;
+}
+figure {
+  margin: 0;
+}
+
+/* A <button> that replaced a clickable div/span: undo the UA button box so
+   the element's own class draws exactly what it drew before. The focus ring
+   is deliberately left to the UA / the app's own `:focus-visible` rule. */
+.kit-plain-btn {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+/* The click target for a region whose whole area is clickable but which
+   contains its own controls (a card with a pin button, a calendar cell with
+   event pills). A real button laid over the region — the nested controls sit
+   above it via `position: relative`, so nothing ever nests inside a button.
+   The region itself needs `position: relative`. */
+.kit-stretch-btn {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Text for assistive tech only — the accessible name a `role="img"` wrapper
+   carried as `aria-label`, now real text in the tree. */
+.kit-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A native control kept operable but invisible: the visible chrome is drawn
+   by the wrapping <label> (which needs `position: relative`), the input keeps
+   focus, keyboard and form semantics, and covers the label as the hit area. */
+.kit-sr-control {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  appearance: none;
+  /* Hit-area owner for the whole card; positioned siblings must not paint
+     above it (see client a11y.module.css srControl for the full note). */
+  z-index: 1;
+  cursor: inherit;
+}

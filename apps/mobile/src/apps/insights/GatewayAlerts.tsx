@@ -98,7 +98,7 @@ export default function GatewayAlerts(props: {
               setRefreshing(true);
               void load().finally(() => setRefreshing(false));
             }}
-            tintColor={colors.ink3}
+            tintColor={colors.textFaint}
           />
         }
       >
@@ -171,9 +171,13 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       padding: spacing[4],
     },
-    cardTitle: { ...t("bodyStrong"), color: colors.ink },
-    detail: { ...t("body"), color: colors.ink2, marginTop: spacing[3] },
-    empty: { ...t("body"), color: colors.ink3, paddingVertical: spacing[6] },
+    cardTitle: { ...t("bodyStrong"), color: colors.text },
+    detail: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
+    empty: {
+      ...t("body"),
+      color: colors.textFaint,
+      paddingVertical: spacing[6],
+    },
     header: {
       alignItems: "center",
       flexDirection: "row",
@@ -183,11 +187,11 @@ const makeStyles = (colors: ThemeColors) =>
     },
     headerCopy: { flex: 1 },
     list: { gap: spacing[3], padding: spacing[5] },
-    meta: { ...t("small"), color: colors.ink3, marginTop: spacing[1] },
+    meta: { ...t("small"), color: colors.textFaint, marginTop: spacing[1] },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    subtitle: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 26,
       letterSpacing: -0.3,

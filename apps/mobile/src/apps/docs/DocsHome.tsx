@@ -336,17 +336,17 @@ export default function DocsHome({
             accessibilityLabel="Up to parent folder"
             onPress={() => navigation.goBack()}
           >
-            <Feather name="chevron-left" size={26} color={colors.ink} />
+            <Feather name="chevron-left" size={26} color={colors.text} />
           </Pressable>
         ) : (
           // At the root: the shared teal grid = leave Docs for your apps.
           <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         )}
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.ink }]}>
+          <Text style={[styles.title, { color: colors.text }]}>
             {parent?.name ?? "Docs"}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
             Private document library
           </Text>
         </View>
@@ -360,20 +360,20 @@ export default function DocsHome({
       <ReplicaStatusBar />
 
       <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-        <Feather name="search" size={17} color={colors.ink2} />
+        <Feather name="search" size={17} color={colors.textSoft} />
         <TextInput
           value={query}
           onChangeText={setQuery}
           placeholder="Search documents offline"
-          placeholderTextColor={colors.ink3}
-          style={[styles.input, { color: colors.ink }]}
+          placeholderTextColor={colors.textFaint}
+          style={[styles.input, { color: colors.text }]}
         />
         {query ? (
           <Pressable
             accessibilityLabel="Clear search"
             onPress={() => setQuery("")}
           >
-            <Feather name="x" size={17} color={colors.ink2} />
+            <Feather name="x" size={17} color={colors.textSoft} />
           </Pressable>
         ) : null}
       </View>
@@ -404,18 +404,18 @@ export default function DocsHome({
                 onPress={() => selectFilter(item.key)}
                 style={[
                   styles.filter,
-                  { backgroundColor: active ? colors.ink : colors.bgSunken },
+                  { backgroundColor: active ? colors.text : colors.bgSunken },
                 ]}
               >
                 <Feather
                   name={item.icon}
                   size={14}
-                  color={active ? colors.bg : colors.ink2}
+                  color={active ? colors.bg : colors.textSoft}
                 />
                 <Text
                   style={[
                     styles.filterText,
-                    { color: active ? colors.bg : colors.ink2 },
+                    { color: active ? colors.bg : colors.textSoft },
                   ]}
                 >
                   {item.label}
@@ -429,14 +429,14 @@ export default function DocsHome({
 
       <View style={styles.libraryHeader}>
         <View>
-          <Text style={[styles.libraryTitle, { color: colors.ink }]}>
+          <Text style={[styles.libraryTitle, { color: colors.text }]}>
             {filter === "all"
               ? folderId
                 ? (parent?.name ?? "Folder")
                 : "All documents"
               : FILTERS.find((item) => item.key === filter)?.label}
           </Text>
-          <Text style={[styles.libraryMeta, { color: colors.ink2 }]}>
+          <Text style={[styles.libraryMeta, { color: colors.textSoft }]}>
             {documents.length} documents
             {folders.length ? ` · ${folders.length} folders` : ""}
           </Text>
@@ -455,7 +455,7 @@ export default function DocsHome({
               <Feather
                 name={mode === "list" ? "list" : "grid"}
                 size={16}
-                color={view === mode ? colors.ink : colors.ink3}
+                color={view === mode ? colors.text : colors.textFaint}
               />
             </Pressable>
           ))}
@@ -499,7 +499,7 @@ export default function DocsHome({
                 size={32}
                 color={colors.accent}
               />
-              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {drive.loading
                   ? "Opening your drive…"
                   : searchError
@@ -510,7 +510,7 @@ export default function DocsHome({
                         ? "No documents are cached here"
                         : "Nothing here yet"}
               </Text>
-              <Text style={[styles.empty, { color: colors.ink2 }]}>
+              <Text style={[styles.empty, { color: colors.textSoft }]}>
                 {searchError
                   ? "Reconnect and try your search again."
                   : drive.connection === "offline"
@@ -533,7 +533,7 @@ export default function DocsHome({
       >
         <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)} />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+          <Text style={[styles.dialogTitle, { color: colors.text }]}>
             Add to Docs
           </Text>
           <Pressable
@@ -546,27 +546,27 @@ export default function DocsHome({
               <Feather name="upload-cloud" size={20} color={colors.accent} />
             </View>
             <View style={styles.addCopy}>
-              <Text style={[styles.rowTitle, { color: colors.ink }]}>
+              <Text style={[styles.rowTitle, { color: colors.text }]}>
                 Import documents
               </Text>
-              <Text style={[styles.meta, { color: colors.ink2 }]}>
+              <Text style={[styles.meta, { color: colors.textSoft }]}>
                 Choose files from this device
               </Text>
             </View>
           </Pressable>
           {folderId ? null : (
             <>
-              <Text style={[styles.newFolderLabel, { color: colors.ink2 }]}>
+              <Text style={[styles.newFolderLabel, { color: colors.textSoft }]}>
                 NEW FOLDER
               </Text>
               <TextInput
                 value={folderName}
                 onChangeText={setFolderName}
                 placeholder="Folder name"
-                placeholderTextColor={colors.ink3}
+                placeholderTextColor={colors.textFaint}
                 style={[
                   styles.folderInput,
-                  { borderColor: colors.lineStrong, color: colors.ink },
+                  { borderColor: colors.lineStrong, color: colors.text },
                 ]}
               />
               <Pressable
@@ -584,7 +584,7 @@ export default function DocsHome({
                 <Text
                   style={[
                     styles.createText,
-                    { color: folderName.trim() ? "#fff" : colors.ink3 },
+                    { color: folderName.trim() ? "#fff" : colors.textFaint },
                   ]}
                 >
                   Create folder

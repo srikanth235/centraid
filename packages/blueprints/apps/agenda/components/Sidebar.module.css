@@ -22,7 +22,7 @@
   gap: 2px;
 }
 .miniNav :global(.kit-icon-btn) {
-  --kit-icon-btn-size: 1.625rem;
+  --icon-button-size: 1.625rem;
 }
 .miniDow {
   display: grid;
@@ -34,7 +34,7 @@
   text-align: center;
   font: var(--t-mono);
   font-size: 9px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 2px 0;
 }
 .miniGrid {
@@ -53,10 +53,10 @@
   font: var(--t-mono);
   font-size: 11px;
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .miniDay[data-outside="true"] {
-  color: var(--ink-3);
+  color: var(--text-faint);
   opacity: 0.6;
 }
 .miniDay:hover {
@@ -101,7 +101,7 @@
   background: none;
   font: var(--t-body);
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .calRow:hover {
   background: var(--bg-sunken);
@@ -128,7 +128,7 @@
   white-space: nowrap;
 }
 .calName[data-shown="false"] {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .calCount {
   font-family: var(--mono);

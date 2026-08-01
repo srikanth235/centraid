@@ -28,7 +28,7 @@
 .profScrim {
   position: absolute;
   inset: 0;
-  background: rgba(8, 9, 12, 0.5);
+  background: var(--scrim);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   animation: cd-fade 160ms ease-out;
@@ -41,8 +41,8 @@
   border: 0.5px solid var(--line);
   border-radius: 18px;
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.25),
-    0 32px 80px -20px rgba(0, 0, 0, 0.6);
+    0 2px 4px var(--scrim),
+    0 32px 80px -20px var(--scrim);
   overflow: hidden;
   animation: cd-pop 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
@@ -70,7 +70,7 @@
   font-size: 15.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--text);
 }
 .profModalClose {
   width: 28px;
@@ -88,7 +88,7 @@
   gap: 13px;
   padding: 13px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
 }
 .profModalPreviewText {
@@ -98,7 +98,7 @@
   font: var(--t-title);
   font-size: 14.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -107,7 +107,7 @@
   margin-top: 2px;
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .profModalFoot {
   display: flex;
@@ -132,15 +132,15 @@
   border-radius: 8px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
   font: var(--t-body);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 .profModalSave[disabled] {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink-4);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text-ghost);
   cursor: not-allowed;
 }
 .profField {
@@ -154,24 +154,24 @@
   font: var(--t-body);
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--text);
 }
 .profFieldOptional {
   font: var(--t-small);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-weight: 400;
 }
 .profFieldInput {
   width: 100%;
   box-sizing: border-box;
   padding: 9px 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
   font: var(--t-body);
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--text);
   outline: none;
   caret-color: var(--accent);
   transition:
@@ -195,8 +195,8 @@
   display: grid;
   place-items: center;
   border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text-soft);
 }
 .profIconBtn[data-selected="true"] {
   border: 1.5px solid var(--accent);
@@ -215,9 +215,9 @@
   cursor: pointer;
   padding: 0;
   border: 0.5px solid var(--line);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 0.5px var(--scrim);
 }
 .profColorBtn[data-selected="true"] {
-  border: 1.5px solid var(--ink);
+  border: 1.5px solid var(--text);
   box-shadow: inset 0 0 0 2px var(--bg-elev);
 }

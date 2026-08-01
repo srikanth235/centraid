@@ -53,11 +53,11 @@ Two viable ways to make the on-disk skills discoverable, each with a tradeoff:
 
 Three grounding inputs are computed at runtime and **cannot** be static `SKILL.md` files:
 
-1. **Live design-token CSS** — `toCss()` from `@centraid/design-tokens`.
+1. **Live design-token CSS** — `toCss()` from `@centraid/design`.
 2. **Host-tool list** — `enumerateHostTools(prefs.kind)`, per-runner.
 3. **Live app schema** — already injected by the chat route as `baseExtra`.
 
-Plan: tokens/icons change rarely → **generate** their `SKILL.md` at build time from `@centraid/design-tokens` (a snapshot, like the scaffold's `tokens.css`). Host-tools + live-schema stay as a small **appended block** via `systemPrompt.append` / `developerInstructions` on every turn — they are not skills on either backend. So even Claude is a hybrid: static skills discovered from disk **+** a per-turn dynamic appendage.
+Plan: tokens/icons change rarely → **generate** their `SKILL.md` at build time from `@centraid/design` (a snapshot, like the scaffold's `tokens.css`). Host-tools + live-schema stay as a small **appended block** via `systemPrompt.append` / `developerInstructions` on every turn — they are not skills on either backend. So even Claude is a hybrid: static skills discovered from disk **+** a per-turn dynamic appendage.
 
 ---
 
@@ -65,7 +65,7 @@ Plan: tokens/icons change rarely → **generate** their `SKILL.md` at build time
 
 ```
 packages/skills/
-  package.json            # deps: @centraid/design-tokens (build-time gen only)
+  package.json            # deps: @centraid/design (build-time gen only)
   scripts/build-skills.mjs # regenerates the design-tokens SKILL.md snapshot
   skills/
     authoring-centraid-apps/SKILL.md   # ← system-prompt.ts CENTRAID_APPEND_PROMPT
@@ -169,7 +169,7 @@ Mechanical relocation; app-engine already owns parse/validate of the app format,
 - `scaffold-files.ts`, `scaffold-automation.ts` (Files variants only), `clone.ts` (`cloneTemplateFiles` + `suggest*` only), `app-rewrites.ts`, `scaffold-defaults.ts` → `packages/app-engine/src/`.
 - `HarnessError`, `AppInfo`, `ScaffoldFile` types → app-engine (rename `HarnessError`? see open question Q1).
 - app-engine `index.ts`: export `scaffoldAppFiles`, `updateAppMetaFiles`, `appPackageJson`, `scaffoldAutomationAppFiles`, `setAutomationEnabledInFiles`, `deleteAutomationFromFiles`, `cloneTemplateFiles`, `suggestCloneIdentityFrom`, `validateAppId`, `ScaffoldFile`, etc.
-- app-engine already depends on `@centraid/design-tokens`? **No** — add it (scaffold-files uses `toCss()`). Actually `toCss()` only used by the scaffold snapshot; keep that dependency local to app-engine.
+- app-engine already depends on `@centraid/design`? **No** — add it (scaffold-files uses `toCss()`). Actually `toCss()` only used by the scaffold snapshot; keep that dependency local to app-engine.
 
 `@centraid/app-engine` already has no `@centraid/*` runtime deps; adding `design-tokens` is fine (design-tokens is a leaf).
 

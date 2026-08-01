@@ -106,7 +106,7 @@
     "packages/blueprints": "blueprints",
     "packages/cli": "gateway",
     "packages/client": "replica-sync",
-    "packages/design-tokens": "web",
+    "packages/design": "web",
     "packages/gateway": "gateway",
     "packages/protocol": "gateway",
     "packages/test-kit": "gateway",

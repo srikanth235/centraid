@@ -18,7 +18,7 @@
   transition: border-color 120ms;
 }
 .swatch:hover {
-  border-color: var(--ink-3);
+  border-color: var(--text-faint);
 }
 /* The radio is invisible, so the label carries the focus ring. */
 .swatch:has(:focus-visible) {
@@ -26,6 +26,6 @@
   outline-offset: 2px;
 }
 .swatch[data-active="true"] {
-  border: 1.5px solid var(--ink);
+  border: 1.5px solid var(--text);
   padding: 7.5px;
 }

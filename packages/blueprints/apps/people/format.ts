@@ -158,7 +158,7 @@ export function avatarColor(p: CadencePerson): string {
 }
 // List chrome dot: deterministic from the list id.
 export function listColor(listId: string | null | undefined): string {
-  if (listId == null) return "var(--ink-3)";
+  if (listId == null) return "var(--text-faint)";
   return PALETTE[hashInt(listId) % PALETTE.length]!;
 }
 export function listName(data: AppData, id: string | null): string {
@@ -182,7 +182,7 @@ export function statusOf(p: CadencePerson): Status {
   const due = !over && days >= cad * 0.72;
   if (over) return { key: "overdue", label: "overdue", color: "var(--danger)" };
   if (due) return { key: "due", label: "due soon", color: "var(--c-family)" };
-  return { key: "ok", label: "on track", color: "var(--ok)" };
+  return { key: "ok", label: "on track", color: "var(--success)" };
 }
 
 export function metaLine(p: CadencePerson): string {

@@ -153,7 +153,7 @@ export interface Strength {
 // kit-meter + label. Mirrors the server's strengthScore so the meter agrees
 // with Watchtower's "weak".
 export function strength(pw: string | null | undefined): Strength {
-  if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--ink-3)" };
+  if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--text-faint)" };
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 14) s++;
@@ -164,7 +164,7 @@ export function strength(pw: string | null | undefined): Strength {
     s <= 2 ? "Weak" : s === 3 ? "Fair" : s === 4 ? "Good" : "Strong";
   const tone = s <= 2 ? "danger" : s === 3 ? "warn" : "ok";
   const color =
-    s <= 2 ? "var(--danger)" : s === 3 ? "var(--warn)" : "var(--ok)";
+    s <= 2 ? "var(--danger)" : s === 3 ? "var(--warning)" : "var(--success)";
   return { ratio: s / 5, tone, label, color };
 }
 

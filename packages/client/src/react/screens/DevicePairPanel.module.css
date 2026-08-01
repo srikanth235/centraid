@@ -14,15 +14,15 @@
 .pairLead {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .pairLead strong {
-  color: var(--ink);
+  color: var(--text);
   font-weight: 600;
 }
 
 /* Who the ticket is for, then what they may reach — the picker never offers a
-   bare text field for an existing person (#599 Decision 10). */
+   bare text field for an existing person (var(--text) Decision 10). */
 .pairTarget {
   display: flex;
   flex-direction: column;
@@ -35,7 +35,7 @@
 }
 .pairFieldLabel {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .pairSelect,
 .pairInput {
@@ -44,8 +44,8 @@
   max-width: 280px;
   padding: 6px 9px;
   font-size: 12.5px;
-  color: var(--ink);
-  background: var(--surface-2, color-mix(in srgb, var(--ink) 5%, transparent));
+  color: var(--text);
+  background: var(--bg-sunken, color-mix(in srgb, var(--text) 5%, transparent));
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -76,7 +76,7 @@
   align-items: center;
   gap: 7px;
   font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
 }
 .grantCheck input {
@@ -109,7 +109,7 @@
   margin: -4px 0 0;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .ttlGroup {
   display: inline-flex;
@@ -121,7 +121,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-size: 11.5px;
   padding: 5px 11px;
   cursor: pointer;
@@ -130,7 +130,7 @@
   border-left: 1px solid var(--line);
 }
 .ttlPreset:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
 }
 .ttlPresetOn {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -143,12 +143,12 @@
   gap: 8px;
 }
 .generateBtn {
-  color: #fff;
+  color: var(--text);
   background: var(--accent);
   border-color: var(--accent);
 }
 .generateBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
+  background: color-mix(in srgb, var(--accent) 88%, var(--text));
 }
 
 .ticketRow {
@@ -168,7 +168,7 @@
   padding: 6px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--text);
 }
 .ticket {
   flex: 1 1 auto;
@@ -176,8 +176,8 @@
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--ink);
-  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  color: var(--text);
+  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
   border-radius: 8px;
   padding: 8px 10px;
@@ -200,7 +200,7 @@
 .pairExpiry {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 @media (max-width: 620px) {
   .pairTicketSurface {

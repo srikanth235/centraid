@@ -21,22 +21,22 @@
   border-radius: 9px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text);
   background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
 }
 .title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.025em;
-  color: var(--ink);
+  color: var(--text);
 }
 .sub {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 .toolbar {
@@ -64,7 +64,7 @@
 }
 .searchIc {
   display: inline-flex;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .searchIn {
   flex: 1;
@@ -73,10 +73,10 @@
   outline: none;
   font: inherit;
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
 }
 .searchIn::placeholder {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .seg {
   display: inline-flex;
@@ -94,18 +94,18 @@
   font: inherit;
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
   transition:
     background 0.14s ease,
     color 0.14s ease;
 }
 .segB:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .segB[data-active="true"] {
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
 }
 .segB:focus-visible {
   outline: none;
@@ -127,7 +127,7 @@
   background: var(--bg-elev);
   font: inherit;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   cursor: pointer;
   transition: border-color 0.14s ease;
 }
@@ -137,7 +137,7 @@
 .fltrChip[data-active="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
-  color: var(--ink);
+  color: var(--text);
 }
 .fltrChip:focus-visible {
   outline: none;
@@ -152,17 +152,17 @@
   padding: 64px 24px;
 }
 .emptyIcon {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .emptyTitle {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .emptyText {
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 6px;
 }
 .emptyActions {
@@ -188,7 +188,7 @@
   font-size: 10.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 14px;
 }
 .catLabel::after {
@@ -217,7 +217,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--tk-hue, var(--ink-4));
+  background: var(--tk-hue, var(--text-ghost));
   opacity: 0.5;
   transition: opacity 0.16s ease;
 }
@@ -237,14 +237,14 @@
   place-items: center;
   font-size: 21px;
   border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   transition: background 0.16s ease;
 }
 .templateVariant:hover .emoji {
   background: color-mix(in srgb, var(--tk-hue, var(--accent)) 16%, transparent);
 }
 .name {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 15.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -252,7 +252,7 @@
 .desc {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .foot {
   margin-top: auto;
@@ -270,7 +270,7 @@
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.01em;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .trigIcon {
   display: inline-flex;

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { apps } from "@centraid/design-tokens";
+import { apps } from "@centraid/design";
 
 import AppCard from "./AppCard.js";
 

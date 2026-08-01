@@ -93,7 +93,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
     t.startsWith("text/")
   )
     return { label: "DOC", name: "Document", cat: "doc", cv: "--c-doc" };
-  return { label: "FILE", name: "File", cat: "other", cv: "--ink-3" };
+  return { label: "FILE", name: "File", cat: "other", cv: "--text-faint" };
 }
 
 // The vault's own edit_document precondition (media_type LIKE 'text/%',

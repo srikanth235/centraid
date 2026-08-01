@@ -19,14 +19,14 @@
   width: 100%;
   font: var(--t-body-strong);
   font-size: 15px;
-  color: var(--ink);
+  color: var(--text);
   background: none;
   border: none;
   padding: 14px 16px 6px;
   outline: none;
 }
 .qaTitle::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .qaMore {
   animation: kit-fade-in 0.16s ease;
@@ -35,7 +35,7 @@
   width: 100%;
   min-height: 64px;
   font: var(--t-body);
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: none;
   border: none;
   padding: 0 16px 10px;
@@ -44,7 +44,7 @@
   font-family: var(--font-sans);
 }
 .qaBody::placeholder {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .qaActions {
   display: flex;
@@ -55,7 +55,7 @@
 }
 .qaTarget {
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .qaActions :global(.kit-btn):last-child {
   margin-left: auto;

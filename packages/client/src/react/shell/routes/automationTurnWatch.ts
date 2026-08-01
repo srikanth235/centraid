@@ -8,7 +8,7 @@
  * had no way to watch its own compile turn — it lifted out unchanged rather
  * than being reimplemented a second, subtly-different way.
  */
-import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 
 import {
   readAutomationTurnExpanded,

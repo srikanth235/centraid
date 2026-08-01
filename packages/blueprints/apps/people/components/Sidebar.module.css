@@ -16,7 +16,7 @@
   border-radius: 9px;
   font: var(--t-body);
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .navItem .lbl {
   flex: 1;
@@ -27,7 +27,7 @@
 }
 .navItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .navItem[aria-current="true"] {
   background: var(--accs);
@@ -77,11 +77,11 @@
   border: none;
   background: none;
   border-radius: 6px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .toolBtn:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .toolBtn.danger:hover {
   color: var(--danger);
@@ -96,7 +96,7 @@
   flex: 1;
   min-width: 0;
   font: var(--t-body);
-  color: var(--ink);
+  color: var(--text);
   background: var(--bg-elev);
   border: 1px solid var(--selb);
   border-radius: 7px;
@@ -106,7 +106,7 @@
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   padding: 0 10px;
 }
@@ -120,14 +120,14 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .storageTop .val {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .storageLabel {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }

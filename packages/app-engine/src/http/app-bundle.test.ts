@@ -525,7 +525,7 @@ describe("app-bundle", () => {
       import.meta.dirname,
       "../../../blueprints/apps/photos"
     );
-    const kitDir = path.resolve(import.meta.dirname, "../../../blueprints/kit");
+    const kitDir = path.resolve(import.meta.dirname, "../../../design/kit");
     it.skipIf(!existsSync(photosDir) || !existsSync(kitDir))(
       "does not build a served graph for the inline-only Photos system app",
       async () => {

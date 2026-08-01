@@ -158,17 +158,17 @@ export default function PhotosSearch({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="search" size={17} color={colors.ink2} />
+          <Feather name="search" size={17} color={colors.textSoft} />
           <TextInput
             autoFocus
             value={term}
             onChangeText={setTerm}
             placeholder="Photos, places, tags…"
-            placeholderTextColor={colors.ink3}
-            style={[styles.input, { color: colors.ink }]}
+            placeholderTextColor={colors.textFaint}
+            style={[styles.input, { color: colors.text }]}
           />
         </View>
       </View>
@@ -188,7 +188,7 @@ export default function PhotosSearch({
           <Text
             style={[
               styles.chipText,
-              { color: favoriteOnly ? colors.onAccent : colors.ink2 },
+              { color: favoriteOnly ? colors.onAccent : colors.textSoft },
             ]}
           >
             Favorites
@@ -204,7 +204,7 @@ export default function PhotosSearch({
           <Text
             style={[
               styles.chipText,
-              { color: videoOnly ? colors.onAccent : colors.ink2 },
+              { color: videoOnly ? colors.onAccent : colors.textSoft },
             ]}
           >
             Videos
@@ -276,10 +276,10 @@ export default function PhotosSearch({
           value={dateFrom}
           onChangeText={setDateFrom}
           placeholder="From YYYY-MM-DD"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           style={[
             styles.dateInput,
-            { backgroundColor: colors.bgSunken, color: colors.ink },
+            { backgroundColor: colors.bgSunken, color: colors.text },
           ]}
         />
         <TextInput
@@ -287,16 +287,16 @@ export default function PhotosSearch({
           value={dateTo}
           onChangeText={setDateTo}
           placeholder="To YYYY-MM-DD"
-          placeholderTextColor={colors.ink3}
+          placeholderTextColor={colors.textFaint}
           style={[
             styles.dateInput,
-            { backgroundColor: colors.bgSunken, color: colors.ink },
+            { backgroundColor: colors.bgSunken, color: colors.text },
           ]}
         />
       </View>
       {onlineOnly ? (
         <View style={[styles.fallback, { backgroundColor: colors.bgSunken }]}>
-          <Text style={[styles.fallbackText, { color: colors.ink2 }]}>
+          <Text style={[styles.fallbackText, { color: colors.textSoft }]}>
             {notice}
           </Text>
           <Pressable
@@ -308,7 +308,7 @@ export default function PhotosSearch({
             <Text
               style={[
                 styles.fallbackAction,
-                { color: online ? colors.accent : colors.ink3 },
+                { color: online ? colors.accent : colors.textFaint },
               ]}
             >
               {online ? "Search online" : "Reconnect for online search"}
@@ -325,7 +325,9 @@ export default function PhotosSearch({
       !placeId &&
       !dateFrom &&
       !dateTo ? (
-        <Text style={[styles.notice, { color: colors.ink2 }]}>{notice}</Text>
+        <Text style={[styles.notice, { color: colors.textSoft }]}>
+          {notice}
+        </Text>
       ) : sections.length ? (
         <PhotoTimeline
           sections={sections}
@@ -339,7 +341,7 @@ export default function PhotosSearch({
         />
       ) : (
         <View style={styles.empty}>
-          <Text style={[styles.notice, { color: colors.ink2 }]}>
+          <Text style={[styles.notice, { color: colors.textSoft }]}>
             No matches in the offline index.
           </Text>
         </View>
@@ -389,7 +391,7 @@ function FilterChip({
       <Text
         style={[
           styles.chipText,
-          { color: active ? colors.onAccent : colors.ink2 },
+          { color: active ? colors.onAccent : colors.textSoft },
         ]}
       >
         {label}

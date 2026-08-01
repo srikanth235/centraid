@@ -12,7 +12,7 @@
 //     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
 //     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).
 //   - `VaultOutcome` — the typed-command result the kit narrates
-//     (packages/blueprints/kit/kit.ts `outcomeMessage`).
+//     (packages/design/kit/kit.ts `outcomeMessage`).
 //
 // This is an ambient script (no imports/exports), so every top-level type and
 // interface below is a GLOBAL — visible unqualified from every app/handler,

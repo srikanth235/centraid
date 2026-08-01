@@ -65,7 +65,7 @@ describe("MUTATION_SEEDS", () => {
         "packages/blueprints",
         "packages/cli",
         "packages/client/src/replica",
-        "packages/design-tokens",
+        "packages/design",
         "packages/gateway",
         "packages/protocol",
         "packages/time-engine",

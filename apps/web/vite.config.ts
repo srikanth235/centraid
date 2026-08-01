@@ -22,9 +22,16 @@ export default defineConfig({
         find: "@centraid/client",
         replacement: fromHere("../../packages/client/src"),
       },
+      // The kit layer is a directory of served assets; the token layer is a
+      // single module. Anchor the root so `@centraid/design/kit/*` subpath
+      // imports resolve to files instead of into the token module's path.
       {
-        find: "@centraid/design-tokens",
-        replacement: fromHere("../../packages/design-tokens/src/index.ts"),
+        find: "@centraid/design/kit",
+        replacement: fromHere("../../packages/design/kit"),
+      },
+      {
+        find: /^@centraid\/design$/u,
+        replacement: fromHere("../../packages/design/src/index.ts"),
       },
     ],
   },

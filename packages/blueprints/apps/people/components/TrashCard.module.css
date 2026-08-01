@@ -21,9 +21,9 @@
 }
 .copy span,
 .copy small {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
 }
 .copy small {
-  color: var(--ink-3);
+  color: var(--text-faint);
 }

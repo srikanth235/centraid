@@ -16,7 +16,7 @@ body {
   border-radius: 10px;
   bottom: 18px;
   box-shadow: var(--shadow-md, 0 12px 32px rgb(0 0 0 / 35%));
-  color: var(--ink, #f4f6f8);
+  color: var(--text, #f4f6f8);
   display: flex;
   font: var(--t-small, 400 13px/18px system-ui);
   gap: 10px;
@@ -43,7 +43,7 @@ body {
 }
 .web-notice button.web-notice-quiet {
   background: transparent;
-  color: var(--ink-2, #bbc0c8);
+  color: var(--text-soft, #bbc0c8);
 }
 .web-notice-offline {
   display: none;

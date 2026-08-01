@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { darkTheme } from "@centraid/design-tokens";
+import { darkTheme } from "@centraid/design";
 
 import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import {
@@ -29,18 +29,15 @@ describe("appearance prefs", () => {
   it("picks only recognised keys off a remote object", () => {
     const got = pickAppearance({
       theme: "dark",
-      density: "comfy",
       cards: "elevated",
       // Retired in #608 — a gateway still holding one must not resurrect it.
       surfaceTemp: "warm",
       accentKey: "rose",
       bogus: "nope",
-      density2: "x",
     });
     expect(got).toStrictEqual({
       theme: "dark",
       themeMode: "dark",
-      density: "comfy",
       cardVariant: "elevated",
       accent: "rose",
     });
@@ -49,7 +46,6 @@ describe("appearance prefs", () => {
   it("rejects invalid union values", () => {
     expect(
       pickAppearance({
-        density: "huge",
         cards: "shiny",
         accentKey: "chartreuse",
       })
@@ -102,7 +98,6 @@ describe("appearance prefs", () => {
     expect(back).toMatchObject({
       theme: DEFAULT_PREFS.theme,
       themeMode: DEFAULT_PREFS.themeMode,
-      density: DEFAULT_PREFS.density,
       cardVariant: DEFAULT_PREFS.cardVariant,
     });
   });
@@ -112,11 +107,9 @@ describe("appearance prefs", () => {
       ...DEFAULT_PREFS,
       theme: "light",
       themeMode: "light",
-      density: "compact",
     });
     const html = document.documentElement;
     expect(html.dataset.theme).toBe("light");
-    expect(html.dataset.density).toBe("compact");
     // Dark has exactly one ramp now, so nothing writes a surface temperature.
     expect(html.dataset.surfaceTemp).toBeUndefined();
   });
@@ -131,6 +124,7 @@ describe("appearance prefs", () => {
       expect(s.getPropertyValue("--accent")).toBe("");
       expect(s.getPropertyValue("--accent-light")).toBe("");
       expect(s.getPropertyValue("--accent-deep")).toBe("");
+      expect(s.getPropertyValue("--accent-text")).toBe("");
       expect(s.getPropertyValue("--bg-l")).toBe("");
     });
 
@@ -139,10 +133,26 @@ describe("appearance prefs", () => {
       const s = document.documentElement.style;
       expect(s.getPropertyValue("--accent")).toBe(ACCENT_PALETTE.ochre.accent);
       expect(s.getPropertyValue("--bg-l")).toBe("5%");
+      // The text rung has to move with the accent, or a picked accent gives
+      // ochre buttons and teal links. Dark takes the accent itself, which is
+      // already legible on near-black…
+      expect(s.getPropertyValue("--accent-text")).toBe(
+        ACCENT_PALETTE.ochre.accent
+      );
+      // …and light takes the deepened shade, which clears AA on near-white.
+      applyPrefsToDocument({
+        ...DEFAULT_PREFS,
+        accent: "ochre",
+        theme: "light",
+      });
+      expect(s.getPropertyValue("--accent-text")).toBe(
+        ACCENT_PALETTE.ochre.text
+      );
       // Clearing matters as much as setting: a stale inline value would keep
       // outranking the theme block forever.
       applyPrefsToDocument(DEFAULT_PREFS);
       expect(s.getPropertyValue("--accent")).toBe("");
+      expect(s.getPropertyValue("--accent-text")).toBe("");
       expect(s.getPropertyValue("--bg-l")).toBe("");
     });
 

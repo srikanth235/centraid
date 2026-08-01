@@ -7,14 +7,14 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { toBlueprintCss } from "@centraid/design-tokens";
+import { toBlueprintCss } from "@centraid/design";
 
 import { buildTheme, renderTokensModule } from "../src/kit/theme/generate";
 
 const here = import.meta.dirname;
 const repoRoot = path.join(here, "..", "..", "..");
 const OUT = path.join(here, "..", "src", "kit", "theme", "tokens.generated.ts");
-const SOURCE = "@centraid/design-tokens#toBlueprintCss";
+const SOURCE = "@centraid/design#toBlueprintCss";
 
 const theme = buildTheme(toBlueprintCss());
 writeFileSync(OUT, renderTokensModule(theme, SOURCE), "utf8");

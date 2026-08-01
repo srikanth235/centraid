@@ -113,7 +113,7 @@ export default function AutomationThread(props: {
               setRefreshing(true);
               void load().finally(() => setRefreshing(false));
             }}
-            tintColor={colors.ink3}
+            tintColor={colors.textFaint}
           />
         }
         ListEmptyComponent={<Empty state={state} styles={styles} />}
@@ -174,7 +174,11 @@ function Empty(props: {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    empty: { ...t("body"), color: colors.ink3, paddingVertical: spacing[6] },
+    empty: {
+      ...t("body"),
+      color: colors.textFaint,
+      paddingVertical: spacing[6],
+    },
     header: {
       alignItems: "center",
       flexDirection: "row",
@@ -185,9 +189,9 @@ const makeStyles = (colors: ThemeColors) =>
     headerCopy: { flex: 1, minWidth: 0 },
     list: { gap: spacing[3], padding: spacing[5] },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    subtitle: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 26,
       letterSpacing: -0.3,
@@ -205,6 +209,6 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: spacing[2],
     },
-    turnMeta: { ...t("small"), color: colors.ink3, marginTop: spacing[2] },
-    turnTitle: { ...t("bodyStrong"), color: colors.ink, flex: 1 },
+    turnMeta: { ...t("small"), color: colors.textFaint, marginTop: spacing[2] },
+    turnTitle: { ...t("bodyStrong"), color: colors.text, flex: 1 },
   });

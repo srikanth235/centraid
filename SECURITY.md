@@ -9,7 +9,7 @@ If you discover a security vulnerability in Centraid, please report it privately
 
 Please include:
 
-- The affected component (`apps/desktop`, `apps/mobile`, `packages/design-tokens`, or the build setup).
+- The affected component (`apps/desktop`, `apps/mobile`, `packages/design`, or the build setup).
 - Steps to reproduce, including OS and runtime versions.
 - The impact you anticipate (e.g., local code execution, exfiltration of stored data, privilege escalation).
 - Any suggested mitigations.

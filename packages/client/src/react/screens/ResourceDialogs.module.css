@@ -1,4 +1,4 @@
-/* Dialogs for the Resource card (issue #528 follow-up): the "Compare modes"
+/* Dialogs for the Resource card (issue var(--text) follow-up): the "Compare modes"
    table and the "How we sized this" details sheet. Self-contained overlay
    chrome — the client has no shared <Modal> component, only the fixed-position
    idiom (styles/modal.module.css, VaultModal.module.css). We keep our own so
@@ -20,7 +20,7 @@
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: rgba(8, 12, 11, 0.44);
+  background: var(--scrim);
   backdrop-filter: blur(3px);
   animation: rd-fade 0.18s ease-out;
 }
@@ -67,20 +67,20 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 650;
   font-size: 16.5px;
   letter-spacing: -0.015em;
-  color: var(--ink);
+  color: var(--text);
 }
 .sub {
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .sub b {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 600;
 }
 .close {
@@ -90,14 +90,14 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  color: var(--ink-3);
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  color: var(--text-faint);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
   border: 1px solid var(--line);
   cursor: pointer;
   transition: 0.16s;
 }
 .close:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
 }
 
@@ -114,14 +114,14 @@
   gap: 12px;
   padding: 13px 20px;
   border-top: 0.5px solid var(--line);
-  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+  background: color-mix(in oklab, var(--text) 2.5%, transparent);
 }
 .footMsg {
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .footMsg b {
-  color: var(--ink);
+  color: var(--text);
   font-weight: 600;
 }
 .footActions {
@@ -151,7 +151,7 @@
   padding: 9px 4px;
   text-align: center;
   cursor: pointer;
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   transition: 0.16s;
@@ -167,7 +167,7 @@
 .cmpName {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-2);
+  color: var(--text-soft);
   letter-spacing: -0.01em;
 }
 .cmpPick {
@@ -175,7 +175,7 @@
   font-size: 8.5px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .cmpModeActive {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
@@ -192,12 +192,12 @@
   align-items: center;
   gap: 5px;
   padding: 9px 8px 9px 2px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 500;
   border-top: 0.5px solid var(--line);
 }
 .cmpQ {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   cursor: help;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -212,10 +212,10 @@
   font-family: var(--font-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .cmpCellHot {
-  color: var(--ink);
+  color: var(--text);
   font-weight: 600;
 }
 .cmpColActive {
@@ -226,13 +226,13 @@
   padding: 11px 13px;
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--ink-3);
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  color: var(--text-faint);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: var(--r-md);
 }
 .cmpNote b {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 600;
 }
 

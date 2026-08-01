@@ -52,7 +52,7 @@
 .configTitle {
   font-size: 17px;
   font-weight: 650;
-  color: var(--ink);
+  color: var(--text);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -67,7 +67,7 @@
   padding: 3px 8px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
-  color: var(--ink-3);
+  color: var(--text-faint);
   border: 1px solid var(--line);
 }
 .chip[data-on="true"] {
@@ -88,7 +88,7 @@
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .sectionFlash {
   position: relative;
@@ -132,24 +132,24 @@
 .codeFile {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--text);
 }
 .codeTag {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding: 1px 6px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 .codePre {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 9px;
@@ -191,19 +191,19 @@
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   margin-bottom: 2px;
 }
 .flowTitle {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .flowSub {
   margin-top: 3px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
   white-space: pre-wrap;
 }
 .flowConn {
@@ -211,7 +211,7 @@
   flex-direction: column;
   align-items: center;
   height: 26px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .flowConnLine {
   width: 2px;
@@ -226,7 +226,7 @@
   margin: 0;
   font-size: 13.5px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -236,7 +236,7 @@
 .muted {
   margin: 0;
   font-size: 12.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .triggers {
   display: flex;
@@ -258,7 +258,7 @@
   align-items: center;
   gap: 9px;
   font-size: 13px;
-  color: var(--ink);
+  color: var(--text);
 }
 .triggerIcon {
   display: inline-flex;
@@ -273,9 +273,9 @@
   flex: none;
   margin-left: auto;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-sunken);
   padding: 2px 7px;
   border-radius: var(--r-sm);
@@ -286,7 +286,7 @@
   gap: 6px;
   align-items: baseline;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .nextrun {
   background: var(--bg-sunken);
@@ -296,10 +296,10 @@
 /* Pretty-printed `where` clause (GAP 2) — monospace, one clause per line. */
 .whereBlock {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-sunken);
   border-radius: var(--r-sm);
   padding: 7px 10px;
@@ -320,12 +320,12 @@
   height: 22px;
   padding: 0;
   border-radius: var(--r-sm);
-  color: var(--ink-4);
+  color: var(--text-ghost);
   background: transparent;
 }
 .triggerActionBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink-2);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-soft);
 }
 .triggerActionBtn:disabled {
   opacity: 0.4;
@@ -339,13 +339,13 @@
   padding: 7px 11px;
   font-size: 12.5px;
   font-weight: 550;
-  color: var(--ink-2);
+  color: var(--text-soft);
   background: transparent;
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-md);
 }
 .addTriggerBtn:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
@@ -368,7 +368,7 @@
   padding: 6px 11px;
   font-size: 12px;
   font-weight: 550;
-  color: var(--ink-3);
+  color: var(--text-faint);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -390,7 +390,7 @@
 .formLabel {
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .formInput {
   width: 100%;
@@ -400,8 +400,8 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-sm);
   font-size: 12.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--ink);
+  font-family: var(--font-mono);
+  color: var(--text);
   outline: none;
 }
 .formInput:focus {
@@ -417,7 +417,7 @@
   margin: 0;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .formError {
   margin: 0;
@@ -451,12 +451,12 @@
   border-top: 1px solid var(--line);
 }
 .rowLabel {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   width: 96px;
   flex-shrink: 0;
 }
 .rowValue {
-  color: var(--ink);
+  color: var(--text);
   min-width: 0;
   word-break: break-word;
 }
@@ -473,7 +473,7 @@
   padding: 3px 9px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
-  color: var(--ink-2);
+  color: var(--text-soft);
   border: 1px solid var(--line);
 }
 /* "When it runs"'s at-a-glance pair: next scheduled fire + the last run's
@@ -519,17 +519,17 @@
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .vaultVerb {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .hint {
   margin-top: auto;
   font-size: 11.5px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
@@ -584,7 +584,7 @@
 .runSummary {
   flex: 1;
   min-width: 0;
-  color: var(--ink);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -593,13 +593,13 @@
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   background: var(--bg-sunken);
   padding: 2px 6px;
   border-radius: var(--r-sm);
   flex-shrink: 0;
 }
 .runMeta {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   flex-shrink: 0;
 }

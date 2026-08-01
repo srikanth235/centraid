@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 120;
-  background: color-mix(in srgb, #000 38%, transparent);
+  background: color-mix(in srgb, var(--text) 38%, transparent);
   display: flex;
   justify-content: flex-end;
   animation: cd-au-fade 0.16s ease;
@@ -41,10 +41,10 @@
   line-height: 1;
 }
 .auDrawerName {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text);
 }
 .auDrawerTrig {
   display: flex;
@@ -53,7 +53,7 @@
   margin-top: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .auDrawerClose {
   margin-left: auto;
@@ -65,12 +65,12 @@
   border-radius: 7px;
   border: none;
   background: none;
-  color: var(--ink-3);
+  color: var(--text-faint);
   cursor: pointer;
 }
 .auDrawerClose:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .auDrawerBody {
   flex: 1;
@@ -82,7 +82,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   margin: 16px 0 9px;
 }
 .auDrawerSecL:first-child {
@@ -96,7 +96,7 @@
   gap: 7px;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .auDrawerFoot {
   padding: 16px 20px;

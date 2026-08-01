@@ -137,9 +137,9 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
-    rowDetail: { ...t("tiny"), color: colors.ink3 },
-    rowDisabled: { color: colors.ink3 },
-    rowLabel: { ...t("body"), color: colors.ink },
+    rowDetail: { ...t("tiny"), color: colors.textFaint },
+    rowDisabled: { color: colors.textFaint },
+    rowLabel: { ...t("body"), color: colors.text },
     // Scrims are shadow, not surface — the same literal the vault drawer uses.
     scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
     sheet: {
@@ -151,7 +151,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       ...t("small"),
-      color: colors.ink2,
+      color: colors.textSoft,
       paddingBottom: spacing[2],
       paddingHorizontal: spacing[4],
     },

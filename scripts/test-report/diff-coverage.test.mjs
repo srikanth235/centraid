@@ -48,7 +48,7 @@ describe("isInstrumentableSource", () => {
       )
     ).toBe(true);
     expect(
-      isInstrumentableSource("packages/blueprints/kit/centraid-inline.js")
+      isInstrumentableSource("packages/design/kit/centraid-inline.js")
     ).toBe(true);
     expect(
       isInstrumentableSource(

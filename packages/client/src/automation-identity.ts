@@ -22,7 +22,7 @@ export type AuHue = (typeof AU_HUES)[number];
 
 // Glyphs that read as "an automation" — picked deterministically per id so an
 // automation keeps a stable face across every surface. Every entry is a real
-// key in the @centraid/design-tokens icon set.
+// key in the @centraid/design icon set.
 export const AU_GLYPHS = [
   "Bolt",
   "Clock",

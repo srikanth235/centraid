@@ -27,8 +27,8 @@ import {
   consumeSse,
   consumeSseFrames,
   frameData,
-} from "@centraid/blueprints/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+} from "@centraid/design/kit/turn-stream.js";
+import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 

@@ -32,14 +32,14 @@
   width: 320px;
   height: 600px;
   border-radius: 28px;
-  background: linear-gradient(180deg, #fafbfc 0%, #eceef2 100%);
+  background: linear-gradient(180deg, var(--text) 0%, var(--text) 100%);
   padding: 22px;
   display: flex;
   flex-direction: column;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.06),
-    0 50px 100px -30px rgba(0, 0, 0, 0.55),
-    0 12px 32px -8px rgba(0, 0, 0, 0.25);
+    0 0 0 1px var(--scrim),
+    0 50px 100px -30px var(--scrim),
+    0 12px 32px -8px var(--scrim);
 }
 .phoneScreen {
   width: 100%;
@@ -56,12 +56,12 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  color: #0c0f15;
+  color: var(--text);
 }
 .battery {
   width: 14px;
   height: 8px;
-  border: 1.2px solid #0c0f15;
+  border: 1.2px solid var(--text);
   border-radius: 2px;
   position: relative;
 }
@@ -69,7 +69,7 @@
   content: "";
   position: absolute;
   inset: 1.2px;
-  background: #0c0f15;
+  background: var(--text);
   border-radius: 1px;
 }
 .body {
@@ -83,9 +83,9 @@
 .cell {
   background: linear-gradient(
     90deg,
-    rgba(0, 0, 0, 0.06) 0%,
-    rgba(0, 0, 0, 0.12) 50%,
-    rgba(0, 0, 0, 0.06) 100%
+    var(--scrim) 0%,
+    var(--scrim) 50%,
+    var(--scrim) 100%
   );
   background-size: 200% 100%;
   animation: skel-shimmer 1.6s linear infinite;
@@ -131,7 +131,7 @@
   border: 0.5px solid var(--line);
   box-shadow: var(--shadow-md);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .buildingDot {
   width: 6px;
@@ -176,7 +176,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
   border: 0.5px solid var(--line);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0;
@@ -189,7 +189,6 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--success, #2ea043);
-  box-shadow: 0 0 6px
-    color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
+  background: var(--success);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success) 70%, transparent);
 }

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 //
 // The `find` patterns are anchored to RELATIVE specifiers (`./` or `../`) on
 // purpose: kit-inline.ts re-exports the REAL kit from the bare package subpath
-// `@centraid/blueprints/kit/kit.js` (the TypeScript source's package
+// `@centraid/design/kit/kit.js` (the TypeScript source's package
 // specifier). A broad `/kit\.(?:js|ts)$/` would also match that re-export and loop kit.ts back onto
 // kit-inline — so we match only the app-relative form the blueprint sources use
 // and leave the package-subpath specifier untouched.

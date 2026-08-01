@@ -15,6 +15,7 @@
   "packages/blueprints": 74,
   "packages/time-engine": 75,
   "packages/cli": 90,
-  "packages/design-tokens": 93,
-  "apps/oauth-worker": 88
+  "packages/design": 93,
+  "apps/oauth-worker": 88,
+  "approvedDeviation": "#672 renamed the package `packages/design-tokens` -> `packages/design` (one design system, two layers: the token vocabulary plus the app kit moved in from `packages/blueprints/kit`). The floor key follows the directory; its VALUE is unchanged at 93 and no floor is lowered anywhere in this file. The ratchet reports the old key as removed because a rename is a delete plus an add \u2014 this marker covers that rename only."
 }

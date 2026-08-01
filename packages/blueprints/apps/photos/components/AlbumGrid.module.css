@@ -38,7 +38,7 @@
   display: block;
   font: var(--t-mono);
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 2px;
 }
 .albumCardNew {
@@ -51,7 +51,7 @@
   border: 1.5px dashed var(--line-strong);
   border-radius: var(--r-card);
   background: var(--bg-elev);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .albumCardNew:hover {
   border-color: var(--_accent);

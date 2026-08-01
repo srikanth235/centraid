@@ -2,7 +2,7 @@
 //
 // Single-source, no drift: the real renderer components live at
 // apps/desktop/src/renderer/react/ui/. Every build copies them here fresh,
-// regenerates the token CSS from the repo's built @centraid/design-tokens,
+// regenerates the token CSS from the repo's built @centraid/design,
 // copies the renderer's canonical styles.css verbatim, and concatenates the
 // flat cssEntry. The importable entry is esbuild-bundled (design-tokens
 // inlined from source, react/react-dom external — the converter provides
@@ -81,7 +81,7 @@ export type { AppCardProps, AppCardTone } from './AppCard.js';
 // 3. Token CSS — the full :root + per-theme + per-density var blocks that
 //    the renderer injects at boot via theme-vars.ts. styles.css reads these.
 const { toCss } = await import(
-  path.resolve(repoRoot, "packages/design-tokens/dist/index.js")
+  path.resolve(repoRoot, "packages/design/dist/index.js")
 );
 writeFileSync(path.resolve(stylesDir, "tokens.css"), toCss());
 console.log("[build] wrote styles/tokens.css");
@@ -136,10 +136,7 @@ await esbuild.build({
   outfile: path.resolve(distDir, "index.js"),
   external: ["react", "react-dom", "react/jsx-runtime"],
   alias: {
-    "@centraid/design-tokens": path.resolve(
-      repoRoot,
-      "packages/design-tokens/src/index.ts"
-    ),
+    "@centraid/design": path.resolve(repoRoot, "packages/design/src/index.ts"),
   },
   loader: { ".css": "local-css" },
   logLevel: "info",

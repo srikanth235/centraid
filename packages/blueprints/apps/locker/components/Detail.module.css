@@ -20,7 +20,7 @@
   gap: 6px;
   border: none;
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font: var(--t-small);
   padding: 16px 16px 0;
 }
@@ -30,7 +30,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-align: center;
   padding: 40px;
 }
@@ -66,7 +66,7 @@
 .wtStat .k {
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 3px;
 }
 .wtItem {

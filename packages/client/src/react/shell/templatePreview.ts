@@ -1,4 +1,4 @@
-import { palette } from "@centraid/design-tokens";
+import { palette } from "@centraid/design";
 
 import type {
   TemplateEntry,

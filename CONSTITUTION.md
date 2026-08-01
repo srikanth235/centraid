@@ -71,7 +71,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 ### coverage-scope-reachability
 
-- **Directive**: Every first-party TypeScript source tree and the co-located executable `packages/blueprints/apps` / `packages/blueprints/kit` runtime trees must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
+- **Directive**: Every first-party TypeScript source tree and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
 - **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional `packages/*/src` and `apps/*/src` roots, but the issue #630 audit found the 41,821-line bundled blueprint runtime lived outside both the instrumentation globs and the reachability enumeration, so a large product surface could regress while every measurement remained green.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.

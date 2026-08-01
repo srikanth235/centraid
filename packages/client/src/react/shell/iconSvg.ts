@@ -1,4 +1,4 @@
-import { icons } from "@centraid/design-tokens";
+import { icons } from "@centraid/design";
 
 // Build a design-token icon as an SVG string — for the imperative body-portal
 // overlays (toast/confirm/template-preview) that manipulate the DOM directly

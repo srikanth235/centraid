@@ -10,12 +10,8 @@
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
 
-import { apps as BUILTIN_APPS, icons, palette } from "@centraid/design-tokens";
-import type {
-  AppMetaResolved,
-  ColorKey,
-  IconName,
-} from "@centraid/design-tokens";
+import { apps as BUILTIN_APPS, icons, palette } from "@centraid/design";
+import type { AppMetaResolved, ColorKey, IconName } from "@centraid/design";
 
 import { Store } from "../storage";
 import { ConditionalBodyCache } from "./conditional-fetch";

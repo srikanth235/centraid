@@ -1,4 +1,4 @@
-/* Relations tab — the orrery (issue #441 B2). Co-located with
+/* Relations tab — the orrery (issue var(--text) B2). Co-located with
    AtlasRelationsTab.tsx. A radial SVG star chart on the left (kinds on
    concentric hop rings, fixed per-pack bearings, fill-weighted FK edges) and a
    fixed readout rail on the right (breadcrumb, hover detail, relation-vocabulary
@@ -45,8 +45,8 @@
   border: 0;
   border-radius: var(--r-pill, 999px);
   background: transparent;
-  color: var(--ink-3);
-  font-family: var(--font-sans);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer;
   transition:
@@ -54,14 +54,14 @@
     background-color 0.15s var(--ease, ease);
 }
 .segBtn:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 .segBtn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .segBtn[aria-pressed="true"] {
-  color: var(--ink);
+  color: var(--text);
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
 }
 .qChip {
@@ -69,8 +69,8 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-pill, 999px);
   background: var(--bg-elev);
-  color: var(--ink-2);
-  font-family: var(--font-sans);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer;
   transition:
@@ -79,8 +79,8 @@
     background-color 0.15s var(--ease, ease);
 }
 .qChip:hover {
-  border-color: var(--ink-4);
-  color: var(--ink);
+  border-color: var(--text-ghost);
+  color: var(--text);
 }
 .qChip:focus-visible {
   outline: 2px solid var(--accent);
@@ -88,7 +88,7 @@
 }
 .qChip[aria-pressed="true"] {
   border-color: var(--accent);
-  color: var(--ink);
+  color: var(--text);
   background: color-mix(in oklab, var(--accent) 10%, var(--bg-elev));
 }
 
@@ -100,16 +100,16 @@
   gap: 12px;
   padding: 48px 24px;
   text-align: center;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .emptyIcon {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .emptyText {
   margin: 0;
   max-width: 42ch;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
@@ -182,7 +182,7 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-pill, 999px);
   background: var(--bg-elev);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 16px;
   line-height: 1;
@@ -192,7 +192,7 @@
     border-color 0.15s var(--ease, ease);
 }
 .zoomBtn:hover {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--accent);
 }
 .zoomBtn:focus-visible {
@@ -233,7 +233,7 @@
   font-size: 9.5px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 /* hairline rule completing each section label — instrument-panel engraving */
 .roLabel::after {
@@ -256,7 +256,7 @@
   gap: 3px;
 }
 .crumbSep {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 11px;
 }
 .crumb {
@@ -266,11 +266,11 @@
   border: 0;
   padding: 2px 3px;
   cursor: pointer;
-  color: var(--ink-3);
+  color: var(--text-faint);
   border-bottom: 1px solid transparent;
 }
 .crumb:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
   border-bottom-color: var(--line-strong);
 }
 .crumbCurrent {
@@ -286,7 +286,7 @@
   border-radius: var(--r-pill, 999px);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
@@ -294,7 +294,7 @@
   transition: color 0.15s var(--ease, ease);
 }
 .backBtn:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
   border-color: var(--accent);
 }
 .backBtn:disabled {
@@ -309,23 +309,23 @@
 .dEmpty {
   margin: 0;
   font: var(--t-small);
-  color: var(--ink-3);
+  color: var(--text-faint);
   line-height: 1.55;
 }
 .dKind {
   margin: 0 0 3px;
   font: var(--t-title);
-  color: var(--ink);
+  color: var(--text);
   word-break: break-word;
 }
 .dKindCol {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .dSig {
   margin: 0 0 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   word-break: break-all;
   line-height: 1.5;
 }
@@ -335,7 +335,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--pack-c, var(--ink-4));
+  background: var(--pack-c, var(--text-ghost));
   margin-right: 6px;
   vertical-align: 1px;
 }
@@ -355,28 +355,28 @@
   gap: 3px;
 }
 .dFigN {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 22px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  color: var(--text);
 }
 .dFigNGhost {
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .dFigK {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .dNote {
   margin: 0;
   padding-left: 9px;
   border-left: 2px solid var(--line);
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   line-height: 1.5;
 }
 
@@ -385,7 +385,7 @@
 .dLede {
   margin: 0 0 12px;
   font: var(--t-small);
-  color: var(--ink);
+  color: var(--text);
   line-height: 1.5;
 }
 .dLede b {
@@ -401,9 +401,9 @@
   gap: 5px;
 }
 .sampleRow {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,7 +413,7 @@
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 
 /* relation-vocabulary chips */
@@ -431,7 +431,7 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-pill, 999px);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: 10.5px;
   cursor: pointer;
@@ -441,40 +441,40 @@
     opacity 0.15s var(--ease, ease);
 }
 .chip:hover {
-  border-color: var(--ink-4);
-  color: var(--ink);
+  border-color: var(--text-ghost);
+  color: var(--text);
 }
 .chip[aria-pressed="false"] {
   opacity: 0.55;
 }
 .chip[aria-pressed="true"] {
   border-color: var(--accent);
-  color: var(--ink);
+  color: var(--text);
 }
 .chipDot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ink-4);
+  background: var(--text-ghost);
   flex: none;
 }
 .chip[aria-pressed="true"] .chipDot {
   background: var(--accent);
 }
 .chipCount {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
 }
 .roFoot {
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.55;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .roFoot b {
-  color: var(--ink-2);
+  color: var(--text-soft);
   font-weight: 500;
 }
 
@@ -499,7 +499,7 @@
 }
 .lgLive {
   height: 4px;
-  background: var(--ink-3);
+  background: var(--text-faint);
 }
 .lgGhost {
   height: 0;
@@ -513,7 +513,7 @@
   height: 10px;
   width: 10px;
   border-radius: 50%;
-  border: 1.2px solid var(--ink-3);
+  border: 1.2px solid var(--text-faint);
   justify-self: center;
 }
 /* concentric rings — the hop-distance graticule the legend now names */
@@ -521,21 +521,21 @@
   height: 12px;
   width: 12px;
   border-radius: 50%;
-  border: 1.2px solid var(--ink-4);
+  border: 1.2px solid var(--text-ghost);
   box-shadow: inset 0 0 0 3px transparent;
   outline: 1.2px solid var(--line-strong);
   outline-offset: 1.5px;
   justify-self: center;
 }
 .lgText {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   line-height: 1.35;
 }
 .lgText b {
   display: block;
-  color: var(--ink);
+  color: var(--text);
   font-weight: 500;
 }
 
@@ -552,7 +552,7 @@
   font-size: 9.5px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .captionItem {
   display: flex;
@@ -561,11 +561,11 @@
   white-space: nowrap;
 }
 .captionNum {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 17px;
   line-height: 1;
   letter-spacing: 0;
-  color: var(--ink);
+  color: var(--text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -618,7 +618,7 @@
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  fill: var(--ink-4);
+  fill: var(--text-ghost);
   paint-order: stroke;
   stroke: var(--bg-sunken);
   stroke-width: 3px;
@@ -634,7 +634,7 @@
 }
 .sectorArc {
   fill: none;
-  stroke: var(--sector-c, var(--ink-4));
+  stroke: var(--sector-c, var(--text-ghost));
   stroke-opacity: 0.42;
   stroke-width: 1.5;
   stroke-linecap: round;
@@ -649,7 +649,7 @@
   font-size: 8px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  fill: var(--sector-c, var(--ink-4));
+  fill: var(--sector-c, var(--text-ghost));
   fill-opacity: 0.75;
   transition: fill-opacity 0.2s var(--ease, ease);
 }
@@ -681,7 +681,7 @@
   animation-delay: var(--dly, 360ms);
 }
 .edgeLive {
-  stroke: var(--ink-3);
+  stroke: var(--text-faint);
 }
 .edgeGhost {
   stroke: var(--line-strong);
@@ -725,7 +725,7 @@
   stroke-width: 1;
 }
 .coreTickMajor {
-  stroke: var(--ink-4);
+  stroke: var(--text-ghost);
 }
 .coreRingOuter {
   fill: none;
@@ -739,7 +739,7 @@
   stroke-width: 1.4;
 }
 .coreName {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 13px;
   fill: var(--accent);
 }
@@ -747,13 +747,13 @@
   font-family: var(--font-mono);
   font-size: 7px;
   letter-spacing: 0.14em;
-  fill: var(--ink-4);
+  fill: var(--text-ghost);
 }
 .coreCaption {
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.02em;
-  fill: var(--ink-3);
+  fill: var(--text-faint);
   paint-order: stroke;
   stroke: var(--bg-sunken);
   stroke-width: 3px;
@@ -770,9 +770,9 @@
   outline: none;
 }
 .nodeBody {
-  fill: var(--node-c, var(--ink-3));
+  fill: var(--node-c, var(--text-faint));
   fill-opacity: 0.55;
-  stroke: var(--node-c, var(--ink-3));
+  stroke: var(--node-c, var(--text-faint));
   stroke-opacity: 0.9;
   stroke-width: 1;
   transition: fill-opacity 0.15s var(--ease, ease);
@@ -795,7 +795,7 @@
 }
 .nodeSelfcurl {
   fill: none;
-  stroke: var(--node-c, var(--ink-3));
+  stroke: var(--node-c, var(--text-faint));
   stroke-width: 1.1;
 }
 .nodeHit {
@@ -805,7 +805,7 @@
   font-family: var(--font-mono);
   font-size: 7.6px;
   letter-spacing: 0.02em;
-  fill: var(--ink-3);
+  fill: var(--text-faint);
   paint-order: stroke;
   stroke: var(--bg-sunken);
   stroke-width: 2.5px;
@@ -820,7 +820,7 @@
 }
 .nodeLabelBig {
   font-size: 9px;
-  fill: var(--ink-2);
+  fill: var(--text-soft);
   opacity: 1;
 }
 .node:hover .nodeLabel,
@@ -836,7 +836,7 @@
   font-family: var(--font-mono);
   font-size: 5.6px;
   letter-spacing: 0.02em;
-  fill: var(--ink-4);
+  fill: var(--text-ghost);
   paint-order: stroke;
   stroke: var(--bg-sunken);
   stroke-width: 2px;
@@ -850,7 +850,7 @@
 .node:hover .nodeSubLabel,
 .node:focus-visible .nodeSubLabel,
 .nodeHot .nodeSubLabel {
-  fill: var(--ink-2);
+  fill: var(--text-soft);
   opacity: 1;
 }
 

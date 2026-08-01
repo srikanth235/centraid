@@ -330,11 +330,10 @@ describe("serveStatic — shared kit asset fallback", () => {
     const appDir = newAppDir({ "index.html": "<html></html>" });
     const sharedAssetsDir = newAppDir({
       "tokens.css": ":root{--app-hue:222}",
-      "wall.css": "body{background:linen}",
     });
 
     await Promise.all(
-      ["tokens.css", "wall.css"].map(async (name) => {
+      ["tokens.css"].map(async (name) => {
         const served = mockRes();
         await serveStatic(mockReq(), served.res, appDir, name, {
           sharedAssetsDir,
@@ -345,12 +344,12 @@ describe("serveStatic — shared kit asset fallback", () => {
   });
 
   it("serves an app-owned stylesheet without consulting sharedAssetsDir", async () => {
-    const appDir = newAppDir({ "wall.css": "body{background:app}" });
+    const appDir = newAppDir({ "theme.css": "body{background:app}" });
     const sharedAssetsDir = newAppDir({
-      "wall.css": "body{background:shared}",
+      "theme.css": "body{background:shared}",
     });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, appDir, "wall.css", { sharedAssetsDir });
+    await serveStatic(mockReq(), res, appDir, "theme.css", { sharedAssetsDir });
     expect(data.statusCode).toBe(200);
     expect(data.body.toString("utf8")).toBe("body{background:app}");
   });

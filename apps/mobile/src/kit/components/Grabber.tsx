@@ -16,7 +16,7 @@ export default function Grabber(): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <View style={[styles.bar, { backgroundColor: colors.ink4 }]} />
+      <View style={[styles.bar, { backgroundColor: colors.textGhost }]} />
     </View>
   );
 }

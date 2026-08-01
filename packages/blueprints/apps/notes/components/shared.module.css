@@ -14,7 +14,7 @@
   font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .tagChip {
   display: inline-flex;

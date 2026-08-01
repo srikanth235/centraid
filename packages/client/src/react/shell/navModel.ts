@@ -1,4 +1,4 @@
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import type { SidebarPage, SidebarProps } from "./Sidebar.js";
 

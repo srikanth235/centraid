@@ -14,7 +14,7 @@ import type {
   ThemePreset,
   TileVariant,
   TileFinish,
-} from "@centraid/design-tokens";
+} from "@centraid/design";
 
 // Make this file a module so `declare global` augments globals.
 
@@ -26,7 +26,7 @@ declare global {
   type IconRenderer = (opts?: IconOptions) => string;
 
   interface CentraidTokensBridge {
-    /** Generated CSS — `:root` + theme + density blocks. Injected at boot. */
+    /** Generated CSS — `:root` plus theme blocks. Injected at boot. */
     cssText: string;
     /** Every registered theme; flip via `<html data-theme="<name>">`. */
     themes: Record<ThemeName, Theme>;

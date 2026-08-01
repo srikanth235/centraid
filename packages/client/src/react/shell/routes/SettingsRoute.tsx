@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { isWebHost } from "../../host-platform.js";
@@ -85,7 +85,7 @@ const ALL_PAGES: readonly PageDef[] = [
     section: "Workspace",
     icon: "Mood",
     subtitle:
-      "Theme, density, and card surface for Centraid chrome. Apps keep their own light/dark palette.",
+      "Theme and card surface for Centraid chrome. Apps keep their own light/dark palette.",
   },
   {
     id: "workspace",
@@ -443,10 +443,8 @@ export default function SettingsRoute({
               {page === "appearance" ? (
                 <SettingsAppearanceScreen
                   cardVariant={prefs.cardVariant}
-                  density={prefs.density}
                   themeMode={prefs.themeMode}
                   onSetCards={(v) => setPrefs({ cardVariant: v })}
-                  onSetDensity={(v) => setPrefs({ density: v })}
                   onSetThemeMode={(m) => setPrefs({ themeMode: m })}
                 />
               ) : page === "providers" ? (

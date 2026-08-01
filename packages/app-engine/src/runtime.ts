@@ -54,7 +54,7 @@ export interface RuntimeOptions {
    * Optional canonical dir for assets shared verbatim by every app
    * (`kit.ts` / `kit.css`). Apps no longer ship their own copy; a request
    * for `/centraid/<id>/kit.ts` that the app folder can't satisfy is served
-   * from here. Hosts point this at `@centraid/blueprints`'s `KIT_DIR`.
+   * from here. Hosts point this at `@centraid/design/kit`'s `KIT_DIR`.
    * Omit to disable the fallback.
    */
   sharedAssetsDir?: string;

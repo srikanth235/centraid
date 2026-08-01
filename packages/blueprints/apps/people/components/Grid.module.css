@@ -70,7 +70,7 @@
   border: none;
   background: none;
   border-radius: 7px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -96,7 +96,7 @@
 .cardRole {
   font: var(--t-small);
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -105,7 +105,7 @@
 .cardMeta {
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-top: 9px;
   display: flex;
   align-items: center;

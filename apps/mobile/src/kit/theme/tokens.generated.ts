@@ -1,50 +1,44 @@
 // GENERATED — do not edit by hand.
-// Source: @centraid/design-tokens#toBlueprintCss
+// Source: @centraid/design#toBlueprintCss
 // Regenerate: bun run generate:theme
 //
 // React-Native theme tokens lowered from the canonical blueprint token source.
 // See src/theme/generate.ts for the translation rules.
 
 export const lightPalette = {
-  accent: '#4e68dd',
-  bg: '#f9f9fb',
+  accent: '#2ea098',
+  bg: '#f9fbfb',
   bgElev: '#ffffff',
-  bgSunken: '#f1f3f6',
+  bgSunken: '#f1f6f5',
   danger: '#c8382f',
-  ink: '#1a1e28',
-  ink2: '#5f6572',
-  ink3: '#8b909c',
-  inkFaint: '#8b909c',
-  inkInv: '#ffffff',
-  inkSoft: '#5f6572',
-  line: 'rgba(27, 31, 39, 0.095)',
-  lineStrong: 'rgba(27, 31, 39, 0.165)',
-  muted: '#5f6572',
+  line: 'rgba(27, 39, 38, 0.095)',
+  lineStrong: 'rgba(27, 39, 38, 0.165)',
   onAccent: '#ffffff',
-  surface: '#ffffff',
-  surface2: '#f1f3f6',
-  text: '#1a1e28',
+  scrim: 'rgba(16, 25, 24, 0.48)',
+  success: '#2f7d4f',
+  text: '#182523',
+  textFaint: '#637471',
+  textInv: '#ffffff',
+  textSoft: '#546462',
+  warning: '#9a6b1f',
 } as const;
 
 export const darkPalette = {
-  accent: '#4e68dd',
-  bg: '#16181d',
-  bgElev: '#22242b',
-  bgSunken: '#2b2e36',
+  accent: '#2ea098',
+  bg: '#161d1c',
+  bgElev: '#222b29',
+  bgSunken: '#2b3634',
   danger: '#f0645b',
-  ink: '#edeff2',
-  ink2: '#a0a5b0',
-  ink3: '#747b8b',
-  inkFaint: '#747b8b',
-  inkInv: '#1f2228',
-  inkSoft: '#a0a5b0',
-  line: 'rgba(171, 182, 206, 0.11)',
-  lineStrong: 'rgba(178, 187, 210, 0.2)',
-  muted: '#a0a5b0',
+  line: 'rgba(171, 206, 201, 0.11)',
+  lineStrong: 'rgba(178, 210, 205, 0.2)',
   onAccent: '#ffffff',
-  surface: '#22242b',
-  surface2: '#2b2e36',
-  text: '#edeff2',
+  scrim: 'rgba(0, 0, 0, 0.68)',
+  success: '#5cc98a',
+  text: '#edf2f1',
+  textFaint: '#8da09d',
+  textInv: '#1f2827',
+  textSoft: '#a0b0ae',
+  warning: '#e0a94a',
 } as const;
 
 export const radii = {

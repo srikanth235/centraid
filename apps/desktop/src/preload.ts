@@ -14,7 +14,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
 
-import * as tokens from "@centraid/design-tokens";
+import * as tokens from "@centraid/design";
 
 import type { PreloadBridge } from "./main/preload-core.js";
 import {

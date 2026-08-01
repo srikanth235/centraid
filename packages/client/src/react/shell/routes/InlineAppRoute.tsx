@@ -12,9 +12,9 @@ import type { JSX, ReactNode } from "react";
 // The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
 // banners, ask panel) that blueprint component modules reference. Loaded once,
 // globally, by the route host — same as the served path's <link rel=kit.css>.
-import "@centraid/blueprints/kit/kit.css";
+import "@centraid/design/kit/kit.css";
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
-import { toBlueprintCss } from "@centraid/design-tokens";
+import { toBlueprintCss } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
@@ -54,7 +54,7 @@ export interface InlineAppRouteProps {
 
 const INLINE_SCOPE_CLASS = "centraid-inline-scope";
 
-// The blueprint token layer (--mono/--surface/--_accent/--ease/type scale …),
+// The blueprint token layer (--mono/--bg-elev/--_accent/--ease/type scale …),
 // rescoped from `:root` to the inline app subtree so it never restyles the
 // shell chrome. Injected once; the shell's own `data-theme` on <html> still
 // drives the dark block. Kept synchronous so inline theming needs no paint gap.

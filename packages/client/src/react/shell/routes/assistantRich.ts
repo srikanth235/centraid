@@ -1,5 +1,5 @@
 // Assistant rich-answer renderer — thin React-shell adapter over the shared,
-// framework-free kit renderer (packages/blueprints/kit/assistant-rich.js, the
+// framework-free kit renderer (packages/design/kit/assistant-rich.js, the
 // single canonical copy since issue #420). The shell keeps its scoped CSS
 // modules: it passes their class names to the shared renderer, so the same
 // string→HTML renderer drives both the kit's Ask panel and this shell, and a
@@ -11,8 +11,8 @@ import {
   richAnswerHtml as sharedRichAnswerHtml,
   hydrateRefs as sharedHydrateRefs,
   wireCodeCopy as sharedWireCodeCopy,
-} from "@centraid/blueprints/kit/assistant-rich.js";
-import type { AssistantRichClassOverrides } from "@centraid/blueprints/kit/assistant-rich.js";
+} from "@centraid/design/kit/assistant-rich.js";
+import type { AssistantRichClassOverrides } from "@centraid/design/kit/assistant-rich.js";
 
 import { resolveAssistantRefs } from "../../../gateway-client.js";
 import { boundedMemo } from "../boundedMemo.js";

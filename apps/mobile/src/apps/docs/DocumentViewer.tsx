@@ -196,9 +196,9 @@ export default function DocumentViewer({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text numberOfLines={1} style={[styles.title, { color: colors.ink }]}>
+        <Text numberOfLines={1} style={[styles.title, { color: colors.text }]}>
           {document.title}
         </Text>
         <Pressable
@@ -230,12 +230,12 @@ export default function DocumentViewer({
               document.canWrite === true
                 ? document.starred
                   ? "#d99b18"
-                  : colors.ink2
-                : colors.ink3
+                  : colors.textSoft
+                : colors.textFaint
             }
           />
         </Pressable>
-        <Text style={[styles.meta, { color: colors.ink2 }]}>
+        <Text style={[styles.meta, { color: colors.textSoft }]}>
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
           · {document.custody ?? "local"}
         </Text>
@@ -256,7 +256,9 @@ export default function DocumentViewer({
           <Feather
             name="folder-plus"
             size={20}
-            color={document.canWrite === true ? colors.accent : colors.ink3}
+            color={
+              document.canWrite === true ? colors.accent : colors.textFaint
+            }
           />
         </Pressable>
         <Pressable
@@ -282,7 +284,9 @@ export default function DocumentViewer({
           <Feather
             name="trash-2"
             size={20}
-            color={document.canWrite === true ? colors.danger : colors.ink3}
+            color={
+              document.canWrite === true ? colors.danger : colors.textFaint
+            }
           />
         </Pressable>
       </View>

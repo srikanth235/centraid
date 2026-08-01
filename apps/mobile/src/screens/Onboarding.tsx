@@ -297,7 +297,7 @@ function ConnectionStep({
             value={code}
             onChangeText={setCode}
             placeholder="Paste the one-line ticket"
-            placeholderTextColor={C.ink4}
+            placeholderTextColor={C.textGhost}
             multiline
             textAlignVertical="top"
             style={styles.phrase}
@@ -407,7 +407,7 @@ function ProfileStep({
           value={name}
           onChangeText={setName}
           placeholder="Your name"
-          placeholderTextColor={C.ink4}
+          placeholderTextColor={C.textGhost}
           style={[styles.input, styles.identityInput]}
           autoCapitalize="words"
           autoCorrect={false}
@@ -432,7 +432,7 @@ function ProfileStep({
                 styles.swatch,
                 {
                   backgroundColor: hex,
-                  borderColor: active ? C.ink : "transparent",
+                  borderColor: active ? C.text : "transparent",
                 },
                 pressed && styles.pressed,
               ]}

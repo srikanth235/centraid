@@ -8,7 +8,7 @@
    reused components/*.module.css, which key on the GLOBAL `.locker.is-narrow`
    / `.show-list` / `.side-open` state classes Chrome.tsx stamps on this frame.
 
-   The shared design-token layer (--ink/--bg/--line/--_accent, shadows, type
+   The shared design-token layer (--text/--bg/--line/--_accent, shadows, type
    scale …) is supplied by the shell (the scoped blueprint-token block
    InlineAppRoute injects under .centraid-inline-scope), so this file references
    those directly and never loads tokens.css/wall.css. The locker-SPECIFIC
@@ -28,7 +28,7 @@
   --accd: color-mix(in oklab, var(--_accent) 92%, hsl(var(--app-hue) 45% 7%));
   --accd-fg: var(--accd);
   --bg-side: hsl(var(--app-hue) 20% 97%);
-  --warn: #e0902e;
+  --warning: #e0902e;
   --t-strong: 600 0.855rem/1.4 var(--font-sans);
   --tk-eye: 0.09em;
 
@@ -137,13 +137,13 @@
   box-shadow: var(--shadow-md);
   padding: 11px 16px;
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .banner strong {
-  color: var(--ink);
+  color: var(--text);
 }
 .banner.notice {
-  border-color: color-mix(in oklab, var(--warn) 40%, var(--line-strong));
+  border-color: color-mix(in oklab, var(--warning) 40%, var(--line-strong));
 }
 
 /* Floating "Ask" launcher mount — this app has no topbar to host it, so it

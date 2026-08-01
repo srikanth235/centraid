@@ -140,7 +140,7 @@ export default function ApprovalsScreen({
           <Icon
             name="ArrowLeft"
             size={20}
-            color={colors.ink}
+            color={colors.text}
             strokeWidth={1.75}
           />
         </Pressable>
@@ -153,7 +153,7 @@ export default function ApprovalsScreen({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void refresh()}
-            tintColor={colors.ink3}
+            tintColor={colors.textFaint}
           />
         }
       >
@@ -591,13 +591,17 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: spacing[3],
     },
     cardBtn: { flex: 1 },
-    cardDetail: { ...t("small"), color: colors.ink3, marginTop: 3 },
-    cardExtra: { ...t("small"), color: colors.ink2, marginTop: spacing[2] },
-    cardTitle: { ...t("bodyStrong"), color: colors.ink },
+    cardDetail: { ...t("small"), color: colors.textFaint, marginTop: 3 },
+    cardExtra: { ...t("small"), color: colors.textSoft, marginTop: spacing[2] },
+    cardTitle: { ...t("bodyStrong"), color: colors.text },
     emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
-    emptyCopy: { ...t("body"), color: colors.ink2 },
-    emptyHint: { ...t("small"), color: colors.ink3, marginTop: spacing[2] },
-    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
+    emptyCopy: { ...t("body"), color: colors.textSoft },
+    emptyHint: {
+      ...t("small"),
+      color: colors.textFaint,
+      marginTop: spacing[2],
+    },
+    emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
     filter: {
       borderColor: colors.line,
       borderRadius: 999,
@@ -606,13 +610,13 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: spacing[2],
     },
     filterActive: {
-      backgroundColor: colors.surface2,
+      backgroundColor: colors.bgSunken,
       borderColor: colors.accent,
     },
-    filterText: { ...t("small"), color: colors.ink3 },
-    filterTextActive: { color: colors.ink },
+    filterText: { ...t("small"), color: colors.textFaint },
+    filterTextActive: { color: colors.text },
     filters: { gap: spacing[2], paddingBottom: spacing[4] },
     list: { gap: spacing[3] },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    title: { ...t("title"), color: colors.ink },
+    title: { ...t("title"), color: colors.text },
   });

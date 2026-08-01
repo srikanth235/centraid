@@ -14,12 +14,12 @@
   background: transparent;
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-3);
+  color: var(--text-faint);
   text-transform: capitalize;
   min-width: 0;
 }
 .seg button[data-active="true"] {
   background: var(--bg-elev);
-  color: var(--ink);
+  color: var(--text);
   box-shadow: var(--shadow-sm);
 }

@@ -1,4 +1,4 @@
-/* App info modal (issue #434) — reuses the per-app consent pane (VaultScreen)
+/* App info modal (issue var(--text)) — reuses the per-app consent pane (VaultScreen)
    inside a body-portal dialog, with Uninstall in the footer. */
 .card {
   width: min(520px, calc(100vw - 40px));
@@ -25,7 +25,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--text-faint);
   margin-bottom: 2px;
 }
 .card h3 {
@@ -49,7 +49,7 @@
   background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
-/* "Automate on this data" deep-links (issue #446 follow-up 1) — one chip button
+/* "Automate on this data" deep-links (issue var(--text) follow-up 1) — one chip button
    per requested entity kind. */
 .automateRow {
   display: flex;
@@ -64,7 +64,7 @@
   border-radius: 8px;
   border: 0.5px solid var(--border);
   background: var(--bg-elev);
-  color: var(--ink-1);
+  color: var(--text-1);
   cursor: pointer;
 }
 .automateBtn:hover {

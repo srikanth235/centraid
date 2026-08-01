@@ -1,4 +1,4 @@
-import * as tokens from "@centraid/design-tokens";
+import * as tokens from "@centraid/design";
 
 import "@centraid/client/styles.css";
 import {

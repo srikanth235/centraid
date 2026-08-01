@@ -22,7 +22,7 @@
 }
 .toolbarSub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 1px;
 }
 /* The scope chips (issue #599) sit under the subtitle, inside the title block,

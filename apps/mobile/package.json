@@ -27,7 +27,7 @@
     "@babel/runtime": "^7.25.0",
     "@centraid/blueprints": "workspace:*",
     "@centraid/client": "workspace:*",
-    "@centraid/design-tokens": "workspace:*",
+    "@centraid/design": "workspace:*",
     "@centraid/protocol": "workspace:*",
     "@centraid/time-engine": "workspace:*",
     "@expo-google-fonts/geist": "^0.4.2",

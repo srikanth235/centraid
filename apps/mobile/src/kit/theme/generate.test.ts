@@ -14,15 +14,14 @@ import {
 // override that references the undefined --bg-wall.
 const FIXTURE = `
 :root {
-  --app-hue: 222;
-  --accent: #4E68DD;
+  --app-hue: 171;
+  --accent: #2EA098;
   --c-teal: #2EA098;
   --_accent: var(--app-color, var(--accent));
-  --ink: hsl(var(--app-hue) 22% 13%);
-  --ink-2: hsl(var(--app-hue) 9% 41%);
+  --text: hsl(var(--app-hue) 22% 13%);
+  --text-soft: hsl(var(--app-hue) 9% 41%);
   --bg: hsl(var(--app-hue) 20% 98%);
-  --surface: #ffffff;
-  --bg-elev: var(--surface);
+  --bg-elev: #ffffff;
   --line: hsl(var(--app-hue) 19% 13% / 0.095);
   --accent-soft: color-mix(in oklab, var(--_accent) 12%, transparent);
   --r-card: 14px;
@@ -34,8 +33,8 @@ const FIXTURE = `
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(var(--app-hue) 16% 94%);
-  --surface: hsl(var(--app-hue) 12% calc(var(--bg-l) + 5%));
+  --text: hsl(var(--app-hue) 16% 94%);
+  --bg-elev: hsl(var(--app-hue) 12% calc(var(--bg-l) + 5%));
   --bg: var(--bg-wall);
 }
 `;
@@ -55,7 +54,7 @@ describe(cssColorToRn, () => {
   });
 
   it("normalizes hex and passes rgba through", () => {
-    expect(cssColorToRn("#4E68DD")).toBe("#4e68dd");
+    expect(cssColorToRn("#2EA098")).toBe("#2ea098");
     expect(cssColorToRn("#abc")).toBe("#aabbcc");
     expect(cssColorToRn("rgba(1, 2, 3, 0.4)")).toBe("rgba(1, 2, 3, 0.4)");
   });
@@ -82,8 +81,8 @@ describe(cssLengthToPx, () => {
 describe(parseTokensCss, () => {
   it("splits the light root and dark override blocks", () => {
     const { light, darkOverride } = parseTokensCss(FIXTURE);
-    expect(light["--accent"]).toBe("#4E68DD");
-    expect(light["--app-hue"]).toBe("222");
+    expect(light["--accent"]).toBe("#2EA098");
+    expect(light["--app-hue"]).toBe("171");
     expect(darkOverride["--bg-l"]).toBe("10%");
     // Dark override only carries what it changes.
     expect(darkOverride["--accent"]).toBeUndefined();
@@ -94,9 +93,9 @@ describe(buildTheme, () => {
   const theme = buildTheme(FIXTURE);
 
   it("extracts resolved light colors", () => {
-    expect(theme.light.accent).toBe("#4e68dd");
-    expect(theme.light.ink).toMatch(/^#[0-9a-f]{6}$/u);
-    expect(theme.light.bgElev).toBe("#ffffff"); // var(--surface)
+    expect(theme.light.accent).toBe("#2ea098");
+    expect(theme.light.text).toMatch(/^#[0-9a-f]{6}$/u);
+    expect(theme.light.bgElev).toBe("#ffffff");
     expect(theme.light.line).toMatch(/^rgba\(/u); // alpha → rgba
   });
 
@@ -110,9 +109,9 @@ describe(buildTheme, () => {
   });
 
   it("resolves dark overrides, including calc and the --bg-wall fallback", () => {
-    expect(theme.dark.ink).not.toBe(theme.light.ink);
-    expect(theme.dark.surface).toMatch(/^#[0-9a-f]{6}$/u); // calc(10% + 5%)
-    expect(theme.dark.bg).toBe("#16181d"); // var(--bg-wall) fallback → hsl(222 12% 10%)
+    expect(theme.dark.text).not.toBe(theme.light.text);
+    expect(theme.dark.bgElev).toMatch(/^#[0-9a-f]{6}$/u); // calc(10% + 5%)
+    expect(theme.dark.bg).toBe("#161d1c"); // var(--bg-wall) fallback → hsl(171 12% 10%)
   });
 
   it("keeps light and dark key sets identical", () => {
@@ -163,18 +162,15 @@ describe(renderTokensModule, () => {
   // emitting formatter-shaped source keeps regeneration from churning quotes.
   it("emits formatter-shaped literals (bare keys, single quotes)", () => {
     const out = renderTokensModule(theme, "src.css");
-    expect(out).toContain("accent: '#4e68dd',");
+    expect(out).toContain("accent: '#2ea098',");
     expect(out).toContain("'1': 4,"); // numeric keys need quoting
     expect(out).not.toContain('"accent"');
   });
 
   it("emits the generated header and font families", () => {
-    const out = renderTokensModule(
-      theme,
-      "@centraid/design-tokens#toBlueprintCss"
-    );
+    const out = renderTokensModule(theme, "@centraid/design#toBlueprintCss");
     expect(out).toContain("GENERATED — do not edit");
-    expect(out).toContain("@centraid/design-tokens#toBlueprintCss");
+    expect(out).toContain("@centraid/design#toBlueprintCss");
     expect(out).toContain("export const lightPalette");
     expect(out).toContain("Geist_400Regular");
   });

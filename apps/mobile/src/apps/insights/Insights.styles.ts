@@ -12,16 +12,16 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[2],
     },
     title: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 30,
       letterSpacing: -0.4,
     },
-    subtitle: { ...t("small"), color: colors.ink3, marginTop: 4 },
+    subtitle: { ...t("small"), color: colors.textFaint, marginTop: 4 },
     scroll: { paddingBottom: spacing[6], paddingHorizontal: spacing[5] },
 
     sectionLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 11,
       letterSpacing: 0.9,
@@ -41,12 +41,12 @@ export const makeStyles = (colors: ThemeColors) =>
     heroTop: { alignItems: "center", flexDirection: "row", gap: 12 },
     heroDot: { borderRadius: 7, height: 14, width: 14 },
     heroStatus: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.serif,
       fontSize: 20,
       letterSpacing: -0.2,
     },
-    heroSub: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    heroSub: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     heroMeta: { flex: 1, minWidth: 0 },
 
     // Metric chips strip inside the hero.
@@ -67,13 +67,13 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 10,
     },
     chipLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.6,
     },
     chipValue: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.monoBold,
       fontSize: 16,
       marginTop: 3,
@@ -88,10 +88,10 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 9,
     },
     compDot: { borderRadius: 4, height: 8, width: 8 },
-    compName: { ...t("body"), color: colors.ink, flexShrink: 1 },
+    compName: { ...t("body"), color: colors.text, flexShrink: 1 },
     compDetail: {
       ...t("small"),
-      color: colors.ink3,
+      color: colors.textFaint,
       flex: 1,
       textAlign: "right",
     },
@@ -112,9 +112,9 @@ export const makeStyles = (colors: ThemeColors) =>
       width: 7,
     },
     eventBody: { flex: 1, minWidth: 0 },
-    eventMsg: { ...t("small"), color: colors.ink2 },
+    eventMsg: { ...t("small"), color: colors.textSoft },
     eventMeta: {
-      color: colors.ink4,
+      color: colors.textGhost,
       fontFamily: family.monoRegular,
       fontSize: 10,
       marginTop: 2,
@@ -133,19 +133,19 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     kpiLabel: { alignItems: "center", flexDirection: "row", gap: 6 },
     kpiLabelText: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.5,
     },
     kpiValue: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.monoBold,
       fontSize: 24,
       letterSpacing: -0.5,
       marginTop: 8,
     },
-    kpiFoot: { ...t("small"), color: colors.ink3, marginTop: 4 },
+    kpiFoot: { ...t("small"), color: colors.textFaint, marginTop: 4 },
 
     // Quota meter under the tokens KPI.
     meter: { marginTop: 8 },
@@ -157,7 +157,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     meterFill: { borderRadius: 3, height: 6 },
     meterFoot: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoRegular,
       fontSize: 10,
       marginTop: 5,
@@ -178,9 +178,9 @@ export const makeStyles = (colors: ThemeColors) =>
       justifyContent: "space-between",
       marginBottom: spacing[3],
     },
-    panelTitle: { ...t("bodyStrong"), color: colors.ink },
+    panelTitle: { ...t("bodyStrong"), color: colors.text },
     panelMeta: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.5,
@@ -191,13 +191,13 @@ export const makeStyles = (colors: ThemeColors) =>
       marginBottom: spacing[3],
     },
     chartStatLabel: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.5,
     },
     chartStatValue: {
-      color: colors.ink,
+      color: colors.text,
       fontFamily: family.monoBold,
       fontSize: 16,
       marginTop: 2,
@@ -208,21 +208,21 @@ export const makeStyles = (colors: ThemeColors) =>
       marginTop: 8,
     },
     chartAxisText: {
-      color: colors.ink4,
+      color: colors.textGhost,
       fontFamily: family.monoRegular,
       fontSize: 10,
     },
 
     // Model bars.
     model: { marginTop: spacing[3] },
-    modelName: { ...t("small"), color: colors.ink2, marginBottom: 5 },
+    modelName: { ...t("small"), color: colors.textSoft, marginBottom: 5 },
     modelFoot: {
       flexDirection: "row",
       justifyContent: "space-between",
       marginTop: 5,
     },
     modelFootText: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoRegular,
       fontSize: 11,
     },
@@ -235,15 +235,15 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 9,
     },
     actAgo: {
-      color: colors.ink4,
+      color: colors.textGhost,
       fontFamily: family.monoRegular,
       fontSize: 11,
       width: 62,
     },
     actBody: { flex: 1, minWidth: 0 },
-    actLabel: { ...t("body"), color: colors.ink },
+    actLabel: { ...t("body"), color: colors.text },
     actKind: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.5,
@@ -251,12 +251,12 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     actNums: { alignItems: "flex-end" },
     actTokens: {
-      color: colors.ink2,
+      color: colors.textSoft,
       fontFamily: family.monoMedium,
       fontSize: 12,
     },
     actUsd: {
-      color: colors.ink3,
+      color: colors.textFaint,
       fontFamily: family.monoRegular,
       fontSize: 11,
       marginTop: 2,
@@ -269,14 +269,14 @@ export const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      color: colors.ink3,
+      color: colors.textFaint,
       overflow: "hidden",
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
     panelEmpty: {
       ...t("small"),
-      color: colors.ink3,
+      color: colors.textFaint,
       paddingVertical: spacing[2],
     },
 
@@ -287,7 +287,11 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[5],
       paddingTop: 72,
     },
-    emptyTitle: { ...t("title"), color: colors.ink, marginTop: spacing[2] },
-    emptyCopy: { ...t("body"), color: colors.ink3, textAlign: "center" },
-    emptyHint: { ...t("small"), color: colors.ink4, marginTop: spacing[2] },
+    emptyTitle: { ...t("title"), color: colors.text, marginTop: spacing[2] },
+    emptyCopy: { ...t("body"), color: colors.textFaint, textAlign: "center" },
+    emptyHint: {
+      ...t("small"),
+      color: colors.textGhost,
+      marginTop: spacing[2],
+    },
   });

@@ -39,7 +39,7 @@
   font: var(--t-body);
   font-size: 14.5px;
   line-height: 1.55;
-  color: var(--ink);
+  color: var(--text);
 }
 .entry {
   display: flex;
@@ -62,12 +62,12 @@
 .entry .dt {
   font: var(--t-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .entry p {
   margin: 4px 0 0;
   font: var(--t-body);
   font-size: 14px;
   line-height: 1.55;
-  color: var(--ink);
+  color: var(--text);
 }

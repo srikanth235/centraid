@@ -21,7 +21,7 @@
   font: var(--t-body);
   font-size: 13.5px;
   background: none;
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .navLabel {
   flex: 1;
@@ -32,7 +32,7 @@
 }
 .navItem:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
@@ -71,11 +71,11 @@
   border: none;
   background: none;
   border-radius: 6px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .nbAdd:hover {
   background: var(--bg-sunken);
-  color: var(--ink);
+  color: var(--text);
 }
 .nbForm {
   display: flex;
@@ -102,7 +102,7 @@
 }
 .summarySub {
   font: var(--t-small);
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 2px;
 }
 .consentLine {
@@ -110,7 +110,7 @@
   align-items: center;
   gap: 7px;
   padding: 11px 4px 2px;
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .consentLine svg {
   color: var(--accent-deep-fg);

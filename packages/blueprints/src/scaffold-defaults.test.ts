@@ -20,7 +20,7 @@ describe("scaffold-defaults", () => {
     expect(DEFAULT_APP_CSS).toContain("min-height: 2.75rem");
     // Colors come from CSS vars; only ink-inv fallbacks keep a bare #fff.
     expect(DEFAULT_APP_CSS).toContain("var(--accent)");
-    expect(DEFAULT_APP_CSS).toContain("var(--ink-inv, #fff)");
+    expect(DEFAULT_APP_CSS).toContain("var(--text-inv, #fff)");
     expect(DEFAULT_APP_CSS).toMatchSnapshot();
   });
 

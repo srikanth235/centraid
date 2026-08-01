@@ -33,17 +33,17 @@ export default function DuplicateReview({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.ink} />
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.ink }]}>
+          <Text style={[styles.title, { color: colors.text }]}>
             Duplicates review
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             Similarity only—nothing is auto-merged.
           </Text>
         </View>
-        <Text style={[styles.count, { color: colors.ink2 }]}>
+        <Text style={[styles.count, { color: colors.textSoft }]}>
           {hints.length}
         </Text>
       </View>
@@ -61,7 +61,7 @@ export default function DuplicateReview({
         />
       ) : (
         <View style={styles.empty}>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>
             No dHash similarity hints.
           </Text>
         </View>

@@ -3,8 +3,8 @@
 }
 .asstH {
   margin: 12px 0 6px;
-  font-family: var(--font-display);
-  color: var(--ink);
+  font-family: var(--font-mono);
+  color: var(--text);
 }
 .asstUl {
   margin: 0 0 8px;
@@ -33,7 +33,7 @@
   margin: 0 0 8px;
   padding: 2px 0 2px 12px;
   border-left: 2.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  color: var(--ink-3);
+  color: var(--text-faint);
 }
 .asstHr {
   border: 0;
@@ -49,20 +49,20 @@
  * innerHTML string (from code-highlight.js), so they must be styled globally —
  * the CSS-module scoping never reaches them. Kept identical to kit.css. */
 :global(.hlKeyword) {
-  color: #9333ea;
+  color: var(--text);
 }
 :global(.hlString) {
-  color: #16a34a;
+  color: var(--text);
 }
 :global(.hlComment) {
-  color: var(--ink-4);
+  color: var(--text-ghost);
   font-style: italic;
 }
 :global(.hlNumber) {
-  color: #d97706;
+  color: var(--text);
 }
 :global(.hlBuiltin) {
-  color: #2563eb;
+  color: var(--text);
 }
 .asstRich code {
   font-family: var(--font-mono);
@@ -76,7 +76,7 @@
   align-items: center;
   border: 0.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--ink);
+  color: var(--text);
   border-radius: 999px;
   padding: 0 7px;
   font: inherit;
@@ -106,21 +106,21 @@
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 8px 12px;
   border-bottom: 0.5px solid var(--line-strong);
 }
 .asstTable td {
   padding: 7px 12px;
   border-bottom: 0.5px solid var(--line);
-  color: var(--ink-2);
+  color: var(--text-soft);
 }
 .asstTable tbody tr:last-child td {
   border-bottom: 0;
 }
 .asstCaption {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding: 6px 2px 0;
 }
 .asstStat {
@@ -132,18 +132,18 @@
   background: var(--bg-elev);
 }
 .asstStatValue {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 24px;
-  color: var(--ink);
+  color: var(--text);
 }
 .asstStatLabel {
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--text-soft);
   margin-top: 2px;
 }
 .asstStatSub {
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
 }
 .asstChart {
   border: 0.5px solid var(--line);
@@ -163,7 +163,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 10px;
-  color: var(--ink-4);
+  color: var(--text-ghost);
   padding-top: 4px;
   gap: 4px;
   overflow: hidden;
@@ -172,11 +172,11 @@
   display: flex;
   gap: 12px;
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-faint);
   padding-top: 6px;
 }
 
-/* Fenced code block with a hover "Copy" button (#420). */
+/* Fenced code block with a hover "Copy" button (var(--text)). */
 .asstCodeWrap {
   position: relative;
 }
@@ -187,7 +187,7 @@
   border: 0.5px solid var(--line-strong);
   border-radius: 6px;
   background: var(--bg-elev);
-  color: var(--ink-3);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 10.5px;
   padding: 3px 7px;

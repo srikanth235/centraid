@@ -76,7 +76,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     greeting: { flex: 1, paddingRight: 12 },
     hello: {
-      color: colors.ink2,
+      color: colors.textSoft,
       fontFamily: family.serif,
       fontSize: 15,
       letterSpacing: 0.2,

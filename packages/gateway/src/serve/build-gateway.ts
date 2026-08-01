@@ -95,11 +95,8 @@ import {
   workerAdmissionStats,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
-import {
-  KIT_DIR,
-  bundledAppDir,
-  listBundledAppTemplates,
-} from "@centraid/blueprints";
+import { bundledAppDir, listBundledAppTemplates } from "@centraid/blueprints";
+import { KIT_DIR } from "@centraid/design/kit";
 import { ROUTES } from "@centraid/protocol";
 import {
   KeyStore,

@@ -142,11 +142,11 @@ const makeStyles = (colors: ThemeColors) =>
     // fights the tile's layout; icon + label stack and center here.
     tileInner: { alignItems: "center", gap: 9 },
     tileLabel: {
-      color: colors.ink2,
+      color: colors.textSoft,
       fontFamily: family.sansMedium,
       fontSize: 12,
     },
-    tileLabelDim: { color: colors.ink3 },
+    tileLabelDim: { color: colors.textFaint },
     // Scale is owned by the reanimated spring now; the press only dims.
     tilePressed: { opacity: 0.7 },
   });

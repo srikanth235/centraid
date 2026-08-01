@@ -338,9 +338,9 @@ export default function PhotosHome({
       {selecting ? (
         <View style={styles.header}>
           <Pressable onPress={() => setSelection(new Set())}>
-            <Feather name="x" size={23} color={colors.ink} />
+            <Feather name="x" size={23} color={colors.text} />
           </Pressable>
-          <Text style={[styles.selectionTitle, { color: colors.ink }]}>
+          <Text style={[styles.selectionTitle, { color: colors.text }]}>
             {selection.size} selected
           </Text>
           <View style={styles.headerActions}>
@@ -363,7 +363,7 @@ export default function PhotosHome({
             onPress={() => setDrawerOpen(true)}
             style={styles.menuBtn}
           >
-            <Feather name="menu" size={23} color={colors.ink2} />
+            <Feather name="menu" size={23} color={colors.textSoft} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -371,8 +371,10 @@ export default function PhotosHome({
             onPress={() => navigation.navigate("PhotosSearch")}
             style={[styles.searchPill, { backgroundColor: colors.bgSunken }]}
           >
-            <Feather name="search" size={17} color={colors.ink3} />
-            <Text style={[styles.searchPlaceholder, { color: colors.ink3 }]}>
+            <Feather name="search" size={17} color={colors.textFaint} />
+            <Text
+              style={[styles.searchPlaceholder, { color: colors.textFaint }]}
+            >
               Search photos &amp; moments
             </Text>
           </Pressable>
@@ -436,10 +438,12 @@ export default function PhotosHome({
             {!selecting && timeline.assets.length ? (
               <View style={styles.timelineHeading}>
                 <View>
-                  <Text style={[styles.timelineTitle, { color: colors.ink }]}>
+                  <Text style={[styles.timelineTitle, { color: colors.text }]}>
                     Timeline
                   </Text>
-                  <Text style={[styles.timelineMeta, { color: colors.ink2 }]}>
+                  <Text
+                    style={[styles.timelineMeta, { color: colors.textSoft }]}
+                  >
                     {timeline.assets.length} items · pinch to change density
                   </Text>
                 </View>
@@ -456,19 +460,19 @@ export default function PhotosHome({
 
             {timeline.loading ? (
               <View style={styles.center}>
-                <Text style={[styles.body2, { color: colors.ink2 }]}>
+                <Text style={[styles.body2, { color: colors.textSoft }]}>
                   Opening your library…
                 </Text>
               </View>
             ) : timeline.sections.length === 0 ? (
               <View style={styles.center}>
                 <Feather name="image" size={40} color={colors.accent} />
-                <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>
                   {collections.connection === "offline"
                     ? "No cached vault photos"
                     : "Your library starts here"}
                 </Text>
-                <Text style={[styles.body2, { color: colors.ink2 }]}>
+                <Text style={[styles.body2, { color: colors.textSoft }]}>
                   {collections.connection === "offline"
                     ? "Camera-roll photos remain available. Reconnect to check the vault."
                     : "Camera-roll photos appear instantly; long-press any item to back it up."}
@@ -534,7 +538,7 @@ export default function PhotosHome({
                         <Feather
                           name={item.icon}
                           size={22}
-                          color={active ? NAV_ACTIVE : colors.ink3}
+                          color={active ? NAV_ACTIVE : colors.textFaint}
                         />
                       </View>
                     </Pressable>
@@ -551,7 +555,7 @@ export default function PhotosHome({
               onPress={() => navigation.navigate("PhotosLibrary")}
               style={({ pressed }) => [
                 styles.fab,
-                { backgroundColor: colors.ink },
+                { backgroundColor: colors.text },
                 pressed && styles.fabPressed,
               ]}
             >

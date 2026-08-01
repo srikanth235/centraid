@@ -36,18 +36,18 @@ export function ListItem({
           <Feather name="folder" size={20} color={colors.accent} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.rowTitle, { color: colors.ink }]}>
+          <Text style={[styles.rowTitle, { color: colors.text }]}>
             {item.folder.name}
           </Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>Folder</Text>
+          <Text style={[styles.meta, { color: colors.textSoft }]}>Folder</Text>
         </View>
-        <Feather name="chevron-right" size={18} color={colors.ink3} />
+        <Feather name="chevron-right" size={18} color={colors.textFaint} />
         <Pressable
           accessibilityLabel={`Actions for ${item.folder.name}`}
           hitSlop={10}
           onPress={() => onMenu(item)}
         >
-          <Feather name="more-vertical" size={19} color={colors.ink2} />
+          <Feather name="more-vertical" size={19} color={colors.textSoft} />
         </Pressable>
       </Pressable>
     );
@@ -69,11 +69,11 @@ export function ListItem({
       <View style={styles.copy}>
         <Text
           numberOfLines={1}
-          style={[styles.rowTitle, { color: colors.ink }]}
+          style={[styles.rowTitle, { color: colors.text }]}
         >
           {item.document.title}
         </Text>
-        <Text style={[styles.meta, { color: colors.ink2 }]}>
+        <Text style={[styles.meta, { color: colors.textSoft }]}>
           {item.location ? `${item.location} · ` : ""}
           {formatType(item.document.mediaType)} ·{" "}
           {formatBytes(item.document.byteSize)} ·{" "}
@@ -89,7 +89,7 @@ export function ListItem({
         hitSlop={10}
         onPress={() => onMenu(item)}
       >
-        <Feather name="more-vertical" size={19} color={colors.ink2} />
+        <Feather name="more-vertical" size={19} color={colors.textSoft} />
       </Pressable>
     </Pressable>
   );
@@ -125,7 +125,7 @@ export function GridItem({
         onPress={() => onMenu(item)}
         style={styles.gridMenu}
       >
-        <Feather name="more-vertical" size={18} color={colors.ink2} />
+        <Feather name="more-vertical" size={18} color={colors.textSoft} />
       </Pressable>
       <View style={[styles.gridPreview, { backgroundColor: colors.bgSunken }]}>
         <Feather
@@ -136,10 +136,13 @@ export function GridItem({
           color={colors.accent}
         />
       </View>
-      <Text numberOfLines={2} style={[styles.gridTitle, { color: colors.ink }]}>
+      <Text
+        numberOfLines={2}
+        style={[styles.gridTitle, { color: colors.text }]}
+      >
         {item.kind === "folder" ? item.folder.name : item.document.title}
       </Text>
-      <Text style={[styles.meta, { color: colors.ink2 }]}>
+      <Text style={[styles.meta, { color: colors.textSoft }]}>
         {document
           ? `${item.kind === "document" && item.location ? `${item.location} · ` : ""}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)} · ${document.scopeLabels?.join(" + ") ?? "Vault"}`
           : "Folder"}

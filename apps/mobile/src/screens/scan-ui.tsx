@@ -21,9 +21,9 @@ export function CloseHeader({
         accessibilityLabel="Close scan"
         onPress={onClose}
       >
-        <Feather name="x" size={24} color={colors.ink} />
+        <Feather name="x" size={24} color={colors.text} />
       </Pressable>
-      <Text style={[styles.title, { color: colors.ink }]}>Scan & review</Text>
+      <Text style={[styles.title, { color: colors.text }]}>Scan & review</Text>
       <View style={styles.headerGap} />
     </View>
   );
@@ -68,18 +68,20 @@ export function Field({
 }): React.JSX.Element {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.textSoft }]}>
+        {label}
+      </Text>
       <TextInput
         {...input}
         accessibilityLabel={input.accessibilityLabel ?? label}
-        placeholderTextColor={colors.ink3}
+        placeholderTextColor={colors.textFaint}
         style={[
           styles.input,
           input.multiline && styles.multiline,
           {
             backgroundColor: colors.bgElev,
             borderColor: colors.lineStrong,
-            color: colors.ink,
+            color: colors.text,
           },
         ]}
       />
@@ -102,7 +104,9 @@ export function ChoiceRows({
 }): React.JSX.Element {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.ink2 }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.textSoft }]}>
+        {label}
+      </Text>
       <View style={styles.chips}>
         {rows.map((row) => (
           <Pressable
@@ -118,7 +122,7 @@ export function ChoiceRows({
               },
             ]}
           >
-            <Text style={{ color: colors.ink }}>{row.label}</Text>
+            <Text style={{ color: colors.text }}>{row.label}</Text>
           </Pressable>
         ))}
       </View>

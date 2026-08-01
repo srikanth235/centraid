@@ -10,8 +10,8 @@
  * CLI / local paths.
  */
 
-import { toBlueprintCss } from "@centraid/design-tokens";
-import type { ColorKey, IconName } from "@centraid/design-tokens";
+import { BRAND, toBlueprintCss } from "@centraid/design";
+import type { ColorKey, IconName } from "@centraid/design";
 
 import { rewriteTitleInHtml, applyManifestName } from "./app-rewrites.js";
 import {
@@ -321,9 +321,9 @@ const DEFAULT_APP_KNOBS: ReadonlyArray<Record<string, unknown>> = [
     key: "appColor",
     label: "Color",
     type: "swatch",
-    default: "#4950F6",
+    default: BRAND,
     options: [
-      { value: "#4950F6", label: "Blue" },
+      { value: BRAND, label: "Teal" },
       { value: "#7C5BD9", label: "Violet" },
       { value: "#2EA098", label: "Teal" },
       { value: "#B47B3F", label: "Ochre" },

@@ -173,7 +173,7 @@ export function createLogic({
             closePopover();
             void movePerson(p, null, "no list");
           },
-          { disabled: p.list_id == null, dotColor: "var(--ink-3)" }
+          { disabled: p.list_id == null, dotColor: "var(--text-faint)" }
         ),
         ...data.lists.map((c) =>
           popItem(
