@@ -1,0 +1,57 @@
+{
+  "_comment": "Experience budgets for the Expo iOS/Android app (apps/mobile). Perceived latency only. See README.md in this directory for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
+  "surface": "mobile",
+  "metrics": {
+    "coldOpenToUsable": {
+      "status": "unmeasured",
+      "volume": "device-local replica seeded by the e2e first-run flow (NOT year-3 — see _note)",
+      "probe": "tests/agent-e2e-mobile/flows/cold-start.mjs — PER-LAUNCH cold start (stopApp → launchApp → Home ready marker), 8 launches, reports median and p95. Runs on the nightly mobile-e2e-ios / mobile-e2e-android jobs.",
+      "_note": "The pre-existing tests/agent-e2e-mobile/flows/volume-proof.mjs measures 20 relaunches as ONE wall-clock total, so a single 10 s launch hides inside a 20-launch sum and the number is unreadable as an experience. The new flow reports per-launch statistics. No ceilingMs on first land: an on-device number from a CI simulator has no distribution yet, so the flow gates on the trailing-median drift budget (>1.5x sustained) from its own 30-sample history. The replica volume is also not year-3 yet — docs/mobile-offline.md's 90k figure is an explicitly labelled PROJECTION, not a run."
+    },
+    "maxDroppedFramePercent": {
+      "status": "unmeasured",
+      "volume": "Photos grid and People directory holding whatever the CI gateway fixture seeded — NOT the declared year-3 90,000 assets / 5,000 contacts. The flow publishes `people rows observed`, a real lower bound it can see, rather than guessing the seeded total.",
+      "probe": "tests/agent-e2e-mobile/flows/scroll-frames.mjs — arms apps/mobile's sampler with openLink centraid://perf-frames?ms=6000, confirms testID perf-frame-sampling, flings 8x, then reads testID perf-frame-report and parses `dropped=<number>%`. Contract pinned by apps/mobile/src/lib/perf/frame-sampler.test.ts.",
+      "maxPercent": 50,
+      "_intendedMaxPercent": 5,
+      "_provenance": {
+        "attempted": "not yet — needs a booted simulator; pending the nightly mobile-e2e-ios / mobile-e2e-android jobs",
+        "note": "maxPercent 50 is a CATASTROPHE bound, NOT observed + headroom, and is labelled so deliberately. Above 50% the list is running at half the display's refresh rate or worse, which is broken on any device and needs no measurement to assert. The real target is 5% (`_intendedMaxPercent`, underscore-prefixed so it is invisible to the ratchet); it is promoted to `maxPercent` only when a real device run produces a distribution, and the 30-sample/1.5x drift gate is what catches a slow walk in the meantime.",
+        "denominatorCaveat": "`dropped` has a PER-DEVICE denominator. The sampler derives the display's true refresh rate from the 10th-percentile inter-frame interval and snaps to 120/90/60/30 Hz, so the flow records `targetHz` beside every percentage. A comparison that drops it reads 60 fps on a 120 Hz ProMotion device as flawless when half the frames are missing.",
+        "scopeCaveat": "JS THREAD ONLY. The sampler counts requestAnimationFrame callbacks, so jank originating on the UI/native thread (a Reanimated worklet, a native image decode) is invisible to it. This is a real frame-drop number for the JS thread, not a compositor-level guarantee."
+      }
+    },
+    "tapToVisualResponse": {
+      "status": "unmeasured",
+      "volume": "n/a",
+      "probe": "NONE TODAY. Same instrumentation blocker as the frame-drop ceiling: Maestro's tap→assert round trip includes its own polling interval (~hundreds of ms), which swamps the signal being measured."
+    },
+    "sendToFirstToken": {
+      "status": "unmeasured",
+      "volume": "n/a — the CI gateway has no model provider",
+      "probe": "NONE TODAY. Needs a fixed-delay stub turn from tests/agent-e2e-mobile/lib/ci-gateway.mjs."
+    },
+    "reconnectToFresh": {
+      "status": "unmeasured",
+      "volume": "50,000 replica rows (declared year-3, docs/mobile-offline.md)",
+      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures the windowed bootstrap in-process; the perceived number is the phone's screen showing stale data after AppState resume, which needs a device-side timestamp the app does not currently expose."
+    },
+    "appWeight": {
+      "status": "measured",
+      "volume": "n/a — build artifact, independent of vault size",
+      "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
+      "maxTotalBytes": 12582912,
+      "maxLargestChunkBytes": 7000000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64, `bun run --cwd apps/mobile ci:bundle` (expo export, both platforms) in this worktree",
+        "observedIosShippedBytes": 11596398,
+        "observedAndroidShippedBytes": 11604148,
+        "observedLargestChunkBytes": 6355198,
+        "observedLargestChunk": "_expo/static/js/<platform>/index-*.hbc (Hermes bytecode)",
+        "note": "MEASURED. One ceiling covers both platforms because they differ by 7,750 B (0.07%). The Hermes bundle is 55% of the weight and the @expo/vector-icons font set is most of the rest — MaterialCommunityIcons.ttf alone is 1.31 MB and is the largest single asset. Ceilings are the larger observed value + ~8% headroom.",
+        "headroom": "observed + 8%"
+      }
+    }
+  }
+}

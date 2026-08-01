@@ -486,6 +486,11 @@ jobs:
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro
         run: bun run --cwd apps/mobile ci:bundle
+      # #659 R3d — these two bundles have been built on every mobile-touching PR
+      # for months and never weighed. Ceilings live in
+      # tests/experience-budgets/mobile.json and are tighten-only.
+      - name: Weigh the shipped mobile bundles
+        run: bun run perf:app-weight -- --surface mobile
       - name: Compile the Android application and native modules
         run: bun run --cwd apps/mobile ci:android-native
 

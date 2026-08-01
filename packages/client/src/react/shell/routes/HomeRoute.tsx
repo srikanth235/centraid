@@ -16,9 +16,13 @@ import { useShellActions } from "../actions.js";
 import { openMenu } from "../contextMenu.js";
 import PageScroll from "../PageScroll.js";
 import { openPrompt } from "../prompt.js";
+import { useCachedQuery } from "../queryCache.js";
 import type { ShellMenuAnchor } from "../Sidebar.js";
-import { PageLoading } from "../status.js";
-import { useAsyncData } from "../useAsyncData.js";
+import { PageSkeleton } from "../status.js";
+import type {
+  ShellAppsController,
+  ShellAppsSnapshot,
+} from "../useShellApps.js";
 import AppInfoModal from "./AppInfoModal.js";
 import { collectAutomationRuns } from "./automationsData.js";
 import type { AutomationFeedEntry } from "./automationsData.js";
@@ -37,7 +41,8 @@ export interface HomeRouteProps {
   tileVariant: AppearancePrefs["tileVariant"];
   isStarred: (id: string) => boolean;
   toggleStar: (id: string) => void;
-  refreshApps: () => Promise<void>;
+  /** Optimistic edit + commit + reconcile over the shell's app lists (#659). */
+  mutateApps: ShellAppsController["mutateApps"];
 }
 
 // React-owned Home — the landing screen. Replaces the vanilla renderHomeAsync
@@ -50,12 +55,15 @@ export interface HomeRouteProps {
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const { navigate, enterBuilder, showToast, confirm, builderEnabled } =
     useShellActions();
-  const { userApps, drafts, tileVariant, isStarred, toggleStar, refreshApps } =
+  const { userApps, drafts, tileVariant, isStarred, toggleStar, mutateApps } =
     props;
   // The app whose "App info" sheet is open (its live grants + Uninstall).
   const [infoApp, setInfoApp] = useState<AppMetaResolvedType | null>(null);
 
-  const feed = useAsyncData(async () => {
+  // Cached across visits (issue #659): Home is the app's front door and the
+  // most re-entered route in the shell, so its automation feed paints from the
+  // last known answer and revalidates behind it.
+  const feed = useCachedQuery("home:feed", async () => {
     // `collectAutomationRuns` returns the automation rows it already fetched.
     // Asking for `listAutomations()` alongside it pulled the same list twice on
     // every Home visit — two round trips for one answer.
@@ -81,7 +89,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   });
 
   const bundledIds: ReadonlySet<string> =
-    feed.status === "ready" ? feed.data.bundledIds : new Set<string>();
+    feed.state.status === "ready"
+      ? feed.state.data.bundledIds
+      : new Set<string>();
 
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const findApp = (id: string): AppMetaResolvedType | undefined =>
@@ -160,6 +170,21 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     });
   };
 
+  /** Drop one app from both lists — the local half of a delete/uninstall. */
+  const withoutApp = (id: string) => (snapshot: ShellAppsSnapshot) => ({
+    userApps: snapshot.userApps.filter((a) => a.id !== id),
+    drafts: snapshot.drafts.filter((a) => a.id !== id),
+  });
+
+  /** Retitle one app in both lists — the local half of a rename. */
+  const renamedApp =
+    (id: string, name: string) => (snapshot: ShellAppsSnapshot) => ({
+      userApps: snapshot.userApps.map((a) =>
+        a.id === id ? { ...a, name } : a
+      ),
+      drafts: snapshot.drafts.map((a) => (a.id === id ? { ...a, name } : a)),
+    });
+
   const deleteAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
     const draft = (app as DraftAppMeta).__draft === true;
     const ok = await confirm({
@@ -171,15 +196,16 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         : `Delete "${app.name}"? This removes it from the gateway and wipes its local app files. Data published to the gateway cannot be recovered.`,
     });
     if (!ok) return;
+    // The tile leaves on confirm, not a round trip later; a refusal puts it
+    // back and says why (issue #659).
     try {
-      await deleteApp({ id: app.id });
+      await mutateApps(withoutApp(app.id), () => deleteApp({ id: app.id }));
       showToast(`Deleted ${draft ? "draft " : ""}"${app.name}"`);
     } catch (error) {
       showToast(
         `Could not delete: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    void refreshApps();
   };
 
   // Uninstall a bundled app (issue #434): revokes its access; the user's data
@@ -195,14 +221,13 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     });
     if (!ok) return;
     try {
-      await deleteApp({ id: app.id });
+      await mutateApps(withoutApp(app.id), () => deleteApp({ id: app.id }));
       showToast(`Uninstalled "${app.name}"`);
     } catch (error) {
       showToast(
         `Could not uninstall: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    void refreshApps();
   };
 
   const renameAppFlow = async (
@@ -220,20 +245,21 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       // A bundled app's code is read-only — rename sets a per-vault label with
       // NO editing session (renameInstalledApp); code-store apps rewrite
       // app.json via updateAppMeta.
-      if (bundled)
-        await renameInstalledApp({ id: gatewayAppId(app), name: next });
-      else await updateAppMeta({ id: app.id, name: next });
+      await mutateApps(renamedApp(app.id, next), () =>
+        bundled
+          ? renameInstalledApp({ id: gatewayAppId(app), name: next })
+          : updateAppMeta({ id: app.id, name: next })
+      );
       showToast(`Renamed to "${next}"`);
     } catch (error) {
       showToast(
         `Could not rename: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    void refreshApps();
   };
 
   const automationMenu = (ref: string, anchor: HomeMenuAnchor): void => {
-    const rows = feed.status === "ready" ? feed.data.rows : [];
+    const rows = feed.state.status === "ready" ? feed.state.data.rows : [];
     const row = rows.find((r) => r.ref === ref);
     if (!row) return;
     const items = [
@@ -279,15 +305,19 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     });
   };
 
-  if (feed.status === "loading") {
+  // The apps are already in memory — the shell root owns them and they survive
+  // navigation. Blanking the whole of Home because the AUTOMATION feed is still
+  // in flight threw away content we could already draw (issue #659). Only a
+  // genuinely empty Home waits, and it waits behind a skeleton, not a word.
+  if (feed.state.status === "loading" && apps.length === 0) {
     return (
       <PageScroll flush>
-        <PageLoading label="Loading…" />
+        <PageSkeleton rows={3} label="Loading Home…" />
       </PageScroll>
     );
   }
-  const rows = feed.status === "ready" ? feed.data.rows : [];
-  const entries = feed.status === "ready" ? feed.data.entries : [];
+  const rows = feed.state.status === "ready" ? feed.state.data.rows : [];
+  const entries = feed.state.status === "ready" ? feed.state.data.entries : [];
   const appItems = buildHomeAppItems(apps, {
     userApps,
     isStarred,
@@ -303,7 +333,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         dateLabel={heroDateLabel()}
         appItems={appItems}
         automationItems={automationItems}
-        dailyBrief={feed.status === "ready" ? feed.data.dailyBrief : undefined}
+        dailyBrief={
+          feed.state.status === "ready" ? feed.state.data.dailyBrief : undefined
+        }
         counts={{
           all: apps.length + rows.length,
           apps: apps.length,

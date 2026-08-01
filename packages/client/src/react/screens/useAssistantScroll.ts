@@ -19,7 +19,9 @@ const NEAR_BOTTOM_PX = 60;
 
 export function useAssistantScroll(
   scrollRef: RefObject<HTMLDivElement | null>,
-  messages: unknown[],
+  // Read only as a change signal — the hook never indexes it, so a windowed
+  // (readonly) slice of the transcript is as valid here as the full array.
+  messages: readonly unknown[],
   conversationId: string | undefined
 ): { showJump: boolean; jumpToBottom: () => void } {
   const stuckRef = useRef(true);

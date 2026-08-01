@@ -9,20 +9,30 @@
 const TICK_INTERVAL_MS = 1000;
 
 /**
- * Start a 1s ticker that calls `tick` each second while the page is visible,
- * pausing entirely while `document.visibilityState === 'hidden'` and firing
- * `tick` once immediately when the page becomes visible again. Returns a
- * teardown that clears the interval and detaches the listener.
+ * Start a ticker that calls `tick` every `intervalMs` (1s by default) while the
+ * page is visible, pausing entirely while `document.visibilityState ===
+ * 'hidden'` and firing `tick` once immediately when the page becomes visible
+ * again. Returns a teardown that clears the interval and detaches the listener.
+ *
+ * The interval became a parameter in issue #659: the running-counter ticker was
+ * not the only poller in the shell that woke a backgrounded tab. Gateway
+ * health, the notifications count, the device roster, backup and storage all
+ * ran their own bare `setInterval`, so a tab left open in another window kept
+ * a laptop's radio and CPU busy answering questions nobody was reading. Same
+ * mechanism, different period.
  */
-export function startVisibilityTicker(tick: () => void): () => void {
+export function startVisibilityTicker(
+  tick: () => void,
+  intervalMs: number = TICK_INTERVAL_MS
+): () => void {
   if (typeof document === "undefined") {
-    const t = setInterval(tick, TICK_INTERVAL_MS);
+    const t = setInterval(tick, intervalMs);
     return () => clearInterval(t);
   }
 
   let timer: ReturnType<typeof setInterval> | null = null;
   const start = (): void => {
-    if (timer === null) timer = setInterval(tick, TICK_INTERVAL_MS);
+    if (timer === null) timer = setInterval(tick, intervalMs);
   };
   const stop = (): void => {
     if (timer !== null) {

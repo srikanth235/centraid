@@ -33,7 +33,7 @@ import { conversationArchiveShas } from "../conversation-archive-roots.js";
 import { archivedSegmentShas } from "../journal-archive.js";
 import type { LocalBlobStore } from "./local.js";
 import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
-import { liveBlobShas } from "./read.js";
+import { liveBlobShasCached } from "./read.js";
 
 /**
  * The narrow slice of an open vault the sweep touches. `VaultDb` satisfies it
@@ -63,6 +63,18 @@ export interface LocalOrphanSweepOptions {
    * snapshot manifests (issue #436 §6). A sha named here is never an orphan.
    */
   extraLiveRoots?: ReadonlySet<string>;
+  /**
+   * Entries this pass may examine (issue #659 L5). A CAS with 100k objects
+   * should not turn one hourly tick into 100k membership tests and up to
+   * 100k unlinks; the pass walks a bounded window and hands back a cursor.
+   * Unset = the whole directory, the pre-#659 behaviour.
+   */
+  maxEntries?: number;
+  /**
+   * Resume point: the pass starts at the first sha strictly greater than
+   * this. Pass the previous result's `nextCursor` back to continue.
+   */
+  cursor?: string;
 }
 
 export interface LocalOrphanSweepResult {
@@ -70,6 +82,13 @@ export interface LocalOrphanSweepResult {
   deleted: string[];
   /** Orphans the grace window held back; they delete on a later pass. */
   graceHeld: string[];
+  /** Entries this pass examined. */
+  examined: number;
+  /**
+   * Where the next pass should resume, or `null` when this pass reached the
+   * end of the directory (the next pass starts over from the beginning).
+   */
+  nextCursor: string | null;
 }
 
 /**
@@ -82,14 +101,36 @@ export function sweepLocalOrphans(
   options: LocalOrphanSweepOptions
 ): LocalOrphanSweepResult {
   const now = options.now ?? Date.now();
-  const live = liveBlobShas(db.vault);
-  for (const sha of archivedSegmentShas(db.journal)) live.add(sha);
-  for (const sha of conversationArchiveShas(db.journal)) live.add(sha);
+  // The live set is shared and read-only (issue #659 L5): the other root sets
+  // are consulted beside it rather than unioned into it, so the memo can be
+  // handed to the backup tick unchanged instead of being rebuilt per caller.
+  const live = liveBlobShasCached(db.vault);
+  const archived = archivedSegmentShas(db.journal);
+  const conversation = conversationArchiveShas(db.journal);
+  const isClaimed = (sha: string): boolean =>
+    live.has(sha) ||
+    archived.has(sha) ||
+    conversation.has(sha) ||
+    options.extraLiveRoots?.has(sha) === true;
+
+  if (options.maxEntries !== undefined && options.maxEntries <= 0)
+    throw new Error("local orphan sweep maxEntries must be > 0");
+  // Sorted so a cursor is a stable resume point across passes even if the
+  // store's own listing order is not specified.
+  const all = [...db.blobs.local.listSync()].sort();
+  const cursor = options.cursor;
+  const found = cursor === undefined ? 0 : all.findIndex((sha) => sha > cursor);
+  const from = found < 0 ? all.length : found;
+  const window =
+    options.maxEntries === undefined
+      ? all.slice(from)
+      : all.slice(from, from + options.maxEntries);
+
   const tombstones = new OrphanTombstoneIndex(db.vault);
   const deleted: string[] = [];
   const graceHeld: string[] = [];
-  for (const sha of db.blobs.local.listSync()) {
-    if (live.has(sha) || options.extraLiveRoots?.has(sha) === true) {
+  for (const sha of window) {
+    if (isClaimed(sha)) {
       tombstones.clear(sha);
       continue;
     }
@@ -102,5 +143,11 @@ export function sweepLocalOrphans(
     tombstones.clear(sha);
     deleted.push(sha);
   }
-  return { deleted, graceHeld };
+  const reachedEnd = from + window.length >= all.length;
+  return {
+    deleted,
+    graceHeld,
+    examined: window.length,
+    nextCursor: reachedEnd ? null : (window[window.length - 1] as string),
+  };
 }

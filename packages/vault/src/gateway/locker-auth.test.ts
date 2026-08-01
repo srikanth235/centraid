@@ -18,13 +18,13 @@ describe("Locker user-presence authentication", () => {
     auth = new LockerAuthentication(db, () => now);
   });
 
-  test("boots unconfigured, creates a vault-key-peppered verifier, and never stores the passphrase", () => {
-    expect(auth.handle({ operation: "status" })).toMatchObject({
+  test("boots unconfigured, creates a vault-key-peppered verifier, and never stores the passphrase", async () => {
+    await expect(auth.handle({ operation: "status" })).resolves.toMatchObject({
       ok: true,
       configured: false,
       authenticated: false,
     });
-    const configured = auth.handle({
+    const configured = await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
@@ -55,16 +55,16 @@ describe("Locker user-presence authentication", () => {
     expect(receiptText).not.toContain("correct horse");
   });
 
-  test("rate limits repeated failures without disclosing whether a credential id exists", () => {
-    auth.handle({
+  test("rate limits repeated failures without disclosing whether a credential id exists", async () => {
+    await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
-    expect(
+    await expect(
       auth.handle({ operation: "unlock", secret: "wrong-passphrase" })
-    ).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
-    auth.handle({ operation: "unlock", secret: "wrong-passphrase" });
-    const third = auth.handle({
+    ).resolves.toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
+    await auth.handle({ operation: "unlock", secret: "wrong-passphrase" });
+    const third = await auth.handle({
       operation: "unlock",
       secret: "wrong-passphrase",
     });
@@ -73,35 +73,35 @@ describe("Locker user-presence authentication", () => {
       code: "INVALID_CREDENTIAL",
       retryAfterMs: 1000,
     });
-    expect(
+    await expect(
       auth.handle({
         operation: "unlock",
         credentialId: "not-a-credential",
         secret: "wrong-passphrase",
       })
-    ).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
-    expect(
+    ).resolves.toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
+    await expect(
       auth.handle({
         operation: "unlock",
         secret: "correct horse battery staple",
       })
-    ).toMatchObject({ ok: false, code: "RATE_LIMITED" });
+    ).resolves.toMatchObject({ ok: false, code: "RATE_LIMITED" });
     now += 1001;
-    expect(
+    await expect(
       auth.handle({
         operation: "unlock",
         secret: "correct horse battery staple",
       })
-    ).toMatchObject({ ok: true, authenticated: true });
+    ).resolves.toMatchObject({ ok: true, authenticated: true });
   });
 
-  test("sessions expire on inactivity and item permits are bound, short-lived, and one-time", () => {
-    const configured = auth.handle({
+  test("sessions expire on inactivity and item permits are bound, short-lived, and one-time", async () => {
+    const configured = await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
     const sessionToken = configured.sessionToken!;
-    const permit = auth.handle({
+    const permit = await auth.handle({
       operation: "authorize-item",
       sessionToken,
       secret: "correct horse battery staple",
@@ -115,7 +115,7 @@ describe("Locker user-presence authentication", () => {
       )
     ).toThrow(/item authorization expired/u);
 
-    const second = auth.handle({
+    const second = await auth.handle({
       operation: "authorize-item",
       sessionToken,
       secret: "correct horse battery staple",
@@ -135,24 +135,26 @@ describe("Locker user-presence authentication", () => {
     ).toThrow(/authorization expired/u);
 
     now += 5 * 60 * 1000 + 1;
-    expect(auth.handle({ operation: "status", sessionToken })).toMatchObject({
+    await expect(
+      auth.handle({ operation: "status", sessionToken })
+    ).resolves.toMatchObject({
       authenticated: false,
     });
   });
 
-  test("explicit lock invalidates its session and all outstanding item permits", () => {
-    const configured = auth.handle({
+  test("explicit lock invalidates its session and all outstanding item permits", async () => {
+    const configured = await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
     const sessionToken = configured.sessionToken!;
-    const permit = auth.handle({
+    const permit = await auth.handle({
       operation: "authorize-item",
       sessionToken,
       secret: "correct horse battery staple",
       itemId: "item-a",
     });
-    auth.handle({ operation: "lock", sessionToken });
+    await auth.handle({ operation: "lock", sessionToken });
     expect(() =>
       auth.consumeItemPermit(
         { sessionToken, itemToken: permit.itemToken },
@@ -161,7 +163,7 @@ describe("Locker user-presence authentication", () => {
     ).toThrow(/locked/u);
   });
 
-  test("authorizeReveal gates UI permits and fill sessions only after configure", () => {
+  test("authorizeReveal gates UI permits and fill sessions only after configure", async () => {
     expect(auth.isConfigured()).toBe(false);
     expect(auth.isUnlocked()).toBe(false);
     // Unconfigured: both arms are open (opt-in presence).
@@ -170,7 +172,7 @@ describe("Locker user-presence authentication", () => {
       auth.authorizeReveal(undefined, "item-a", "fill")
     ).not.toThrow();
 
-    const configured = auth.handle({
+    const configured = await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
@@ -186,17 +188,17 @@ describe("Locker user-presence authentication", () => {
       auth.authorizeReveal(undefined, "item-a", "fill")
     ).not.toThrow();
 
-    auth.handle({ operation: "lock" }); // lock all sessions
+    await auth.handle({ operation: "lock" }); // lock all sessions
     expect(auth.isUnlocked()).toBe(false);
     expect(() => auth.authorizeReveal(undefined, "item-a", "fill")).toThrow(
       /locked/u
     );
 
-    const unlocked = auth.handle({
+    const unlocked = await auth.handle({
       operation: "unlock",
       secret: "correct horse battery staple",
     });
-    const permit = auth.handle({
+    const permit = await auth.handle({
       operation: "authorize-item",
       sessionToken: unlocked.sessionToken!,
       secret: "correct horse battery staple",
@@ -211,33 +213,33 @@ describe("Locker user-presence authentication", () => {
     ).not.toThrow();
   });
 
-  test("enroll-device and revoke-device cover session and primary guards", () => {
-    const configured = auth.handle({
+  test("enroll-device and revoke-device cover session and primary guards", async () => {
+    const configured = await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
     const sessionToken = configured.sessionToken!;
     const deviceSecret = "d".repeat(32);
 
-    expect(
+    await expect(
       auth.handle({
         operation: "enroll-device",
         sessionToken: "dead-session",
         secret: deviceSecret,
         label: "Phone",
       })
-    ).toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
+    ).resolves.toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
 
-    expect(
+    await expect(
       auth.handle({
         operation: "enroll-device",
         sessionToken,
         secret: "too-short",
         label: "Phone",
       })
-    ).toMatchObject({ ok: false, code: "WEAK_DEVICE_SECRET" });
+    ).resolves.toMatchObject({ ok: false, code: "WEAK_DEVICE_SECRET" });
 
-    const enrolled = auth.handle({
+    const enrolled = await auth.handle({
       operation: "enroll-device",
       sessionToken,
       secret: deviceSecret,
@@ -249,43 +251,113 @@ describe("Locker user-presence authentication", () => {
     });
     const deviceId = enrolled.credentialId!;
 
-    expect(
+    await expect(
       auth.handle({
         operation: "revoke-device",
         sessionToken: "dead-session",
         credentialId: deviceId,
       })
-    ).toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
+    ).resolves.toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
 
-    expect(
+    await expect(
       auth.handle({
         operation: "revoke-device",
         sessionToken,
         credentialId: LOCKER_PRIMARY_CREDENTIAL_ID,
       })
-    ).toMatchObject({ ok: false, code: "PRIMARY_CREDENTIAL" });
+    ).resolves.toMatchObject({ ok: false, code: "PRIMARY_CREDENTIAL" });
 
-    expect(
+    await expect(
       auth.handle({
         operation: "revoke-device",
         sessionToken,
         credentialId: deviceId,
       })
-    ).toMatchObject({ ok: true, authenticated: true });
+    ).resolves.toMatchObject({ ok: true, authenticated: true });
 
     // Device credential unlock path after enroll (before revoke above we
     // already revoked — re-enroll and unlock with device secret).
-    const again = auth.handle({
+    const again = await auth.handle({
       operation: "enroll-device",
       sessionToken,
       secret: deviceSecret,
       label: "Watch",
     });
-    const unlocked = auth.handle({
+    const unlocked = await auth.handle({
       operation: "unlock",
       secret: deviceSecret,
       credentialId: again.credentialId,
     });
     expect(unlocked).toMatchObject({ ok: true, authenticated: true });
+  });
+
+  // ── issue #659 G11: the KDF runs off the event loop ───────────────────
+
+  test("an unlock leaves the event loop free while its scrypt runs", async () => {
+    await auth.handle({
+      operation: "configure",
+      secret: "correct horse battery staple",
+    });
+
+    // A timer chain that can only advance if the loop is being serviced. With
+    // the old `scryptSync` the whole ~100 ms derivation ran inside one tick,
+    // so this counter could not move at all while the unlock was in flight.
+    let ticks = 0;
+    let ticking = true;
+    const tick = (): void => {
+      if (!ticking) return;
+      ticks += 1;
+      setTimeout(tick, 1);
+    };
+    setTimeout(tick, 1);
+
+    const before = ticks;
+    const started = performance.now();
+    const unlocked = await auth.handle({
+      operation: "unlock",
+      secret: "correct horse battery staple",
+    });
+    const elapsedMs = performance.now() - started;
+    const during = ticks - before;
+    ticking = false;
+
+    expect(unlocked).toMatchObject({ ok: true, authenticated: true });
+    // The derivation is deliberately expensive, so a serviced loop turns over
+    // many times inside it. `scryptSync` yielded only at the handful of await
+    // boundaries around it, which is why the floor is well above 1 — a
+    // regression to the sync KDF cannot satisfy this.
+    expect(elapsedMs).toBeGreaterThan(20);
+    expect(during).toBeGreaterThan(10);
+  });
+
+  test("a wrong passphrase still pays the full derivation before it is refused", async () => {
+    await auth.handle({
+      operation: "configure",
+      secret: "correct horse battery staple",
+    });
+    // The enumeration guard is only a guard if the fake derivation is
+    // AWAITED: an unknown credential id and a known one must both cost a real
+    // scrypt, so the refusal timing tells an attacker nothing.
+    const startUnknown = performance.now();
+    const unknown = await auth.handle({
+      operation: "unlock",
+      credentialId: "not-a-credential",
+      secret: "wrong-passphrase",
+    });
+    const unknownMs = performance.now() - startUnknown;
+
+    now += 60_000; // clear the failure backoff the refusal just recorded
+    const startKnown = performance.now();
+    const known = await auth.handle({
+      operation: "unlock",
+      secret: "wrong-passphrase",
+    });
+    const knownMs = performance.now() - startKnown;
+
+    expect(unknown).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
+    expect(known).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
+    // Both paths did real KDF work — neither returned on a fast path.
+    expect(unknownMs).toBeGreaterThan(1);
+    expect(knownMs).toBeGreaterThan(1);
   });
 });

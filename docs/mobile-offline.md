@@ -70,12 +70,27 @@ Locker is stricter than the ordinary replica plane. Its native cover performs au
 
 The checked 50,000-row fixture spans 2016–2025 across four mounted household sources. On the 2026-07-29 development host it measured a 562.6 ms cold merged/sorted read, a 1.5 ms federated FTS lookup, and 22,188,032 projection bytes. At that observed density the 5,000-row bootstrap window is 2,218,804 bytes. The same evidence lane encodes twelve reproducible 256px/82%-quality thumbnail samples: the 13,726-byte p95 projects a 12,820,084-byte recent-90-day plus 5%-favorite pack for each 12,500-item source, within its 128 MiB ceiling. The lane enforces the 1,000 ms, 100 ms, 4 MiB bootstrap-page, and 128 MiB thumbnail ceilings. Native build/install/launch checks prove the new modules load on both platforms; the committed mobile journey lane remains the owner of React-frame, airplane-mode, and reconnect-drain evidence.
 
+### Where 50,000 rows came from, and where it stops (#659)
+
+50,000 is a measured fixture, not a product ceiling. A household that keeps a phone camera for a decade plausibly reaches 90,000 items by year three of using Centraid, so the envelope has to say what happens there rather than imply the number cannot be exceeded.
+
+Scaling the 2026-07-29 measurement linearly — a projection from that run, **not** a new measurement — a 90,000-row set is about 39.9 MB of projection across four sources and about 1,013 ms of cold merged read. That is over the 1,000 ms ceiling, and it was over it for a structural reason: the mounted reader answered every request by selecting every row of the entity from every attached source, parsing each payload in JavaScript, and only then applying the caller's filters and limit. Cost tracked the size of the library instead of the size of the answer.
+
+Since #659 the reader pushes the read grammar's filters, and the caller's limit where truncation is provably safe, into the attached SQLite databases, and runs the statement off the JS thread. What that changes about this envelope:
+
+- **A bounded read costs what it returns.** The 5,000-row bootstrap window, a filtered lookup, and a keyed fetch no longer scale with the projection, so they hold at 90,000 rows and beyond.
+- **An unbounded read still costs the whole entity.** Photos deliberately reads its full asset set to merge the camera roll against it. That path scales linearly and is the one that leaves the 1,000 ms budget somewhere between 50,000 and 90,000 rows on the reference host.
+- **The limit is not pushed for content-hashed entities across several sources.** Equal bytes in two vaults collapse into one row carrying both source badges, and a per-source page could drop the duplicate that supplies a badge. Those entities read in full by design; the cheaper path is not worth a missing badge.
+
+The honest ceiling today is therefore: **bounded reads are unbounded in library size; the full-projection Photos read is measured to 50,000 rows and projected to leave budget near 90,000.** Closing that gap means giving the timeline a windowed read rather than raising the number here. Storage scales without a cliff — projection bytes are linear, and the per-source 128 MiB thumbnail budget is unchanged because the pack is a 90-day-plus-favorites window, not a fraction of the library.
+
 - merged cold view: under 1 second after page one is locally available;
 - federated local search: under 100 ms for the supported mounted set;
-- scrolling: bounded 100k local reads feeding FlashList, no 10k truncation;
+- scrolling: reads bounded by the query, not by the library, and no 10k truncation;
 - newest-first bootstrap page: 5,000 rows;
 - attached sources: 4;
 - FTS results: 1,000;
-- pinned thumbnails: 128 MiB per source.
+- pinned thumbnails: 128 MiB per source;
+- measured library: 50,000 rows; projected budget edge for a full-projection read: ~90,000 rows.
 
 Device/simulator runs remain the release evidence for 60 fps and the end-to-end time budgets; unit tests pin query behavior, provenance dedupe, cursor convergence, and outbox durability.

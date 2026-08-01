@@ -4,6 +4,7 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { browseRows } from "../../packages/vault/src/schema/atlas-browse.js";
 import { createTestVault } from "../helpers/factories.js";
+import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/ontology.scale.test.ts";
 
@@ -68,19 +69,28 @@ describe("ontology.scale", () => {
     const partyCount = pageCount("core.party", "party_id");
     const relationCount = pageCount("core.link", "link_id");
     const durationMs = performance.now() - started;
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       partyCount === 10_001 && relationCount === 9_999 && durationMs < 10_000;
+    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Atlas/Browse kinds and relations at 10k entities",
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         { name: "wall clock", value: durationMs, unit: "ms", budget: 10_000 },
         { name: "party rows paged", value: partyCount, unit: "rows" },
         { name: "relation rows paged", value: relationCount, unit: "rows" },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
     expect(partyCount).toBe(10_001);
     expect(relationCount).toBe(9_999);
     expect(durationMs).toBeLessThan(10_000);

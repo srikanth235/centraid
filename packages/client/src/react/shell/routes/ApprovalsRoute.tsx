@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
@@ -19,8 +19,8 @@ import { confirmVaultParked } from "../../../gateway-client-vault.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
-import { PageEmpty, PageLoading } from "../status.js";
-import { useAsyncData } from "../useAsyncData.js";
+import { useCachedQuery } from "../queryCache.js";
+import { PageEmpty, PageSkeleton } from "../status.js";
 import {
   buildGrantRow,
   buildActivityRow,
@@ -37,7 +37,13 @@ const REVIEW_LIMIT_SEE_ALL = 200;
 
 /** The route's whole payload — one fetch triple, so the last-good copy the
  *  route holds across refetches has a name. */
-async function loadApprovals(reviewLimit: number) {
+interface Approvals {
+  notifications: Awaited<ReturnType<typeof getNotifications>>;
+  grants: Awaited<ReturnType<typeof listOutboxGrants>>;
+  review: Awaited<ReturnType<typeof getReview>>;
+}
+
+async function loadApprovals(reviewLimit: number): Promise<Approvals> {
   const [notifications, grants, review] = await Promise.all([
     getNotifications(true),
     listOutboxGrants(),
@@ -56,9 +62,6 @@ async function loadApprovals(reviewLimit: number) {
 export default function ApprovalsRoute(): JSX.Element {
   const { confirm, showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Bumping this forces useAsyncData to re-fetch. SSE rings this same doorbell;
-  // explicit decisions still reload immediately.
-  const [refreshTick, setRefreshTick] = useState(0);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
 
   // The outbox decision an `outbox` notice deep-links to (#647 D10). The
@@ -69,19 +72,20 @@ export default function ApprovalsRoute(): JSX.Element {
     nonce: number;
   } | null>(null);
 
-  // Every notifications-changed doorbell bumps `refreshTick`, which is a deps change —
-  // so without `keepPreviousData` the route would swap to PageLoading on every
-  // SSE event, UNMOUNTING ApprovalsScreen and discarding whatever the owner
-  // was in the middle of: half-edited outbox artifact text, the expanded row,
-  // the "always allow" checkbox, the active chip. The loader is for the FIRST
-  // load only.
-  const state = useAsyncData(
-    () => loadApprovals(reviewLimit),
-    [refreshTick, reviewLimit],
-    { keepPreviousData: true }
+  // Cached and stale-while-revalidate (issue #659). Two things follow. An SSE
+  // doorbell or a decision revalidates BEHIND the rendered page, so nothing the
+  // owner is in the middle of — half-edited outbox artifact text, the expanded
+  // row, the "always allow" checkbox, the active chip — is thrown away. And
+  // leaving Notifications and coming back paints the last known state at once
+  // instead of a spinner while the triple round-trips again.
+  const { state, refresh, mutate } = useCachedQuery(
+    `approvals:${reviewLimit}`,
+    () => loadApprovals(reviewLimit)
   );
 
-  const reload = (): void => setRefreshTick((t) => t + 1);
+  // Stable across renders so the SSE subscription below never has to tear
+  // down and re-open just because the component re-rendered.
+  const reload = useCallback((): void => void refresh(), [refresh]);
   useEffect(() => {
     const controller = new AbortController();
     void subscribeNotificationsChanges(reload, controller.signal).catch(() => {
@@ -94,16 +98,23 @@ export default function ApprovalsRoute(): JSX.Element {
       .then((enabled) => (enabled ? syncWebNotifications() : Promise.resolve()))
       .catch(() => undefined);
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
+  /**
+   * Run one decision. The row leaves the page the moment the owner decides
+   * (issue #659) — `apply` is the local edit describing that — and the wire
+   * call confirms it; a rejection restores the page exactly as it was and says
+   * why. `apply` is omitted where the decision has no single obvious local
+   * consequence, in which case this is a plain commit-then-revalidate.
+   */
   const runDecision = async (
     id: string,
-    action: () => Promise<void>
+    action: () => Promise<void>,
+    apply: (previous: Approvals) => Approvals = (previous) => previous
   ): Promise<void> => {
     setBusyId(id);
     try {
-      await action();
-      reload();
+      await mutate(apply, action);
     } catch (error) {
       showToast(
         `That didn’t go through: ${error instanceof Error ? error.message : String(error)}`
@@ -111,6 +122,38 @@ export default function ApprovalsRoute(): JSX.Element {
     } finally {
       setBusyId(null);
     }
+  };
+
+  /** Drop one pending decision from the blocking summary, by list and id. */
+  const withoutDecision = (
+    previous: Approvals,
+    list: "outbox" | "parked" | "scopeRequests",
+    id: string
+  ): Approvals => {
+    const decisions = previous.notifications.decisions;
+    const remaining =
+      list === "outbox"
+        ? decisions.outbox.filter((item) => item.itemId !== id)
+        : list === "parked"
+          ? decisions.parked.filter((item) => item.invocationId !== id)
+          : decisions.scopeRequests.filter((item) => item.requestId !== id);
+    const dropped =
+      (list === "outbox"
+        ? decisions.outbox.length
+        : list === "parked"
+          ? decisions.parked.length
+          : decisions.scopeRequests.length) - remaining.length;
+    return {
+      ...previous,
+      notifications: {
+        ...previous.notifications,
+        decisions: {
+          ...decisions,
+          [list]: remaining,
+          count: Math.max(0, decisions.count - dropped),
+        },
+      },
+    };
   };
 
   const reasonFor = (outcome: {
@@ -126,23 +169,27 @@ export default function ApprovalsRoute(): JSX.Element {
     alwaysAllow: boolean,
     artifact?: Record<string, unknown>
   ): void => {
-    void runDecision(itemId, async () => {
-      const outcome = await decideOutboxItem({
-        itemId,
-        decision: "approve",
-        alwaysAllow,
-        ...(artifact ? { artifact } : {}),
-      });
-      const reason = reasonFor(outcome);
-      if (reason) throw new Error(reason);
-      showToast(
-        artifact
-          ? "Approved with your edits."
-          : alwaysAllow
-            ? "Approved — future sends like this go through automatically."
-            : "Approved."
-      );
-    });
+    void runDecision(
+      itemId,
+      async () => {
+        const outcome = await decideOutboxItem({
+          itemId,
+          decision: "approve",
+          alwaysAllow,
+          ...(artifact ? { artifact } : {}),
+        });
+        const reason = reasonFor(outcome);
+        if (reason) throw new Error(reason);
+        showToast(
+          artifact
+            ? "Approved with your edits."
+            : alwaysAllow
+              ? "Approved — future sends like this go through automatically."
+              : "Approved."
+        );
+      },
+      (previous) => withoutDecision(previous, "outbox", itemId)
+    );
   };
 
   const handleDenyOutbox = (itemId: string): void => {
@@ -153,12 +200,19 @@ export default function ApprovalsRoute(): JSX.Element {
       danger: true,
     }).then((ok) => {
       if (!ok) return;
-      void runDecision(itemId, async () => {
-        const outcome = await decideOutboxItem({ itemId, decision: "discard" });
-        const reason = reasonFor(outcome);
-        if (reason) throw new Error(reason);
-        showToast("Discarded — nothing was sent.");
-      });
+      void runDecision(
+        itemId,
+        async () => {
+          const outcome = await decideOutboxItem({
+            itemId,
+            decision: "discard",
+          });
+          const reason = reasonFor(outcome);
+          if (reason) throw new Error(reason);
+          showToast("Discarded — nothing was sent.");
+        },
+        (previous) => withoutDecision(previous, "outbox", itemId)
+      );
     });
   };
 
@@ -167,10 +221,14 @@ export default function ApprovalsRoute(): JSX.Element {
     approve: boolean
   ): void => {
     const proceed = (): void => {
-      void runDecision(invocationId, async () => {
-        await confirmVaultParked({ invocationId, approve });
-        showToast(approve ? "Approved." : "Denied.");
-      });
+      void runDecision(
+        invocationId,
+        async () => {
+          await confirmVaultParked({ invocationId, approve });
+          showToast(approve ? "Approved." : "Denied.");
+        },
+        (previous) => withoutDecision(previous, "parked", invocationId)
+      );
     };
     if (approve) {
       proceed();
@@ -189,10 +247,14 @@ export default function ApprovalsRoute(): JSX.Element {
     approve: boolean
   ): void => {
     const proceed = (): void => {
-      void runDecision(requestId, async () => {
-        await decideScopeRequest({ requestId, approve });
-        showToast(approve ? "Scope approved." : "Scope request denied.");
-      });
+      void runDecision(
+        requestId,
+        async () => {
+          await decideScopeRequest({ requestId, approve });
+          showToast(approve ? "Scope approved." : "Scope request denied.");
+        },
+        (previous) => withoutDecision(previous, "scopeRequests", requestId)
+      );
     };
     if (approve) {
       proceed();
@@ -216,12 +278,25 @@ export default function ApprovalsRoute(): JSX.Element {
       danger: true,
     }).then((ok) => {
       if (!ok) return;
-      void runDecision(grantId, async () => {
-        const outcome = await revokeOutboxGrant(grantId);
-        const reason = reasonFor(outcome);
-        if (reason) throw new Error(reason);
-        showToast("Grant revoked.");
-      });
+      void runDecision(
+        grantId,
+        async () => {
+          const outcome = await revokeOutboxGrant(grantId);
+          const reason = reasonFor(outcome);
+          if (reason) throw new Error(reason);
+          showToast("Grant revoked.");
+        },
+        // The row is filtered on `revokedAt` below, so stamping it is what
+        // makes the standing rule leave the list on the click.
+        (previous) => ({
+          ...previous,
+          grants: previous.grants.map((grant) =>
+            grant.grantId === grantId
+              ? { ...grant, revokedAt: new Date().toISOString() }
+              : grant
+          ),
+        })
+      );
     });
   };
 
@@ -229,15 +304,34 @@ export default function ApprovalsRoute(): JSX.Element {
     noticeId: string,
     action: "read" | "archive"
   ): void => {
-    void runDecision(noticeId, async () => {
-      await updateNotice(noticeId, action);
-    });
+    void runDecision(
+      noticeId,
+      async () => {
+        await updateNotice(noticeId, action);
+      },
+      (previous) => ({
+        ...previous,
+        notifications: {
+          ...previous.notifications,
+          notices:
+            action === "archive"
+              ? previous.notifications.notices.filter(
+                  (notice) => notice.noticeId !== noticeId
+                )
+              : previous.notifications.notices.map((notice) =>
+                  notice.noticeId === noticeId && notice.readAt === null
+                    ? { ...notice, readAt: new Date().toISOString() }
+                    : notice
+                ),
+        },
+      })
+    );
   };
 
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageLoading label="Loading Notifications…" />
+        <PageSkeleton rows={4} label="Loading Notifications…" />
       </PageScroll>
     );
   }

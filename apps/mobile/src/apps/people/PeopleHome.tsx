@@ -1,22 +1,18 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// governance: allow-repo-hygiene file-size-limit — native People intentionally
-// keeps the offline directory, channel CRUD, duplicate review, and merge
-// (via core.merge_party) in one first-class cover so every visible control
-// maps to a receipted action.
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
@@ -32,15 +28,19 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, radii, useTheme } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
+import { MergePicker } from "./MergePicker";
+import { styles } from "./PeopleHome.styles";
+import {
+  keyOfPerson,
+  PEOPLE_LIST_ID,
+  personItemLayout,
+  PersonListRow,
+} from "./PersonListRow";
+import type { PersonRow } from "./PersonListRow";
 
 type ChannelKind = "phone" | "email" | "address" | "handle";
-type PersonRow = ReplicaRow & {
-  party_id: string;
-  name: string;
-  role?: ReplicaValue;
-};
 const text = (row: ReplicaRow | undefined, key: string): string =>
   row?.[key] == null ? "" : String(row[key]);
 
@@ -94,32 +94,61 @@ export default function PeopleHome({
   const [editingChannelId, setEditingChannelId] = useState<string>();
   const [mergeOpen, setMergeOpen] = useState(false);
 
+  // Indexed, not scanned: this directory reaches ~5k profiles against a
+  // same-sized party table, and the `find` this replaces made the join
+  // quadratic — 25M comparisons on every render that touched either query.
+  const partyNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const party of parties.rows) {
+      names.set(String(party.party_id), text(party, "display_name"));
+    }
+    return names;
+  }, [parties.rows]);
   const people = useMemo<PersonRow[]>(
     () =>
       profiles.rows
         .filter((profile) => !profile.deleted_at)
-        .map((profile) => {
-          const party = parties.rows.find(
-            (candidate) => candidate.party_id === profile.party_id
-          );
-          return {
-            ...profile,
-            party_id: String(profile.party_id),
-            name: text(party, "display_name") || "Unnamed person",
-          } as PersonRow;
-        })
+        .map(
+          (profile) =>
+            ({
+              ...profile,
+              party_id: String(profile.party_id),
+              name:
+                partyNames.get(String(profile.party_id)) || "Unnamed person",
+            }) as PersonRow
+        )
         .sort((a, b) => String(a.name).localeCompare(String(b.name))),
-    [parties.rows, profiles.rows]
+    [partyNames, profiles.rows]
   );
   const selected =
     people.find((person) => person.party_id === selectedId) ?? people[0];
-  const selectedChannels = channels.rows
-    .filter((channel) => channel.party_id === selected?.party_id)
-    .sort(
-      (a, b) =>
-        Number(b.is_preferred ?? 0) - Number(a.is_preferred ?? 0) ||
-        String(a.kind).localeCompare(String(b.kind))
-    );
+  const selectedPartyId = selected?.party_id;
+  const selectedChannels = useMemo(
+    () =>
+      channels.rows
+        .filter((channel) => channel.party_id === selectedPartyId)
+        .sort(
+          (a, b) =>
+            Number(b.is_preferred ?? 0) - Number(a.is_preferred ?? 0) ||
+            String(a.kind).localeCompare(String(b.kind))
+        ),
+    [channels.rows, selectedPartyId]
+  );
+  const renderPerson = useCallback(
+    ({ item, index }: ListRenderItemInfo<PersonRow>) => (
+      <PersonListRow
+        // Positional, not identity-based: the probe needs a handle that exists
+        // whatever the fixture seeded.
+        testID={`${PEOPLE_LIST_ID}-row-${index}`}
+        person={item}
+        selected={selectedPartyId === item.party_id}
+        colors={colors}
+        onSelect={setSelectedId}
+      />
+    ),
+    [colors, selectedPartyId]
+  );
+  const closeMerge = useCallback(() => setMergeOpen(false), []);
   const duplicateNames = (channel: ReplicaRow): string[] => {
     const duplicateIds = channels.rows
       .filter(
@@ -129,13 +158,7 @@ export default function PeopleHome({
           other.normalized_value === channel.normalized_value
       )
       .map((other) => String(other.party_id));
-    return duplicateIds.map(
-      (id) =>
-        text(
-          parties.rows.find((party) => party.party_id === id),
-          "display_name"
-        ) || id
-    );
+    return duplicateIds.map((id) => partyNames.get(id) || id);
   };
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
@@ -258,7 +281,7 @@ export default function PeopleHome({
             }).then((result) => {
               if (!result) return;
               setSelectedId(String(target.party_id));
-              setMergeOpen(false);
+              closeMerge();
               Alert.alert(
                 "People merged",
                 "The duplicate identity is gone; references now point at the survivor."
@@ -326,35 +349,24 @@ export default function PeopleHome({
       </View>
       <View style={styles.body}>
         <FlatList
+          testID={PEOPLE_LIST_ID}
+          accessibilityLabel="People directory"
           data={people}
           style={styles.directory}
-          keyExtractor={(person) => String(person.party_id)}
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{
-                selected: selected?.party_id === item.party_id,
-              }}
-              onPress={() => setSelectedId(String(item.party_id))}
-              style={[
-                styles.person,
-                {
-                  backgroundColor:
-                    selected?.party_id === item.party_id
-                      ? colors.bgSunken
-                      : colors.bg,
-                  borderColor: colors.line,
-                },
-              ]}
-            >
-              <Text style={[styles.personName, { color: colors.ink }]}>
-                {String(item.name)}
-              </Text>
-              <Text style={[styles.meta, { color: colors.ink3 }]}>
-                {String(item.role ?? "No role")}
-              </Text>
-            </Pressable>
-          )}
+          keyExtractor={keyOfPerson}
+          renderItem={renderPerson}
+          // Rows are a fixed `PERSON_ROW_HEIGHT`, so the list can place any
+          // index arithmetically instead of measuring its way down — the
+          // difference between an instant and a multi-second `scrollToIndex`
+          // once the directory is thousands of people long.
+          getItemLayout={personItemLayout}
+          // Sized to the row, not copied from a cheat sheet: a ~60pt row fills
+          // a phone screen in about 14, so a first batch of 16 covers the fold
+          // and `windowSize` 5 keeps two screens of scrollback either side.
+          initialNumToRender={16}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          removeClippedSubviews
         />
         <ScrollView
           style={styles.detail}
@@ -365,26 +377,9 @@ export default function PeopleHome({
               <Text style={[styles.detailTitle, { color: colors.ink }]}>
                 {String(selected.name)}
               </Text>
-              <Pressable onPress={() => setMergeOpen((current) => !current)}>
-                <Text style={{ color: colors.danger }}>
-                  {mergeOpen ? "Cancel merge" : "Merge duplicate…"}
-                </Text>
+              <Pressable onPress={() => setMergeOpen(true)}>
+                <Text style={{ color: colors.danger }}>Merge duplicate…</Text>
               </Pressable>
-              {mergeOpen
-                ? people
-                    .filter((person) => person.party_id !== selected.party_id)
-                    .map((person) => (
-                      <Pressable
-                        key={String(person.party_id)}
-                        onPress={() => merge(person)}
-                        style={[styles.merge, { borderColor: colors.line }]}
-                      >
-                        <Text style={{ color: colors.ink }}>
-                          Merge into {String(person.name)}
-                        </Text>
-                      </Pressable>
-                    ))
-                : null}
               {selectedChannels.map((channel) => {
                 const duplicates = duplicateNames(channel);
                 return (
@@ -491,53 +486,15 @@ export default function PeopleHome({
           )}
         </ScrollView>
       </View>
+      <MergePicker
+        visible={mergeOpen}
+        people={people}
+        keepingName={selected ? String(selected.name) : undefined}
+        excludePartyId={selectedPartyId}
+        colors={colors}
+        onClose={closeMerge}
+        onPick={merge}
+      />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  add: {
-    alignItems: "center",
-    borderRadius: 12,
-    justifyContent: "center",
-    width: 44,
-  },
-  addRow: { flexDirection: "row", gap: 8, padding: 12 },
-  body: { flex: 1, flexDirection: "row" },
-  channel: {
-    alignItems: "center",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    padding: 12,
-  },
-  detail: { flex: 1.45 },
-  detailContent: { gap: 10, padding: 12, paddingBottom: 80 },
-  detailTitle: { fontFamily: family.displayBold, fontSize: 23 },
-  directory: { flex: 1 },
-  form: { borderRadius: radii.lg, borderWidth: 1, gap: 9, padding: 10 },
-  header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    flex: 1,
-    minWidth: 72,
-    padding: 10,
-  },
-  kindRow: { gap: 16, paddingVertical: 4 },
-  merge: { borderRadius: 8, borderWidth: 1, padding: 9 },
-  meta: { fontFamily: family.sansRegular, fontSize: 12 },
-  person: { borderBottomWidth: 1, padding: 13 },
-  personName: { fontFamily: family.sansMedium, fontSize: 14 },
-  safe: { flex: 1 },
-  save: {
-    borderRadius: 10,
-    marginLeft: "auto",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  switchRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-  title: { fontFamily: family.displayBold, fontSize: 28 },
-  warning: { fontFamily: family.sansMedium, fontSize: 11, marginTop: 3 },
-});

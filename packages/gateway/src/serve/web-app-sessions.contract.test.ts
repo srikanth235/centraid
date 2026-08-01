@@ -550,4 +550,45 @@ describe("web-app-sessions.contract scenarios", () => {
     enrolled = false;
     expect(sessions.authorize(appReq())).toBeUndefined();
   });
+
+  // Issue #659 G3 moved expiry reclamation off the per-request path. Expiry is
+  // therefore only correct if `authorize()` checks it itself — this is the law
+  // that stops a future refactor from re-deriving liveness from "the sweep ran".
+  test("an expired app session stops authorizing even though nothing swept", async () => {
+    let now = 1_700_000_000_000;
+    const sessions = new WebAppSessions({ now: () => now });
+
+    const mintRes = new MockRes();
+    await runWithVaultContext({ vaultId: "v1", deviceKey: "dev-1" }, () =>
+      sessions.handler(
+        req({
+          url: "/centraid/_apps/alpha/web-session",
+          method: "POST",
+          headers: { origin: SHELL },
+          body: "{}",
+        }),
+        mintRes as unknown as ServerResponse
+      )
+    );
+    const { launchPath } = JSON.parse(mintRes.body) as { launchPath: string };
+    const redeemRes = new MockRes();
+    await sessions.handler(
+      req({ url: launchPath, method: "GET" }),
+      redeemRes as unknown as ServerResponse
+    );
+    const appCookie =
+      (redeemRes.getHeader("set-cookie") ?? "").split(";")[0] ?? "";
+    const appReq = (): IncomingMessage =>
+      req({ url: "/centraid/alpha/", headers: { cookie: appCookie } });
+
+    expect(sessions.authorize(appReq())).toStrictEqual({
+      plane: "device",
+      deviceKey: "dev-1",
+    });
+    // Past the 12h app-session wall, with no sweep in between.
+    now += 12 * 60 * 60 * 1000 + 1;
+    expect(sessions.authorize(appReq())).toBeUndefined();
+    // The origin allowlist must not keep advertising a dead session's origin.
+    expect(sessions.knownShellOrigins()).not.toContain(SHELL);
+  });
 });

@@ -88,9 +88,42 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   for (const [index, file] of files.entries()) {
     assert.match(sources[index], /<FlatList/u, `${file} lost virtualization`);
   }
-  const timeline = await source(
-    "apps/mobile/src/apps/photos/PhotoTimeline.tsx"
+  // The decode/cache contract for a grid cell used to be inline props on the
+  // timeline's <Image>, so a grep for the literal was the whole check. It now
+  // lives in one module (#659), which a source grep cannot follow through a
+  // spread — so the check is in two halves, and BOTH are needed:
+  //
+  //   1. the contract still names a bounded cache tier where it now lives, and
+  //   2. every grid surface actually reaches it.
+  //
+  // Deleting the policy fails (1); dropping the spread at a call site fails (2).
+  // The per-tier *values* (device-addressed bytes stay out of the disk cache,
+  // gateway thumbnails keep it) are pinned by behaviour in
+  // apps/mobile/src/apps/photos/grid-image.test.ts, which can assert on the
+  // returned object rather than on source text.
+  const gridImage = await source("apps/mobile/src/apps/photos/grid-image.ts");
+  assert.match(
+    gridImage,
+    /cachePolicy: .*"memory-disk"/u,
+    "grid cells lost their bounded image cache tier"
   );
-  assert.match(timeline, /cachePolicy="memory-disk"/u);
-  assert.match(timeline, /recyclingKey=/u);
+  const grids = [
+    "apps/mobile/src/apps/photos/PhotoTimeline.tsx",
+    "apps/mobile/src/apps/photos/PhotosLibrary.tsx",
+  ];
+  const gridSources = await Promise.all(grids.map((file) => source(file)));
+  for (const [index, file] of grids.entries()) {
+    assert.match(
+      gridSources[index],
+      /\{\.\.\.gridImageProps\(/u,
+      `${file} renders image cells without the shared decode/cache contract`
+    );
+    // FlashList recycles these views; without an explicit key a cell shows the
+    // previous asset until the new one decodes.
+    assert.match(
+      gridSources[index],
+      /recyclingKey=/u,
+      `${file} lost its image recycling key`
+    );
+  }
 });

@@ -19,6 +19,7 @@ import type {
   ReplicaServerShape,
   ReplicaShapeAccess,
 } from "./replica-shape.js";
+import { preparedStatement } from "./sql-statement-cache.js";
 
 export interface ReplicaUpsertWire {
   op: "upsert";
@@ -167,11 +168,10 @@ function appMatches(
   if (!access.appId) return true;
   if (access.appId === appId || access.appId === appName) return true;
   return (
-    db
-      .prepare(
-        `SELECT 1 AS matched FROM consent_app WHERE app_id = ? AND name = ? LIMIT 1`
-      )
-      .get(appId, access.appId) !== undefined
+    preparedStatement(
+      db,
+      `SELECT 1 AS matched FROM consent_app WHERE app_id = ? AND name = ? LIMIT 1`
+    ).get(appId, access.appId) !== undefined
   );
 }
 
@@ -181,9 +181,11 @@ function currentRow(
   key: string,
   rowId: string
 ): Record<string, unknown> | undefined {
-  return db
-    .prepare(`SELECT * FROM "${table}" WHERE "${key}" = ?`)
-    .get(rowId) as Record<string, unknown> | undefined;
+  // Table/key come from a closed set of consent tables, never from the wire.
+  return preparedStatement(
+    db,
+    `SELECT * FROM "${table}" WHERE "${key}" = ?`
+  ).get(rowId) as Record<string, unknown> | undefined;
 }
 
 function shapeControlChange(
@@ -196,21 +198,20 @@ function shapeControlChange(
   if (change.entity === "core.concept") {
     const restriction = access.appId ? ` AND (a.app_id = ? OR a.name = ?)` : "";
     return (
-      db
-        .prepare(
-          `SELECT 1 AS matched
+      preparedStatement(
+        db,
+        `SELECT 1 AS matched
              FROM consent_access_grant g
              JOIN consent_app a ON a.app_id = g.app_id
             WHERE g.purpose_concept_id = ? AND a.status = 'active'
               AND g.status = 'active' AND g.revoked_at IS NULL
               AND (g.expires_at IS NULL OR g.expires_at > ?)${restriction}
             LIMIT 1`
-        )
-        .get(
-          change.rowId,
-          now,
-          ...(access.appId ? [access.appId, access.appId] : [])
-        ) !== undefined
+      ).get(
+        change.rowId,
+        now,
+        ...(access.appId ? [access.appId, access.appId] : [])
+      ) !== undefined
     );
   }
   if (!SHAPE_CONTROL_ENTITIES.has(change.entity)) return false;

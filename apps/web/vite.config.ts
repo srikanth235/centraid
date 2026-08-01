@@ -58,6 +58,38 @@ export default defineConfig({
           // If you widen this regex, re-run apps/web/tests/e2e/perf-waterfall
           // .spec.ts — it asserts the app RENDERS. Request count alone is
           // gameable: the blank-page builds above "improved" to 6 requests.
+          //
+          // ROUTE-LEVEL CODE SPLITTING WAS TRIED AND WAIVED (issue #659 C7).
+          // Recorded here so nobody repeats the experiment from scratch.
+          //
+          // Making the shell's 18 non-first-paint routes `React.lazy` MEASURED
+          // WORSE on the cold shell, not better:
+          //
+          //     requests 12 -> 73     transfer 387,990 B -> 857,155 B
+          //
+          // The routes themselves were NOT the cost — 0 of those 73 requests
+          // was a lazy route chunk. The damage was indirect: 18 `import()`
+          // boundaries fragmented the EAGER graph into ~70 chunks (40 of them
+          // under 3 KB, 60 KB in total), and compressing 70 small files
+          // separately costs far more than compressing a few large ones.
+          //
+          // Four ways out were measured. `codeSplitting.minSize` changed
+          // nothing; `minShareCount: 4` made it worse (100 -> 103 chunks);
+          // grouping routes + screens gave 21 chunks but a 1.24 MB chunk the
+          // eager graph pulls; grouping only the 18 route modules gave 22
+          // chunks AND A BLANK APP — the ordering hazard above.
+          //
+          // PRECONDITION for retrying: `packages/client/src/gateway-client-
+          // core.ts` and `packages/client/src/vault-change-feed.ts` each
+          // subscribe to `window.CentraidApi` at MODULE-EVALUATION time, and
+          // their relative order is itself load-bearing (vault-change-feed's
+          // own comment relies on gateway-client-core being imported above it).
+          // Splitting is viable only once those subscriptions stop being
+          // eval-time side effects — an explicit init the host calls after
+          // installing the API, ordered deliberately rather than by import
+          // order — and it must then be RE-MEASURED, because nothing here shows
+          // splitting wins even with the hazard gone. A blank app is a far
+          // worse outcome than an unsplit bundle.
           groups: [
             {
               name: "shell-common",

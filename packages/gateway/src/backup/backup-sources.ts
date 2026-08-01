@@ -18,7 +18,7 @@ import type { EngineLogger, SourceEntry } from "@centraid/backup";
 import {
   archivedSegmentShas,
   conversationArchiveShas,
-  liveBlobShas,
+  liveBlobShasCached,
   readBlobStoreSettings,
   ReplicaIndex,
 } from "@centraid/vault";
@@ -272,10 +272,14 @@ export async function assembleSourceEntries(
   if (remotePrimary) {
     pending = new Set(plane.db.blobTransfers.pendingSnapshotShas());
     const replicated = new ReplicaIndex(plane.db.vault).all();
-    const live = liveBlobShas(plane.db.vault);
-    for (const sha of archivedSegmentShas(plane.db.journal)) live.add(sha);
-    for (const sha of conversationArchiveShas(plane.db.journal)) live.add(sha);
-    for (const sha of live) if (!replicated.has(sha)) pending.add(sha);
+    // Shared, read-only base set (#659 L5); the archive roots are checked
+    // alongside it instead of being merged into it.
+    for (const sha of liveBlobShasCached(plane.db.vault))
+      if (!replicated.has(sha)) pending.add(sha);
+    for (const sha of archivedSegmentShas(plane.db.journal))
+      if (!replicated.has(sha)) pending.add(sha);
+    for (const sha of conversationArchiveShas(plane.db.journal))
+      if (!replicated.has(sha)) pending.add(sha);
   }
   entries.push(...(await listBlobEntries(plane.dir, pending)));
 

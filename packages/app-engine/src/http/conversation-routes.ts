@@ -16,7 +16,31 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type {
   ConversationHistoryStore,
   ConversationSummary,
+  TranscriptWindow,
 } from "../conversation/history.js";
+import { sendJsonNegotiated } from "./compression.js";
+
+/**
+ * `?turns=<n>&beforeSeq=<seq>` → a {@link TranscriptWindow} (issue #659 G5).
+ * Absent parameters mean "the whole transcript", so an existing caller's
+ * request is unchanged. A malformed value is REJECTED rather than ignored: a
+ * silently dropped `beforeSeq` would serve the newest page to a client paging
+ * backwards, which reads as "the conversation ends here".
+ */
+function parseTranscriptWindow(url: URL): TranscriptWindow | "invalid" {
+  const window: TranscriptWindow = {};
+  for (const [param, key] of [
+    ["turns", "limit"],
+    ["beforeSeq", "beforeSeq"],
+  ] as const) {
+    const raw = url.searchParams.get(param);
+    if (raw === null) continue;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) return "invalid";
+    window[key] = value;
+  }
+  return window;
+}
 
 const ROUTE_PREFIX = "/_centraid-conversations";
 
@@ -257,12 +281,26 @@ export function makeConversationRouteHandler(
       if (method === "GET") {
         // Archive-aware read (issue #438 wave 3): serves live rows and merges
         // any custody-gated-pruned history back from the CAS, read-only.
-        const full = await store.getSessionRehydrated(appId, id);
+        // Transcript paging (issue #659 G5). No parameters ⇒ the whole thread,
+        // exactly as before. `turns` windows to the NEWEST N — the end a reader
+        // opens to — and `beforeSeq` walks strictly backwards from a previous
+        // response's `oldestSeq`. A paged response carries ONLY that page's
+        // messages so the client can prepend them to what it already holds.
+        const window = parseTranscriptWindow(url);
+        if (window === "invalid") {
+          sendError(res, 400, "turns and beforeSeq must be positive integers");
+          return true;
+        }
+        const full = await store.getSessionRehydrated(appId, id, window);
         if (!full) {
           sendError(res, 404, "session not found");
           return true;
         }
-        sendJson(res, 200, full);
+        // The one genuinely large response on this router — a whole transcript,
+        // JSON, highly repetitive. Negotiated compression (issue #659 G5); the
+        // opaque-tunnel transports never send Accept-Encoding and so still get
+        // raw bytes (see compression.ts).
+        await sendJsonNegotiated(req, res, 200, full);
         return true;
       }
       if (method === "PATCH") {

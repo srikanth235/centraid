@@ -1,6 +1,6 @@
 {
   "_comment": "The skip budget (#656 Layer 2). Every deliberate hole in the suite — test.skip / describe.skipIf / .todo / runtime t.skip() / a CENTRAID_* or CLAWGNITION_* opt-in env gate — is inventoried here with an OPEN tracking issue and a reason. scripts/test-report/skip-inventory.mjs discovers the population by scanning; validate-matrix.mjs (in check:pr) fails on an uninventoried skip, on a stale entry, and whenever the count differs from _budget. _budget is DOWN-ONLY: deleting a skip must lower it in the same change, and adding one costs an explicit hand edit plus an issue. Keys are <path>#<ordinal> (nth skip site in that file) so they survive line drift; `line` is informational and refreshed by `node scripts/test-report/skip-inventory.mjs --write`. A skip site also forbids its file from backing a computed-solid matrix cell — see scripts/test-report/matrix-grades.mjs.",
-  "_budget": 27,
+  "_budget": 29,
   "sites": {
     "apps/desktop/tests/e2e/appview-templates-insights.spec.ts#1": {
       "kind": "static-skip",
@@ -32,7 +32,7 @@
     },
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
-      "line": 402,
+      "line": 404,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
       "issue": 659,
       "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression."
@@ -109,21 +109,21 @@
     },
     "packages/gateway/src/cli/status-admin.test.ts#2": {
       "kind": "conditional-skip",
-      "line": 98,
+      "line": 107,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 656,
       "reason": "Same darwin/linux-only service surface as site #1 (status --json against a never-installed unit)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#3": {
       "kind": "conditional-skip",
-      "line": 152,
+      "line": 161,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 656,
       "reason": "Same darwin/linux-only service surface as site #1 (installed-unit status reporting)."
     },
     "packages/gateway/src/cli/status-admin.test.ts#4": {
       "kind": "conditional-skip",
-      "line": 171,
+      "line": 180,
       "snippet": "test.skipIf(servicePlatform)(",
       "issue": 656,
       "reason": "Same darwin/linux-only service surface as site #1 (status against an unreachable listener)."
@@ -170,9 +170,16 @@
       "issue": 656,
       "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only."
     },
+    "tests/perf/desktop-launch.perf.test.ts#1": {
+      "kind": "conditional-skip",
+      "line": 80,
+      "snippet": "test.skipIf(!report)(",
+      "issue": 659,
+      "reason": "#659 R3b. The REAL Electron launch is measured by apps/desktop/tests/e2e/launch-time.spec.ts (vitest cannot start Electron on a display-less runner) and handed to this lane as nightly-evidence-desktop. A missing input is a HARD failure under CI — see the throw above the describe — and a skip locally, exactly like pwa-waterfall."
+    },
     "tests/perf/pwa-waterfall.perf.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 60,
+      "line": 61,
       "snippet": "test.skipIf(!waterfall)(",
       "issue": 659,
       "reason": "The rig consumes a waterfall report published by the nightly web-e2e job; a missing input is a hard failure under CI and a local skip otherwise."
@@ -186,10 +193,17 @@
     },
     "tests/perf/tunnel-native.perf.test.ts#2": {
       "kind": "conditional-skip",
-      "line": 68,
+      "line": 77,
       "snippet": "test.skipIf(hasNative)(",
       "issue": 659,
       "reason": "The inverse arm: it asserts the absent-module fallback path, so it is skipped exactly when the dylib is present."
+    },
+    "tests/scale/restore-10gib.scale.test.ts#1": {
+      "kind": "conditional-skip",
+      "line": 99,
+      "snippet": "test.skipIf(!ENABLED)(",
+      "issue": 659,
+      "reason": "#659 S3. Ten GiB of chunk + AEAD + restore is ~5 minutes and ~25 GiB of scratch; it has its own nightly job (restore-year3 in e2e.yml) which sets CENTRAID_SCALE_RESTORE_GIB=10. Skipping loudly when unset is deliberate — the alternative is silently shrinking to a size that proves nothing."
     }
   }
 }

@@ -234,3 +234,153 @@ export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
     version += 1;
   }
 }
+
+/*
+ * Batched, resumable data rewrites (issue #659 L7).
+ *
+ * The ladder above is right for DDL: a rung is small, atomic, and its cost is
+ * independent of how much is in the vault. It is exactly wrong for a rung
+ * that has to REWRITE rows — a single transaction over a table with a
+ * million rows blocks the whole vault for as long as it takes, and a crash
+ * halfway through means starting over from the top on the next open, forever
+ * if the rewrite cannot finish inside one window.
+ *
+ * This primitive is the alternative: the rewrite runs in bounded batches, each
+ * batch commits with its own cursor, and a pass may stop at any batch boundary
+ * and resume exactly where it stopped. A host can therefore run a few batches
+ * per sweep instead of holding the vault hostage at startup.
+ *
+ * No shipped rung needs it yet; it exists so that the first one that does is
+ * not tempted to write the single-transaction version. The cursor table is
+ * created on demand rather than as a rung of its own so that adopting the
+ * primitive is a code change, not a schema-version bump.
+ */
+
+const MIGRATION_CURSOR_DDL = `
+CREATE TABLE IF NOT EXISTS schema_batch_cursor (
+  name       TEXT PRIMARY KEY,
+  cursor     TEXT NOT NULL,
+  done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
+  processed  INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+) STRICT;
+`;
+
+/** Rows one batch rewrites when the caller names no other size. */
+export const DEFAULT_MIGRATION_BATCH_SIZE = 500;
+
+export interface BatchedRewrite {
+  /** Stable name. The resume cursor is stored under it — never reuse one. */
+  name: string;
+  /**
+   * Selects the next keys to rewrite. Bound with `:cursor` (the last key of
+   * the previous batch, `''` on the first run) and `:limit`; must return one
+   * TEXT column aliased `key`, ordered ascending, and must select only keys
+   * strictly greater than `:cursor`. Ordering by the key is what makes the
+   * cursor a resume point rather than an offset.
+   */
+  selectBatchSql: string;
+  /** Rewrites ONE row. Bound with `:key`. */
+  applySql: string;
+}
+
+export interface BatchedMigrationResult {
+  /** Rows rewritten by this call (not cumulative). */
+  processed: number;
+  /** Batches this call committed. */
+  batches: number;
+  /** `true` once a batch came back empty — the rewrite is complete. */
+  done: boolean;
+}
+
+/**
+ * Run up to `maxBatches` batches of a data-rewriting migration, committing
+ * each batch with its cursor. Calling it again resumes from the last
+ * committed cursor; calling it after completion is a no-op that costs one
+ * indexed read of the cursor row.
+ */
+export function runBatchedMigration(
+  db: DatabaseSync,
+  rewrite: BatchedRewrite,
+  options: { batchSize?: number; maxBatches?: number; now?: string } = {}
+): BatchedMigrationResult {
+  const batchSize = options.batchSize ?? DEFAULT_MIGRATION_BATCH_SIZE;
+  if (batchSize <= 0) throw new Error("migration batch size must be > 0");
+  const maxBatches = options.maxBatches ?? Number.POSITIVE_INFINITY;
+  if (maxBatches <= 0) throw new Error("migration maxBatches must be > 0");
+  db.exec(MIGRATION_CURSOR_DDL);
+
+  const state = db
+    .prepare(
+      `SELECT cursor, done, processed FROM schema_batch_cursor WHERE name = :name`
+    )
+    .get({ name: rewrite.name }) as
+    | { cursor: string; done: number; processed: number }
+    | undefined;
+  if (state?.done === 1) return { processed: 0, batches: 0, done: true };
+
+  const select = db.prepare(rewrite.selectBatchSql);
+  const apply = db.prepare(rewrite.applySql);
+  const saveCursor = db.prepare(
+    `INSERT INTO schema_batch_cursor (name, cursor, done, processed, updated_at)
+     VALUES (:name, :cursor, :done, :processed, :updatedAt)
+     ON CONFLICT(name) DO UPDATE SET
+       cursor = excluded.cursor,
+       done = excluded.done,
+       processed = excluded.processed,
+       updated_at = excluded.updated_at`
+  );
+
+  let cursor = state?.cursor ?? "";
+  let totalProcessed = state?.processed ?? 0;
+  let processed = 0;
+  let batches = 0;
+  let done = false;
+  const updatedAt = options.now ?? new Date().toISOString();
+
+  while (batches < maxBatches) {
+    const keys = (
+      select.all({ cursor, limit: batchSize }) as { key: string }[]
+    ).map((row) => row.key);
+    if (keys.length === 0) {
+      done = true;
+      // Latch completion in its own transaction so a crash before this point
+      // simply repeats the (empty) probe rather than losing the cursor.
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        saveCursor.run({
+          name: rewrite.name,
+          cursor,
+          done: 1,
+          processed: totalProcessed,
+          updatedAt,
+        });
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      break;
+    }
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const key of keys) apply.run({ key });
+      cursor = keys[keys.length - 1] as string;
+      totalProcessed += keys.length;
+      saveCursor.run({
+        name: rewrite.name,
+        cursor,
+        done: 0,
+        processed: totalProcessed,
+        updatedAt,
+      });
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    processed += keys.length;
+    batches += 1;
+  }
+  return { processed, batches, done };
+}

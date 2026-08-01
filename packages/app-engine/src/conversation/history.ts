@@ -38,7 +38,7 @@ import type {
   RunKind,
   Turn,
 } from "./schema.js";
-import { ConversationStore } from "./store.js";
+import { ConversationStore, MAX_TRANSCRIPT_TURNS } from "./store.js";
 import type { ConversationMeta } from "./store.js";
 import {
   groupRetryFamilies,
@@ -101,6 +101,30 @@ export interface SessionTranscript extends ConversationSummary {
   hasArchivedHistory?: boolean;
   archivedTurnCount?: number;
   archiveUnavailable?: boolean;
+  /**
+   * Older turns exist before this response's oldest one (issue #659 G5) — the
+   * client shows its "load earlier" control only when this is true.
+   */
+  hasMore: boolean;
+  /**
+   * `seq` of the oldest turn in this response: the cursor to pass back as
+   * `beforeSeq` for the previous page. Absent for an empty transcript.
+   *
+   * A `beforeSeq` request returns ONLY that page's messages, never the page
+   * plus what the caller already has, so the client can PREPEND them to its
+   * existing array. That matters because the transcript projection keys on
+   * message object identity, so rebuilding the array would re-key every
+   * already-rendered row; prepending keeps them referentially identical.
+   */
+  oldestSeq?: number;
+}
+
+/** A page request for {@link SessionTranscript} — see `listTurnWindow`. */
+export interface TranscriptWindow {
+  /** Turns to return, newest-first by selection. Defaults to the whole thread. */
+  limit?: number;
+  /** Return only turns strictly older than this `seq`. */
+  beforeSeq?: number;
 }
 
 /**
@@ -334,20 +358,31 @@ export class ConversationHistoryStore {
    * `ai` messages and `tool` items as `tool` messages (issue #190). Live rows
    * only — the archive-aware read path is `getSessionRehydrated`.
    */
-  getSession(appId: string, id: string): SessionTranscript | undefined {
+  getSession(
+    appId: string,
+    id: string,
+    window: TranscriptWindow = {}
+  ): SessionTranscript | undefined {
     const { store } = this.appConversation(appId);
     const meta = this.ownedMeta(appId, id);
     if (!meta) return undefined;
 
-    const turns = store.listTurns(id);
-    const itemsByTurn = new Map<string, Item[]>();
-    for (const turn of turns)
-      itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    // Three queries for the page (issue #659 G5): turns, then its items, then
+    // its attachments. It used to be 1 + turns + one attachment query per
+    // rendered message — and it read the whole thread regardless.
+    const page = store.listTurnWindow(id, window);
+    const turns = page.turns;
+    // Scope the two batched reads to the SAME seq range as the turns, so a
+    // window costs a window's rows and the batching composes with it.
+    const range = seqRangeOf(turns);
+    const itemsByTurn = store.listItemsByTurn(id, range);
+    const attachmentsByItem = store.listAttachmentsByItem(id, range);
 
     const messages = foldTranscript({
       turns,
       itemsByTurn,
-      attachmentsOf: (itemId) => this.attachmentsPayload(appId, itemId),
+      attachmentsOf: (itemId) =>
+        attachmentPayloads(appId, attachmentsByItem.get(itemId)),
       isArchived: () => false,
     });
     const workspace = store.getWorkspaceSelection(id);
@@ -356,6 +391,8 @@ export class ConversationHistoryStore {
       messageCount: messages.length,
       messages,
       ...(workspace ? { workspace } : {}),
+      hasMore: page.hasMore,
+      ...(page.oldestSeq === undefined ? {} : { oldestSeq: page.oldestSeq }),
     };
   }
 
@@ -371,7 +408,8 @@ export class ConversationHistoryStore {
    */
   async getSessionRehydrated(
     appId: string,
-    id: string
+    id: string,
+    window: TranscriptWindow = {}
   ): Promise<SessionTranscript | undefined> {
     const { store } = this.appConversation(appId);
     const meta = this.ownedMeta(appId, id);
@@ -380,7 +418,7 @@ export class ConversationHistoryStore {
     const prunedRefs = store.listArchiveSegments(id).filter((r) => r.pruned);
     // Fast path: no pruned range ⇒ every turn is still a live row (an
     // archived-but-unpruned range serves from live rows too, no blob fetch).
-    if (prunedRefs.length === 0) return this.getSession(appId, id);
+    if (prunedRefs.length === 0) return this.getSession(appId, id, window);
 
     const archived = await collectArchivedRows(
       this.archiveBlobReader,
@@ -388,38 +426,31 @@ export class ConversationHistoryStore {
     );
 
     const liveTurns = store.listTurns(id);
-    const itemsByTurn = new Map<string, Item[]>();
-    for (const turn of liveTurns)
-      itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    const itemsByTurn = store.listItemsByTurn(id);
+    const attachmentsByItem = store.listAttachmentsByItem(id);
     // Archived turns can never collide with live ids (pruned rows are gone).
     for (const [turnId, items] of archived.itemsByTurn)
       itemsByTurn.set(turnId, items);
 
-    const turns = [...archived.turns, ...liveTurns].sort(
+    const merged = [...archived.turns, ...liveTurns].sort(
       (a, b) => a.seq - b.seq
     );
+    // Windowing happens AFTER the merge on this path, in memory (issue #659
+    // G5). The archive segments have to be fetched and decoded whole either
+    // way, so pushing the window into SQL would window only the live half and
+    // report `hasMore` against a partial picture. Cost is unchanged from
+    // before; correctness across the archive boundary is what is bought.
+    const { turns, hasMore } = windowMerged(merged, window);
 
     const messages = foldTranscript({
       turns,
       itemsByTurn,
-      attachmentsOf: (itemId) => {
-        const arch = archived.attachmentsByItem.get(itemId);
-        if (arch) {
-          return arch.map((a) => ({
-            hash: a.hash,
-            mime: a.mime,
-            sizeBytes: a.sizeBytes,
-            ...(a.filename === undefined ? {} : { filename: a.filename }),
-            ...(a.source !== undefined && a.source !== "upload"
-              ? { source: a.source }
-              : {}),
-            ...(a.workspacePath === undefined
-              ? { url: blobUrl(appId, a.hash) }
-              : { workspacePath: a.workspacePath }),
-          }));
-        }
-        return this.attachmentsPayload(appId, itemId);
-      },
+      attachmentsOf: (itemId) =>
+        attachmentPayloads(
+          appId,
+          archived.attachmentsByItem.get(itemId) ??
+            attachmentsByItem.get(itemId)
+        ),
       isArchived: (turnId) => archived.turnIds.has(turnId),
     });
 
@@ -433,6 +464,8 @@ export class ConversationHistoryStore {
       hasArchivedHistory: true,
       archivedTurnCount: archived.turnIds.size,
       ...(archived.unavailable ? { archiveUnavailable: true } : {}),
+      hasMore,
+      ...(turns.length > 0 ? { oldestSeq: turns[0]!.seq } : {}),
     };
   }
 
@@ -442,18 +475,7 @@ export class ConversationHistoryStore {
     itemId: string
   ): ConversationAttachmentPayload[] {
     const { store } = this.appConversation(appId);
-    return store.listAttachmentsForItem(itemId).map((a) => ({
-      hash: a.hash,
-      mime: a.mime,
-      sizeBytes: a.sizeBytes,
-      ...(a.filename === undefined ? {} : { filename: a.filename }),
-      ...(a.source !== undefined && a.source !== "upload"
-        ? { source: a.source }
-        : {}),
-      ...(a.workspacePath === undefined
-        ? { url: blobUrl(appId, a.hash) }
-        : { workspacePath: a.workspacePath }),
-    }));
+    return attachmentPayloads(appId, store.listAttachmentsForItem(itemId));
   }
 
   /** Persist uploaded bytes to the app's blob CAS (dedup by content hash). */
@@ -1140,6 +1162,75 @@ function recordNode(
     });
   }
   return itemId;
+}
+
+/**
+ * Inclusive `seq` bounds of a turn page — scopes the batched item/attachment
+ * reads to the same window as the turns (issue #659 G5).
+ */
+function seqRangeOf(turns: readonly Turn[]): {
+  fromSeq?: number;
+  toSeq?: number;
+} {
+  if (turns.length === 0) return {};
+  return { fromSeq: turns[0]!.seq, toSeq: turns.at(-1)!.seq };
+}
+
+/**
+ * The in-memory equivalent of `listTurnWindow`, for the archive-merged path
+ * where the window cannot be expressed in SQL. Same contract: strictly older
+ * than `beforeSeq`, newest `limit` of what remains, oldest-first, and
+ * `hasMore` iff something was cut from the older end.
+ */
+function windowMerged(
+  merged: readonly Turn[],
+  window: TranscriptWindow
+): { turns: Turn[]; hasMore: boolean } {
+  const eligible =
+    window.beforeSeq === undefined
+      ? merged
+      : merged.filter((turn) => turn.seq < window.beforeSeq!);
+  const limit = Math.max(
+    1,
+    Math.min(window.limit ?? MAX_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS)
+  );
+  if (eligible.length <= limit) {
+    return { turns: [...eligible], hasMore: false };
+  }
+  return { turns: eligible.slice(eligible.length - limit), hasMore: true };
+}
+
+/**
+ * Attachment rows → the wire payload. One mapper for both sources — live rows
+ * and rehydrated archive rows — so the two can never drift; extracted when
+ * #659 G5 replaced the per-item lookup with one batched read per conversation.
+ */
+function attachmentPayloads(
+  appId: string,
+  attachments:
+    | readonly {
+        hash: string;
+        mime: string;
+        sizeBytes: number;
+        filename?: string;
+        source?: string;
+        workspacePath?: string;
+      }[]
+    | undefined
+): ConversationAttachmentPayload[] {
+  if (!attachments || attachments.length === 0) return [];
+  return attachments.map((a) => ({
+    hash: a.hash,
+    mime: a.mime,
+    sizeBytes: a.sizeBytes,
+    ...(a.filename === undefined ? {} : { filename: a.filename }),
+    ...(a.source !== undefined && a.source !== "upload"
+      ? { source: a.source }
+      : {}),
+    ...(a.workspacePath === undefined
+      ? { url: blobUrl(appId, a.hash) }
+      : { workspacePath: a.workspacePath }),
+  }));
 }
 
 function toMeta(c: ConversationMeta): ConversationSummary {

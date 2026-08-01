@@ -14,7 +14,13 @@
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
+import {
+  AppState,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
@@ -75,7 +81,36 @@ type HomeState =
 // The loader lives outside the component: it closes over nothing but the two
 // (stable) state setters, so it needs no `useCallback` identity dance and the
 // effects below read as plain async kick-offs.
+/**
+ * How long a loaded Home stays good enough to reuse.
+ *
+ * Home used to re-fetch the app registry, the daily brief and notifications on
+ * mount, on every focus, on every vault-link event and on every doorbell — so
+ * tabbing away and back cost three round trips for an answer that had not
+ * changed. Anything that genuinely invalidates the screen (pull-to-refresh, a
+ * vault switch) forces past this window; ordinary navigation does not.
+ */
+const HOME_STALE_MS = 30_000;
+
+let homeLoadedAt = 0;
+let homeInFlight: Promise<void> | undefined;
+
 async function loadHome(
+  setState: (next: HomeState) => void,
+  setApprovals: (next: number) => void,
+  options: { force?: boolean } = {}
+): Promise<void> {
+  if (!options.force && Date.now() - homeLoadedAt < HOME_STALE_MS) return;
+  // One screen owns these setters, so a caller that arrives mid-load wants the
+  // result of the load already running, not a second copy of it.
+  if (homeInFlight) return homeInFlight;
+  homeInFlight = runHomeLoad(setState, setApprovals).finally(() => {
+    homeInFlight = undefined;
+  });
+  return homeInFlight;
+}
+
+async function runHomeLoad(
   setState: (next: HomeState) => void,
   setApprovals: (next: number) => void
 ): Promise<void> {
@@ -96,6 +131,7 @@ async function loadHome(
       .filter((app) => !NATIVE_APP_IDS.has(app.id));
     const automations = rows.filter((row) => row.kind === "automation").length;
     setState({ apps, automations, brief, kind: "ready" });
+    homeLoadedAt = Date.now();
     // Notifications is secondary — never fail the whole load over it.
     try {
       setApprovals((await getNotifications()).decisions.count);
@@ -167,16 +203,36 @@ export default function HomeScreen({
       refreshNotificationsCount,
       controller.signal
     ).catch(() => undefined);
-    const timer = setInterval(refreshNotificationsCount, 60_000);
+    // The SSE doorbell is the primary signal; this is its backstop, and a
+    // backgrounded phone has no badge to keep current.
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const startPoll = (): void => {
+      timer ??= setInterval(refreshNotificationsCount, 60_000);
+    };
+    const stopPoll = (): void => {
+      if (timer) clearInterval(timer);
+      timer = undefined;
+    };
+    const appStateSub = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        refreshNotificationsCount();
+        startPoll();
+      } else stopPoll();
+    });
+    if (AppState.currentState === "active") startPoll();
     return () => {
       controller.abort();
-      clearInterval(timer);
+      appStateSub.remove();
+      stopPoll();
     };
   }, []);
   // Switching / adding / forgetting a Vault re-points the whole app at a new
   // vault — reload the grid so it reflects the now-active vault's apps.
   useEffect(
-    () => subscribeVaultLinks(() => void loadHome(setState, setApprovals)),
+    () =>
+      subscribeVaultLinks(
+        () => void loadHome(setState, setApprovals, { force: true })
+      ),
     []
   );
   useFocusEffect(
@@ -188,7 +244,7 @@ export default function HomeScreen({
 
   const onRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await loadHome(setState, setApprovals);
+    await loadHome(setState, setApprovals, { force: true });
     setRefreshing(false);
   }, []);
 

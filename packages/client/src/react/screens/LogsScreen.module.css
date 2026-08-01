@@ -174,3 +174,23 @@
 .jumpBtn:hover {
   background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
 }
+
+/* "Show N earlier lines" — the top edge of the rendered window (issue #659).
+   The panel keeps only the newest lines mounted; this is how a reader walks
+   back through the rest without two thousand rows in the DOM. */
+.showEarlier {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  color: var(--ink-3);
+  font-size: 11.5px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.showEarlier:hover {
+  color: var(--ink-1);
+}

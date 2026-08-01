@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type * as TypeImport_18fk7n9 from "node:sqlite";
 
+import { SseStream } from "@centraid/app-engine";
 import {
   currentReplicaLogState,
   InvalidReplicaCursorError,
@@ -385,8 +386,11 @@ function isNdjson(req: IncomingMessage): boolean {
   return String(req.headers.accept ?? "").includes("application/x-ndjson");
 }
 
-function writeSse(res: ServerResponse, event: string, data: unknown): void {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+// Every replica SSE frame goes through the bounded writer (issue #659 G6): a
+// device that stops draining its change stream is dropped and re-syncs from its
+// checkpoint on reconnect, rather than accumulating in gateway memory.
+function writeSse(stream: SseStream, event: string, data: unknown): void {
+  stream.event(event, JSON.stringify(data));
 }
 
 function sameCursor(left: ReplicaCursor, right: ReplicaCursor): boolean {
@@ -593,12 +597,12 @@ function parseOutcomeReconciliation(body: Record<string, unknown>): {
 }
 
 function sendSseRebootstrap(
-  res: ServerResponse,
+  stream: SseStream,
   reason: string,
   state: ReplicaLogState
 ): void {
-  writeSse(res, "rebootstrap", rebootstrapBody(reason, state));
-  res.end();
+  writeSse(stream, "rebootstrap", rebootstrapBody(reason, state));
+  stream.end();
 }
 
 async function streamChanges(
@@ -617,19 +621,20 @@ async function streamChanges(
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders?.();
+  const stream = new SseStream(res);
   if (rawSince === "0:0") {
-    sendSseRebootstrap(res, "initial", currentReplicaLogState(db));
+    sendSseRebootstrap(stream, "initial", currentReplicaLogState(db));
     return true;
   }
   let cursor: ReplicaCursor;
   try {
     cursor = parseSince(url);
   } catch (error) {
-    writeSse(res, "rebootstrap", {
+    writeSse(stream, "rebootstrap", {
       error: "replica_rebootstrap_required",
       reason: error instanceof Error ? error.message : "invalid-cursor",
     });
-    res.end();
+    stream.end();
     return true;
   }
   const expected = expectedReplicaShapeIds(url);
@@ -648,17 +653,37 @@ async function streamChanges(
     wake?.();
   });
   let heartbeatAt = Date.now();
-  const streamNext = async (): Promise<void> => {
-    if (closed) return;
+  const heartbeatMs = options.heartbeatMs ?? 15_000;
+  /*
+   * A LOOP, not recursion (issue #659 G11). `streamNext()` used to tail-call
+   * itself once per page and once per wake, so a long-lived subscriber built an
+   * ever-deeper chain of pending promises — memory that grew with the
+   * connection's age rather than with its work. The control flow is otherwise
+   * unchanged: the access check runs before every projection, a `hasMore` page
+   * loops immediately without a heartbeat or a wait, and either rebootstrap
+   * path ends the stream.
+   *
+   * `for (;;)` with an explicit `if (closed) break` rather than
+   * `while (!closed)`: `closed` is set by the socket-close listeners above, in
+   * an event callback that no reader — and no linter — can see from the loop
+   * header. Making the check a statement in the body puts every exit in one
+   * place: this one, the two rebootstrap breaks, and the access break.
+   */
+  for (;;) {
+    // Socket gone (client hung up, or SseStream dropped it for backpressure and
+    // destroyed the response). Re-read every pass, including after a `continue`
+    // from a multi-page drain and after the wake below.
+    if (closed) break;
     const access = resolveReplicaAccess(req, url, vaultId, options.enrollments);
     if (!access.ok) {
       sendSseRebootstrap(
-        res,
+        stream,
         "device-access-changed",
         currentReplicaLogState(db)
       );
-      return;
+      break;
     }
+    let drained = true;
     try {
       const page = projectReplicaPage(db, access.access, cursor, limit);
       if (
@@ -666,38 +691,44 @@ async function streamChanges(
         (baseline && !sameReplicaShapeIds(page.shapes, baseline))
       ) {
         sendSseRebootstrap(
-          res,
+          stream,
           page.rebootstrapReason ?? "shape-changed",
           currentReplicaLogState(db)
         );
-        return;
+        break;
       }
       baseline ??= replicaShapeIds(page.shapes);
       if (page.doorbell.length > 0) {
-        writeSse(res, "change", {
+        writeSse(stream, "change", {
           changes: page.doorbell,
           cursor: page.batch.to,
         });
       }
       if (!sameCursor(cursor, page.batch.to))
-        writeSse(res, "cursor", page.batch.to);
+        writeSse(stream, "cursor", page.batch.to);
       cursor = page.batch.to;
-      if (page.batch.hasMore) return streamNext();
+      drained = !page.batch.hasMore;
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
-        sendSseRebootstrap(res, error.reason, error.state);
-        return;
+        sendSseRebootstrap(stream, error.reason, error.state);
+        break;
       }
-      writeSse(res, "retry", {
+      writeSse(stream, "retry", {
         error: "replica_stream_retry",
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    const heartbeatMs = options.heartbeatMs ?? 15_000;
+    // More pages waiting: project the next one right away.
+    if (!drained) continue;
     if (Date.now() - heartbeatAt >= heartbeatMs) {
-      res.write(": heartbeat\n\n");
+      stream.comment("heartbeat");
       heartbeatAt = Date.now();
     }
+    // The loop IS the wait: each pass blocks until the next commit signal,
+    // wake, or heartbeat deadline. There is nothing to parallelize — the whole
+    // point is to hold this connection open doing nothing until something
+    // happens on it.
+    // oxlint-disable-next-line no-await-in-loop -- sequential by construction
     await new Promise<void>((resolve) => {
       let settled = false;
       const settle = (): void => {
@@ -725,9 +756,7 @@ async function streamChanges(
         settle();
       };
     });
-    return streamNext();
-  };
-  await streamNext();
+  }
   unsubscribe();
   req.off("close", close);
   res.off("close", close);

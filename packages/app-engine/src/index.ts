@@ -238,6 +238,9 @@ export {
   CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP,
 } from "./http/changes-sse.js";
 
+// The one bounded SSE writer every event feed goes through (issue #659 G6).
+export { SseStream } from "./http/sse-stream.js";
+
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:
 //   - the standalone daemon registers it on the gateway's HTTP surface

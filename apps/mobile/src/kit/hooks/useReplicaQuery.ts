@@ -5,6 +5,7 @@ import type {
   ReplicaReadWireResult,
 } from "@centraid/client/replica/native";
 
+import { coalesceWork } from "../../lib/coalesce";
 import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { useReplica } from "../replica/ReplicaProvider";
 import type { ReplicaContextValue } from "../replica/ReplicaProvider";
@@ -16,6 +17,12 @@ export type {
   ReplicaQueryConnection,
   ReplicaQueryState,
 } from "./replica-query-state";
+
+/**
+ * Long enough to swallow one delta batch's invalidations, short enough that a
+ * change made on another device still feels immediate.
+ */
+const REPLICA_INVALIDATION_WINDOW_MS = 120;
 
 function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
   // Hermes in the supported Expo runtime does not expose ES2023 `toSorted`.
@@ -87,7 +94,16 @@ export function useReplicaQuery(
     void (async () => {
       await refresh();
     })();
-    return session.subscribe(appId, () => void refresh());
+    // One delta pull applies its invalidations one by one. Reading once per
+    // invalidation turned a single sync into hundreds of full mounted reads and
+    // as many re-renders; the burst says nothing an individual signal doesn't,
+    // so it collapses into one read after the batch settles.
+    const coalesced = coalesceWork(refresh, REPLICA_INVALIDATION_WINDOW_MS);
+    const unsubscribe = session.subscribe(appId, coalesced.signal);
+    return () => {
+      coalesced.cancel();
+      unsubscribe();
+    };
   }, [appId, refresh, session]);
 
   // Map once per underlying result — a fresh array identity every render would

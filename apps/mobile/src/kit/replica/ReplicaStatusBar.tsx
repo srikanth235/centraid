@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,17 +12,8 @@ import {
 } from "react-native";
 
 import { family, radii, useTheme } from "../theme";
+import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";
-
-interface PendingChange {
-  id: string;
-  vaultId: string;
-  vaultLabel: string;
-  status: string;
-  label: string;
-  reason?: string;
-  kind: "replica" | "placement";
-}
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
@@ -36,16 +27,10 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     bootstrapProgress = [],
     refresh,
   } = useReplica();
-  const [pending, setPending] = useState<PendingChange[]>([]);
   const [open, setOpen] = useState(false);
-  const refreshPending = useCallback(() => {
-    void session?.pendingChanges().then(setPending);
-  }, [session]);
-  useEffect(() => {
-    refreshPending();
-    const timer = setInterval(refreshPending, 5_000);
-    return () => clearInterval(timer);
-  }, [refreshPending]);
+  // One AppState-gated ticker serves every mounted status bar; see
+  // ./pending-changes.
+  const { pending, refresh: refreshPending } = usePendingChanges(session);
   const updatedTimes = scopes.flatMap((scope) =>
     scope.updatedAt ? [Date.parse(scope.updatedAt)] : []
   );

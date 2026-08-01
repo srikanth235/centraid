@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { BoundedCache } from "./bounded-cache.js";
 import {
   compress,
   isCompressibleType,
@@ -47,6 +48,20 @@ export function ifNoneMatchHits(
  * reader. Garbage in HTML attributes is a much worse failure mode than
  * an attribute simply not appearing.
  */
+/**
+ * All three asset caches are LRU-bounded (issue #659 G9). Their keys are
+ * content-derived — a file's (path,mtime,size) or a body's etag — so every edit
+ * a builder saves mints a NEW key, and an unbounded map meant the gateway
+ * retained the raw bytes plus the brotli and gzip variants of every generation
+ * of every file for the process lifetime.
+ *
+ * The ceilings are generous next to any real app's file count, so a steady-state
+ * app still runs fully warm; what they cut off is the unbounded accumulation of
+ * SUPERSEDED generations, which is the only part that grows without end.
+ */
+const MAX_PLAIN_ENTRIES = 512;
+const MAX_VARIANT_ENTRIES = 256;
+
 /** Per-(path,mtime,size) etag + compressed-variant cache for plain assets. */
 interface PlainCacheEntry {
   etag: string;
@@ -54,15 +69,22 @@ interface PlainCacheEntry {
   raw?: Buffer;
   variants: Map<Encoding, Buffer>;
 }
-export const plainCache = new Map<string, PlainCacheEntry>();
+export const plainCache = new BoundedCache<string, PlainCacheEntry>(
+  MAX_PLAIN_ENTRIES
+);
 
 /** Compressed variants for a transformed `.jsx`/`.tsx`/`.ts` body, keyed by its content etag. */
-export const jsxVariantCache = new Map<string, Map<Encoding, Buffer>>();
+export const jsxVariantCache = new BoundedCache<string, Map<Encoding, Buffer>>(
+  MAX_VARIANT_ENTRIES
+);
 
 /** Compressed variants for a compiled `*.module.css` JS body, keyed by its content etag. */
-export const cssModuleVariantCache = new Map<string, Map<Encoding, Buffer>>();
+export const cssModuleVariantCache = new BoundedCache<
+  string,
+  Map<Encoding, Buffer>
+>(MAX_VARIANT_ENTRIES);
 export function variantCacheFor(
-  cache: Map<string, Map<Encoding, Buffer>>,
+  cache: BoundedCache<string, Map<Encoding, Buffer>>,
   etag: string
 ): Map<Encoding, Buffer> {
   let m = cache.get(etag);

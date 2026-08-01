@@ -1,6 +1,8 @@
 # PWA fast-path perf budgets (issue #404, workstream I)
 
-Instrumentation + CI budgets for the mobile/PWA fast path. This is the browser sibling of the desktop waterfall probe (`apps/desktop/tests/e2e-live/probe-open-waterfall.mjs`): it measures what it costs to boot the shell and open an app over the PWA transport, and fences those numbers so a future change can't silently re-inflate them.
+Instrumentation + CI budgets for the mobile/PWA fast path. It measures what it costs to boot the shell and open an app over the PWA transport, and fences those numbers so a future change can't silently re-inflate them.
+
+> **There is no desktop counterpart.** This README used to call itself the browser sibling of a desktop waterfall probe at `apps/desktop/tests/e2e-live/probe-open-waterfall.mjs`; that script was deleted with the rest of the unreferenced e2e-live scripts (issue #468 L4). What survives under [apps/desktop/tests/e2e-live/](../../apps/desktop/tests/e2e-live/) is a manual, non-CI harness — `driver.mjs`, `smoke.mjs`, `iframe-probe.mjs` — and none of it measures a waterfall or enforces a budget. The web spec below is the only budgeted perf rig in the repo today.
 
 ## What's measured
 
@@ -23,6 +25,10 @@ QUIC pool: `{connects: 1, streams: 12, reconnects: 8}` → connects/streams ≈ 
 
 \* The `web-e2e` fixture is a bare HTML doc with an **inlined** runtime and no external subresources, so the iframe has 0 `resource` entries; its cost is the no-store navigation document (~1.98 KB). The shell bundle (the ~708 KB `boot` chunk) is where the fast-path cost — and the bundling workstream's win — lives.
 
+## Seeded volume (the calibration gap)
+
+Per [docs/coding-standards.md](../../docs/coding-standards.md) ("Scale rigs are calibrated to year-3 volumes"), a rig states the data volume its numbers were measured at. This one's is **empty**: the `web-e2e` fixture is a single bare app in a fresh vault, so every number above is a cold-start cost, not a scale cost. Treat the budgets as a bundle/transport ratchet only — they cannot catch an O(vault-size) regression, because there is no vault size here to be O(). A rig seeded to declared year-3 volumes is the missing half, and its volume table belongs in this section when it lands.
+
 ## Running it
 
 ```sh
@@ -41,6 +47,24 @@ cd apps/web && bun run e2e            # runs every tests/e2e/*.spec.ts, incl. pe
 ```
 
 > A **fresh `vite build`** matters for test 3: the committed `apps/web/dist` is gitignored and may predate the `iroh-transport.ts` timing instrumentation. The runner rebuilds it; when a stale dist lacks the counters, test 3 skips itself with a message rather than failing.
+
+### `run-waterfall.mjs` measures UNCOMPRESSED bytes — read this before trusting a transfer number
+
+`run-waterfall.mjs` runs a bare `vite build`. The web app's real build is `bun run --cwd apps/web build`, which is `… && vite build && node scripts/precompress.mjs` — so the runner **skips `precompress.mjs`**, and because `emptyOutDir` is on, it also **deletes the `.br`/`.gz` sidecars any previous full build left behind.**
+
+`transferSize` is the **compressed** size. Measured through the runner, the cold shell reads about **1.79 MB**; measured against a properly precompressed dist it is about **422 KB**. Same code, same spec — a 4× difference that is entirely serving, not the bundle.
+
+This has already cost one investigation (issue #659). The request counts and the warm/cold ratio are unaffected, so those stay trustworthy either way; only byte totals are distorted.
+
+To get a byte number comparable to the recorded baselines in `apps/web/tests/e2e/perf-budgets.ts`:
+
+```sh
+bun run --cwd apps/web build          # the REAL build, including precompress
+cd apps/web && bunx playwright test perf-waterfall \
+  -c tests/e2e/playwright.config.ts -g "app-open waterfall"
+```
+
+Use `run-waterfall.mjs` for request counts, ratios, and the QUIC pool numbers; use the two commands above whenever a byte total is the point.
 
 ## The budgets — and how to update them
 
@@ -62,3 +86,19 @@ Timing-only, guarded, zero behavior change:
 
 - `globalThis.__centraidIrohStats: { connects, streams, reconnects }` — running counters. `connects` = endpoint spawns (memoized, ~1); `streams` = `node.request()` calls (one QUIC stream each, retries included); `reconnects` = retry rounds. After N pooled requests, `connects ≪ streams`.
 - User Timing marks/measures: `centraid:iroh-connect` (endpoint spawn) and `centraid:iroh-request` (stream open → first response header/byte). Read them from a console or a test via `performance.getEntriesByName(...)`.
+
+## The other rigs in this directory (#659)
+
+`run-waterfall.mjs` / `summarize.mjs` are the PWA rig described above. Two more things live here now:
+
+- **`app-weight.mjs`** (R3d) — weighs the artifacts a user actually downloads: `apps/desktop/dist/renderer` and the two `expo export` outputs under `dist/mobile-bundle-smoke/`. Both builds already ran in CI on every desktop/mobile PR and had never been weighed. Run `bun run perf:app-weight -- --surface desktop|mobile` (add `--report` to print without failing). Ceilings live in `tests/experience-budgets/<surface>.json` and are tighten-only. Source maps are excluded as diagnostics; the script reports total shipped bytes AND the largest single chunk, because a total that holds while one chunk swallows everything is exactly what a code-split is meant to prevent.
+
+  Measured 2026-07-31 (darwin arm64): desktop renderer **5,827,344 B** across 33 files, largest `react-boot.js` at 1,333,046 B. Mobile **11,596,398 B** (iOS) / **11,604,148 B** (Android), of which the Hermes bundle is 6,355,198 B.
+
+- **Web vitals** (R3a) — `apps/web/tests/e2e/perf-waterfall.spec.ts` gained a fourth test capturing LCP / INP / CLS through observers installed via `addInitScript` (before any document script runs; an observer attached after paint measures a truncated timeline). Ceilings live in `tests/experience-budgets/web.json`.
+
+  **Only CLS is gated today, and the reason is on the record.** In this harness (Playwright's bundled headless Chromium, 2026-07-31) the paint timeline contains `first-paint` and NEVER `first-contentful-paint`, so no LCP candidate is ever emitted — even though the connect screen renders fully in the accessibility snapshot and all three observers install. The probe reports the paint timeline in its annotation and its JSON, and the LCP/INP entries in `web.json` stay `unmeasured` with their intended ceilings parked under `_intendedCeilingMs`. Asserting a ceiling on a number the browser refuses to emit would pass vacuously forever.
+
+## Experience budgets
+
+`tests/experience-budgets/` (#659 R2) is the layer above every budget file named here: the same regressions written as what the vault owner feels, one file per surface, with an explicit `status` (`measured` / `projected` / `unmeasured`) on every metric and the year-3 volume each number was taken at. Read `tests/experience-budgets/README.md` before adding a number anywhere.

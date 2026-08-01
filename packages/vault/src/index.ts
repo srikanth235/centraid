@@ -9,6 +9,16 @@ export {
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
+// The per-vault memory budget and its division (issue #659 L8). One owner for
+// the split: `openVaultDb` applies it at open, a host's registry re-applies it
+// to live planes on every mount/create/delete.
+export {
+  applyVaultFootprint,
+  DEFAULT_VAULT_FOOTPRINT,
+  MIN_VAULT_FILE_CACHE_BYTES,
+  type VaultFootprintBudget,
+  type AppliedVaultFootprint,
+} from "./vault-footprint.js";
 export {
   LockerAuthentication,
   LOCKER_ITEM_PERMIT_MS,
@@ -163,6 +173,7 @@ export {
   resolveServableBlob,
   resolveDerivativeShas,
   liveBlobShas,
+  liveBlobShasCached,
   type BlobResolveOutcome,
   type ServableBlob,
   type DerivativeRef,
@@ -685,6 +696,7 @@ export {
 } from "./schema/table-stats.js";
 export {
   DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS,
+  DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS,
   archivedSegmentShas,
   runJournalArchival,
   readArchivedSegment,
@@ -719,3 +731,40 @@ export {
   type InlineBodyViolationEntry,
   type InlineBodyViolationScan,
 } from "./commands/inline-body-guard.js";
+
+// Bounded vault-side retention and its size ladder (issue #659 L1/L3/L4).
+// `runVaultMaintenance` is the single hookpoint a host sweep calls;
+// `decideVaultMaintenance` is the pure policy in front of it, shaped like
+// journal-limit.ts's ladder for `journal.db`.
+export {
+  ENTITY_REVISION_PRUNE_CAP,
+  pruneExpiredEntityRevisions,
+  type EntityRevisionPruneResult,
+} from "./commands/entity-revisions.js";
+export {
+  RETENTION_ROW_CAP,
+  RETENTION_DEFAULT_KEEP_DAYS,
+  sweepBoundedRetention,
+  type RetentionTable,
+  type RetentionTableResult,
+  type RetentionSweepOptions,
+  type RetentionSweepResult,
+} from "./retention.js";
+export {
+  VAULT_RETENTION_LADDER,
+  VAULT_RETENTION_DEFAULT_KEEP_DAYS,
+  VAULT_RETENTION_FLOOR_KEEP_DAYS,
+  decideVaultMaintenance,
+  runVaultMaintenance,
+  vaultFileBytes,
+  type VaultMaintenanceDecisionInput,
+  type VaultMaintenanceDecision,
+  type VaultMaintenanceResult,
+} from "./vault-limit.js";
+// The batched, resumable data-rewrite primitive for migration rungs (#659 L7).
+export {
+  DEFAULT_MIGRATION_BATCH_SIZE,
+  runBatchedMigration,
+  type BatchedRewrite,
+  type BatchedMigrationResult,
+} from "./schema/migrate.js";

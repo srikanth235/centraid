@@ -1,6 +1,6 @@
 /*! governance: allow-repo-hygiene file-size-limit — one native Tasks cover keeps the offline replica projection and its receipted interaction surface together. */
 import { Feather } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
@@ -35,73 +36,82 @@ import type { TasksScreenProps } from "../../navigation";
 
 type TaskView = "inbox" | "today" | "upcoming" | `project:${string}`;
 const day = (): string => new Date().toISOString().slice(0, 10);
+// `task_id` is the primary key of schedule.task, so it is unique per row even
+// while an optimistic insert is still pending.
+const taskKey = (row: ReplicaRow): string => String(row.task_id);
 
-function DragTaskRow({
-  row,
-  sectionName,
-  onToggle,
-  onMove,
-  onReorder,
-}: {
-  row: ReplicaRow;
-  sectionName?: string;
-  onToggle: () => void;
-  onMove: () => void;
-  onReorder: (direction: -1 | 1) => void;
-}) {
-  const { colors } = useTheme();
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dy) > 10 &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx),
-        onPanResponderRelease: (_, gesture) => {
-          if (Math.abs(gesture.dy) > 24) onReorder(gesture.dy < 0 ? -1 : 1);
-        },
-      }),
-    [onReorder]
-  );
-  return (
-    <View
-      {...responder.panHandlers}
-      style={[
-        styles.task,
-        { backgroundColor: colors.bgElev, borderColor: colors.line },
-      ]}
-    >
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: false }}
-        onPress={onToggle}
-        style={[styles.check, { borderColor: colors.accent }]}
-      />
-      <View style={styles.taskMain}>
-        <Text style={[styles.taskTitle, { color: colors.ink }]}>
-          {String(row.title ?? "Untitled task")}
-        </Text>
-        <Text style={[styles.meta, { color: colors.ink3 }]}>
-          {row.due_at ? String(row.due_at).slice(0, 10) : "Anytime"}
-          {sectionName ? ` · ${sectionName}` : ""}
-          {row.recurrence_anchor === "completion"
-            ? " · repeats after completion"
-            : row.rrule
-              ? " · repeating"
-              : ""}
-        </Text>
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Move task"
-        onPress={onMove}
-        style={styles.iconButton}
+// Every callback takes the row instead of being pre-bound per cell, so the
+// screen can hand all rows one stable function set and let memo hold.
+const DragTaskRow = memo(
+  ({
+    row,
+    sectionName,
+    onToggle,
+    onMove,
+    onReorder,
+  }: {
+    row: ReplicaRow;
+    sectionName?: string;
+    onToggle: (row: ReplicaRow) => void;
+    onMove: (row: ReplicaRow) => void;
+    onReorder: (row: ReplicaRow, direction: -1 | 1) => void;
+  }): React.JSX.Element => {
+    const { colors } = useTheme();
+    const responder = useMemo(
+      () =>
+        PanResponder.create({
+          onMoveShouldSetPanResponder: (_, gesture) =>
+            Math.abs(gesture.dy) > 10 &&
+            Math.abs(gesture.dy) > Math.abs(gesture.dx),
+          onPanResponderRelease: (_, gesture) => {
+            if (Math.abs(gesture.dy) > 24)
+              onReorder(row, gesture.dy < 0 ? -1 : 1);
+          },
+        }),
+      [onReorder, row]
+    );
+    return (
+      <View
+        {...responder.panHandlers}
+        style={[
+          styles.task,
+          { backgroundColor: colors.bgElev, borderColor: colors.line },
+        ]}
       >
-        <Feather name="folder" size={17} color={colors.ink2} />
-      </Pressable>
-      <Feather name="menu" size={18} color={colors.ink3} />
-    </View>
-  );
-}
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: false }}
+          onPress={() => onToggle(row)}
+          style={[styles.check, { borderColor: colors.accent }]}
+        />
+        <View style={styles.taskMain}>
+          <Text style={[styles.taskTitle, { color: colors.ink }]}>
+            {String(row.title ?? "Untitled task")}
+          </Text>
+          <Text style={[styles.meta, { color: colors.ink3 }]}>
+            {row.due_at ? String(row.due_at).slice(0, 10) : "Anytime"}
+            {sectionName ? ` · ${sectionName}` : ""}
+            {row.recurrence_anchor === "completion"
+              ? " · repeats after completion"
+              : row.rrule
+                ? " · repeating"
+                : ""}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Move task"
+          onPress={() => onMove(row)}
+          style={styles.iconButton}
+        >
+          <Feather name="folder" size={17} color={colors.ink2} />
+        </Pressable>
+        <Feather name="menu" size={18} color={colors.ink3} />
+      </View>
+    );
+  }
+);
+DragTaskRow.displayName = "DragTaskRow";
 
 export default function TasksHome({
   navigation,
@@ -162,32 +172,36 @@ export default function TasksHome({
     ? view.slice("project:".length)
     : null;
 
-  const write = async (
-    action: string,
-    input: Record<string, ReplicaValue>,
-    optimistic?: NativeOptimisticMutation[]
-  ) => {
-    if (!session) return undefined;
-    try {
-      const result = await session.write("tasks", {
-        action,
-        input,
-        ...(optimistic ? { optimistic } : {}),
-      });
-      if (
-        !surfaceWriteOutcome(result, {
-          onParked: () =>
-            navigation.navigate("Settings", { screen: "Approvals" }),
-          queuedMessage: "This Tasks change will sync automatically.",
-        })
-      )
+  // Stable so the row callbacks built on it are stable too.
+  const write = useCallback(
+    async (
+      action: string,
+      input: Record<string, ReplicaValue>,
+      optimistic?: NativeOptimisticMutation[]
+    ) => {
+      if (!session) return undefined;
+      try {
+        const result = await session.write("tasks", {
+          action,
+          input,
+          ...(optimistic ? { optimistic } : {}),
+        });
+        if (
+          !surfaceWriteOutcome(result, {
+            onParked: () =>
+              navigation.navigate("Settings", { screen: "Approvals" }),
+            queuedMessage: "This Tasks change will sync automatically.",
+          })
+        )
+          return undefined;
+        return result;
+      } catch (error) {
+        surfaceWriteFailure(error, "Tasks change failed");
         return undefined;
-      return result;
-    } catch (error) {
-      surfaceWriteFailure(error, "Tasks change failed");
-      return undefined;
-    }
-  };
+      }
+    },
+    [navigation, session]
+  );
 
   const addTask = async (): Promise<void> => {
     const clean = title.trim();
@@ -262,9 +276,9 @@ export default function TasksHome({
     setSectionDraft("");
   };
 
-  const moveTask = (row: ReplicaRow): void => {
+  const moveTask = useCallback((row: ReplicaRow): void => {
     setMovingTask(row);
-  };
+  }, []);
   const moveTo = async (
     destination: { projectId?: string; sectionId?: string } = {}
   ): Promise<void> => {
@@ -283,21 +297,59 @@ export default function TasksHome({
     });
     setMovingTask(undefined);
   };
-  const reorder = async (row: ReplicaRow, direction: -1 | 1): Promise<void> => {
-    const index = visible.findIndex((item) => item.task_id === row.task_id);
-    const target = visible[index + direction];
-    if (!target) return;
-    await write("organize-task", {
-      task_id: String(row.task_id),
-      ...(row.project_id
-        ? {
-            project_id: String(row.project_id),
-            ...(row.section_id ? { section_id: String(row.section_id) } : {}),
-          }
-        : { clear_project: true }),
-      sort_order: Number(target.sort_order ?? index + direction),
-    });
-  };
+  const reorder = useCallback(
+    (row: ReplicaRow, direction: -1 | 1): void => {
+      const index = visible.findIndex((item) => item.task_id === row.task_id);
+      const target = visible[index + direction];
+      if (!target) return;
+      void write("organize-task", {
+        task_id: String(row.task_id),
+        ...(row.project_id
+          ? {
+              project_id: String(row.project_id),
+              ...(row.section_id ? { section_id: String(row.section_id) } : {}),
+            }
+          : { clear_project: true }),
+        sort_order: Number(target.sort_order ?? index + direction),
+      });
+    },
+    [visible, write]
+  );
+  const completeTask = useCallback(
+    (row: ReplicaRow): void => {
+      void write("set-status", {
+        task_id: String(row.task_id),
+        status: "completed",
+      });
+    },
+    [write]
+  );
+  // A map instead of a linear find per row: the row body only needs the name.
+  const sectionNameById = useMemo(
+    () =>
+      new Map(
+        sections.rows.map((section) => [
+          String(section.section_id),
+          typeof section.name === "string" ? section.name : undefined,
+        ])
+      ),
+    [sections.rows]
+  );
+  const renderTask = useCallback(
+    ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => {
+      const sectionName = sectionNameById.get(String(item.section_id));
+      return (
+        <DragTaskRow
+          row={item}
+          {...(sectionName ? { sectionName } : {})}
+          onToggle={completeTask}
+          onMove={moveTask}
+          onReorder={reorder}
+        />
+      );
+    },
+    [completeTask, moveTask, reorder, sectionNameById]
+  );
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
@@ -417,8 +469,18 @@ export default function TasksHome({
       </View>
       <FlatList
         data={visible}
-        keyExtractor={(row) => String(row.task_id)}
+        keyExtractor={taskKey}
         contentContainerStyle={styles.list}
+        // No getItemLayout: styles.task sets padding, not a height, and the
+        // task title wraps freely, so rows are 62pt only in the one-line case.
+        // The list is squeezed between the composer/options above and the
+        // organize block below — roughly 320pt, so ~5 of the 70pt (62 + 8 gap)
+        // rows are on screen; 6 covers the first paint plus a partial row.
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        // No removeClippedSubviews: each row owns a PanResponder for
+        // drag-to-reorder, and clipping detaches those touch targets on Android.
         ListEmptyComponent={
           queryState.loading ? null : (
             <Text style={[styles.empty, { color: colors.ink3 }]}>
@@ -426,24 +488,7 @@ export default function TasksHome({
             </Text>
           )
         }
-        renderItem={({ item }) => (
-          <DragTaskRow
-            row={item}
-            sectionName={
-              sections.rows.find(
-                (section) => section.section_id === item.section_id
-              )?.name as string | undefined
-            }
-            onToggle={() =>
-              void write("set-status", {
-                task_id: String(item.task_id),
-                status: "completed",
-              })
-            }
-            onMove={() => moveTask(item)}
-            onReorder={(direction) => void reorder(item, direction)}
-          />
-        )}
+        renderItem={renderTask}
       />
       <View style={styles.organize}>
         <TextInput

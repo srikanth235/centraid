@@ -6,6 +6,7 @@ import type {
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
 } from "../../gateway-client-local-storage.js";
+import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import LocalFootprintCard from "./LocalFootprintCard.js";
 import StorageLimitsPanel from "./StorageLimitsPanel.js";
 
@@ -68,11 +69,12 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   useEffect(() => {
     mountedRef.current = true;
     const initialRefresh = setTimeout(() => void refresh(), 0);
-    const timer = setInterval(() => void refresh(), FOOTPRINT_POLL_MS);
+    // Suspended while the tab is hidden and caught up on return (issue #659).
+    const stop = startVisibilityTicker(() => void refresh(), FOOTPRINT_POLL_MS);
     return () => {
       mountedRef.current = false;
       clearTimeout(initialRefresh);
-      clearInterval(timer);
+      stop();
     };
   }, [refresh]);
 

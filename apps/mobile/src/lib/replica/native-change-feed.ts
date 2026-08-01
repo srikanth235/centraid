@@ -35,6 +35,8 @@ export interface NativeVaultChangeFeedOptions {
 }
 
 const MIN_RECONNECT_MS = 1_000;
+/** Quiet window before the resume cursor is written to durable storage. */
+const CURSOR_PERSIST_DEBOUNCE_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 
 /**
@@ -62,6 +64,8 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   #reconnectDelay = MIN_RECONNECT_MS;
   #rebootstrapRequired = false;
   #generation = 0;
+  #persistTimer: ReturnType<typeof setTimeout> | undefined;
+  #pendingCursor: VaultChangeCursor | undefined;
 
   constructor(options: NativeVaultChangeFeedOptions) {
     this.#gatewayAuth = options.gatewayAuth;
@@ -94,6 +98,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     this.#cursor = { epoch: cursor.epoch, seq: cursor.seq };
     this.#cursorLoaded = true;
     this.#rebootstrapRequired = false;
+    this.#pendingCursor = undefined;
     await this.persistCursor(this.#cursor);
     this.reconnect();
   }
@@ -103,7 +108,11 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     if (this.#active === active) return;
     this.#active = active;
     if (active) this.connect();
-    else this.stopStream();
+    else {
+      this.stopStream();
+      // Backgrounding is the last reliable moment to land the resume cursor.
+      void this.flushCursor();
+    }
   }
 
   private reconnect(): void {
@@ -220,7 +229,35 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     if (cursor.epoch === this.#cursor.epoch && cursor.seq < this.#cursor.seq)
       return;
     this.#cursor = cursor;
-    void this.persistCursor(cursor);
+    this.schedulePersist(cursor);
+  }
+
+  /**
+   * Write the resume cursor at most once per quiet window.
+   *
+   * A busy delta batch advances the cursor once per change, and every advance
+   * used to be its own AsyncStorage write — a disk write per row for work whose
+   * only consumer is the next cold start. Only the newest cursor matters, and
+   * losing an unwritten one costs a replay, not data, so the write is debounced
+   * and flushed when the app goes away.
+   */
+  private schedulePersist(cursor: VaultChangeCursor): void {
+    this.#pendingCursor = cursor;
+    if (this.#persistTimer) return;
+    this.#persistTimer = setTimeout(() => {
+      this.#persistTimer = undefined;
+      void this.flushCursor();
+    }, CURSOR_PERSIST_DEBOUNCE_MS);
+  }
+
+  private async flushCursor(): Promise<void> {
+    if (this.#persistTimer) {
+      clearTimeout(this.#persistTimer);
+      this.#persistTimer = undefined;
+    }
+    const cursor = this.#pendingCursor;
+    this.#pendingCursor = undefined;
+    if (cursor) await this.persistCursor(cursor);
   }
 
   private emit(message: VaultChangeMessage): void {
@@ -301,6 +338,9 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
 
   /** Drop a revoked scope's persisted resume cursor. */
   async clearCursor(): Promise<void> {
+    if (this.#persistTimer) clearTimeout(this.#persistTimer);
+    this.#persistTimer = undefined;
+    this.#pendingCursor = undefined;
     try {
       await this.#storage.removeItem(this.#storageKey);
     } catch {

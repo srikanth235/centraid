@@ -22,6 +22,8 @@ const CONTROL_COOKIE = "__centraid_control";
 const MINT_RE = /^\/centraid\/_apps\/(?<appId>[^/]+)\/web-session$/u;
 const PENDING_TTL_MS = 60_000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+/** Expiry reclamation cadence — see `startSweeping()` (issue #659 G3). */
+const SWEEP_INTERVAL_MS = 5 * 60_000;
 const REPLICA_APP_PATHS = new Set([
   "/centraid/_vault/replica/bootstrap",
   "/centraid/_vault/changes",
@@ -149,6 +151,7 @@ export class WebAppSessions {
   private readonly controlStore: WebControlSessionStore;
   private readonly isDeviceValid?: (deviceKey: string) => boolean;
   private readonly now: () => number;
+  private sweepTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: WebAppSessionsOptions = {}) {
     this.controlStore =
@@ -245,16 +248,20 @@ export class WebAppSessions {
    * authorize a request by itself.
    */
   knownShellOrigins(): string[] {
-    this.sweep();
+    const now = this.now();
     const origins = new Set<string>();
     for (const row of this.controlStore.list()) origins.add(row.shellOrigin);
     for (const session of this.active.values())
-      origins.add(session.shellOrigin);
+      if (session.expiresAt > now) origins.add(session.shellOrigin);
     return [...origins];
   }
 
   authorize(req: IncomingMessage): BearerAuthorization | undefined {
-    this.sweep();
+    // No sweep here (issue #659 G3). Expiry is enforced by the explicit
+    // `expiresAt` checks below and by the store's `expires_at > ?` predicate,
+    // so authorization never depended on the sweep having just run — the sweep
+    // only reclaims memory and rows, and now runs on `startSweeping()`'s timer.
+    const now = this.now();
     const pathname = requestPath(req);
     const presented = cookies(req);
     if (pathname === WEB_CONTROL_PATH) {
@@ -312,6 +319,7 @@ export class WebAppSessions {
       const candidate = this.activeByCookieName.get(cookieName);
       if (
         candidate &&
+        candidate.expiresAt > now &&
         tokenMatches(token, candidate.token) &&
         permits(candidate, pathname)
       ) {
@@ -452,6 +460,24 @@ export class WebAppSessions {
     );
     sendJson(res, 200, { ok: true });
     return Promise.resolve(true);
+  }
+
+  /**
+   * Reclaim expired pending/active/control sessions on a timer instead of on
+   * every HTTP request (issue #659 G3). Idempotent; the timer is `unref`d so
+   * it never holds the process open. Returns a stop function for hosts that
+   * do not call `stopSweeping()`.
+   */
+  startSweeping(intervalMs = SWEEP_INTERVAL_MS): void {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => this.sweep(), intervalMs);
+    this.sweepTimer.unref?.();
+  }
+
+  stopSweeping(): void {
+    if (!this.sweepTimer) return;
+    clearInterval(this.sweepTimer);
+    this.sweepTimer = undefined;
   }
 
   private sweep(): void {

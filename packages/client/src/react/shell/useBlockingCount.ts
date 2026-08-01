@@ -5,6 +5,7 @@ import {
   syncWebNotifications,
   subscribeNotificationsChanges,
 } from "../../gateway-client.js";
+import { startVisibilityTicker } from "./routes/visibility-ticker.js";
 
 const POLL_MS = 60_000;
 
@@ -39,10 +40,12 @@ export function useNotificationsCounts(): {
     void subscribeNotificationsChanges(load, controller.signal).catch(() => {
       // The slow poll below is the deliberate fallback.
     });
-    const timer = window.setInterval(load, POLL_MS);
+    // The fallback poll suspends with the tab (issue #659): SSE is primary and
+    // reconnects on return, and a hidden tab has no badge to keep current.
+    const stop = startVisibilityTicker(load, POLL_MS);
     window.addEventListener("focus", load);
     return () => {
-      window.clearInterval(timer);
+      stop();
       window.removeEventListener("focus", load);
       controller.abort();
     };

@@ -192,7 +192,7 @@ function measuredThumbnailBytes(): number[] {
 }
 
 describe(MultiVaultReplicaReader, () => {
-  test("keeps a writable vault and its item id atomic across equal-sha rows", () => {
+  test("keeps a writable vault and its item id atomic across equal-sha rows", async () => {
     const root = tempDirSync("centraid-provenance-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
@@ -216,10 +216,12 @@ describe(MultiVaultReplicaReader, () => {
       ]
     );
 
-    const row = reader.read("docs", {
-      entity: "core.content_item",
-      limit: 100,
-    }).rows[0]!.values;
+    const row = (
+      await reader.read("docs", {
+        entity: "core.content_item",
+        limit: 100,
+      })
+    ).rows[0]!.values;
 
     expect(row.content_id).toBe("content-s");
     expect(row.__centraidScopeId).toBe("shared");
@@ -228,7 +230,7 @@ describe(MultiVaultReplicaReader, () => {
     reader.close();
   });
 
-  test("ATTACHes mounted vaults, federates FTS, and dedupes equal sha provenance", () => {
+  test("ATTACHes mounted vaults, federates FTS, and dedupes equal sha provenance", async () => {
     const root = tempDirSync("centraid-mounted-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
@@ -252,7 +254,7 @@ describe(MultiVaultReplicaReader, () => {
       ]
     );
 
-    const contents = reader.read("docs", {
+    const contents = await reader.read("docs", {
       entity: "core.content_item",
       limit: 100,
     });
@@ -270,7 +272,7 @@ describe(MultiVaultReplicaReader, () => {
     ]);
     expect(contents.rows[0]?.values.__centraidCanWrite).toBe(true);
 
-    const results = reader.search("docs", {
+    const results = await reader.search("docs", {
       entity: "core.document",
       query: "house",
     });
@@ -322,7 +324,7 @@ describe(MultiVaultReplicaReader, () => {
     reopened.close();
   });
 
-  test("detaches only a revoked scope and drops its cross-scope outbox work", () => {
+  test("detaches only a revoked scope and drops its cross-scope outbox work", async () => {
     const root = tempDirSync("centraid-revoked-");
     const personal = path.join(root, "personal.db");
     const shared = path.join(root, "shared.db");
@@ -361,14 +363,14 @@ describe(MultiVaultReplicaReader, () => {
     ]);
     expect(reader.placement("placement-revoked")).toBeUndefined();
     expect(
-      reader
-        .read("docs", { entity: "core.document", limit: 100 })
-        .rows.map((row) => row.values.document_id)
+      (
+        await reader.read("docs", { entity: "core.document", limit: 100 })
+      ).rows.map((row) => row.values.document_id)
     ).toStrictEqual(["document-p"]);
     reader.close();
   });
 
-  test("holds the 50k-item ten-year cold-read and local-search budgets", () => {
+  test("holds the 50k-item ten-year cold-read and local-search budgets", async () => {
     const root = tempDirSync("centraid-household-");
     const fixtureScopes = [
       { vaultId: "personal", label: "Personal", role: "admin" as const },
@@ -388,7 +390,7 @@ describe(MultiVaultReplicaReader, () => {
     expect(reader.scopes()).toHaveLength(MAX_MOUNTED_NATIVE_SCOPES);
 
     const coldStarted = performance.now();
-    const recent = reader.read("docs", {
+    const recent = await reader.read("docs", {
       entity: "core.document",
       orderBy: { column: "updated_at", dir: "desc" },
       limit: 5_000,
@@ -403,7 +405,7 @@ describe(MultiVaultReplicaReader, () => {
     expect(coldMs).toBeLessThan(strict ? 1_000 : 15_000);
 
     const searchStarted = performance.now();
-    const matches = reader.search("docs", {
+    const matches = await reader.search("docs", {
       entity: "core.document",
       query: "needlepersonal",
       limit: 100,

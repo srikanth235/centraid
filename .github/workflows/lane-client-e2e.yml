@@ -73,6 +73,11 @@ jobs:
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/desktop
       - run: bun run build
+      # #659 R3d — apps/desktop/dist/renderer is built on every desktop-touching
+      # PR and was never weighed. Ceilings live in
+      # tests/experience-budgets/desktop.json and are tighten-only.
+      - name: Weigh the shipped desktop renderer
+        run: bun run perf:app-weight -- --surface desktop
       - run: sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-1-0 libsecret-tools dbus-x11
       - run: |
           xvfb-run --auto-servernum dbus-run-session -- bash -c '

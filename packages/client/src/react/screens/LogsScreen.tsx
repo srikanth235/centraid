@@ -58,6 +58,17 @@ type StreamStatus = "connecting" | "live" | "reconnecting";
 
 /** Client-side cap — matches the gateway ring so memory stays bounded. */
 const MAX_ENTRIES = 2000;
+
+/**
+ * How many matching lines are in the DOM at once (issue #659).
+ *
+ * The panel holds up to {@link MAX_ENTRIES} lines and painted every one of
+ * them, so a busy gateway put two thousand flex rows on screen and re-laid all
+ * of them out on every arriving line — while the viewport shows perhaps forty.
+ * Only the newest window is mounted; the rest are one click away rather than
+ * gone, because a filtered log you cannot scroll back through is not a log.
+ */
+const LOG_WINDOW = 300;
 const RECONNECT_MS = 2000;
 /** "At the bottom" slack for the follow toggle, in px. */
 const FOLLOW_SLACK = 48;
@@ -195,11 +206,27 @@ export default function LogsScreen({
     );
   }, [entries, filter, query]);
 
+  // Windowing (issue #659). Reading is anchored at the newest line, so the
+  // window is the TAIL of the matches; asking for more grows it a page at a
+  // time and a filter change starts over.
+  const [windowSize, setWindowSize] = useState(LOG_WINDOW);
+  const [seenWindowReset, setSeenWindowReset] = useState("");
+  const windowReset = `${filter} ${query}`;
+  if (seenWindowReset !== windowReset) {
+    setSeenWindowReset(windowReset);
+    setWindowSize(LOG_WINDOW);
+  }
+  const hiddenCount = Math.max(0, visible.length - windowSize);
+  const windowed = useMemo(
+    () => (hiddenCount > 0 ? visible.slice(-windowSize) : visible),
+    [visible, windowSize, hiddenCount]
+  );
+
   // Follow: pin the viewport to the newest line unless the user scrolled up.
   useEffect(() => {
     const el = scrollRef.current;
     if (el && followRef.current) el.scrollTop = el.scrollHeight;
-  }, [visible]);
+  }, [windowed]);
 
   const onScroll = useCallback((): void => {
     const el = scrollRef.current;
@@ -338,6 +365,15 @@ export default function LogsScreen({
 
       <div className={styles.logPanel}>
         <div className={styles.logScroll} ref={scrollRef} onScroll={onScroll}>
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              className={styles.showEarlier}
+              onClick={() => setWindowSize((size) => size + LOG_WINDOW)}
+            >
+              {`Show ${Math.min(hiddenCount, LOG_WINDOW)} earlier lines (${hiddenCount} hidden)`}
+            </button>
+          ) : null}
           {visible.length === 0 ? (
             <div className={styles.empty}>
               {entries.length === 0
@@ -345,7 +381,7 @@ export default function LogsScreen({
                 : "No lines match the current filter."}
             </div>
           ) : (
-            visible.map((e) => (
+            windowed.map((e) => (
               <div key={e.seq} className={styles.line} data-level={e.level}>
                 <span className={styles.lineTime}>{timeLabel(e.ts)}</span>
                 <span className={styles.lineLevel} data-level={e.level}>

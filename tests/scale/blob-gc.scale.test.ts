@@ -19,6 +19,7 @@ import {
   sha256OfBytes,
 } from "../../packages/vault/src/blob/store.js";
 import { openVaultDb } from "../../packages/vault/src/db.js";
+import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/blob-gc.scale.test.ts";
 const STATES: readonly CustodyState[] = [
@@ -145,6 +146,10 @@ describe("blob-gc.scale", () => {
       }
     ).n;
     const DURATION_BUDGET_MS = 30_000;
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       evicted.evictedBlobs === perState &&
       eligible.every((sha) => !local.hasSync(sha) && remote.hasSync(sha)) &&
@@ -152,11 +157,12 @@ describe("blob-gc.scale", () => {
       pending.every((sha) => local.hasSync(sha)) &&
       outboxRemaining === perState &&
       durationMs < DURATION_BUDGET_MS;
+    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Mixed-custody CAS eviction at 5k objects",
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -172,6 +178,10 @@ describe("blob-gc.scale", () => {
         },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
 
     expect(evicted.evictedBlobs).toBe(perState);
     expect(evicted.evictedBytes).toBeGreaterThan(0);
@@ -190,5 +200,86 @@ describe("blob-gc.scale", () => {
       shasByState.get("missing")!.every((sha) => !local.hasSync(sha))
     ).toBe(true);
     expect(durationMs).toBeLessThan(DURATION_BUDGET_MS);
+  });
+
+  // ── issue #659 S2: the same scan at a year-3 CAS ──────────────────────
+  //
+  // The test above proves eviction is right on REAL files; this one proves the
+  // work is BOUNDED at volume. Its local tier is in-memory on purpose: at
+  // 100k objects the fixture's fsync-per-file seeding costs ~6 minutes and
+  // measures the disk, not the code under test, while every cost this rig
+  // exists to bound — the custody refresh, the live-set derivation behind it,
+  // and the eviction pass — is driven by the ROW count, which is real here.
+  test("the custody scan and eviction pass stay bounded at 100k objects", async () => {
+    const db = openVaultDb();
+    await db.blobTransfers.close();
+    onTestFinished(() => db.close());
+
+    const remote = new MemoryBlobStore();
+    const local = new MemoryBlobStore();
+    const budget = { bytes: Number.MAX_SAFE_INTEGER };
+    const cache = new BlobCache(db.vault, local, {
+      settings: () => ({ budgetBytes: budget.bytes }),
+    });
+    const custody = new BlobCustody(local, () => ({ store: remote }), cache);
+
+    const count = 100_000;
+    const perState = count / STATES.length;
+    const replicated: string[] = [];
+    const localOnly: string[] = [];
+    const content = db.vault.prepare(
+      `INSERT INTO core_content_item
+       (content_id, media_type, content_uri, sha256, byte_size, created_at)
+     VALUES (?, 'application/octet-stream', ?, ?, ?, ?)`
+    );
+    const now = new Date().toISOString();
+    let protectedLocalBytes = 0;
+
+    db.vault.exec("BEGIN");
+    try {
+      for (let index = 0; index < count; index += 1) {
+        const state = STATES[index % STATES.length]!;
+        const bytes = Buffer.from(
+          `volume-blob-${index.toString().padStart(6, "0")}`
+        );
+        const sha = sha256OfBytes(bytes);
+        content.run(
+          `volume-content-${index}`,
+          blobUriFor(sha),
+          sha,
+          bytes.length,
+          now
+        );
+        if (state === "replicated") {
+          replicated.push(sha);
+          local.putSync(sha, bytes);
+          remote.putSync(sha, bytes);
+          cache.replica.mark(sha, bytes.length);
+        } else if (state === "local-only") {
+          localOnly.push(sha);
+          local.putSync(sha, bytes);
+          protectedLocalBytes += bytes.length;
+        } else if (state === "remote-only") {
+          remote.putSync(sha, bytes);
+          cache.replica.mark(sha, bytes.length);
+        }
+      }
+      db.vault.exec("COMMIT");
+    } catch (error) {
+      db.vault.exec("ROLLBACK");
+      throw error;
+    }
+
+    const started = performance.now();
+    await refreshCustodyState({ ...db, blobs: custody });
+    budget.bytes = protectedLocalBytes;
+    const evicted = custody.evictAfterReconcile();
+    const durationMs = performance.now() - started;
+
+    // Correctness is unchanged at volume: exactly the remotely proven bytes go.
+    expect(evicted.evictedBlobs).toBe(perState);
+    expect(replicated.every((sha) => !local.hasSync(sha))).toBe(true);
+    expect(localOnly.every((sha) => local.hasSync(sha))).toBe(true);
+    expect(durationMs).toBeLessThan(rigBudgetMs(OWNER));
   });
 });

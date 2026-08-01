@@ -7,6 +7,8 @@ import { describe, expect, onTestFinished, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+
 const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
 // --- Budgets ---------------------------------------------------------------
@@ -77,14 +79,19 @@ describe("gateway-request.perf", () => {
     const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
     const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
 
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("perf", OWNER);
     const passed =
       p95Ms < REQUEST_P95_BUDGET_MS &&
       idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
+    const withinDrift = drift === null || p95Ms <= drift;
     await recordQualityResult({
       lane: "perf",
       owner: OWNER,
       name: "Gateway request p95 and idle CPU",
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         {
           name: "request p95",
@@ -100,6 +107,10 @@ describe("gateway-request.perf", () => {
         },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${p95Ms} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
     expect(p95Ms).toBeLessThan(REQUEST_P95_BUDGET_MS);
     expect(idleCpuMsPerSecond).toBeLessThan(IDLE_CPU_BUDGET_MS_PER_S);
   });

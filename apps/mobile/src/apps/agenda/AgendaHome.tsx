@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
@@ -47,6 +48,12 @@ const addDays = (date: Date, days: number): Date => {
   next.setDate(next.getDate() + days);
   return next;
 };
+// Day headers key on the day string and events on their instance key, so the
+// two arms of AgendaRow can never collide.
+const agendaRowKey = (row: AgendaRow): string => row.key;
+// One shared identity for the "nothing to list" case: a fresh `[]` per render
+// would make FlatList re-diff a list it already knows is empty.
+const NO_ROWS: AgendaRow[] = [];
 
 export default function AgendaHome({
   navigation,
@@ -161,6 +168,25 @@ export default function AgendaHome({
     void Haptics.selectionAsync();
     setCursor(new Date());
   };
+  const openEvent = useCallback(
+    (event: AgendaEventModel): void => {
+      navigation.navigate("AgendaEvent", {
+        eventId: event.id,
+        instanceKey: event.instanceKey,
+      });
+    },
+    [navigation]
+  );
+  const renderRow = useCallback(
+    ({ item }: ListRenderItemInfo<AgendaRow>): React.JSX.Element =>
+      item.kind === "day" ? (
+        <DayHeaderRow date={item.date} colors={colors} />
+      ) : (
+        <EventRow event={item.event} colors={colors} onOpen={openEvent} />
+      ),
+    [colors, openEvent]
+  );
+  const listData = agenda.connection === "unavailable" ? NO_ROWS : agendaRows;
   const toggleCalendar = (id: string): void => {
     void Haptics.selectionAsync();
     setHiddenCalendars((current) => {
@@ -320,9 +346,18 @@ export default function AgendaHome({
         <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
-        data={agenda.connection === "unavailable" ? [] : agendaRows}
-        keyExtractor={(row) => row.key}
+        data={listData}
+        keyExtractor={agendaRowKey}
         contentContainerStyle={styles.list}
+        // Day headers (45pt) and event rows (72pt) interleave, so no fixed
+        // itemHeight exists and getItemLayout would mis-place every cell.
+        // Agenda mode spans 120 days: 8 rows fills the ~520pt of screen left
+        // below the header/segment/nav chrome, and ±3 viewports of retained
+        // cells is enough to absorb a fast flick without holding the year.
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews
         refreshing={refreshing}
         onRefresh={() => void refreshAgenda()}
         ListHeaderComponent={
@@ -345,30 +380,7 @@ export default function AgendaHome({
             </Text>
           )
         }
-        renderItem={({ item }) =>
-          item.kind === "day" ? (
-            <View style={styles.dayHeader}>
-              <Text style={[styles.dayHeaderTitle, { color: colors.ink }]}>
-                {new Intl.DateTimeFormat(undefined, {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                }).format(item.date)}
-              </Text>
-            </View>
-          ) : (
-            <EventRow
-              event={item.event}
-              colors={colors}
-              onPress={() =>
-                navigation.navigate("AgendaEvent", {
-                  eventId: item.event.id,
-                  instanceKey: item.event.instanceKey,
-                })
-              }
-            />
-          )
-        }
+        renderItem={renderRow}
       />
       {createOpen ? (
         <AgendaCreateModal
@@ -384,18 +396,41 @@ export default function AgendaHome({
   );
 }
 
-function EventRow({
-  event,
-  colors,
-  onPress,
-}: {
-  event: AgendaEventModel;
-  colors: ReturnType<typeof useTheme>["colors"];
-  onPress: () => void;
-}): React.JSX.Element {
-  return (
+const DayHeaderRow = memo(
+  ({
+    date,
+    colors,
+  }: {
+    date: Date;
+    colors: ReturnType<typeof useTheme>["colors"];
+  }): React.JSX.Element => (
+    <View style={styles.dayHeader}>
+      <Text style={[styles.dayHeaderTitle, { color: colors.ink }]}>
+        {new Intl.DateTimeFormat(undefined, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        }).format(date)}
+      </Text>
+    </View>
+  )
+);
+DayHeaderRow.displayName = "DayHeaderRow";
+
+// `onOpen` takes the event rather than a pre-bound closure so the caller can
+// hand every row the same stable callback — a per-row arrow would defeat memo.
+const EventRow = memo(
+  ({
+    event,
+    colors,
+    onOpen,
+  }: {
+    event: AgendaEventModel;
+    colors: ReturnType<typeof useTheme>["colors"];
+    onOpen: (event: AgendaEventModel) => void;
+  }): React.JSX.Element => (
     <Pressable
-      onPress={onPress}
+      onPress={() => onOpen(event)}
       style={[styles.event, { borderBottomColor: colors.line }]}
     >
       <View style={styles.time}>
@@ -425,8 +460,9 @@ function EventRow({
       </View>
       <Feather name="chevron-right" size={18} color={colors.ink3} />
     </Pressable>
-  );
-}
+  )
+);
+EventRow.displayName = "EventRow";
 
 function MonthGrid({
   cursor,

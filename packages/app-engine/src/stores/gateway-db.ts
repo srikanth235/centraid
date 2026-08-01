@@ -242,6 +242,21 @@ export const CONVERSATION_LEDGER_DDL = `
       ON items(turn_id, call_id) WHERE call_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_items_by_model
       ON items(model, started_at DESC);
+    /*
+     * Covering index for run_summary's three dominant-* rollups (issue #659
+     * G8). Each is a correlated GROUP BY over one turn's step/agent items, run
+     * once per turn per Insights query — seven of them per dashboard load. With
+     * only idx_items_by_turn the planner found the turn's items by index and
+     * then fetched EVERY matching row from the table to read kind, model,
+     * provider, effort, and the two token columns. Carrying those in the index
+     * makes each rollup an index-only scan.
+     *
+     * PARTIAL on the two kinds the view actually aggregates, so the hot
+     * streaming inserts — message_in and tool items — do not pay to maintain it.
+     */
+    CREATE INDEX IF NOT EXISTS idx_items_run_rollup
+      ON items(turn_id, model, provider, effort, input_tokens, output_tokens)
+      WHERE kind IN ('step','agent');
 
     CREATE TABLE IF NOT EXISTS attachments (
       id         TEXT PRIMARY KEY,
@@ -462,72 +477,81 @@ export const CONVERSATION_LEDGER_DDL = `
     CREATE INDEX IF NOT EXISTS idx_conversation_digest_automation
       ON conversation_digest(automation_ref);
 
-    -- run_summary is a VIEW, not a table: one row per FINISHED run, every
-    -- kind — the Insights/Executions source. It used to be a denormalized
-    -- table maintained by a best-effort dual write at finishTurn, justified
-    -- when the rollup lived in a different file (central analytics.sqlite,
-    -- #280); with the ledger and the rollup in ONE file there is no boundary
-    -- left to denormalize across, so the ledger tables above are simply THE
-    -- source and the view is the lens (no write path, no drift).
-    -- automation_ref/app_id derivation and the dominant-model / dominant-
-    -- provider picks mirror the old write-through exactly. DROP+CREATE so
-    -- view shape can evolve on existing vaults (IF NOT EXISTS would stick).
-    DROP VIEW IF EXISTS run_summary;
-    CREATE VIEW run_summary AS
-      SELECT
-        t.id             AS run_id,
-        c.kind           AS kind,
-        CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
-        CASE
-          WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
-            THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
-          ELSE c.app_id
-        END              AS app_id,
-        -- The automation's display name (issue: orphaned runs showing the raw
-        -- ref) — conversations.title is refreshed when the stable automation
-        -- conversation is ensured and outlives the automation manifest being
-        -- deleted. NULLIF empties it out since the column defaults to ''.
-        CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
-        t.trigger        AS trigger,
-        t.trigger_origin AS trigger_origin,
-        t.ok             AS ok,
-        t.pinned         AS pinned,
-        t.summary        AS summary,
-        t.note           AS note,
-        t.error          AS error,
-        t.retry_of       AS retry_of,
-        (SELECT i.model FROM items i
-          WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','agent')
-          GROUP BY i.model
-          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-          LIMIT 1)       AS model,
-        -- Dominant runner kind (ACP stamps provider = RunnerKind) for Insights
-        -- by-runner breakdown (issue #514).
-        (SELECT i.provider FROM items i
-          WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','agent')
-          GROUP BY i.provider
-          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-          LIMIT 1)       AS provider,
-        -- Effort is recorded only after ACP confirms thought_level. Picking
-        -- the dominant confirmed value mirrors the model/provider rollups.
-        (SELECT i.effort FROM items i
-          WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
-          GROUP BY i.effort
-          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-          LIMIT 1)       AS effort,
-        t.started_at               AS started_at,
-        t.ended_at                 AS ended_at,
-        t.total_input_tokens       AS total_input_tokens,
-        t.total_output_tokens      AS total_output_tokens,
-        t.total_cache_read_tokens  AS total_cache_read_tokens,
-        t.total_cache_write_tokens AS total_cache_write_tokens,
-        t.hydration_tokens          AS hydration_tokens,
-        t.total_cost_usd           AS total_cost_usd,
-        t.step_count               AS step_count,
-        t.tool_count               AS tool_count
-      FROM turns t
-      JOIN conversations c ON c.id = t.conversation_id
-      WHERE t.ended_at IS NOT NULL;
+`;
+
+/*
+ * run_summary is a VIEW, not a table: one row per FINISHED run, every
+ * kind — the Insights/Executions source. It used to be a denormalized
+ * table maintained by a best-effort dual write at finishTurn, justified
+ * when the rollup lived in a different file (central analytics.sqlite,
+ * #280); with the ledger and the rollup in ONE file there is no boundary
+ * left to denormalize across, so the ledger tables above are simply THE
+ * source and the view is the lens (no write path, no drift).
+ * automation_ref/app_id derivation and the dominant-model / dominant-
+ * provider picks mirror the old write-through exactly.
+ *
+ * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). This used to be
+ * an unconditional DROP+CREATE on every journal open, which is a schema write —
+ * a transaction, a schema-version bump, and an invalidation of every prepared
+ * statement in the process — paid on every gateway start and every worker that
+ * touches the file, to produce a view identical to the one already there.
+ */
+export const RUN_SUMMARY_VIEW_DDL = `
+CREATE VIEW run_summary AS
+  SELECT
+    t.id             AS run_id,
+    c.kind           AS kind,
+    CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
+    CASE
+      WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
+        THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
+      ELSE c.app_id
+    END              AS app_id,
+    -- The automation's display name (issue: orphaned runs showing the raw
+    -- ref) — conversations.title is refreshed when the stable automation
+    -- conversation is ensured and outlives the automation manifest being
+    -- deleted. NULLIF empties it out since the column defaults to ''.
+    CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
+    t.trigger        AS trigger,
+    t.trigger_origin AS trigger_origin,
+    t.ok             AS ok,
+    t.pinned         AS pinned,
+    t.summary        AS summary,
+    t.note           AS note,
+    t.error          AS error,
+    t.retry_of       AS retry_of,
+    (SELECT i.model FROM items i
+      WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','agent')
+      GROUP BY i.model
+      ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+      LIMIT 1)       AS model,
+    -- Dominant runner kind (ACP stamps provider = RunnerKind) for Insights
+    -- by-runner breakdown (issue #514).
+    (SELECT i.provider FROM items i
+      WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','agent')
+      GROUP BY i.provider
+      ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+      LIMIT 1)       AS provider,
+    -- Effort is recorded only after ACP confirms thought_level. Picking
+    -- the dominant confirmed value mirrors the model/provider rollups.
+    (SELECT i.effort FROM items i
+      WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+      GROUP BY i.effort
+      ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+      LIMIT 1)       AS effort,
+    t.started_at               AS started_at,
+    t.ended_at                 AS ended_at,
+    t.total_input_tokens       AS total_input_tokens,
+    t.total_output_tokens      AS total_output_tokens,
+    t.total_cache_read_tokens  AS total_cache_read_tokens,
+    t.total_cache_write_tokens AS total_cache_write_tokens,
+    t.hydration_tokens          AS hydration_tokens,
+    t.total_cost_usd           AS total_cost_usd,
+    t.step_count               AS step_count,
+    t.tool_count               AS tool_count
+  FROM turns t
+  JOIN conversations c ON c.id = t.conversation_id
+  WHERE t.ended_at IS NOT NULL;
 `;
 
 /**
@@ -540,9 +564,11 @@ export const CONVERSATION_LEDGER_DDL = `
  * concatenation of every inbound `message_in` item's text. Assistant answers
  * live in `items.output_json` as a JSON envelope, not indexable in a pure-SQL
  * trigger, so titles + the user's own words are the search surface — the words
- * a user actually remembers a thread by. Because a conversation accretes items
- * incrementally, the item trigger re-derives the whole `body` row on each
- * text-bearing insert (chat threads are small; this is a bounded recompute).
+ * a user actually remembers a thread by. A conversation accretes items
+ * incrementally and the `body` row is maintained incrementally to match: the
+ * insert trigger APPENDS the new item's text (issue #659 G4). Only the rare
+ * paths — a title change, an item delete, the first-open backfill — re-derive
+ * the whole body from items.
  *
  * The backfill at the tail is `NOT EXISTS`-guarded, so it populates rows once
  * when the index is first created on a pre-existing dev vault and is a no-op
@@ -578,18 +604,57 @@ export const CONVERSATION_FTS_DDL = `
       DELETE FROM fts_conversation WHERE conversation_id = old.id;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS fts_conversation_item_ai
+    /*
+     * Item insert is INCREMENTAL (issue #659 G4). It used to delete the row and
+     * re-derive body by joining items↔turns and group_concat-ing the WHOLE
+     * conversation — inside the streaming write transaction, on every
+     * text-bearing item. That is O(conversation) per insert, so indexing a
+     * thread cost O(n²) and the cost grew with the thread the user was actively
+     * using. Appending the one new item's text is O(text) and produces exactly
+     * the same body string, because the old derivation was itself an
+     * insertion-ordered group_concat with the same ' ' separator.
+     *
+     * Rows exist only for 'chat'/'build' conversations (see conv_ai and the
+     * backfill), so the UPDATE self-selects the same conversations the old
+     * INSERT…WHERE c.kind IN ('chat','build') did. DROP+CREATE so an existing
+     * vault picks up the new body maintenance instead of keeping the recompute.
+     */
+    DROP TRIGGER IF EXISTS fts_conversation_item_ai;
+    CREATE TRIGGER fts_conversation_item_ai
       AFTER INSERT ON items WHEN new.text IS NOT NULL AND new.text <> '' BEGIN
-      DELETE FROM fts_conversation
-        WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
-      INSERT INTO fts_conversation(conversation_id, title, body)
-        SELECT c.id, c.title,
-          (SELECT COALESCE(group_concat(i.text, ' '), '')
-             FROM items i JOIN turns t ON t.id = i.turn_id
-            WHERE t.conversation_id = c.id AND i.text IS NOT NULL AND i.text <> '')
-          FROM conversations c
-         WHERE c.id = (SELECT conversation_id FROM turns WHERE id = new.turn_id)
-           AND c.kind IN ('chat','build');
+      UPDATE fts_conversation
+         SET body = CASE WHEN body = '' THEN new.text ELSE body || ' ' || new.text END
+       WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+    END;
+
+    /*
+     * Append-only maintenance would leave a pruned message's words searchable,
+     * so deletion — the rare path (ledger prune, #438) — pays the re-derivation
+     * the insert path no longer does. Two triggers because SQLite fires row
+     * triggers for ON DELETE CASCADE only under recursive_triggers: a direct
+     * item delete is caught by item_ad, and the turn-level prune (which
+     * cascades to items) by turn_ad. Both no-op when no fts row exists, so an
+     * automation conversation and a fully cascading conversation delete pay
+     * nothing — the latter's row removal belongs to fts_conversation_conv_ad.
+     */
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_item_ad
+      AFTER DELETE ON items WHEN old.text IS NOT NULL AND old.text <> '' BEGIN
+      UPDATE fts_conversation
+         SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
+                       FROM items i JOIN turns t ON t.id = i.turn_id
+                      WHERE t.conversation_id = fts_conversation.conversation_id
+                        AND i.text IS NOT NULL AND i.text <> '')
+       WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_turn_ad
+      AFTER DELETE ON turns BEGIN
+      UPDATE fts_conversation
+         SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
+                       FROM items i JOIN turns t ON t.id = i.turn_id
+                      WHERE t.conversation_id = fts_conversation.conversation_id
+                        AND i.text IS NOT NULL AND i.text <> '')
+       WHERE conversation_id = old.conversation_id;
     END;
 
     INSERT INTO fts_conversation(conversation_id, title, body)
@@ -748,8 +813,29 @@ export function ensureConversationLedger(db: DatabaseSync): void {
      WHERE c.adapter_kind IS NOT NULL AND c.adapter_session_id IS NOT NULL
      GROUP BY c.id
   `);
+  ensureRunSummaryView(db);
   db.exec(CONVERSATION_ITEM_COUNT_DDL);
   db.exec(CONVERSATION_FTS_DDL);
+}
+
+/**
+ * Create `run_summary` only when it is absent or its stored definition differs
+ * from {@link RUN_SUMMARY_VIEW_DDL} (issue #659 G11). SQLite records a view's
+ * CREATE statement verbatim in `sqlite_master.sql` (without the trailing
+ * semicolon), so comparing against the source we would execute is an exact
+ * equality check — a definition edit still lands on every existing vault, but
+ * an unchanged one costs a single indexed `sqlite_master` read.
+ */
+function ensureRunSummaryView(db: DatabaseSync): void {
+  const wanted = RUN_SUMMARY_VIEW_DDL.trim().replace(/;$/u, "");
+  const existing = db
+    .prepare(
+      `SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'run_summary'`
+    )
+    .get() as { sql: string | null } | undefined;
+  if (existing?.sql === wanted) return;
+  db.exec(`DROP VIEW IF EXISTS run_summary;`);
+  db.exec(RUN_SUMMARY_VIEW_DDL);
 }
 
 /**
@@ -765,10 +851,20 @@ export function ensureConversationLedger(db: DatabaseSync): void {
  */
 export function openJournalDb(dbPath: string): DatabaseSync {
   const db = new DatabaseSync(dbPath);
-  // busy_timeout: wait up to 30s for a lock instead of failing
-  // immediately. Load-bearing twice over: the multi-client gateway
-  // (standalone daemon) and the worker subprocesses that open the SAME
-  // journal file the gateway's vault plane holds open.
+  // busy_timeout: wait for a contended lock instead of failing immediately.
+  // Load-bearing twice over: the multi-client gateway (standalone daemon) and
+  // the worker subprocesses that open the SAME journal file the gateway's vault
+  // plane holds open.
+  //
+  // The value is a STALL BUDGET, not a patience setting (issue #659 G11). This
+  // driver is `node:sqlite`'s SYNCHRONOUS one, so the wait is a blocked event
+  // loop: at the old 30s a single contended write could freeze every request,
+  // SSE heartbeat, and health probe on the gateway for half a minute — a
+  // hard-down gateway presented as a slow one. 10s still dwarfs any real
+  // contention on this file (a WAL checkpoint by the shipper, a worker's
+  // insert), so nothing that used to succeed now fails; it only bounds how long
+  // a genuinely stuck lock can hold the process hostage before the write
+  // surfaces SQLITE_BUSY to its caller.
   //
   // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
   // checkpointer of journal.db — its backup segments are raw WAL byte
@@ -795,7 +891,7 @@ export function openJournalDb(dbPath: string): DatabaseSync {
     PRAGMA auto_vacuum=INCREMENTAL;
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
-    PRAGMA busy_timeout=30000;
+    PRAGMA busy_timeout=10000;
     PRAGMA cache_size=-16000;
     PRAGMA mmap_size=67108864;
     PRAGMA temp_store=MEMORY;

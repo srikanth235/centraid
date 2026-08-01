@@ -48,6 +48,17 @@ import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 /** Rows older than this are eligible for archival, unless overridden. */
 export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
 
+/**
+ * Invocations (and, separately, provenance rows) one run may seal (issue
+ * #659 L2). Before this cap the engine read EVERY eligible row of five
+ * tables into JS, closed over them, and gzipped the lot in one shot — a
+ * first archival on a vault with a year of history was an unbounded memory
+ * spike and a multi-second stall. The cap mirrors the ledger prune's
+ * `maxSegments` (issue #438): a pass does bounded work and reports `capped`
+ * so the host can simply come back.
+ */
+export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
+
 const SEGMENT_VERSION = 1;
 
 export type JournalArchiveStream = "provenance" | "invocation_cluster";
@@ -72,6 +83,11 @@ export interface JournalArchivalOptions {
   windowDays?: number;
   /** Override "now" — tests only. */
   now?: string;
+  /**
+   * Cap on the invocations, and separately the provenance rows, one run may
+   * seal. Default `DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`.
+   */
+  maxRowsPerRun?: number;
 }
 
 export interface JournalArchivalResult {
@@ -79,6 +95,11 @@ export interface JournalArchivalResult {
   manifests: JournalArchiveManifestRow[];
   rowsArchived: number;
   reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
+  /**
+   * `true` when a stream hit `maxRowsPerRun` — there is more to archive and
+   * the host should run again rather than wait for the next daily gate.
+   */
+  capped: boolean;
 }
 
 export interface ArchivedSegmentRows {
@@ -151,88 +172,156 @@ function deleteByIds(
   }
 }
 
+function selectColumnsByIds<T>(
+  journal: DatabaseSync,
+  sqlFor: (placeholders: string) => string,
+  ids: readonly string[]
+): T[] {
+  if (ids.length === 0) return [];
+  const out: T[] = [];
+  for (const part of chunk(ids, ID_CHUNK)) {
+    const placeholders = part.map(() => "?").join(", ");
+    out.push(...(journal.prepare(sqlFor(placeholders)).all(...part) as T[]));
+  }
+  return out;
+}
+
 /**
- * The invocation⇄receipt mutual-FK closure: start from invocations old
- * enough by their own clock, then repeatedly drop any invocation whose
- * linked receipt (either FK direction) is too young, missing, or shared
- * with an invocation that isn't (yet) in the eligible set. Terminates
- * because `eligible` only shrinks. Small, personal-vault-scale sets — a
- * fixed-point loop over plain JS Sets is simpler and safer here than
- * expressing the closure as recursive SQL.
+ * The invocation⇄receipt mutual-FK closure: start from the OLDEST `maxRows`
+ * invocations old enough by their own clock, then drop any invocation whose
+ * linked receipt (either FK direction) is too young, missing, or shared with
+ * an invocation that isn't eligible.
+ *
+ * Two shapes changed in issue #659 L2, both behaviour-preserving:
+ *
+ *   - the link and receipt-time maps are built from id-scoped queries over the candidate
+ *     set and the receipts it touches, not from two FULL scans of
+ *     `consent_receipt` and `agent_command_invocation`;
+ *   - the fixed point is reached by a WORKLIST rather than by rescanning the
+ *     whole eligible set after every removal. Removing an invocation can only
+ *     make its receipts' OTHER referrers ineligible, so those are exactly the
+ *     invocations that need re-examining. Same least/greatest fixed point,
+ *     linear in edges instead of quadratic in candidates.
  */
 function computeEligibleCluster(
   journal: DatabaseSync,
-  cutoff: string
-): { invocationIds: Set<string>; receiptIds: Set<string> } {
+  cutoff: string,
+  maxRows: number
+): {
+  invocationIds: Set<string>;
+  receiptIds: Set<string>;
+  capped: boolean;
+} {
   const candidates = journal
     .prepare(
-      `SELECT invocation_id FROM agent_command_invocation WHERE requested_at < ?`
+      `SELECT invocation_id FROM agent_command_invocation
+        WHERE requested_at < ?
+        ORDER BY requested_at, invocation_id
+        LIMIT ?`
     )
-    .all(cutoff) as { invocation_id: string }[];
+    .all(cutoff, maxRows) as { invocation_id: string }[];
   const eligible = new Set(candidates.map((r) => r.invocation_id));
+  const capped = candidates.length >= maxRows;
   if (eligible.size === 0)
-    return { invocationIds: eligible, receiptIds: new Set() };
+    return { invocationIds: eligible, receiptIds: new Set(), capped };
 
-  const receiptRows = journal
-    .prepare(
-      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt WHERE invocation_id IS NOT NULL`
-    )
-    .all() as {
+  const candidateIds = [...eligible];
+  const ownReceipts = selectColumnsByIds<{
+    invocation_id: string;
+    receipt_id: string;
+  }>(
+    journal,
+    (p) =>
+      `SELECT invocation_id, receipt_id FROM agent_command_invocation
+        WHERE receipt_id IS NOT NULL AND invocation_id IN (${p})`,
+    candidateIds
+  );
+  const receiptsOfCandidates = selectColumnsByIds<{
     receipt_id: string;
     invocation_id: string;
     occurred_at: string;
-  }[];
-  const invRows = journal
-    .prepare(
-      `SELECT invocation_id, receipt_id FROM agent_command_invocation WHERE receipt_id IS NOT NULL`
-    )
-    .all() as { invocation_id: string; receipt_id: string }[];
+  }>(
+    journal,
+    (p) =>
+      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt
+        WHERE invocation_id IS NOT NULL AND invocation_id IN (${p})`,
+    candidateIds
+  );
 
-  const linked = new Map<string, Set<string>>(); // invocationId -> receiptIds it touches
+  // Every receipt any candidate touches, in either FK direction.
+  const touchedReceiptIds = new Set<string>();
+  for (const r of ownReceipts) touchedReceiptIds.add(r.receipt_id);
+  for (const r of receiptsOfCandidates) touchedReceiptIds.add(r.receipt_id);
+  const receiptIdList = [...touchedReceiptIds];
+
+  // …and every invocation that touches one of THOSE receipts, candidate or
+  // not: an outside referrer is exactly what blocks a shared receipt.
+  const receiptRows = selectColumnsByIds<{
+    receipt_id: string;
+    invocation_id: string | null;
+    occurred_at: string;
+  }>(
+    journal,
+    (p) =>
+      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt
+        WHERE receipt_id IN (${p})`,
+    receiptIdList
+  );
+  const outsideReferrers = selectColumnsByIds<{
+    invocation_id: string;
+    receipt_id: string;
+  }>(
+    journal,
+    (p) =>
+      `SELECT invocation_id, receipt_id FROM agent_command_invocation
+        WHERE receipt_id IN (${p})`,
+    receiptIdList
+  );
+
+  const linked = new Map<string, Set<string>>(); // invocationId -> receiptIds
+  const referrers = new Map<string, Set<string>>(); // receiptId -> invocationIds
   const addLink = (inv: string, rec: string): void => {
-    let s = linked.get(inv);
-    if (!s) {
-      s = new Set();
-      linked.set(inv, s);
+    let recs = linked.get(inv);
+    if (!recs) {
+      recs = new Set();
+      linked.set(inv, recs);
     }
-    s.add(rec);
+    recs.add(rec);
+    let invs = referrers.get(rec);
+    if (!invs) {
+      invs = new Set();
+      referrers.set(rec, invs);
+    }
+    invs.add(inv);
   };
-  for (const r of receiptRows) addLink(r.invocation_id, r.receipt_id);
-  for (const r of invRows) addLink(r.invocation_id, r.receipt_id);
+  for (const r of ownReceipts) addLink(r.invocation_id, r.receipt_id);
+  for (const r of outsideReferrers) addLink(r.invocation_id, r.receipt_id);
+  for (const r of receiptRows)
+    if (r.invocation_id !== null) addLink(r.invocation_id, r.receipt_id);
 
   const receiptTime = new Map(
     receiptRows.map((r) => [r.receipt_id, r.occurred_at])
   );
-  const referrers = new Map<string, Set<string>>(); // receiptId -> invocationIds that touch it
-  for (const [inv, recs] of linked) {
-    for (const rec of recs) {
-      let s = referrers.get(rec);
-      if (!s) {
-        s = new Set();
-        referrers.set(rec, s);
-      }
-      s.add(inv);
-    }
-  }
 
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const inv of eligible) {
-      const recs = linked.get(inv);
-      if (!recs) continue;
-      for (const rec of recs) {
-        const t = receiptTime.get(rec);
-        const tooYoung = t === undefined || t >= cutoff;
-        const refs = referrers.get(rec) ?? new Set([inv]);
-        const referrerNotYetEligible = [...refs].some(
-          (other) => !eligible.has(other)
-        );
-        if (tooYoung || referrerNotYetEligible) {
-          eligible.delete(inv);
-          changed = true;
-          break;
-        }
+  const worklist = [...eligible];
+  const drop = (inv: string): void => {
+    if (!eligible.delete(inv)) return;
+    // Its receipts' other referrers now sit beside a non-eligible referrer.
+    for (const rec of linked.get(inv) ?? [])
+      for (const other of referrers.get(rec) ?? []) worklist.push(other);
+  };
+  while (worklist.length > 0) {
+    const inv = worklist.pop() as string;
+    if (!eligible.has(inv)) continue;
+    for (const rec of linked.get(inv) ?? []) {
+      const occurredAt = receiptTime.get(rec);
+      const tooYoung = occurredAt === undefined || occurredAt >= cutoff;
+      const blockedByOutsider = [...(referrers.get(rec) ?? [])].some(
+        (other) => !eligible.has(other)
+      );
+      if (tooYoung || blockedByOutsider) {
+        drop(inv);
+        break;
       }
     }
   }
@@ -240,31 +329,39 @@ function computeEligibleCluster(
   const receiptIds = new Set<string>();
   for (const inv of eligible)
     for (const rec of linked.get(inv) ?? []) receiptIds.add(rec);
-  return { invocationIds: eligible, receiptIds };
+  return { invocationIds: eligible, receiptIds, capped };
 }
 
-/** prov_id values a LIVE (not-being-archived) agent_evidence row still points at. */
+/**
+ * prov_id values a LIVE (not-being-archived) agent_evidence row still points
+ * at, restricted to the candidates in hand (issue #659 L2 — this used to
+ * scan all of `agent_evidence` regardless of how few rows were in play).
+ */
 function liveEvidenceProvRefs(
   journal: DatabaseSync,
-  eligibleInvocationIds: Set<string>
+  eligibleInvocationIds: Set<string>,
+  candidateProvIds: readonly string[]
 ): Set<string> {
-  const rows = journal
-    .prepare(
-      `SELECT prov_id, invocation_id FROM agent_evidence WHERE prov_id IS NOT NULL`
-    )
-    .all() as { prov_id: string; invocation_id: string }[];
+  const rows = selectColumnsByIds<{ prov_id: string; invocation_id: string }>(
+    journal,
+    (p) =>
+      `SELECT prov_id, invocation_id FROM agent_evidence
+        WHERE prov_id IS NOT NULL AND prov_id IN (${p})`,
+    candidateProvIds
+  );
   const blocked = new Set<string>();
   for (const r of rows)
     if (!eligibleInvocationIds.has(r.invocation_id)) blocked.add(r.prov_id);
   return blocked;
 }
 
+/** The oldest `maxRows` provenance rows whose chain successors are also old. */
 function selectProvenanceCandidates(
   journal: DatabaseSync,
   cutoff: string,
-  blockedByEvidence: Set<string>
+  maxRows: number
 ): Row[] {
-  const rows = journal
+  return journal
     .prepare(
       `SELECT * FROM consent_provenance p
         WHERE p.occurred_at < ?
@@ -272,10 +369,10 @@ function selectProvenanceCandidates(
             SELECT 1 FROM consent_provenance c
              WHERE c.prev_prov_id = p.prov_id AND c.occurred_at >= ?
           )
-        ORDER BY p.occurred_at, p.prov_id`
+        ORDER BY p.occurred_at, p.prov_id
+        LIMIT ?`
     )
-    .all(cutoff, cutoff) as Row[];
-  return rows.filter((r) => !blockedByEvidence.has(r.prov_id as string));
+    .all(cutoff, cutoff, maxRows) as Row[];
 }
 
 interface SegmentBuild {
@@ -287,8 +384,39 @@ interface SegmentBuild {
   toTime: string;
 }
 
+/**
+ * Serialize a segment row-by-row instead of `JSON.stringify`-ing the whole
+ * payload (issue #659 L2). One `stringify` over every archived row builds a
+ * single string as large as the segment — on top of the row objects it is
+ * built from — and only then copies it into a Buffer, so peak memory was
+ * roughly three times the segment. Encoding per row keeps the peak at one
+ * row plus the accumulated chunks, and the run cap
+ * (`DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`) is what bounds the accumulation.
+ *
+ * The output is byte-identical to `JSON.stringify(payload)` for the payload
+ * shape declared by `ArchivedSegmentRows`, so a segment written before this
+ * change and one written after decode the same way.
+ */
 function gzipJson(payload: ArchivedSegmentRows): Buffer {
-  return gzipSync(Buffer.from(JSON.stringify(payload), "utf8"));
+  const chunks: Buffer[] = [];
+  const push = (text: string): void => {
+    chunks.push(Buffer.from(text, "utf8"));
+  };
+  push(
+    `{"version":${JSON.stringify(payload.version)},"stream":${JSON.stringify(
+      payload.stream
+    )},"rows":{`
+  );
+  let firstTable = true;
+  for (const [table, rows] of Object.entries(payload.rows)) {
+    push(`${firstTable ? "" : ","}${JSON.stringify(table)}:[`);
+    firstTable = false;
+    for (const [index, row] of rows.entries())
+      push(`${index === 0 ? "" : ","}${JSON.stringify(row)}`);
+    push("]");
+  }
+  push("}}");
+  return gzipSync(Buffer.concat(chunks));
 }
 
 function buildProvenanceSegment(rows: Row[]): SegmentBuild | null {
@@ -499,12 +627,15 @@ export function runJournalArchival(
     throw new Error(
       "journal archival window must be a positive number of days"
     );
+  const maxRows = options.maxRowsPerRun ?? DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS;
+  if (maxRows <= 0)
+    throw new Error("journal archival maxRowsPerRun must be a positive count");
   const now = options.now ?? nowIso();
   const cutoff = daysBeforeIso(now, windowDays);
   const journal = db.journal;
 
   // Phase 1 — compute eligibility. Reads only; no lock held past each query.
-  const cluster = computeEligibleCluster(journal, cutoff);
+  const cluster = computeEligibleCluster(journal, cutoff, maxRows);
   const clusterTables: ClusterTables | null =
     cluster.invocationIds.size > 0
       ? {
@@ -541,15 +672,16 @@ export function runJournalArchival(
         }
       : null;
 
+  const provCandidates = selectProvenanceCandidates(journal, cutoff, maxRows);
   const blockedByEvidence = liveEvidenceProvRefs(
     journal,
-    cluster.invocationIds
+    cluster.invocationIds,
+    provCandidates.map((r) => r.prov_id as string)
   );
-  const provRows = selectProvenanceCandidates(
-    journal,
-    cutoff,
-    blockedByEvidence
+  const provRows = provCandidates.filter(
+    (r) => !blockedByEvidence.has(r.prov_id as string)
   );
+  const capped = cluster.capped || provCandidates.length >= maxRows;
 
   const provSeg = buildProvenanceSegment(provRows);
   const clusterSeg = clusterTables ? buildClusterSegment(clusterTables) : null;
@@ -559,6 +691,7 @@ export function runJournalArchival(
       manifests: [],
       rowsArchived: 0,
       reclaim: { mode: reclaimModeOf(journal), ranVacuum: false },
+      capped,
     };
   }
 
@@ -650,7 +783,7 @@ export function runJournalArchival(
   }
 
   const reclaim = reclaimSpace(journal);
-  return { manifests, rowsArchived, reclaim };
+  return { manifests, rowsArchived, reclaim, capped };
 }
 
 function rowToManifest(row: Row): JournalArchiveManifestRow {

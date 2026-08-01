@@ -984,7 +984,18 @@
               }
             : (explicit ?? owner);
         if (route) return tunnel(event, route);
-        if (event.request.method !== 'GET' || event.request.destination === '')
+        if (event.request.method !== 'GET') return fetch(event.request);
+        // A `fetch()` issued from JS has an EMPTY destination — which is how
+        // the iroh WASM binary is loaded. That bailout meant the one asset big
+        // enough to matter (~2 MB) was the only one the shell cache never held,
+        // so every visit re-downloaded it (issue #659 C3). Hashed `/assets/`
+        // paths are immutable by construction, so serving them from the shell
+        // cache is always safe; everything else with an empty destination is a
+        // data request and still passes straight through.
+        if (
+          event.request.destination === '' &&
+          !(url.origin === self.location.origin && url.pathname.startsWith('/assets/'))
+        )
           return fetch(event.request);
         return shell(event);
       })().catch(

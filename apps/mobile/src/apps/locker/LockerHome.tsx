@@ -13,9 +13,9 @@ import {
   Pressable,
   RefreshControl,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppHeader from "../../kit/components/AppHeader";
@@ -42,6 +42,8 @@ import type {
   ScreenState,
 } from "./LockerHome.types";
 import { ItemAuthModal, ItemDetailModal, StateCard } from "./LockerHome.views";
+import { LockerItemRow, lockerItemKey } from "./LockerItemRow";
+import { LockerUnlockScreen } from "./LockerUnlockScreen";
 
 const META = resolveAppMeta({
   id: "locker",
@@ -51,6 +53,7 @@ const META = resolveAppMeta({
   colorKey: "slate",
 });
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+
 export default function LockerHome({
   navigation,
 }: LockerScreenProps): React.JSX.Element {
@@ -321,70 +324,91 @@ export default function LockerHome({
     }
   };
 
-  const revealWith = async (
-    row: LockerRow,
-    secret: string,
-    credentialId?: string
-  ): Promise<void> => {
-    if (!sessionToken) return;
-    setWorking(true);
-    try {
-      const permit = await callAuth({
-        credentialId,
-        itemId: row.item_id,
-        operation: "authorize-item",
-        secret,
-        sessionToken,
-      });
-      if (!permit.ok || !permit.itemToken)
-        throw new Error(permit.message ?? "Item authentication failed.");
-      const result = await appQuery<{
-        item?: LockerItem | null;
-        vaultDenied?: { message?: string };
-      }>("locker", "item", {
-        auth_session: sessionToken,
-        item_id: row.item_id,
-        item_token: permit.itemToken,
-      });
-      if (result.vaultDenied)
-        throw new Error(
-          result.vaultDenied.message ?? "Secret reveal was denied."
-        );
-      if (!result.item) throw new Error("This Locker item no longer exists.");
-      setDetail(result.item);
-      setPendingItem(null);
-      setItemPassphrase("");
-      setItemError(undefined);
-      setActivityNonce((value) => value + 1);
-    } catch (caughtError) {
-      setPendingItem(row);
-      setItemPassphrase("");
-      setItemError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Item authentication failed."
-      );
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const openItem = async (row: LockerRow): Promise<void> => {
-    setActivityNonce((value) => value + 1);
-    setItemError(undefined);
-    if (deviceCredentialId) {
+  // `revealWith` and `openItem` are callbacks so the list's `renderItem` — and
+  // with it every memoized row — keeps a stable identity across re-renders of
+  // this screen (unlock state, clipboard timers, app-state masking).
+  const revealWith = useCallback(
+    async (
+      row: LockerRow,
+      secret: string,
+      credentialId?: string
+    ): Promise<void> => {
+      if (!sessionToken) return;
+      setWorking(true);
       try {
-        const credential = await readLockerDeviceCredential();
-        if (credential) {
-          await revealWith(row, credential.secret, credential.credentialId);
-          return;
-        }
-      } catch {
-        // The explicit passphrase sheet below is the honest fallback.
+        const permit = await callAuth({
+          credentialId,
+          itemId: row.item_id,
+          operation: "authorize-item",
+          secret,
+          sessionToken,
+        });
+        if (!permit.ok || !permit.itemToken)
+          throw new Error(permit.message ?? "Item authentication failed.");
+        const result = await appQuery<{
+          item?: LockerItem | null;
+          vaultDenied?: { message?: string };
+        }>("locker", "item", {
+          auth_session: sessionToken,
+          item_id: row.item_id,
+          item_token: permit.itemToken,
+        });
+        if (result.vaultDenied)
+          throw new Error(
+            result.vaultDenied.message ?? "Secret reveal was denied."
+          );
+        if (!result.item) throw new Error("This Locker item no longer exists.");
+        setDetail(result.item);
+        setPendingItem(null);
+        setItemPassphrase("");
+        setItemError(undefined);
+        setActivityNonce((value) => value + 1);
+      } catch (caughtError) {
+        setPendingItem(row);
+        setItemPassphrase("");
+        setItemError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Item authentication failed."
+        );
+      } finally {
+        setWorking(false);
       }
-    }
-    setPendingItem(row);
-  };
+    },
+    [callAuth, sessionToken]
+  );
+
+  const openItem = useCallback(
+    async (row: LockerRow): Promise<void> => {
+      setActivityNonce((value) => value + 1);
+      setItemError(undefined);
+      if (deviceCredentialId) {
+        try {
+          const credential = await readLockerDeviceCredential();
+          if (credential) {
+            await revealWith(row, credential.secret, credential.credentialId);
+            return;
+          }
+        } catch {
+          // The explicit passphrase sheet below is the honest fallback.
+        }
+      }
+      setPendingItem(row);
+    },
+    [deviceCredentialId, revealWith]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<LockerRow>): React.JSX.Element => (
+      <LockerItemRow
+        row={item}
+        styles={styles}
+        colors={colors}
+        onOpen={openItem}
+      />
+    ),
+    [colors, openItem, styles]
+  );
 
   const copySecret = async (value: string): Promise<void> => {
     await Clipboard.setStringAsync(value);
@@ -435,60 +459,18 @@ export default function LockerHome({
         );
       case "locked":
         return (
-          <View style={styles.locked}>
-            <Icon name="Key" size={32} color={colors.ink2} />
-            <Text style={styles.stateTitle}>
-              {screen.configured ? "Locker is locked" : "Protect Locker"}
-            </Text>
-            <Text style={styles.stateCopy}>
-              {screen.configured
-                ? "Enter your primary passphrase. Each secret asks for user presence again before reveal."
-                : "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request."}
-            </Text>
-            <TextInput
-              accessibilityLabel={
-                screen.configured
-                  ? "Locker passphrase"
-                  : "Create Locker passphrase"
-              }
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setPassphrase}
-              onSubmitEditing={() => void unlockWith(passphrase)}
-              placeholder={
-                screen.configured ? "Primary passphrase" : "New passphrase"
-              }
-              placeholderTextColor={colors.ink3}
-              secureTextEntry
-              style={styles.input}
-              value={passphrase}
-            />
-            {screen.message ? (
-              <Text accessibilityRole="alert" style={styles.error}>
-                {screen.message}
-              </Text>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              disabled={working || passphrase.length < 12}
-              onPress={() => void unlockWith(passphrase)}
-              style={[styles.primary, working && styles.disabled]}
-            >
-              <Text style={styles.primaryText}>
-                {screen.configured ? "Unlock" : "Create passphrase"}
-              </Text>
-            </Pressable>
-            {screen.configured && deviceCredentialId ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={working}
-                onPress={() => void biometricUnlock()}
-                style={styles.secondary}
-              >
-                <Text style={styles.secondaryText}>Unlock with biometrics</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          <LockerUnlockScreen
+            colors={colors}
+            styles={styles}
+            configured={screen.configured}
+            message={screen.message}
+            passphrase={passphrase}
+            onChangePassphrase={setPassphrase}
+            onUnlock={() => void unlockWith(passphrase)}
+            onBiometricUnlock={() => void biometricUnlock()}
+            biometricsAvailable={Boolean(deviceCredentialId)}
+            working={working}
+          />
         );
       case "empty":
         return (
@@ -503,7 +485,7 @@ export default function LockerHome({
           <FlatList
             contentContainerStyle={styles.list}
             data={screen.items}
-            keyExtractor={(item) => item.item_id}
+            keyExtractor={lockerItemKey}
             refreshControl={
               <RefreshControl
                 refreshing={screen.refreshing}
@@ -540,26 +522,18 @@ export default function LockerHome({
                 </View>
               </>
             }
-            renderItem={({ item }) => (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void openItem(item)}
-                style={styles.row}
-              >
-                <View style={styles.rowIcon}>
-                  <Icon name="Key" size={18} color={colors.ink2} />
-                </View>
-                <View style={styles.rowCopy}>
-                  <Text numberOfLines={1} style={styles.rowTitle}>
-                    {item.title}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.rowSubtitle}>
-                    {item.subtitle}
-                  </Text>
-                </View>
-                <Icon name="ChevronRight" size={16} color={colors.ink3} />
-              </Pressable>
-            )}
+            // No getItemLayout: the header block is optional (the biometric
+            // card only appears before enrollment), so item offsets are not
+            // knowable ahead of layout even though the rows themselves are a
+            // fixed 68pt.
+            // The query asks for up to 500 items. A 68pt row means ~11 fill the
+            // ~760pt below the app header, so 11 covers the first paint and ±3
+            // viewports of retained cells absorbs a fast flick through a large
+            // vault without keeping all 500 mounted.
+            initialNumToRender={11}
+            maxToRenderPerBatch={11}
+            windowSize={7}
+            renderItem={renderItem}
           />
         );
     }

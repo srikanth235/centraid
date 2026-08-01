@@ -1,0 +1,65 @@
+{
+  "_comment": "Experience budgets for the Electron desktop app (apps/desktop). Perceived latency only. See README.md in this directory for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
+  "surface": "desktop",
+  "metrics": {
+    "coldOpenToUsable": {
+      "status": "measured",
+      "volume": "empty (mock-gateway e2e fixture, 1 app, fresh userData) — NOT year-3",
+      "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — REAL Electron launch (_electron.launch → firstWindow → Home library visible), nightly desktop-e2e job. Publishes artifacts/perf-input/desktop-launch-report.json, gated by tests/perf/desktop-launch.perf.test.ts.",
+      "ceilingMs": 12000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64, worktree build, Playwright _electron.launch",
+        "observedMs": 4540,
+        "breakdown": "process → first window 4494 ms; first window → usable Home 46 ms",
+        "note": "MEASURED, ONE SAMPLE. The headline finding: 99% of the 4.5 s a vault owner waits is MAIN-PROCESS boot before any window exists — the renderer reaches a usable Home 46 ms after it appears. The pre-existing `desktop-cold` budget (3000 ms in tests/quality-rig-budgets.json) is a first-import proxy over ONE module with no Electron process, and never saw this. Ceiling is ~2.6x observed because a shared CI runner is materially slower than this host and one sample cannot bound the jitter; TIGHTEN once ~10 nightly samples exist. The sustained-drift gate (30 samples, 1.5x) is what actually catches a slow walk.",
+        "headroom": "~2.6x observed (single-sample, cross-host)"
+      }
+    },
+    "tapToVisualResponse": {
+      "status": "measured",
+      "volume": "empty (mock-gateway e2e fixture)",
+      "probe": "apps/desktop/tests/e2e/launch-time.spec.ts — click an app tile → the app view attaches.",
+      "ceilingMs": 6000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64, same run as coldOpenToUsable",
+        "observedMs": 2066,
+        "note": "MEASURED, ONE SAMPLE. Two seconds from clicking a tile to the app view attaching is a long time to look at an unchanged screen, and nothing measured it before. The number includes the app-view mount and its first gateway round trips against the mock gateway. Ceiling ~3x observed, single-sample; tighten on real distribution.",
+        "headroom": "~3x observed (single-sample, cross-host)"
+      }
+    },
+    "sendToFirstToken": {
+      "status": "unmeasured",
+      "volume": "n/a — the desktop e2e mock gateway has no model provider",
+      "probe": "NONE TODAY. Needs the mock gateway in apps/desktop/tests/e2e/fixtures.ts to serve a fixed-delay SSE turn so the number is the shell's dead time, not a provider's."
+    },
+    "maxDroppedFramePercent": {
+      "status": "unmeasured",
+      "volume": "n/a",
+      "probe": "NONE TODAY. Chromium exposes no per-frame drop counter to Playwright without a CDP trace; the mobile surface owns the frame-drop ceiling (see mobile.json)."
+    },
+    "reconnectToFresh": {
+      "status": "unmeasured",
+      "volume": "n/a",
+      "probe": "NONE TODAY. Wants a mock-gateway pause/resume in the desktop e2e harness plus a client-side 'data is fresh' signal to observe."
+    },
+    "appWeight": {
+      "status": "measured",
+      "volume": "n/a — build artifact, independent of vault size",
+      "probe": "scripts/perf/app-weight.mjs --surface desktop (weighs apps/desktop/dist/renderer), run in CI after the desktop build",
+      "maxTotalBytes": 6291456,
+      "maxLargestChunkBytes": 1500000,
+      "_provenance": {
+        "at": "2026-07-31",
+        "host": "darwin arm64, worktree `vite build` output of apps/desktop",
+        "observedShippedBytes": 5827344,
+        "observedShippedFiles": 33,
+        "observedLargestChunkBytes": 1333046,
+        "observedLargestChunk": "react-boot.js",
+        "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface desktop --report`. Source maps (10.7 MB of them) are excluded as diagnostics, not product weight. Ceilings are observed + ~8% headroom. The three next-largest shipped files are react-pdf.worker.min.mjs (1.30 MB), sqlite3.wasm (865 kB) and react-boot.css (530 kB) — react-boot.js and react-pdf are both code-split candidates, and when either lands these numbers must be re-measured and TIGHTENED.",
+        "headroom": "observed + 8%"
+      }
+    }
+  }
+}
