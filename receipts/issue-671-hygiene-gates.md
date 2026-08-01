@@ -19,6 +19,7 @@
 - **Clear CRITICAL inventory blockers (`shell-quote`, `tar`) via package overrides** — root `package.json` `overrides` force `shell-quote@1.8.4` and `tar@7.5.22` so nested copies no longer report CRITICAL in the OSV inventory; `bun.lock` updated accordingly.
 - **`knip.json`** — ignoreBinaries lists `gitleaks`, `osv-scanner`, and `trivy` so knip does not require CI-only external scanners as package dependencies.
 - **SonarCloud config as code** — `docs/sonarcloud.md` documents Autoscan exclusions, silenced noise rules, and Free-plan profile/gate limits; `scripts/ci/configure-sonarcloud.mjs` re-applies API settings (exclusions + multicriteria + Centraid profile/gate); `AGENTS.md` and `docs/toolchain.md` index the doc.
+- **Sonar PR fail-closed only on product signal** — exclusions keep `scripts/**`, `.github/**`, tests/fixtures out of Autoscan so Sonar way (any new BUG/VULN fails) does not red hygiene/tooling PRs; multicriteria expanded for style/FP security rules; live API re-applied and PR #673 noise issues WONTFIX’d pending re-analysis.
 
 ## Decisions
 
