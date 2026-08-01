@@ -136,16 +136,18 @@ flattening the ramp into four identical greys.
 - `packages/design/tsconfig.test.json` — ESM typecheck program (the kit layer is browser ESM; the build still emits CJS)
 - `packages/design/package.json`, `packages/design/tsconfig.json` — hermetic `@types/node` for Docker builds
 - `packages/design/kit/conversation-client.{js,d.ts}`, `packages/design/kit/kit.ts`, `packages/design/src/conversation-client.test.ts` — `isSafeClientId` / `safeClientId` for storage-sourced path segments
+- `packages/design/src/kit.test.ts` — covers `KIT_DIR` for the design/src coverage floor
 - `packages/gateway/src/serve/build-gateway.ts` — `KIT_DIR` from `@centraid/design/kit`
 - `packages/blueprints/{package.json,vitest.config.ts,tsconfig.apps.json,types/virtual-kit/kit.ts,src/index.ts,src/app-boot-harness.ts,src/locker-online-only.test.ts,visual-harness/server.mjs}` — kit handed over
 - `apps/{web,desktop}/vite.config.ts`, `packages/client/{tsconfig.json,vitest.config.ts,vitest.mutation.config.ts}` — anchored root alias + kit directory alias
 - `tests/mutation-floors.json` — floor key follows the directory rename (value unchanged at 93)
 - `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `docs/traps/design-tokens.md` — two-layer model documented
 
-### PR #677 CI — hermetic design build + kit URL safety
+### PR #677 CI — hermetic design build + kit URL safety + coverage
 
 - `@centraid/design` declares `@types/node` and sets `compilerOptions.types: ["node"]` so the Docker gateway image build no longer fails on `node:path` / `__dirname` when hoisting is absent.
 - Kit conversation client exports `isSafeClientId` / `safeClientId`; kit Ask panel validates sessionStorage and history DOM ids before assembling `conversationPath` fetch URLs (Sonar `tssecurity:S8476`).
+- `src/kit.test.ts` exercises `KIT_DIR` so the `packages/design/src/**` coverage floor (98% lines) stays met after the kit-layer fold.
 
 ## Verification
 
