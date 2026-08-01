@@ -45,6 +45,8 @@ accessibility zero-grey (15 cells).
 
 - **Connect Pressable testID.** Android run 30708832841: ticket entered correctly but Maestro `tapOn: ^Connect$` hit `clickable=false` TextView; submit never ran. Added `testID="onboarding-connect"` and Maestro `tapOn: id`.
 
+- **Post-pair capability wall.** Android run 30710370305: Connect testID worked and pairing advanced to the shell, but the flow waited for Done while the app showed `Reconnect once` (offline capability probe lag over iroh). configureGateway now accepts that wall and taps `Retry connection`.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

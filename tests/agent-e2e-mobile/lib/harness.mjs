@@ -25,7 +25,7 @@ import {
 } from "../../agent-e2e-shared/harness.mjs";
 import {
   DISMISS_KEYBOARD_ONBOARDING,
-  retryableTapCommands,
+  completeOnboardingCommands,
   waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
@@ -496,10 +496,12 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - tapOn:
     id: "onboarding-connect"
     retryTapIfNoChange: true
-# Redemption dials the gateway over iroh; on a cold simulator that handshake is
-# the slowest step in the journey, so budget for the network, not the render.
+# Redemption dials the gateway over iroh. After a named-member pair the
+# onboarded flag can unmount Onboarding before Done paints, and the replica
+# shell may first show the offline-capability wall ("Reconnect once") until
+# /_gateway/info is reachable over the tunnel (Android run 30710370305).
 - extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
+    visible: "Who's using this phone[?]|You're all set, Mobile[.]|Reconnect once|${HOME_READY_MARKER}"
     timeout: 90000
 `,
       "configure-gateway",
@@ -517,32 +519,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     await ctx.run(
       `appId: ${state.appId}
 ---
-- runFlow:
-    when:
-      visible: "Who's using this phone[?]"
-    commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
-      - inputText: "Nightly"
-      - hideKeyboard
-      - tapOn: "Continue"
-- extendedWaitUntil:
-    visible: "You're all set, (Nightly|Mobile)[.]"
-    timeout: 60000
-# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
-# The button's press animation changes the hierarchy even if navigation was
-# ignored, so retry only while the source control remains visible. The Home
-# marker below remains mandatory and prevents a vacuous pass.
-${retryableTapCommands("Enter Centraid")}
-# The rail remains visible while Home loads, and the async Daily Brief can move
-# every tile when it arrives. Wait for its explicit settled accessibility label
-# so the next tap never uses coordinates captured before that layout shift.
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: 30000
-`,
+${completeOnboardingCommands(HOME_READY_MARKER)}`,
       "complete-onboarding"
     );
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);

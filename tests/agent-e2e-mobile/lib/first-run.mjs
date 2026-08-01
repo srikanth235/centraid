@@ -92,3 +92,50 @@ export function retryableTapCommands(selector, sourceSelector = selector) {
 ${conditionalRetry}
 ${conditionalRetry}`;
 }
+
+/**
+ * Post-pair completion: profile form, Done → Enter Centraid, or the offline
+ * capability wall ("Reconnect once"), then Home ready. Named-member tickets
+ * can unmount Onboarding before Done paints and land on the wall until
+ * /_gateway/info succeeds over iroh (Android run 30710370305).
+ *
+ * @param {string} homeReadyMarker HOME_READY_MARKER from the harness
+ */
+export function completeOnboardingCommands(homeReadyMarker) {
+  const enterCentraid = retryableTapCommands("Enter Centraid")
+    .split("\n")
+    .map((line) => (line ? `      ${line}` : line))
+    .join("\n");
+  return `# Capability probe can lag the iroh handshake; retry the wall once.
+- runFlow:
+    when:
+      visible: "Reconnect once"
+    commands:
+      - tapOn: "Retry connection"
+- runFlow:
+    when:
+      visible: "Who's using this phone[?]"
+    commands:
+      - tapOn: "Your name"
+# e2e-lint-allow: unasserted-input — React Native TextInput values are not
+# reliably Maestro-matchable; the personalized done heading below proves the
+# submitted profile name end to end.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "You're all set, (Nightly|Mobile)[.]"
+    commands:
+${enterCentraid}
+# Retry the capability wall if it reappears after Enter Centraid.
+- runFlow:
+    when:
+      visible: "Reconnect once"
+    commands:
+      - tapOn: "Retry connection"
+- extendedWaitUntil:
+    visible: "${homeReadyMarker}"
+    timeout: 90000
+`;
+}
