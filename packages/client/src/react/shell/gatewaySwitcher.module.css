@@ -1,4 +1,4 @@
-/* Sidebar vault switcher popover (issues var(--text), var(--text), var(--text)). One flat list of
+/* Sidebar vault switcher popover (issues #599, #608, #665). One flat list of
    vaults across every registered gateway — the Gateways section moved to
    Settings → Gateways. Body-portalled by gatewaySwitcher.ts, same mechanics as
    contextMenu.module.css (the sidebar column clips `overflow: hidden`).

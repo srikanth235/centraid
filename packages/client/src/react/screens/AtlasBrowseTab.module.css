@@ -1,4 +1,4 @@
-/* Browse tab — the vault-aware table editor (issue var(--text) B3). Co-located with
+/* Browse tab — the vault-aware table editor (issue #441 B3). Co-located with
    AtlasBrowseTab.tsx. Mobile-first: the table picker is a collapsible sheet
    above a full-width editor; at >=720px it becomes a sticky left rail beside the
    grid. Colours are design tokens only (no hardcoded hex, no `red`) — reusing

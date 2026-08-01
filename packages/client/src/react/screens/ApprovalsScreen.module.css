@@ -1,4 +1,4 @@
-/* Approvals page (issues var(--text)/var(--text)) — co-located styles for
+/* Approvals page (issues #306/#308) — co-located styles for
    ApprovalsScreen.tsx. Scoped by Vite CSS Modules. Mirrors the
    InsightsScreen header/panel look: paper/ink tokens, 0.5px hairlines,
    quiet color-mix hovers — no bespoke palette. */
@@ -496,7 +496,7 @@ button.rowMain:hover {
   padding-right: 10px;
 }
 
-/* Recent activity (issue var(--text)) — decision accents, risk rail, collapse ×N. */
+/* Recent activity (issue #552) — decision accents, risk rail, collapse ×N. */
 .activityHead {
   display: flex;
   align-items: center;

@@ -36,7 +36,7 @@
   line-height: 1.5;
 }
 
-/* Consent surface (issue var(--text)): what the app will be able to touch, rendered
+/* Consent surface (issue #434): what the app will be able to touch, rendered
    from its app.json vault block as owner-facing sentences before install. */
 .tmplAccess {
   display: flex;

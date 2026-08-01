@@ -1,6 +1,6 @@
 /* First-run onboarding — the fullscreen welcome view that owns `#root` until
    the user personalizes their profile. Co-located with OnboardingScreen.tsx
-   (issue var(--text), Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
+   (issue #325, Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
    so the old `cd-onb-*` global prefix is gone — the file name is the namespace.
 
    Sets a deliberate first-impression tone — the rest of the chrome is dense
@@ -19,7 +19,7 @@
   background: var(--text);
   overflow: hidden;
   isolation: isolate;
-  /* System UI stack (issue var(--text) K11) — no webfont network load. */
+  /* System UI stack (issue #468 K11) — no webfont network load. */
   font-family: var(--font-sans);
   color: var(--text);
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -439,7 +439,7 @@
   color: color-mix(in srgb, currentColor 78%, transparent);
 }
 
-/* Why the CTA is disabled, said once and quietly (issue var(--text) UX-4). Shares
+/* Why the CTA is disabled, said once and quietly (issue #603 UX-4). Shares
    `.keychainNote`'s register deliberately — this is a heads-up, not a
    validation error, so it must not read louder than the note beneath it.
    Dimmed from the card's own ink rather than a fresh hex, so the
@@ -451,7 +451,7 @@
   color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
-/* "Back" to the desktop first-run chooser (issue var(--text)) — a quiet text link,
+/* "Back" to the desktop first-run chooser (issue #603) — a quiet text link,
    deliberately not competing with the primary CTA above it. */
 .backBtn {
   display: block;

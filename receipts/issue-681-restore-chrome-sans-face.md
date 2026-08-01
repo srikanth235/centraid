@@ -13,6 +13,8 @@ without discarding the parts of that commit's font work that were genuine cleanu
 - [x] Re-add the `literalFontFamily` allowances the ratchet needs for those inherit sites
 - [x] Move the AutomationsOverviewScreen subtitle off mono onto the shared body convention
 - [x] Verify in the running desktop app that the chrome computes to sans and mono stays an accent
+- [x] Restore the 60 issue references the same search/replace corrupted into token names
+- [x] Move the AutomationTemplatesScreen subtitle off mono onto the same body convention
 
 ## What changed
 
@@ -110,6 +112,69 @@ It now follows the shared page-subtitle convention used by `ApprovalsScreen` and
  }
 ```
 
+### Corrupted issue references
+
+The same `1e7b2358` pass rewrote issue numbers inside comments into token names.
+The mechanism is now clear: a raw-hex purge treated three-digit issue references as
+hex colours — `#468` is a valid 3-digit hex, so `(issue #468 K6)` became
+`(issue var(--text) K6)`. Every issue number in the repo is digits-only, so every
+reference the purge reached was destroyed.
+
+Sixty references across 36 files are restored. The original numbers cannot be
+inferred from the corrupted text — `var(--text)` is the same string regardless of
+which issue it replaced — so each line was matched against its pre-#677 counterpart
+by turning the corrupted line into a regex (each `var(--…)` blob becomes a `(#\d+)`
+capture), requiring exactly one matching parent line, and substituting the captured
+numbers back positionally. Lines with zero or multiple parent matches would have been
+reported rather than guessed; there were none.
+
+`packages/design/kit/kit.css` needed its pre-rename path (`packages/blueprints/kit/kit.css`)
+to find a parent blob, since #677 moved the kit layer into `packages/design`.
+
+Restored numbers: #190, #272, #282, #306, #308, #325, #327, #367, #382, #420, #434,
+#436, #439, #441, #446, #468, #505, #528, #552, #573, #599, #603, #608, #659, #665,
+#667.
+
+Files whose comments were repaired, beyond those already listed above:
+
+- `packages/client/src/react/screens/DiscoverScreen.module.css`
+- `packages/client/src/react/screens/HouseholdScreen.module.css`
+- `packages/client/src/react/screens/ImportScreen.module.css`
+- `packages/client/src/react/screens/LogsScreen.module.css`
+- `packages/client/src/react/screens/OnboardingScreen.module.css`
+- `packages/client/src/react/screens/PaletteScreen.module.css`
+- `packages/client/src/react/screens/RecoverScreen.module.css`
+- `packages/client/src/react/shell/IdentityHead.module.css`
+- `packages/client/src/react/shell/gatewaySwitcher.module.css`
+- `packages/client/src/react/shell/routes/AppInfoModal.module.css`
+- `packages/client/src/react/shell/routes/ConnectFlow.module.css`
+- `packages/client/src/react/shell/routes/HandshakeLadder.module.css`
+- `packages/client/src/react/shell/routes/InlineAppRoute.module.css`
+- `packages/client/src/react/shell/routes/ScopePicker.module.css`
+- `packages/client/src/react/shell/templatePreview.module.css`
+- `packages/client/src/react/styles/a11y.module.css`
+- `packages/client/src/react/styles/pageSkeleton.module.css`
+- `packages/client/src/react/styles/vault.module.css`
+- `packages/design/kit/kit.css`
+
+### AutomationTemplatesScreen subtitle
+
+`packages/client/src/react/screens/AutomationTemplatesScreen.module.css` carried the
+same mono page-subtitle shape as its sibling overview screen. Both Automations
+screens now share the one convention, so navigating Automations → Browse templates
+no longer changes typeface mid-flow:
+
+```css
+ .sub {
+   margin: 0;
+-  font-family: var(--font-mono);
+-  font-size: 12px;
++  font: var(--t-body);
++  font-size: 13px;
+   color: var(--text-faint);
+ }
+```
+
 ### Checklist crosswalk
 
 - **Restore the shell's default body face to the sans stack** — "The default body
@@ -124,6 +189,10 @@ It now follows the shared page-subtitle convention used by `ApprovalsScreen` and
   — "AutomationsOverviewScreen subtitle" above.
 - **Verify in the running desktop app that the chrome computes to sans and mono stays an accent**
   — the live Electron/Playwright run under `## Verification`.
+- **Restore the 60 issue references the same search/replace corrupted into token names**
+  — "Corrupted issue references" above; 36 files.
+- **Move the AutomationTemplatesScreen subtitle off mono onto the same body convention**
+  — "AutomationTemplatesScreen subtitle" above.
 
 ## Decisions
 
@@ -146,19 +215,25 @@ It now follows the shared page-subtitle convention used by `ApprovalsScreen` and
 - **The AutomationsOverviewScreen fix is in scope by explicit instruction.** It is a
   pre-existing defect rather than #677 fallout; it was surfaced for a decision and
   folded in on request rather than silently.
+- **Corrupted issue numbers were recovered, never guessed.** `var(--text)` carries no
+  information about which issue it replaced, so any reconstruction from context would
+  have been invention. Each line is matched against exactly one pre-#677 parent line
+  or left alone and reported. Zero lines needed manual pairing, so no number in this
+  change is an inference.
+- **Both Automations subtitles now share one convention.** Fixing only the overview
+  screen would have left the pair inconsistent across a single navigation step, so
+  the templates screen moved with it once the scope question was settled.
 
 ## Out of scope
 
-- **57 corrupted comments from the same search/replace.** `1e7b2358` also rewrote
-  issue references inside comments (`(issue #468 K6)` → `(issue var(--text) K6)`,
-  `(issue #667)` → `(issue var(--text))`) across roughly 20 files. Cosmetic, but it
-  destroys the issue breadcrumbs; it wants its own commit and is not fixed here.
-- **`AutomationTemplatesScreen.module.css` `.sub`.** The sibling Automations screen
-  has the same mono page-subtitle shape. It was left alone to keep this change
-  scoped to what was asked; it is the obvious companion if the convention is being
-  swept.
-- **`packages/design/kit/kit.css`.** Its 23 font changes in `1e7b2358` were the
-  legitimate `--kit-mono` → `--mono` rename. Untouched.
+Nothing from this issue is deferred — the corrupted issue references and the
+`AutomationTemplatesScreen` subtitle were both initially deferred and have since been
+folded in (see `## What changed`). What remains below is context on surfaces this
+change deliberately does not touch, not outstanding work.
+
+- **`packages/design/kit/kit.css` font declarations.** Its 23 font changes in
+  `1e7b2358` were the legitimate `--kit-mono` → `--mono` rename and stay as they are;
+  only its six corrupted comments were repaired.
 - **Mobile (`apps/mobile`).** Its `family.mono*` usages are pre-existing and were not
   affected by the rename.
 - **`packages/design/src/kit.test.ts` is not part of this work.** It belongs to
@@ -217,6 +292,17 @@ remaining mono element is an intended accent (⌘-shortcut chips, eyebrow labels
 hero date, `DRAFT` badges, tile counts), and each was confirmed mono in the
 pre-#677 tree as well.
 
+Comment restoration — no corrupted reference survives anywhere outside this receipt
+(which quotes the corruption deliberately):
+
+```sh
+rg -n 'issues? var\(--' --glob '!receipts/**' | wc -l   # → 0
+```
+
+The Automations subtitles were re-checked in the running app after the change: on
+both the overview and the templates screen, no text element longer than 25
+characters computes to a monospace family.
+
 ## Audit
 
 PASS — a fresh-context sub-agent was handed only the staged diff, this receipt, and
@@ -227,43 +313,63 @@ mirrors the issue's, defaulting to REFUTED when uncertain.
 What it confirmed by direct count against the patch: 35 `+var(--font-sans)` and 43
 `+var(--font-display)` lines (78 total) across exactly 32 distinct files, matching
 the table; exactly 4 `+font-family: inherit` lines, in the same four files that gain
-`literalFontFamily: 1` entries in `tests/design-token-css-budget.json`; the
-`AutomationsOverviewScreen` subtitle change; the six checklist items identical in
-wording and order to the issue's; complete file coverage; and no undisclosed change
-— every `+`/`-` line in the CSS files touches `font-family`, `font:`, or `font-size`
-and nothing else.
+`literalFontFamily: 1` entries in `tests/design-token-css-budget.json`; exactly 60
+paired corrupted-reference restorations across exactly 36 files; both Automations
+subtitle changes; the eight checklist items identical in wording and order to the
+issue's; complete file coverage across all 56 files of the real change set; and no
+undisclosed font change.
 
-Two limits it recorded rather than waived:
+It independently extracted the set of issue numbers added in comment lines and found
+it identical to the list published above — 26 numbers, none claimed but absent, none
+added but unclaimed. It also spot-checked restoration *correctness* rather than just
+count, confirming that restored numbers match their comments' subject matter (#468
+on the safe-area comment, #441 on the Atlas screens, #420 on AssistantScreen, #599 on
+the household screens, #505 on InlineAppRoute, #439 on RecoverScreen, #573 on the
+a11y sites), and found no number substituted onto a mismatched line.
+
+Three limits it recorded rather than waived:
 
 1. The selector names given for the `inherit` sites (`.editTextarea`,
    `.tgChangeCard`, `.deviceBtn`) sit outside the diff's three-line hunk context, so
    the auditor could not confirm them from the diff alone. They are asserted by the
    author, not independently checked.
-2. Checklist item 6 — the live desktop verification and its per-screen element
-   counts — is narrative and produces no artifact in the diff, so it is
-   unfalsifiable from the audit materials. The auditor treated it skeptically and
-   did not count it as evidence either way.
+2. The live desktop verification and its per-screen element counts are narrative and
+   produce no artifact in the diff, so they are unfalsifiable from the audit
+   materials. The auditor treated them skeptically and did not count them as
+   evidence either way.
+3. The `origin/main..staged` range it was handed also swept in ~100 files from
+   `95f44758` (#680, the pre-v0 purge), which landed on `main` mid-session and is
+   unrelated to this work. The auditor isolated the true 56-file scope and confirmed
+   none of those unrelated files carry font changes, so there is no hidden scope
+   creep behind the noise.
 
-Neither limit contradicts diff evidence, which is why the verdict is PASS rather
+None of the three contradicts diff evidence, which is why the verdict is PASS rather
 than REFUTED.
 
 ## Steering
 
 A fresh-context sub-agent on the low tier was handed the session transcript
 (`cb7dbb8f-b680-41f2-858a-c645894de891.jsonl`) and this receipt, and classified every
-user message as interrupt / correction / not-steering.
+user message as interrupt / correction / not-steering. It was run twice: once before
+the deferred items were folded in, and again afterwards.
+
+The second run **REFUTED** check 1 and caught a real miss. The `/goal` message —
+"no out of scope issues please...fix ll of them and update PR" — is a **correction**,
+not a scope addition: the agent had chosen to defer the corrupted issue references
+and the `AutomationTemplatesScreen` subtitle to `## Out of scope`, and the user was
+pushing back on that decision. The first run had no such message to judge; the
+author's own reading at the time of the second run was that it merely added scope,
+which the auditor correctly rejected.
 
 - **Check 1 — every human-steering event is recorded as a row in `### Steering`:
-  PASS.** It found zero interrupts and zero corrections across the session's five
-  user messages, and the receipt records zero steering rows. The messages were: the
-  initial task, a `/compact` invocation, "open desktop app and check please", a
-  request to summarize, and the instruction to fix AutomationsOverviewScreen and
-  commit. The last three add scope rather than push back on work already done, which
-  the directive explicitly excludes from steering.
-- **Check 2 — no non-steering message is recorded as a steering event: PASS.** No
-  `### Steering` rows exist, so there are no false positives.
-
-No `ledger.py append-row` calls were needed, since there were no events to append.
+  PASS after remediation.** One correction (transcript ordinal 462,
+  2026-08-01T15:11:12.611Z) is now recorded via
+  `ledger.py append-row … correction classifier …`. The other five messages — the
+  initial task, `/compact`, "open desktop app and check please", the summary
+  request, and the instruction to fix AutomationsOverviewScreen and commit — add
+  scope rather than push back on work already done, which the directive excludes.
+- **Check 2 — no non-steering message is recorded as a steering event: PASS.** The
+  single row corresponds to the one event both runs agree is a correction.
 
 ## Accounting
 
@@ -276,3 +382,10 @@ No `ledger.py append-row` calls were needed, since there were no events to appen
 | claude-code-cb7dbb8f-b68-1785591204-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 713 | 576819 | 19104555 | 94392 | 671924 | 15.5208 | 713 | 576819 | 19104555 | 94392 |  |
 | claude-code-cb7dbb8f-b68-1785591417-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 35 | 36817 | 3215901 | 13184 | 50036 | 2.1678 | 748 | 613636 | 22320456 | 107576 |  |
 | claude-code-cb7dbb8f-b68-1785591522-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 17 | 29391 | 1901557 | 10817 | 40225 | 1.4050 | 765 | 643027 | 24222013 | 118393 |  |
+| claude-code-cb7dbb8f-b68-1785598339-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 172 | 448089 | 20079126 | 71704 | 519965 | 14.6336 | 937 | 1091116 | 44301139 | 190097 |  |
+
+### Steering
+
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-cb7dbb8f-1785597072-1 | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | correction | classifier | no out of scope issues please...fix ll of them and update PR | pending | 462 | 2026-08-01T15:11:12.611Z |

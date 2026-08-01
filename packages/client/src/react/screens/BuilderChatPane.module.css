@@ -330,7 +330,7 @@
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
-/* Staged composer attachments (issue var(--text) — builder attach button). */
+/* Staged composer attachments (issue #420 — builder attach button). */
 .attachRow {
   display: flex;
   flex-wrap: wrap;

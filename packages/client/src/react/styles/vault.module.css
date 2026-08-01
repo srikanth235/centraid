@@ -1,6 +1,6 @@
 /* Shared vault-consent styles — the per-app owner consent surface (scopes,
    grant/revoke, parked invocations). Imported by ImportScreen + VaultScreen
-   (issue var(--text), Phase 4 CSS refactor): a SHARED CSS Module, so both importers
+   (issue #325, Phase 4 CSS refactor): a SHARED CSS Module, so both importers
    get the same scoped class names. Lifted from the monolithic styles.css. */
 .label {
   font-family: var(--font-mono);

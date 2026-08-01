@@ -1,4 +1,4 @@
-/* Insights page — co-located styles for InsightsScreen.tsx (issue var(--text), Phase 4
+/* Insights page — co-located styles for InsightsScreen.tsx (issue #325, Phase 4
    CSS refactor). Scoped by Vite CSS Modules; lifted from the old monolithic
    styles.css, cd-ins-* → scoped local names.
 

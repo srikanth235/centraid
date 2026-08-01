@@ -21,7 +21,7 @@
   gap: 8px;
 }
 
-/* ── The §6 five-metric health surface (issue var(--text)) ─────────────────────── */
+/* ── The §6 five-metric health surface (issue #436) ─────────────────────── */
 .metrics {
   display: flex;
   flex-direction: column;

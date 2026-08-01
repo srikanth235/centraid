@@ -1,4 +1,4 @@
-/* The Vault Atlas (issue var(--text) Part B) — co-located styles for AtlasScreen.tsx
+/* The Vault Atlas (issue #441 Part B) — co-located styles for AtlasScreen.tsx
    and the two placeholder tabs. This file owns the page frame: head, the
    underline tab strip (shared vocabulary with the Gateway page), the Kinds
    loading/error lines, and the "coming in this PR" empty state the Relations

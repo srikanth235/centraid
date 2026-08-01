@@ -261,7 +261,7 @@
   border-right: none;
 }
 
-/* The sidebar's three zones (issue var(--text)). Head and foot are fixed; the
+/* The sidebar's three zones (issue #667). Head and foot are fixed; the
    middle scrolls, so Recents grows into whatever height the nav groups
    didn't take and the account row never drifts off-screen. */
 .sbColumn {
@@ -483,7 +483,7 @@
   color: var(--text);
 }
 
-/* Conversation grouping (issue var(--text)): a lightweight sub-label under the Chats
+/* Conversation grouping (issue #420): a lightweight sub-label under the Chats
    header for the "Pinned"/"Recent" split, and the collapsible "Archived"
    toggle at the bottom of the list. */
 .sbSubLabel {

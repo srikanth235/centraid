@@ -1,4 +1,4 @@
-/* Relations tab — the orrery (issue var(--text) B2). Co-located with
+/* Relations tab — the orrery (issue #441 B2). Co-located with
    AtlasRelationsTab.tsx. A radial SVG star chart on the left (kinds on
    concentric hop rings, fixed per-pack bearings, fill-weighted FK edges) and a
    fixed readout rail on the right (breadcrumb, hover detail, relation-vocabulary

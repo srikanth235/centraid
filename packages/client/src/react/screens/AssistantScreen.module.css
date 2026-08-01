@@ -229,7 +229,7 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
-/* Runner notice row (issue var(--text), Wave 6) — e.g. dropped-PDF warning. */
+/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
 .notice {
   display: flex;
   align-items: center;
@@ -246,14 +246,14 @@
 .notice[data-level="warn"] {
   color: var(--warning);
 }
-/* Offline hint beside a resend button (issue var(--text), Wave 6). */
+/* Offline hint beside a resend button (issue #420, Wave 6). */
 .offlineHint {
   font-size: 11px;
   color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-/* Reconnect catch-up hint (issue var(--text), Wave 6). */
+/* Reconnect catch-up hint (issue #420, Wave 6). */
 .catchUp {
   display: flex;
   align-items: center;
@@ -350,7 +350,7 @@
     border-color 140ms ease;
 }
 
-/* Composer autocomplete popover (@-mentions + slash commands, issue var(--text)) —
+/* Composer autocomplete popover (@-mentions + slash commands, issue #420) —
    floats just above the composer, anchored to its top edge. */
 .acPopover {
   position: absolute;
@@ -752,7 +752,7 @@
   color: var(--text);
 }
 
-/* ── Reasoning row (issue var(--text), Wave 2) ─────────────────────────────────── */
+/* ── Reasoning row (issue #420, Wave 2) ─────────────────────────────────── */
 .msgThinking {
   align-items: stretch;
 }
@@ -810,7 +810,7 @@
   }
 }
 
-/* ── Per-turn usage/cost (issue var(--text), Wave 2) ───────────────────────────── */
+/* ── Per-turn usage/cost (issue #420, Wave 2) ───────────────────────────── */
 .msgUsage {
   font-size: 10.5px;
   color: var(--text-ghost);
@@ -818,7 +818,7 @@
   cursor: default;
 }
 
-/* ── Image attachment thumbnails (issue var(--text), Wave 2) ───────────────────── */
+/* ── Image attachment thumbnails (issue #420, Wave 2) ───────────────────── */
 .msgAttachChipImage {
   padding: 0;
   overflow: hidden;
@@ -847,7 +847,7 @@
 }
 
 /* "Show earlier messages" — the top edge of the mounted transcript window
-   (issue var(--text)). A real button, so it is reachable and operable by keyboard;
+   (issue #659). A real button, so it is reachable and operable by keyboard;
    the transcript above it is deferred, never discarded. */
 .showEarlier {
   align-self: center;

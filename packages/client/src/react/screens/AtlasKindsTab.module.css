@@ -1,4 +1,4 @@
-/* Kinds tab — the periodic table of the ontology (issue var(--text) B1). Co-located
+/* Kinds tab — the periodic table of the ontology (issue #441 B1). Co-located
    with AtlasKindsTab.tsx. A census sentence up top, then one grid section per
    ontology pack where every kind holds a permanent cell (populated cells carry
    a count + write-pulse sparkline; empty kinds are dashed ghosts), and a

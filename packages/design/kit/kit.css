@@ -190,7 +190,7 @@
   display: none !important;
 }
 
-/* ---------- Native Web Component hosts (issue var(--text)) ----------------------- */
+/* ---------- Native Web Component hosts (issue #327) ----------------------- */
 /* The kit's presentation primitives are custom elements (elements.js) that
    render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
    is `display: contents` so it contributes no box of its own — the emitted
@@ -1497,7 +1497,7 @@ kit-reference-strip,
   border-bottom-left-radius: 0.35rem;
 }
 
-/* Rich assistant answers (issue var(--text)) — the shared assistant-rich.js renderer
+/* Rich assistant answers (issue #420) — the shared assistant-rich.js renderer
    emits these class names inside a `.kit-msg.ai` bubble; ported from the React
    shell's assistantRich.module.css and mapped onto kit tokens so the Ask panel
    renders ref-chips + typed block:table/chart/stat identically to the shell.
@@ -2206,7 +2206,7 @@ kit-reference-strip,
   }
 }
 
-/* ---------- Ask · conversation history (issue var(--text) read side) -------------
+/* ---------- Ask · conversation history (issue #190 read side) -------------
    A toggleable in-panel view: past conversations for this app, newest
    first, with a "New conversation" action and per-row delete. Replaces the
    log/suggest/compose stack while open — same tokens, same trust language.
@@ -2361,7 +2361,7 @@ kit-reference-strip,
 
 /* ---------- Ask · pending attachments (compose strip) ---------------------
    Files picked/dropped/pasted upload immediately to the per-app
-   conversation blob CAS (issue var(--text)); the strip tracks upload state until
+   conversation blob CAS (issue #190); the strip tracks upload state until
    Send folds the resolved refs into the turn body and clears it. */
 
 .kit-ask-attach {
@@ -2447,7 +2447,7 @@ kit-reference-strip,
   outline-offset: -2px;
 }
 
-/* ── Inline anchored references (issue var(--text)) ────────────────────────────────
+/* ── Inline anchored references (issue #282) ────────────────────────────────
    The `@`-mention popover — the SOLE cross-reference creation gesture
    (caret-anchored) — and the inline chip a resolved anchor renders as. The
    chip shows the resolver's LIVE card title, never a byte snapshot. */
@@ -2542,7 +2542,7 @@ kit-reference-strip,
   text-decoration: line-through;
 }
 
-/* ── Reference strip (issues var(--text) + var(--text)) ───────────────────────────────────
+/* ── Reference strip (issues #272 + #282) ───────────────────────────────────
    The canonical strip renderer's styling. The durable home of a note/doc's
    cross-references and the landing zone an orphaned inline anchor degrades
    to. Same token idiom as the picker/mention surfaces. */

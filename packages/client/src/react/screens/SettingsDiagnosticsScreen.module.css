@@ -248,7 +248,7 @@
   font-style: italic;
 }
 
-/* Connections — host plumbing (issue var(--text)). Deliberately the same row anatomy
+/* Connections — host plumbing (issue #665). Deliberately the same row anatomy
    as the component rows above (dot · meta · trailing controls) so the one
    place a host is still a host reads as part of this page rather than as a
    manager bolted onto it. */

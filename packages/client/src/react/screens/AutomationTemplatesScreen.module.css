@@ -34,8 +34,8 @@
 }
 .sub {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--t-body);
+  font-size: 13px;
   color: var(--text-faint);
 }
 
