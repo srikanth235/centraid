@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import { BLUEPRINT_TOKEN_CONTRACT } from "@centraid/design";
 
 import type { TokenPurityBudget } from "./token-purity-allowlist.js";
-import { TOKEN_PURITY_ALLOWLIST } from "./token-purity-allowlist.js";
+import {
+  TOKEN_PURITY_ALLOWLIST,
+  UNRESOLVED_VAR_DEBT,
+} from "./token-purity-allowlist.js";
 
 const appDir = path.join(path.resolve(import.meta.dirname, ".."), "apps");
 
@@ -146,6 +149,62 @@ describe("blueprint app CSS token purity", () => {
       "these rules fill with --accent-deep but ink with --on-accent; use " +
         "var(--text-inv), which flips with the fill"
     ).toStrictEqual([]);
+  });
+
+  it("resolves every fallback-less var() an app references", () => {
+    // A `var(--x)` with no fallback that names nothing declared is invalid at
+    // computed-value time: the declaration is dropped and the property falls
+    // back to inherited/initial. Nothing throws, nothing logs — the rule just
+    // silently does not apply, which is how a stale rename survives review.
+    // An app may resolve a name from the contract, from kit.css (served to
+    // every app surface), or from anywhere in its OWN stylesheets, since an
+    // app's Chrome declares tokens its components inherit.
+    const kitDeclared = new Set(
+      [
+        ...readFileSync(
+          path.join(appDir, "..", "..", "design", "kit", "kit.css"),
+          "utf8"
+        ).matchAll(CUSTOM_PROP_DECL),
+      ].map((m) => m.groups?.name ?? "")
+    );
+    const unresolved: string[] = [];
+    for (const app of new Set(
+      files.map((f) => path.relative(appDir, f).split(path.sep)[0])
+    )) {
+      const own = files.filter(
+        (f) => path.relative(appDir, f).split(path.sep)[0] === app
+      );
+      const sources = own.map((f) =>
+        readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "")
+      );
+      const declared = new Set(
+        sources.flatMap((css) =>
+          [...css.matchAll(CUSTOM_PROP_DECL)].map((m) => m.groups?.name ?? "")
+        )
+      );
+      own.forEach((file, i) => {
+        const source = sources[i] ?? "";
+        for (const m of source.matchAll(
+          /var\(\s*(?<name>--[A-Za-z0-9_-]+)\s*(?<next>[,)])/gu
+        )) {
+          const name = m.groups?.name ?? "";
+          if (m.groups?.next === ",") continue; // an explicit fallback is a choice
+          if (
+            CONTRACT_PROPS.has(name) ||
+            declared.has(name) ||
+            kitDeclared.has(name)
+          ) {
+            continue;
+          }
+          unresolved.push(`${path.relative(appDir, file)} -> ${name}`);
+        }
+      });
+    }
+    expect(
+      [...new Set(unresolved)].sort(),
+      "a fallback-less var() naming nothing declared silently drops its " +
+        "declaration; declare the token, use a contract name, or give it a fallback"
+    ).toStrictEqual(UNRESOLVED_VAR_DEBT);
   });
 
   it("keeps the allowlist free of entries for files that no longer exist", () => {

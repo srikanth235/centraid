@@ -93,3 +93,26 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     customProps: ["--font-sans"],
   },
 };
+
+/**
+ * Fallback-less `var()` references that resolve to nothing (issue #686).
+ *
+ * Each entry is a live latent bug: the declaration is dropped at computed-value
+ * time, so the rule silently does not apply. All of these predate #686 — the
+ * burn-down neither introduced nor fixed them — and they are pinned here so the
+ * class can only shrink. Fixing one means deleting its line, not editing it.
+ */
+export const UNRESOLVED_VAR_DEBT: readonly string[] = [
+  "_shared/AudiencePlacement.module.css -> --acc",
+  "people/components/TrashCard.module.css -> --r-lg",
+  "photos/Chrome.module.css -> --bg-l",
+  "tally/components/ExpenseUndo.module.css -> --r-lg",
+  "tally/components/GroupManager.module.css -> --r-lg",
+  "tasks/components/Board.module.css -> --accent-deep-fg",
+  "tasks/components/Capture.module.css -> --accent-deep-fg",
+  "tasks/components/Detail.module.css -> --accent-deep-fg",
+  "tasks/components/Row.module.css -> --accent-deep-fg",
+  "tasks/components/Sidebar.module.css -> --accent-deep-fg",
+  "tasks/components/Sidebar.module.css -> --t-label",
+  "tasks/components/shared.module.css -> --accent-deep-fg",
+];
