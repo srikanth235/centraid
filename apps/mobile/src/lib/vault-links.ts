@@ -84,9 +84,8 @@ export interface VaultLinkInput {
 let registry: VaultLink[] = [];
 let activeId = "";
 let hydrated = false;
-// The in-flight hydration promise, so concurrent boot callers (ReplicaProvider,
-// phone-link) share ONE run — the migration below is a read-modify-write that
-// would duplicate the migrated VaultLink if two cold-boot calls raced it.
+// The in-flight hydration promise, so concurrent boot callers (ReplicaProvider
+// and phone-link) share ONE run.
 let hydrating: Promise<void> | undefined;
 const listeners = new Set<() => void>();
 
@@ -138,39 +137,7 @@ async function clearActiveSlot(): Promise<void> {
   // LAST_GATEWAY/LAST_BASE left as-is: harmless stale hints, overwritten on next activate.
 }
 
-/**
- * One-time fold of a pre-registry install into a single VaultLink, so an
- * already-paired (or manual-URL) user keeps working across the upgrade with no
- * re-pair. Runs only when the registry is empty. `gatewayId` MUST be the exact
- * `LAST_GATEWAY` value the replica already keyed on, or the migrated VaultLink would
- * re-key to a fresh, empty replica DB.
- */
-async function migrateLegacySlot(): Promise<void> {
-  const [endpointHint, desktopName, deviceId, gatewayId, vaultId] =
-    await Promise.all([
-      hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
-      Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ""),
-      Store.hydrate<string>(LINK_DEVICE_ID_KEY, ""),
-      Store.hydrate<string>(LAST_GATEWAY, ""),
-      Store.hydrate<string>(LAST_VAULT, ""),
-    ]);
-  // Nothing to carry forward: no endpoint hint AND no resolved vault.
-  if (!endpointHint && !vaultId) return;
-  const gw = gatewayId || desktopName || "desktop";
-  const vault: VaultLink = {
-    id: mintId(),
-    gatewayId: gw,
-    desktopName,
-    deviceId,
-    vaultId,
-  };
-  registry = [vault];
-  activeId = vault.id;
-  if (endpointHint) await setSecure(endpointHintKeyFor(vault.id), endpointHint);
-  persist();
-}
-
-/** Pull the registry into memory + fold any legacy slot. Idempotent; call once at boot. */
+/** Pull the registry into memory. Idempotent; call once at boot. */
 export async function hydrateVaultLinks(): Promise<void> {
   if (hydrated) return;
   // Coalesce concurrent callers onto a single run (see `hydrating` above).
@@ -181,7 +148,6 @@ export async function hydrateVaultLinks(): Promise<void> {
 async function doHydrate(): Promise<void> {
   registry = await Store.hydrate<VaultLink[]>(REGISTRY_KEY, []);
   activeId = await Store.hydrate<string>(ACTIVE_ID_KEY, "");
-  if (registry.length === 0) await migrateLegacySlot();
   // Repair a dangling active pointer (e.g. its VaultLink was removed out from under it).
   if (activeId && !registry.some((s) => s.id === activeId)) {
     activeId = registry[0]?.id ?? "";

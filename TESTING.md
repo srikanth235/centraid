@@ -54,6 +54,10 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
 | Mutation | StrykerJS on 15 seeded engine packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
 
+### Opt-in live adapter smoke
+
+`bun run --cwd packages/agent-runtime test:live-adapters` launches the configured external ACP adapters and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
+
 ### PR vs nightly (L1 / E2)
 
 Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [docs/decisions.md](docs/decisions.md).

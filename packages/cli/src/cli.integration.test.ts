@@ -7,7 +7,9 @@ import http from "node:http";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
-  GATEWAY_SCHEMA_EPOCH,
+  DEFAULT_GATEWAY_CAPABILITIES,
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
   GATEWAY_VERSION,
   ROUTES,
 } from "@centraid/protocol";
@@ -39,14 +41,10 @@ describe("cli", () => {
         res.end(
           JSON.stringify({
             version: GATEWAY_VERSION,
-            schemaEpoch: GATEWAY_SCHEMA_EPOCH,
+            protocolVersion: GATEWAY_PROTOCOL_VERSION,
+            minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
             instanceId: "cli-int-1",
-            capabilities: {
-              webSessions: true,
-              devicePairing: true,
-              tunnel: true,
-              backupWal: true,
-            },
+            capabilities: DEFAULT_GATEWAY_CAPABILITIES,
           })
         );
         return;
@@ -131,12 +129,12 @@ describe("cli", () => {
     const statusBody = JSON.parse(status.stdout) as {
       ok: boolean;
       version: string;
-      schemaEpoch: number;
+      protocolVersion: number;
       capabilities: { webSessions: boolean };
     };
     expect(statusBody.ok).toBe(true);
     expect(statusBody.version).toBe(GATEWAY_VERSION);
-    expect(statusBody.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
+    expect(statusBody.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
     expect(statusBody.capabilities.webSessions).toBe(true);
 
     const health = await runCli([

@@ -96,7 +96,6 @@ export async function main(
           version: result.info.version,
           protocolVersion: result.info.protocolVersion,
           minSupportedProtocol: result.info.minSupportedProtocol,
-          schemaEpoch: result.info.schemaEpoch,
           instanceId: result.info.instanceId,
           capabilities: result.info.capabilities,
         },

@@ -144,7 +144,6 @@ export interface IrohPairingResponse {
   vaultId?: string;
   vaultName?: string;
   version?: string;
-  schemaEpoch?: number;
 }
 
 export async function pairGatewayOverIroh(

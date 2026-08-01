@@ -341,7 +341,7 @@ describe(deriveOutageEvents, () => {
       prevHealthStatus: "ok",
       state: state({ status: "up", lastCheckAt: T0 + 5000 }),
       componentActions: [],
-      versionSkewAction: { gatewayVersion: "0.2.0", gatewaySchemaEpoch: 2 },
+      versionSkewAction: { gatewayVersion: "0.2.0", gatewayProtocolVersion: 2 },
       now: T0 + 5000,
     });
     expect(events).toStrictEqual([
@@ -350,7 +350,7 @@ describe(deriveOutageEvents, () => {
         kind: "version-skew",
         gatewayId: "local",
         gatewayLabel: "Local",
-        detail: "v0.2.0 (schema 2)",
+        detail: "v0.2.0 (protocol 2)",
       },
     ]);
   });
@@ -367,7 +367,7 @@ describe(deriveOutageEvents, () => {
         outages: [{ startedAt: T0, endedAt: T0 + 5000 }],
       }),
       componentActions: [],
-      versionSkewAction: { gatewayVersion: "0.2.0", gatewaySchemaEpoch: 2 },
+      versionSkewAction: { gatewayVersion: "0.2.0", gatewayProtocolVersion: 2 },
       now: T0 + 5000,
     });
     expect(events.map((e) => e.kind)).toStrictEqual([

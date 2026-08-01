@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["tests/**"],
   "ignoreBinaries": [
     "actionlint",
     "eas",
@@ -17,12 +16,19 @@
   "exclude": ["enumMembers"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
-      "project": ["scripts/**/*.{js,mjs,ts}"],
+      "entry": [
+        "scripts/**/*.{js,mjs,ts}",
+        "tests/**/*.{js,mjs,ts,tsx}",
+        ".github/workflows/*.{yml,yaml}"
+      ],
+      "project": ["scripts/**/*.{js,mjs,ts}", "tests/**/*.{js,mjs,ts,tsx}"],
       "ignoreUnresolved": ["react", "react-native"],
       "ignoreDependencies": [
         "@stryker-mutator/core",
-        "@stryker-mutator/vitest-runner"
+        "@stryker-mutator/vitest-runner",
+        "@stryker-mutator/api",
+        "fake-indexeddb",
+        "@playwright/test"
       ]
     },
     "packages/*": {

@@ -58,7 +58,7 @@ export interface ConnectivityReport {
   stages: ConnectivityStage[];
   gateway?: {
     version: string;
-    schemaEpoch: number;
+    protocolVersion: number;
     instanceId: string;
     compatible: boolean;
   };

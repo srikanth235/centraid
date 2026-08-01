@@ -24,7 +24,7 @@ const base: GatewayRuntimeSnapshot = {
   gatewayStartedAt: T0 - 60_000,
   gatewayUptimeMs: NOW - 2000 - (T0 - 60_000),
   version: "0.1.0",
-  schemaEpoch: 1,
+  protocolVersion: 1,
   checksTotal: 720,
   checksFailed: 6,
   samples: [

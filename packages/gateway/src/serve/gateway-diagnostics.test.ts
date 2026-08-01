@@ -75,7 +75,7 @@ describe("gateway-diagnostics", () => {
     });
 
     expect(bundle.gateway.version).toStrictEqual(expect.any(String));
-    expect(bundle.gateway.schemaEpoch).toBeTypeOf("number");
+    expect(bundle.gateway.protocolVersion).toBeTypeOf("number");
     expect(bundle.runtime.nodeVersion).toBe(process.version);
     expect(bundle.runtime.platform).toBe(os.platform());
     expect(bundle.health.status).toBe("ok");

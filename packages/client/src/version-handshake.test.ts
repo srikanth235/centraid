@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 
+import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/protocol";
+
 import {
   EXPECTED_GATEWAY_VERSION,
   EXPECTED_PROTOCOL_VERSION,
-  EXPECTED_SCHEMA_EPOCH,
   handshakeGateway,
   judgeGatewayInfo,
 } from "./version-handshake.js";
@@ -12,19 +13,25 @@ describe("version-handshake", () => {
   test("judgeGatewayInfo: protocol match allows product skew", () => {
     const ok = judgeGatewayInfo({
       version: EXPECTED_GATEWAY_VERSION,
-      schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      protocolVersion: EXPECTED_PROTOCOL_VERSION,
+      minSupportedProtocol: EXPECTED_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(ok.ok).toBe(true);
 
     const productSkew = judgeGatewayInfo({
       version: "9.9.9",
-      schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      protocolVersion: EXPECTED_PROTOCOL_VERSION,
+      minSupportedProtocol: EXPECTED_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(productSkew.ok).toBe(true);
 
     const badProtocol = judgeGatewayInfo({
       version: EXPECTED_GATEWAY_VERSION,
-      schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      protocolVersion: EXPECTED_PROTOCOL_VERSION + 1,
+      minSupportedProtocol: EXPECTED_PROTOCOL_VERSION + 1,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(badProtocol).toMatchObject({
       ok: false,
@@ -41,7 +48,7 @@ describe("version-handshake", () => {
       ok: false,
       reason: "malformed",
     });
-    expect(judgeGatewayInfo({ schemaEpoch: 1 })).toMatchObject({
+    expect(judgeGatewayInfo({ protocolVersion: 1 })).toMatchObject({
       ok: false,
       reason: "malformed",
     });
@@ -66,7 +73,7 @@ describe("version-handshake", () => {
             version: EXPECTED_GATEWAY_VERSION,
             protocolVersion: EXPECTED_PROTOCOL_VERSION,
             minSupportedProtocol: EXPECTED_PROTOCOL_VERSION,
-            schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+            capabilities: DEFAULT_GATEWAY_CAPABILITIES,
           }),
           { status: 200 }
         )

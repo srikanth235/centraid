@@ -126,7 +126,6 @@ describe(registrationsFor, () => {
         ref: "a/multi",
         triggerIndex: 1,
         trigger: { kind: "cron", expr: "0 8 * * *" },
-        cronExprs: ["0 8 * * *", "*/30 * * * *"],
         cronSchedules: [{ expr: "0 8 * * *" }, { expr: "*/30 * * * *" }],
       },
     ]);

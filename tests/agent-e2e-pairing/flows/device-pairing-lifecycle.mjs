@@ -31,7 +31,7 @@ await runFlow("device-pairing-lifecycle", async (ctx) => {
       `pair response names the wrong vault: ${JSON.stringify(paired)}`
     );
   }
-  if (!paired.version || typeof paired.schemaEpoch !== "number") {
+  if (!paired.version || typeof paired.protocolVersion !== "number") {
     throw new Error(
       `pair response missing handshake material: ${JSON.stringify(paired)}`
     );

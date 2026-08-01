@@ -3,6 +3,7 @@ import { assert, describe, expect, test } from "vitest";
 import { fc } from "@centraid/test-kit/fast-check";
 
 import {
+  DEFAULT_GATEWAY_CAPABILITIES,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   judgeGatewayInfo,
@@ -68,6 +69,7 @@ describe("protocol handshake property", () => {
           version,
           protocolVersion: GATEWAY_PROTOCOL_VERSION,
           minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+          capabilities: DEFAULT_GATEWAY_CAPABILITIES,
         });
         expect(result.ok).toBe(true);
         assert(result.ok);
@@ -111,25 +113,11 @@ describe("protocol handshake property", () => {
       version: "9.9.9",
       protocolVersion: 1,
       minSupportedProtocol: 1,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(result.ok).toBe(false);
     assert(!result.ok);
     expect(result.reason).toBe("protocol_mismatch");
-  });
-
-  test("schemaEpoch alone is accepted as protocolVersion fallback", () => {
-    fc.assert(
-      fc.property(fc.constantFrom(GATEWAY_PROTOCOL_VERSION), (epoch) => {
-        const result = judgeGatewayInfo({
-          version: "0.0.1",
-          schemaEpoch: epoch,
-        });
-        expect(result.ok).toBe(true);
-        assert(result.ok);
-        expect(result.info.protocolVersion).toBe(epoch);
-      }),
-      { numRuns: 8, seed: 53275 }
-    );
   });
 
   test("missing protocol fields is malformed, not mismatch", () => {
@@ -150,6 +138,7 @@ describe("protocol handshake property", () => {
             version: "1.0.0",
             protocolVersion: GATEWAY_PROTOCOL_VERSION,
             minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+            capabilities: DEFAULT_GATEWAY_CAPABILITIES,
             instanceId,
             startedAt,
             uptimeMs,
@@ -163,6 +152,7 @@ describe("protocol handshake property", () => {
             version: "1.0.0",
             protocolVersion: GATEWAY_PROTOCOL_VERSION,
             minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+            capabilities: DEFAULT_GATEWAY_CAPABILITIES,
             instanceId: 99,
             startedAt: "nope",
             uptimeMs: null,
@@ -191,6 +181,7 @@ describe("protocol handshake property", () => {
             version: "1.0.0",
             protocolVersion: bad,
             minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+            capabilities: DEFAULT_GATEWAY_CAPABILITIES,
           });
           expect(result.ok).toBe(false);
           assert(!result.ok);
@@ -199,5 +190,23 @@ describe("protocol handshake property", () => {
       ),
       { numRuns: 16, seed: 53277 }
     );
+  });
+
+  test("every advertised capability is required on the handshake", () => {
+    for (const capability of Object.keys(DEFAULT_GATEWAY_CAPABILITIES)) {
+      const capabilities: Record<string, unknown> = {
+        ...DEFAULT_GATEWAY_CAPABILITIES,
+      };
+      delete capabilities[capability];
+      const result = judgeGatewayInfo({
+        version: "1.0.0",
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+        capabilities,
+      });
+      expect(result.ok, capability).toBe(false);
+      assert(!result.ok);
+      expect(result.reason, capability).toBe("malformed");
+    }
   });
 });

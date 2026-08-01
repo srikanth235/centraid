@@ -63,7 +63,6 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from "../version.js";
 import type { DaemonLayout } from "./paths.js";
@@ -283,7 +282,6 @@ export function makeDaemonDevicePlane(input: {
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     };
   };
 

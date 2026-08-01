@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  DEFAULT_GATEWAY_CAPABILITIES,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
   judgeGatewayInfo,
   buildGatewayInfoPayload,
@@ -16,8 +16,6 @@ describe("handshake scenarios", () => {
     expect(GATEWAY_VERSION).toBe("0.1.0");
     expect(GATEWAY_PROTOCOL_VERSION).toBe(2);
     expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(2);
-    expect(GATEWAY_SCHEMA_EPOCH).toBe(2);
-    expect(GATEWAY_SCHEMA_EPOCH).toBe(GATEWAY_PROTOCOL_VERSION);
   });
 
   test("protocolsCompatible enforces mutual support window", () => {
@@ -63,6 +61,7 @@ describe("handshake scenarios", () => {
       version: "9.9.9",
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(ok.ok).toBe(true);
     if (!ok.ok) return;
@@ -71,19 +70,12 @@ describe("handshake scenarios", () => {
     expect(ok.info.capabilities?.webSessions).toBe(true);
   });
 
-  test("judgeGatewayInfo: schemaEpoch fallback when protocolVersion omitted", () => {
-    const ok = judgeGatewayInfo({
-      version: "0.0.1",
-      schemaEpoch: GATEWAY_PROTOCOL_VERSION,
-    });
-    expect(ok.ok).toBe(true);
-  });
-
   test("judgeGatewayInfo: protocol mismatch refused (not product)", () => {
     const bad = judgeGatewayInfo({
       version: GATEWAY_VERSION,
       protocolVersion: 99,
       minSupportedProtocol: 99,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(bad).toMatchObject({ ok: false, reason: "protocol_mismatch" });
     expect(judgeGatewayInfo(null)).toMatchObject({
@@ -102,8 +94,7 @@ describe("handshake scenarios", () => {
     expect(payload.version).toBe(GATEWAY_VERSION);
     expect(payload.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
     expect(payload.minSupportedProtocol).toBe(GATEWAY_MIN_PROTOCOL_VERSION);
-    expect(payload.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
-    expect(payload.capabilities?.devicePairing).toBe(true);
+    expect(payload.capabilities.devicePairing).toBe(true);
     expect(ROUTES.gatewayInfo).toBe("/centraid/_gateway/info");
   });
 
@@ -123,6 +114,7 @@ describe("handshake scenarios", () => {
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
       authenticated: true,
     });
     expect(authed).toMatchObject({ ok: true, info: { authenticated: true } });
@@ -130,6 +122,7 @@ describe("handshake scenarios", () => {
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(silent.ok && "authenticated" in silent.info).toBe(false);
   });
@@ -157,6 +150,7 @@ describe("handshake scenarios", () => {
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
       endpointId: 42,
       endpointTicket: null,
     });
@@ -183,12 +177,12 @@ describe("handshake scenarios", () => {
       judgeGatewayInfo({
         version: GATEWAY_VERSION,
         protocolVersion: "not-a-number",
-        schemaEpoch: "also-not-a-number",
+        capabilities: DEFAULT_GATEWAY_CAPABILITIES,
       })
     ).toStrictEqual({
       ok: false,
       reason: "malformed",
-      detail: "gateway info missing protocolVersion (or schemaEpoch fallback)",
+      detail: "gateway info missing protocolVersion",
     });
   });
 
@@ -197,6 +191,7 @@ describe("handshake scenarios", () => {
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: 2.5,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;

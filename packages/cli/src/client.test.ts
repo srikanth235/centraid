@@ -3,7 +3,9 @@ import http from "node:http";
 import { describe, expect, test } from "vitest";
 
 import {
-  GATEWAY_SCHEMA_EPOCH,
+  DEFAULT_GATEWAY_CAPABILITIES,
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
   GATEWAY_VERSION,
   ROUTES,
 } from "@centraid/protocol";
@@ -24,14 +26,10 @@ function startMockGateway(): Promise<{
       res.end(
         JSON.stringify({
           version: GATEWAY_VERSION,
-          schemaEpoch: GATEWAY_SCHEMA_EPOCH,
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
           instanceId: "mock-1",
-          capabilities: {
-            webSessions: true,
-            devicePairing: true,
-            tunnel: false,
-            backupWal: true,
-          },
+          capabilities: DEFAULT_GATEWAY_CAPABILITIES,
         })
       );
       return;
