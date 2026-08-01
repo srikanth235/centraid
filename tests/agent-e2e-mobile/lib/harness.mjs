@@ -498,12 +498,34 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - tapOn:
     id: "onboarding-connect"
     retryTapIfNoChange: true
-# Redemption dials the gateway over iroh. Prefer profile / Done / Home over the
-# capability wall — the wall is a shell-only gate (App.tsx) and is handled in
-# complete-onboarding after Enter Centraid.
+# Submit must enter the pairing path (Connecting…) or land on a post-pair
+# screen. A silent no-op leaves the ticket field filled and Connect idle
+# (Android 30713590856). Re-focus + retype + retap once if that happens.
+- runFlow:
+    when:
+      notVisible: "Connecting…|Who's using|Enter Centraid|${HOME_READY_MARKER}|Paste a pairing ticket first"
+    commands:
+      - tapOn:
+          id: "pairing-code-input"
+# e2e-lint-allow: unasserted-input — same ticket; re-drive RN state after a
+# desynced native fill. Successful redemption is still the end-to-end check.
+      - eraseText
+      - inputText: \${MAESTRO_PAIRING_TICKET}
+      - hideKeyboard
+      - scrollUntilVisible:
+          element:
+            id: "onboarding-connect"
+          direction: DOWN
+          visibilityPercentage: 100
+      - tapOn:
+          id: "onboarding-connect"
+          retryTapIfNoChange: true
+# Iroh redemption can take >90s on cold CI. Done heading is split across
+# Text nodes ("You're all set, " + "Mobile" + ".") so match Enter Centraid
+# / Who's using / Home instead of the full greet string.
 - extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]|${HOME_READY_MARKER}"
-    timeout: 90000
+    visible: "Who's using|Enter Centraid|${HOME_READY_MARKER}"
+    timeout: 180000
 `,
       "configure-gateway",
       {

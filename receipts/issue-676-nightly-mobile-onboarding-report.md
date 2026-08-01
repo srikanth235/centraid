@@ -51,6 +51,8 @@ accessibility zero-grey (15 cells).
 
 - **Android stuck on Reconnect once after pair (30711575336).** home-loads PASS; template-gate/native-v0 FAIL asserting `Your apps, ready` while the shell showed the capability wall. Root: `ReplicaCompatibilityGate` wrapped onboarding and replaced Done/profile as soon as pair set vault links and the first `/_gateway/info` fetch over the tunnel failed. Fixes: (1) `apps/mobile/App.tsx` — gate only when `onboarded === true`; (2) `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` — online capability probe retries with backoff; (3) `tests/agent-e2e-mobile/lib/first-run.mjs` complete-onboarding loops Retry with gaps; (4) `tests/agent-e2e-mobile/lib/harness.mjs` configureGateway waits for profile/Done/Home, not the wall.
 
+- **Android configure still red on 30713590856.** home-loads PASS; configure-gateway left the ticket filled and Connect idle after a COMPLETED connect tap (no Connecting… / Done). Mitigations: empty-ticket Connect shows an error; `codeRef` on submit; harness re-drives the ticket + retaps if still on the connect form; wait 180s for `Who's using|Enter Centraid|Home` (Done heading is split across Text nodes so the full greet string is not Maestro-safe).
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

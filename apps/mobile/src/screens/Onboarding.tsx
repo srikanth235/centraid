@@ -184,6 +184,9 @@ function ConnectionStep({
   const [scanning, setScanning] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
   const [code, setCode] = useState("");
+  // Mirror into a ref so Connect always submits the latest keystrokes even if a
+  // re-render races a Maestro paste (controlled TextInput desync class of miss).
+  const codeRef = useRef("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
@@ -215,7 +218,14 @@ function ConnectionStep({
   };
 
   const submit = (payload: string): void => {
-    if (scannedRef.current || !payload.trim()) return;
+    if (scannedRef.current) return;
+    if (!payload.trim()) {
+      // Silent no-op left Maestro green on the Connect tap while the native
+      // TextInput still showed a ticket (controlled-state desync on Android
+      // run 30713590856). Surface the miss so the next tap/retry is honest.
+      setError("Paste a pairing ticket first.");
+      return;
+    }
     scannedRef.current = true;
     setScanning(false);
     setPairing(true);
@@ -306,7 +316,10 @@ function ConnectionStep({
             testID="pairing-code-input"
             accessibilityLabel="Paste the one-line ticket"
             value={code}
-            onChangeText={setCode}
+            onChangeText={(next) => {
+              codeRef.current = next;
+              setCode(next);
+            }}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
             multiline
@@ -340,7 +353,9 @@ function ConnectionStep({
               // never fired submit — ticket stayed on screen for the full wait).
               testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
-              onPress={() => (pairing ? undefined : submit(code))}
+              onPress={() =>
+                pairing ? undefined : submit(codeRef.current || code)
+              }
             />
             <Pressable
               accessibilityLabel="Scan the QR code instead"

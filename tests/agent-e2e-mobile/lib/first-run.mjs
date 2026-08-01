@@ -108,7 +108,7 @@ export function completeOnboardingCommands(homeReadyMarker) {
     .join("\n");
   return `- runFlow:
     when:
-      visible: "Who's using this phone[?]"
+      visible: "Who's using"
     commands:
       - tapOn: "Your name"
 # e2e-lint-allow: unasserted-input — React Native TextInput values are not
@@ -117,9 +117,10 @@ export function completeOnboardingCommands(homeReadyMarker) {
       - inputText: "Nightly"
       - hideKeyboard
       - tapOn: "Continue"
+# Done heading is split across Text nodes; match the Enter Centraid control.
 - runFlow:
     when:
-      visible: "You're all set, (Nightly|Mobile)[.]"
+      visible: "Enter Centraid"
     commands:
 ${enterCentraid}
 # After Enter Centraid the shell may show the offline-capability wall until
@@ -135,6 +136,6 @@ ${enterCentraid}
           timeout: 5000
 - extendedWaitUntil:
     visible: "${homeReadyMarker}"
-    timeout: 90000
+    timeout: 120000
 `;
 }
