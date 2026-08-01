@@ -299,6 +299,12 @@ function ConnectionStep({
         <>
           <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
           <TextInput
+            // testID so Maestro can focus the field without matching the lede
+            // "Paste the one-line ticket printed by …" (run 30707656659: empty
+            // submit is silent, so a lede-tap masquerading as field focus
+            // burns the full pairing wait with no error).
+            testID="pairing-code-input"
+            accessibilityLabel="Paste the one-line ticket"
             value={code}
             onChangeText={setCode}
             placeholder="Paste the one-line ticket"

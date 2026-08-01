@@ -268,33 +268,30 @@ async function runMaestroChunk(
   // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
   // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
   // is already an uploaded artifact path.
+  // Sensitive flows: ticket is a MAESTRO_* env var (YAML keeps a placeholder)
+  // and stdout is quiet. On success discard hierarchy/screenshots; on failure
+  // keep them in the uploaded run dir so CI can diagnose (run 30707656659).
+  // Note: e2e.yml still prunes `*-configure-gateway` debug dirs before upload
+  // as a defense against ticket material on screen; that cleanup is separate.
   const run = sensitive ? spawnQuiet : spawnLive;
-  try {
-    await run(
-      "maestro",
-      [
-        "--udid",
-        state.udid,
-        "test",
-        "--debug-output",
-        debugDir,
-        "--flatten-debug-output",
-        flowFile,
-      ],
-      {
-        cwd: state.screenshotsDir,
-        env: { ...process.env, ...maestroEnv },
-        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
-      }
-    );
-  } finally {
-    // A pairing ticket is a live enrollment capability. Sensitive flows use a
-    // MAESTRO_* variable so the retained YAML contains only a placeholder, run
-    // without console output, and discard Maestro's hierarchy/screenshots even
-    // on failure. The workflow repeats this cleanup before artifact upload as a
-    // defense against abrupt harness termination.
-    if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
-  }
+  await run(
+    "maestro",
+    [
+      "--udid",
+      state.udid,
+      "test",
+      "--debug-output",
+      debugDir,
+      "--flatten-debug-output",
+      flowFile,
+    ],
+    {
+      cwd: state.screenshotsDir,
+      env: { ...process.env, ...maestroEnv },
+      timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
+    }
+  );
+  if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
 }
 
 /**
@@ -471,7 +468,10 @@ ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- tapOn:
     visible:
       text: "Paste the one-line ticket"
     timeout: 15000
-- tapOn: "Paste the one-line ticket"
+# Focus the pairing TextInput by testID — not the lede text that also
+# contains "Paste the one-line ticket" (empty Connect is a silent no-op).
+- tapOn:
+    id: "pairing-code-input"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
 - inputText: "x"

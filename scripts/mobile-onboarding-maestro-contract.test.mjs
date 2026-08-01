@@ -93,3 +93,10 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
     /accessibilityLabel="Scan the QR code instead"[\s\S]{0,80}accessibilityRole="button"/u
   );
 });
+
+test("pairing code field is focused by testID so lede text is not mistaken for the input", () => {
+  const ui = read(ONBOARDING);
+  assert.match(ui, /testID="pairing-code-input"/u);
+  const harness = read(HARNESS);
+  assert.match(harness, /id:\s*"pairing-code-input"/u);
+});
