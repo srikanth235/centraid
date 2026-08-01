@@ -46,7 +46,18 @@ The scaffold generator writes the canonical token baseline at the beginning of `
 
 The token contract: your app-local `app.css` `:root` sets **`--app-hue`** (one number that drives the entire neutral ramp — ink, lines, surfaces, shadows) and **`--accent`** (pick a palette var: `--c-amber`, `--c-forest`, `--c-indigo`, `--c-ochre`, `--c-rose`, `--c-slate`, `--c-teal`, `--c-violet`). Everything else derives from the generated baseline; override an individual token only for a deliberate app-specific look. Dark theme is fully handled by that baseline (both `data-theme` and the `prefers-color-scheme` fallback) — **never write your own dark-theme token blocks**. Paint accents through `var(--_accent)` (resolves the user's appColor knob over `--accent`).
 
-Prefer kit primitives over hand-rolled equivalents: `.kit-btn`, `.kit-chip(.quiet)`, `.kit-seg`, `.kit-modal*`, `.kit-popover*`, `.kit-banner`, `.kit-empty*`, `.kit-toasts`, `.kit-skeleton`, `.kit-input(.bare)`, `.kit-search`, `.kit-icon-btn`, `.kit-viewer-nav`, `.kit-drop`/`.kit-drop-card`, `.kit-foot`, `.kit-muted`/`.kit-small`, and `box-shadow: var(--kit-focus-ring)` for focus. One cascade trap: kit.css loads **after** app.css, so an app rule overriding a kit class at equal specificity loses — bump specificity with a compound selector (`.kit-input.my-variant`), the pattern the bundled apps use throughout.
+Every size comes off the contract too, never off feel:
+
+- **Spacing — `var(--sp-1)`…`var(--sp-7)` = 4 · 8 · 12 · 16 · 24 · 32 · 48px.** Every `padding`, `margin`, and `gap` uses a rung. A gutter that is not on the scale is a bug, not a nuance — do not pick a px or rem value by feel.
+- **Radii — `var(--r-sm)`, `var(--r-md)`, `var(--r-card)`, `var(--r-pill)`.**
+- **Type — the `font` shorthands `var(--t-title)`, `var(--t-body)`, `var(--t-body-strong)`, `var(--t-small)`, `var(--t-tiny)`, `var(--t-mono)`.** Never write `font-size:`. A `font` shorthand also resets `font-family`, so follow it with `font-family: inherit;` wherever the app-font knob must keep flowing down.
+- **Focus — `box-shadow: var(--focus-ring)`.**
+
+**One component vocabulary: `.kit-*`.** `kit.css` is served to every app surface, so the kit is always there and an app must never hand-roll a second button/input/chip/empty-state style (the scaffold's old `.primary` / `.ghost` / `.link` / `.del` / `.muted` / `.small` / `.empty` classes are gone). Use: `.kit-btn` (`.kit-btn primary` for the one primary action, `.kit-btn danger`), `.kit-icon-btn`, `.kit-plain-btn`, `.kit-input(.bare)`, `.kit-search`, `.kit-chip(.quiet)`, `.kit-seg(.stretch)`, `.kit-banner(.notice)`, `.kit-empty*` / `.kit-empty-card`, `.kit-skeleton`, `.kit-toasts`/`.kit-toast`, `.kit-modal*`, `.kit-popover*`, `.kit-drop`/`.kit-drop-card`, `.kit-viewer-nav`, `.kit-foot`, `.kit-muted`/`.kit-small`.
+
+Your own `app.css` is for **layout scaffolding only** — the page shell plus the structural shapes the kit has no class for, which in the scaffold are `.head`, `.add-bar`, `.list`, `.row`, `.row-text`, `.surface` (generic card), `.loading`, `.error`, and `.circle` (round toggle). Compose kit components inside them.
+
+One cascade trap: kit.css loads **after** app.css, so an app rule overriding a kit class at equal specificity loses — bump specificity with a compound selector (`.kit-input.my-variant`, `.my-panel .kit-btn`), the pattern the bundled apps and the scaffold's own knob blocks use throughout. Never reach for `!important`.
 
 ### App manifest — `app.json` (source of truth)
 

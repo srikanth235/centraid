@@ -335,6 +335,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785605633-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 744 | 240453 | 214 | 960 | 0.2605 | 477 | 533914 | 36143048 | 259978 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
 | claude-code-ab8b1729-92f-1785605759-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 12 | 10986 | 1451847 | 6316 | 17314 | 1.9051 | 489 | 544900 | 37594895 | 266294 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
 | claude-code-ab8b1729-92f-1785605873-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 26 | 8051 | 3223768 | 5157 | 13234 | 3.5825 | 515 | 552951 | 40818663 | 271451 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605940-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 600 | 250053 | 400 | 1002 | 0.2776 | 517 | 553551 | 41068716 | 271851 | feat(blueprints): one component vocabulary, token-driven scaffold baseline (#686 |
 
 ### Steering
 
