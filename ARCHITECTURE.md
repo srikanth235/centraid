@@ -2,9 +2,9 @@
 
 ## Overview
 
-Centraid is personal software over a sovereign vault. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the vault plane, the app engine, the agent runtime, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. That gateway runs two ways from the same code:
+Centraid is personal software over a sovereign vault. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the vault plane, the app engine, the agent runtime, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. The same gateway code is deployed on two host surfaces:
 
-- **Embedded** in the Electron desktop's main process (`apps/desktop`). The renderer is a **thin client** that talks to the embedded gateway over HTTP with a Bearer token; Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
+- **Desktop-controlled local gateway** (`apps/desktop`). Production launches `centraid-gateway` as a detached child and the renderer is a **thin client** over HTTP with a Bearer token; `CENTRAID_EMBEDDED_GATEWAY=1` keeps an in-process `serve()` path for tests/E2E. Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
 - **Standalone** as the `centraid-gateway` daemon (a bin shipped by `@centraid/gateway`), serving the same HTTP surface under a config-file `dataDir`.
 
 `serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design` is the cross-surface shared package; per-runtime TypeScript settings live in the root `tsconfig.base.json` / `tsconfig.electron.json` / `tsconfig.expo.json` files.
@@ -83,9 +83,9 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 ```
 .
 ├── apps/
-│   ├── desktop/                   # @centraid/desktop — Electron host; embeds the gateway
+│   ├── desktop/                   # @centraid/desktop — Electron host; controls the local daemon
 │   ├── extension/                 # @centraid/extension — MV3 Companion; constrained Iroh/WASM device
-│   ├── web/                       # @centraid/web — installable Vite PWA; HTTP or relay-only Iroh/WASM
+│   ├── web/                       # @centraid/web — installable Vite PWA; ticket-only relay Iroh/WASM client
 │   ├── oauth-worker/              # @centraid/oauth-worker — stateless Assist ceremony/exchange/refresh edge
 │   └── mobile/                    # @centraid/mobile — Expo; HTTP client to a gateway
 ├── packages/
@@ -113,7 +113,7 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 
 Each gateway host derives its own paths and passes absolute slots to the gateway (it never derives them itself — see `packages/gateway/src/paths.ts`):
 
-- **Every host (desktop embed, CLI, and OS service)** uses the same platform-default `dataDir`, outside Electron `userData`: `gateway.db`, `keys/`, `vault/`, `cache/`, and `gateway-logs/`. `gateway.db` is both the full gateway-state database and the exclusive process lock; it holds preferences, enrollments, tickets, web sessions, backup fencing, recovery-kit confirmation, storage connections, and limits. `keys/` is the only gateway secret directory and every entry is a self-describing `KeyStore` envelope (endpoint identity, backup keyring, storage-credential key, and independent per-vault DEKs). `vault/<vaultId>/` contains sovereign vault content only: `vault.db`, `journal.db`, blobs, app data, and the code store. `cache/` is disposable. A **fresh** data dir auto-founds two vaults — `Shared` and `Personal` — at gateway construction (issue #603), so `vault/` exists from the first boot; a data dir that already holds vault directories is never touched by that bootstrap.
+- **Every host (desktop-controlled daemon, CLI, and OS service)** uses the same platform-default `dataDir`, outside Electron `userData`: `gateway.db`, `keys/`, `vault/`, `cache/`, and `gateway-logs/`. `gateway.db` is both the full gateway-state database and the exclusive process lock; it holds preferences, enrollments, tickets, web sessions, backup fencing, recovery-kit confirmation, storage connections, and limits. `keys/` is the only gateway secret directory and every entry is a self-describing `KeyStore` envelope (endpoint identity, backup keyring, storage-credential key, and independent per-vault DEKs). `vault/<vaultId>/` contains sovereign vault content only: `vault.db`, `journal.db`, blobs, app data, and the code store. `cache/` is disposable. A **fresh** data dir auto-founds two vaults — `Shared` and `Personal` — at gateway construction (issue #603), so `vault/` exists from the first boot; a data dir that already holds vault directories is never touched by that bootstrap.
 - **Desktop device state** remains under Electron `userData`, separate from gateway state: one main-process-owned `connections.json` keyed by stable gateway EndpointId and one `safeStorage` ciphertext containing per-connection device secrets. A remote-only connection creates no local gateway directory. Relay hints are refreshable address cache, never identity.
 
 ### At-rest formats (issue #555)

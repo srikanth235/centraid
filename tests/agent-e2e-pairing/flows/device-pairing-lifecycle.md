@@ -4,7 +4,7 @@ The full pairing ceremony (issue #289) with every real component in its real pro
 
 ## Goal
 
-Prove the SSH-bootstrap workflow an owner actually performs works end to end: mint a pasteable ticket on the gateway box, redeem it from a device that has never been seen before, and end up with an enrollment that gates the tunnel — surviving a daemon restart, and dying on revocation.
+Prove the current pairing workflow end to end: mint a pasteable ticket on the gateway host, redeem it from a device that has never been seen before, and end up with an enrollment that gates the tunnel — surviving a daemon restart and dying on revocation. There is no SSH transport in this flow.
 
 ## Setup
 

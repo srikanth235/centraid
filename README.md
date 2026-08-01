@@ -24,7 +24,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 - **Connect Google without Cloud Console** — Centraid Assist uses a stateless public OAuth ceremony so desktop/PWA clients paired to a remote gateway can connect Calendar or Contacts without exposing that gateway. The browser carries only a short-lived code; tokens are sealed only on the gateway. BYO OAuth remains under Advanced. [Privacy and architecture](docs/oauth-assist.md).
 - **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
 - **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
-- **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and the Centraid Companion extension adds explicit Locker fill plus web capture through a constrained paired-device profile.
+- **Run it anywhere** — one gateway core, two hosts: a desktop-controlled local daemon or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and the Centraid Companion extension adds explicit Locker fill plus web capture through a constrained paired-device profile.
 - **Hosted or on-device** — databases, code, and consent stay with your gateway. Keep the vault **On this device**, or connect one storage provider for an encrypted **Hosted** copy where devices upload only framed ciphertext and the gateway verifies what the provider holds; a blank machine plus your recovery kit runs `recover` to bring the vault back, lazily.
 
 ## How it works (30 seconds)
@@ -36,7 +36,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
         ▼                            ▼
  ┌─────────────────── gateway ───────────────────────┐
  │ buildGateway() — same core, two hosts:            │
- │ desktop embed · centraid-gateway daemon           │
+ │ desktop-controlled daemon · centraid-gateway      │
  │                                                   │
  │  app-engine        agent-runtime      automation  │
  │  declared-handler  ACP turn driver    cron+webhook│
@@ -58,7 +58,7 @@ Prereqs: [Bun](https://bun.sh) ≥ 1.3, Node ≥ 24 (built-in `node:sqlite`).
 
 ```sh
 bun install
-bun run dev:desktop    # Electron shell with the local gateway embedded
+bun run dev:desktop    # Electron shell; starts the local gateway by default
 bun run dev:web        # installable browser client; connect it to a gateway
 ```
 
@@ -74,11 +74,11 @@ centraid-gateway pair --data-dir ./gw-data          # one-time ticket for a clie
 
 For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data volume with `noatime`. ext4 does not provide reflink clones on common Pi kernels, so daily recovery bases fall back to a full database copy; the gateway detects that fallback and logs a storage-wear warning.
 
-Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it via Settings → Phone on the desktop (one-time QR).
+Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it from desktop Household → Devices with a one-time ticket or QR.
 
 Optional device-local transcription: run an OpenAI-compatible file-ASR service such as whisper.cpp on the desktop and set `CENTRAID_DEVICE_ASR_URL` to its loopback `/v1/audio/transcriptions` endpoint. `CENTRAID_DEVICE_ASR_TOKEN` and `CENTRAID_DEVICE_ASR_MODEL` are optional. Centraid advertises the transcript work capability only while that loopback adapter answers; media and credentials stay in the Electron main process.
 
-The PWA can connect with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. Direct HTTP remains available as a fallback; in that mode the standalone gateway serves the PWA on a dedicated origin and exchanges the short-lived credential for an Origin-bound HttpOnly session. Generated apps receive separate, single-app sessions and cannot call shell/admin routes on either transport.
+The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. A standalone gateway can also serve the PWA as a same-host web origin; remote gateway connections remain ticket-only Iroh. Generated apps receive separate, single-app sessions and cannot call shell/admin routes.
 
 Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault → first app → phone → always-on, in one page.
 
@@ -86,7 +86,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 
 | Path | What it is |
 | --- | --- |
-| `apps/desktop` | Electron host for the shared React client. Embeds the gateway in-process. |
+| `apps/desktop` | Electron host for the shared React client; controls a detached local gateway by default and supports an in-process test path. |
 | `apps/extension` | MV3 Centraid Companion for explicit Locker fill and web capture over paired Iroh/WASM. |
 | `apps/web` | Vite PWA host plus its application-specific Iroh/WASM transport; embeds no gateway. |
 | `apps/mobile` | Expo app for iOS / Android / web. Connects to a gateway over HTTP; embeds nothing. |
@@ -157,7 +157,7 @@ Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** an
 centraid-gateway serve --data-dir "$DATA_DIR"
 
 # Mint a one-time pair ticket for a phone / PWA / desktop.
-# No --vault → the registry default, which is Shared.
+# No --vault → the registry default, the owner's Personal vault.
 centraid-gateway pair --data-dir "$DATA_DIR"
 centraid-gateway pair --data-dir "$DATA_DIR" --qr
 
@@ -169,9 +169,9 @@ centraid-gateway pair --data-dir "$DATA_DIR" --vault Personal
 | --- | --- |
 | **Desktop** | First run offers **Start fresh on this Mac** or **Connect with a ticket**; a registered desktop pastes the ticket into **Add vault** |
 | **PWA** | Ticket only — paste the one-line ticket into the first-run flow or **Add vault** |
-| **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Gateway link |
+| **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Desktop link |
 
-Tickets burn on first successful redeem (or wrong secret). See [docs/recovery/pairing.md](docs/recovery/pairing.md).
+Tickets burn on first successful redeem; a wrong secret is rejected without consuming the ticket. See [docs/recovery/pairing.md](docs/recovery/pairing.md).
 
 ## Gateway Docker (standalone)
 
@@ -227,7 +227,7 @@ bun run ci             # alias of check:pr
 
 See [docs/toolchain.md](docs/toolchain.md) for the stable command API, rule rubric, runtime profiles, safe-fix policy, and dedicated-upgrade contract.
 
-Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
+Desktop e2e: 55 Playwright tests across the current desktop specs, driving the real Electron app against local and remote gateway paths — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
 Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, preview/publish, app execution, and session isolation.
 
