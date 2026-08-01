@@ -1577,7 +1577,7 @@
       "dimension": "journey",
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
-      "minimumTests": 5
+      "minimumTests": 4
     },
     {
       "id": "mobile-template-gate",

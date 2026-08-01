@@ -35,6 +35,8 @@ accessibility zero-grey (15 cells).
 
 - **Android system ANR resilience.** Run 30706136941 android failed with the correct scan-first UI under a "Pixel Launcher isn't responding" sheet. `tests/agent-e2e-mobile/lib/first-run.mjs` now exports `DISMISS_SYSTEM_ANR` / `waitForOnboardingConnectCommands`, used by home-loads and configureGateway.
 
+- **home-loads minimumTests.** After extracting the onboarding connect wait into `first-run.mjs`, `countDeclaredTests` on `home-loads.mjs` is 4; matrix `mobile-real-journey` floor set to 4.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
