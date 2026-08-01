@@ -12,9 +12,11 @@
 import { describe, expect, test } from "vitest";
 
 import { toCss } from "./css.js";
+import { spacing } from "./density.js";
+import { library } from "./library.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
-import { themes } from "./themes/index.js";
+import { BRAND, EASE, ON_ACCENT, themes } from "./themes/index.js";
 import {
   fontStacks,
   marketingType,
@@ -65,6 +67,83 @@ describe("token stylesheet values", () => {
     const root = blocks.get(":root");
     for (const [key, value] of Object.entries(radii)) {
       expect(root?.get(`--r-${key}`), key).toBe(`${value}px`);
+    }
+  });
+
+  test("every spacing rung is emitted in px, and only the rungs exist", () => {
+    // The scale in density.ts is the whole vocabulary a surface may spend —
+    // a rung that silently drops out sends its call sites to `0`, and a bare
+    // number is not a length at all (`padding: 16` computes to nothing).
+    const root = parseBlocks(toCss()).get(":root");
+    const emitted = [...(root?.keys() ?? [])].filter((k) =>
+      k.startsWith("--sp-")
+    );
+    expect(emitted).toHaveLength(Object.keys(spacing).length);
+    for (const [key, value] of Object.entries(spacing)) {
+      expect(root?.get(`--sp-${key}`), key).toBe(`${value}px`);
+    }
+  });
+
+  test("shared library-tile tokens are emitted under one --lib- prefix", () => {
+    // Home and Discover render the same tile off these values; the point of
+    // the shared table is that one edit moves both pages, which only holds if
+    // every entry actually reaches the sheet under its own name.
+    const root = parseBlocks(toCss()).get(":root");
+    const emitted = [...(root?.keys() ?? [])].filter((k) =>
+      k.startsWith("--lib-")
+    );
+    expect(emitted).toHaveLength(Object.keys(library).length);
+    for (const [key, value] of Object.entries(library)) {
+      expect(root?.get(`--lib-${key}`), key).toBe(value);
+    }
+  });
+
+  test("theme-independent constants are emitted once, at the root only", () => {
+    // The brand teal, the ink for a saturated-accent/scrim surface, and the
+    // single easing curve do not flip with the ramp. A theme block that
+    // redefines one is exactly the drift these constants exist to prevent,
+    // and a missing one leaves its `var()` call sites resolving to nothing —
+    // how `--on-accent` shipped unpainted in the first place (#686 F3).
+    const blocks = parseBlocks(toCss());
+    const root = blocks.get(":root");
+    const constants = {
+      "--brand": BRAND,
+      "--ease": EASE,
+      "--on-accent": ON_ACCENT,
+    };
+    for (const [prop, value] of Object.entries(constants)) {
+      expect(root?.get(prop), prop).toBe(value);
+      for (const name of Object.keys(themes)) {
+        expect(
+          blocks.get(`[data-theme='${name}']`)?.has(prop),
+          `${name} redefines ${prop}`
+        ).toBe(false);
+      }
+    }
+  });
+
+  test("every theme block carries that theme's own role values", () => {
+    // `kind` is registry metadata and `palette` is emitted once at the root as
+    // `--c-*`; every other field on a Theme is a role token whose block must
+    // carry that theme's value under the kebab-case spelling of the field
+    // (`accentDeep` → `--accent-deep`). Checking the values (not just the
+    // names) is what catches a role dropping out of the emitter — the block
+    // then inherits whatever the previous block set, silently.
+    const blocks = parseBlocks(toCss());
+    const metadata = new Set(["kind", "palette"]);
+    for (const [name, theme] of Object.entries(themes)) {
+      const props = blocks.get(`[data-theme='${name}']`);
+      const roles = Object.entries(theme).filter(
+        ([field, value]) => !metadata.has(field) && typeof value === "string"
+      );
+      // Guards against the filter itself emptying out.
+      expect(roles.length, name).toBeGreaterThan(20);
+      for (const [field, value] of roles) {
+        const prop = `--${field
+          .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
+          .toLowerCase()}`;
+        expect(props?.get(prop), `${name} ${prop}`).toBe(value);
+      }
     }
   });
 

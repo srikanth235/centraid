@@ -241,6 +241,9 @@
   - `packages/design/src/design-md.test.ts`
   - `packages/client/src/react/shell/appearance.ts`
 
+- **Mutation floor restored for `packages/design`** — the `--sp-*` / `--ease` / `--brand` / `--on-accent` emission added by A1/B1/F3 introduced mutants no seeded test could kill: `src/contract.test.ts` pins the emitted property NAME list (and is not in the mutation seed's `testFiles` anyway), so a mutant that blanks a token's key or empties `themeProps()`'s literal still produced a well-formed sheet. `packages/design/src/css-properties.test.ts` — the value-law file the seed actually runs — gains four behaviour tests: every spacing rung emitted in `px` with only the rungs present, every `--lib-*` library-tile token emitted under its own name, the three theme-independent constants (`--brand`, `--ease`, `--on-accent`) present at `:root` and redefined by no theme block, and every `Theme` role field emitted in its own block under the kebab-case spelling with that theme's value. Score 92.78 → 98.97 (floor 93); `src/css.ts` reaches 100%. Files:
+  - `packages/design/src/css-properties.test.ts`
+
 ## Out of scope
 
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
@@ -333,6 +336,32 @@ Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/compone
 
 Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
 
+Mutation floor (`packages/design`), before and after the `css-properties.test.ts` value laws:
+
+```
+$ node scripts/mutation/run.mjs --package design   # BEFORE
+File           |  total | # killed | # survived |
+All files      |  92.78 |       90 |          7 |
+ css.ts        |  85.37 |       35 |          6 |
+ tile.ts       |  97.96 |       48 |          1 |
+ typography.ts | 100.00 |        7 |          0 |
+  - packages/design: 92.8% (ok)      # floor 93 -> mutation-pr RED
+
+$ node scripts/mutation/run.mjs --package design   # AFTER
+File           |  total | # killed | # survived |
+All files      |  98.97 |       96 |          1 |
+ css.ts        | 100.00 |       41 |          0 |
+ tile.ts       |  97.96 |       48 |          1 |
+ typography.ts | 100.00 |        7 |          0 |
+  - packages/design: 99.0% (ok)      # floor 93 met
+
+$ cd packages/design && vitest run
+Test Files  17 passed (17) / Tests  206 passed (206)
+$ bun run lint && bun run format      # clean; format left the test file unchanged
+```
+
+One mutant is left alive deliberately: `src/tile.ts:71:13` `HEX_RE.exec(hex)?.groups?.digits` → `?.groups.digits`. It is EQUIVALENT, not a gap — the leading `?.` already short-circuits the whole chain when `exec` returns `null`, and a successful `RegExpExecArray` from a named-group pattern always has `.groups`, so the second `?.` can never be the thing that prevents a throw. No behaviour distinguishes the two programs. The non-hex fallback path it guards is already covered by "a non-hex colour passes through instead of producing NaN paint".
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -379,6 +408,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785608039-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 28 | 490654 | 3347224 | 8546 | 499228 | 4.9540 | 715 | 1400681 | 67263235 | 345189 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
 | claude-code-ab8b1729-92f-1785608166-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 839 | 276697 | 211 | 1052 | 0.1489 | 717 | 1401520 | 67539932 | 345400 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
 | claude-code-ab8b1729-92f-1785609891-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 98 | 40235 | 14289478 | 25612 | 65945 | 8.0370 | 815 | 1441755 | 81829410 | 371012 | fix(design): make the filled primary button clear WCAG AA on every accent (#686) |
+| claude-code-ab8b1729-92f-1785611828-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 96 | 49426 | 15565414 | 24896 | 74418 | 8.7145 | 911 | 1491181 | 97394824 | 395908 | test(design): pin the emitted values of spacing, motion, and theme roles (#686)C |
 
 ### Steering
 
