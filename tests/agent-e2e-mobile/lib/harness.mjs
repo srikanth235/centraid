@@ -466,9 +466,11 @@ ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}# Open paste by test
 - tapOn:
     id: "onboarding-paste"
     retryTapIfNoChange: true
+# Wait for the paste field by testID — lede/placeholder text is not a reliable
+# XCUITest match on iOS (30713590856).
 - extendedWaitUntil:
     visible:
-      text: "Paste the one-line ticket"
+      id: "pairing-code-input"
     timeout: 15000
 # Focus the pairing TextInput by testID — not the lede text that also
 # contains "Paste the one-line ticket" (empty Connect is a silent no-op).

@@ -43,8 +43,9 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
   assert.match(flow, /Scan the QR code/u);
   assert.match(flow, /Can't scan\? Paste a code instead/u);
   assert.match(flow, /id:\s*"onboarding-paste"/u);
+  assert.match(flow, /id:\s*"pairing-code-input"/u);
   const openPaste = flow.indexOf("onboarding-paste");
-  const pasteField = flow.indexOf("Paste the one-line ticket");
+  const pasteField = flow.indexOf("pairing-code-input");
   assert.ok(openPaste >= 0, "must open the paste path by testID");
   assert.ok(
     pasteField > openPaste,
@@ -61,7 +62,7 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
   const harness = read(HARNESS);
   const configure = harness.slice(harness.indexOf("ctx.configureGateway"));
   assert.match(configure, /id:\s*"onboarding-paste"/u);
-  assert.match(configure, /Paste the one-line ticket/u);
+  assert.match(configure, /id:\s*"pairing-code-input"/u);
   assert.match(configure, /id:\s*"onboarding-connect"/u);
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
   assert.doesNotMatch(

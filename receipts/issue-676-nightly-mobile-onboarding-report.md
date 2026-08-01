@@ -53,6 +53,8 @@ accessibility zero-grey (15 cells).
 
 - **Android configure still red on 30713590856.** home-loads PASS; configure-gateway left the ticket filled and Connect idle after a COMPLETED connect tap (no Connecting… / Done). Mitigations: empty-ticket Connect shows an error; `codeRef` on submit; harness re-drives the ticket + retaps if still on the connect form; wait 180s for `Who's using|Enter Centraid|Home` (Done heading is split across Text nodes so the full greet string is not Maestro-safe).
 
+- **iOS paste path was open but text assert failed (30713590856).** Screenshot after fail shows PAIRING CODE + Connect + Scan instead — `onboarding-paste` worked. Asserting lede/placeholder `"Paste the one-line ticket"` is unsafe on XCUITest (split Text nodes / non-exposed placeholder). home-loads + configure wait on `id: pairing-code-input` and `PAIRING CODE` / `onboarding-connect` instead.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

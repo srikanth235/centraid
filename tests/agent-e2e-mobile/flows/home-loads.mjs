@@ -23,13 +23,18 @@ ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Sc
 - tapOn:
     id: "onboarding-paste"
     retryTapIfNoChange: true
+# Do not assert lede/placeholder text "Paste the one-line ticket" — on iOS the
+# lede is split across Text nodes and the placeholder is not XCUITest-visible
+# (run 30713590856: paste opened, PAIRING CODE + Connect present, text assert
+# still failed for 15s). Prove the paste path via stable testIDs/labels.
 - extendedWaitUntil:
     visible:
-      text: "Paste the one-line ticket"
+      id: "pairing-code-input"
     timeout: 15000
 - assertVisible: "PAIRING CODE"
 - assertVisible:
     id: "onboarding-connect"
+- assertVisible: "Scan the QR code instead"
 - takeScreenshot: scan-first-onboarding
 `,
     "home-fresh"
