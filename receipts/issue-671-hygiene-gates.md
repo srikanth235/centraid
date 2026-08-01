@@ -17,6 +17,7 @@
 - **SECURITY.md documents the three gates and roles vs dependency-review/CodeQL** — new “Automated security gates (#671)” table in `SECURITY.md` describing GHAS, Gitleaks, dependency-review, OSV, CodeQL, and Trivy roles.
 - **Structural + unit tests for wiring and OSV severity classification** — `scripts/ci/hygiene-gates.mjs` + `.test.mjs` assert workflow wiring; `scripts/ci/osv-lockfile-scan.mjs` + `.test.mjs` classify CRITICAL/HIGH and invoke the real scanner when present; both hooked into `package.json` `scripts:test`.
 - **Clear CRITICAL inventory blockers (`shell-quote`, `tar`) via package overrides** — root `package.json` `overrides` force `shell-quote@1.8.4` and `tar@7.5.22` so nested copies no longer report CRITICAL in the OSV inventory; `bun.lock` updated accordingly.
+- **`knip.json`** — ignoreBinaries lists `gitleaks`, `osv-scanner`, and `trivy` so knip does not require CI-only external scanners as package dependencies.
 
 ## Decisions
 

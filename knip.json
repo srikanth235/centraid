@@ -4,11 +4,14 @@
   "ignoreBinaries": [
     "actionlint",
     "eas",
+    "gitleaks",
     "hdiutil",
+    "osv-scanner",
     "pmset",
     "sqlite3",
     "strace",
-    "systemd-creds"
+    "systemd-creds",
+    "trivy"
   ],
   "ignoreExportsUsedInFile": true,
   "exclude": ["enumMembers"],
