@@ -1078,9 +1078,42 @@ function testTitle(): string {
   }
 }
 
-/** Click a sidebar nav item by its visible label. */
+/**
+ * Rail renames from #667 — older e2e labels still resolve to the current
+ * button text so call sites that predate the IA pass do not go dark.
+ */
+const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
+  Insights: "Analytics",
+  Household: "Devices",
+  "Vault Atlas": "Data",
+};
+
+/**
+ * Destinations that left the rail for the ⌘K palette (#667). The palette is
+ * the complete index; Discover is the main one e2e still needs to reach.
+ */
+const PALETTE_ONLY_NAV = new Set(["Discover"]);
+
+/** Open the command palette and run a navigation row by its visible label. */
+export async function gotoPaletteNav(page: Page, label: string): Promise<void> {
+  await page.keyboard.press("Meta+k");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.waitFor({ state: "visible" });
+  // Narrow first so the row is on-screen even when the full list is long.
+  await palette.getByRole("textbox").fill(label);
+  await palette.getByRole("button", { name: label, exact: true }).click();
+  await palette.waitFor({ state: "hidden" }).catch(() => undefined);
+}
+
+/** Click a sidebar nav item by its visible label (or open it via ⌘K when the
+ *  rail no longer lists that destination). */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  await page.getByRole("button", { name: label, exact: true }).click();
+  if (PALETTE_ONLY_NAV.has(label)) {
+    await gotoPaletteNav(page, label);
+    return;
+  }
+  const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
+  await page.getByRole("button", { name: railLabel, exact: true }).click();
 }
 
 /** The grid item for an app, keyed by its stable data-app-id anchor. */
