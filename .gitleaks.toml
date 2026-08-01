@@ -1,0 +1,48 @@
+# Gitleaks config for Centraid (#671).
+# Complements GitHub secret scanning + push protection (enabled on this repo).
+# GHAS non-provider patterns are off; this job catches high-entropy / generic
+# credentials and documents fixture allowlists so the gate stays green.
+
+title = "centraid"
+
+[extend]
+# Use default gitleaks ruleset as the base.
+useDefault = true
+
+[allowlist]
+description = "Intentional fixtures, mocks, docs, and build artifacts — not production secrets"
+paths = [
+  '''(?i)receipts/''',
+  '''(?i)docs/''',
+  '''(?i)CHANGELOG\.md''',
+  '''(?i)COSTS\.md''',
+  '''(?i)STEERING\.md''',
+  '''(?i)QUALITY\.md''',
+  # Governance pack lock digests look like high-entropy tokens; not secrets.
+  '''(?i)\.governance/''',
+  # Blueprint / harness mocks and e2e pairing fixtures use placeholder secrets.
+  '''(?i)packages/blueprints/visual-harness/''',
+  '''(?i)packages/blueprints/kit/''',
+  '''(?i)tests/agent-e2e-pairing/''',
+  '''(?i)tests/agent-e2e-mobile/''',
+  '''(?i)tests/onboarding-scenarios\.md''',
+  '''(?i)packages/data-plane/fixtures/''',
+  '''(?i)packages/.*/fixtures/''',
+  '''(?i).*\.test\.(ts|tsx|mjs|js)$''',
+  '''(?i).*\.spec\.(ts|tsx|mjs|js)$''',
+  '''(?i).*/fixtures?\.(ts|tsx|mjs|js)$''',
+  '''(?i).*/__fixtures__/''',
+  '''(?i).*/test-fixtures\.''',
+  # Generated or vendored browser bindings (not human-authored secrets).
+  '''(?i)apps/web/src/generated/''',
+  '''(?i)apps/web/public/''',
+  # Local Rust/Node build trees (never present in clean CI checkouts).
+  '''(?i).*/target/''',
+  '''(?i).*/dist/''',
+  '''(?i)node_modules/''',
+  '''(?i)\.turbo/''',
+  '''(?i)coverage/''',
+  '''(?i)artifacts/''',
+  '''(?i)\.claude/''',
+  '''(?i)\.grok/''',
+]

@@ -189,6 +189,33 @@ Assist deliberately supports self-hosted gateways without a Centraid cloud accou
 - Assist does not proxy Google API calls, store connection rows in Centraid cloud, protect against compromise of the gateway/paired client, or remove Google Workspace administrator policy.
 - Standard Assist must not be called GA until the production consent/brand and sensitive-scope evidence passes. Restricted Gmail/Drive scopes remain disabled until restricted-scope verification and CASA evidence pass. The executable evidence checklist is [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md).
 
+## Automated security gates (#671)
+
+Complementary controls on top of manual review and the threat model above. These are **not** a substitute for CodeQL or for the local toolchain (oxlint, TypeScript, knip, Vitest/mutation floors).
+
+| Gate | Where | What it catches | What it does not replace |
+| --- | --- | --- | --- |
+| **GitHub secret scanning + push protection** | Repo setting (enabled) | Known provider token patterns on push/PR | Non-provider high-entropy strings |
+| **Gitleaks** | `ci.yml` job `gitleaks` → required `check` | High-entropy / generic secrets in the current tree; fixtures allowlisted in [`.gitleaks.toml`](.gitleaks.toml) | Full git-history archaeology (intentionally not a merge gate) |
+| **dependency-review** | `ci.yml` (PR only) | _New_ high-severity advisories and banned copyleft licenses introduced by the PR | Latent vulns already in `bun.lock` |
+| **OSV-Scanner** | `ci.yml` job `osv-scanner` → required `check` | Full `bun.lock` inventory; **fails on CRITICAL** only ([`scripts/ci/osv-lockfile-scan.mjs`](scripts/ci/osv-lockfile-scan.mjs)); HIGH is logged | Typosquat/malware behavioral signals (Socket) |
+| **CodeQL** `security-extended` | [`security.yml`](.github/workflows/security.yml) on main + weekly | SAST for TS/JS, Actions YAML, Rust | Per-PR wall-clock budget |
+| **Trivy** | [`lane-release-gateway-image.yml`](.github/workflows/lane-release-gateway-image.yml) after image push | CRITICAL/HIGH OS and package CVEs in the gateway image; exceptions in [`.trivyignore`](.trivyignore) with reason + review date | Scanning every app surface |
+
+**Roles (lockfile):** dependency-review = “don’t _add_ a known-bad dep on this PR.” OSV = “what is _already_ in the lockfile?” so inventory debt cannot hide behind an unrelated change.
+
+**Structural contract:** `node --test scripts/ci/hygiene-gates.test.mjs` asserts the three gates stay wired into real workflows (part of `scripts:test`).
+
+**Re-apply / local:**
+
+```bash
+gitleaks detect --source . --no-git --config .gitleaks.toml
+# with osv-scanner on PATH:
+node scripts/ci/osv-lockfile-scan.mjs
+```
+
+SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates.
+
 ## Known metadata exposure to backup providers
 
 Backup objects are end-to-end encrypted (AES-256-GCM, keys never leave the owner — `packages/backup/FORMAT.md`), so a storage provider reads no vault content. It does observe **traffic shape**: object counts and sizes always told a provider roughly how much a vault stores, and the continuous WAL segment stream (issue #408) sharpens that into **write volume and cadence** — segment sizes and upload timing correlate with when and how much the owner writes. This is an accepted trade for continuous, point-in-time backup; the shipper's tick/threshold knobs are where padding or batching would land if a deployment needs that correlation blunted.

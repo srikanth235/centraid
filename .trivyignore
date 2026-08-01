@@ -1,0 +1,6 @@
+# Trivy ignore list for the centraid-gateway image (#671).
+# Only add entries with: CVE id, reason, and review-by date (YYYY-MM-DD).
+# Empty on purpose: first land with zero ignores so CRITICAL/HIGH fail closed.
+#
+# Example:
+# CVE-YYYY-NNNNN  # reason: base image lag; fixed in next Debian point; review-by: 2026-09-01
