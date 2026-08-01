@@ -33,6 +33,8 @@ accessibility zero-grey (15 cells).
   `scripts/mobile-onboarding-maestro-contract.test.mjs` pins UI ↔ flow ↔ harness
   strings; staged nightly report shows `unmappedEvidence=0`, `cellsMissing=0`.
 
+- **Android system ANR resilience.** Run 30706136941 android failed with the correct scan-first UI under a "Pixel Launcher isn't responding" sheet. `tests/agent-e2e-mobile/lib/first-run.mjs` now exports `DISMISS_SYSTEM_ANR` / `waitForOnboardingConnectCommands`, used by home-loads and configureGateway.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

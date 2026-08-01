@@ -26,6 +26,7 @@ import {
 import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
+  waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
   METRO_ORIGIN,
@@ -463,11 +464,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      text: "Connect your gateway."
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Can't scan? Paste a code instead"
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- tapOn: "Can't scan? Paste a code instead"
 - extendedWaitUntil:
     visible:
       text: "Paste the one-line ticket"

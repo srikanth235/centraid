@@ -69,3 +69,14 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
   const submit = configure.indexOf("^Connect$");
   assert.ok(openPaste >= 0 && submit > openPaste);
 });
+
+test("first-run dismisses Android system ANR overlays during onboarding wait", () => {
+  const firstRun = read("tests/agent-e2e-mobile/lib/first-run.mjs");
+  assert.match(firstRun, /isn't responding/u);
+  assert.match(firstRun, /tapOn: "Wait"/u);
+  assert.match(firstRun, /waitForOnboardingConnectCommands/u);
+  const home = read(HOME_LOADS);
+  assert.match(home, /waitForOnboardingConnectCommands/u);
+  const harness = read(HARNESS);
+  assert.match(harness, /waitForOnboardingConnectCommands/u);
+});

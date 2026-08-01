@@ -2,6 +2,7 @@
 // scan-first onboarding entry point. Proves the harness loop end-to-end (sim
 // discovery, app-install check, ctx.run, screenshot capture, verdict.md).
 
+import { waitForOnboardingConnectCommands } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("home-loads", async (ctx) => {
@@ -9,16 +10,14 @@ await runFlow("home-loads", async (ctx) => {
   // default path scan-first (showPaste=false): the primary control is
   // "Scan the QR code" and paste lives behind the secondary link. Assert the
   // live default hierarchy, then open paste and confirm the ticket UI.
+  // Android cold emulators may raise a Pixel Launcher ANR sheet that hides
+  // the hierarchy — waitForOnboardingConnectCommands dismisses it.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      text: "Connect your gateway."
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- assertVisible: "Scan the QR code"
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
 - tapOn: "Can't scan? Paste a code instead"
 - assertVisible: "Paste the one-line ticket"

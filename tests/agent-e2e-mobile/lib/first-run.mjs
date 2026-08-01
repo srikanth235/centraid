@@ -22,6 +22,52 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
 `;
 
 /**
+ * Cold Android emulators occasionally raise a system ANR sheet
+ * ("Pixel Launcher isn't responding" / "System UI isn't responding") that
+ * sits above the Centraid window. Maestro then only sees the sheet's
+ * hierarchy, so waiters for onboarding copy time out even though the app
+ * rendered correctly underneath (nightly re-run 30706136941). Tap "Wait"
+ * so the app keeps running; never "Close app".
+ */
+export const DISMISS_SYSTEM_ANR = `- runFlow:
+    when:
+      visible: ".*isn't responding.*"
+    commands:
+      - tapOn: "Wait"
+`;
+
+/**
+ * Wait for the scan-first onboarding heading after a clearState launch,
+ * dismissing system ANR overlays between short polls so a stuck Pixel
+ * Launcher dialog cannot burn the whole first-launch budget.
+ *
+ * @param {number} timeoutMs total wait budget (FIRST_LAUNCH_TIMEOUT_MS)
+ */
+export function waitForOnboardingConnectCommands(timeoutMs) {
+  const pollMs = 5_000;
+  const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
+  // Indent DISMISS_SYSTEM_ANR under the repeat commands list.
+  const dismissInside = DISMISS_SYSTEM_ANR.split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => `      ${line}`)
+    .join("\n");
+  return `${DISMISS_SYSTEM_ANR}- repeat:
+    times: ${times}
+    while:
+      notVisible:
+        text: "Connect your gateway."
+    commands:
+${dismissInside}
+      - waitForAnimationToEnd:
+          timeout: ${pollMs}
+${DISMISS_SYSTEM_ANR}- extendedWaitUntil:
+    visible:
+      text: "Connect your gateway."
+    timeout: ${pollMs}
+`;
+}
+
+/**
  * Tap an animated React Native control without treating its press animation as
  * proof that navigation happened.
  *
