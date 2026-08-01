@@ -37,7 +37,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;

@@ -30,5 +30,17 @@
   "packages/blueprints/apps/notes/Chrome.module.css": { "rawHex": 2 },
   "packages/blueprints/apps/people/Chrome.module.css": { "rawHex": 18 },
   "packages/blueprints/apps/tally/Chrome.module.css": { "rawHex": 8 },
-  "packages/blueprints/apps/tasks/Chrome.module.css": { "rawHex": 1 }
+  "packages/blueprints/apps/tasks/Chrome.module.css": { "rawHex": 1 },
+  "packages/client/src/react/screens/ApprovalsScreen.module.css": {
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/screens/BuilderChatPane.module.css": {
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderCloud.module.css": {
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderShell.module.css": {
+    "literalFontFamily": 1
+  }
 }

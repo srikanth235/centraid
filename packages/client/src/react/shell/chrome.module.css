@@ -449,7 +449,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
   color: var(--text-ghost);
@@ -489,7 +489,7 @@
 .sbSubLabel {
   margin: 6px 0 2px;
   padding: 0 12px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 500;
   color: var(--text-ghost);
@@ -508,7 +508,7 @@
   color: var(--text-ghost);
   cursor: pointer;
   text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;

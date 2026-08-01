@@ -22,7 +22,7 @@ body {
   height: 100%;
 }
 body {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   background: var(--bg);
   color: var(--text);

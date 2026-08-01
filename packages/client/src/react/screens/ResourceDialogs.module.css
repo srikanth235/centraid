@@ -67,7 +67,7 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 650;
   font-size: 16.5px;
   letter-spacing: -0.015em;

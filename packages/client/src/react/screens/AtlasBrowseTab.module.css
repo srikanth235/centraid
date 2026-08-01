@@ -73,7 +73,7 @@
 .pickToggleLabel {
   flex: 1;
   text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
 }
@@ -118,7 +118,7 @@
   border: none;
   background: none;
   outline: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   color: var(--text);
 }
@@ -179,7 +179,7 @@
   color: var(--text);
 }
 .pickLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   min-width: 0;
   overflow: hidden;
@@ -195,7 +195,7 @@
 }
 .pickEmpty {
   padding: 12px 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-ghost);
 }
@@ -252,7 +252,7 @@
   border: 0.5px solid var(--accent);
   background: var(--accent);
   color: var(--text-inv);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -274,7 +274,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   cursor: pointer;
   transition: color 0.12s var(--ease, ease);
@@ -295,7 +295,7 @@
   border: 0.5px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, transparent);
   color: var(--danger);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
@@ -380,7 +380,7 @@
 .machineryNote {
   margin: 0;
   flex: 1;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11.5px;
   line-height: 1.4;
 }
@@ -482,7 +482,7 @@
 .gridEmpty {
   padding: 32px 16px;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   color: var(--text-ghost);
   border: 0.5px dashed var(--line-strong);
@@ -627,7 +627,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   outline: none;
 }
@@ -647,7 +647,7 @@
   border: 0.5px dashed var(--line-strong);
   background: var(--bg-sunken);
   color: var(--text-ghost);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11.5px;
 }
 .autoField {
@@ -704,7 +704,7 @@
   background: var(--bg-sunken);
 }
 .fkHitDisplay {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   color: var(--text);
 }
@@ -721,7 +721,7 @@
   border: 0.5px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -794,7 +794,7 @@
 }
 .dialogSummary {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   color: var(--text);
 }
@@ -858,7 +858,7 @@
   border-left: 2px solid var(--danger);
   background: color-mix(in oklab, var(--danger) 7%, transparent);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -869,7 +869,7 @@
   border-left: 2px solid var(--line-strong);
   background: var(--bg-sunken);
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.45;
 }

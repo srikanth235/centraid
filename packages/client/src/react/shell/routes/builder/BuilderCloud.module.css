@@ -304,7 +304,7 @@
 .automationMetaFaint {
   color: var(--text-faint);
   background: transparent;
-  font-family: var(--font-mono);
+  font-family: inherit;
 }
 .automationActions {
   display: flex;
