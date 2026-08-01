@@ -146,6 +146,7 @@ flattening the ramp into four identical greys.
 
 - `@centraid/design` declares `@types/node` and sets `compilerOptions.types: ["node"]` so the Docker gateway image build no longer fails on `node:path` / `__dirname` when hoisting is absent.
 - Kit conversation client exports `isSafeClientId` / `safeClientId`; kit Ask panel validates sessionStorage and history DOM ids before assembling `conversationPath` fetch URLs (Sonar `tssecurity:S8476`).
+- Follow-up: `src/kit.test.ts` covers `KIT_DIR` so the `packages/design/src/**` line floor (98%) stays met after the kit-layer fold (verify on #677 failed at 97.04% before this landed).
 
 ## Verification
 
@@ -158,7 +159,7 @@ node scripts/lint-design-tokens.mjs
 
 `bun run check:push` — 25/25 gates green after the hermetic types + safe-client-id fix.
 `bun run --cwd packages/design build` — exit 0 (Node typings via package deps).
-`bun run --cwd packages/design test` — 157 tests including `isSafeClientId` / `safeClientId` accept/reject cases.
+`bun run --cwd packages/design test` — includes `isSafeClientId` / `safeClientId` accept/reject cases and `KIT_DIR` seam coverage.
 The semantic-token suite is 81 tests across 8 files. The desktop Electron smoke build
 completed; the live renderer did not reach its readiness selector in this
 headless session, so visual regression remains covered by the PR’s automated
