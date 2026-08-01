@@ -486,14 +486,16 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # off screen — and Maestro matches (and "taps") off-screen elements, so the tap
 # reports COMPLETED while nothing happens and the flow dies later on an
 # unrelated assertion. Scroll it fully into view first.
-# Exact ^Connect$ — bare "Connect" also matches the h1 "Connect your gateway.".
+# Tap the Pressable by testID — text "^Connect$" matches the non-clickable
+# child TextView and never fires submit (Android run 30708832841).
 - scrollUntilVisible:
     element:
-      text: "^Connect$"
+      id: "onboarding-connect"
     direction: DOWN
     visibilityPercentage: 100
 - tapOn:
-    text: "^Connect$"
+    id: "onboarding-connect"
+    retryTapIfNoChange: true
 # Redemption dials the gateway over iroh; on a cold simulator that handshake is
 # the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:

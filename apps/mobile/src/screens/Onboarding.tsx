@@ -335,6 +335,10 @@ function ConnectionStep({
         showPaste ? (
           <>
             <PrimaryButton
+              // testID so Maestro taps the Pressable, not the child TextView
+              // (run 30708832841: ^Connect$ matched clickable=false Text and
+              // never fired submit — ticket stayed on screen for the full wait).
+              testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
               onPress={() => (pairing ? undefined : submit(code))}
             />
@@ -498,13 +502,16 @@ function PrimaryButton({
   label,
   onPress,
   arrow,
+  testID,
 }: {
   label: string;
   onPress: () => void;
   arrow?: boolean;
+  testID?: string;
 }): React.JSX.Element {
   return (
     <Pressable
+      testID={testID}
       accessibilityLabel={label}
       accessibilityRole="button"
       onPress={onPress}

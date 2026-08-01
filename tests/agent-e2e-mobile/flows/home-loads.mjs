@@ -29,9 +29,8 @@ ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Sc
       text: "Paste the one-line ticket"
     timeout: 15000
 - assertVisible: "PAIRING CODE"
-# Exact ^Connect$ — bare "Connect" also matches the h1 "Connect your gateway.".
 - assertVisible:
-    text: "^Connect$"
+    id: "onboarding-connect"
 - takeScreenshot: scan-first-onboarding
 `,
     "home-fresh"

@@ -43,6 +43,8 @@ accessibility zero-grey (15 cells).
 
 - **Pairing field focus by testID.** Android run 30707656659: `home-loads` PASS (scan-first + paste path) but `configureGateway` failed ~4.5m — tap on lede text "Paste the one-line ticket…" never focused the `TextInput`, empty Connect is silent (G8). Added `testID="pairing-code-input"` and Maestro `tapOn: id`.
 
+- **Connect Pressable testID.** Android run 30708832841: ticket entered correctly but Maestro `tapOn: ^Connect$` hit `clickable=false` TextView; submit never ran. Added `testID="onboarding-connect"` and Maestro `tapOn: id`.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

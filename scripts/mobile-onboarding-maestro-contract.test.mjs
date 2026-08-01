@@ -36,7 +36,10 @@ test("Onboarding ships scan-first defaults with paste behind the secondary contr
 
 test("home-loads asserts the scan-first hierarchy before opening paste", () => {
   const flow = read(HOME_LOADS);
-  assert.match(flow, /Connect your gateway\./u);
+  const firstRun = read("tests/agent-e2e-mobile/lib/first-run.mjs");
+  // Connect wait lives in waitForOnboardingConnectCommands (ANR-safe helper).
+  assert.match(firstRun, /Connect your gateway\./u);
+  assert.match(flow, /waitForOnboardingConnectCommands/u);
   assert.match(flow, /Scan the QR code/u);
   assert.match(flow, /Can't scan\? Paste a code instead/u);
   const openPaste = flow.indexOf(`Can't scan? Paste a code instead`);
@@ -58,7 +61,7 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
   const configure = harness.slice(harness.indexOf("ctx.configureGateway"));
   assert.match(configure, /Can't scan\? Paste a code instead/u);
   assert.match(configure, /Paste the one-line ticket/u);
-  assert.match(configure, /\^Connect\$/u);
+  assert.match(configure, /id:\s*"onboarding-connect"/u);
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
   assert.doesNotMatch(
     stripLineComments(configure),
@@ -66,7 +69,7 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
     "harness must not tap/assert the pre-scan-first primary label"
   );
   const openPaste = configure.indexOf(`Can't scan? Paste a code instead`);
-  const submit = configure.indexOf("^Connect$");
+  const submit = configure.indexOf("onboarding-connect");
   assert.ok(openPaste >= 0 && submit > openPaste);
 });
 
@@ -99,4 +102,16 @@ test("pairing code field is focused by testID so lede text is not mistaken for t
   assert.match(ui, /testID="pairing-code-input"/u);
   const harness = read(HARNESS);
   assert.match(harness, /id:\s*"pairing-code-input"/u);
+});
+
+test("Connect submit is targeted by testID so Maestro does not tap the TextView", () => {
+  const ui = read(ONBOARDING);
+  assert.match(ui, /testID="onboarding-connect"/u);
+  const harness = read(HARNESS);
+  assert.match(harness, /id:\s*"onboarding-connect"/u);
+  // Must not use bare text Connect as the submit tap (matches non-clickable label).
+  assert.doesNotMatch(
+    stripLineComments(harness.slice(harness.indexOf("ctx.configureGateway"))),
+    /tapOn:\s*\n\s*text:\s*"\^Connect\$"/u
+  );
 });
