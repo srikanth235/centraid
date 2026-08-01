@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-01T16:16:13.257Z",
+  "generatedAt": "2026-08-01T16:44:27.282Z",
   "passed": 887,
   "failed": 0,
   "skipped": 0,
@@ -171,7 +171,7 @@
     "coverage:packages/client/src/*.{ts,tsx}:lines": 80.28,
     "coverage:packages/client/src/*.{ts,tsx}:branches": 67.55,
     "coverage:packages/gateway/src/**:lines": 80.42,
-    "coverage:packages/gateway/src/**:branches": 66.67,
+    "coverage:packages/gateway/src/**:branches": 66.68,
     "coverage:packages/time-engine/src/**:lines": 97.09,
     "coverage:packages/time-engine/src/**:branches": 86.51,
     "coverage:packages/agent-runtime/src/**:lines": 86.38,
