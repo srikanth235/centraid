@@ -32,34 +32,11 @@ apps/web/public/centraid-worker-iroh.wasm
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__
 *.pyc
-.ds-sync/
-ds-bundle/
-.design-sync/.cache/
-.design-sync/learnings/
-.design-sync/node_modules
-.design-sync/ds-src/node_modules
-.design-sync/ds-src/dist
-.design-sync/ds-src/styles/tokens.css
-.design-sync/ds-src/styles/kit.css
-.design-sync/ds-src/styles/bundle.css
-# issue #327: build outputs of the wrapper-free design-sync build — copied
-# component source, generated preview cards, and the derived manifest.
-.design-sync/ds-src/components/
-.design-sync/ds-src/previews/
-.design-sync/ds-src/manifest.json
 
 # Per-app scratch trees the boot harness builds (app.js + symlinked kit assets);
 # they must live inside the package because vite refuses to load a dynamically
 # imported module from outside the project root. See src/app-boot-harness.ts.
 packages/blueprints/.app-boot/
-# issue #325: second design system — the desktop React shell (Icon/Button/
-# Logo/AppCard). Generated bundle + the input package's copied-fresh source,
-# fonts, and styles (build.mjs regenerates them all from apps/desktop each run).
-ds-bundle-desktop/
-.design-sync/desktop-src/src/
-.design-sync/desktop-src/dist/
-.design-sync/desktop-src/fonts/
-.design-sync/desktop-src/styles/
 # CSS-module carve tooling bookkeeping (class -> local-name maps used only by
 # the carve/rewrite scripts, never read by the app or its build).
 *.module.css.map.json

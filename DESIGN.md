@@ -280,9 +280,9 @@ components:
 
 # DESIGN.md — Centraid
 
-Machine-readable design brief for AI coding agents, in the [getdesign.md](https://getdesign.md/) format — token front matter plus the reasoning behind it, in one root file. Conformance to the official spec is enforced by `bun run lint:design-md` (the `@google/design.md` linter); the truth of the values is enforced against the TypeScript source by [packages/design/src/design-md.test.ts](packages/design/src/design-md.test.ts).
+Machine-readable design brief for AI coding agents, in the [design.md](https://github.com/google-labs-code/design.md) format — token front matter plus the reasoning behind it, in one root file. Conformance to the official spec is enforced by `bun run lint:design-md` (the `@google/design.md` linter); the truth of the values is enforced against the TypeScript source by [packages/design/src/design-md.test.ts](packages/design/src/design-md.test.ts).
 
-This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs/design-language.md) (the prose rulebook), [packages/design/src/contract.ts](packages/design/src/contract.ts) (the enforced token vocabulary), and [docs/traps/design-tokens.md](docs/traps/design-tokens.md) (how agents get this wrong). If you change a token, change this file in the same commit.
+This is the **canonical design document** — the binding rulebook and the machine-readable brief in one file (docs/design-language.md was folded in here, #686). Implementation depth lives in [packages/design/src/contract.ts](packages/design/src/contract.ts) (the enforced token vocabulary) and [docs/traps/design-tokens.md](docs/traps/design-tokens.md) (how agents get this wrong). If you change a token, change this file in the same commit.
 
 ## Overview
 
@@ -304,13 +304,15 @@ This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs
 | Kit (`kit/kit.css`, `kit/elements.js`) | the system UI framework | the served substrate — `.kit-*` classes and `<kit-*>` elements, holding **no design decisions of its own** |
 | `toBlueprintCss()` | the app SDK | what a sandboxed blueprint app is handed |
 
+`toCss()` is the shell's own emit (desktop + web). `toBlueprintCss()` is the app surface's emit **and** the source mobile lowers from (`apps/mobile/scripts/generate-theme.ts` → `src/kit/theme/tokens.generated.ts`). One source, three lowerings.
+
 ### Rules (binding)
 
 1. Use tokens. No hex, `rgb()`, or `hsl()` literal in client, kit, or app CSS. A value with no token belongs in `packages/design/src`, and its name in `src/contract.ts`.
 2. Never declare a new `--name` in app CSS or `kit.css`. New names go in the contract.
 3. Never set `font-family` in app or kit CSS. Token stacks own type.
 4. Spacing comes from `--sp-1`…`--sp-7`. A gutter off the scale is a bug, not a nuance.
-5. `--t-*` are CSS `font` **shorthands**. Write `font: var(--t-body)`; `font-size: var(--t-body)` silently drops everything.
+5. `--t-*` are CSS `font` **shorthands**. Write `font: var(--t-body)`; `font-size: var(--t-body)` silently drops everything. A shorthand also resets `font-family` — override the family before the shorthand, never after.
 6. `--text-inv` is _inverse_ ink for filled/accent surfaces — not "invalid".
 7. Every animation needs a `prefers-reduced-motion: reduce` branch that removes movement, not merely shortens it.
 8. Deep-importing `@centraid/design/src/...` is forbidden — use the barrel.
@@ -367,7 +369,7 @@ Blueprint apps express identity by moving **`--app-hue`** (default `171`) — th
 
 ## Typography
 
-**Roles, not families.** The contract names `sans`, `display`, `mono`; surfaces bind roles to faces and never introduce a role. Web and desktop use **system stacks only** — `system-ui` for sans/display, `ui-monospace` for mono. No webfont family first; the chrome never blocks on a network font fetch (#468 K11). Mobile maps the same roles to loaded platform faces because RN cannot combine `fontFamily` with `fontWeight` (see the #686 entry in [docs/decisions.md](docs/decisions.md)).
+**Roles, not families.** The contract names `sans`, `display`, `mono` (plus `serif` on the blueprint surface); surfaces bind roles to faces and never introduce a role. Web and desktop use **system stacks only** — `system-ui` for sans/display, `ui-monospace` for mono. No webfont family first; the chrome never blocks on a network font fetch (#468 K11). Mobile maps the same roles to loaded platform faces because RN cannot combine `fontFamily` with `fontWeight` (see the #686 entry in [docs/decisions.md](docs/decisions.md)).
 
 **Two weights across the chrome: 400 and 500/600. No bold.**
 
@@ -444,7 +446,6 @@ The `components:` front matter is a representative slice, not the full kit — i
 
 ### References
 
-- [docs/design-language.md](docs/design-language.md) — the binding prose rulebook
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source of truth vs hardcoded CSS
 - [packages/design/src/contract.ts](packages/design/src/contract.ts) — enforced token vocabulary
 - [packages/client/src/react/CSS-CONVENTIONS.md](packages/client/src/react/CSS-CONVENTIONS.md) — renderer CSS-Modules rules

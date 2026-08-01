@@ -13,7 +13,7 @@
 //                         `scripts/generate-theme.ts`). It does not consume
 //                         `toCss()` or the `themes` presets.
 //
-// Prose rulebook: docs/design-language.md.
+// Canonical design document: DESIGN.md (repo root).
 
 export { palette } from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";

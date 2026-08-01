@@ -114,7 +114,7 @@ Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/
 
 ## #686 — typography is a contract of ROLES, not families
 
-Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://github.com/srikanth235/centraid/issues/686). Prose rulebook: [design-language.md](design-language.md).
+Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://github.com/srikanth235/centraid/issues/686). Canonical design document: [DESIGN.md](../DESIGN.md).
 
 - **The contract names roles, never faces.** `sans` / `display` / `mono` / `serif`, plus the semantic scale in `packages/design/src/typography.ts` (`size`, `lineHeight`, `weight` per key). A surface binds roles to faces; a surface never adds a role, and no consumer may set an arbitrary `font-family`.
 - **Web and desktop use system stacks. #468 K11 stands.** `system-ui` / `ui-monospace` chains, no webfont family first, so the chrome never blocks on a network fetch. This is not up for renegotiation as part of #686.
@@ -129,6 +129,6 @@ Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://g
 | [release.md](release.md) | D1–D6 prepare vs publish, patch/minor, beta |
 | [identifiers.md](identifiers.md) | J5 full `dev.centraid.*` table |
 | [enrollment.md](enrollment.md) | Apple / Azure / Play human steps |
-| [design-language.md](design-language.md) | The design rulebook the #686 typography entry implements |
+| [DESIGN.md](../DESIGN.md) | The canonical design document the #686 typography entry implements |
 | [TESTING.md](../TESTING.md) | L1/E2 PR vs nightly |
 | [SECURITY.md](../SECURITY.md) | F2 threat model |

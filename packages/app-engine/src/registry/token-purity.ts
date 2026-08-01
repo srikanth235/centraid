@@ -44,7 +44,7 @@ const RESERVED_PREFIXES = [
 
 /**
  * The two identity knobs an app is explicitly allowed to declare
- * (`docs/design-language.md`, "What apps may and may not do"). Everything else
+ * (`DESIGN.md`, "Do's and Don'ts"). Everything else
  * in the contract is read-only to an app.
  */
 const APP_OWNED_PROPS = new Set(["--app-hue", "--accent"]);

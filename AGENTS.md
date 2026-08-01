@@ -41,11 +41,10 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [TESTING.md](TESTING.md) | Suite strategy, PR vs nightly, conventions |
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure + pairing/relay/gateway threat model |
 | [CHANGELOG.md](CHANGELOG.md) | Keep a Changelog; release notes source (D3) |
-| [DESIGN.md](DESIGN.md) | Machine-readable design brief for agents — conforms to the official [getdesign.md](https://getdesign.md/) spec (YAML token front matter + canonical section order). Format checked by `bun run lint:design-md`; values pinned to `packages/design/src` by `packages/design/src/design-md.test.ts` |
+| [DESIGN.md](DESIGN.md) | The canonical design document — binding rulebook + machine-readable brief in the official [design.md](https://github.com/google-labs-code/design.md) spec (YAML token front matter + canonical sections). Format checked by `bun run lint:design-md`; values pinned to `packages/design/src` by `packages/design/src/design-md.test.ts` |
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
-| [docs/design-language.md](docs/design-language.md) | Canonical design language: field notebook, token contract as OS, type/colour/spacing/motion rules |
 | [docs/toolchain.md](docs/toolchain.md) | Tool ownership, stable commands, rule rubric, profiles, and upgrades |
 | [docs/sonarcloud.md](docs/sonarcloud.md) | SonarCloud Autoscan scope, silenced rules, Centraid profile/gate, apply script |
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |

@@ -35,7 +35,7 @@ export const METRICS = [
   "rawRadius",
 ];
 
-/** The two-weight chrome rule (docs/design-language.md, typography.ts):
+/** The two-weight chrome rule (DESIGN.md, typography.ts):
  * 400 + 500/600. `normal` is 400. 700 exists only in `marketingType`, which
  * is web-only and outside the chrome — so it counts as debt here. */
 const SANCTIONED_WEIGHTS = new Set(["400", "500", "600", "normal", "inherit"]);

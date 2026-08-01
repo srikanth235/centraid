@@ -2,7 +2,7 @@
  * Drift guard for the root DESIGN.md brief (#686).
  *
  * DESIGN.md is the machine-readable design brief handed to AI coding agents,
- * in the official getdesign.md format: YAML front matter carrying the tokens,
+ * in the official google-labs-code/design.md format: YAML front matter carrying the tokens,
  * markdown body carrying the reasoning.
  *
  * Two gates guard it, and they check different things:
@@ -295,9 +295,9 @@ describe("DESIGN.md body", () => {
 
   test("points at the deeper docs it defers to", () => {
     expect(body.length).toBeGreaterThan(1000);
-    expect(body).toContain("docs/design-language.md");
+    expect(body).toContain("docs/traps/design-tokens.md");
     expect(body).toContain("packages/design/src/contract.ts");
-    expect(body).toContain("getdesign.md");
+    expect(body).toContain("google-labs-code/design.md");
     expect(body).toContain("lint:design-md");
   });
 
