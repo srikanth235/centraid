@@ -33,6 +33,7 @@
 - **kit.css itself still hardcodes type/spacing px** (e.g. `.kit-btn font-size: 0.8125rem`) — the served component layer is the remaining half of full token purity; now visible in the budget (80 rawFontSize in kit) and left as ratcheted debt.
 - **Consolidation (user direction): one canonical design document.** `docs/design-language.md` folded into root `DESIGN.md` (its unique content — three-lowerings note, `font` shorthand family-reset caveat, serif role — absorbed; every reference repointed: `AGENTS.md`, `docs/decisions.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`) and deleted. `.design-sync/` deleted entirely (user: it no longer makes sense; nothing in the build/test graph reads it) along with its `.gitignore` entries.
 - **`EASE` rehomed, `motion.ts` deleted.** A dedicated module for one constant pushed `packages/client/src/index.ts` to 101 modules and tripped oxlint `no-barrel-file` (threshold 100). Rather than weaken the rule, `EASE` moved into `packages/design/src/themes/shared.ts` beside the other measured design constants — no new graph node, still exactly one spelling of the curve. `DESIGN.md` updated to point at the new home. `ACCENT_DEEP_DARK` dropped from the `themes/index.ts` re-export (knip: consumed only inside `themes/centraid.ts`).
+- **Visual QA found what the tests could not.** Every gate was green and CI fully passed, but rendering the real emitted tokens against the real `kit.css` across both themes and all eight palette hues exposed a regression F3 had introduced: eleven app rules across six apps filled with `--accent-deep` but inked with the theme-stable `--on-accent`. Because F3 *lifts* `--accent-deep` on the dark ramp, those became white-on-near-white. The numeric grid never caught it because it measured `kit-btn-primary`, not app-local rules that re-declare the same pairing. Fixed in `agenda`, `docs`, `notes`, `photos`, `tasks`, and their components, and pinned by a new `token-purity` test so the pairing cannot return. Lesson recorded: a token change needs a rendered pass, not only a measured one.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -244,6 +245,8 @@
 - **Mutation floor restored for `packages/design`** — the `--sp-*` / `--ease` / `--brand` / `--on-accent` emission added by A1/B1/F3 introduced mutants no seeded test could kill: `src/contract.test.ts` pins the emitted property NAME list (and is not in the mutation seed's `testFiles` anyway), so a mutant that blanks a token's key or empties `themeProps()`'s literal still produced a well-formed sheet. `packages/design/src/css-properties.test.ts` — the value-law file the seed actually runs — gains four behaviour tests: every spacing rung emitted in `px` with only the rungs present, every `--lib-*` library-tile token emitted under its own name, the three theme-independent constants (`--brand`, `--ease`, `--on-accent`) present at `:root` and redefined by no theme block, and every `Theme` role field emitted in its own block under the kebab-case spelling with that theme's value. Score 92.78 → 98.97 (floor 93); `src/css.ts` reaches 100%. Files:
   - `packages/design/src/css-properties.test.ts`
 
+- **Ink-pairing regression fix + gate** — eleven rules repointed from `var(--on-accent)` to `var(--text-inv)` where the fill is `var(--accent-deep)`, each with an inline note stating the contract: `packages/blueprints/apps/agenda/Chrome.module.css`, `packages/blueprints/apps/agenda/components/MonthView.module.css`, `packages/blueprints/apps/agenda/components/Sidebar.module.css`, `packages/blueprints/apps/agenda/components/WeekView.module.css`, `packages/blueprints/apps/docs/Chrome.module.css`, `packages/blueprints/apps/notes/Chrome.module.css`, `packages/blueprints/apps/photos/components/Editor.module.css`, `packages/blueprints/apps/photos/components/Picker.module.css`, `packages/blueprints/apps/photos/components/Sidebar.module.css`, `packages/blueprints/apps/tasks/Chrome.module.css`. New test in `packages/blueprints/src/token-purity.test.ts` ("never inks an --accent-deep fill with the theme-stable --on-accent") holds every app to the kit's header contract.
+
 ## Out of scope
 
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
@@ -319,6 +322,18 @@ $ cd packages/gateway && vitest run      # 1281 passed, 6 skipped / 192 files
 $ cd packages/client && vitest run       # 213 files / 1738 tests passed
 $ bash .governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh  # exit 0; red-capable on injected #ff00aa
 ```
+
+Ink-pairing gate:
+
+```
+$ cd packages/blueprints && vitest run src/token-purity.test.ts src/shared-css.test.ts
+Test Files  2 passed (2)
+Tests  8 passed (8)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — zero regressions
+```
+
+Red-capability proven against a real regression: reverting one app's fix returned the stale pairing and the new test failed (1 failed | 3 passed); re-applying it restored green. Verified visually by rendering the emitted tokens + real `kit.css` in a browser across both themes and all 8 palette hues.
 
 Drift-guard red proven: spacing[5] 24→20 in density.ts fails "every spacing rung is stated in order"; reverted.
 
@@ -409,6 +424,8 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785608166-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 839 | 276697 | 211 | 1052 | 0.1489 | 717 | 1401520 | 67539932 | 345400 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
 | claude-code-ab8b1729-92f-1785609891-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 98 | 40235 | 14289478 | 25612 | 65945 | 8.0370 | 815 | 1441755 | 81829410 | 371012 | fix(design): make the filled primary button clear WCAG AA on every accent (#686) |
 | claude-code-ab8b1729-92f-1785611828-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 96 | 49426 | 15565414 | 24896 | 74418 | 8.7145 | 911 | 1491181 | 97394824 | 395908 | test(design): pin the emitted values of spacing, motion, and theme roles (#686)C |
+| claude-code-ab8b1729-92f-1785613809-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 134 | 66913 | 24210121 | 43515 | 110562 | 13.6118 | 1045 | 1558094 | 121604945 | 439423 | fix(blueprints): ink accent-deep fills with text-inv, not the fixed white (#686) |
+| claude-code-ab8b1729-92f-1785614133-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 12 | 1923 | 2283435 | 1115 | 3050 | 1.1817 | 1057 | 1560017 | 123888380 | 440538 |  |
 
 ### Steering
 

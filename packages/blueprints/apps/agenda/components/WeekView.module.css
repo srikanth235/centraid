@@ -52,7 +52,9 @@
 }
 .weekDayHead[data-today="true"] .weekNum {
   background: var(--accent-deep);
-  color: var(--on-accent);
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-weight: 600;
 }
 .weekAllday {

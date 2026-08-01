@@ -48,7 +48,9 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: var(--on-accent);
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
