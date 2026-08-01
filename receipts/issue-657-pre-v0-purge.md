@@ -60,6 +60,7 @@ apps/web/src/iroh-transport.ts
 apps/web/tests/e2e/perf-waterfall.spec.ts
 docs/protocol.md
 knip.json
+packages/design/src/kit.test.ts
 packages/app-engine/src/conversation/archive/engine.ts
 packages/app-engine/src/conversation/archive/prune.ts
 packages/app-engine/src/conversation/archive/types.ts
@@ -136,6 +137,7 @@ tests/onboarding-scenarios.md
 - `bun run test:affected` — 27 tasks passed, including 1,268 gateway, 1,737 client, 1,075 vault, and 378 mobile tests
 - `bun run check:push` — all 25 gates passed
 - `bun run check:pr` — passed; diff coverage 93.4% (57/61)
+- PR CI follow-up: `packages/design/src/kit.test.ts` covers `KIT_DIR` so the post-#677 `packages/design/src/**` line floor (98%) stays met on verify (was 97.04%).
 
 ```sh
 bun run check:pr
