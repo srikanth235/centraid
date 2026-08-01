@@ -224,7 +224,9 @@ export class RemoteStreamIngress {
     const key = remoteEncryptionKey(remote, sha)!;
     const sealedFrames: Buffer[] = [];
     const newLens: number[] = [];
-    for (let at = 0, index = startFrame; at < bytes.length; index += 1) {
+    let at = 0;
+    let index = startFrame;
+    while (at < bytes.length) {
       const frame = bytes.subarray(
         at,
         Math.min(at + meta.frameSize, bytes.length)
@@ -233,6 +235,7 @@ export class RemoteStreamIngress {
       sealedFrames.push(sealed);
       newLens.push(sealed.length);
       at += frame.length;
+      index += 1;
     }
     const sealedLens = [...meta.sealedLens, ...newLens];
     const body: Buffer[] =

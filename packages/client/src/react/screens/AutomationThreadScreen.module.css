@@ -292,8 +292,10 @@
   background: color-mix(in srgb, var(--c-amber) 7%, var(--bg-elev));
 }
 .consentCard[data-status]:not([data-status="pending"]) {
-  border-left-color: var(--line-strong);
+  /* Set full border first, then re-assert the left accent so it is not
+     clobbered by the shorthand (css:S4657). */
   border-color: var(--line);
+  border-left: 3px solid var(--line-strong);
   background: var(--bg-elev);
   opacity: 0.8;
 }

@@ -342,8 +342,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             (a.album_ids ?? []).includes(album.album_id)
           );
           if (members.length === 0) return null;
-          const newest = members.reduce((a, b) =>
-            String(a.taken_at ?? "") > String(b.taken_at ?? "") ? a : b
+          const newest = members.reduce(
+            (a, b) =>
+              String(a.taken_at ?? "") > String(b.taken_at ?? "") ? a : b,
+            members[0]!
           );
           return {
             key: album.album_id,

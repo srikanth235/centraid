@@ -153,6 +153,7 @@ describe("closed PWA Notifications wake", () => {
     expect(configure).toBeDefined();
     let configured: Promise<unknown> | undefined;
     configure?.({
+      origin: "https://centraid.example",
       data: {
         type: "centraid:configure-iroh-wake",
         configuration: {

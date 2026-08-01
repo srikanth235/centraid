@@ -93,7 +93,8 @@ function nextCronFire(
   const dates = triggers
     .filter((t): t is Extract<typeof t, { kind: "cron" }> => t.kind === "cron")
     .flatMap((t) => cronNextRuns(t.expr, 1));
-  return dates.length > 0 ? dates.reduce((a, b) => (b < a ? b : a)) : null;
+  if (dates.length === 0) return null;
+  return dates.reduce((a, b) => (b < a ? b : a), dates[0]!);
 }
 
 /** "When it'll next fire" summary — cron gets an exact time; data/condition/webhook get an honest cadence description instead of a fabricated one. */

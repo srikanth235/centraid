@@ -363,22 +363,18 @@ export function wireCodeCopy(host, options = {}) {
     const pre = btn.parentElement?.querySelector("pre");
     const text = pre?.textContent ?? "";
     if (!text) return;
-    try {
-      void (async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          btn.dataset.copied = "true";
-          btn.textContent = "Copied";
-          setTimeout(() => {
-            delete btn.dataset.copied;
-            btn.textContent = "Copy";
-          }, 1400);
-        } catch {
-          /* clipboard write failed — leave the button as-is */
-        }
-      })();
-    } catch {
-      /* clipboard unavailable — leave the button as-is */
-    }
+    void navigator.clipboard.writeText(text).then(
+      () => {
+        btn.dataset.copied = "true";
+        btn.textContent = "Copied";
+        setTimeout(() => {
+          delete btn.dataset.copied;
+          btn.textContent = "Copy";
+        }, 1400);
+      },
+      () => {
+        /* clipboard write failed — leave the button as-is */
+      }
+    );
   });
 }

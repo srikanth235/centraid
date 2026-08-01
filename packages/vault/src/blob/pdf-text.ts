@@ -112,23 +112,132 @@ function compressedStream(
   return bytes.subarray(dataStart, payloadEnd);
 }
 
+/**
+ * Collect PDF string operands of Tj / TJ operators without nested-quantifier
+ * regexes (Sonar S5852 / ReDoS). Literals and bracket arrays are walked in
+ * linear time with explicit escape handling.
+ */
 function textShowingParts(raw: string): string[] {
   const parts: string[] = [];
-  for (const match of raw.matchAll(/\((?<literal>(?:\\.|[^\\)])*)\)\s*Tj/gu)) {
-    parts.push(decodePdfString(match.groups?.literal ?? ""));
-    if (parts.length >= MAX_TEXT_PARTS) return parts;
-  }
-  for (const match of raw.matchAll(
-    /\[(?<elements>(?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/gu
-  )) {
-    for (const value of (match.groups?.elements ?? "").matchAll(
-      /\((?<literal>(?:\\.|[^\\)])*)\)/gu
-    )) {
-      parts.push(decodePdfString(value.groups?.literal ?? ""));
-      if (parts.length >= MAX_TEXT_PARTS) return parts;
+  let i = 0;
+  while (i < raw.length && parts.length < MAX_TEXT_PARTS) {
+    if (raw[i] === "(") {
+      const literal = readPdfLiteral(raw, i);
+      if (!literal) {
+        i += 1;
+        continue;
+      }
+      const after = skipPdfWs(raw, literal.end);
+      if (raw.startsWith("Tj", after)) {
+        parts.push(decodePdfString(literal.value));
+        i = after + 2;
+        continue;
+      }
+      i = literal.end;
+      continue;
     }
+    if (raw[i] === "[") {
+      const close = findPdfArrayClose(raw, i);
+      if (close < 0) {
+        i += 1;
+        continue;
+      }
+      const after = skipPdfWs(raw, close + 1);
+      if (raw.startsWith("TJ", after)) {
+        pushLiteralsFromSlice(raw, i + 1, close, parts);
+        i = after + 2;
+        continue;
+      }
+      i = close + 1;
+      continue;
+    }
+    i += 1;
   }
   return parts;
+}
+
+function skipPdfWs(raw: string, from: number): number {
+  let i = from;
+  while (i < raw.length && /\s/u.test(raw[i]!)) i += 1;
+  return i;
+}
+
+/** Read a `(...)` PDF string starting at `open` (`(`). */
+function readPdfLiteral(
+  raw: string,
+  open: number
+): { value: string; end: number } | null {
+  if (raw[open] !== "(") return null;
+  let i = open + 1;
+  let depth = 1;
+  let value = "";
+  while (i < raw.length && depth > 0) {
+    const c = raw[i]!;
+    if (c === "\\") {
+      value += c + (raw[i + 1] ?? "");
+      i += 2;
+      continue;
+    }
+    if (c === "(") {
+      depth += 1;
+      value += c;
+      i += 1;
+      continue;
+    }
+    if (c === ")") {
+      depth -= 1;
+      if (depth === 0) return { value, end: i + 1 };
+      value += c;
+      i += 1;
+      continue;
+    }
+    value += c;
+    i += 1;
+  }
+  return null;
+}
+
+/** Matching `]` for a `[` at `open`, skipping nested PDF string literals. */
+function findPdfArrayClose(raw: string, open: number): number {
+  let i = open + 1;
+  while (i < raw.length) {
+    const c = raw[i]!;
+    if (c === "(") {
+      const lit = readPdfLiteral(raw, i);
+      if (!lit) return -1;
+      i = lit.end;
+      continue;
+    }
+    if (c === "]") return i;
+    // Nested arrays are rare in TJ operands; still skip them linearly.
+    if (c === "[") {
+      const nested = findPdfArrayClose(raw, i);
+      if (nested < 0) return -1;
+      i = nested + 1;
+      continue;
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+function pushLiteralsFromSlice(
+  raw: string,
+  from: number,
+  to: number,
+  parts: string[]
+): void {
+  let i = from;
+  while (i < to && parts.length < MAX_TEXT_PARTS) {
+    if (raw[i] === "(") {
+      const lit = readPdfLiteral(raw, i);
+      if (!lit || lit.end > to) break;
+      parts.push(decodePdfString(lit.value));
+      i = lit.end;
+      continue;
+    }
+    i += 1;
+  }
 }
 
 function decodePdfString(value: string): string {

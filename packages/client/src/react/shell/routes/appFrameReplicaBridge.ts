@@ -8,6 +8,7 @@ import type {
   ReplicaDependency,
   ReplicaValue,
 } from "../../../replica/types.js";
+import { appFramePostMessageOrigin } from "./appFramePostMessage.js";
 
 type RequestId = string | number;
 
@@ -331,7 +332,7 @@ export function attachAppFrameReplicaBridge(
           type: "centraid:replica-parent",
           documentNonce: options.documentNonce,
         },
-        "*",
+        appFramePostMessageOrigin(frame),
         [channel.port2]
       );
     } catch {

@@ -150,7 +150,7 @@ describe("appFrameReplicaBridge", () => {
         type: "centraid:replica-parent",
         documentNonce: "document-one",
       });
-      expect(handshakeCall[1]).toBe("*");
+      expect(handshakeCall[1]).toBe(window.location.origin);
       const childPort = handshakeCall[2][0] as MessagePort;
       const childMessages: unknown[] = [];
       childPort.addEventListener("message", (event) =>

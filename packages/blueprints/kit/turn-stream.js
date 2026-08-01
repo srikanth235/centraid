@@ -120,11 +120,9 @@ export async function consumeSseFrames(body, onFrame, opts = {}) {
   try {
     await consumeNext();
   } finally {
-    try {
-      void reader.cancel();
-    } catch {
+    void reader.cancel().catch(() => {
       /* reader already released */
-    }
+    });
   }
 }
 

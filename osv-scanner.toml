@@ -1,0 +1,11 @@
+# OSV-Scanner project config (#671).
+# Full lockfile inventory. Complements dependency-review (PR-introduced deps only).
+# See SECURITY.md "Automated security gates".
+
+# No permanent ignores yet. If a HIGH finding is accepted, add:
+# [[PackageOverrides]]
+# name = "example"
+# version = "1.2.3"
+# vulnerability = "GHSA-...."
+# effectiveUntil = 2026-09-01
+# reason = "..."

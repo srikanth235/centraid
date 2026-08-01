@@ -75,10 +75,16 @@ function isoDate(raw: string | undefined): string {
 
 /** Strip Re:/Fwd: chains and case — the thread grouping key. */
 export function threadKey(subject: string | null): string {
-  return (subject ?? "(no subject)")
-    .replace(/^(?:\s*(?:re|fwd?|aw)\s*:\s*)+/iu, "")
-    .trim()
-    .toLowerCase();
+  // Iterative single-prefix strip stays linear-time. A nested quantifier
+  // (e.g. `^(?:\s*(?:re|fwd?)\s*:)+`) is ReDoS-prone on crafted subjects.
+  let s = (subject ?? "(no subject)").trim();
+  const once = /^(?:re|fwd?|aw)\s*:\s*/iu;
+  for (let n = 0; n < 64; n += 1) {
+    const next = s.replace(once, "").trimStart();
+    if (next === s) break;
+    s = next;
+  }
+  return s.toLowerCase();
 }
 
 /** `content-type: multipart/mixed; boundary="b1"` → `b1`, or null. */

@@ -453,7 +453,9 @@ async function tokenProxy(
   }
   const result: Record<string, unknown> = {
     access_token: accessToken,
-    token_type: payload.token_type === "Bearer" ? "Bearer" : "Bearer",
+    // OAuth access tokens from Assist are Bearer-only; do not echo untrusted
+    // token_type strings from the upstream body.
+    token_type: "Bearer",
   };
   const refreshToken = bounded(payload.refresh_token, 16 * 1024);
   if (refreshToken) result.refresh_token = refreshToken;
