@@ -41,7 +41,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [TESTING.md](TESTING.md) | Suite strategy, PR vs nightly, conventions |
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure + pairing/relay/gateway threat model |
 | [CHANGELOG.md](CHANGELOG.md) | Keep a Changelog; release notes source (D3) |
-| [DESIGN.md](DESIGN.md) | Machine-readable design brief for agents (getdesign.md convention): colors, type, spacing, components + reasoning |
+| [DESIGN.md](DESIGN.md) | Machine-readable design brief for agents — conforms to the official [getdesign.md](https://getdesign.md/) spec (YAML token front matter + canonical section order). Format checked by `bun run lint:design-md`; values pinned to `packages/design/src` by `packages/design/src/design-md.test.ts` |
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |

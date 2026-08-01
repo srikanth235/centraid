@@ -20,7 +20,7 @@
 - [x] D2 mobile color opt-outs migrated/waived
 - [x] D3 post-generation CSS validation for agent apps
 - [x] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
-- [x] F1 Root `DESIGN.md` per the getdesign.md convention
+- [x] F1 Root `DESIGN.md` per the getdesign.md convention (deepened: conforms to the official google-labs-code/design.md spec, `@google/design.md` linter wired)
 
 ## Decisions (orchestrator recommendations, per user directive)
 
@@ -218,6 +218,8 @@
   - `packages/blueprints/apps/tasks/components/Sidebar.module.css`
   - `packages/blueprints/apps/tasks/components/shared.module.css`
 
+- **F1 Root `DESIGN.md` per the getdesign.md convention (deepened: conforms to the official google-labs-code/design.md spec, `@google/design.md` linter wired)** — root `DESIGN.md` rewritten to the official spec: YAML front matter (46 colors incl. both theme ramps with the dark `--bg-l` anchor resolved to hex, 7 typography roles, 5 rounded, 7 spacing, 46 component entries; `primary` aliased to brand via token ref) + canonical section order (Overview · Colors · Typography · Layout · Elevation & Depth · Shapes · Components · Do's and Don'ts). `@google/design.md@0.4.0` pinned exact in root `package.json` devDependencies (`bun.lock` updated); new `lint:design-md` script wired into the `check:push`/`check:pr`/`check:full` gate chain next to `lint:design-tokens` (red-capable, proven on a broken token ref). `packages/design/src/design-md.test.ts` rewritten to parse the front matter and pin 16 checks directly against the TS token source (red-capable, proven on a radii change). `docs/toolchain.md` gains the owner + command-contract rows. The linter surfaced a REAL finding: `--on-accent: #ffffff` fails WCAG AA on the accent fills (3.04:1 / 2.07:1) — documented as a Known finding in `DESIGN.md` and fixed in a follow-up commit on this branch. Also `packages/blueprints/apps/tasks/Chrome.module.css` — restored one `var(--on-accent)` substitution that an orchestrator red-capability `git restore` had accidentally reverted.
+
 ## Out of scope
 
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
@@ -296,6 +298,16 @@ $ bash .governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/che
 
 Drift-guard red proven: spacing[5] 24→20 in density.ts fails "every spacing rung is stated in order"; reverted.
 
+F1 spec deepening:
+
+```
+$ bun run lint:design-md
+ok (0 errors; 2 WCAG warnings surfaced -> fixed in follow-up)
+$ cd packages/design && vitest run src/design-md.test.ts
+Test Files  1 passed (1) / Tests  16 passed (16)
+$ bun run lockfile:lint && bun run knip   # both clean
+```
+
 Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/components/Row.module.css`: vitest ratchet and check.sh both fail; injection reverted (diff empty).
 
 Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
@@ -339,6 +351,9 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785606006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 538 | 250653 | 268 | 808 | 0.2708 | 519 | 554089 | 41319369 | 272119 | refactor(client): radius and weight token adoption, four-metric css ratchet (#68 |
 | claude-code-ab8b1729-92f-1785606078-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 6 | 1623 | 753573 | 1248 | 2877 | 0.8363 | 525 | 555712 | 42072942 | 273367 | refactor(blueprints): burn eight system apps down onto the token contract (#686) |
 | claude-code-ab8b1729-92f-1785606152-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 563 | 251732 | 349 | 914 | 0.2762 | 527 | 556275 | 42324674 | 273716 | feat(gateway): token-purity validation at the app publish gate (#686)Co-Authored |
+| claude-code-ab8b1729-92f-1785606993-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 110 | 72990 | 14552245 | 47541 | 120641 | 17.8428 | 637 | 629265 | 56876919 | 321257 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
+| claude-code-ab8b1729-92f-1785607061-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 3680 | 281343 | 215 | 3897 | 0.3381 | 639 | 632945 | 57158262 | 321472 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
+| claude-code-ab8b1729-92f-1785607135-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 802 | 570046 | 1060 | 1866 | 0.6331 | 643 | 633747 | 57728308 | 322532 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
 
 ### Steering
 

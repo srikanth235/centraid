@@ -1,10 +1,290 @@
+---
+version: alpha
+name: Centraid
+description: >-
+  Field-notebook design system for a personal app builder. Calm, instrument-grade, neutral-led. One structural accent, hard-edged geometry, measured contrast. Token values here are generated from packages/design/src and pinned by packages/design/src/design-md.test.ts.
+colors:
+  # Brand. `primary` is an alias for the single structural accent — Centraid
+  # has exactly one, and it is the brand teal.
+  primary: "{colors.brand}"
+  brand: "#3EC8B4"
+  accent: "#3EC8B4"
+  accent-light: "#62D6C6"
+  accent-deep: "#2AA593"
+  accent-midnight: "#12645A"
+  accent-text: "#0F7A6C"
+  on-accent: "#FFFFFF"
+
+  # Semantic states. Never emphasis, never a second accent.
+  success: "#456B39"
+  success-dark: "#5C8A4E"
+  danger: "#C44A4A"
+  warning: "#9A6B1F"
+  warning-dark: "#E0A94A"
+
+  # App-icon palette — the saturated 8, identical across both themes.
+  c-amber: "#E89A3C"
+  c-forest: "#5C8A4E"
+  c-indigo: "#4E68DD"
+  c-ochre: "#B47B3F"
+  c-rose: "#E55772"
+  c-slate: "#5C677D"
+  c-teal: "#2EA098"
+  c-violet: "#7C5BD9"
+
+  # Light theme — surfaces, ink, hairlines.
+  light-bg: "#FCFCFC"
+  light-bg-app: "#FFFFFF"
+  light-bg-elev: "#FFFFFF"
+  light-bg-sunken: "#F0F1F3"
+  light-bg-wall: "#FCFCFC"
+  light-text: "#14161B"
+  light-text-soft: "rgba(20,22,27,0.78)"
+  light-text-faint: "rgba(20,22,27,0.62)"
+  light-text-ghost: "rgba(20,22,27,0.48)"
+  light-text-inv: "#F4F5F7"
+  light-line: "rgba(20,22,27,0.11)"
+  light-line-strong: "rgba(20,22,27,0.20)"
+  light-scrim: "rgba(20,22,27,0.52)"
+
+  # Dark theme. Every surface is `hsl(0 0% calc(var(--bg-l) ± n))` off the
+  # single `--bg-l: 5%` anchor; the hexes below are that anchor resolved, so
+  # a contrast checker can read them.
+  dark-bg: "#0D0D0D"
+  dark-bg-app: "#000000"
+  dark-bg-elev: "#181818"
+  dark-bg-sunken: "#030303"
+  dark-text: "#ECEEF2"
+  dark-text-soft: "rgba(236,238,242,0.72)"
+  dark-text-faint: "rgba(236,238,242,0.52)"
+  dark-text-ghost: "rgba(236,238,242,0.38)"
+  dark-text-inv: "#141820"
+  dark-line: "rgba(220,230,245,0.08)"
+  dark-line-strong: "rgba(220,230,245,0.16)"
+  dark-scrim: "rgba(0,0,0,0.72)"
+typography:
+  display:
+    fontFamily: system-ui
+    fontSize: 28px
+    fontWeight: 600
+    lineHeight: 34px
+  title:
+    fontFamily: system-ui
+    fontSize: 20px
+    fontWeight: 600
+    lineHeight: 26px
+  body:
+    fontFamily: system-ui
+    fontSize: 15px
+    fontWeight: 400
+    lineHeight: 22px
+  body-strong:
+    fontFamily: system-ui
+    fontSize: 15px
+    fontWeight: 600
+    lineHeight: 22px
+  small:
+    fontFamily: system-ui
+    fontSize: 13px
+    fontWeight: 400
+    lineHeight: 18px
+  mono:
+    fontFamily: ui-monospace
+    fontSize: 12px
+    fontWeight: 500
+    lineHeight: 16px
+  tiny:
+    fontFamily: system-ui
+    fontSize: 11px
+    fontWeight: 500
+    lineHeight: 14px
+rounded:
+  xs: 2px
+  sm: 4px
+  md: 6px
+  lg: 10px
+  xl: 14px
+spacing:
+  "1": 4px
+  "2": 8px
+  "3": 12px
+  "4": 16px
+  "5": 24px
+  "6": 32px
+  "7": 48px
+components:
+  kit-btn:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.light-text}"
+    typography: "{typography.body}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.2}"
+  kit-btn-primary:
+    backgroundColor: "{colors.accent-deep}"
+    textColor: "{colors.on-accent}"
+    typography: "{typography.body-strong}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.2}"
+  kit-btn-primary-hover:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
+  kit-btn-primary-pressed:
+    backgroundColor: "{colors.accent-midnight}"
+    textColor: "{colors.on-accent}"
+  kit-badge-new:
+    backgroundColor: "{colors.accent-light}"
+    textColor: "{colors.dark-text-inv}"
+    rounded: "{rounded.sm}"
+  kit-btn-danger:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.danger}"
+    rounded: "{rounded.md}"
+  kit-input:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.light-text}"
+    typography: "{typography.body}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.3}"
+  kit-chip:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.light-text-soft}"
+    typography: "{typography.small}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.1}"
+  kit-banner-success:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.success}"
+    rounded: "{rounded.md}"
+  kit-banner-warning:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.warning}"
+    rounded: "{rounded.md}"
+  kit-app-side:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.light-text-soft}"
+    typography: "{typography.small}"
+  kit-app-topbar:
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text}"
+    typography: "{typography.title}"
+  kit-modal:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.light-text}"
+    rounded: "{rounded.xl}"
+    padding: "{spacing.5}"
+  kit-popover:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.light-text}"
+    rounded: "{rounded.lg}"
+    padding: "{spacing.3}"
+  kit-empty:
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text-faint}"
+    typography: "{typography.small}"
+  kit-toast:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.dark-text}"
+    rounded: "{rounded.lg}"
+    padding: "{spacing.3}"
+  kit-msg-meta:
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text-faint}"
+    typography: "{typography.mono}"
+  kit-app-side-dark:
+    backgroundColor: "{colors.dark-bg-sunken}"
+    textColor: "{colors.dark-text-soft}"
+    typography: "{typography.small}"
+  kit-input-dark:
+    backgroundColor: "{colors.dark-bg-sunken}"
+    textColor: "{colors.dark-text}"
+    rounded: "{rounded.md}"
+  kit-modal-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.dark-text}"
+    rounded: "{rounded.xl}"
+  kit-banner-success-dark:
+    backgroundColor: "{colors.dark-bg}"
+    textColor: "{colors.success-dark}"
+  kit-banner-warning-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.warning-dark}"
+  kit-btn-accent-text:
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.accent-text}"
+    typography: "{typography.body-strong}"
+  kit-icon-brand:
+    backgroundColor: "{colors.dark-bg}"
+    textColor: "{colors.brand}"
+  kit-icon-accent-midnight:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.accent-midnight}"
+  kit-avatar-amber:
+    backgroundColor: "{colors.c-amber}"
+    rounded: "{rounded.sm}"
+  kit-avatar-forest:
+    backgroundColor: "{colors.c-forest}"
+  kit-avatar-indigo:
+    backgroundColor: "{colors.c-indigo}"
+  kit-avatar-ochre:
+    backgroundColor: "{colors.c-ochre}"
+  kit-avatar-rose:
+    backgroundColor: "{colors.c-rose}"
+  kit-avatar-slate:
+    backgroundColor: "{colors.c-slate}"
+  kit-avatar-teal:
+    backgroundColor: "{colors.c-teal}"
+  kit-avatar-violet:
+    backgroundColor: "{colors.c-violet}"
+  kit-scrim:
+    backgroundColor: "{colors.light-scrim}"
+    textColor: "{colors.light-text-inv}"
+  kit-avatar-fallback:
+    backgroundColor: "{colors.c-slate}"
+    textColor: "{colors.light-text-inv}"
+    rounded: "{rounded.sm}"
+  kit-scrim-dark:
+    backgroundColor: "{colors.dark-scrim}"
+    textColor: "{colors.dark-text}"
+  kit-skeleton:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.light-text-ghost}"
+    rounded: "{rounded.sm}"
+  kit-hairline:
+    backgroundColor: "{colors.light-line}"
+    height: 1px
+  kit-hairline-strong:
+    backgroundColor: "{colors.light-line-strong}"
+    height: 1px
+  kit-hairline-dark:
+    backgroundColor: "{colors.dark-line}"
+    height: 1px
+  kit-hairline-strong-dark:
+    backgroundColor: "{colors.dark-line-strong}"
+    height: 1px
+  kit-app-wall:
+    backgroundColor: "{colors.light-bg-wall}"
+    textColor: "{colors.light-text}"
+  kit-app-shell:
+    backgroundColor: "{colors.light-bg-app}"
+    textColor: "{colors.light-text}"
+  kit-app-shell-dark:
+    backgroundColor: "{colors.dark-bg-app}"
+    textColor: "{colors.dark-text}"
+  kit-ghost-rule:
+    backgroundColor: "{colors.dark-bg}"
+    textColor: "{colors.dark-text-ghost}"
+  kit-faint-meta:
+    backgroundColor: "{colors.dark-bg}"
+    textColor: "{colors.dark-text-faint}"
+---
+
 # DESIGN.md — Centraid
 
-Machine-readable design brief for AI coding agents, following the [getdesign.md](https://getdesign.md/) convention: colors, type, spacing, components, and the reasoning behind them, in one root file.
+Machine-readable design brief for AI coding agents, in the [getdesign.md](https://getdesign.md/) format — token front matter plus the reasoning behind it, in one root file. Conformance to the official spec is enforced by `bun run lint:design-md` (the `@google/design.md` linter); the truth of the values is enforced against the TypeScript source by [packages/design/src/design-md.test.ts](packages/design/src/design-md.test.ts).
 
-This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs/design-language.md) (the prose rulebook), [packages/design/src/contract.ts](packages/design/src/contract.ts) (the enforced token vocabulary), and [docs/traps/design-tokens.md](docs/traps/design-tokens.md) (how agents get this wrong). Values below are pinned against the TypeScript source by `packages/design/src/design-md.test.ts` — if you change a token, change this file in the same commit.
+This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs/design-language.md) (the prose rulebook), [packages/design/src/contract.ts](packages/design/src/contract.ts) (the enforced token vocabulary), and [docs/traps/design-tokens.md](docs/traps/design-tokens.md) (how agents get this wrong). If you change a token, change this file in the same commit.
 
-## Point of view
+## Overview
 
 **Field notebook.** Calm, instrument-grade, personal. The product is where someone keeps their own life's data, so the chrome recedes and the data reads.
 
@@ -14,7 +294,17 @@ This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs
 - **Contrast is measured, not eyeballed.** Every ink and status rung below carries the ratio it was tuned to.
 - **Motion is confirmation, not entertainment.**
 
-## Rules (binding)
+### The platform analogy
+
+`packages/design` is one package with two layers, and reads as a small operating system:
+
+| Layer | Analogy | What it is |
+| --- | --- | --- |
+| Token contract (`src/contract.ts`) | the OS | the only public vocabulary of semantic roles |
+| Kit (`kit/kit.css`, `kit/elements.js`) | the system UI framework | the served substrate — `.kit-*` classes and `<kit-*>` elements, holding **no design decisions of its own** |
+| `toBlueprintCss()` | the app SDK | what a sandboxed blueprint app is handed |
+
+### Rules (binding)
 
 1. Use tokens. No hex, `rgb()`, or `hsl()` literal in client, kit, or app CSS. A value with no token belongs in `packages/design/src`, and its name in `src/contract.ts`.
 2. Never declare a new `--name` in app CSS or `kit.css`. New names go in the contract.
@@ -25,7 +315,11 @@ This is a **brief**, not the spec. Depth lives in [docs/design-language.md](docs
 7. Every animation needs a `prefers-reduced-motion: reduce` branch that removes movement, not merely shortens it.
 8. Deep-importing `@centraid/design/src/...` is forbidden — use the barrel.
 
-## Color
+### Front-matter naming
+
+The front matter is one flat namespace, so the two themes are prefixed `light-*` and `dark-*`; in CSS these are the same token names (`--bg`, `--text`, …) resolved per theme. `primary` is an alias for `brand` — Centraid has exactly one structural accent. Component entries are the kit's class families, `*-dark` suffixed where a family's contrast pair differs by theme.
+
+## Colors
 
 ### Brand
 
@@ -43,6 +337,8 @@ Accent ramp derived from brand, all four exposed as tokens:
 
 Derive tints with `accentRamp()`. Do not hand-pick.
 
+**Known finding.** `bun run lint:design-md` reports two `contrast-ratio` warnings against `kit-btn-primary` and `kit-btn-primary-hover`: `--on-accent` is `#FFFFFF` (see `src/blueprint.ts`), which lands at 3.04:1 on `--accent-deep` and 2.07:1 on `--accent`. That is a real gap, not a modelling artefact — the filled primary button is the one place the accent carries text. It is left visible rather than papered over; the fix is a deepened `--on-accent` or a deepened accent fill, tracked as a design-token debt item. Warnings do not fail the gate; errors do.
+
 ### Semantic states
 
 Not accents; never used for emphasis.
@@ -57,11 +353,15 @@ Not accents; never used for emphasis.
 
 Eight saturated hues that read on graphite, exposed as `--c-<name>`: `amber #E89A3C` · `forest #5C8A4E` · `indigo #4E68DD` · `ochre #B47B3F` · `rose #E55772` · `slate #5C677D` · `teal #2EA098` · `violet #7C5BD9`.
 
+These are icon fills, not text surfaces — the `kit-avatar-*` component entries carry `backgroundColor` only. An avatar that must render initials uses `kit-avatar-fallback` (slate + inverse ink), the one pairing tuned to clear AA.
+
 ### Surfaces and ink
 
 Exactly two themes, `light` and `dark`; a registry key must equal its `kind`. There is one dark ramp, anchored on a single knob `--bg-l: 5%` — every dark surface is `hsl(0 0% calc(var(--bg-l) ± n))`, so moving one number retunes the whole ramp.
 
 Ink descends `--text` → `--text-soft` → `--text-faint` → `--text-ghost`. These are `color:` on real prose, so each rung clears a floor against the lightest surface it can land on. Light theme, measured against `--bg`: **text 17.6:1, soft 8.8:1, faint 5.0:1, ghost 3.2:1**. Surfaces: `--bg`, `--bg-app`, `--bg-elev` (raised fill), `--bg-sunken` (recessed/track), `--bg-wall`. Hairlines: `--line`, `--line-strong`.
+
+`--text-ghost` and the hairline tokens are structural, not prose — they carry borders, tracks, and disabled glyphs, so they answer to the 3:1 non-text floor rather than 4.5:1.
 
 Blueprint apps express identity by moving **`--app-hue`** (default `171`) — their neutrals are `hsl(var(--app-hue) …)`. An app does not redefine a palette.
 
@@ -81,41 +381,39 @@ Blueprint apps express identity by moving **`--app-hue`** (default `171`) — th
 | `--t-mono`        | 12 / 16            | mono    | 500    |
 | `--t-tiny`        | 11 / 14            | sans    | 500    |
 
-Marketing/hero styles (`--t-display-1` 40, `--t-h2` 22, `--t-h3` 16) are **web-only, outside the chrome**, and are the single place weight 700 appears.
+`display` and `sans` both resolve to `system-ui` today — they are distinct **roles**, so a surface may rebind one without the other; the front matter records the face each role currently carries.
+
+Marketing/hero styles (`--t-display-1` 40, `--t-h2` 22, `--t-h3` 16) are **web-only, outside the chrome**, and are the single place weight 700 appears. They are not part of the chrome token set and so are not in the front matter.
 
 **Mono is the signature.** Metadata, counts, dates, and eyebrows are mono; prose is not.
 
-## Spacing
+## Layout
 
 `--sp-1`…`--sp-7` = **4 · 8 · 12 · 16 · 24 · 32 · 48** px. Emitted identically by `toCss()` and `toBlueprintCss()` from `src/density.ts`, and typed for mobile as `spacing`. The scale is fixed — there is no density switch on the token layer, and these are the only rungs.
 
-## Radii
+Layout is a single-column reading surface plus chrome: `kit-app-side` (navigation), `kit-app-topbar` (context), and the content pane. Gutters step the scale, they do not interpolate: `--sp-3` inside a control, `--sp-4` between controls, `--sp-5` between sections.
 
-`--r-xs` 2 · `--r-sm` 4 · `--r-md` 6 · `--r-lg` 10 · `--r-xl` 14 (px).
-
-Components live between 6–14px. Only sheets and modals soften past `xl`, composed inline (`var(--r-xl)` plus a pill on FABs).
-
-## Elevation
+## Elevation & Depth
 
 Hairline borders separate; shadows lift sparingly. Three rungs only: `--shadow-sm`, `--shadow-md`, `--shadow-lg`. No heavy strokes, no drop-shadow stacks.
 
-## Motion
+Depth reads through surface lightness before it reads through shadow: `--bg-sunken` recesses, `--bg-elev` raises, and only detached surfaces (popover, modal, toast) take a shadow at all.
+
+### Motion
 
 - One curve for the whole product: **`--ease: cubic-bezier(0.2, 0.7, 0.3, 1)`** — a calm, instrument-grade ease-out. The literal lives in `src/motion.ts` and nowhere else.
 - **Standard transitions ≤ 200ms.** Anything longer needs a reason a member could name.
 - Motion animates state changes and entrances. Nothing loops; nothing draws attention to itself while idle.
 
+## Shapes
+
+`--r-xs` 2 · `--r-sm` 4 · `--r-md` 6 · `--r-lg` 10 · `--r-xl` 14 (px).
+
+Components live between 6–14px. Only sheets and modals soften past `xl`, composed inline (`var(--r-xl)` plus a pill on FABs). Nothing is fully rounded except an avatar or a FAB — hard-edged geometry is the identity.
+
 ## Components
 
-`packages/design` is one package with two layers, and reads as a small operating system:
-
-| Layer | Analogy | What it is |
-| --- | --- | --- |
-| Token contract (`src/contract.ts`) | the OS | the only public vocabulary of semantic roles |
-| Kit (`kit/kit.css`, `kit/elements.js`) | the system UI framework | the served substrate — `.kit-*` classes and `<kit-*>` elements, holding **no design decisions of its own** |
-| `toBlueprintCss()` | the app SDK | what a sandboxed blueprint app is handed |
-
-Canonical and only copy of the kit: `packages/design/kit/kit.css`. Apps do not carry their own copies.
+Canonical and only copy of the kit: `packages/design/kit/kit.css`. Apps do not carry their own copies. The layer model is in [Overview](#the-platform-analogy).
 
 **Class families** (compose, do not fork): `kit-app-*` (shell, side, topbar, brand), `kit-ask-*` (the assistant panel), `kit-msg-*`, `kit-btn`, `kit-input`, `kit-chip`, `kit-seg`, `kit-search`, `kit-popover`, `kit-modal`, `kit-banner`, `kit-empty`, `kit-icon`, `kit-toast(s)`, `kit-attach-*`, `kit-ref-*`, `kit-mention-*`, `kit-chart-*`, `kit-skeleton`, `kit-avatar`.
 
@@ -123,7 +421,9 @@ Canonical and only copy of the kit: `packages/design/kit/kit.css`. Apps do not c
 
 **Tokens every `app.css` MUST define**: `--bg-elev`, `--line`, `--text`, `--text-soft`, `--accent`. Optional, degrading gracefully when absent: `--bg-sunken`, `--line-strong`, `--text-faint`, `--radius`, `--shadow-md`, `--accent-soft`.
 
-## Do / Don't
+The `components:` front matter is a representative slice, not the full kit — it records the contrast pair, type role, radius, and padding rung each family binds, so an agent can check its own work without reading `kit.css`.
+
+## Do's and Don'ts
 
 **Do**
 
@@ -142,7 +442,7 @@ Canonical and only copy of the kit: `packages/design/kit/kit.css`. Apps do not c
 - Hand-edit a generated token snapshot.
 - Fork the shell token set into an app surface, or vice versa — CSP and the theme bridge assume the blueprint contract.
 
-## References
+### References
 
 - [docs/design-language.md](docs/design-language.md) — the binding prose rulebook
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source of truth vs hardcoded CSS

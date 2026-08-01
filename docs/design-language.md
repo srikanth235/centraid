@@ -75,7 +75,7 @@ Calm, instrument-grade, personal. The product is a place someone keeps their own
 
 ## Related
 
-- [../DESIGN.md](../DESIGN.md) — machine-readable brief: DESIGN.md, the condensed agent-facing restatement of this page (drift-guarded by `packages/design/src/design-md.test.ts`)
+- [../DESIGN.md](../DESIGN.md) — machine-readable brief: the condensed agent-facing restatement of this page, in the official [getdesign.md](https://getdesign.md/) format (YAML token front matter + canonical section order). Spec conformance: `bun run lint:design-md`. Value drift: `packages/design/src/design-md.test.ts`
 - [traps/design-tokens.md](traps/design-tokens.md) — source of truth, the two layers, and how agents get it wrong
 - [../packages/client/src/react/CSS-CONVENTIONS.md](../packages/client/src/react/CSS-CONVENTIONS.md) — renderer CSS-Modules rules
 - `packages/design/src/contract.ts` — the enforced token vocabulary

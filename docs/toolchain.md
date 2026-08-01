@@ -13,9 +13,12 @@ This is the durable command and ownership contract for TypeScript quality work. 
 | Task graph execution | pinned Turbo |
 | Dead code and dependency hygiene | Knip |
 | Runtime behaviour | Vitest and e2e suites |
+| DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
 | Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [docs/sonarcloud.md](sonarcloud.md) |
 
 Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine command runner. `toolchain:doctor` is its non-mutating drift check. Optional GitHub, Sonar, and react-doctor JavaScript-plugin presets remain declined as bundles; a future issue may admit one rule at a time through the rubric below.
+
+`@google/design.md` owns _format_ conformance of the root `DESIGN.md` only; it has no view on whether the values are Centraid's real tokens. That truth check is `packages/design/src/design-md.test.ts`, which compares the front matter against `packages/design/src`. Both run under `check:push`.
 
 Oxfmt is the sole style owner. Oxlint rules that only restate formatting are off. The pinned TypeScript compiler is the sole owner of compiler diagnostics; Oxlint `--type-check` is not part of any command.
 
@@ -35,6 +38,7 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `check:fast` | format check, ordinary lint, and affected typecheck |
 | `check:pr` | frozen install, static policy, typecheck, affected tests, and Knip |
 | `check:full` | PR gate plus dependents, coverage, affected mutation/perf, and web/desktop e2e |
+| `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
 | `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
 
 Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:pr`. The one intentional mutation is governance token accounting: immediately before a commit, its hook appends the frozen cost coordinate to this issue's receipt so the commit and ledger row remain one auditable unit.

@@ -1,15 +1,25 @@
 /**
  * Drift guard for the root DESIGN.md brief (#686).
  *
- * DESIGN.md is the machine-readable design brief handed to AI coding agents
- * (getdesign.md convention). It restates exact token values, so it rots the
- * moment someone edits `density.ts` / `radii.ts` / `motion.ts` / `palette.ts` /
- * `themes/shared.ts` without touching it. These tests pin every exact value the
- * brief states against the TypeScript source of truth.
+ * DESIGN.md is the machine-readable design brief handed to AI coding agents,
+ * in the official getdesign.md format: YAML front matter carrying the tokens,
+ * markdown body carrying the reasoning.
  *
- * Parsing is deliberately minimal: we anchor on token names and assert the
- * source value appears verbatim on the same line. No markdown AST, no table
- * parsing — the brief may be reformatted freely as long as the numbers hold.
+ * Two gates guard it, and they check different things:
+ *
+ *   - `bun run lint:design-md` (@google/design.md) checks the file is a valid
+ *     DESIGN.md — schema, resolvable `{token.refs}`, WCAG pairs, section order.
+ *     It has no idea what Centraid's real tokens are.
+ *   - this file checks the values are TRUE — every number and hex in the front
+ *     matter is compared against the TypeScript source of truth, so the brief
+ *     cannot silently rot when someone edits `palette.ts` / `radii.ts` /
+ *     `density.ts` / `motion.ts` / `typography.ts` / `themes/*`.
+ *
+ * The front matter is parsed with a deliberately small hand parser (the shape
+ * is ours, two levels deep, and we do not want a YAML dependency here just to
+ * read a file we also write). The markdown body is still matched loosely: the
+ * prose may be reformatted freely as long as the reasoning and the canonical
+ * section order hold.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,108 +32,307 @@ import { palette } from "./palette.js";
 import { radii } from "./radii.js";
 import { themes } from "./themes/index.js";
 import { BRAND } from "./themes/shared.js";
-import { type } from "./typography.js";
+import { fonts, type } from "./typography.js";
 
 const DESIGN_MD = fileURLToPath(new URL("../../../DESIGN.md", import.meta.url));
 const doc = readFileSync(DESIGN_MD, "utf8");
 
-/** Lines mentioning `token`, so a value can be pinned to its own name. */
-const linesWith = (token: string): string[] =>
-  doc.split("\n").filter((line) => line.includes(token));
+/** Split the file into its YAML front matter and its markdown body. */
+function split(source: string): { frontMatter: string; body: string } {
+  const match = /^---\n(?<fm>[\s\S]*?)\n---\n(?<body>[\s\S]*)$/u.exec(source);
+  if (!match?.groups) {
+    throw new Error(
+      "DESIGN.md has no YAML front matter — the spec requires it"
+    );
+  }
+  return { body: match.groups.body ?? "", frontMatter: match.groups.fm ?? "" };
+}
 
-describe("DESIGN.md brief", () => {
-  test("exists and points at the deeper docs it defers to", () => {
-    expect(doc.length).toBeGreaterThan(1000);
-    expect(doc).toContain("docs/design-language.md");
-    expect(doc).toContain("packages/design/src/contract.ts");
-    expect(doc).toContain("getdesign.md");
+type Scalar = string;
+type Group = Record<string, Scalar | Record<string, Scalar>>;
+
+/**
+ * Minimal parser for the two-level `key:` / `  key: value` / `    key: value`
+ * shape this front matter uses. Comments, blank lines, and folded scalars
+ * (`description: >-`) are skipped; quotes are stripped.
+ */
+function parseFrontMatter(fm: string): Record<string, Group | Scalar> {
+  const out: Record<string, Group | Scalar> = {};
+  let top: string | undefined;
+  let mid: string | undefined;
+  const unquote = (v: string): string => v.replace(/^["']|["']$/gu, "");
+
+  let folded: string | undefined;
+
+  for (const raw of fm.split("\n")) {
+    if (raw.trim() === "" || raw.trim().startsWith("#")) {
+      continue;
+    }
+    // Continuation lines of a `key: >-` folded scalar are indented under it.
+    if (folded !== undefined && /^\s/u.test(raw)) {
+      out[folded] = `${(out[folded] as string) ?? ""}${raw.trim()} `;
+      continue;
+    }
+    folded = undefined;
+    const entry = /^(?<indent> *)(?<key>[^\s:#][^:]*):(?<rest>.*)$/u.exec(raw);
+    if (!entry?.groups) {
+      continue;
+    }
+    const indent = (entry.groups.indent ?? "").length;
+    const key = unquote((entry.groups.key ?? "").trim());
+    const value = (entry.groups.rest ?? "").trim();
+
+    if (indent === 0) {
+      top = key;
+      mid = undefined;
+      if (value === "") {
+        out[key] = {};
+      } else if (value.startsWith(">") || value.startsWith("|")) {
+        folded = key;
+        out[key] = "";
+      } else {
+        out[key] = unquote(value);
+      }
+    } else if (indent === 2 && top !== undefined) {
+      const group = out[top];
+      if (typeof group !== "object") {
+        continue;
+      }
+      mid = key;
+      group[key] = value === "" ? {} : unquote(value);
+    } else if (indent === 4 && top !== undefined && mid !== undefined) {
+      const group = out[top];
+      if (typeof group !== "object") {
+        continue;
+      }
+      const nested = group[mid];
+      if (typeof nested === "object") {
+        nested[key] = unquote(value);
+      }
+    }
+  }
+  return out;
+}
+
+const { body, frontMatter } = split(doc);
+const fm = parseFrontMatter(frontMatter);
+
+const group = (name: string): Group => {
+  const value = fm[name];
+  if (typeof value !== "object") {
+    throw new Error(`DESIGN.md front matter is missing the \`${name}:\` group`);
+  }
+  return value;
+};
+
+const scalar = (g: Group, key: string): string => {
+  const value = g[key];
+  expect(value, `front-matter key \`${key}\` is missing`).toBeTypeOf("string");
+  return value as string;
+};
+
+const nested = (g: Group, key: string): Record<string, Scalar> => {
+  const value = g[key];
+  expect(value, `front-matter group \`${key}\` is missing`).toBeTypeOf(
+    "object"
+  );
+  return value as Record<string, Scalar>;
+};
+
+const colors = group("colors");
+const typography = group("typography");
+const rounded = group("rounded");
+const spacingFm = group("spacing");
+
+/** `bodyStrong` → `body-strong`, matching the front-matter token names. */
+const kebab = (key: string): string =>
+  key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase();
+
+describe("DESIGN.md front matter", () => {
+  test("carries the spec's required identity fields", () => {
+    expect(fm.version).toBe("alpha");
+    expect(fm.name).toBe("Centraid");
+    expect(fm.description).toContain("packages/design/src");
   });
 
   test("brand hex matches themes/shared.ts", () => {
-    expect(doc).toContain(BRAND);
-    expect(linesWith("BRAND").join("\n")).toContain(BRAND);
+    expect(scalar(colors, "brand")).toBe(BRAND);
+    expect(scalar(colors, "accent")).toBe(BRAND);
+    // `primary` is the spec's expected name; ours is an alias, not a 2nd brand.
+    expect(scalar(colors, "primary")).toBe("{colors.brand}");
   });
 
   test("accent ramp hexes match the shipped light theme", () => {
-    for (const [token, value] of [
-      ["--accent-light", themes.light.accentLight],
-      ["--accent-deep", themes.light.accentDeep],
-      ["--accent-midnight", themes.light.accentMidnight],
-      ["--accent-text", themes.light.accentText],
-    ] as const) {
-      expect(linesWith(token).join("\n")).toContain(value);
-    }
+    expect(scalar(colors, "accent-light")).toBe(themes.light.accentLight);
+    expect(scalar(colors, "accent-deep")).toBe(themes.light.accentDeep);
+    expect(scalar(colors, "accent-midnight")).toBe(themes.light.accentMidnight);
+    expect(scalar(colors, "accent-text")).toBe(themes.light.accentText);
   });
 
   test("semantic state colors match both ramps", () => {
-    for (const [token, dark, light] of [
-      ["--success", themes.dark.success, themes.light.success],
-      ["--danger", themes.dark.danger, themes.light.danger],
-      ["--warning", themes.dark.warning, themes.light.warning],
-    ] as const) {
-      const line = linesWith(token).join("\n");
-      expect(line).toContain(dark);
-      expect(line).toContain(light);
-    }
+    expect(scalar(colors, "success")).toBe(themes.light.success);
+    expect(scalar(colors, "success-dark")).toBe(themes.dark.success);
+    expect(scalar(colors, "danger")).toBe(themes.light.danger);
+    expect(scalar(colors, "danger")).toBe(themes.dark.danger);
+    expect(scalar(colors, "warning")).toBe(themes.light.warning);
+    expect(scalar(colors, "warning-dark")).toBe(themes.dark.warning);
   });
 
-  test("every palette hue is listed by name and hex", () => {
+  test("every palette hue is carried as `c-<name>`, and nothing extra", () => {
     for (const [name, hex] of Object.entries(palette)) {
-      expect(linesWith(name).join("\n")).toContain(hex);
+      expect(scalar(colors, `c-${name}`)).toBe(hex);
     }
-    // and nothing extra was invented
-    const listed = [...doc.matchAll(/`--c-(?<hue>[a-z]+)`/gu)].map(
-      (m) => m.groups?.hue
-    );
-    for (const name of listed) {
-      expect(Object.keys(palette)).toContain(name);
-    }
-  });
-
-  test("dark ramp anchor knob matches themes/centraid.ts", () => {
-    expect(linesWith("--bg-l").join("\n")).toContain(themes.dark.bgL);
-  });
-
-  test("every spacing rung is stated in order", () => {
-    const rungs = Object.values(spacing);
-    const line = linesWith("--sp-1").join("\n");
-    expect(line).toContain(rungs.join(" · "));
-    expect(doc).toContain(`--sp-${rungs.length}`);
-  });
-
-  test("every radius step is stated with its token", () => {
-    for (const [key, value] of Object.entries(radii)) {
-      expect(linesWith(`--r-${key}`).join("\n")).toMatch(
-        new RegExp(`--r-${key}\`\\s*${value}\\b`, "u")
+    const listed = Object.keys(colors)
+      .filter((k) => k.startsWith("c-"))
+      .map((k) => k.slice(2));
+    expect(listed.sort()).toStrictEqual(Object.keys(palette).sort());
+    // and the prose still names them alongside their hexes
+    for (const [name, hex] of Object.entries(palette)) {
+      expect(body, `${name} missing from the Colors prose`).toContain(
+        `${name} ${hex}`
       );
     }
   });
 
-  test("the easing curve is quoted verbatim", () => {
-    expect(linesWith("--ease").join("\n")).toContain(EASE);
-    expect(doc).toContain("200ms");
+  test("light-theme surfaces and ink match themes/centraid.ts", () => {
+    for (const [token, value] of [
+      ["light-bg", themes.light.bg],
+      ["light-bg-app", themes.light.bgApp],
+      ["light-bg-elev", themes.light.bgElev],
+      ["light-bg-sunken", themes.light.bgSunken],
+      ["light-text", themes.light.text],
+      ["light-text-soft", themes.light.textSoft],
+      ["light-text-faint", themes.light.textFaint],
+      ["light-text-ghost", themes.light.textGhost],
+      ["light-text-inv", themes.light.textInv],
+      ["light-line", themes.light.line],
+      ["light-line-strong", themes.light.lineStrong],
+    ] as const) {
+      expect(scalar(colors, token), token).toBe(value);
+    }
   });
 
-  test("the type scale states each role's size and line-height", () => {
+  test("dark-theme ink matches, and its surfaces resolve the --bg-l anchor", () => {
+    for (const [token, value] of [
+      ["dark-text", themes.dark.text],
+      ["dark-text-soft", themes.dark.textSoft],
+      ["dark-text-faint", themes.dark.textFaint],
+      ["dark-text-ghost", themes.dark.textGhost],
+      ["dark-text-inv", themes.dark.textInv],
+      ["dark-line", themes.dark.line],
+      ["dark-line-strong", themes.dark.lineStrong],
+    ] as const) {
+      expect(scalar(colors, token), token).toBe(value);
+    }
+    // Dark surfaces are `hsl(0 0% calc(var(--bg-l) ± n))`; a contrast checker
+    // cannot read a var(), so the front matter carries them resolved. Pin the
+    // anchor those hexes were resolved from.
+    const anchor = themes.dark.bgL;
+    expect(anchor).toBeDefined();
+    expect(body).toContain(`--bg-l: ${anchor}`);
+    const lightness = Number(String(anchor).replace("%", "")) / 100;
+    const channel = Math.round(lightness * 255);
+    const hex = `#${channel.toString(16).padStart(2, "0").repeat(3)}`;
+    expect(scalar(colors, "dark-bg").toLowerCase()).toBe(hex);
+  });
+
+  test("every spacing rung is carried, in order, with its px unit", () => {
+    const rungs = Object.entries(spacing);
+    expect(Object.keys(spacingFm)).toStrictEqual(rungs.map(([k]) => k));
+    for (const [key, value] of rungs) {
+      expect(scalar(spacingFm, key), `--sp-${key}`).toBe(`${value}px`);
+    }
+    // the prose still states the whole scale on one line
+    expect(body).toContain(rungs.map(([, v]) => v).join(" · "));
+    expect(body).toContain(`--sp-${rungs.length}`);
+  });
+
+  test("every radius step is carried with its px unit", () => {
+    for (const [key, value] of Object.entries(radii)) {
+      expect(scalar(rounded, key), `--r-${key}`).toBe(`${value}px`);
+    }
+    expect(Object.keys(rounded).sort()).toStrictEqual(
+      Object.keys(radii).sort()
+    );
+    for (const [key, value] of Object.entries(radii)) {
+      expect(body).toMatch(new RegExp(`--r-${key}\`\\s*${value}\\b`, "u"));
+    }
+  });
+
+  test("the type scale carries each role's size, line-height, weight, face", () => {
     for (const [key, style] of Object.entries(type)) {
-      const token = `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`;
-      const line = linesWith(token).join("\n");
-      expect(line, `${token} missing from DESIGN.md`).not.toBe("");
+      const role = nested(typography, kebab(key));
+      expect(role.fontSize, `${key} fontSize`).toBe(`${style.size}px`);
+      expect(role.lineHeight, `${key} lineHeight`).toBe(
+        `${style.lineHeight}px`
+      );
+      expect(role.fontWeight, `${key} fontWeight`).toBe(style.weight);
+      expect(role.fontFamily, `${key} fontFamily`).toBe(fonts[style.family]);
+    }
+    expect(Object.keys(typography).sort()).toStrictEqual(
+      Object.keys(type).map(kebab).sort()
+    );
+  });
+});
+
+describe("DESIGN.md body", () => {
+  test("uses the spec's canonical section order", () => {
+    const canonical = [
+      "Overview",
+      "Colors",
+      "Typography",
+      "Layout",
+      "Elevation & Depth",
+      "Shapes",
+      "Components",
+      "Do's and Don'ts",
+    ];
+    const present = [...body.matchAll(/^## (?<title>.+)$/gmu)].map((m) =>
+      (m.groups?.title ?? "").trim()
+    );
+    expect(present).toStrictEqual(canonical);
+  });
+
+  test("points at the deeper docs it defers to", () => {
+    expect(body.length).toBeGreaterThan(1000);
+    expect(body).toContain("docs/design-language.md");
+    expect(body).toContain("packages/design/src/contract.ts");
+    expect(body).toContain("getdesign.md");
+    expect(body).toContain("lint:design-md");
+  });
+
+  test("the type scale prose restates each role's size and weight", () => {
+    for (const [key, style] of Object.entries(type)) {
+      const token = `--t-${kebab(key)}`;
+      const line = body
+        .split("\n")
+        .filter((l) => l.includes(token))
+        .join("\n");
+      expect(line, `${token} missing from DESIGN.md prose`).not.toBe("");
       expect(line).toContain(`${style.size} / ${style.lineHeight}`);
       expect(line).toContain(style.weight);
     }
   });
 
-  test("typography states roles-not-families and the system stacks", () => {
-    expect(doc).toContain("system-ui");
-    expect(doc).toContain("ui-monospace");
-    expect(doc).toMatch(/Roles, not families/u);
+  test("the easing curve is quoted verbatim", () => {
+    const line = body
+      .split("\n")
+      .filter((l) => l.includes("--ease"))
+      .join("\n");
+    expect(line).toContain(EASE);
+    expect(body).toContain("200ms");
+  });
+
+  test("states roles-not-families and the system stacks", () => {
+    expect(body).toContain(fonts.sans);
+    expect(body).toContain(fonts.mono);
+    expect(body).toMatch(/Roles, not families/u);
   });
 
   test("carries the reasoning, not just the values", () => {
-    expect(doc).toContain("Field notebook");
-    expect(doc).toContain("instrument, not a pillow");
-    expect(doc).toMatch(/Neutrals do the work/u);
-    expect(doc).toMatch(/measured, not eyeballed/u);
+    expect(body).toContain("Field notebook");
+    expect(body).toContain("instrument, not a pillow");
+    expect(body).toMatch(/Neutrals do the work/u);
+    expect(body).toMatch(/measured, not eyeballed/u);
   });
 });

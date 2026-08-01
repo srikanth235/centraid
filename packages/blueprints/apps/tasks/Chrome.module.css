@@ -48,7 +48,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
