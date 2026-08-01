@@ -7,24 +7,28 @@
 - [x] A2 consumer-side token-purity ratchet test (blueprint apps)
 - [x] A5 reserved-namespace guard (`--c-*` etc.) in the same test
 - [x] A2 governance directive `no-hardcoded-colors`
-- [ ] A3 component vocabulary unified (scaffold ↔ kit)
-- [ ] A4 scaffold exemplar on tokens
-- [ ] B2 shell type-scale adoption + ratchet
-- [ ] B3 shell radius adoption + ratchet
-- [ ] B4 mono body face decided + documented
+- [x] A3 component vocabulary unified (scaffold ↔ kit)
+- [x] A4 scaffold exemplar on tokens
+- [x] B2 shell type-scale adoption + ratchet
+- [x] B3 shell radius adoption + ratchet
+- [x] B4 mono body face decided + documented
 - [x] C1 `docs/design-language.md` + AGENTS.md index row + ui-grounding reference
 - [x] C2 `.design-sync` stale conventions neutralized
 - [x] C3 stale mobile-theming comments fixed
 - [x] C4 `styles.css` eaten comment restored
 - [x] D1 typeface decision recorded in docs/decisions.md
 - [x] D2 mobile color opt-outs migrated/waived
-- [ ] D3 post-generation CSS validation for agent apps
-- [ ] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
+- [x] D3 post-generation CSS validation for agent apps
+- [x] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
+- [x] F1 Root `DESIGN.md` per the getdesign.md convention
 
 ## Decisions (orchestrator recommendations, per user directive)
 
 - **D1 typography = roles, not families.** Web/desktop keep system stacks (#468 K11); mobile keeps its per-role platform mapping, now recorded as decided rather than drift.
 - **A2 coexists with the #630 Wave-0 ratchet.** `scripts/lint-design-tokens.mjs` + `tests/design-token-css-budget.json` (landed on main while this branch was in flight) already ratchet rawHex/literalFontFamily across client+blueprints+kit. The new `token-purity` test is complementary — it adds functional color literals, reserved custom-property namespaces, and contract-imported names, blueprint-scope only. Burn-down lanes must shrink BOTH allowlists.
+- **E deliberate visual deltas (token semantics over hand-picked values):** tally `--pos`/`--neg` → system `--success`/`--danger`; locker sidebar surface → `--bg-elev`; people re-derives neutrals from `--app-hue: 345` + `--c-rose` accent and drops its Geist/Space Grotesk declarations per the roles decision; agenda light `--warning` → token value; a generator-toggle drop shadow → `--shadow-sm`. All recorded here for review.
+- **Photos/docs "theater stage" gap:** 3 residual `hsl(var(--app-hue) 25% 4%)` backdrops exist because the contract has no opaque near-black `--stage` token; follow-up candidate for `packages/design`.
+- **kit.css itself still hardcodes type/spacing px** (e.g. `.kit-btn font-size: 0.8125rem`) — the served component layer is the remaining half of full token purity; now visible in the budget (80 rawFontSize in kit) and left as ratcheted debt.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -49,6 +53,170 @@
 - **D1 typeface decision recorded in docs/decisions.md** — `docs/decisions.md` gains the `## #686 — typography is a contract of ROLES, not families` section (web/desktop system stacks per #468 K11; mobile per-role platform mapping sanctioned pending native-faces revisit).
 
 - **D2 mobile color opt-outs migrated/waived** — `apps/mobile/src/screens/onboarding-styles.ts` now derives its palette from `resolveTheme("dark").colors` (scheme stays pinned, values come from tokens; one `// #686 waiver:` for the true-black camera viewfinder). `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx` replaces 27 hand-picked hexes with tints derived from the 8-hue design palette via `tileFinish()`, keyed by a stable FNV-1a hash of the collection/party id. `apps/mobile/src/screens/onboarding-art.tsx` and `apps/mobile/src/screens/onboarding-home-art.tsx` carry explicit illustration-art exemption comments.
+
+- **F1 Root `DESIGN.md` per the getdesign.md convention** — new root `DESIGN.md` (151-line machine-readable design brief: point of view, binding rules, color/typography/spacing/radii/elevation/motion, two-layer component vocabulary, do/don't) with real values from the token source; new `packages/design/src/design-md.test.ts` drift guard (12 tests) pinning every stated value (brand hex, accent ramp, semantic states, all 8 palette hues, spacing rungs, radii, EASE curve, type roles) to the TS source of truth; index row in `AGENTS.md`; pointer in `docs/design-language.md`. Also hardened `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh` against prose false-positives (`#686` in CSS comments parses as 3-digit hex; `hsl(var(--app-hue) …)` is contract-parameterized) — comment stripping, declaration-colon filter, hex-followed-by-word filter; red-capability re-proven after each change.
+
+- **A3 component vocabulary unified (scaffold ↔ kit)** and **A4 scaffold exemplar on tokens** — generated apps are served `kit.css` (via `SHARED_ASSET_FILES` → `sharedAssetsDir`), so the scaffold's parallel component vocabulary (`.primary`/`.ghost`/`.muted`/`.empty`…) is retired in favour of `.kit-btn`/`.kit-input`/`.kit-empty`/`.kit-muted`; `DEFAULT_APP_CSS` keeps only layout classes kit lacks (`.head`, `.add-bar`, `.list`, `.row`, `.surface`, `.loading`, `.error`, `.circle`) and is now 100% token-driven (`--t-*`, `--sp-*`, `--r-*`, `--on-accent`; zero literals, the `#fff` carve-out is gone). Knob blocks retarget `.kit-*` with compound selectors; the appFont knob moves to token roles. Files:
+  - `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
+  - `packages/blueprints/src/scaffold-defaults.test.ts`
+  - `packages/blueprints/src/scaffold-defaults.ts`
+  - `packages/blueprints/src/scaffold-files.ts`
+  - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+  - `packages/gateway/src/skills/ui-grounding.test.ts`
+  - `packages/gateway/src/skills/ui-grounding.ts`
+- **B2 shell type-scale adoption + ratchet** and **B3 shell radius adoption + ratchet** — `scripts/lint-design-tokens.mjs` gains a METRICS registry with `rawFontSize`, `rawFontWeight` (outside 400/500/600), `rawRadius` (off the 2/4/6/10/14 scale; carve-outs: 0, %, ≥99px pill, 1px nudge, var/calc) and a `--write` budget-regeneration mode; `scripts/lint-design-tokens.test.mjs` covers each counter red-capably; `tests/design-token-css-budget.json` regenerated (final head state: 0 grandfathered hex, 4 literal font stacks, 1291 raw font-sizes, 9 off-scale weights, 287 raw radii). In `packages/client`: 152 border-radius declarations converted to `var(--r-*)` (value-identical), 48 off-scale font-weights snapped into the sanctioned set, 6 display-scale 700s kept as marketing territory. Zero font-size conversions — a measured finding: no client declaration exactly matches a `--t-*` shorthand (all line-heights unitless vs px tokens), so the type surface is recorded debt, not silently rounded. Client CSS files touched:
+  - `packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `packages/client/src/react/screens/AssistantScreen.module.css`
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/AutomationCompilePane.module.css`
+  - `packages/client/src/react/screens/AutomationEditorScreen.module.css`
+  - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `packages/client/src/react/screens/BackupCard.module.css`
+  - `packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `packages/client/src/react/screens/DevicePairPanel.module.css`
+  - `packages/client/src/react/screens/DevicesCard.module.css`
+  - `packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/HomeScreen.module.css`
+  - `packages/client/src/react/screens/InsightsScreen.module.css`
+  - `packages/client/src/react/screens/LocalFootprintCard.module.css`
+  - `packages/client/src/react/screens/LogsScreen.module.css`
+  - `packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `packages/client/src/react/screens/PaletteScreen.module.css`
+  - `packages/client/src/react/screens/PhoneScreen.module.css`
+  - `packages/client/src/react/screens/RecoverScreen.module.css`
+  - `packages/client/src/react/screens/ResourceDialogs.module.css`
+  - `packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `packages/client/src/react/screens/RunViewScreen.module.css`
+  - `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsStorageScreen.module.css`
+  - `packages/client/src/react/screens/WhatsNewModal.module.css`
+  - `packages/client/src/react/shell/CaptureOverlay.module.css`
+  - `packages/client/src/react/shell/IdentityHead.module.css`
+  - `packages/client/src/react/shell/chrome.module.css`
+  - `packages/client/src/react/shell/gatewaySwitcher.module.css`
+  - `packages/client/src/react/shell/routes/AppViewRoute.module.css`
+  - `packages/client/src/react/shell/routes/ConnectFlow.module.css`
+  - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `packages/client/src/react/shell/routes/assistantRich.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCloud.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderHistory.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderPreview.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderShell.module.css`
+  - `packages/client/src/react/shell/templatePreview.module.css`
+  - `packages/client/src/react/styles/chatMessage.module.css`
+  - `packages/client/src/react/styles/linkBtn.module.css`
+  - `packages/client/src/react/styles/pageEmpty.module.css`
+  - `packages/client/src/react/styles/pageSkeleton.module.css`
+  - `packages/client/src/react/styles/seg.module.css`
+  - `packages/client/src/react/styles/toolGroup.module.css`
+  - `packages/client/src/react/styles/vault.module.css`
+  - `packages/client/src/react/ui/AppCard.module.css`
+  - `packages/client/src/react/ui/Button.module.css`
+  - `packages/client/src/styles.css`
+- **B4 mono body face decided + documented** — resolved upstream by #681 (c27cb65c restored `body { font-family: var(--font-sans) }`); `DESIGN.md`/`docs/design-language.md` document mono as a signature role, not the body face. No net diff in this branch.
+- **D3 post-generation CSS validation for agent apps** — token-purity validation wired into the publish gate `validateManifestAt()` (the same seam that rejects malformed manifests; hard-reject with LLM-instructive per-violation messages; installed apps unaffected — the gate runs only on publish, and bundled blueprints install in place without passing through it). The generated `toBlueprintCss()` baseline is structurally stripped before scanning so scaffolded apps publish clean. Files:
+  - `packages/app-engine/src/index.ts`
+  - `packages/app-engine/src/registry/token-purity.test.ts`
+  - `packages/app-engine/src/registry/token-purity.ts`
+  - `packages/gateway/src/validate-app-css.test.ts`
+  - `packages/gateway/src/validate-app-css.ts`
+  - `packages/gateway/src/validate-manifest.ts`
+- **E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)** — all eight system apps swept onto tokens: 252 → 5 remaining violations repo-wide (all sanctioned: app-font knobs, `--app-hue`/`--accent` identity, the photos wall, and 3 `hsl(var(--app-hue) 25% 4%)` theater-stage backdrops awaiting a `--stage` token). docs' reserved-namespace `--c-*` shadow palette renamed to `--kind-*` and sourced from the 8-hue palette; photos scrims routed through `--scrim`/`--on-accent` color-mix; tally/locker/people/agenda literal forks replaced by `--success`/`--danger`/`--warning`/`--accent-*`/`--on-accent`; 234 exact spacing substitutions onto `--sp-*`; 70+152 radius snaps; kit composition raised (photos sidebar brand block, locker sidebar 2→9 composes). `packages/blueprints/src/token-purity-allowlist.ts` shrunk from 28 files/252 violations to 8 entries. Blueprint app files touched:
+  - `packages/blueprints/apps/agenda/Chrome.module.css`
+  - `packages/blueprints/apps/agenda/components/CreateModal.module.css`
+  - `packages/blueprints/apps/agenda/components/EventDrawer.module.css`
+  - `packages/blueprints/apps/agenda/components/EventEditor.module.css`
+  - `packages/blueprints/apps/agenda/components/MonthView.module.css`
+  - `packages/blueprints/apps/agenda/components/ScheduleView.module.css`
+  - `packages/blueprints/apps/agenda/components/Sidebar.module.css`
+  - `packages/blueprints/apps/agenda/components/WeekView.module.css`
+  - `packages/blueprints/apps/docs/Chrome.module.css`
+  - `packages/blueprints/apps/docs/components/Activity.module.css`
+  - `packages/blueprints/apps/docs/components/BulkBar.module.css`
+  - `packages/blueprints/apps/docs/components/Details.module.css`
+  - `packages/blueprints/apps/docs/components/Editor.module.css`
+  - `packages/blueprints/apps/docs/components/Grid.module.css`
+  - `packages/blueprints/apps/docs/components/History.module.css`
+  - `packages/blueprints/apps/docs/components/List.module.css`
+  - `packages/blueprints/apps/docs/components/NewMenu.module.css`
+  - `packages/blueprints/apps/docs/components/QuickLook.module.css`
+  - `packages/blueprints/apps/docs/components/Sidebar.module.css`
+  - `packages/blueprints/apps/docs/components/shared.module.css`
+  - `packages/blueprints/apps/docs/format.ts`
+  - `packages/blueprints/apps/locker/Chrome.module.css`
+  - `packages/blueprints/apps/locker/components/Detail.module.css`
+  - `packages/blueprints/apps/locker/components/Detail.tsx`
+  - `packages/blueprints/apps/locker/components/EditModal.module.css`
+  - `packages/blueprints/apps/locker/components/Generator.module.css`
+  - `packages/blueprints/apps/locker/components/ItemFields.module.css`
+  - `packages/blueprints/apps/locker/components/List.module.css`
+  - `packages/blueprints/apps/locker/components/LockScreen.module.css`
+  - `packages/blueprints/apps/locker/components/Sidebar.module.css`
+  - `packages/blueprints/apps/locker/components/shared.module.css`
+  - `packages/blueprints/apps/notes/Chrome.module.css`
+  - `packages/blueprints/apps/notes/components/Card.module.css`
+  - `packages/blueprints/apps/notes/components/Editor.module.css`
+  - `packages/blueprints/apps/notes/components/History.module.css`
+  - `packages/blueprints/apps/notes/components/QuickAdd.module.css`
+  - `packages/blueprints/apps/notes/components/Sidebar.module.css`
+  - `packages/blueprints/apps/notes/components/Toolbar.module.css`
+  - `packages/blueprints/apps/notes/components/WikiLinks.module.css`
+  - `packages/blueprints/apps/notes/components/shared.module.css`
+  - `packages/blueprints/apps/people/Chrome.module.css`
+  - `packages/blueprints/apps/people/components/Activity.tsx`
+  - `packages/blueprints/apps/people/components/AddPersonModal.module.css`
+  - `packages/blueprints/apps/people/components/AddRows.module.css`
+  - `packages/blueprints/apps/people/components/ContactChannels.module.css`
+  - `packages/blueprints/apps/people/components/DetailSections.module.css`
+  - `packages/blueprints/apps/people/components/DetailSections.tsx`
+  - `packages/blueprints/apps/people/components/Details.module.css`
+  - `packages/blueprints/apps/people/components/Grid.module.css`
+  - `packages/blueprints/apps/people/components/History.module.css`
+  - `packages/blueprints/apps/people/components/Journal.module.css`
+  - `packages/blueprints/apps/people/components/Journal.tsx`
+  - `packages/blueprints/apps/people/components/List.module.css`
+  - `packages/blueprints/apps/people/components/NewMenu.module.css`
+  - `packages/blueprints/apps/people/components/Sidebar.module.css`
+  - `packages/blueprints/apps/people/components/TrashCard.module.css`
+  - `packages/blueprints/apps/people/format.ts`
+  - `packages/blueprints/apps/photos/Chrome.module.css`
+  - `packages/blueprints/apps/photos/components/AlbumGrid.module.css`
+  - `packages/blueprints/apps/photos/components/Editor.module.css`
+  - `packages/blueprints/apps/photos/components/Lightbox.module.css`
+  - `packages/blueprints/apps/photos/components/LightboxInfo.module.css`
+  - `packages/blueprints/apps/photos/components/Memories.module.css`
+  - `packages/blueprints/apps/photos/components/Picker.module.css`
+  - `packages/blueprints/apps/photos/components/Sidebar.module.css`
+  - `packages/blueprints/apps/photos/components/Slideshow.module.css`
+  - `packages/blueprints/apps/photos/components/Timeline.module.css`
+  - `packages/blueprints/apps/photos/components/Toolbar.module.css`
+  - `packages/blueprints/apps/photos/components/shared.module.css`
+  - `packages/blueprints/apps/tally/Chrome.module.css`
+  - `packages/blueprints/apps/tally/components/Activity.module.css`
+  - `packages/blueprints/apps/tally/components/Dashboard.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseModal.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseRow.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseUndo.module.css`
+  - `packages/blueprints/apps/tally/components/GroupManager.module.css`
+  - `packages/blueprints/apps/tally/components/History.module.css`
+  - `packages/blueprints/apps/tally/components/Ledger.module.css`
+  - `packages/blueprints/apps/tally/components/Sidebar.module.css`
+  - `packages/blueprints/apps/tally/components/shared.module.css`
+  - `packages/blueprints/apps/tasks/components/Board.module.css`
+  - `packages/blueprints/apps/tasks/components/Capture.module.css`
+  - `packages/blueprints/apps/tasks/components/Detail.module.css`
+  - `packages/blueprints/apps/tasks/components/Row.module.css`
+  - `packages/blueprints/apps/tasks/components/Sidebar.module.css`
+  - `packages/blueprints/apps/tasks/components/shared.module.css`
 
 ## Out of scope
 
@@ -101,6 +269,33 @@ $ vitest run src/screens src/kit/theme src/apps/photos
 Test Files 11 passed / Tests 75 passed
 ```
 
+F1:
+
+```
+$ cd packages/design && vitest run src/design-md.test.ts
+Test Files  1 passed (1)
+Tests  12 passed (12)
+```
+
+A3+A4 / B2+B3 / D3 / E (wave 2):
+
+```
+$ cd packages/blueprints && vitest run src/token-purity.test.ts src/shared-css.test.ts src/scaffold-defaults.test.ts
+Test Files  3 passed (3)
+Tests  13 passed (13)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), zero regressions
+$ node --test scripts/lint-design-tokens.test.mjs   # 7/7 pass
+$ cd packages/design && vitest run
+Test Files  17 passed (17) / Tests  170 passed (170)
+$ cd packages/app-engine && vitest run   # 621 passed / 58 files
+$ cd packages/gateway && vitest run      # 1281 passed, 6 skipped / 192 files
+$ cd packages/client && vitest run       # 213 files / 1738 tests passed
+$ bash .governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh  # exit 0; red-capable on injected #ff00aa
+```
+
+Drift-guard red proven: spacing[5] 24→20 in density.ts fails "every spacing rung is stated in order"; reverted.
+
 Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/components/Row.module.css`: vitest ratchet and check.sh both fail; injection reverted (diff empty).
 
 Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
@@ -133,6 +328,13 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785604286-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 10 | 2245 | 873464 | 1388 | 3643 | 0.9710 | 307 | 354027 | 18541141 | 141819 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
 | claude-code-ab8b1729-92f-1785604343-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 395 | 175649 | 194 | 591 | 0.1903 | 309 | 354422 | 18716790 | 142013 | docs(design): design-language rulebook, design-sync cleanup, roles decision (#68 |
 | claude-code-ab8b1729-92f-1785604406-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 594 | 352088 | 1730 | 2328 | 0.4461 | 313 | 355016 | 19068878 | 143743 | refactor(mobile): onboarding and photos tints onto design tokens (#686)Co-Author |
+| claude-code-ab8b1729-92f-1785604795-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 64 | 79890 | 5847992 | 80695 | 160649 | 10.8820 | 377 | 434906 | 24916870 | 224438 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785604961-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 4832 | 195098 | 205 | 5039 | 0.2658 | 379 | 439738 | 25111968 | 224643 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785605097-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 297 | 199930 | 237 | 536 | 0.2155 | 381 | 440035 | 25311898 | 224880 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785605577-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 94 | 93135 | 10590697 | 34884 | 128113 | 13.5000 | 475 | 533170 | 35902595 | 259764 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605633-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 744 | 240453 | 214 | 960 | 0.2605 | 477 | 533914 | 36143048 | 259978 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605759-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 12 | 10986 | 1451847 | 6316 | 17314 | 1.9051 | 489 | 544900 | 37594895 | 266294 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605873-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 26 | 8051 | 3223768 | 5157 | 13234 | 3.5825 | 515 | 552951 | 40818663 | 271451 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
 
 ### Steering
 

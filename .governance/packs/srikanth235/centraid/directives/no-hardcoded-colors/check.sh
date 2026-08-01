@@ -62,6 +62,39 @@ while IFS= read -r diff_line; do
             ;;
         '+'*)
             content="${diff_line#+}"
+            # Strip comment text before matching: issue references like `#686`
+            # inside /* ... */ are valid 3-digit hex to the regex but are not
+            # color declarations. Order matters on a single diff line with no
+            # surrounding context: (1) a `*/` with no `/*` before it closes a
+            # block comment started on an earlier line - drop the prefix;
+            # (2) drop complete inline `/* ... */` comments; (3) a trailing
+            # unclosed `/*` drops the remainder; (4) a line that is a bare
+            # block-comment continuation (leading `*`) is skipped.
+            content="$(printf '%s' "$content" | sed -E '
+                /\*\//{ /\/\*/!s:^.*\*/:: ; }
+                s:/\*[^*]*(\*+[^/*][^*]*)*\*+/::g
+                s:/\*.*$::')"
+            trimmed="${content#"${content%%[![:space:]]*}"}"
+            case "$trimmed" in
+                \**) line_no=$((line_no + 1)); continue ;;
+            esac
+            # A color literal only counts inside a declaration. A diff line has
+            # no surrounding context, so a multi-line comment's interior prose
+            # (e.g. "... #686 retired that fork") is indistinguishable from
+            # CSS by position alone. Two prose filters: a line with no colon is
+            # not a declaration, and `#abc word` (hex followed by a word) is an
+            # issue reference in a sentence, not a color value. The vitest
+            # ratchet strips comments properly and remains the thorough gate.
+            case "$content" in
+                *:*) ;;
+                *) line_no=$((line_no + 1)); continue ;;
+            esac
+            content="$(printf '%s' "$content" | sed -E 's/#[0-9a-fA-F]{3,8} [A-Za-z]+//g')"
+            # Functional notation whose first argument is itself a token
+            # (`hsl(var(--app-hue) ...)`) is parameterized by the contract,
+            # not a restated color - the vitest ratchet still counts it, but
+            # the tripwire lets it through. (No \b: BSD sed lacks it.)
+            content="$(printf '%s' "$content" | sed -E 's:(rgba?|hsla?)\([[:space:]]*var\(::g')"
             if printf '%s' "$content" | grep -qE "$PATTERN"; then
                 if ! printf '%s' "$content" \
                     | grep -q "governance: allow-no-hardcoded-colors"; then

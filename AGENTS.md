@@ -41,6 +41,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [TESTING.md](TESTING.md) | Suite strategy, PR vs nightly, conventions |
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure + pairing/relay/gateway threat model |
 | [CHANGELOG.md](CHANGELOG.md) | Keep a Changelog; release notes source (D3) |
+| [DESIGN.md](DESIGN.md) | Machine-readable design brief for agents (getdesign.md convention): colors, type, spacing, components + reasoning |
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
