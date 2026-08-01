@@ -1,3 +1,4 @@
+// #686: illustration art, exempt from token contract
 // Small marks for the first-run onboarding flow (screens/Onboarding). Split out
 // so the flow file stays under the repo file-size limit; these are pure,
 // stateless SVG glyphs with no onboarding logic in them. The flow's hero lives

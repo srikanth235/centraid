@@ -1,3 +1,4 @@
+// #686: illustration art, exempt from token contract
 // The onboarding hero: "it lives at home."
 //
 // A house whose front door is the gateway mark, four blueprint apps as lit

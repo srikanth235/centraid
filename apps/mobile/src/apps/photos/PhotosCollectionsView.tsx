@@ -2,38 +2,54 @@ import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { palette, tileFinish } from "@centraid/design";
+
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme/resolve";
 import type { PhotosScreenProps } from "../../navigation";
 
-// The design paints each tile with a linear-gradient; RN has no gradient
-// primitive here (no expo-linear-gradient dependency), so each is approximated
-// by a single representative mid-tone lifted from the gradient stops.
-const AVATAR_TILES = [
-  "#e8896b",
-  "#5a9bc4",
-  "#8ca652",
-  "#8c9bb4",
-  "#c98fae",
-  "#5c8a4e",
-];
-const ALBUM_TILES = [
-  "#a7c9a0",
-  "#c9a0d4",
-  "#d4b89b",
-  "#9bb4d4",
-  "#e8a98c",
-  "#8ca6b4",
-];
+// Collection tints come from the shared 8-hue app palette (#686) rather than
+// hand-picked hexes, so Photos drifts with the design system. The order below
+// alternates warm and cool so neighbouring tiles never read as a run of one
+// family; `tileFinish(_, "solid")` supplies the fill and the glyph ink, which
+// is what keeps white marks legible on every hue in both schemes.
+const TINTS = [
+  palette.teal,
+  palette.rose,
+  palette.indigo,
+  palette.amber,
+  palette.violet,
+  palette.forest,
+  palette.ochre,
+  palette.slate,
+] as const;
 
+/** Ink for anything drawn on a tint (all solid tiles share one glyph color). */
+const ON_TINT = tileFinish(palette.teal, "solid").glyphColor;
+
+const fill = (color: string): string =>
+  tileFinish(color, "solid").backgroundColor;
+
+/** FNV-1a — a stable tint per row id, so tiles don't reshuffle on re-sort. */
+function tintFor(key: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return fill(TINTS[h % TINTS.length] ?? TINTS[0]);
+}
+
+// Fixed collections read best with a tint chosen for their meaning rather than
+// hashed: people learn the colour of "Favorites" the way they learn its icon.
 const CATEGORIES: Array<{ label: string; color: string }> = [
-  { label: "Documents", color: "#8c9bb4" },
-  { label: "Selfies", color: "#e8899b" },
-  { label: "Videos", color: "#5c4a7d" },
-  { label: "Food", color: "#8ca652" },
-  { label: "Nature", color: "#5c8a4e" },
-  { label: "Receipts", color: "#a67c52" },
+  { label: "Documents", color: fill(palette.slate) },
+  { label: "Selfies", color: fill(palette.rose) },
+  { label: "Videos", color: fill(palette.violet) },
+  { label: "Food", color: fill(palette.amber) },
+  { label: "Nature", color: fill(palette.forest) },
+  { label: "Receipts", color: fill(palette.ochre) },
 ];
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
@@ -135,8 +151,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color="#e8896b"
-          icon={<Feather name="heart" size={20} color="#fff" />}
+          color={fill(palette.rose)}
+          icon={<Feather name="heart" size={20} color={ON_TINT} />}
           title="Favorites"
           count="Your starred photos"
           onPress={() =>
@@ -146,8 +162,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color="#5a9bc4"
-          icon={<Feather name="clock" size={20} color="#fff" />}
+          color={fill(palette.indigo)}
+          icon={<Feather name="clock" size={20} color={ON_TINT} />}
           title="Recently added"
           count="Newest first"
           onPress={() => navigation.navigate("PhotosLibrary")}
@@ -155,8 +171,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color="#8ca652"
-          icon={<Feather name="smartphone" size={20} color="#fff" />}
+          color={fill(palette.teal)}
+          icon={<Feather name="smartphone" size={20} color={ON_TINT} />}
           title="Screenshots"
           count="Captured on this phone"
           onPress={() => navigation.navigate("PhotosLibrary")}
@@ -164,8 +180,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color="#8c9bb4"
-          icon={<Feather name="archive" size={20} color="#fff" />}
+          color={fill(palette.slate)}
+          icon={<Feather name="archive" size={20} color={ON_TINT} />}
           title="Archive"
           count="Hidden from the timeline"
           last
@@ -185,13 +201,10 @@ export default function PhotosCollectionsView({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.peopleRow}
       >
-        {people.map((person, index) => (
+        {people.map((person) => (
           <View key={person.id} style={styles.person}>
             <View
-              style={[
-                styles.avatar,
-                { backgroundColor: AVATAR_TILES[index % AVATAR_TILES.length] },
-              ]}
+              style={[styles.avatar, { backgroundColor: tintFor(person.id) }]}
             />
             <Text
               numberOfLines={1}
@@ -232,7 +245,7 @@ export default function PhotosCollectionsView({
       </View>
       {albums.length ? (
         <View style={styles.albumGrid}>
-          {albums.map((album, index) => (
+          {albums.map((album) => (
             <Pressable
               key={album.__rowId}
               style={styles.album}
@@ -245,7 +258,11 @@ export default function PhotosCollectionsView({
               <View
                 style={[
                   styles.albumTile,
-                  { backgroundColor: ALBUM_TILES[index % ALBUM_TILES.length] },
+                  {
+                    backgroundColor: tintFor(
+                      String(album.collection_id ?? album.__rowId)
+                    ),
+                  },
                 ]}
               />
               <Text
@@ -327,7 +344,7 @@ const makeStyles = (
       paddingHorizontal: 16,
     },
     categoryLabel: {
-      color: "#fff",
+      color: ON_TINT,
       fontFamily: family.sansBold,
       fontSize: 12,
       margin: 9,

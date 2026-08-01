@@ -17,7 +17,7 @@
 - [x] C3 stale mobile-theming comments fixed
 - [x] C4 `styles.css` eaten comment restored
 - [x] D1 typeface decision recorded in docs/decisions.md
-- [ ] D2 mobile color opt-outs migrated/waived
+- [x] D2 mobile color opt-outs migrated/waived
 - [ ] D3 post-generation CSS validation for agent apps
 - [ ] E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)
 
@@ -47,6 +47,8 @@
 - **C3 stale mobile-theming comments fixed** — `packages/design/src/themes/index.ts` and `packages/design/src/index.ts` now describe the real three-lowerings pipeline (shell `toCss()`, blueprint `toBlueprintCss()`, mobile AOT via `apps/mobile/scripts/generate-theme.ts`).
 - **C4 `styles.css` eaten comment restored** — `packages/client/src/styles.css` had already been fixed on main by c27cb65c (#681); our branch converged to identical content, so this item lands with no net diff.
 - **D1 typeface decision recorded in docs/decisions.md** — `docs/decisions.md` gains the `## #686 — typography is a contract of ROLES, not families` section (web/desktop system stacks per #468 K11; mobile per-role platform mapping sanctioned pending native-faces revisit).
+
+- **D2 mobile color opt-outs migrated/waived** — `apps/mobile/src/screens/onboarding-styles.ts` now derives its palette from `resolveTheme("dark").colors` (scheme stays pinned, values come from tokens; one `// #686 waiver:` for the true-black camera viewfinder). `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx` replaces 27 hand-picked hexes with tints derived from the 8-hue design palette via `tileFinish()`, keyed by a stable FNV-1a hash of the collection/party id. `apps/mobile/src/screens/onboarding-art.tsx` and `apps/mobile/src/screens/onboarding-home-art.tsx` carry explicit illustration-art exemption comments.
 
 ## Out of scope
 
@@ -90,6 +92,15 @@ packages/gateway/src/skills/ui-grounding.ts:1
 $ grep -n '#686' docs/decisions.md | head -1
 ```
 
+D2:
+
+```
+$ cd apps/mobile && bun run typecheck && bun run lint
+clean
+$ vitest run src/screens src/kit/theme src/apps/photos
+Test Files 11 passed / Tests 75 passed
+```
+
 Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/components/Row.module.css`: vitest ratchet and check.sh both fail; injection reverted (diff empty).
 
 Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
@@ -121,6 +132,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785604218-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 1763 | 172581 | 212 | 1977 | 0.2052 | 297 | 351782 | 17667677 | 140431 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
 | claude-code-ab8b1729-92f-1785604286-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 10 | 2245 | 873464 | 1388 | 3643 | 0.9710 | 307 | 354027 | 18541141 | 141819 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
 | claude-code-ab8b1729-92f-1785604343-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 395 | 175649 | 194 | 591 | 0.1903 | 309 | 354422 | 18716790 | 142013 | docs(design): design-language rulebook, design-sync cleanup, roles decision (#68 |
+| claude-code-ab8b1729-92f-1785604406-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 594 | 352088 | 1730 | 2328 | 0.4461 | 313 | 355016 | 19068878 | 143743 | refactor(mobile): onboarding and photos tints onto design tokens (#686)Co-Author |
 
 ### Steering
 
