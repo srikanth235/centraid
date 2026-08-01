@@ -861,7 +861,6 @@ export default function App(): JSX.Element {
           headSlot={headSlot}
           onHome={go({ kind: "home" })}
           onSearch={() => setPaletteOpen(true)}
-          onAssistant={go({ kind: "assistant" })}
           onInsights={go({ kind: "insights" })}
           onAutomations={go({ kind: "automations" })}
           onConnectors={go({ kind: "connectors" })}

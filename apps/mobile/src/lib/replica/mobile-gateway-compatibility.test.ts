@@ -13,6 +13,8 @@ const base = {
   devicePairing: true,
   tunnel: true,
   backupWal: true,
+  assistOAuth: true,
+  automationTurns: true,
 };
 
 describe("mobile gateway compatibility", () => {
@@ -57,7 +59,6 @@ describe("mobile gateway compatibility", () => {
         version: "0.1.0",
         protocolVersion: 2,
         minSupportedProtocol: 2,
-        schemaEpoch: 2,
         capabilities,
       })
     ).toBe("supported");
@@ -66,7 +67,6 @@ describe("mobile gateway compatibility", () => {
         version: "old-gateway",
         protocolVersion: 1,
         minSupportedProtocol: 1,
-        schemaEpoch: 1,
         capabilities,
       })
     ).toBe("update-gateway");
@@ -75,7 +75,6 @@ describe("mobile gateway compatibility", () => {
         version: "future-gateway",
         protocolVersion: 3,
         minSupportedProtocol: 3,
-        schemaEpoch: 3,
         capabilities,
       })
     ).toBe("update-app");
@@ -84,7 +83,6 @@ describe("mobile gateway compatibility", () => {
         version: "capability-old",
         protocolVersion: 2,
         minSupportedProtocol: 2,
-        schemaEpoch: 2,
         capabilities: base,
       })
     ).toBe("update-gateway");

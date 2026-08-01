@@ -5,9 +5,7 @@
  * only ever learned about an unreachable gateway when a data request failed.
  * This module owns the heartbeat: every {@link GATEWAY_RUNTIME_POLL_MS} it
  * probes the active gateway's `/centraid/_gateway/health` — component-level
- * status, not just "a compatible gateway is listening" (falling back to the
- * plain `/centraid/_gateway/info` liveness probe for older gateways that
- * 404 on `/health`) — folds the result through the pure core
+ * status — folds the result through the pure core
  * (gateway-monitor-core.ts), broadcasts the snapshot to every window, and
  * fires OS notifications: the existing whole-gateway down/recovered pair
  * (settings-backed threshold, default 2 minutes), a new per-component
@@ -160,7 +158,7 @@ function notifyComponent(
 
 /**
  * Version-skew alert (wave 2 of #351) — fires once when a REMOTE gateway's
- * reported version/schemaEpoch first diverges from this build's pinned
+ * reported version/protocolVersion first diverges from this build's pinned
  * expectations, de-duped by `applyVersionSkewAlert`. v0 policy is
  * "surface loudly", not refuse — see gateway-monitor-core.ts's file header.
  */
@@ -172,8 +170,8 @@ function notifyVersionSkew(
   const n = new Notification({
     title: "Gateway version mismatch",
     body:
-      `“${gatewayLabel}” is running v${action.gatewayVersion} (schema epoch ` +
-      `${action.gatewaySchemaEpoch}), which doesn’t match what this app expects. ` +
+      `“${gatewayLabel}” is running v${action.gatewayVersion} (protocol ` +
+      `${action.gatewayProtocolVersion}), which doesn’t match what this app expects. ` +
       "Update both to the same version to avoid undebuggable weirdness.",
     urgency: "critical",
   });

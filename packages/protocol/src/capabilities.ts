@@ -16,31 +16,14 @@ export interface GatewayCapabilities {
   tunnel: boolean;
   /** Continuous WAL backup shipper surface. */
   backupWal: boolean;
-  /**
-   * Shared-client Google OAuth courier is configured on this gateway.
-   * Optional on the wire so pre-#526 gateways remain structurally valid;
-   * clients interpret absence as false.
-   */
-  // COMPAT(assist-oauth-capability): added 2026-07-23; drop optionality when the protocol floor requires #526.
-  assistOAuth?: boolean;
-  /**
-   * Native interactive automation turns and conversational revision.
-   * Optional so clients connected to a pre-#541 gateway hide the composer.
-   */
-  // COMPAT(automation-turns-capability): added 2026-07-24; drop optionality when the protocol floor requires #541.
-  automationTurns?: boolean;
-  /**
-   * One authenticated stream may carry changes for several mounted vaults.
-   * Optional for compatibility with gateways predating issue #628.
-   */
-  // COMPAT(multi-vault-replica-capability): added 2026-07-29; drop optionality when the protocol floor requires #628.
-  multiVaultReplica?: boolean;
-  /**
-   * Idempotent cross-vault add/move placement intents are available.
-   * Optional for compatibility with gateways predating issue #628.
-   */
-  // COMPAT(cross-vault-placement-capability): added 2026-07-29; drop optionality when the protocol floor requires #628.
-  crossVaultPlacements?: boolean;
+  /** Shared-client Google OAuth courier is configured on this gateway. */
+  assistOAuth: boolean;
+  /** Native interactive automation turns and conversational revision. */
+  automationTurns: boolean;
+  /** One authenticated stream may carry changes for several mounted vaults. */
+  multiVaultReplica: boolean;
+  /** Idempotent cross-vault add/move placement intents are available. */
+  crossVaultPlacements: boolean;
 }
 
 /** Default capability surface for a modern loopback/daemon gateway. */
@@ -65,12 +48,9 @@ export function isGatewayCapabilities(
     typeof c.devicePairing === "boolean" &&
     typeof c.tunnel === "boolean" &&
     typeof c.backupWal === "boolean" &&
-    (c.assistOAuth === undefined || typeof c.assistOAuth === "boolean") &&
-    (c.automationTurns === undefined ||
-      typeof c.automationTurns === "boolean") &&
-    (c.multiVaultReplica === undefined ||
-      typeof c.multiVaultReplica === "boolean") &&
-    (c.crossVaultPlacements === undefined ||
-      typeof c.crossVaultPlacements === "boolean")
+    typeof c.assistOAuth === "boolean" &&
+    typeof c.automationTurns === "boolean" &&
+    typeof c.multiVaultReplica === "boolean" &&
+    typeof c.crossVaultPlacements === "boolean"
   );
 }

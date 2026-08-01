@@ -40,7 +40,6 @@ import type {
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from "../version.js";
 import type { GatewayLogEntry, GatewayLogStore } from "./gateway-log-store.js";
@@ -80,7 +79,6 @@ export interface DiagnosticsBundle {
     version: string;
     protocolVersion: number;
     minSupportedProtocol: number;
-    schemaEpoch: number;
   };
   runtime: {
     platform: NodeJS.Platform;
@@ -209,7 +207,6 @@ export async function buildDiagnosticsBundle(
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     },
     runtime: {
       platform: os.platform(),

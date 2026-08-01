@@ -28,7 +28,7 @@ describe("the default gateway capabilities", () => {
 });
 
 describe(isGatewayCapabilities, () => {
-  it("accepts required booleans and optional compatible capabilities", () => {
+  it("requires every advertised capability to be boolean", () => {
     expect(isGatewayCapabilities(null)).toBe(false);
     expect(isGatewayCapabilities("x")).toBe(false);
     expect(isGatewayCapabilities({})).toBe(false);
@@ -38,6 +38,10 @@ describe(isGatewayCapabilities, () => {
         devicePairing: true,
         tunnel: false,
         backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
       })
     ).toBe(true);
     expect(
@@ -59,6 +63,9 @@ describe(isGatewayCapabilities, () => {
         tunnel: true,
         backupWal: true,
         assistOAuth: "yes",
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
       })
     ).toBe(false);
     expect(
@@ -67,6 +74,9 @@ describe(isGatewayCapabilities, () => {
         devicePairing: true,
         tunnel: true,
         backupWal: true,
+        assistOAuth: false,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
         automationTurns: "yes",
       })
     ).toBe(false);
@@ -76,6 +86,9 @@ describe(isGatewayCapabilities, () => {
         devicePairing: true,
         tunnel: true,
         backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        crossVaultPlacements: true,
         multiVaultReplica: "yes",
       })
     ).toBe(false);
@@ -85,6 +98,9 @@ describe(isGatewayCapabilities, () => {
         devicePairing: true,
         tunnel: true,
         backupWal: true,
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
         crossVaultPlacements: "yes",
       })
     ).toBe(false);
@@ -94,6 +110,10 @@ describe(isGatewayCapabilities, () => {
         devicePairing: true,
         tunnel: true,
         backupWal: "true",
+        assistOAuth: false,
+        automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
       })
     ).toBe(false);
   });

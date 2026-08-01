@@ -383,6 +383,7 @@ which the auditor correctly rejected.
 | claude-code-cb7dbb8f-b68-1785591417-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 35 | 36817 | 3215901 | 13184 | 50036 | 2.1678 | 748 | 613636 | 22320456 | 107576 |  |
 | claude-code-cb7dbb8f-b68-1785591522-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 17 | 29391 | 1901557 | 10817 | 40225 | 1.4050 | 765 | 643027 | 24222013 | 118393 |  |
 | claude-code-cb7dbb8f-b68-1785598339-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 172 | 448089 | 20079126 | 71704 | 519965 | 14.6336 | 937 | 1091116 | 44301139 | 190097 |  |
+| claude-code-cb7dbb8f-b68-1785598423-1 | claude-code | cb7dbb8f-b680-41f2-858a-c645894de891 | #681 | claude-opus-5 | 14 | 15285 | 1770594 | 3034 | 18333 | 1.0567 | 951 | 1106401 | 46071733 | 193131 |  |
 
 ### Steering
 

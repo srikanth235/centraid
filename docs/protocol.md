@@ -73,8 +73,7 @@ Land C1–C3 (this doc + code that honors it on the handshake and any new cross-
 | `version` | **Product** semver — display / about only. Clients **must not** refuse connect because product strings differ. |
 | `protocolVersion` | Wire protocol integer (CapVer-style). Mutual support window with `minSupportedProtocol`. |
 | `minSupportedProtocol` | Oldest protocol this peer still speaks. |
-| `schemaEpoch` | Historical alias still emitted (= protocol until vault epoch splits). Fallback if `protocolVersion` absent. |
-| `capabilities` | Feature flags (C1) — not product version. |
+| `capabilities` | Required feature flags (C1) — not product version. |
 
 Handshake (`judgeGatewayInfo`):
 
@@ -93,7 +92,7 @@ Constants live in `@centraid/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VER
 
 Until 1.0:
 
-- Prefer optional fields with defaults for forward compatibility.
+- Prefer optional additive fields for forward compatibility; the handshake's protocol and capability fields are required on every reachable gateway.
 - **Protocol** floor bumps refuse incompatible peers (update wall), not product string equality.
 - Vault DDL / storage **schemaEpoch** in replica code is a storage cursor concept; it may later diverge from wire protocol.
 - **1.0** = first release after which every schema change ships a migration ([decisions.md](decisions.md)).

@@ -15,32 +15,20 @@ import { ROUTES } from "./routes.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from "./version.js";
 
 export interface GatewayInfo {
   /** Product version (display only). */
   version: string;
-  /**
-   * Wire protocol version. Prefer this over schemaEpoch for new code.
-   * Always present on payloads built by `buildGatewayInfoPayload`.
-   */
+  /** Wire protocol version. Always present on gateway info payloads. */
   protocolVersion: number;
   /** Oldest protocol this peer still supports. */
   minSupportedProtocol: number;
-  /**
-   * Historical field; equals protocolVersion until vault epoch splits.
-   * Still accepted as a fallback when protocolVersion is absent (older gateways).
-   */
-  schemaEpoch: number;
-  /** Per-process diagnostic id. Optional — older gateways omit it. */
+  /** Per-process diagnostic id. */
   instanceId?: string;
-  /**
-   * Feature capability map (C1). Optional on the wire for older gateways;
-   * judges fill defaults so clients detect features in one place.
-   */
-  capabilities?: GatewayCapabilities;
+  /** Feature capability map (C1). */
+  capabilities: GatewayCapabilities;
   /** Process start epoch ms — additive runtime clock. */
   startedAt?: number;
   /** Process uptime ms — additive runtime clock. */
@@ -75,13 +63,12 @@ export type HandshakeResult =
 
 /**
  * Resolve protocol numbers from a gateway info payload.
- * Prefers protocolVersion; falls back to schemaEpoch for older gateways.
  */
 export function readProtocolFromInfo(info: Record<string, unknown>): {
   protocolVersion: number | null;
   minSupportedProtocol: number | null;
 } {
-  const protocolRaw = info.protocolVersion ?? info.schemaEpoch;
+  const protocolRaw = info.protocolVersion;
   const protocolVersion =
     typeof protocolRaw === "number" && Number.isSafeInteger(protocolRaw)
       ? protocolRaw
@@ -90,7 +77,7 @@ export function readProtocolFromInfo(info: Record<string, unknown>): {
   const minSupportedProtocol =
     typeof minRaw === "number" && Number.isSafeInteger(minRaw)
       ? minRaw
-      : protocolVersion; // old gateways: only speak current protocol
+      : protocolVersion;
   return { protocolVersion, minSupportedProtocol };
 }
 
@@ -132,7 +119,7 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
     return {
       ok: false,
       reason: "malformed",
-      detail: "gateway info missing protocolVersion (or schemaEpoch fallback)",
+      detail: "gateway info missing protocolVersion",
     };
   }
 
@@ -154,14 +141,13 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
     };
   }
 
-  const capabilities = isGatewayCapabilities(info.capabilities)
-    ? info.capabilities
-    : { ...DEFAULT_GATEWAY_CAPABILITIES };
-  const schemaEpoch =
-    typeof info.schemaEpoch === "number" &&
-    Number.isSafeInteger(info.schemaEpoch)
-      ? info.schemaEpoch
-      : protocolVersion;
+  if (!isGatewayCapabilities(info.capabilities)) {
+    return {
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info missing capabilities",
+    };
+  }
 
   return {
     ok: true,
@@ -169,8 +155,7 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
       version: info.version,
       protocolVersion,
       minSupportedProtocol,
-      schemaEpoch,
-      capabilities,
+      capabilities: info.capabilities,
       ...(typeof info.instanceId === "string"
         ? { instanceId: info.instanceId }
         : {}),
@@ -251,7 +236,6 @@ export function buildGatewayInfoPayload(input: {
     version: GATEWAY_VERSION,
     protocolVersion: GATEWAY_PROTOCOL_VERSION,
     minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-    schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     instanceId: input.instanceId,
     startedAt: input.startedAt,
     uptimeMs: input.uptimeMs,

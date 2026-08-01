@@ -142,8 +142,6 @@ export interface CursorRegistration {
    * time (trigger `tz` → gateway default → host-local).
    */
   cronSchedules?: readonly CronSchedule[];
-  /** @deprecated Prefer `cronSchedules`; kept for signature hashing callers. */
-  cronExprs?: readonly string[];
 }
 
 /**
@@ -168,7 +166,6 @@ export function registrationsFor(
       { expr: trigger.expr, ...(timeZone === undefined ? {} : { timeZone }) },
     ];
   });
-  const cronExprs = cronSchedules.map((s) => s.expr);
   const firstCron = row.triggers.findIndex(
     (trigger) => trigger.kind === "cron"
   );
@@ -176,7 +173,7 @@ export function registrationsFor(
     if (trigger.kind !== "cron")
       return [{ ref: row.ref, triggerIndex, trigger }];
     if (triggerIndex !== firstCron) return [];
-    return [{ ref: row.ref, triggerIndex, trigger, cronSchedules, cronExprs }];
+    return [{ ref: row.ref, triggerIndex, trigger, cronSchedules }];
   });
 }
 

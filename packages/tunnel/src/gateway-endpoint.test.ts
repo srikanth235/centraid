@@ -111,7 +111,7 @@ describe("gateway endpoint", () => {
           vaultId: ticket.vaultId,
           vaultName: "Family",
           version: "0.1.0",
-          schemaEpoch: 1,
+          protocolVersion: 2,
         };
       },
       requestHeaders: (endpointId) => ({
@@ -167,7 +167,7 @@ describe("gateway endpoint", () => {
       vaultId: "v-family",
       vaultName: "Family",
       version: "0.1.0",
-      schemaEpoch: 1,
+      protocolVersion: 2,
     });
     expect(enrolled.has(device.endpointId)).toBe(true);
 

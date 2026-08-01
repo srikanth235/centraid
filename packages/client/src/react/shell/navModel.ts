@@ -57,7 +57,6 @@ export type NavInput = Pick<
   | "approvalsCount"
   | "notificationsHasUnreadNotices"
   | "onApprovals"
-  | "onAssistant"
   | "onAtlas"
   | "onAutomations"
   | "onConnectors"
@@ -81,9 +80,7 @@ export function buildNavSections(props: NavInput): NavSection[] {
       ...(props.activePage === "assistant" && !props.activeConversationId
         ? { page: "assistant" as const }
         : {}),
-      ...((props.onNewChat ?? props.onAssistant)
-        ? { onSelect: props.onNewChat ?? props.onAssistant }
-        : {}),
+      ...(props.onNewChat ? { onSelect: props.onNewChat } : {}),
     },
     {
       id: "search",

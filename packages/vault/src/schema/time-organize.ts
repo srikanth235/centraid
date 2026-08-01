@@ -1,6 +1,6 @@
 // Issue #630 Wave 4: durable time semantics and the organizational spine.
-// This is one forward-only rung because the new foreign keys and columns form
-// one contract consumed together by Agenda, Tasks, People, and Tally.
+// These objects are part of the pre-release base contract consumed together by
+// Agenda, Tasks, People, and Tally.
 
 export const TIME_ORGANIZE_DDL = `
 ALTER TABLE core_event ADD COLUMN end_tz TEXT;
@@ -82,25 +82,6 @@ CREATE INDEX social_contact_channel_duplicate_idx
   ON social_contact_channel(kind, normalized_value, party_id);
 CREATE UNIQUE INDEX social_contact_channel_preferred_idx
   ON social_contact_channel(party_id, kind) WHERE is_preferred = 1;
-
--- Soft people_merge edge from the #630 organize band. Left CREATE-stable so
--- already-applied rungs do not rewrite; DROP_PEOPLE_MERGE_DDL removes it on
--- the next user_version step (identity merge is core.merge_party only).
-CREATE TABLE people_merge (
-  merge_id        TEXT PRIMARY KEY,
-  source_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  target_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  revision_id     TEXT NOT NULL REFERENCES core_entity_revision(revision_id),
-  merged_at       TEXT NOT NULL,
-  undone_at       TEXT,
-  CHECK (source_party_id <> target_party_id)
-) STRICT;
-CREATE UNIQUE INDEX people_merge_source_active_idx
-  ON people_merge(source_party_id) WHERE undone_at IS NULL;
-CREATE INDEX people_merge_target_idx
-  ON people_merge(target_party_id);
-CREATE INDEX people_merge_revision_idx
-  ON people_merge(revision_id);
 
 ALTER TABLE tally_expense ADD COLUMN original_amount_minor INTEGER
   CHECK (original_amount_minor IS NULL OR original_amount_minor > 0);

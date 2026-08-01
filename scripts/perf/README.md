@@ -2,7 +2,7 @@
 
 Instrumentation + CI budgets for the mobile/PWA fast path. It measures what it costs to boot the shell and open an app over the PWA transport, and fences those numbers so a future change can't silently re-inflate them.
 
-> **There is no desktop counterpart.** This README used to call itself the browser sibling of a desktop waterfall probe at `apps/desktop/tests/e2e-live/probe-open-waterfall.mjs`; that script was deleted with the rest of the unreferenced e2e-live scripts (issue #468 L4). What survives under [apps/desktop/tests/e2e-live/](../../apps/desktop/tests/e2e-live/) is a manual, non-CI harness — `driver.mjs`, `smoke.mjs`, `iframe-probe.mjs` — and none of it measures a waterfall or enforces a budget. The web spec below is the only budgeted perf rig in the repo today.
+> **There is no desktop counterpart.** The old exploratory e2e-live harness and its waterfall probe are retired. The web spec below is the only budgeted perf rig in the repo today.
 
 ## What's measured
 

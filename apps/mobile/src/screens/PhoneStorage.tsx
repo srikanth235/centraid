@@ -150,9 +150,9 @@ export default function PhoneStorage({
           >
             <Feather name="alert-circle" size={18} color={colors.accent} />
             <Text style={[styles.explainerText, { color: colors.textSoft }]}>
-              {formatBytes(unassignedPendingBytes)} of legacy pending uploads
-              predate vault-target accounting. They remain durable and are not
-              assigned to whichever vault is currently focused.
+              {formatBytes(unassignedPendingBytes)} of pending uploads are not
+              assigned to a vault. They remain durable and are not assigned to
+              whichever vault is currently focused.
             </Text>
           </View>
         ) : null}

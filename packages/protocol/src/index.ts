@@ -2,12 +2,10 @@ export {
   GATEWAY_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
 } from "./version.js";
 /** Client-facing aliases (product display / protocol floor). */
 export { GATEWAY_VERSION as EXPECTED_GATEWAY_VERSION } from "./version.js";
 export { GATEWAY_PROTOCOL_VERSION as EXPECTED_PROTOCOL_VERSION } from "./version.js";
-export { GATEWAY_SCHEMA_EPOCH as EXPECTED_SCHEMA_EPOCH } from "./version.js";
 
 export {
   DEFAULT_GATEWAY_CAPABILITIES,

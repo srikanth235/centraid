@@ -212,7 +212,10 @@ describe("AutomationViewRoute suite", () => {
       devicePairing: true,
       tunnel: true,
       backupWal: true,
+      assistOAuth: false,
       automationTurns: true,
+      multiVaultReplica: true,
+      crossVaultPlacements: true,
     });
     api.rotateAutomationWebhookSecret.mockReset().mockResolvedValue({
       webhook: {

@@ -173,7 +173,7 @@ describe("serve scenarios", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      gateway: { version: string; schemaEpoch: number };
+      gateway: { version: string; protocolVersion: number };
       runtime: { platform: string; arch: string; nodeVersion: string };
       health: { status: string };
       logs: unknown[];
@@ -185,7 +185,7 @@ describe("serve scenarios", () => {
       config: unknown;
     };
     expect(body.gateway.version).toBeTypeOf("string");
-    expect(body.gateway.schemaEpoch).toBeTypeOf("number");
+    expect(body.gateway.protocolVersion).toBeTypeOf("number");
     expect(body.runtime.nodeVersion).toBe(process.version);
     expect(body.health.status).toStrictEqual(expect.any(String));
     expect(Array.isArray(body.logs)).toBe(true);

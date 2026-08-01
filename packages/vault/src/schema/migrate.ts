@@ -1,7 +1,7 @@
-// The forward-only schema ladder for vault.db and journal.db. The first rung
-// remains the v0 base composed in dependency order. Issue #630 is the point at
-// which real owner data must survive blueprint schema work, so every later
-// shape change is an ordered, replay-safe rung instead of editing the base.
+// The forward-only schema ladder for vault.db and journal.db. Pre-release v0
+// keeps the vault at one base rung: all current owner tables are composed in
+// dependency order and there are no released files that need compatibility
+// upgrades. Later rungs are reserved for post-release data migrations.
 // Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
 
 import type { DatabaseSync } from "node:sqlite";
@@ -29,16 +29,12 @@ import {
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
 import { TALLY_DDL, TALLY_RECEIPT_DDL } from "./domains-tally.js";
-import { DROP_PEOPLE_MERGE_DDL } from "./drop-people-merge.js";
 import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL } from "./fts.js";
 import { JOURNAL_DDL } from "./journal.js";
-import {
-  NOTIFICATIONS_NOTICE_DDL,
-  RENAME_INBOX_NOTICE_DDL,
-} from "./notifications.js";
+import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
@@ -90,100 +86,31 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     HOME_DDL,
     BUSINESS_DDL,
     PEOPLE_DDL,
+    PEOPLE_PROFILE_LIFECYCLE_DDL,
     LOCKER_DDL,
+    LOCKER_AUTH_DDL,
     LOCKER_ALIAS_DDL,
     TALLY_DDL,
+    TALLY_RECEIPT_DDL,
+    ENTITY_REVISIONS_DDL,
+    TIME_ORGANIZE_DDL,
     ENRICH_DDL,
     OUTBOX_DDL,
     REPLICA_DDL,
     FTS_DDL,
     BLOB_TRANSFER_DDL,
     BLOB_DDL,
+    // Notifications is a rebuildable projection; its pre-release rename is
+    // part of the composed base rather than a compatibility rung.
+    RENAME_INBOX_NOTICE_DDL,
   ].join("\n"),
-  LOCKER_AUTH_DDL,
-  ENTITY_REVISIONS_DDL,
-  PEOPLE_PROFILE_LIFECYCLE_DDL,
-  TALLY_RECEIPT_DDL,
-  TIME_ORGANIZE_DDL,
-  // After soft people.merge_people was folded into core.merge_party (#630/#638),
-  // drop the unused people_merge residual without rewriting the organize band.
-  DROP_PEOPLE_MERGE_DDL,
-  // Notifications is a projection: decisions stay canonical and only durable
-  // notices gain a new table (#647).
-  NOTIFICATIONS_NOTICE_DDL,
-  // The surface rename Inbox → Notifications (#665) renamed the table with it.
-  // v0 owes no data migration: the old table is dropped, not copied.
-  RENAME_INBOX_NOTICE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
 
-/**
- * Repair the #526 credential sidecar added while the v0 ladder was still
- * collapsed to one rung. Existing development vaults already stamped at
- * user_version=1 do not replay CREATE TABLE IF NOT EXISTS, so add the column
- * explicitly before broker queries can touch it.
- */
-// COMPAT(sync-oauth-mode-v0): added 2026-07-23, drop when the supported vault floor postdates #526.
-export function repairSyncCredentialOauthMode(db: DatabaseSync): void {
-  const table = db
-    .prepare(
-      `SELECT 1 AS present FROM sqlite_master
-        WHERE type = 'table' AND name = 'sync_connection_credential'`
-    )
-    .get();
-  if (!table) return;
-  const columns = db
-    .prepare(`PRAGMA table_info('sync_connection_credential')`)
-    .all() as {
-    name: string;
-  }[];
-  if (columns.some((column) => column.name === "oauth_mode")) return;
-  db.exec(
-    `ALTER TABLE sync_connection_credential
-       ADD COLUMN oauth_mode TEXT NOT NULL DEFAULT 'byo'
-       CHECK (oauth_mode IN ('byo','assist'))`
-  );
-}
-
-// COMPAT(anchor-scope-memory-v0): added 2026-07-25, drop when the supported vault floor postdates #541.
-/** Preserve narrow revocation memory in dev vaults that already stamped v0. */
-export function repairConsentScopeTombstoneShape(db: DatabaseSync): void {
-  const table = db
-    .prepare(
-      `SELECT 1 AS present FROM sqlite_master
-        WHERE type = 'table' AND name = 'consent_scope_tombstone'`
-    )
-    .get();
-  if (!table) return;
-  const columns = new Set(
-    (
-      db.prepare(`PRAGMA table_info('consent_scope_tombstone')`).all() as {
-        name: string;
-      }[]
-    ).map((column) => column.name)
-  );
-  if (!columns.has("row_filter_json")) {
-    db.exec(
-      `ALTER TABLE consent_scope_tombstone
-         ADD COLUMN row_filter_json TEXT
-         CHECK (row_filter_json IS NULL OR json_valid(row_filter_json))`
-    );
-  }
-  if (!columns.has("field_mask_json")) {
-    db.exec(
-      `ALTER TABLE consent_scope_tombstone
-         ADD COLUMN field_mask_json TEXT
-         CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))`
-    );
-  }
-}
-
-/** Apply the vault schema and its replay-safe compatibility repairs together. */
+/** Apply the current pre-release vault schema. */
 export function migrateVault(db: DatabaseSync): void {
   migrate(db, VAULT_MIGRATIONS);
-  repairSyncCredentialOauthMode(db);
-  repairConsentScopeTombstoneShape(db);
 }
 
 function currentVersion(db: DatabaseSync): number {

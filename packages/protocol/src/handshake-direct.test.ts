@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_GATEWAY_CAPABILITIES } from "./capabilities.js";
 import {
   buildGatewayInfoPayload,
   handshakeGateway,
@@ -15,21 +16,16 @@ import { ROUTES } from "./routes.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from "./version.js";
 
 describe(readProtocolFromInfo, () => {
-  it("prefers protocolVersion and falls back to schemaEpoch / peer=min", () => {
+  it("reads protocolVersion and defaults peer minimum to that protocol", () => {
     expect(
       readProtocolFromInfo({ protocolVersion: 2, minSupportedProtocol: 1 })
     ).toStrictEqual({
       protocolVersion: 2,
       minSupportedProtocol: 1,
-    });
-    expect(readProtocolFromInfo({ schemaEpoch: 2 })).toStrictEqual({
-      protocolVersion: 2,
-      minSupportedProtocol: 2,
     });
     expect(readProtocolFromInfo({})).toStrictEqual({
       protocolVersion: null,
@@ -64,17 +60,21 @@ describe("judgeGatewayInfo branches", () => {
     });
   });
 
-  it("fills default capabilities when wire map is absent or invalid", () => {
-    const ok = judgeGatewayInfo({
+  it("requires the complete capability map on the wire", () => {
+    const missing = judgeGatewayInfo({
       version: "0.1.0",
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-      capabilities: { webSessions: "yes" },
     });
-    expect(ok.ok).toBe(true);
-    if (!ok.ok) return;
-    expect(ok.info.capabilities?.webSessions).toBe(true);
-    expect(ok.info.capabilities?.assistOAuth).toBe(false);
+    expect(missing).toMatchObject({ ok: false, reason: "malformed" });
+
+    const invalid = judgeGatewayInfo({
+      version: "0.1.0",
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: { ...DEFAULT_GATEWAY_CAPABILITIES, webSessions: "yes" },
+    });
+    expect(invalid).toMatchObject({ ok: false, reason: "malformed" });
   });
 
   it("carries optional instanceId / clocks when present", () => {
@@ -82,10 +82,10 @@ describe("judgeGatewayInfo branches", () => {
       version: "0.1.0",
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      capabilities: DEFAULT_GATEWAY_CAPABILITIES,
       instanceId: "i1",
       startedAt: 10,
       uptimeMs: 20,
-      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     });
     expect(ok).toMatchObject({
       ok: true,

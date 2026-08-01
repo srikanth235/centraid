@@ -439,16 +439,6 @@ export class ConversationStore {
     return conversationId;
   }
 
-  /** @deprecated Use ensureAutomationConversation. */
-  createAutomationRun(
-    _conversationId: string,
-    automationRef: string,
-    appId?: string,
-    name?: string
-  ): void {
-    this.ensureAutomationConversation(automationRef, appId, name);
-  }
-
   getConversation(id: string): Conversation | undefined {
     const { stmts } = this.ensureReady();
     const raw = stmts.getConversation.get(id) as RawConversation | undefined;
