@@ -88,19 +88,20 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    // Density is a standing control on the same page (folded in from Layout);
-    // compact is never the default (regular), so a reload that restores it
-    // proves the prefs write path rather than the shipped default.
-    const density = page.getByRole("tablist", { name: "Density" });
-    await density.getByRole("tab", { name: "compact" }).click();
+    // Cards is a standing control on the same page. `elevated` is never the
+    // default (`outlined`), so a reload that restores it proves the prefs
+    // write path rather than the shipped default. This used to drive the
+    // Density control, which #672 removed along with the density system.
+    const cards = page.getByRole("tablist", { name: "Cards" });
+    await cards.getByRole("tab", { name: "elevated" }).click();
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.density))
-      .toBe("compact");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
+      .toBe("elevated");
     await page.reload();
     await waitForHome(page);
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.density))
-      .toBe("compact");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
+      .toBe("elevated");
   } finally {
     await closeApp(app);
   }

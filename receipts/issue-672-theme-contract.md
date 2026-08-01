@@ -183,6 +183,7 @@ handoff from diagnosis to completing the governed commit and draft PR.
 | codex-019fbc6b-05b-1785575180-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 22157 | 0 | 1496320 | 1158 | 23315 | 0.4468 | 450034 | 0 | 20962048 | 53960 | test(client): cover teal orbit logo (#672) |
 | claude-code-cbc1504a-314-1785577918-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 776 | 1642727 | 59632329 | 283586 | 1927089 | 47.1767 | 776 | 1642727 | 59632329 | 283586 |  |
 | claude-code-cbc1504a-314-1785580278-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 276 | 642331 | 41713126 | 90761 | 733368 | 27.1415 | 1052 | 2285058 | 101345455 | 374347 |  |
+| claude-code-cbc1504a-314-1785580866-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 54 | 24400 | 9855823 | 10435 | 34889 | 5.3416 | 1106 | 2309458 | 111201278 | 384782 |  |
 
 ### Steering
 

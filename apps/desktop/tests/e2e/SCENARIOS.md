@@ -148,9 +148,9 @@ Target journeys for the desktop e2e suite, derived from the app's real surfaces.
 | --- | --- | --- | --- |
 | 12.1 | Appearance theme → applies live + saves to gateway | P1 | ✅ (Light tab → `data-theme` + prefs PUT; accent control removed in #608) |
 | 12.2 | Match system | P2 | ✅ (standing Appearance tab → resolves OS scheme + `themeMode: system` PUT) |
-| 12.3 | Density / cards toggles | P2 | 🔶 density covered by 12.5; accent control removed in #608 |
+| 12.3 | Cards toggle | P2 | 🔶 covered by 12.5; density system removed in #672, accent control in #608 |
 | 12.4 | Providers page renders | P2 | ✅ (Agents nav → page title + active-agent switch) |
-| 12.5 | Settings persist across relaunch | P1 | ✅ (density compact survives reload) |
+| 12.5 | Settings persist across relaunch | P1 | ✅ (cards elevated survives reload) |
 
 ## 13. Gateways / profiles
 
