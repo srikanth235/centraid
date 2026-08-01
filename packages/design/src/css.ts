@@ -4,6 +4,7 @@
 // blocks as a single CSS string. Desktop injects this into a <style> tag
 // at preload time — the only token-related CSS it ships.
 
+import { paletteText } from "./color";
 import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
@@ -59,6 +60,11 @@ function themeProps(t: Theme): Record<string, string> {
     "--sidebar-blur": t.sidebarBlur,
     "--sidebar-divider": t.sidebarDivider,
   });
+  // The palette hues as TEXT. The `--c-*` hues themselves are icon fills and
+  // are theme-independent; this solved rung is not — it deepens on light and
+  // lifts on dark, so it belongs to the theme block rather than the static one.
+  for (const [k, v] of Object.entries(paletteText[t.kind]))
+    out[`--c-${k}-text`] = v;
   return out;
 }
 

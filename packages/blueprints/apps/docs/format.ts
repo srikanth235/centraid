@@ -163,8 +163,24 @@ export function isAudio(doc: DocFields): boolean {
 export function isMedia(doc: DocFields): boolean {
   return isVideo(doc) || isAudio(doc);
 }
+/**
+ * The FILL sibling of a kind's text rung (`--kind-pdf` → `--kind-pdf-fill`).
+ *
+ * `cv` is the kind as TEXT — a solved, deepened/lifted shade (see the two-rung
+ * note in Chrome.module.css). Painting a decorative bar or a tint with it makes
+ * the thumbnail read as a muddier version of its own label; worse, tinting a
+ * surface with the ink that lands on it walks the background toward the
+ * foreground and eats the contrast the solve just bought. Fills read the raw
+ * palette hue instead, which is what the palette is for.
+ */
+export function fillVar(cv: string): string {
+  return `${cv}-fill`;
+}
+
+/** A kind tint — always built from the FILL rung, never from the text one, so
+ *  a label painted `var(cv)` keeps its measured ratio on top of it. */
 export function tintBg(cv: string, pct: number): string {
-  return `color-mix(in oklab, var(${cv}) ${pct}%, transparent)`;
+  return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
 // The row list's empty-state copy, as plain data — one per nav/search/type

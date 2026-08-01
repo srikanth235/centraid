@@ -1,5 +1,6 @@
 // Quick-look overlay (#quickRoot root).
 import {
+  fillVar,
   fmtBytes,
   fmtFull,
   isAudio,
@@ -109,7 +110,7 @@ export function QuickLook({
           style={{
             height: "11px",
             width: "44%",
-            background: `var(${m.cv})`,
+            background: `var(${fillVar(m.cv)})`,
             opacity: 0.85,
             marginBottom: "22px",
           }}
@@ -139,7 +140,7 @@ export function QuickLook({
       <div className={styles.quickTop}>
         <span
           className={styles.quickBadge}
-          style={{ background: tintBg(m.cv, 20), color: `var(${m.cv})` }}
+          style={{ background: tintBg(m.cv, 12), color: `var(${m.cv})` }}
         >
           {m.label}
         </span>

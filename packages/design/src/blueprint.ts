@@ -17,6 +17,7 @@
 // identity overrides now sit in Chrome.module.css; this module generalizes the
 // shared formulas so portable surfaces don't re-derive them per app.
 
+import { paletteText } from "./color";
 import { spacing } from "./density";
 import { palette } from "./palette";
 import { radii } from "./radii";
@@ -64,6 +65,15 @@ function lightProps(): Record<string, string> {
   // what the shell emits (the old --icon-* alias is gone, #672).
   for (const [name, hex] of Object.entries(palette)) {
     props[`--c-${name}`] = hex;
+  }
+
+  // …and the same eight as TEXT. The hexes above are FILLS — `--c-amber` is
+  // 2.3:1 as `color:` on this surface — so an app that wants a hue on type
+  // reads `--c-<name>-text`, the rung `color.ts` solves per theme. Before this
+  // existed, `docs` hand-picked six darker literals for its file-kind labels
+  // and #686 replaced them with the raw fills, dropping five of six below AA.
+  for (const [name, hex] of Object.entries(paletteText.light)) {
+    props[`--c-${name}-text`] = hex;
   }
 
   Object.assign(props, {
@@ -166,7 +176,16 @@ function lightProps(): Record<string, string> {
  * the old compatibility aliases.
  */
 function darkProps(): Record<string, string> {
+  const paletteTextDark: Record<string, string> = {};
+  // The palette-text rung flips direction per theme: it DEEPENS the hue on a
+  // near-white surface and LIFTS it on a near-black one. The fills themselves
+  // (`--c-*`) are the same eight hexes in both themes, so only this rung is
+  // re-emitted here.
+  for (const [name, hex] of Object.entries(paletteText.dark)) {
+    paletteTextDark[`--c-${name}-text`] = hex;
+  }
   return {
+    ...paletteTextDark,
     // Default so a standalone dark app (no host wiring a real value) still
     // resolves every calc() below — docs/photos both set this same default.
     "--bg-l": "10%",

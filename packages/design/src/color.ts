@@ -15,6 +15,9 @@
 // client's barrel sits at oxlint's `no-barrel-file` module cap — a second new
 // module reachable from the package index trips that gate.
 
+import { palette } from "./palette";
+import type { ColorKey } from "./palette";
+
 export type Rgb = readonly [number, number, number];
 
 /** A parsed colour: opaque channels plus the alpha to composite them with. */
@@ -222,21 +225,116 @@ function accentFillShade(base: string): string {
   );
 }
 
-/** Walk `base` down its own hue in 1-point lightness steps and return the
- *  FIRST (lightest) shade whose `score` clears `floor` — staying as close to
- *  the owner's pick as the floor allows. */
+/** Walk `base` along its own hue in 1-point lightness steps — `step` picks the
+ *  direction — and return the FIRST shade whose `score` clears `floor`, i.e.
+ *  the one closest to the owner's pick that the floor allows. Hue and
+ *  saturation never move, so the result still reads as the same colour. */
+function walkUntil(
+  base: string,
+  score: (candidate: string) => number,
+  floor: number,
+  step: number
+): string {
+  const [h, s, l] = rgbToHsl(parseColor(base).rgb);
+  const limit = step < 0 ? 0.05 : 0.95;
+  for (
+    let lightness = l;
+    step < 0 ? lightness >= limit : lightness <= limit;
+    lightness += step
+  ) {
+    const candidate = toHex(hslToRgb(h, s, lightness));
+    if (score(candidate) >= floor) return candidate;
+  }
+  return toHex(hslToRgb(h, s, limit));
+}
+
+/** `walkUntil` in the deepening direction — the light ramp's solver. */
 function darkenUntil(
   base: string,
   score: (candidate: string) => number,
   floor: number = AA_BODY
 ): string {
-  const [h, s, l] = rgbToHsl(parseColor(base).rgb);
-  for (let lightness = l; lightness >= 0.05; lightness -= 0.01) {
-    const candidate = toHex(hslToRgb(h, s, lightness));
-    if (score(candidate) >= floor) return candidate;
-  }
-  return toHex(hslToRgb(h, s, 0.05));
+  return walkUntil(base, score, floor, -0.01);
 }
+
+// ── Palette hues as TEXT ───────────────────────────────────────────────────
+//
+// The eight `--c-*` hues are documented as icon FILLS, and they are tuned for
+// that: as `color:` on a near-white surface `--c-amber` is 2.3:1 and `--c-teal`
+// 3.2:1. `--accent-text` exists because the accent had exactly this problem;
+// the palette had no equivalent rung, so every surface that wanted a hue as
+// text hand-picked a darker literal of its own (the `docs` file-kind tints did
+// precisely that, and #686 removed those literals without noticing they were
+// doing solved-contrast work). This is that missing rung, solved by the same
+// machinery `--accent-text` uses, once per theme.
+
+/**
+ * The surface each theme's palette-text rung is solved against: the hardest
+ * one either emitter ships. Light is the shell's `--bg-sunken` (`#F0F1F3`) —
+ * the DARKEST light surface, so every lighter one gains. Dark is the blueprint
+ * `--bg-sunken` at the default `--bg-l: 10%` (`hsl(171 11% 19%)`) — the
+ * LIGHTEST dark surface, for the same reason in the other direction.
+ */
+const PALETTE_TEXT_SURFACE = {
+  dark: "#2b3634",
+  light: "#F0F1F3",
+} as const;
+
+/**
+ * …plus a wash of the hue itself. A palette hue on type is almost never on a
+ * bare surface: a coloured chip, badge, or thumbnail label sits on a weak tint
+ * of its OWN hue, which has already walked the background toward the ink. So
+ * the surface the rung is solved against is the hardest one WITH that wash on
+ * it, and a bare surface is then strictly easier. 12% is the strength the tint
+ * idiom uses (`tintBg()` in the `docs` app); it also moves the reference in the
+ * harder direction for both themes — darker under light ink's opposite, lighter
+ * under dark's — so it is a genuine worst case rather than an average.
+ */
+const PALETTE_TEXT_TINT = 0.12;
+
+/**
+ * Floor the palette-text rungs are solved to. 0.3 above the 4.5 body floor for
+ * the same reason `AA_FILL` is: the search walks 8-bit `hsl()` in 1-point
+ * steps, and that margin is what keeps a rounding trip from shipping a 4.49.
+ */
+const AA_PALETTE_TEXT = 4.8;
+
+/** The palette hue `base` deepened (light) or lifted (dark) until it clears
+ *  `AA_PALETTE_TEXT` on that theme's hardest surface under its own tint. */
+function paletteTextShade(base: string, kind: "light" | "dark"): string {
+  const surface = toHex(
+    composite(
+      { alpha: PALETTE_TEXT_TINT, rgb: parseColor(base).rgb },
+      parseColor(PALETTE_TEXT_SURFACE[kind]).rgb
+    )
+  );
+  return walkUntil(
+    base,
+    (candidate) => contrastRatio(candidate, surface),
+    AA_PALETTE_TEXT,
+    kind === "light" ? -0.01 : 0.01
+  );
+}
+
+function paletteTextShades(kind: "light" | "dark"): Record<ColorKey, string> {
+  return Object.fromEntries(
+    Object.entries(palette).map(([name, hex]) => [
+      name,
+      paletteTextShade(hex, kind),
+    ])
+  ) as Record<ColorKey, string>;
+}
+
+/**
+ * Every palette hue as a legible `color:`, per theme — emitted as
+ * `--c-<name>-text` by both emitters. A surface that needs a palette hue on
+ * type reads this instead of `--c-<name>`, exactly as it reads `--accent-text`
+ * rather than `--accent`.
+ */
+export const paletteText = {
+  dark: paletteTextShades("dark"),
+  light: paletteTextShades("light"),
+} as const;
 
 /** Derive the full four-value ramp for an accent base colour. */
 export function accentRamp(base: string): AccentRamp {

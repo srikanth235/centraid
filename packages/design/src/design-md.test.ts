@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
+import { paletteText } from "./color.js";
 import { spacing } from "./density.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
@@ -186,7 +187,7 @@ describe("DESIGN.md front matter", () => {
       expect(scalar(colors, `c-${name}`)).toBe(hex);
     }
     const listed = Object.keys(colors)
-      .filter((k) => k.startsWith("c-"))
+      .filter((k) => k.startsWith("c-") && !k.includes("-text"))
       .map((k) => k.slice(2));
     expect(listed.sort()).toStrictEqual(Object.keys(palette).sort());
     // and the prose still names them alongside their hexes
@@ -195,6 +196,41 @@ describe("DESIGN.md front matter", () => {
         `${name} ${hex}`
       );
     }
+  });
+
+  test("every palette hue's solved TEXT rung is carried, per theme", () => {
+    // The fills above are theme-independent; this rung is not, and neither
+    // half is derivable from the other by a checker reading the file — so both
+    // are written out, the same way `success` / `success-dark` are.
+    for (const [name, hex] of Object.entries(paletteText.light)) {
+      expect(scalar(colors, `c-${name}-text`), `c-${name}-text`).toBe(hex);
+    }
+    for (const [name, hex] of Object.entries(paletteText.dark)) {
+      expect(scalar(colors, `c-${name}-text-dark`), `c-${name}-text-dark`).toBe(
+        hex
+      );
+    }
+    const listed = Object.keys(colors).filter(
+      (k) => k.startsWith("c-") && k.includes("-text")
+    );
+    expect(listed).toHaveLength(Object.keys(palette).length * 2);
+    // and the prose still carries the measured grid, not just the values —
+    // the whole point of the rung is the number beside it.
+    for (const name of Object.keys(palette)) {
+      // The prose carries one table row per hue: both halves plus the ratios
+      // they were measured at. Column padding is the formatter's business, so
+      // the row is matched by its contents rather than its spacing.
+      const row = body
+        .split("\n")
+        .filter(
+          (line) => line.includes(`\`--c-${name}\``) && line.includes("|")
+        )
+        .join("\n");
+      expect(row, `--c-${name} has no row in the Colors prose`).not.toBe("");
+      expect(row).toContain(paletteText.light[name as keyof typeof palette]);
+      expect(row).toContain(paletteText.dark[name as keyof typeof palette]);
+    }
+    expect(body).toContain("--c-<name>-text");
   });
 
   test("light-theme surfaces and ink match themes/centraid.ts", () => {

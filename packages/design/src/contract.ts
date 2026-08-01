@@ -27,6 +27,9 @@ const shellStatic = [
 ] as const;
 
 const surface = [
+  // The palette hues as `color:` — solved per theme, unlike the `--c-*` fills
+  // above, which are theme-independent. See `paletteText` in color.ts.
+  ...Object.keys(palette).map((key) => `--c-${key}-text`),
   "--accent",
   "--accent-deep",
   "--accent-light",
@@ -70,6 +73,7 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
   "--font-title",
   "--mono",
   ...Object.keys(palette).map((key) => `--c-${key}`),
+  ...Object.keys(palette).map((key) => `--c-${key}-text`),
   "--accent",
   "--on-accent",
   "--_accent",

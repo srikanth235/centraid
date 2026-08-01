@@ -382,6 +382,154 @@ describe("blueprint token contrast floors", () => {
     });
   });
 
+  // ── The palette hues as TEXT ────────────────────────────────────────────
+  //
+  // `--c-*` are icon FILLS. Painted as `color:` on a near-white surface they
+  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — which is why `docs`
+  // hand-picked six deeper literals for its file-kind labels, and why #686
+  // silently broke five of six by replacing those literals with the raw fills.
+  // `--c-<name>-text` is the solved rung that closes the gap for every surface,
+  // and this grid is what stops it drifting back.
+  describe("every palette hue has a legible TEXT rung", () => {
+    // A kind label sits on a weak tint of its OWN hue, so the surface has
+    // already moved toward the ink. `docs` paints 12%; measuring the rung on a
+    // plain card would miss exactly the case the app ships.
+    const TINT = 0.12;
+    // The counterpart of the fills' `RECOGNISABLE` cap: a rung that has been
+    // walked past this has stopped being its hue and become near-black (light)
+    // or near-white (dark), which defeats colour-coding six file kinds.
+    const RECOGNISABLE = 12;
+
+    /** `color-mix(in oklab, C p%, transparent)` over `bg` — the alpha
+     *  composite a browser performs for `tintBg()`. */
+    const tint = (hue: string, bg: string): string => {
+      const fg = parseColor(hue).rgb;
+      const back = parseColor(bg).rgb;
+      return toHex(
+        [0, 1, 2].map((i) => {
+          const f = fg[i] ?? 0;
+          const b = back[i] ?? 0;
+          return f * TINT + b * (1 - TINT);
+        }) as unknown as [number, number, number]
+      );
+    };
+
+    /** Perceptual distance in oklab — the space the mixes are already done in,
+     *  and the only one where "these two look the same" is a number. */
+    const distance = (a: string, b: string): number => {
+      const [al, aa, ab] = rgbToOklab(a);
+      const [bl, ba, bb] = rgbToOklab(b);
+      return Math.hypot(al - bl, aa - ba, ab - bb);
+    };
+
+    describe.each([
+      ["light", light, {}, ["--bg-elev", "--bg-sunken"]],
+      ["dark", dark, { "--bg-l": "10%" }, ["--bg-elev", "--bg-sunken"]],
+    ] as const)("%s", (theme, tokens, extra, surfaceNames) => {
+      const scope = { "--app-hue": HUE, ...extra };
+      const surfaces = surfaceNames
+        .map((key) => evalColorMix(resolve(tokens[key] ?? "", scope)))
+        .filter(measurable);
+
+      test.each(Object.entries(palette))(
+        `${theme}: --c-%s-text clears AA on every surface it lands on`,
+        (name, fillHex) => {
+          const value = tokens[`--c-${name}-text`];
+          expect(value, `--c-${name}-text is emitted`).toBeDefined();
+          const ink = evalColorMix(resolve(value ?? "", scope));
+          expect(surfaces).toHaveLength(surfaceNames.length);
+          for (const surface of surfaces) {
+            expect(
+              contrastRatio(ink, surface),
+              `${theme} --c-${name}-text on ${surface}`
+            ).toBeGreaterThanOrEqual(AA_BODY);
+            // …and on a 12% tint of its own FILL over that surface, which is
+            // the surface `docs` actually paints the label on.
+            expect(
+              contrastRatio(ink, tint(fillHex, surface)),
+              `${theme} --c-${name}-text on its own ${TINT * 100}% tint`
+            ).toBeGreaterThanOrEqual(AA_BODY);
+          }
+          expect(
+            Math.max(...surfaces.map((s) => contrastRatio(ink, s))),
+            `${theme} --c-${name}-text still reads as its hue`
+          ).toBeLessThan(RECOGNISABLE);
+        }
+      );
+
+      test(`${theme}: the rung is its fill's hue, moved only in lightness`, () => {
+        // "Darken it until it passes" is only safe while hue and saturation
+        // hold: the moment the solver is allowed to desaturate, eight hues
+        // converge on one muddy grey that clears every floor and codes
+        // nothing. The walk moves lightness ONLY, and in the direction the
+        // theme requires — deeper under a light surface, lifted under a dark
+        // one. (It cannot promise any two hues stay apart: `ochre` is `amber`
+        // at lower chroma, and solving both to one floor converges them by
+        // construction. That is a palette property, so the set that has to be
+        // told apart is gated where it is chosen — see the `docs` app's
+        // `kind-colours.test.ts` in packages/blueprints.)
+        for (const [name, fillHex] of Object.entries(palette)) {
+          const ink = evalColorMix(
+            resolve(tokens[`--c-${name}-text`] ?? "", scope)
+          );
+          const [fillHue, fillSat, fillLight] = rgbToHsl(
+            parseColor(fillHex).rgb
+          );
+          const [hue, sat, lightness] = rgbToHsl(parseColor(ink).rgb);
+          // Tolerances are 8-bit re-quantisation slack, not licence to drift:
+          // the walk re-rounds `hsl()` to a hex at every step.
+          expect(
+            Math.abs(hue - fillHue),
+            `${theme} --c-${name}-text hue`
+          ).toBeLessThan(2);
+          expect(
+            Math.abs(sat - fillSat),
+            `${theme} --c-${name}-text saturation`
+          ).toBeLessThan(0.03);
+          // Signed travel, so one assertion covers both directions: the rung
+          // must move AWAY from the theme's surface, never toward it.
+          const travel =
+            theme === "light" ? fillLight - lightness : lightness - fillLight;
+          expect(
+            travel,
+            `${theme} --c-${name}-text moved the wrong way`
+          ).toBeGreaterThanOrEqual(0);
+        }
+      });
+
+      test(`${theme}: the file-kind hues stay apart as text`, () => {
+        // A colour code is only a code while its members are TELLABLE APART,
+        // and solving to a shared contrast floor pulls hues together — the
+        // failure this guards is silent, because every rung still passes AA.
+        // The set is the six the `docs` app colour-codes file kinds with
+        // (`kind-colours.test.ts` in packages/blueprints pins that binding).
+        // `ochre` is deliberately NOT in it: it is `amber` at lower chroma, so
+        // the two converge from 0.125 apart as fills to 0.028 as light text.
+        const KINDS = [
+          "rose",
+          "teal",
+          "indigo",
+          "forest",
+          "amber",
+          "violet",
+        ] as const;
+        const rungs = KINDS.map((name) => ({
+          hex: evalColorMix(resolve(tokens[`--c-${name}-text`] ?? "", scope)),
+          name,
+        }));
+        for (const a of rungs) {
+          for (const b of rungs) {
+            if (a.name >= b.name) continue;
+            expect(
+              distance(a.hex, b.hex),
+              `${theme} ${a.name} vs ${b.name} collapsed`
+            ).toBeGreaterThan(0.035);
+          }
+        }
+      });
+    });
+  });
+
   test("the default app hue is the brand hue", () => {
     // 222 (ink-blue) was the pre-teal default; it tinted every unbranded app's
     // greys, ink and shadows toward a second, competing brand.

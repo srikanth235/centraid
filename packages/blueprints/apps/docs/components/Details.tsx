@@ -150,7 +150,7 @@ export function Details({
           </button>
         </div>
         <div className={styles.detailsBody}>
-          <div className={styles.hero} style={{ background: tintBg(m.cv, 16) }}>
+          <div className={styles.hero} style={{ background: tintBg(m.cv, 12) }}>
             {isImage(doc) ? (
               <img src={doc.content_uri} alt="" />
             ) : isVideo(doc) && doc.poster_uri ? (

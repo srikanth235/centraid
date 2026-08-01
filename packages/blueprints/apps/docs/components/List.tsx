@@ -75,7 +75,7 @@ export function ListRow({
       <button
         type="button"
         className={styles.badge}
-        style={{ background: tintBg(m.cv, 16) }}
+        style={{ background: tintBg(m.cv, 12) }}
         aria-label={`Preview ${title}`}
         onClick={(e) => {
           e.stopPropagation();

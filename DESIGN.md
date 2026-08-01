@@ -33,6 +33,27 @@ colors:
   c-teal: "#2EA098"
   c-violet: "#7C5BD9"
 
+  # …and the same eight as TEXT. The fills above are 2.2:1 (`c-amber`) to
+  # 4.8:1 (`c-indigo`) as `color:` on a near-white surface, so a hue on type
+  # reads this solved rung instead — `--c-<name>-text`, deepened on light and
+  # lifted on dark by the same solver `accent-text` uses.
+  c-amber-text: "#8f5611"
+  c-forest-text: "#46693c"
+  c-indigo-text: "#3452d8"
+  c-ochre-text: "#83592e"
+  c-rose-text: "#b91d3a"
+  c-slate-text: "#535d71"
+  c-teal-text: "#1f6d67"
+  c-violet-text: "#6842d3"
+  c-amber-text-dark: "#eba653"
+  c-forest-text-dark: "#8eb881"
+  c-indigo-text-dark: "#97a6eb"
+  c-ochre-text-dark: "#d0a679"
+  c-rose-text-dark: "#ee90a2"
+  c-slate-text-dark: "#a3abbb"
+  c-teal-text-dark: "#38c4ba"
+  c-violet-text-dark: "#b4a1e9"
+
   # Light theme — surfaces, ink, hairlines.
   light-bg: "#FCFCFC"
   light-bg-app: "#FFFFFF"
@@ -239,6 +260,70 @@ components:
     backgroundColor: "{colors.c-teal}"
   kit-avatar-violet:
     backgroundColor: "{colors.c-violet}"
+  c-amber-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-amber-text}"
+    typography: "{typography.body-strong}"
+  c-forest-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-forest-text}"
+    typography: "{typography.body-strong}"
+  c-indigo-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-indigo-text}"
+    typography: "{typography.body-strong}"
+  c-ochre-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-ochre-text}"
+    typography: "{typography.body-strong}"
+  c-rose-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-rose-text}"
+    typography: "{typography.body-strong}"
+  c-slate-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-slate-text}"
+    typography: "{typography.body-strong}"
+  c-teal-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-teal-text}"
+    typography: "{typography.body-strong}"
+  c-violet-on-elev:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.c-violet-text}"
+    typography: "{typography.body-strong}"
+  c-amber-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-amber-text-dark}"
+    typography: "{typography.body-strong}"
+  c-forest-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-forest-text-dark}"
+    typography: "{typography.body-strong}"
+  c-indigo-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-indigo-text-dark}"
+    typography: "{typography.body-strong}"
+  c-ochre-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-ochre-text-dark}"
+    typography: "{typography.body-strong}"
+  c-rose-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-rose-text-dark}"
+    typography: "{typography.body-strong}"
+  c-slate-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-slate-text-dark}"
+    typography: "{typography.body-strong}"
+  c-teal-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-teal-text-dark}"
+    typography: "{typography.body-strong}"
+  c-violet-on-elev-dark:
+    backgroundColor: "{colors.dark-bg-elev}"
+    textColor: "{colors.c-violet-text-dark}"
+    typography: "{typography.body-strong}"
   kit-chart-series:
     backgroundColor: "{colors.accent}"
   kit-media-stage:
@@ -388,6 +473,25 @@ Eight saturated hues that read on graphite, exposed as `--c-<name>`: `amber #E89
 `kit-chart-series` is the same kind of entry: `--accent` painted as an SVG mark (`.kit-chart-barrect`, `.kit-chart-line`), never as a text surface. `kit-media-stage` is the one place `--on-accent` is recorded — a photo lightbox or slideshow is a fixed near-black stage in both themes, so its chrome takes the fixed white rather than the theme's inverse ink.
 
 These are icon fills, not text surfaces — the `kit-avatar-*` component entries carry `backgroundColor` only. An avatar that must render initials uses `kit-avatar-fallback` (slate + inverse ink), the one pairing tuned to clear AA.
+
+**A palette hue on type reads `--c-<name>-text`, never `--c-<name>`.** As `color:` on a near-white surface the fills measure **2.2:1** (`--c-amber`) to 4.8:1 (`--c-indigo`) — the same problem `--accent-text` exists to solve for the accent, and until #686 the palette had no equivalent rung. So every surface that wanted a hue on type hand-picked a deeper literal of its own, and when the #686 burn-down replaced those literals with the raw fills the contrast they had been quietly carrying went with them: the `docs` file-kind labels fell from 4.80–5.82:1 to **2.24–4.71:1**, five of six below AA.
+
+`--c-<name>-text` is that missing rung, solved by the same machinery as `--accent-text` (`src/color.ts`) and emitted by **both** emitters, per theme — deepened under a light surface, lifted under a dark one, hue and saturation untouched. It is solved against the hardest surface either emitter ships _with a 12% wash of the hue itself on it_, because a palette hue on type is almost never on a bare surface: a coloured chip, badge, or thumbnail label sits on a weak tint of its own hue, which has already walked the background toward the ink. A bare surface is then strictly easier.
+
+| Hue | Light text | worst | on its 12% tint | Dark text | worst | on its 12% tint |
+| --- | --- | --- | --- | --- | --- | --- |
+| `--c-amber` | `#8f5611` | 5.30 | 4.89 | `#eba653` | 6.02 | 4.90 |
+| `--c-forest` | `#46693c` | 5.55 | 4.89 | `#8eb881` | 5.55 | 4.86 |
+| `--c-indigo` | `#3452d8` | 5.56 | 4.81 | `#97a6eb` | 5.34 | 4.82 |
+| `--c-ochre` | `#83592e` | 5.41 | 4.80 | `#d0a679` | 5.60 | 4.89 |
+| `--c-rose` | `#b91d3a` | 5.63 | 4.95 | `#ee90a2` | 5.44 | 4.83 |
+| `--c-slate` | `#535d71` | 5.86 | 5.01 | `#a3abbb` | 5.42 | 4.93 |
+| `--c-teal` | `#1f6d67` | 5.40 | 4.81 | `#38c4ba` | 5.82 | 4.94 |
+| `--c-violet` | `#6842d3` | 5.62 | 4.85 | `#b4a1e9` | 5.49 | 4.98 |
+
+The `c-<hue>-on-elev` / `c-<hue>-on-elev-dark` component entries record the canonical pairing — the rung on a raised card — the same way `kit-avatar-*` records the fills' pairing.
+
+The solve moves **lightness only**. That is the guard against "darken it until it passes": let it desaturate and eight hues converge on one grey that clears every floor and codes nothing. What it cannot promise is that any two hues stay apart — `ochre` is `amber` at lower chroma, so solving both to one floor collapses them from 0.125 to 0.028 in oklab, and a surface that colour-codes a _set_ must pick hues that survive it (the `docs` app codes six file kinds and deliberately carries no amber/ochre pair).
 
 ### Surfaces and ink
 

@@ -35,6 +35,7 @@
 - **`EASE` rehomed, `motion.ts` deleted.** A dedicated module for one constant pushed `packages/client/src/index.ts` to 101 modules and tripped oxlint `no-barrel-file` (threshold 100). Rather than weaken the rule, `EASE` moved into `packages/design/src/themes/shared.ts` beside the other measured design constants — no new graph node, still exactly one spelling of the curve. `DESIGN.md` updated to point at the new home. `ACCENT_DEEP_DARK` dropped from the `themes/index.ts` re-export (knip: consumed only inside `themes/centraid.ts`).
 - **Visual QA found what the tests could not.** Every gate was green and CI fully passed, but rendering the real emitted tokens against the real `kit.css` across both themes and all eight palette hues exposed a regression F3 had introduced: eleven app rules across six apps filled with `--accent-deep` but inked with the theme-stable `--on-accent`. Because F3 *lifts* `--accent-deep` on the dark ramp, those became white-on-near-white. The numeric grid never caught it because it measured `kit-btn-primary`, not app-local rules that re-declare the same pairing. Fixed in `agenda`, `docs`, `notes`, `photos`, `tasks`, and their components, and pinned by a new `token-purity` test so the pairing cannot return. Lesson recorded: a token change needs a rendered pass, not only a measured one.
 - **Latent silent-failure class found and pinned, not fixed.** Auditing every `var()` in app CSS surfaced 12 fallback-less references that resolve to nothing (`--accent-deep-fg` in seven `tasks` files, `--r-lg` in three — the blueprint contract spells radii `--r-sm/--r-md/--r-card/--r-pill`, with no `--r-lg` — plus `--acc`, `--bg-l`, `--t-label`). Each silently drops its declaration. All 12 are byte-identical on `origin/main`, so this PR neither introduced nor fixed them; deliberately left as recorded debt rather than opportunistically changing visuals in a PR already this large. Pinned by `UNRESOLVED_VAR_DEBT` so the class can only shrink.
+- **The burn-down silently dropped SOLVED contrast values, and the contract had no rung to replace them.** Removing `docs`' six hand-picked file-kind hexes in favour of the raw `--c-*` palette hues looked like pure literal-elimination — the point of A2 — but those literals were doing solved-contrast work. `--c-*` is documented in `DESIGN.md` as **icon fills**, and as `color:` on a near-white app surface the fills measure 2.11–4.43:1; five of the six kinds fell below AA (`--kind-pdf` 4.74 → 2.11). The accent already had a solved answer to exactly this (`--accent-text` via `accentTextShade()`); the palette had none, which is *why* the app hand-picked in the first place. The fix closes the gap generally rather than restoring the literals: `packages/design/src/color.ts` now solves a **`--c-<name>-text`** rung per hue per theme with the same walk (`walkUntil`, lightness only, hue and saturation untouched), and **both** emitters publish it, so any surface wanting a palette hue on type has a correct token instead of a hand-pick. `packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole. Two consequences recorded: (a) the rung is solved against the hardest surface either emitter ships *plus a 12% wash of the hue itself*, because a hue on type almost always sits on a weak tint of itself; (b) the solve **cannot** keep two hues apart — `ochre` is `amber` at lower chroma, so solving both to one floor collapses them from 0.125 to 0.028 in oklab — so `docs` moved `pdf` to rose and `slide` to amber, which is also the conventional signal for both kinds.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -250,6 +251,24 @@
 
 - **Unresolved-var gate** — new test in `packages/blueprints/src/token-purity.test.ts` ("resolves every fallback-less var() an app references") resolving names against the contract, `packages/design/kit/kit.css`, and the app's own stylesheets; the 12 known-broken references are pinned in `UNRESOLVED_VAR_DEBT` in `packages/blueprints/src/token-purity-allowlist.ts`.
 
+- **Palette-hue-as-text rung (`--c-<name>-text`) — closes the gap the burn-down exposed**
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/color.ts` — `darkenUntil()` generalised to `walkUntil(base, score, floor, step)` (deepen or lift, lightness only); new `PALETTE_TEXT_SURFACE` (light `#F0F1F3` = the darkest light surface either emitter ships; dark `#2b3634` = the lightest dark one), `PALETTE_TEXT_TINT = 0.12` self-wash allowance, `AA_PALETTE_TEXT = 4.8`, `paletteTextShade()`, and the exported `paletteText` map.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/css.ts` — `themeProps()` emits `--c-<name>-text` from `paletteText[t.kind]`, so the shell gets both halves.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/blueprint.ts` — `lightProps()` / `darkProps()` emit the light and dark halves into the `:root`, `[data-theme='dark']`, and `prefers-color-scheme` blocks.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/contract.ts` — eight `--c-<name>-text` names added to `SHELL_TOKEN_CONTRACT` (theme block, not static) and to `BLUEPRINT_TOKEN_CONTRACT`.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/DESIGN.md` — front matter gains `c-<name>-text` / `c-<name>-text-dark` (16 values) and 16 `c-<hue>-on-elev[-dark]` component entries recording the canonical pairing; the "App-icon palette" prose gains the rule ("a palette hue on type reads `--c-<name>-text`, never `--c-<name>`"), the measured grid, and the lightness-only / cannot-keep-hues-apart caveat.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/design-md.test.ts` — palette test no longer treats `-text` keys as strays; new test pins all 16 hexes to `paletteText` and requires the prose row for each hue to carry both halves.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/contrast.test.ts` — new `every palette hue has a legible TEXT rung` grid (8 hues × 2 themes): AA on every surface AND on a 12% self-tint of its own fill, a `RECOGNISABLE < 12` cap, a hue/saturation-preservation + direction-of-travel law, and an oklab separation floor for the six file-kind hues.
+- **`docs` rebound to the solved rung, with fills split out**
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/Chrome.module.css` — `--kind-<k>` now reads `--c-<hue>-text` and a new `--kind-<k>-fill` reads the raw `--c-<hue>`; `pdf` → rose and `slide` → amber (the amber/ochre pair collapses under the solve); the whole app-local dark block for the kind rungs is **deleted** — the design package emits both halves.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/format.ts` — new `fillVar()`; `tintBg()` now mixes the FILL rung, so a label painted `var(cv)` keeps its measured ratio on the tint behind it.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/Grid.tsx`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/QuickLook.tsx` — the four decorative `background: var(${m.cv})` marks read `fillVar(m.cv)`.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/Grid.tsx`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/Details.tsx`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/List.tsx`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/QuickLook.tsx` — tint strengths unified at 12% (were 15/16/16/20), the strength the rung is solved for.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/Grid.module.css` — `.thumbLabel`'s `opacity: 0.9` removed; it was an unmeasured ~0.6 off the label's ratio, applied after the token layer had solved it.
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/kind-colours.test.ts` — **new**: pins the binding the contrast grid assumes (text rung for text, fill rung for fills, same hue per kind, six distinct hues, no `ochre`, no app-local dark re-declaration, `tintBg()` never mixes the text rung).
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/manifest.json` — regenerated (picks up the new test file, matching how the other apps' test files are already listed).
+
+
 ## Out of scope
 
 - Fixing the 12 pre-existing unresolved `var()` references. They are pinned and visible; each needs a per-site design call (what should `--r-lg` have been?), which is a separate change.
@@ -381,6 +400,120 @@ $ bun run lint && bun run format      # clean; format left the test file unchang
 
 One mutant is left alive deliberately: `src/tile.ts:71:13` `HEX_RE.exec(hex)?.groups?.digits` → `?.groups.digits`. It is EQUIVALENT, not a gap — the leading `?.` already short-circuits the whole chain when `exec` returns `null`, and a successful `RegExpExecArray` from a named-group pattern always has `.groups`, so the second `?.` can never be the thing that prevents a throw. No behaviour distinguishes the two programs. The non-hex fallback path it guards is already covered by "a non-hex colour passes through instead of producing NaN paint".
 
+### Palette-hue-as-text rung (`--c-<name>-text`) + `docs` file-kind regression
+
+`docs` file-kind labels as TEXT. "Ratio" is the WORST case across every surface the
+label lands on: `--bg-elev`, `--bg`, `--bg-sunken`, *and* the self-tint painted behind
+it. The "before #686" column is measured on that column's own shipped tint (15%) and
+includes the `.thumbLabel` fade the app also shipped.
+
+```
+LIGHT
+| kind  | before #686 (hand-picked) | ratio | #686 regression (raw fill) | ratio     | FINAL (solved rung) | ratio |
+|-------|---------------------------|-------|----------------------------|-----------|---------------------|-------|
+| pdf   | #c2410c                   | 4.74  | #E89A3C                    | 2.11 FAIL | #b91d3a             | 5.10  |
+| image | #0e7490                   | 4.91  | #2EA098                    | 2.92 FAIL | #1f6d67             | 4.99  |
+| doc   | #4058cf                   | 5.47  | #4E68DD                    | 4.43 FAIL | #3452d8             | 4.95  |
+| sheet | #4e7a40                   | 4.60  | #5C8A4E                    | 3.70 FAIL | #46693c             | 5.04  |
+| slide | #9a6528                   | 4.51  | #B47B3F                    | 3.29 FAIL | #8f5611             | 5.03  |
+| media | #7c3aed                   | 5.22  | #7C5BD9                    | 4.42 FAIL | #6842d3             | 5.00  |
+
+DARK  (the 66% mix to --text mostly held; the light ramp is where the regression bit)
+| kind  | #686 regression (66% mix) | ratio | FINAL (solved rung) | ratio |
+|-------|---------------------------|-------|---------------------|-------|
+| pdf   | #ecb982                   | 7.04  | #ee90a2             | 4.83  |
+| image | #7abcb5                   | 5.77  | #38c4ba             | 4.94  |
+| doc   | #7f99e7                   | 4.53  | #97a6eb             | 4.82  |
+| sheet | #8cad84                   | 5.02  | #8eb881             | 4.86  |
+| slide | #c9a37d                   | 5.37  | #eba653             | 4.90  |
+| media | #9f91e5                   | 4.56  | #b4a1e9             | 4.98  |
+
+Whole contract, both themes (worst surface / worst self-tint), from the emitted CSS:
+| hue          | light text | worst | on 12% tint | dark text | worst | on 12% tint |
+|--------------|------------|-------|-------------|-----------|-------|-------------|
+| --c-amber    | #8f5611    | 5.30  | 4.89        | #eba653   | 6.02  | 4.90        |
+| --c-forest   | #46693c    | 5.55  | 4.89        | #8eb881   | 5.55  | 4.86        |
+| --c-indigo   | #3452d8    | 5.56  | 4.81        | #97a6eb   | 5.34  | 4.82        |
+| --c-ochre    | #83592e    | 5.41  | 4.80        | #d0a679   | 5.60  | 4.89        |
+| --c-rose     | #b91d3a    | 5.63  | 4.95        | #ee90a2   | 5.44  | 4.83        |
+| --c-slate    | #535d71    | 5.86  | 5.01        | #a3abbb   | 5.42  | 4.93        |
+| --c-teal     | #1f6d67    | 5.40  | 4.81        | #38c4ba   | 5.82  | 4.94        |
+| --c-violet   | #6842d3    | 5.62  | 4.85        | #b4a1e9   | 5.49  | 4.98        |
+
+DISTINGUISHABILITY (the six file kinds, after solving)
+light: pdf #b91d3a h349deg  image #1f6d67 h175deg  doc #3452d8 h229deg
+       sheet #46693c h107deg  slide #8f5611 h33deg  media #6842d3 h256deg
+       closest pair in oklab: image/sheet = 0.064   (gate > 0.035)
+dark:  pdf #ee90a2 h349deg  image #38c4ba h176deg  doc #97a6eb h229deg
+       sheet #8eb881 h106deg  slide #eba653 h33deg  media #b4a1e9 h256deg
+       closest pair in oklab: doc/media = 0.040    (gate > 0.035)
+The solve moves lightness only, so every rung keeps its fill's hue to <2deg and its
+saturation to <0.03 (pinned as a law, not a spot check). Amber/ochre DO collapse
+(0.125 -> 0.028 light); `docs` therefore carries rose+amber, not amber+ochre.
+
+BADGES AND FILLS
+The one text-on-solid-badge site is QuickLook's kind badge, which is `background:
+tintBg(cv, 12)` + `color: var(cv)` -- i.e. the "on 12% tint" column above, 4.80-5.01.
+The remaining `var(--kind-*-fill)` marks are pure decoration carrying no information
+(a mock page's header bar at .85 over white, 2.03-3.66; the two ruled lines under a
+thumbnail label at .18/.14 over the tint, ~1.2). They are unchanged in role from what
+shipped; no text or state depends on them.
+```
+
+Gates:
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  17 passed (17)
+      Tests  227 passed (227)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css - 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     zero regressions
+
+$ bun run lint:design-md
+  "summary": { "errors": 0, "warnings": 0, "infos": 1 }
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint          # oxlint --deny-warnings, clean
+$ bun run format        # oxfmt, applied
+$ bun run knip          # exit 0
+```
+
+Proof of red (each sabotage applied, run, reverted):
+
+```
+1. bind --kind-pdf back to the raw fill (the exact #686 regression)
+   -> --kind-pdf: expected 'var(--c-rose)' to match /^var\(--c-[a-z]+-text\)$/u
+      2 failed | 14 passed
+2. put the collapsing amber/ochre pair back
+   -> expected [ 'rose', 'teal', 'indigo', ... ] to not include 'ochre'
+      1 failed | 15 passed
+3. tint from the TEXT rung instead of the fill rung
+   -> expected 'color-mix(in oklab, var(--kind-pdf) 1...' to contain 'var(--kind-pdf-fill)'
+      1 failed | 15 passed
+4. AA_PALETTE_TEXT 4.8 -> 1 (emit the raw fill as the text rung)
+   -> dark --c-slate-text on hsl(171 12% 15%): expected 2.55 to be >= 4.5  (+15 more)
+      16 failed | 37 passed
+5. PALETTE_TEXT_TINT 0.12 -> 0 (drop the self-tint allowance)
+   -> dark --c-teal-text on its own 12% tint: expected 4.17 to be >= 4.5  (+12 more)
+      13 failed | 40 passed
+6. let the solver desaturate (s -> s * 0.5) instead of only moving lightness
+   -> light --c-amber-text saturation: expected 0.392 to be less than 0.03
+   -> dark indigo vs violet collapsed: expected 0.023 to be greater than 0.035
+      3 failed | 50 passed
+7. drift DESIGN.md off the TS source (c-amber-text -> the raw fill hex)
+   -> c-amber-text: expected '#E89A3C' to be '#8f5611'
+      1 failed | 16 passed
+```
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -434,6 +567,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785615525-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 966 | 398589 | 234 | 1202 | 0.2112 | 1115 | 1593720 | 135234416 | 466450 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
 | claude-code-ab8b1729-92f-1785615609-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 845 | 399555 | 254 | 1101 | 0.2114 | 1117 | 1594565 | 135633971 | 466704 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
 | claude-code-ab8b1729-92f-1785615967-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 12 | 1739 | 2406625 | 1014 | 2765 | 1.2396 | 1129 | 1596304 | 138040596 | 467718 |  |
+| claude-code-ab8b1729-92f-1785618533-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 27001 | 10243373 | 20804 | 47855 | 5.8108 | 1179 | 1623305 | 148283969 | 488522 | fix(design): solve a text-legible rung per palette hue (#686)The burn-down repla |
 
 ### Steering
 
