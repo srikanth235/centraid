@@ -121,7 +121,7 @@
 .tabBadge {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 999px;
@@ -152,7 +152,7 @@
    top edge so the panel itself reads up/down at a glance. */
 .hero {
   position: relative;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background:
     linear-gradient(
@@ -348,7 +348,7 @@
 .beat {
   flex: 1 1 0;
   max-width: 7px;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--r-xs) var(--r-xs) 0 0;
 }
 .beat[data-ok="true"] {
   height: 100%;
@@ -837,7 +837,7 @@
 
 /* Panel — shared card shell (Insights family). */
 .panel {
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;

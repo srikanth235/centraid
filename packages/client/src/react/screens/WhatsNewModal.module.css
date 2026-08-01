@@ -134,7 +134,7 @@
 .title {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 650;
+  font-weight: 600;
   font-size: 16px;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -151,7 +151,7 @@
   color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 6%, transparent);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 .installed {
@@ -159,7 +159,7 @@
   font-weight: 600;
   color: white;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 .pre {
@@ -167,7 +167,7 @@
   font-weight: 600;
   color: var(--text);
   background: color-mix(in oklab, var(--c-amber) 26%, transparent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 
@@ -186,7 +186,7 @@
 .notes h4 {
   margin: 14px 0 6px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--text-soft) 85%, transparent);
@@ -206,13 +206,13 @@
 }
 .notes strong {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 .notes code {
   font-family: var(--font-mono);
   font-size: 0.9em;
   background: color-mix(in oklab, var(--text) 7%, transparent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
 }
 .notes a {

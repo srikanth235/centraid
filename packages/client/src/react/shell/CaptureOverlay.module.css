@@ -52,7 +52,7 @@
 .kinds button {
   min-height: 38px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -80,7 +80,7 @@
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   padding: 10px 12px;
@@ -111,7 +111,7 @@
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 13%, var(--bg));
   color: var(--accent);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .hint,
@@ -138,7 +138,7 @@
   gap: 10px 16px;
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   color: var(--text-soft);
 }
 

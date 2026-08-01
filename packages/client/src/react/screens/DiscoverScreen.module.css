@@ -96,7 +96,7 @@
 .grid[data-layout="rows"] .cardIcon {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .grid[data-layout="rows"] .cardIcon svg {
   width: 19px;

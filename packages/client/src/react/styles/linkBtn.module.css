@@ -5,7 +5,7 @@
   font-size: 12px;
   font-weight: 500;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   cursor: pointer;
   transition:
     border-color 120ms,

@@ -8,7 +8,7 @@
   gap: 12px;
   padding: 14px;
   border: 0.5px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .pairLead {
@@ -62,7 +62,7 @@
   margin: 0;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .grantRow {
   display: flex;
@@ -166,7 +166,7 @@
   width: 176px;
   height: 176px;
   padding: 6px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--line);
   background: var(--text);
 }

@@ -7,7 +7,7 @@
 .tmplPreviewIcon {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   display: grid;
   place-items: center;
   color: var(--text);

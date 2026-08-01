@@ -89,7 +89,7 @@
 .segB {
   padding: 5px 13px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: none;
   font: inherit;
   font-size: 12px;

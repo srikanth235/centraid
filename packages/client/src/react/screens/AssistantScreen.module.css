@@ -182,7 +182,7 @@
   max-width: 78%;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 14px 14px 4px 14px;
+  border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
   padding: 8px 12px;
   font-size: 13px;
   color: var(--text);
@@ -203,7 +203,7 @@
   gap: 7px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 5px 10px;
   font-size: 11.5px;
   color: var(--text-soft);
@@ -236,7 +236,7 @@
   gap: 8px;
   padding: 8px 12px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   font-size: 12.5px;
   color: var(--text-faint);
@@ -264,7 +264,7 @@
 }
 .tools {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   font-size: 12px;
   color: var(--text-faint);
@@ -758,7 +758,7 @@
 }
 .thinking {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in oklab, var(--text) 3%, transparent);
   padding: 2px 10px;
   font-size: 12.5px;
@@ -828,7 +828,7 @@
   max-width: 180px;
   max-height: 180px;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .msgAttachThumb[data-loading="true"] {
   width: 96px;
@@ -842,7 +842,7 @@
   width: 26px;
   height: 26px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   flex: none;
 }
 

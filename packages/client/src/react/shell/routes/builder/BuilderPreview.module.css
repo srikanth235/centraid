@@ -62,7 +62,7 @@
   width: 14px;
   height: 8px;
   border: 1.2px solid var(--text);
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   position: relative;
 }
 .battery::after {
@@ -113,7 +113,7 @@
 }
 .cell {
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .buildingPill {
   position: absolute;

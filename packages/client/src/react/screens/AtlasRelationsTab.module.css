@@ -494,7 +494,7 @@
 }
 .lgSwatch {
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   align-self: center;
 }
 .lgLive {

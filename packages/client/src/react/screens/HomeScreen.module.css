@@ -88,7 +88,7 @@
   color: var(--text-ghost);
   letter-spacing: 0;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .composerSend {

@@ -305,7 +305,7 @@
   flex: none;
   max-width: 220px;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -349,7 +349,7 @@
   height: 48px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
@@ -434,7 +434,7 @@
 }
 .skelHead {
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 6%, transparent);
   animation: cd-pulse 1.4s ease-in-out infinite;
 }

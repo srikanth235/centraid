@@ -1,12 +1,21 @@
 #!/usr/bin/env node
-// Design-token ratchet (#630 Wave 0).
+// Design-token ratchet (#630 Wave 0; type/radius counters added by #686 B2).
 //
 // Raw hex colors and literal font-family stacks in client/blueprint CSS are
 // design-system forks. Existing debt is explicit in the checked-in budget;
 // every decrease must tighten that budget, every increase fails, and new CSS
 // files start at zero. Comments are stripped so issue references such as #505
 // are not mistaken for colors.
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+//
+// Run with `--write` to rewrite the budget from the current tree (the only
+// sanctioned way to record a decrease).
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -18,13 +27,85 @@ const TARGETS = [
 const BUDGET_FILE = path.join(ROOT, "tests/design-token-css-budget.json");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 
+export const METRICS = [
+  "rawHex",
+  "literalFontFamily",
+  "rawFontSize",
+  "rawFontWeight",
+  "rawRadius",
+];
+
+/** The two-weight chrome rule (docs/design-language.md, typography.ts):
+ * 400 + 500/600. `normal` is 400. 700 exists only in `marketingType`, which
+ * is web-only and outside the chrome — so it counts as debt here. */
+const SANCTIONED_WEIGHTS = new Set(["400", "500", "600", "normal", "inherit"]);
+
+const declarations = (css, property) => [
+  ...css.matchAll(
+    new RegExp(String.raw`${property}\s*:\s*(?<value>[^;}]+)`, "giu")
+  ),
+];
+
+const isTokened = (value) => value.includes("var(--");
+
+/** `--t-*` are `font` **shorthands**, not sizes, so *every* `font-size`
+ * declaration with a length is off-contract — `font-size: var(--t-body)`
+ * silently drops the whole shorthand. Carve-outs: `inherit` (explicit
+ * cascade) and any `var(...)` (a surface-local sizing knob). */
+function countRawFontSize(css) {
+  return declarations(css, "font-size").filter((match) => {
+    const value = match.groups?.value.trim() ?? "";
+    return value !== "inherit" && !isTokened(value);
+  }).length;
+}
+
+function countRawFontWeight(css) {
+  return declarations(css, "font-weight").filter((match) => {
+    const value = (match.groups?.value ?? "")
+      .replace(/!important/giu, "")
+      .trim();
+    return !SANCTIONED_WEIGHTS.has(value) && !isTokened(value);
+  }).length;
+}
+
+/** One count per `border-radius` declaration that carries an off-scale px
+ * component. The scale is `--r-xs|sm|md|lg|xl` = 2/4/6/10/14px. Carve-outs,
+ * because none of them are points on that scale:
+ *   - `0` / `inherit`      — a reset, not a radius
+ *   - any `%` (e.g. `50%`) — circle/ellipse geometry
+ *   - `>= 99px`            — the pill idiom radii.ts documents as composed
+ *                            inline ("a pill on FABs")
+ *   - `1px`                — sub-`xs` optical nudge so an inner edge matches
+ *                            an outer radius minus its hairline border
+ *   - `var(...)`/`calc(var(...))` — already tokened */
+function countRawRadius(css) {
+  return declarations(css, "border-radius").filter((match) => {
+    const value = (match.groups?.value ?? "")
+      .replace(/!important/giu, "")
+      .trim();
+    if (isTokened(value)) return false;
+    return value.split(/[\s/]+/u).some((part) => {
+      const px = /^(?<n>\d+(?:\.\d+)?)px$/u.exec(part);
+      if (!px) return false;
+      const n = Number(px.groups?.n);
+      return n !== 1 && n < 99;
+    });
+  }).length;
+}
+
 export function analyzeCss(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, "");
   const rawHex = [...stripped.matchAll(/#[\da-f]{3,8}\b/giu)].length;
   const literalFontFamily = [
     ...stripped.matchAll(/font-family\s*:\s*(?<value>[^;]+);/giu),
   ].filter((match) => !match.groups?.value.trim().startsWith("var(--")).length;
-  return { rawHex, literalFontFamily };
+  return {
+    rawHex,
+    literalFontFamily,
+    rawFontSize: countRawFontSize(stripped),
+    rawFontWeight: countRawFontWeight(stripped),
+    rawRadius: countRawRadius(stripped),
+  };
 }
 
 function walkCss(directory, out = []) {
@@ -41,7 +122,7 @@ export function compareBudget(actual, budget) {
   const findings = [];
   for (const [file, counts] of Object.entries(actual)) {
     const allowed = budget[file] ?? {};
-    for (const metric of ["rawHex", "literalFontFamily"]) {
+    for (const metric of METRICS) {
       const found = counts[metric] ?? 0;
       const limit = allowed[metric] ?? 0;
       if (found > limit)
@@ -70,16 +151,47 @@ export function scanDesignTokenCss(root = ROOT) {
       throw new Error(`design-token lint target does not exist: ${target}`);
     for (const absolute of walkCss(directory)) {
       const counts = analyzeCss(readFileSync(absolute, "utf8"));
-      if (counts.rawHex > 0 || counts.literalFontFamily > 0)
-        actual[path.relative(root, absolute)] = counts;
+      const recorded = Object.fromEntries(
+        METRICS.filter((metric) => counts[metric] > 0).map((metric) => [
+          metric,
+          counts[metric],
+        ])
+      );
+      if (Object.keys(recorded).length > 0)
+        actual[path.relative(root, absolute)] = recorded;
     }
   }
   return actual;
 }
 
+export function formatTotals(actual) {
+  const totals = Object.fromEntries(METRICS.map((metric) => [metric, 0]));
+  for (const counts of Object.values(actual))
+    for (const metric of METRICS) totals[metric] += counts[metric] ?? 0;
+  return (
+    `${totals.rawHex} grandfathered hex value(s), ` +
+    `${totals.literalFontFamily} literal font stack(s), ` +
+    `${totals.rawFontSize} raw font-size(s), ` +
+    `${totals.rawFontWeight} off-scale font-weight(s), ` +
+    `${totals.rawRadius} raw border-radius(es)`
+  );
+}
+
 function main() {
-  const budget = JSON.parse(readFileSync(BUDGET_FILE, "utf8"));
   const actual = scanDesignTokenCss();
+  if (process.argv.includes("--write")) {
+    const sorted = Object.fromEntries(
+      Object.keys(actual)
+        .sort()
+        .map((file) => [file, actual[file]])
+    );
+    writeFileSync(BUDGET_FILE, `${JSON.stringify(sorted, null, 2)}\n`);
+    console.log(
+      `ok   design-token-css — budget rewritten: ${formatTotals(actual)}`
+    );
+    return;
+  }
+  const budget = JSON.parse(readFileSync(BUDGET_FILE, "utf8"));
   const findings = compareBudget(actual, budget);
   if (findings.length > 0) {
     console.error(
@@ -89,16 +201,8 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  const totals = Object.values(actual).reduce(
-    (sum, counts) => ({
-      rawHex: sum.rawHex + counts.rawHex,
-      literalFontFamily: sum.literalFontFamily + counts.literalFontFamily,
-    }),
-    { rawHex: 0, literalFontFamily: 0 }
-  );
   console.log(
-    `ok   design-token-css — ${totals.rawHex} grandfathered hex value(s), ` +
-      `${totals.literalFontFamily} literal font stack(s), zero regressions`
+    `ok   design-token-css — ${formatTotals(actual)}, zero regressions`
   );
 }
 

@@ -110,7 +110,7 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .group .rowClickable:hover {
   background: color-mix(in oklab, var(--text) 4%, transparent);

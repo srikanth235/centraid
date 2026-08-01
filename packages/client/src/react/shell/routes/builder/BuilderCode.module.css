@@ -53,7 +53,7 @@
   color: var(--text-faint);
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 2px 5px;
 }
 .treeList {
@@ -71,7 +71,7 @@
   background: transparent;
   padding: 5px 8px 5px calc(8px + var(--depth) * 14px);
   margin-block: 1.5px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   color: var(--text-soft);
   font-size: 12.5px;
   text-align: left;
@@ -204,7 +204,7 @@
   height: 16px;
   flex: none;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -238,7 +238,7 @@
   padding: 4px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   box-shadow: 0 8px 24px var(--scrim);
 }
 .overflowMenu[hidden] {
@@ -249,7 +249,7 @@
   background: transparent;
   text-align: left;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
@@ -465,7 +465,7 @@
   top: 5px;
   bottom: 5px;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   background: var(--accent);
 }
 

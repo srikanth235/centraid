@@ -208,7 +208,7 @@
   white-space: nowrap;
   color: var(--danger);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
@@ -298,7 +298,7 @@
 .orderRail {
   align-self: stretch;
   width: 3px;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
   background: var(
     --accent-color,
     color-mix(in oklab, var(--text) 35%, transparent)

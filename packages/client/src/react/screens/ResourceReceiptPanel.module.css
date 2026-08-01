@@ -3,7 +3,7 @@
    elevated card with a header, label/value fact rows, and a quiet footnote.
    Measured actuals of the gateway host, shown beside the cost transparency. */
 .panel {
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   padding: 16px 18px 18px;

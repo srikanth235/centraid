@@ -86,7 +86,7 @@
   margin: 12px 0 4px;
   padding: 10px 12px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
 }
 .abProgressDots {
@@ -156,7 +156,7 @@
   color: var(--text-faint);
   background: none;
   border: 0.5px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 4px 10px;
   cursor: pointer;
   transition:
@@ -312,7 +312,7 @@
 .chatInput {
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   padding: 12px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -326,7 +326,7 @@
   font-size: 10.5px;
   color: var(--text-ghost);
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
@@ -372,7 +372,7 @@
   align-items: center;
   padding: 2px;
   flex: none;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 .attachRemove:hover {
   color: var(--text);

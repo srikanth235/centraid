@@ -138,7 +138,7 @@
   color: var(--text);
   font: inherit;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 600;
   border-radius: 999px;
   padding: 4px 8px 4px 6px;
   cursor: pointer;
@@ -159,7 +159,7 @@
 .selectedConnWarn {
   color: var(--c-amber);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .selectedConnX {
   color: var(--text-ghost);
@@ -190,7 +190,7 @@
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 999px;
@@ -241,7 +241,7 @@
   padding: 14px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
 }
 .agentPickerTitle {
@@ -258,7 +258,7 @@
   display: grid;
   gap: 5px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-faint);
 }
 .agentPickerField select {
@@ -285,7 +285,7 @@
   padding: 12px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
 }
 .connPickerHead {
@@ -296,7 +296,7 @@
 }
 .connPickerTitle {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 .connPickerHint {
@@ -1248,7 +1248,7 @@
   color: var(--danger);
   background: none;
   border: 0.5px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 4px 8px;
   cursor: pointer;
 }
@@ -1334,7 +1334,7 @@
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 600;
   border-radius: 999px;
   padding: 7px 12px;
   cursor: pointer;

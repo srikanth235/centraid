@@ -97,7 +97,7 @@
 .empty code {
   background: var(--bg-sunken);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-size: 12px;
 }
 .statGrid {
@@ -268,7 +268,7 @@
   font-size: 11.5px;
   color: var(--text-faint);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--bg-sunken);
 }
 .automationToggle {
@@ -297,7 +297,7 @@
   font-size: 11px;
   color: var(--text-soft);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--bg-sunken);
   font-family: var(--font-mono);
 }
@@ -315,7 +315,7 @@
   font-size: 11.5px;
   margin-left: auto;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-family: var(--font-mono);
 }
 .automationResult[data-ok="true"] {
@@ -357,7 +357,7 @@
   top: 8px;
   bottom: 8px;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   background: var(--accent);
 }
 .railItem[data-active="true"] svg {
@@ -395,7 +395,7 @@
 .sectionLabel {
   margin: 26px 0 12px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -405,7 +405,7 @@
   align-items: center;
   gap: 14px;
   padding: 16px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 1px solid var(--line);
   background: var(--bg-elev);
 }
@@ -458,7 +458,7 @@
   align-items: center;
   gap: 7px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--c-forest);
@@ -513,7 +513,7 @@
 }
 .feed {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -559,11 +559,11 @@
 }
 .feedLive {
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: hsla(101 28% 42% / 0.16);
   color: var(--c-forest);
 }
