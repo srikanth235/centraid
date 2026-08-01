@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-01T15:09:45.843Z",
+  "generatedAt": "2026-08-01T16:16:13.257Z",
   "passed": 887,
   "failed": 0,
   "skipped": 0,
@@ -177,7 +177,7 @@
     "coverage:packages/agent-runtime/src/**:lines": 86.38,
     "coverage:packages/agent-runtime/src/**:branches": 76.91,
     "coverage:packages/vault/src/**:lines": 88.19,
-    "coverage:packages/vault/src/**:branches": 74.38,
+    "coverage:packages/vault/src/**:branches": 74.37,
     "coverage:packages/design/src/**:lines": 98.22,
     "coverage:packages/design/src/**:branches": 84.75,
     "coverage:packages/tunnel/src/**:lines": 71.84,
