@@ -48,6 +48,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-model-ids/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-no-hardcoded-model-ids <reason>` for the rare opt-in case (e.g. a controlled experiment that pins a specific model intentionally).
 
+### no-hardcoded-colors
+
+- **Directive**: stylesheets under `packages/blueprints/apps/**/*.module.css` must not introduce hex (`#fff`, `#0b0d12`, `#rrggbbaa`) or functional (`rgb()`, `rgba()`, `hsl()`, `hsla()`) color literals. Color reaches app CSS as `var(--token)` from `@centraid/design`. The check evaluates only lines added relative to the merge base with the default branch (or staged additions when no such ref exists), so historical debt does not block every commit while a new literal fails immediately.
+- **Rationale**: `packages/design` is contract-tested on the supply side, but supply without enforced consumption is theatre — a literal in app CSS silently forks the palette, survives every token change, and shows up later as the one panel that didn't switch to dark mode. The exhaustive gate is `packages/blueprints/src/token-purity.test.ts`, which also covers `font-family` stacks and custom properties declared in reserved namespaces (`--c-*`, `--t-*`, `--r-*`, `--sp-*`, `--bg-*`, `--text-*`, and every name in `BLUEPRINT_TOKEN_CONTRACT`) and pins the remaining debt per file in `token-purity-allowlist.ts` so the ledger can only shrink. This directive is the fast commit-time tripwire in front of it.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh`
+- **Exceptions**: per-line waiver `/* governance: allow-no-hardcoded-colors <reason> */` for the rare literal that genuinely cannot be a token (e.g. a value fixed by an external spec).
+
 ### actions-declare-table-writes
 
 - **Directive**: every entry in a centraid `app.json#actions[]` array must include a `writes:` field whose value is an array of table names. Empty arrays (`writes: []`) are allowed and signal "this action performs no database writes" (e.g. a webhook-only action). Missing or non-array `writes` is rejected. Applies to all tracked `**/app.json` files whose top-level `manifestVersion` is set (distinguishing Centraid manifests from `apps/mobile/app.json`, which is an Expo config).
@@ -246,6 +253,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-06-13 — @srikanth235 — Modify `gateway-engine-mode-agnostic` + `handler-uses-ctx-primitives`: update the rationale wording from "same code, two modes" to "same code, three hosts" (desktop embed, centraid-gateway daemon, OpenClaw plugin), reflecting the standalone daemon as a third gateway host. Rules unchanged — rationale text only (#243).
 - 2026-07-29 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate the co-located blueprint app and kit runtime roots, require matching Vitest instrumentation, and restore the directive's missing constitutional policy record (#630).
 - 2026-07-31 — @srikanth235 — Add the performance principle: every user-facing interaction owns a perceived-latency budget, an unmeasured hot path is an incomplete feature, and nothing O(vault-size) runs synchronously on the request path or the event loop. Principle only, no new mechanical directive — the full-stack audit found the failures are shape-level (sync SQLite on the loop, per-subscriber recompute, ungated pollers) and not `grep`-decidable; the reviewable doctrine lives in [docs/coding-standards.md](docs/coding-standards.md) (#659).
+- 2026-08-01 — @srikanth235 — Add `no-hardcoded-colors`: blueprint app CSS may not introduce hex or `rgb()`/`hsl()` color literals, so the design package's token supply is matched by enforced consumption. Added-lines-only at commit time; the exhaustive gate (fonts, reserved custom-property namespaces, and a shrink-only per-file debt ledger) is `packages/blueprints/src/token-purity.test.ts` (#686).
 
 ## Escape hatches
 
