@@ -168,7 +168,7 @@
   color: var(--text-soft);
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s var(--ease, ease);
+  transition: background 0.12s var(--ease);
 }
 .pickOption:hover {
   background: var(--bg-sunken);
@@ -256,7 +256,7 @@
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.12s var(--ease, ease);
+  transition: opacity 0.12s var(--ease);
 }
 .primaryBtn:hover:not(:disabled) {
   opacity: 0.9;
@@ -277,7 +277,7 @@
   font-family: var(--font-sans);
   font-size: 12.5px;
   cursor: pointer;
-  transition: color 0.12s var(--ease, ease);
+  transition: color 0.12s var(--ease);
 }
 .ghostBtn:hover:not(:disabled) {
   color: var(--text);
@@ -318,7 +318,7 @@
   background: var(--bg-elev);
   color: var(--text-faint);
   cursor: pointer;
-  transition: color 0.12s var(--ease, ease);
+  transition: color 0.12s var(--ease);
 }
 .iconBtn:hover:not(:disabled) {
   color: var(--text);

@@ -105,8 +105,8 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    border-color 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 .tab:first-child {
   margin-left: 0;
@@ -214,7 +214,7 @@
   border-radius: 999px;
   border: 1px solid var(--pulse);
   opacity: 0;
-  animation: orbRing 3.2s var(--ease, ease-out) infinite;
+  animation: orbRing 3.2s var(--ease) infinite;
 }
 .orb::after {
   animation-delay: 1.6s;
@@ -1010,8 +1010,8 @@
   cursor: pointer;
   padding: 0;
   transition:
-    background 0.18s var(--ease, ease),
-    border-color 0.18s var(--ease, ease);
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease);
 }
 .switch[data-on] {
   background: var(--accent);
@@ -1032,14 +1032,14 @@
   box-shadow:
     0 0 0 1px var(--scrim),
     0 1px 2px var(--scrim);
-  transition: transform 0.18s var(--ease, ease);
+  transition: transform 0.18s var(--ease);
 }
 .switch[data-on] .switchThumb {
   transform: translateX(13.5px);
 }
 
 .alertAfter {
-  transition: opacity 0.18s var(--ease, ease);
+  transition: opacity 0.18s var(--ease);
 }
 .alertAfter[data-disabled] {
   opacity: 0.45;
@@ -1070,8 +1070,8 @@
   display: inline-flex;
   align-items: center;
   transition:
-    border-color 0.15s var(--ease, ease),
-    background 0.15s var(--ease, ease);
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
 .preset:hover:not(:disabled) {
   border-color: var(--accent);

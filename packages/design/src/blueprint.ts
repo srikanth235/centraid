@@ -17,6 +17,8 @@
 // identity overrides now sit in Chrome.module.css; this module generalizes the
 // shared formulas so portable surfaces don't re-derive them per app.
 
+import { spacing } from "./density";
+import { EASE } from "./motion";
 import { palette } from "./palette";
 import { radii } from "./radii";
 
@@ -106,7 +108,7 @@ function lightProps(): Record<string, string> {
     "--radius": "0.75rem",
     "--radius-sm": "0.5rem",
 
-    "--ease": "cubic-bezier(0.2, 0.7, 0.3, 1)",
+    "--ease": EASE,
     "--focus-ring": "0 0 0 3px var(--accent-soft)",
     "--shadow-sm": "0 0 0 0.5px var(--line-strong)",
     "--shadow-md":
@@ -126,6 +128,12 @@ function lightProps(): Record<string, string> {
     "--t-tiny": "600 0.6rem/1.4 var(--mono)",
     "--t-mono": "500 0.72rem/1.4 var(--mono)",
   });
+
+  // Fixed spacing scale (density.ts) — apps had no spacing token at all, so
+  // every gutter was a hardcoded px literal. Same rungs the shell emits.
+  for (const [step, px] of Object.entries(spacing)) {
+    props[`--sp-${step}`] = `${px}px`;
+  }
 
   return props;
 }

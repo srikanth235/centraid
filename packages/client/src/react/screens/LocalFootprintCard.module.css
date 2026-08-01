@@ -82,7 +82,7 @@
 .railSegment {
   height: 100%;
   min-width: 0;
-  transition: width 420ms var(--ease, cubic-bezier(0.22, 1, 0.36, 1));
+  transition: width 420ms var(--ease);
 }
 /* Over budget: the whole fill picks up a diagonal hatch on top of its hues,
    so the state is legible without relying on colour alone. */
@@ -148,7 +148,7 @@
   cursor: pointer;
   color: inherit;
   font: inherit;
-  animation: legendIn 320ms var(--ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+  animation: legendIn 320ms var(--ease) both;
 }
 .legendRow + .legendRow {
   border-top: 1px solid var(--line);

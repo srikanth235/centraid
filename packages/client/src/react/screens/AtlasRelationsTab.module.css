@@ -50,8 +50,8 @@
   font-size: 12px;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    background-color 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    background-color 0.15s var(--ease);
 }
 .segBtn:hover {
   color: var(--text);
@@ -74,9 +74,9 @@
   font-size: 12px;
   cursor: pointer;
   transition:
-    border-color 0.15s var(--ease, ease),
-    color 0.15s var(--ease, ease),
-    background-color 0.15s var(--ease, ease);
+    border-color 0.15s var(--ease),
+    color 0.15s var(--ease),
+    background-color 0.15s var(--ease);
 }
 .qChip:hover {
   border-color: var(--text-ghost);
@@ -188,8 +188,8 @@
   line-height: 1;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    border-color 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 .zoomBtn:hover {
   color: var(--text);
@@ -291,7 +291,7 @@
   font-size: 10.5px;
   letter-spacing: 0.03em;
   cursor: pointer;
-  transition: color 0.15s var(--ease, ease);
+  transition: color 0.15s var(--ease);
 }
 .backBtn:hover:not(:disabled) {
   color: var(--text);
@@ -436,9 +436,9 @@
   font-size: 10.5px;
   cursor: pointer;
   transition:
-    border-color 0.15s var(--ease, ease),
-    color 0.15s var(--ease, ease),
-    opacity 0.15s var(--ease, ease);
+    border-color 0.15s var(--ease),
+    color 0.15s var(--ease),
+    opacity 0.15s var(--ease);
 }
 .chip:hover {
   border-color: var(--text-ghost);
@@ -599,7 +599,7 @@
 }
 
 .graticule {
-  animation: atlasFadeIn 0.6s var(--ease, ease) backwards;
+  animation: atlasFadeIn 0.6s var(--ease) backwards;
 }
 .ringGuide {
   fill: none;
@@ -627,10 +627,10 @@
 
 /* the dial — pack sector arcs + curved names, painted in the pack hue */
 .dial {
-  animation: atlasFadeIn 0.7s var(--ease, ease) 0.12s backwards;
+  animation: atlasFadeIn 0.7s var(--ease) 0.12s backwards;
 }
 .sector {
-  transition: opacity 0.2s var(--ease, ease);
+  transition: opacity 0.2s var(--ease);
 }
 .sectorArc {
   fill: none;
@@ -638,7 +638,7 @@
   stroke-opacity: 0.42;
   stroke-width: 1.5;
   stroke-linecap: round;
-  transition: stroke-opacity 0.2s var(--ease, ease);
+  transition: stroke-opacity 0.2s var(--ease);
 }
 .sectorTick {
   stroke: var(--line-strong);
@@ -651,7 +651,7 @@
   text-transform: uppercase;
   fill: var(--sector-c, var(--text-ghost));
   fill-opacity: 0.75;
-  transition: fill-opacity 0.2s var(--ease, ease);
+  transition: fill-opacity 0.2s var(--ease);
 }
 /* hovering a kind lights its whole compass sector */
 .sectorHot .sectorArc {
@@ -668,7 +668,7 @@
 }
 
 .edges {
-  transition: opacity 0.2s var(--ease, ease);
+  transition: opacity 0.2s var(--ease);
 }
 .edgesDimmed .edge:not(.edgeHot) {
   opacity: 0.12;
@@ -677,7 +677,7 @@
   fill: none;
   stroke-linecap: round;
   pointer-events: none;
-  animation: atlasFadeIn 0.5s var(--ease, ease) backwards;
+  animation: atlasFadeIn 0.5s var(--ease) backwards;
   animation-delay: var(--dly, 360ms);
 }
 .edgeLive {
@@ -718,7 +718,7 @@
   animation: atlasBreathe 7s ease-in-out infinite;
 }
 .coreBezel {
-  animation: atlasFadeIn 0.6s var(--ease, ease) 0.1s backwards;
+  animation: atlasFadeIn 0.6s var(--ease) 0.1s backwards;
 }
 .coreTick {
   stroke: var(--line-strong);
@@ -775,10 +775,10 @@
   stroke: var(--node-c, var(--text-faint));
   stroke-opacity: 0.9;
   stroke-width: 1;
-  transition: fill-opacity 0.15s var(--ease, ease);
+  transition: fill-opacity 0.15s var(--ease);
   transform-box: fill-box;
   transform-origin: center;
-  animation: atlasBloom 0.45s var(--ease, ease) backwards;
+  animation: atlasBloom 0.45s var(--ease) backwards;
   animation-delay: var(--dly, 0ms);
 }
 .nodeHalo {
@@ -786,7 +786,7 @@
   stroke: var(--accent);
   stroke-width: 1.5;
   opacity: 0;
-  transition: opacity 0.15s var(--ease, ease);
+  transition: opacity 0.15s var(--ease);
 }
 .node:hover .nodeHalo,
 .node:focus-visible .nodeHalo,
@@ -813,9 +813,9 @@
   pointer-events: none;
   opacity: 0.6;
   transition:
-    fill 0.15s var(--ease, ease),
-    opacity 0.15s var(--ease, ease);
-  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
+    fill 0.15s var(--ease),
+    opacity 0.15s var(--ease);
+  animation: atlasFadeIn 0.4s var(--ease) backwards;
   animation-delay: calc(var(--dly, 0ms) + 140ms);
 }
 .nodeLabelBig {
@@ -843,8 +843,8 @@
   stroke-opacity: 0.7;
   pointer-events: none;
   opacity: 0.72;
-  transition: opacity 0.15s var(--ease, ease);
-  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
+  transition: opacity 0.15s var(--ease);
+  animation: atlasFadeIn 0.4s var(--ease) backwards;
   animation-delay: calc(var(--dly, 0ms) + 180ms);
 }
 .node:hover .nodeSubLabel,
@@ -858,7 +858,7 @@
    the edge layer, applied to whole nodes so the lit set reads at a glance */
 .nodeDim {
   opacity: 0.16;
-  transition: opacity 0.2s var(--ease, ease);
+  transition: opacity 0.2s var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {

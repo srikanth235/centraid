@@ -1,6 +1,7 @@
 // The one public CSS-token vocabulary. Emitters may choose values appropriate
 // to their surface, but cannot invent a second spelling for a semantic role.
 
+import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
@@ -14,6 +15,8 @@ const kebab = (key: string): string =>
 const shellStatic = [
   ...Object.keys(palette).map((key) => `--c-${key}`),
   ...Object.keys(radii).map((key) => `--r-${key}`),
+  ...Object.keys(spacing).map((key) => `--sp-${key}`),
+  "--ease",
   "--brand",
   ...Object.keys(fontStacks).map((key) => `--font-${key}`),
   ...Object.keys({ ...type, ...marketingType }).map(
@@ -93,6 +96,7 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
   "--r-pill",
   "--radius",
   "--radius-sm",
+  ...Object.keys(spacing).map((key) => `--sp-${key}`),
   "--ease",
   "--focus-ring",
   "--shadow-sm",

@@ -4,7 +4,9 @@
 // blocks as a single CSS string. Desktop injects this into a <style> tag
 // at preload time — the only token-related CSS it ships.
 
+import { spacing } from "./density";
 import { library } from "./library";
+import { EASE } from "./motion";
 import { palette } from "./palette";
 import { radii } from "./radii";
 import { BRAND, themes } from "./themes";
@@ -73,6 +75,11 @@ export function toCss(): string {
   }
   for (const [k, v] of Object.entries(radii))
     staticProps[`--r-${k}`] = `${v}px`;
+  // Fixed spacing scale (density.ts) — the only rungs any surface may use.
+  for (const [k, v] of Object.entries(spacing))
+    staticProps[`--sp-${k}`] = `${v}px`;
+  // The one easing curve — same value the blueprint layer publishes.
+  staticProps["--ease"] = EASE;
   // Brand teal — theme-independent, matches the logo / app-icon SVGs.
   staticProps["--brand"] = BRAND;
   // Typography — web font stacks + the semantic type scale as CSS `font`
