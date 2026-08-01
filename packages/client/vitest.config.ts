@@ -19,7 +19,7 @@ export default jsdomProject({
         // subpath rather than part of the barrel — pulling it through
         // `@centraid/design` would trip oxlint's 100-module barrel ceiling on
         // `packages/client/src/index.ts`.
-        find: /^@centraid\/design\/(?<module>color|oklab)$/u,
+        find: /^@centraid\/design\/(?<module>color|css-vars|oklab)$/u,
         replacement: fileURLToPath(
           new URL("../design/src/$1.ts", import.meta.url)
         ),

@@ -62,9 +62,9 @@
   font-size: 11px;
   padding: 5px 10px;
   border-radius: 8px;
-  border: 0.5px solid var(--border);
+  border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  color: var(--text-1);
+  color: var(--text);
   cursor: pointer;
 }
 .automateBtn:hover {

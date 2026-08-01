@@ -614,7 +614,7 @@
   padding: 7px 9px;
   border: 0.5px solid var(--line);
   border-radius: 7px;
-  background: var(--bg-elev-raised);
+  background: var(--bg-elev);
   color: var(--text);
   font: inherit;
 }

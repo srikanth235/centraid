@@ -72,6 +72,40 @@ function inkTokenOf(className: string): string {
  *  remainder, which is `.diffText`/`--text` and has to be separable too. */
 const TOKEN_CLASSES = ["tokTag", "tokAttr", "tokStr", "tokKey", "tokCom"];
 
+/** The `background:` a rule declares, as the token name it references. */
+function fillTokenOf(label: string, head: RegExp): string {
+  const rule = head.exec(css);
+  expect(
+    rule?.groups?.body,
+    `the ${label} dot rule exists in BuilderCode.module.css`
+  ).toBeDefined();
+  const fill = /background:\s*var\((?<name>--[\w-]+)\)/u.exec(
+    rule?.groups?.body ?? ""
+  );
+  expect(
+    fill?.groups?.name,
+    `the ${label} dot paints a tokened fill`
+  ).toBeDefined();
+  return fill?.groups?.name ?? "";
+}
+
+/** The language-dot set — 6px fills shown together in the tab strip and the
+ *  file tree, one per open file. Same law as the token inks above: until #686
+ *  three of them named `--c-blue` / `--c-orange` / `--c-yellow`, hues the
+ *  palette has never had, so those dots painted nothing at all and the gate
+ *  that would have said so only walked blueprint apps.
+ *
+ *  `unknown` is the tree's fallback for a file kind with no dot of its own; it
+ *  belongs in the separation set because a language dot that lands on it reads
+ *  as "unrecognized file". */
+const LANG_DOTS: readonly (readonly [string, RegExp])[] = [
+  ["html", /\.tabDot\s*\{(?<body>[^}]*)\}/u],
+  ["css", /\.tabDot\[data-lang="css"\]\s*\{(?<body>[^}]*)\}/u],
+  ["js/ts", /\.tabDot\[data-lang="js"\][^{]*\{(?<body>[^}]*)\}/u],
+  ["md", /\.tabDot\[data-lang="md"\]\s*\{(?<body>[^}]*)\}/u],
+  ["unknown", /\.treeLangDot\s*\{(?<body>[^}]*)\}/u],
+];
+
 describe("the builder's syntax-token colours", () => {
   const stylesheet = toCss();
   const light = declarations(stylesheet, ":root");
@@ -155,6 +189,47 @@ describe("the builder's syntax-token colours", () => {
           expect(
             oklabDistance(a?.hex ?? "", b?.hex ?? ""),
             `${theme} .${a?.className} vs .${b?.className} collapsed`
+          ).toBeGreaterThan(APART);
+        }
+      }
+    });
+
+    const dots = LANG_DOTS.map(([label, head]) => ({
+      label,
+      // The dots sit on the tab strip / tree rather than the `<pre>`, but the
+      // only translucent member is the `--text-ghost` unknown default, and
+      // both surfaces are within a few percent of `--bg` — close enough that
+      // compositing over `--bg` does not move the comparison.
+      hex: flatten(
+        evalColorMix(resolveVars(tokens[fillTokenOf(label, head)] ?? "", scope))
+      ),
+    }));
+
+    test(`${theme}: the language dots stay mutually distinguishable`, () => {
+      for (let i = 0; i < dots.length; i++) {
+        for (let j = i + 1; j < dots.length; j++) {
+          const a = dots[i];
+          const b = dots[j];
+          expect(a?.hex, `${a?.label} dot resolved`).not.toContain("var(");
+          expect(
+            oklabDistance(a?.hex ?? "", b?.hex ?? ""),
+            `${theme} ${a?.label} vs ${b?.label} dot collapsed`
+          ).toBeGreaterThan(APART);
+        }
+      }
+    });
+
+    test(`${theme}: no language dot collides with a syntax ink`, () => {
+      // Both sets are on screen at once — the tab strip sits directly above
+      // the tokenized `<pre>` — so a dot that matches a token colour reads as
+      // meaning. `unknown` is exempt against `.tokCom`: both ARE
+      // `--text-ghost`, one deliberately.
+      for (const dot of dots) {
+        for (const ink of inks) {
+          if (dot.label === "unknown" && ink.className === "tokCom") continue;
+          expect(
+            oklabDistance(dot.hex, ink.hex),
+            `${theme} ${dot.label} dot vs .${ink.className}`
           ).toBeGreaterThan(APART);
         }
       }

@@ -149,7 +149,9 @@
   gap: 3px;
   padding: 3px 5px 3px 8px;
   border: 1px solid var(--line);
-  border-radius: var(--r-pill);
+  /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
+     at `--r-xl` and composes the pill inline (radii.ts). */
+  border-radius: 999px;
   color: var(--text-soft);
   font: var(--t-tiny);
 }

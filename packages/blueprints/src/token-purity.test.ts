@@ -4,6 +4,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { BLUEPRINT_TOKEN_CONTRACT } from "@centraid/design";
+import {
+  declaredCustomProps,
+  stripCssComments,
+  unresolvedVarRefs,
+} from "@centraid/design/css-vars";
 
 import type { TokenPurityBudget } from "./token-purity-allowlist.js";
 import {
@@ -159,13 +164,15 @@ describe("blueprint app CSS token purity", () => {
     // An app may resolve a name from the contract, from kit.css (served to
     // every app surface), or from anywhere in its OWN stylesheets, since an
     // app's Chrome declares tokens its components inherit.
-    const kitDeclared = new Set(
-      [
-        ...readFileSync(
-          path.join(appDir, "..", "..", "design", "kit", "kit.css"),
-          "utf8"
-        ).matchAll(CUSTOM_PROP_DECL),
-      ].map((m) => m.groups?.name ?? "")
+    //
+    // The reader itself is shared with the shell's twin of this gate
+    // (packages/client/src/shell-var-resolution.test.ts) so the two cannot
+    // drift on what counts as a declaration or a reference (#686).
+    const kitDeclared = declaredCustomProps(
+      readFileSync(
+        path.join(appDir, "..", "..", "design", "kit", "kit.css"),
+        "utf8"
+      )
     );
     const unresolved: string[] = [];
     for (const app of new Set(
@@ -174,28 +181,14 @@ describe("blueprint app CSS token purity", () => {
       const own = files.filter(
         (f) => path.relative(appDir, f).split(path.sep)[0] === app
       );
-      const sources = own.map((f) =>
-        readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "")
-      );
-      const declared = new Set(
-        sources.flatMap((css) =>
-          [...css.matchAll(CUSTOM_PROP_DECL)].map((m) => m.groups?.name ?? "")
-        )
-      );
+      const sources = own.map((f) => stripCssComments(readFileSync(f, "utf8")));
+      const resolved = new Set([
+        ...CONTRACT_PROPS,
+        ...kitDeclared,
+        ...sources.flatMap((css) => declaredCustomProps(css)),
+      ]);
       own.forEach((file, i) => {
-        const source = sources[i] ?? "";
-        for (const m of source.matchAll(
-          /var\(\s*(?<name>--[A-Za-z0-9_-]+)\s*(?<next>[,)])/gu
-        )) {
-          const name = m.groups?.name ?? "";
-          if (m.groups?.next === ",") continue; // an explicit fallback is a choice
-          if (
-            CONTRACT_PROPS.has(name) ||
-            declared.has(name) ||
-            kitDeclared.has(name)
-          ) {
-            continue;
-          }
+        for (const name of unresolvedVarRefs(sources[i] ?? "", resolved)) {
           unresolved.push(`${path.relative(appDir, file)} -> ${name}`);
         }
       });

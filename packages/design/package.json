@@ -32,6 +32,11 @@
       "react-native": "./src/color.ts",
       "default": "./dist/color.js"
     },
+    "./css-vars": {
+      "types": "./dist/css-vars.d.ts",
+      "react-native": "./src/css-vars.ts",
+      "default": "./dist/css-vars.js"
+    },
     "./oklab": {
       "types": "./dist/oklab.d.ts",
       "react-native": "./src/oklab.ts",

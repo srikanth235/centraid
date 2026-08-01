@@ -23,6 +23,7 @@
 - [x] F1 Root `DESIGN.md` conforming to the official google-labs-code/design.md spec + `@google/design.md` linter wired
 - [x] F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)
 - [x] F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)
+- [x] F4 Extend the unresolved-`var()` gate to `packages/client` and fix the 13 phantom tokens it found
 
 ## Decisions (orchestrator recommendations, per user directive)
 
@@ -38,6 +39,7 @@
 - **The burn-down silently dropped SOLVED contrast values, and the contract had no rung to replace them.** Removing `docs`' six hand-picked file-kind hexes in favour of the raw `--c-*` palette hues looked like pure literal-elimination — the point of A2 — but those literals were doing solved-contrast work. `--c-*` is documented in `DESIGN.md` as **icon fills**, and as `color:` on a near-white app surface the fills measure 2.11–4.43:1; five of the six kinds fell below AA (`--kind-pdf` 4.74 → 2.11). The accent already had a solved answer to exactly this (`--accent-text` via `accentTextShade()`); the palette had none, which is *why* the app hand-picked in the first place. The fix closes the gap generally rather than restoring the literals: `packages/design/src/color.ts` now solves a **`--c-<name>-text`** rung per hue per theme with the same walk (`walkUntil`, lightness only, hue and saturation untouched), and **both** emitters publish it, so any surface wanting a palette hue on type has a correct token instead of a hand-pick. `packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole. Two consequences recorded: (a) the rung is solved against the hardest surface either emitter ships *plus a 12% wash of the hue itself*, because a hue on type almost always sits on a weak tint of itself; (b) the solve **cannot** keep two hues apart — `ochre` is `amber` at lower chroma, so solving both to one floor collapses them from 0.125 to 0.028 in oklab — so `docs` moved `pdf` to rose and `slide` to amber, which is also the conventional signal for both kinds.
 - **The semantic states were never pinned, and #686 increased the app surfaces' exposure to them.** `contrast.test.ts` held `--danger` / `--success` / `--warning` to the **3:1 non-text floor, on `--bg` only** — the ink roles had real per-surface floors, the states had a formality. So `DESIGN.md` could claim "`--danger` #C44A4A — clears AA on both ramps" with nothing measuring it, and it was false: **3.74:1** on dark `--bg-elev`, 4.20:1 on light `--bg-sunken`. The exposure is not theoretical and #686 widened it: the E burn-down replaced app-local semantic literals with these tokens (`tally` `--pos` #0fa678 / `--neg` #f0805a → `--success`/`--danger`, `people` #f0645b/#5fbd88 → the same), and the values it moved to measured *worse* on dark than the ones it removed. A full sweep of the tree found **131 `color:` rules** on the three roles across `packages/client/src`, `packages/blueprints/apps` and `packages/design/kit/kit.css` — essentially all of them 9px–13.7px, i.e. **body text under WCAG 1.4.3**, not the large-text or non-text cases the 3:1 floor was standing in for. Only two sites in the whole repo are large text (`tally` `.stat .v` 26px, `locker` `.wtStat .n` 28px). The states are now **solved**, not hand-picked, by the same `walkUntil()` machinery as `--accent-text` and `--c-<name>-text`, per emitter and per theme, against that emitter's hardest surface *and* a 12% wash of the state itself (`color: var(--danger)` on `color-mix(… var(--danger) 12%, transparent)` is the single commonest site). Two consequences recorded: (a) `--danger` can no longer be **one shared literal** — the two ramps pull the solve in opposite directions, which is precisely why one hex could not clear both, so `DESIGN.md` and `themes/` now carry `danger` **and** `danger-dark`; (b) a contrast gate alone cannot stop a solver from cheating by **desaturating** — a grey `--danger` cleared every floor on every surface *and* the oklab separation check — so the new gate additionally holds each role to its hue family and to real chroma. Proven by sabotage: greying `DANGER_BASE` is red on `readsAsRole`, and reverting any of the six solved values is red on its own surface × wash cell.
 - **The client half of the palette-as-text gap, previously deferred, is now closed.** When `--c-<name>-text` landed, the receipt recorded that "`packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole" and moved on. The real count is **39 direct `color:` sites across 25 stylesheets**, plus **five identity/status variables** (`--au-hue`, `--notice-hue`, `--tk-hue`, `--plan-tone`, and the `--log-status` / `--conn-health` / `--diag-health` trio) that launder a raw hue into a `color:` one indirection away — invisible to any grep for `color: var(--c-`. Measured on the **shell's own** emitted surfaces (a different emitter from the one the existing grid uses: `--bg-l: 5%` not 10%, and two extra surfaces `--bg` / `--bg-app`), the fills as ink are **2.04–5.03:1 light / 3.12–8.44:1 dark — 17 of 32 cells below AA**, every hue failing on at least one theme, and amber missing even the **3:1 non-text floor** an icon glyph owes. Three consequences recorded: (a) **the fill stays the fill** — washes, dots, rails, bars and 2px edges keep `--c-<name>`; where one variable did both jobs it was split into a `-hue`/`-ink` pair rather than deepened, because dulling a fill to buy contrast nothing reads is a visual regression, not a fix; (b) **16% is the wash ceiling under a palette ink**, not the 12% the solve targets — at 18% indigo and violet fall to 4.44 / 4.49, so `ApprovalsScreen`'s identity tile came down to 12%, the same normalisation this PR already applied to four state washes; (c) **a highlighting scheme owes a second contract the contrast grids cannot see.** The builder's syntax tokens were tag=rose, attr=violet, str=forest, key=indigo — violet and indigo are only 0.068 apart as fills, and solving both to one floor pulled them to **0.075 light / 0.040 dark**, two token classes the eye reads as one colour. `.tokAttr` moved to amber (0.119 / 0.126). The gate for it is deliberately held at **0.08**, above the 0.035 the `docs` labels take and the 0.06 the semantic states take: at 0.035 the very defect it was written for passes, and a gate that green-lights its own bug is decoration. Proven by sabotage in both directions.
+- **Our own unresolved-`var()` gate had a client-side blind spot, and the stale design-sync vocabulary had already leaked through it.** A2's `resolves every fallback-less var() an app references` (added earlier in this PR) walks `packages/blueprints/apps` and nothing else, so `packages/client` — the larger CSS surface — was never scanned. Scanning it against `SHELL_TOKEN_CONTRACT` plus every `--x:` declared in shell CSS finds **13 unresolvable names across 19 files**, each one a declaration silently dropped at computed-value time. Provenance confirms the suspicion the audit raised: `--ink-1` was **never declared anywhere in repository history** (`git log -S'--ink-1:'` is empty), it is one of the four names `.design-sync/conventions.md` explicitly listed as "tokens that were never emitted" (`--surface`, `--ink-*`, `--warn`, `--d-*`), and #672/#677's mechanical `--ink-*` → `--text-*` rename carried the phantom forward verbatim as `--text-1` — so the stale doc's vocabulary outlived the doc and was re-blessed by a rename that looked like a cleanup. `--warn`/`--ok` were the same story and were caught by #677 itself; `--ink-1` was not, because nothing measured the shell. Three consequences recorded: (a) the gate is now shared machinery (`@centraid/design/css-vars`) with a shell-side twin, so a rename cannot be "unified" into a phantom again; (b) **runtime-provided properties get an allowlist, and the allowlist is itself gated** — an entry must be both *true* (the named TSX actually writes it) and *necessary* (no stylesheet declares it), or it would quietly widen the gate; exactly one property earns an entry (`--profile-accent`), while a dozen other inline-set properties (`--onb-accent`, `--depth`, `--stage-i`, …) all carry CSS defaults and are deliberately left out; (c) the builder's three language dots had been painting **no background at all** since they were authored — `--c-blue` / `--c-orange` / `--c-yellow` are hues this palette has never had — which is the most visible thing in this issue that every other gate walked past.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -294,6 +296,17 @@
   - **Gates.** `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/scripts/lint-design-tokens.mjs` gains a sixth ratchet metric `paletteHueAsText` — a `color:` / `-webkit-text-fill-color:` naming a bare `--c-<hue>` anywhere under the three CSS targets, now at **zero**; the property match carries a left boundary so `background-color` / `border-color` / `border-top-color` stay outside it. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/scripts/lint-design-tokens.test.mjs` covers ink vs fill vs rung vs near-miss. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/contrast-shell-palette.test.ts` (new) re-measures every `--c-*-text` rung against all four **shell** surfaces bare and on 6–16% self-washes, per theme, plus the lightness-only and hue-recognisability laws. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderCode.tokens.test.ts` (new) reads the scheme out of its own stylesheet and pins both contract and mutual separation.
   - **Helpers, not re-derivation** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/oklab.ts` gains `alphaOver()` (the wash composite) and `resolveVars()` (the `var()`/`calc()` substitution the grids all needed). `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/package.json` publishes them behind `@centraid/design/color` and `@centraid/design/oklab` **subpaths, not the barrel**: routing one more module through `packages/design/src/index.ts` pushes `packages/client/src/index.ts` to 101 modules and trips oxlint `no-barrel-file` (threshold 100) — the same ceiling that rehomed `EASE` earlier in this PR. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/vitest.config.ts` aliases the two subpaths at source. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/index.ts` records why the maths is not in the barrel.
   - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/DESIGN.md` — the palette section gains "The shell was the last holdout": the 32-cell measurement, the fill-stays-the-fill rule and the four `-hue`/`-ink` pairs, the two gates, the 16% wash ceiling, and the syntax-scheme collapse with its numbers.
+
+- **F4 Extend the unresolved-`var()` gate to `packages/client` and fix the 13 phantom tokens it found.** The A2 gate walked blueprint apps only; the shell was unscanned and carried 13 names that resolve to nothing.
+  - **Shared reader, so the two gates cannot drift** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/css-vars.ts` (new) carries the three pure halves both gates need: `stripCssComments()`, `declaredCustomProps()`, `unresolvedVarRefs()`. Published behind the `@centraid/design/css-vars` **subpath**, not the barrel, for the same oklint `no-barrel-file` ceiling that keeps `./color` and `./oklab` out of it (`/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/package.json`); aliased at source for vitest in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/vitest.config.ts`. Unit-pinned by `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/css-vars.test.ts` (new, 12 tests), including a regression guard that a `/g` regex is built fresh per call — a module-scope instance carries `lastIndex` and returns a different answer the second time.
+  - **The shell-side gate** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/shell-var-resolution.test.ts` (new) walks every `.css` under `packages/client/src` and resolves each fallback-less `var()` against `SHELL_TOKEN_CONTRACT`, every `--x:` declared anywhere in shell CSS, and a commented `RUNTIME_DECLARED` allowlist. A third test keeps that allowlist honest in **both** directions: an entry whose component no longer sets the property is red, and so is an entry a stylesheet already declares (redundant, and therefore silently widening).
+  - **The blueprints gate rewired onto the shared reader** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/src/token-purity.test.ts` now calls `declaredCustomProps()` / `unresolvedVarRefs()` / `stripCssComments()` instead of its own inline regexes; `UNRESOLVED_VAR_DEBT` is unchanged (12 entries, still exactly the same list).
+  - **Phantom ink ramp → the real ramp.** `--text-1` (8 sites, 7 files) is the primary ink at every site — a title above a `--text-soft`/`--text-ghost` sub, or a hover escalating out of `--text-faint` — so all eight become `var(--text)`: `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AssistantScreen.module.css` (`.showEarlier:hover`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/HomeScreen.module.css` (`.shelfEmptyTitle`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/LogsScreen.module.css` (`.showEarlier:hover`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/PhoneScreen.module.css` (`.deviceName`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/templatePreview.module.css` (`.tmplAccessVerb`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/AppInfoModal.module.css` (`.automateBtn`), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/vault.module.css` (`.grantTitle`, `.parkedCommand`).
+  - **The rest of the phantom ink vocabulary** — `--text-muted` → `var(--text-soft)` (12px helper prose under a control label / a keychain heads-up): `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsDeviceScreen.module.css`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/ConnectFlow.module.css`. `--text-secondary` → `var(--text-soft)` (3 rules) and `--text-tertiary` → `var(--text-faint)` (the 10px `.mapping` detail line, the least important rung on the row, and `--text-ghost` is a structural 3:1 rung that does not clear the body floor): `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/ImportScreen.module.css`.
+  - **Structural phantoms** — `--border` → `var(--line)` (a 0.5px hairline) in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/AppInfoModal.module.css`; `--bg-elev-raised` → `var(--bg-elev)` in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/BackupCard.module.css`, matching the canonical settings text input in `settings-controls.module.css`; `--t-h1` → `var(--t-h2)` in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/HouseholdScreen.module.css` and `--t-heading` → `var(--t-h2)` (2 rules) in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/HomeScreen.module.css` — the scale is `--t-h2`/`--t-h3`/`--t-display-1` with **no `h1`**, and `--t-h2` is already the shell's page/section-title idiom (`AutomationsOverviewScreen`, `SettingsConnectionsScreen`, …).
+  - **Blueprint-contract token used in shell scope** — `--r-pill` is in `BLUEPRINT_TOKEN_CONTRACT` only; the shell scale stops at `--r-xl` and `radii.ts` documents the pill as composed inline, so `.ladderMember` takes `border-radius: 999px` (119 other shell rules already do) with a comment saying why: `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsProvidersScreen.module.css`.
+  - **Runtime-provided, therefore legitimate** — `--profile-accent` is written from TSX (`style={{ "--profile-accent": avatarColor }}`, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsProfileScreen.tsx`) and deliberately has no CSS default: the avatar ring has no meaning until a swatch is chosen. Allowlisted with that reason in `RUNTIME_DECLARED`.
+  - **Language dots repaired and measured** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderCode.module.css`: html `--c-blue` → **`--c-rose`**, css `--c-orange` → **`--c-teal`**, js/ts `--c-yellow` → **`--c-ochre`** (md keeps `--c-violet`). The hue budget is nearly forced: `amber` sits **0.031** from `.tokAttr` and `indigo` **0.064** from `.tokKey` (both under the file's 0.08 floor), and `slate` lands **0.038** from the dark theme's composited `--text-ghost`, i.e. reads as the tree's "unknown file type" default. The shipped set holds **0.143** between dots, **0.099 light / 0.168 dark** against that unknown default, and **0.122 light / 0.123 dark** against the four solved syntax inks. `.tokTag` being rose makes the html dot and the html-tag ink the same hue on purpose. Gated by two new tests in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderCode.tokens.test.ts`, which read the dot fills out of the stylesheet the same way it already reads the token inks.
 
 ## Out of scope
 
@@ -747,6 +760,98 @@ floor, and the sabotage PASSED — 0.040 clears 0.035. The floor was raised to
 the defect it exists to catch. A gate that green-lights its own bug is
 decoration; this is the run that found that out.
 
+Shell-side unresolved-`var()` gate (13 phantoms) + shared reader:
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  19 passed (19)
+      Tests  270 passed (270)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     0 palette-hue-as-text, zero regressions
+     # unchanged: `border-radius: 999px` is the documented pill idiom, above the
+     # >=99px carve-out, so replacing var(--r-pill) does not move rawRadius
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+{"findings":[{"severity":"info","message":"Design system defines 64 colors, 7 typography
+  scales, 5 rounding levels, 7 spacing tokens, 67 components.","rule":"token-summary"}],
+ "summary":{"errors":0,"warnings":0,"infos":1}}
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint            # oxlint --deny-warnings .
+(clean)
+
+$ bun run knip
+(configuration hints only; exit 0)
+
+$ oxfmt --check <touched files>
+All matched files use the correct format.
+
+$ cd packages/design && vitest run --coverage.include='src/**'
+  css-vars.ts   |  100 stmts | 87.5 branch |  100 funcs |  100 lines
+  All files     | 97.02      | 79.85       |  100       | 98.34
+  # packages/design/src floors are 98 lines / 70 branches — held
+```
+
+Proof of red (six sabotages, each reverted):
+
+```
+$ # 1. reintroduce a phantom in shell CSS (HomeScreen .shelfEmptyTitle -> var(--text-1))
+AssertionError: a fallback-less var() naming nothing declared silently drops its
+  declaration. …: expected [ Array(1) ] to strictly equal []
++   "react/screens/HomeScreen.module.css -> --text-1"
+ Tests  1 failed | 2 passed (3)
+
+$ # 2. js/ts dot -> --c-amber (the hue barred for colliding with .tokAttr)
+AssertionError: dark js/ts dot vs .tokAttr: expected 0.030704790366375714 to be greater than 0.08
+ Tests  1 failed | 8 passed (9)
+
+$ # 3. js/ts dot -> --c-slate (the hue barred for colliding with the tree's unknown default)
+AssertionError: dark js/ts vs unknown dot collapsed: expected 0.03810857313766087 to be greater than 0.08
+ Tests  2 failed | 7 passed (9)
+
+$ # 4. add a REDUNDANT runtime allowlist entry (--depth, which CSS declares)
++   "--depth: CSS declares it, so the entry is redundant"
+ Tests  1 failed | 2 passed (3)
+
+$ # 5. rename the allowlist entry so the component no longer matches
++   "react/screens/SettingsProfileScreen.module.css -> --profile-accent"
++   "--nope-accent: react/screens/SettingsProfileScreen.tsx no longer sets it"
+ Tests  2 failed | 1 passed (3)
+ # both directions red: the phantom surfaces AND the stale entry is named
+
+$ # 6. blueprints gate still red after being rewired onto the shared reader
++   "notes/Chrome.module.css -> --phantom-token"
+ Tests  1 failed | 4 passed (5)
+
+$ # all six reverted; green again
+ Tests  3 passed (3)     # shell-var-resolution
+ Tests  9 passed (9)     # BuilderCode.tokens
+ Tests  5 passed (5)     # token-purity
+```
+
+Note on 2/3: the two barred hues were found by measurement, not by taste. `slate`
+was the first pick for js/ts on pairwise-separation grounds (0.162 between dots,
+the best available triple) and only the `--text-ghost` comparison — the tree's
+own fallback for an unrecognized file — ruled it out at 0.038 on dark. A dot set
+that is internally distinguishable and still collides with "unknown" is the same
+class of defect as the violet/indigo token collapse this issue already fixed.
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -808,6 +913,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785621331-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 3907 | 1782452 | 4586 | 8501 | 1.0303 | 1269 | 1673388 | 167736215 | 527750 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
 | claude-code-ab8b1729-92f-1785621454-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 3985 | 4039188 | 2099 | 6102 | 2.0971 | 1287 | 1677373 | 171775403 | 529849 |  |
 | claude-code-ab8b1729-92f-1785624677-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 68 | 32575 | 15656804 | 21411 | 54054 | 8.5676 | 1355 | 1709948 | 187432207 | 551260 | fix(client): bind palette-hue text to the solved text rungs (#686)The shell pain |
+| claude-code-ab8b1729-92f-1785627287-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 48 | 28404 | 11502137 | 18202 | 46654 | 6.3839 | 1403 | 1738352 | 198934344 | 569462 | fix(client): resolve phantom token references the stale doc left behind (#686)-- |
 
 ### Steering
 

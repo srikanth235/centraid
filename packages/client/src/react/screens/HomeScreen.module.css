@@ -162,7 +162,7 @@
 .briefHead h2 {
   margin: 2px 0 0;
   color: var(--text);
-  font: var(--t-heading);
+  font: var(--t-h2);
 }
 .briefEyebrow,
 .briefDate {
@@ -200,7 +200,7 @@
 }
 .briefFact strong {
   margin: 7px 0 4px;
-  font: var(--t-heading);
+  font: var(--t-h2);
 }
 .briefFactLabel,
 .briefFactDetail {
@@ -353,7 +353,7 @@
 .shelfEmptyTitle {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text);
 }
 .shelfEmptySub {
   font-size: 13px;
