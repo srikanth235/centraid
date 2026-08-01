@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
-import { tileFinish } from "@centraid/design-tokens";
-import type { IconName } from "@centraid/design-tokens";
+import { tileFinish } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
 import Icon from "../ui/Icon.js";
 import { DEFAULT_VAULT_ICON, PROFILE_COLORS } from "./routes/VaultModal.js";

@@ -1,5 +1,5 @@
 /* Bridge: supply the handful of kit-level names that are NOT part of the
- * @centraid/design-tokens contract. The surface and text families used to be
+ * @centraid/design contract. The surface and text families used to be
  * remapped here (--surface, --muted, --ink-3 …); with one shared vocabulary
  * (#672) kit.css reads the contract names directly, so anything this file
  * still declares is a genuine gap rather than a second spelling. */

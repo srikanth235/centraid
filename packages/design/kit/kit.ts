@@ -20,7 +20,7 @@ import {
 } from "./edge-upload.js";
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
-// Canonical (and ONLY) copy: packages/blueprints/kit/kit.ts. Apps don't
+// Canonical (and ONLY) copy: packages/design/kit/kit.ts. Apps don't
 // carry their own copies — the app-engine runtime serves `kit.ts` /
 // `kit.css` from this dir (`sharedAssetsDir`, wired to `KIT_DIR`) whenever
 // an app folder has no override of its own. Edit here, and every app —

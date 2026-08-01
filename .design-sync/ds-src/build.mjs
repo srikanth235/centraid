@@ -1,11 +1,11 @@
 // Build the Centraid blueprint-kit design-system input for design-sync
 // (issue #327). NO compile step, NO React wrappers.
 //
-// The kit's components are now native Web Components (`packages/blueprints/kit/
+// The kit's components are now native Web Components (`packages/design/kit/
 // elements.js`, defined with `customElements.define()`), which claude.ai/design
 // ingests directly — so this build no longer authors or `tsc`-compiles a React
 // wrapper package. It just:
-//   1. regenerates the token CSS from the built `@centraid/design-tokens`,
+//   1. regenerates the token CSS from the built `@centraid/design`,
 //   2. copies the canonical `kit.css` verbatim,
 //   3. concatenates tokens + fonts + bridge + kit.css into `styles/bundle.css`
 //      (the `cssEntry` every rendered design receives),
@@ -29,7 +29,7 @@ import path from "node:path";
 
 const here = import.meta.dirname;
 const repoRoot = path.resolve(here, "..", "..");
-const kitDir = path.resolve(repoRoot, "packages/blueprints/kit");
+const kitDir = path.resolve(repoRoot, "packages/design/kit");
 const stylesDir = path.resolve(here, "styles");
 const componentsDir = path.resolve(here, "components");
 const previewsDir = path.resolve(here, "previews");
@@ -38,7 +38,7 @@ for (const d of [stylesDir, componentsDir, previewsDir])
 
 // 1. Token CSS — the full :root + per-theme + per-density var blocks.
 const { toCss } = await import(
-  path.resolve(repoRoot, "packages/design-tokens/dist/index.js")
+  path.resolve(repoRoot, "packages/design/dist/index.js")
 );
 writeFileSync(path.resolve(stylesDir, "tokens.css"), toCss());
 console.log("[build] wrote styles/tokens.css");

@@ -10,8 +10,8 @@
  * CLI / local paths.
  */
 
-import { BRAND, toBlueprintCss } from "@centraid/design-tokens";
-import type { ColorKey, IconName } from "@centraid/design-tokens";
+import { BRAND, toBlueprintCss } from "@centraid/design";
+import type { ColorKey, IconName } from "@centraid/design";
 
 import { rewriteTitleInHtml, applyManifestName } from "./app-rewrites.js";
 import {

@@ -1,6 +1,6 @@
 // Shared conversation-client wire contract (issue #420) — the ONE place the
 // chat routes and the model-picker state shape are defined. Canonical copy:
-// packages/blueprints/kit/conversation-client.js. Both the kit's Ask panel
+// packages/design/kit/conversation-client.js. Both the kit's Ask panel
 // (relative same-origin fetch) and the React shell (auth-aware doFetch against
 // a baseUrl) build their conversation CRUD, blob upload, turn POST, and
 // model-picker calls on these route builders + state helpers, so a route or

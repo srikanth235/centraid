@@ -10,7 +10,7 @@
 // at the pref layer's anchor whatever `darkTheme` declared, and why a theme's
 // own accent never rendered. A theme's values are the floor; `bgL` and `accent` go inline only
 // when the owner has actually chosen one, and are cleared when they have not.
-import { themes } from "@centraid/design-tokens";
+import { themes } from "@centraid/design";
 
 import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import type {

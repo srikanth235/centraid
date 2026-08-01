@@ -30,8 +30,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { icons as ICON_SET } from "@centraid/design-tokens";
-import type { IconName } from "@centraid/design-tokens";
+import { icons as ICON_SET } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";

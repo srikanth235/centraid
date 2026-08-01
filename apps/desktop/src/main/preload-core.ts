@@ -12,7 +12,7 @@
  * `ipcRenderer`, call these factories, expose the results.
  */
 
-import type * as DesignTokens from "@centraid/design-tokens";
+import type * as DesignTokens from "@centraid/design";
 
 import { Channel, hostCapabilities } from "./ipc-core.js";
 import { createDeepLinkBuffer } from "./oauth-deep-link.js";

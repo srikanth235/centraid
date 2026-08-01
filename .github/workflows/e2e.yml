@@ -232,7 +232,7 @@ jobs:
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
         # packages/gateway/dist, and turbo pulls every workspace dependency
         # (vault, app-engine, agent-runtime, automation, backup, blueprints,
-        # tunnel, client, web, design-tokens) in transitively — nothing
+        # tunnel, client, web, design) in transitively — nothing
         # the mobile job needs is dropped. The saving is narrow but real, and
         # comes almost entirely from dropping @centraid/desktop (skills and
         # data-plane folded into gateway/tunnel in #495).

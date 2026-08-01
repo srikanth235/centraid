@@ -1,4 +1,4 @@
-import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
 
 import type {
   AsstMsgDTO,

@@ -24,7 +24,7 @@
  *   - A resolver that picks bundle-or-cache per template, preferring the
  *     higher semver version.
  *
- * Depends only on `@centraid/design-tokens` — no engine, no store. Consumed by
+ * Depends only on `@centraid/design` — no engine, no store. Consumed by
  * `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
  * `ScaffoldFile` contract for automation scaffolding).
  *
@@ -63,14 +63,6 @@ const PACKAGE_ROOT = path.resolve(DIST_DIR, "..");
 
 /** Absolute path to the bundled templates directory (the package root). */
 export const appTemplatesDir: string = PACKAGE_ROOT;
-
-/**
- * Absolute path to the canonical shared kit dir (`kit.ts` / `kit.css`).
- * Apps no longer carry per-app copies of these; the app-engine runtime
- * serves them from here as a fallback for `/centraid/<id>/kit.{js,css}`.
- * Hosts pass this as the runtime's `sharedAssetsDir`.
- */
-export const KIT_DIR: string = path.join(PACKAGE_ROOT, "kit");
 
 /** Manifest file name — same on bundle and cache. */
 const MANIFEST_FILE = "manifest.json";

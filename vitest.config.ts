@@ -13,7 +13,7 @@ export const coverageProjects = [
   "packages/blob-format",
   "packages/blueprints",
   "packages/client",
-  "packages/design-tokens",
+  "packages/design",
   "packages/gateway",
   "packages/protocol",
   "packages/time-engine",
@@ -36,7 +36,7 @@ export const coverageInclude = [
   // Bundled apps and their shared browser runtime are production code
   // co-located outside packages/blueprints/src (issue #630 Wave 0).
   "packages/blueprints/apps/**/*.{ts,tsx}",
-  "packages/blueprints/kit/**/*.{ts,js}",
+  "packages/design/kit/**/*.{ts,js}",
   // The PWA service worker is load-bearing production offline/caching code that
   // lives outside src/ only because it must be served from the PWA root. Named
   // file, not `apps/*/public/**` — the rest of public/ is static assets (issue

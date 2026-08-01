@@ -1,0 +1,18 @@
+{
+  // Typecheck-only program covering BOTH layers' sources and tests.
+  //
+  // `module: ESNext` (not the package's Node16) because this program never
+  // emits: the kit layer is browser ES modules and its tests use `import.meta`
+  // and top-level `await`, which TypeScript rejects only because the package's
+  // BUILD target is CommonJS. The build config (tsconfig.json) is unchanged and
+  // still emits CJS for the token layer, which Electron preload requires.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["dist", "node_modules"]
+}

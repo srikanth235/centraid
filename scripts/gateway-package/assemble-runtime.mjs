@@ -35,7 +35,7 @@ export const GATEWAY_WORKSPACE_PACKAGES = [
   "packages/automation",
   "packages/backup",
   "packages/blueprints",
-  "packages/design-tokens",
+  "packages/design",
   "packages/protocol",
   "packages/time-engine",
   "packages/tunnel",

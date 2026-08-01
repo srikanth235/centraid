@@ -681,7 +681,7 @@
    so the chrome and the content below visually flow as one surface. The
    only structural separator is the vertical sidebar/main divider.
    `--bg-wall` is a gradient in dark mode and a flat near-white in light
-   mode (see packages/design-tokens themes). */
+   mode (see packages/design themes). */
 .main {
   grid-area: main;
   position: relative;

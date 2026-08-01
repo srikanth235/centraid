@@ -10,8 +10,8 @@ import {
   accentRamp,
   BRAND,
   palette,
-} from "@centraid/design-tokens";
-import type { AccentRamp } from "@centraid/design-tokens";
+} from "@centraid/design";
+import type { AccentRamp } from "@centraid/design";
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;

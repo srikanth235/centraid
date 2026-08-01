@@ -55,7 +55,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
-| **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design-tokens` |
+| **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
 

@@ -1,5 +1,5 @@
 // Shared assistant rich-answer renderer (issue #420) — the ONE string→HTML
-// renderer for every chat surface. Canonical copy: packages/blueprints/kit/
+// renderer for every chat surface. Canonical copy: packages/design/kit/
 // assistant-rich.js. Both the kit's Ask panel and the React shell render
 // assistant answers through this, so GFM, typed `block:*` blocks, code
 // highlighting, and ref-chips look identical on both. Framework-free vanilla

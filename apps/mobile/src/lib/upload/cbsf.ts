@@ -4,7 +4,7 @@
 // enforced on arrival by `packages/vault/src/blob/remote-verify.ts`
 // (`verifyRemoteSealedObject`). This module is a third writer of that same
 // format — after the vault (node:crypto) and the WebView's
-// `packages/blueprints/kit/edge-upload.js` (crypto.subtle) — because neither
+// `packages/design/kit/edge-upload.js` (crypto.subtle) — because neither
 // is importable from Hermes. `cbsf.test.ts` unseals this module's output with
 // the vault's own `unsealFrame`/`openDirectory` so the two can never drift.
 //

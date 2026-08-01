@@ -22,7 +22,7 @@
 import {
   consumeSseFrames,
   frameData,
-} from "@centraid/blueprints/kit/turn-stream.js";
+} from "@centraid/design/kit/turn-stream.js";
 
 import {
   auth,

@@ -18,7 +18,7 @@ export default {
   mutate: ["src/css.ts", "src/typography.ts", "src/tile.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: {
-    fileName: "../../artifacts/mutation/design-tokens-report.json",
+    fileName: "../../artifacts/mutation/design-report.json",
   },
   thresholds: { high: 80, low: 50, break: null },
   timeoutMS: 60_000,

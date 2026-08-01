@@ -12,9 +12,9 @@ import type { JSX, ReactNode } from "react";
 // The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
 // banners, ask panel) that blueprint component modules reference. Loaded once,
 // globally, by the route host — same as the served path's <link rel=kit.css>.
-import "@centraid/blueprints/kit/kit.css";
+import "@centraid/design/kit/kit.css";
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
-import { toBlueprintCss } from "@centraid/design-tokens";
+import { toBlueprintCss } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";

@@ -22,7 +22,7 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
-import { palette } from "@centraid/design-tokens";
+import { palette } from "@centraid/design";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useTheme } from "../../kit/theme";

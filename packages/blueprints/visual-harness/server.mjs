@@ -4,7 +4,7 @@
 // Serves the two apps EXACTLY the way the real gateway does — same
 // `serveStatic()` from packages/app-engine/src/http/static-server.ts (real
 // per-request esbuild JSX transform, real SHARED_ASSET_FILES fallback to
-// packages/blueprints/kit, real CSP + nonce stamping) — but with zero
+// packages/design/kit, real CSP + nonce stamping) — but with zero
 // gateway/vault behind it. In place of the real change-bridge's
 // `window.centraid.read/write` (which POST to a live vault), every served
 // index.html gets `mock-centraid.js` injected as an inline script, stamped
@@ -26,7 +26,7 @@ import { serveStatic } from "../../app-engine/src/http/static-server.ts";
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const APPS_DIR = path.join(REPO_ROOT, "packages/blueprints/apps");
-const KIT_DIR = path.join(REPO_ROOT, "packages/blueprints/kit");
+const KIT_DIR = path.join(REPO_ROOT, "packages/design/kit");
 const MOCK_SCRIPT_FILE = path.join(__dirname, "mock-centraid.js");
 
 const PORT = Number(process.env.PORT) || 4173;

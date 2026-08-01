@@ -1,5 +1,5 @@
 // Desktop React DOM component library — the shell's presentational primitives.
-// Mirrors the mobile RN component API over @centraid/design-tokens (the one
+// Mirrors the mobile RN component API over @centraid/design (the one
 // shared cross-runtime package) + the local `cx`/`tile-visual` helpers.
 // Each component owns a co-located `*.module.css`; there are no global
 // component classes. Lived in `@centraid/desktop-ui` + `@centraid/ui-core`

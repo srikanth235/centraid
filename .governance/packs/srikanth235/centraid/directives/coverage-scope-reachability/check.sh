@@ -80,8 +80,8 @@ if [[ -f "$VITEST_CFG" ]]; then
     if ! grep -Fq "packages/blueprints/apps/**" "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/blueprints/apps/** (bundled app code would be invisible)"
     fi
-    if ! grep -Fq "packages/blueprints/kit/**" "$VITEST_CFG"; then
-        violation "vitest.config.ts coverage.include must cover packages/blueprints/kit/** (shared blueprint runtime would be invisible)"
+    if ! grep -Fq "packages/design/kit/**" "$VITEST_CFG"; then
+        violation "vitest.config.ts coverage.include must cover packages/design/kit/** (shared blueprint runtime would be invisible)"
     fi
 fi
 
@@ -134,7 +134,7 @@ PKG_IDS="$(
 # Non-standard executable roots under packages/blueprints. Keep them separate:
 # a floor on packages/blueprints/src/** must not accidentally satisfy either.
 BLUEPRINT_SCOPE_IDS="$(
-    for scope in packages/blueprints/apps packages/blueprints/kit; do
+    for scope in packages/blueprints/apps packages/design/kit; do
         if git -C "$REPO_ROOT" ls-files \
             "$scope/**/*.ts" "$scope/**/*.tsx" "$scope/**/*.js" "$scope/**/*.mjs" \
             "$scope/*.ts" "$scope/*.tsx" "$scope/*.js" "$scope/*.mjs" 2>/dev/null \

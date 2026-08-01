@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
-import { icons } from "@centraid/design-tokens";
-import type { IconName } from "@centraid/design-tokens";
+import { icons } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
 export interface IconProps {
   name: IconName;
@@ -18,7 +18,7 @@ export interface IconProps {
 
 /**
  * Line icon, mirroring the mobile `<Icon>` API. Path data is the single
- * source of truth in @centraid/design-tokens, so desktop + mobile draw the
+ * source of truth in @centraid/design, so desktop + mobile draw the
  * same glyphs. Emits the identical SVG shape the vanilla `icons.ts` wrapper
  * produces, so a React-drawn icon and a leftover vanilla one are pixel-equal.
  */

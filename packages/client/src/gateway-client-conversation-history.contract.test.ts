@@ -3,7 +3,7 @@
 // pinning: a conversation row lives in exactly ONE vault, so once its vault is
 // known the client must NAME it on the wire rather than let the shell's ambient
 // default-scope pointer decide. Routes are single-sourced from
-// `@centraid/blueprints/kit/conversation-client.js`, so these tests assert
+// `@centraid/design/kit/conversation-client.js`, so these tests assert
 // against that builder rather than restating the path literals.
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   conversationPath,
   conversationsPath,
-} from "@centraid/blueprints/kit/conversation-client.js";
+} from "@centraid/design/kit/conversation-client.js";
 
 import {
   history,

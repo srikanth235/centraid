@@ -19,7 +19,7 @@ packages/blueprints/
 
 The bundled tree doubles as the remote tree, so a GitHub-raw URL serving `manifest.json` + `<apps|automations>/<id>/<file>` works as a remote template source unchanged.
 
-The package carries all three ways code enters the runtime: the **blank scaffolders** (`scaffoldApp`/`scaffoldAppFiles`, moved here from `@centraid/app-engine` in #151), the **automation clone** path, and the bundled UI-app **install-in-place** catalog. Its runtime code depends only on `@centraid/design-tokens` — no engine, no store. Consumed by `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the `ScaffoldFile` contract).
+The package carries all three ways code enters the runtime: the **blank scaffolders** (`scaffoldApp`/`scaffoldAppFiles`, moved here from `@centraid/app-engine` in #151), the **automation clone** path, and the bundled UI-app **install-in-place** catalog. Its runtime code depends only on `@centraid/design` — no engine, no store. Consumed by `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the `ScaffoldFile` contract).
 
 ## Bundled-app readiness contract
 
@@ -35,7 +35,7 @@ The reachability gate is intentionally capability-by-capability, not a source co
 
 ## Browser dependencies
 
-Built-in apps are bundled into the main client and use normal workspace/package imports. React, `@centraid/blob-format`, video-frame support, and `pdfjs-dist` therefore follow the same Vite dependency graph as the rest of the client; the kit does not ship generated copies of those runtimes or design tokens. The main client, Expo theme generator, and dormant framework-free scaffold consume `@centraid/design-tokens` directly. Blueprint app and kit sources are included in the root `bun run lint` pass; the root `oxlint.config.ts` supplies their mixed browser/Node globals without a separate lint script.
+Built-in apps are bundled into the main client and use normal workspace/package imports. React, `@centraid/blob-format`, video-frame support, and `pdfjs-dist` therefore follow the same Vite dependency graph as the rest of the client; the kit does not ship generated copies of those runtimes or design tokens. The main client, Expo theme generator, and dormant framework-free scaffold consume `@centraid/design` directly. Blueprint app and kit sources are included in the root `bun run lint` pass; the root `oxlint.config.ts` supplies their mixed browser/Node globals without a separate lint script.
 
 ## Adding a template
 

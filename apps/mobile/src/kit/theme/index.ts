@@ -1,5 +1,5 @@
 // Mobile theme — re-exports the shared design system from
-// @centraid/design-tokens and resolves type styles to the actual
+// @centraid/design and resolves type styles to the actual
 // font-family names produced by @expo-google-fonts. RN doesn't
 // combine `fontFamily` + `fontWeight` reliably across platforms,
 // so each weight becomes its own family name.
@@ -14,10 +14,10 @@
 
 import type { TextStyle } from "react-native";
 
-import { type as typeTokens } from "@centraid/design-tokens";
-import type { TypeKey } from "@centraid/design-tokens";
+import { type as typeTokens } from "@centraid/design";
+import type { TypeKey } from "@centraid/design";
 
-export { spacing, radii } from "@centraid/design-tokens";
+export { spacing, radii } from "@centraid/design";
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.

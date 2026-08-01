@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, JSX, SetStateAction } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import type {
   AsstModelPickerDTO,

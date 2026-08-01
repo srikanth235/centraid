@@ -7,7 +7,7 @@
 // secure-storage via phone-link.ts). Callers `hydrateProfile()` once at boot,
 // then read synchronously on the render path.
 
-import { palette } from "@centraid/design-tokens";
+import { palette } from "@centraid/design";
 
 import { Store } from "../storage";
 

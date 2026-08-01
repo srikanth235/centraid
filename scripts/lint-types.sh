@@ -42,7 +42,7 @@ TARGETS=(
   packages/blueprints
   packages/cli
   packages/client
-  packages/design-tokens
+  packages/design
   packages/gateway
   packages/protocol
   packages/test-kit
@@ -195,7 +195,7 @@ done
 # gap for blueprint apps/kit, repository scripts/tests, and Playwright e2e.
 EXTRA_TARGETS=(
   "blueprint-apps|packages/blueprints/tsconfig.apps.json|packages/blueprints/apps|source"
-  "blueprint-kit|packages/blueprints/tsconfig.apps.json|packages/blueprints/kit|source"
+  "blueprint-kit|packages/blueprints/tsconfig.apps.json|packages/design/kit|source"
   "repository-scripts|scripts/tsconfig.json|scripts|source"
   "repository-tests|tests/tsconfig.json|tests|test"
   "desktop-e2e|apps/desktop/tests/e2e/tsconfig.json|apps/desktop/tests/e2e|test"

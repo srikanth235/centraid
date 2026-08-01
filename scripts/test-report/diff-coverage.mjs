@@ -81,7 +81,7 @@ export function isInstrumentableSource(filePath) {
   const conventionalSource = filePath.includes("/src/");
   const blueprintRuntime =
     filePath.startsWith("packages/blueprints/apps/") ||
-    filePath.startsWith("packages/blueprints/kit/");
+    filePath.startsWith("packages/design/kit/");
   if (!conventionalSource && !blueprintRuntime) return false;
   if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath)) return false;
   if (/\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath))

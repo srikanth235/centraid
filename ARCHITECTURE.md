@@ -7,7 +7,7 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 - **Embedded** in the Electron desktop's main process (`apps/desktop`). The renderer is a **thin client** that talks to the embedded gateway over HTTP with a Bearer token; Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
 - **Standalone** as the `centraid-gateway` daemon (a bin shipped by `@centraid/gateway`), serving the same HTTP surface under a config-file `dataDir`.
 
-`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design-tokens` is the cross-surface shared package; per-runtime TypeScript settings live in the root `tsconfig.base.json` / `tsconfig.electron.json` / `tsconfig.expo.json` files.
+`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design` is the cross-surface shared package; per-runtime TypeScript settings live in the root `tsconfig.base.json` / `tsconfig.electron.json` / `tsconfig.expo.json` files.
 
 The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. Gateway connections are iroh-only through the Rust/WASM client; browsers have no UDP access, so the browser transport is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped.
 
@@ -98,7 +98,8 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
 │   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
 │   ├── tunnel/                    # @centraid/tunnel — wire protocol + packaged Rust napi relay
-│   └── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
+│   └── design/                    # @centraid/design — tokens layer (colors, type, spacing,
+│                                  #   icons) + kit layer (kit.css/kit.ts served to apps)
 ├── tsconfig.base.json             # shared TS compilerOptions (electron/expo variants extend it)
 ├── turbo.json                     # task graph (build / dev / typecheck / lint / test)
 └── package.json                   # workspaces, top-level scripts, devDependencies
@@ -106,7 +107,7 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The Rust `packages/tunnel/data-plane` core is packaged both as `packages/tunnel/native`'s napi relay and as the optional direct-HTTP sidecar for ticketed Range delivery, hashing, compression, previews, and provider byte pumping. Both receive only pre-authorized metadata/capabilities and own no identity, consent, journal, replica, agent, or automation decision. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native). The low-end measurements, hardware decision table, deferred cache/materialization designs, Rust protocol boundary, and rollback contract are recorded in [`docs/plans/gateway-low-end-and-rust-plane.md`](docs/plans/gateway-low-end-and-rust-plane.md).
+`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The Rust `packages/tunnel/data-plane` core is packaged both as `packages/tunnel/native`'s napi relay and as the optional direct-HTTP sidecar for ticketed Range delivery, hashing, compression, previews, and provider byte pumping. Both receive only pre-authorized metadata/capabilities and own no identity, consent, journal, replica, agent, or automation decision. The desktop app depends on gateway + agent-runtime + app-engine + automation + design + tunnel. Both apps share `@centraid/design` (mobile resolves it from `src` for React Native). The low-end measurements, hardware decision table, deferred cache/materialization designs, Rust protocol boundary, and rollback contract are recorded in [`docs/plans/gateway-low-end-and-rust-plane.md`](docs/plans/gateway-low-end-and-rust-plane.md).
 
 ## On-disk layout
 
@@ -174,4 +175,4 @@ The desktop app builds its main process, preload bundle, and shared client rende
 
 ## Cross-surface design tokens
 
-`@centraid/design-tokens` is the single source of truth for visual + identity decisions that render consistently across desktop and mobile. Both apps depend on it via the workspace protocol, so a token change recompiles both targets through the turbo task graph.
+`@centraid/design` is the single source of truth for visual + identity decisions that render consistently across desktop and mobile. Both apps depend on it via the workspace protocol, so a token change recompiles both targets through the turbo task graph.

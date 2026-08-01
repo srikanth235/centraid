@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { palette } from "@centraid/design-tokens";
-import type { IconName } from "@centraid/design-tokens";
+import { palette } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
 import Button from "../../kit/components/Button";
 import Icon from "../../kit/components/Icon";

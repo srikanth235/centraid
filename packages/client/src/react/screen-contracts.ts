@@ -10,7 +10,7 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
-import type { TileVariant } from "@centraid/design-tokens";
+import type { TileVariant } from "@centraid/design";
 
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 

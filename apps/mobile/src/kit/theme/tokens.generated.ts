@@ -1,5 +1,5 @@
 // GENERATED — do not edit by hand.
-// Source: @centraid/design-tokens#toBlueprintCss
+// Source: @centraid/design#toBlueprintCss
 // Regenerate: bun run generate:theme
 //
 // React-Native theme tokens lowered from the canonical blueprint token source.

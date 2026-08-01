@@ -149,7 +149,7 @@ Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which boot
 
 ## Product tiers and coverage gates
 
-The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app and kit runtime), agent-runtime, plus pure libraries design-tokens, tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
+The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
 
 Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config. Floors are a conservative integer margin below the latest measured `bun run coverage` run (2026-07-29):
 
@@ -160,8 +160,8 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
 | `packages/blueprints/apps/**` | 17.81 / 12.34 | **17** / **12** |
-| `packages/blueprints/kit/**` | 49.56 / 37.27 | **49** / **37** |
-| `packages/design-tokens/src/**` | 99.03 / 71.42 | **98** / **70** |
+| `packages/design/kit/**` | 49.56 / 37.27 | **49** / **37** |
+| `packages/design/src/**` | 99.03 / 71.42 | **98** / **70** |
 | `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
 | `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
 | `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
@@ -174,7 +174,7 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
-The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 

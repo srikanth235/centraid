@@ -1,6 +1,6 @@
 import type { JSX, MouseEvent, ReactNode } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import { cx } from "./cx.js";
 import Icon from "./Icon.js";

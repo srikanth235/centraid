@@ -8,12 +8,12 @@ Agents hardcode hex/rgb, invent parallel CSS variables, import deep theme files,
 
 | Layer | Package / path | Role |
 | --- | --- | --- |
-| Typed tokens | `packages/design-tokens/src/*` | Colors, type, spacing, icons, app metadata |
+| Typed tokens | `packages/design/src/*` | Colors, type, spacing, icons, app metadata |
 | Desktop/web CSS emit | `toCss()` | Shell themes |
 | Blueprint apps | `toBlueprintCss()` / scaffolded `tokens.css` | Separate field-notebook language — not a fork of shell tokens by hand |
 | Mobile | Imports typed values (often from `src` for RN) | No separate hex palette |
 
-Barrel: `@centraid/design-tokens` (`packages/design-tokens/src/index.ts`). Prefer `themes.light` / `themes.dark` over legacy `colors` alias for new code.
+Barrel: `@centraid/design` (`packages/design/src/index.ts`). Prefer `themes.light` / `themes.dark` over legacy `colors` alias for new code.
 
 ## Two themes, and the key must equal the kind
 
@@ -32,23 +32,32 @@ Adding a third preset therefore means moving those rules onto a resolved-kind at
 ## How agents get it wrong
 
 1. **Hardcoded `#…` / `rgb()`** in client or blueprint CSS — use `var(--…)` from the token emit, or typed imports on RN.
-2. **Editing generated `tokens.css` in an app** without regenerating from design-tokens — next scaffold/sync overwrites or drifts.
-3. **Skipping `bun run build` on design-tokens** after token edits so consumers still see old `dist/`.
+2. **Editing generated `tokens.css` in an app** without regenerating from `@centraid/design` — next scaffold/sync overwrites or drifts.
+3. **Skipping `bun run build` on `packages/design`** after token edits so consumers still see old `dist/`.
 4. **Using shell tokens inside blueprint apps** (or vice versa) without going through the blueprint token path — CSP and theme-bridge assume the blueprint contract.
-5. **Deep imports** like `@centraid/design-tokens/src/themes/centraid` — use package exports / barrel (governance no-deep-imports).
+5. **Deep imports** like `@centraid/design/src/themes/centraid` — use package exports / barrel (governance no-deep-imports).
 6. **Font-family overrides** in app CSS — UI grounding forbids arbitrary `font-family`; token stacks own type.
 
 ## Checklist
 
-- [ ] Change tokens in `packages/design-tokens/src`, not in a one-off CSS file under `apps/`
+- [ ] Change tokens in `packages/design/src`, not in a one-off CSS file under `apps/`
 - [ ] Rebuild / let turbo rebuild dependents
 - [ ] New theme? Its registry key equals its `kind`, or the literal `[data-theme='dark']` shell rules moved to the resolved kind first
 - [ ] New appearance pref applied inline on `<html>`? It only writes when the owner set it, and clears when they did not
-- [ ] Blueprint/mobile consumers: verify direct `@centraid/design-tokens` generation and run the relevant package tests
+- [ ] Blueprint/mobile consumers: verify direct `@centraid/design` generation and run the relevant package tests
 - [ ] Grep for new hex in the touched UI surfaces
 
 ## Related
 
-- `packages/design-tokens`
+- `packages/design`
 - [coding-standards.md](../coding-standards.md)
 - Issue #43 history in `receipts/issue-43-ui-grounding-design-tokens.md`
+
+## The two layers of `packages/design`
+
+`packages/design` is one package with two layers, and the distinction matters when you are deciding where a change belongs:
+
+- **Token layer** (`src/`, imported as `@centraid/design`) — the typed values and the emitters (`toCss()` for the shell, `toBlueprintCss()` for app surfaces). Every visual decision lives here. It is IMPORTED.
+- **Kit layer** (`kit/`, referenced as `@centraid/design/kit`) — the component substrate app surfaces load: `kit.css`, `kit.ts`, chart elements, toast and Ask controllers. It is SERVED, not bundled: the app-engine hands these files to app surfaces over HTTP via `sharedAssetsDir` (`KIT_DIR`).
+
+The kit holds **no design decisions of its own** (#672) — every colour, hairline, radius and face in `kit.css` is a contract token. If you find yourself adding a literal or a new `--name` there, the value belongs in the token layer and the name belongs in `src/contract.ts`.

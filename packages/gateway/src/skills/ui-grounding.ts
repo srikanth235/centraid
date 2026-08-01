@@ -6,7 +6,7 @@
  * curated icon set, copy-pasteable component primitives, and a short
  * checklist for the states/a11y floor every app should hit.
  *
- * Built dynamically per turn (from `@centraid/design-tokens`) so a future
+ * Built dynamically per turn (from `@centraid/design`) so a future
  * tokens change propagates without regenerating anything. This is the
  * design-contract grounding that can't be a static `SKILL.md` — it is
  * composed into the turn alongside the static authoring skills. Promoting it
@@ -14,7 +14,7 @@
  * step once native skill discovery is wired on both backends.
  */
 
-import { icons, toBlueprintCss } from "@centraid/design-tokens";
+import { icons, toBlueprintCss } from "@centraid/design";
 
 /**
  * Returns the ordered list of prompt blocks to splice in below the
@@ -33,7 +33,7 @@ export function buildUiGroundingBlocks(): string[] {
 
 /**
  * `### Design tokens` — the live CSS-variable contract emitted by
- * `@centraid/design-tokens`. The agent should consume these via
+ * `@centraid/design`. The agent should consume these via
  * `var(--accent)`, `var(--text)`, etc. — never hardcode colors, radii,
  * font sizes, or spacing values.
  *
@@ -70,7 +70,7 @@ function renderDesignTokensBlock(): string {
 
 /**
  * `### Icon set` — the curated Lucide-style icon paths from
- * `@centraid/design-tokens/icons.ts`. Tells the agent: pick from this
+ * `@centraid/design/icons.ts`. Tells the agent: pick from this
  * set, inline the path data into an `<svg viewBox="0 0 24 24">`, and
  * use `currentColor` so colors flow from the parent `color` rule. No
  * emoji, no remote SVG fetches, no extra icon libraries.

@@ -27,7 +27,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/client": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "@centraid/gateway": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
@@ -70,7 +70,7 @@
         "@babel/runtime": "^7.25.0",
         "@centraid/blueprints": "workspace:*",
         "@centraid/client": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "@centraid/protocol": "workspace:*",
         "@centraid/time-engine": "workspace:*",
         "@expo-google-fonts/geist": "^0.4.2",
@@ -152,7 +152,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/client": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "react": "19.2.8",
         "react-dom": "19.2.8",
       },
@@ -232,8 +232,7 @@
       "name": "@centraid/blueprints",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/blob-format": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "pdfjs-dist": "6.1.200",
         "tldts": "7.4.9",
       },
@@ -270,7 +269,7 @@
       "dependencies": {
         "@centraid/blob-format": "workspace:*",
         "@centraid/blueprints": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "@centraid/protocol": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "6.1.200",
@@ -287,9 +286,12 @@
         "typescript": "catalog:",
       },
     },
-    "packages/design-tokens": {
-      "name": "@centraid/design-tokens",
+    "packages/design": {
+      "name": "@centraid/design",
       "version": "0.1.0",
+      "dependencies": {
+        "@centraid/blob-format": "workspace:*",
+      },
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
         "typescript": "catalog:",
@@ -307,7 +309,7 @@
         "@centraid/automation": "workspace:*",
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/design": "workspace:*",
         "@centraid/protocol": "workspace:*",
         "@centraid/time-engine": "workspace:*",
         "@centraid/tunnel": "workspace:*",
@@ -641,7 +643,7 @@
 
     "@centraid/client": ["@centraid/client@workspace:packages/client"],
 
-    "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
+    "@centraid/design": ["@centraid/design@workspace:packages/design"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 

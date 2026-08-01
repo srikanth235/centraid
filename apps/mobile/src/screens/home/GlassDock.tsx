@@ -15,7 +15,7 @@ import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import GlassBar from "../../kit/components/GlassBar";
 import Icon from "../../kit/components/Icon";

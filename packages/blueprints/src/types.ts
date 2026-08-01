@@ -2,7 +2,7 @@
  * Public types for @centraid/blueprints.
  */
 
-import type { ColorKey, IconName } from "@centraid/design-tokens";
+import type { ColorKey, IconName } from "@centraid/design";
 
 /**
  * One per-app aesthetic knob declared by a template's `app.json#knobs[]`.
@@ -37,7 +37,7 @@ export interface AppKnobsManifest {
 }
 
 /**
- * Metadata for a single template entry. Mirrors @centraid/design-tokens'
+ * Metadata for a single template entry. Mirrors @centraid/design'
  * `AppMeta` plus a `version` field (so the gallery can detect updates) and
  * a `files` list (so the remote fetcher knows what to download).
  *
@@ -63,9 +63,9 @@ export interface TemplateMeta {
   name: string;
   /** One-line description shown on the gallery card. */
   desc: string;
-  /** Color key from @centraid/design-tokens — drives the tile hue. */
+  /** Color key from @centraid/design — drives the tile hue. */
   colorKey: ColorKey;
-  /** Icon key from @centraid/design-tokens — drives the tile glyph. */
+  /** Icon key from @centraid/design — drives the tile glyph. */
   iconKey: IconName;
   /** Template version. Semver; bumped when the template's source changes. */
   version: string;

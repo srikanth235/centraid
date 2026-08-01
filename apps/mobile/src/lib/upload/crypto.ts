@@ -7,7 +7,7 @@
 // statically into a logic module breaks under vitest.
 //
 // The default implementation targets the WebCrypto `SubtleCrypto` API, which
-// is what `packages/blueprints/kit/edge-upload.js` already seals with in the
+// is what `packages/design/kit/edge-upload.js` already seals with in the
 // WebView. That makes it real (not a stub) in node/vitest today, and on device
 // it needs only a `globalThis.crypto.subtle` polyfill installed at boot — see
 // `index.ts`. No sealing logic changes between the two.

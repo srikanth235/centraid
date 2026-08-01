@@ -14,7 +14,7 @@ import type {
   ThemePreset,
   TileVariant,
   TileFinish,
-} from "@centraid/design-tokens";
+} from "@centraid/design";
 
 // Make this file a module so `declare global` augments globals.
 

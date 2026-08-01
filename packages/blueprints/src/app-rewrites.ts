@@ -59,7 +59,7 @@ export async function rewriteIndexHtmlTitle(
 /**
  * Tile visual identity (icon glyph + hue) carried in `app.json`. Keys are
  * plain strings at this layer — the catalog (`index.json`) declares them
- * with the `@centraid/design-tokens` types, and the shells validate before
+ * with the `@centraid/design` types, and the shells validate before
  * rendering, so the rewrite stays pass-through.
  */
 export interface AppVisualIdentity {

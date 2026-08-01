@@ -3,9 +3,9 @@
    lives elsewhere:
    - ALL design tokens (colors per theme, typography + font stacks,
      spacing, shadows, device-wall, palette, radii, library-tile sizing)
-     come from @centraid/design-tokens via theme-vars.ts, which injects the
+     come from @centraid/design via theme-vars.ts, which injects the
      generated tokens.css into a <style> tag at boot. To tweak design
-     values, edit the TS in packages/design-tokens — not this file.
+     values, edit the TS in packages/design — not this file.
    - ALL component styles live in co-located `*.module.css` files next to
      their React components (see react/CSS-CONVENTIONS.md). Do not add
      component classes here. */

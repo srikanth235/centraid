@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import { radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";

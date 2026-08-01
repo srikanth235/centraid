@@ -31,7 +31,11 @@ describe("locker-online-only", () => {
       );
     }
     for (const file of ["kit.ts", "elements.js"]) {
-      symlinkSync(path.resolve(PKG, "kit", file), path.resolve(SCRATCH, file));
+      // The kit layer lives in the design package (#672).
+      symlinkSync(
+        path.resolve(PKG, "../design/kit", file),
+        path.resolve(SCRATCH, file)
+      );
     }
   });
 

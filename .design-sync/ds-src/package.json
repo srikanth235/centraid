@@ -2,7 +2,7 @@
   "name": "@centraid/blueprint-kit-ds",
   "version": "0.0.0",
   "private": true,
-  "description": "Design-sync input for the Centraid blueprint kit (claude.ai/design). Points straight at the kit's real native Web Components (packages/blueprints/kit/elements.js) — no React wrappers, no compile step (issue #327). `build` only assembles the CSS bundle and preview cards.",
+  "description": "Design-sync input for the Centraid blueprint kit (claude.ai/design). Points straight at the kit's real native Web Components (packages/design/kit/elements.js) — no React wrappers, no compile step (issue #327). `build` only assembles the CSS bundle and preview cards.",
   "type": "module",
   "scripts": {
     "build": "node build.mjs"

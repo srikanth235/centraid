@@ -11,9 +11,13 @@ export default jsdomProject({
     alias: [
       ...inlineBlueprintAliases(),
       {
-        find: "@centraid/design-tokens",
+        find: "@centraid/design/kit",
+        replacement: fileURLToPath(new URL("../design/kit", import.meta.url)),
+      },
+      {
+        find: /^@centraid\/design$/u,
         replacement: fileURLToPath(
-          new URL("../design-tokens/src/index.ts", import.meta.url)
+          new URL("../design/src/index.ts", import.meta.url)
         ),
       },
     ],

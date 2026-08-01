@@ -168,12 +168,9 @@ describe(renderTokensModule, () => {
   });
 
   it("emits the generated header and font families", () => {
-    const out = renderTokensModule(
-      theme,
-      "@centraid/design-tokens#toBlueprintCss"
-    );
+    const out = renderTokensModule(theme, "@centraid/design#toBlueprintCss");
     expect(out).toContain("GENERATED — do not edit");
-    expect(out).toContain("@centraid/design-tokens#toBlueprintCss");
+    expect(out).toContain("@centraid/design#toBlueprintCss");
     expect(out).toContain("export const lightPalette");
     expect(out).toContain("Geist_400Regular");
   });

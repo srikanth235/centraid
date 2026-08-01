@@ -75,6 +75,18 @@ already existed on the app surface), `--success` joins the app surface, and all
 30 `var(--warn)`/`var(--ok)` references across the client, kit and blueprints
 move onto the contract names. `--ok`/`--warn` no longer exist.
 
+**One design package, two layers.** With the vocabulary unified, the split
+between `packages/design-tokens` and `packages/blueprints/kit` had no remaining
+justification: the kit held no design decisions of its own, and living under
+"app templates" mislabelled the shared UI substrate the templates render on.
+The package is now `packages/design` (`@centraid/design`) with a **token
+layer** (`src/`, imported) and a **kit layer** (`kit/`, served to app surfaces
+via `KIT_DIR` / `sharedAssetsDir`). `KIT_DIR` moves out of `@centraid/blueprints`
+into `@centraid/design/kit`; the seven kit-layer test files move with the code;
+blueprints keeps its templates and drops `@centraid/blob-format`, which only the
+kit used. `docs/traps/design-tokens.md` documents which layer a change belongs
+in, so the two never re-fragment.
+
 `contrast.test.ts` was the reason (2) and (4) could hide: it re-typed the
 values it was guarding instead of reading them. It now parses the emitted CSS
 from `toCss()` / `toBlueprintCss()`, resolves `var()`/`calc()` the way mobile's
@@ -117,6 +129,16 @@ flattening the ramp into four identical greys.
 - `apps/mobile/src/kit/theme/tokens.generated.ts` — regenerated from the corrected app surface
 - `scripts/perf/app-weight.mjs`, `tests/experience-budgets/{desktop,mobile}.json` — `--surface` CLI flag restored
 - `.design-sync/ds-src/styles/bridge.css` — dead `--ink*`/`--surface*` mappings dropped
+- `packages/design/**` (was `packages/design-tokens/**`) — renamed package, `@centraid/design`
+- `packages/design/kit/**` (was `packages/blueprints/kit/**`) — the kit layer, moved with history
+- `packages/design/src/kit.ts` (new) — `KIT_DIR`, the kit layer's one seam
+- `packages/design/src/{assistant-rich,assistant-sanitize,code-highlight,conversation-client,edge-upload,kit-smoke,turn-stream}.test.ts` — kit-layer tests moved from blueprints
+- `packages/design/tsconfig.test.json` — ESM typecheck program (the kit layer is browser ESM; the build still emits CJS)
+- `packages/gateway/src/serve/build-gateway.ts` — `KIT_DIR` from `@centraid/design/kit`
+- `packages/blueprints/{package.json,vitest.config.ts,tsconfig.apps.json,types/virtual-kit/kit.ts,src/index.ts,src/app-boot-harness.ts,src/locker-online-only.test.ts,visual-harness/server.mjs}` — kit handed over
+- `apps/{web,desktop}/vite.config.ts`, `packages/client/{tsconfig.json,vitest.config.ts,vitest.mutation.config.ts}` — anchored root alias + kit directory alias
+- `tests/mutation-floors.json` — floor key follows the directory rename (value unchanged at 93)
+- `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `docs/traps/design-tokens.md` — two-layer model documented
 
 ## Verification
 
@@ -160,6 +182,7 @@ handoff from diagnosis to completing the governed commit and draft PR.
 | codex-019fbc6b-05b-1785574961-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 19779 | 0 | 993280 | 1306 | 21085 | 0.3174 | 427877 | 0 | 19465728 | 52802 | feat(theme): unify token contract and improve legibility (#672) |
 | codex-019fbc6b-05b-1785575180-1 | codex | 019fbc6b-05bf-72d1-9acd-c246218b38eb | #672 | gpt-5.6-terra | 22157 | 0 | 1496320 | 1158 | 23315 | 0.4468 | 450034 | 0 | 20962048 | 53960 | test(client): cover teal orbit logo (#672) |
 | claude-code-cbc1504a-314-1785577918-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 776 | 1642727 | 59632329 | 283586 | 1927089 | 47.1767 | 776 | 1642727 | 59632329 | 283586 |  |
+| claude-code-cbc1504a-314-1785580278-1 | claude-code | cbc1504a-3144-4890-8d32-899615939189 | #672 | claude-opus-5 | 276 | 642331 | 41713126 | 90761 | 733368 | 27.1415 | 1052 | 2285058 | 101345455 | 374347 |  |
 
 ### Steering
 

@@ -1,21 +1,34 @@
 {
-  "name": "@centraid/design-tokens",
+  "name": "@centraid/design",
   "version": "0.1.0",
   "private": false,
-  "description": "Shared design tokens (colors, type, spacing, app metadata, icon paths) for Centraid desktop and mobile.",
+  "description": "Centraid's design system: the token vocabulary (tokens layer) and the blueprint app kit served to app surfaces (kit layer).",
   "license": "SEE LICENSE IN REPOSITORY",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/srikanth235/centraid.git",
-    "directory": "packages/design-tokens"
+    "directory": "packages/design"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "kit"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./kit": {
+      "types": "./dist/kit.d.ts",
+      "default": "./dist/kit.js"
+    },
+    "./kit/*": "./kit/*"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -24,6 +37,9 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@centraid/blob-format": "workspace:*"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { isWebHost } from "../../host-platform.js";

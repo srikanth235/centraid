@@ -2,12 +2,12 @@
 
 ## What this design system is (read first)
 
-Centraid's product UI is a **native Web Component kit** (`packages/blueprints/kit/`): `elements.js` defines `<kit-*>` custom elements with `customElements.define()` — dependency-free vanilla (no runtime bundle underneath; Lit was fully removed from the kit) — styled by `kit.css` (the `.kit-*` class system), plus a **token package** (`@centraid/design-tokens`, TS objects → CSS vars via `toCss()`).
+Centraid's product UI is a **native Web Component kit** (`packages/design/kit/`): `elements.js` defines `<kit-*>` custom elements with `customElements.define()` — dependency-free vanilla (no runtime bundle underneath; Lit was fully removed from the kit) — styled by `kit.css` (the `.kit-*` class system), plus a **token package** (`@centraid/design`, TS objects → CSS vars via `toCss()`).
 
 claude.ai/design ingests native custom elements **directly** — the Design System pane lists a `<kit-*>` element as a real component and generated designs embed the tag verbatim. So this sync points straight at the kit's **real component files**; there is **no React wrapper package and no compile step** (issue #327 replaced both).
 
 - `.design-sync/ds-src/` is the sync staging area. Committed source is just `build.mjs` (the generator), `styles/bridge.css` + `styles/fonts.css`, the fonts, and `package.json`. Everything else (`components/`, `previews/`, `manifest.json`, derived `styles/*.css`) is **build output** (gitignored).
-- `buildCmd` = `node .design-sync/ds-src/build.mjs`. It (1) regenerates `styles/tokens.css` from the built `@centraid/design-tokens`, (2) copies `kit.css` verbatim, (3) concatenates `tokens + fonts + bridge + kit.css` into `styles/bundle.css` (the `cssEntry`), (4) copies the REAL `kit/elements.js` into `components/`, (5) writes one `@dsCard` preview HTML per component into `previews/` and a `manifest.json` (tag → source + preview). **`@centraid/design-tokens` and `kit.css` must be built/present first** — run `turbo build` (or at least build design-tokens) if `packages/design-tokens/dist/` is stale.
+- `buildCmd` = `node .design-sync/ds-src/build.mjs`. It (1) regenerates `styles/tokens.css` from the built `@centraid/design`, (2) copies `kit.css` verbatim, (3) concatenates `tokens + fonts + bridge + kit.css` into `styles/bundle.css` (the `cssEntry`), (4) copies the REAL `kit/elements.js` into `components/`, (5) writes one `@dsCard` preview HTML per component into `previews/` and a `manifest.json` (tag → source + preview). **`@centraid/design` and `kit.css` must be built/present first** — run `turbo build` (or at least build design-tokens) if `packages/design/dist/` is stale.
 - `config.json` (`shape: "web-components"`) names the manifest, the component source, the previews dir, and the `cssEntry`. There is no `runtime` field — `elements.js` has no runtime dependency to point at. The actual push is a separate credentialed step: run the `/design-sync` skill, which reads `config.json` and drives the `DesignSync` tool against the pinned `projectId`.
 
 ## No more wrappers (issue #327)
@@ -18,7 +18,7 @@ Adding/changing a component is a one-file edit in `kit/elements.js` plus (option
 
 ## The CSS bridge (still needed — a naming adapter, not a wrapper)
 
-`kit.css` reads **app-level** vars (`--surface`, `--text`, `--muted`, `--accent`, `--radius`, `--mono`, …) that the blueprint apps define per-app. `@centraid/design-tokens` emits **different** names (`--bg`, `--ink`, `--accent`, `--line`, `--r-*`, `--d-*`). `styles/bridge.css` maps the former onto the latter. **Without the bridge, every component renders unstyled.**
+`kit.css` reads **app-level** vars (`--surface`, `--text`, `--muted`, `--accent`, `--radius`, `--mono`, …) that the blueprint apps define per-app. `@centraid/design` emits **different** names (`--bg`, `--ink`, `--accent`, `--line`, `--r-*`, `--d-*`). `styles/bridge.css` maps the former onto the latter. **Without the bridge, every component renders unstyled.**
 
 Note (issue #327): moving the components to native custom elements did **not** remove the need for the bridge. The elements render in the **light DOM** and read the same app-level var names `kit.css` always read; those custom properties inherit into the element unchanged. Shadow-DOM encapsulation would not have closed the design-tokens↔app-var **naming** gap — that gap is what the bridge exists for — so the bridge stays. If a new component reads a var the bridge doesn't map, add it to `bridge.css`.
 
@@ -36,7 +36,7 @@ Each `previews/<tag>.html` starts with a first-line `<!-- @dsCard group="…" na
 
 ## Re-sync risks (what can silently go stale)
 
-- **Token names**: the bridge hard-codes `@centraid/design-tokens` var names (`--bg-elev`, `--ink`, `--r-lg`, `--c-amber`). If the tokens package renames vars, the bridge breaks silently (components render half-styled). Re-check `bridge.css` against `packages/design-tokens/src/css.ts` after any tokens change.
+- **Token names**: the bridge hard-codes `@centraid/design` var names (`--bg-elev`, `--ink`, `--r-lg`, `--c-amber`). If the tokens package renames vars, the bridge breaks silently (components render half-styled). Re-check `bridge.css` against `packages/design/src/css.ts` after any tokens change.
 - **Excluded controllers**: if the product later wants the live Ask/@-mention behaviors in the DS, they'd need a different (non-static) treatment — they're not here by design.
 - **Fonts**: self-hosted copies won't track upstream font updates; fine for a brand pin.
 

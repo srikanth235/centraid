@@ -1,6 +1,6 @@
 // Shared intent-invalidation derivation (issue #420) — the ONE function that
 // turns a set of durable replica intents into the app-visible overlay
-// invalidations. Canonical copy: packages/blueprints/kit/intent-invalidations.js.
+// invalidations. Canonical copy: packages/design/kit/intent-invalidations.js.
 // Both packages/client (whose replica coordinator re-exports it from
 // ./src/replica/intent-invalidations.ts) and the blueprints app-boot harness
 // (packages/blueprints/src/app-boot-harness.ts) drive their overlay events

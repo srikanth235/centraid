@@ -57,7 +57,7 @@ export default defineConfig({
     "apps/web/public/sw.js",
     "scripts/docs-site/src/content/**",
     "packages/blueprints/manifest.json",
-    "packages/blueprints/kit/tokens.css",
-    "packages/blueprints/kit/wall.css",
+    "packages/design/kit/tokens.css",
+    "packages/design/kit/wall.css",
   ],
 });

@@ -5,7 +5,7 @@
   "gatewayBin": "centraid-gateway",
   "packages": [
     "protocol",
-    "design-tokens",
+    "design",
     "blob-format",
     "app-engine",
     "backup",

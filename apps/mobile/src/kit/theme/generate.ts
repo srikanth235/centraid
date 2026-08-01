@@ -39,7 +39,7 @@ const FONT_ROLES = {
 
 // The portable token CSS has no spacing scale — spacing is a mobile concern the kit never
 // defined. Use the design system's regular density scale (see
-// packages/design-tokens/src/density.ts) so mobile matches everything else.
+// packages/design/src/density.ts) so mobile matches everything else.
 const SPACING = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 48 } as const;
 
 // Dark `--bg` is `var(--bg-wall)`, which the browser host supplies at runtime
@@ -258,7 +258,7 @@ function radiusKey(name: string): string {
 
 // Internal (`--_accent`) and swatch (`--c-amber`) vars are excluded from the
 // neutral/semantic palette: the former is a plumbing alias, the latter are the
-// app-icon hues already owned by @centraid/design-tokens' `palette`.
+// app-icon hues already owned by @centraid/design' `palette`.
 function isPaletteCandidate(name: string): boolean {
   return !name.startsWith("--_") && !name.startsWith("--c-");
 }

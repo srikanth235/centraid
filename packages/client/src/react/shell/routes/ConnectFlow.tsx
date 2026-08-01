@@ -1,8 +1,8 @@
 import { useEffect, useReducer, useRef } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
-import { tileFinish } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
+import { tileFinish } from "@centraid/design";
 
 import { cx } from "../../ui/cx.js";
 import Icon from "../../ui/Icon.js";

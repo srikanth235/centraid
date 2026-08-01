@@ -14,7 +14,7 @@
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { family, t, useTheme } from "../../kit/theme";

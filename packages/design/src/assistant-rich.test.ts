@@ -1,5 +1,5 @@
 /* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has no
-   DOM lib (blueprints "src" is node-side); this file runs the browser kit under
+   DOM lib (the token layer is node-side); this file runs the browser kit under
    jsdom, so DOM globals are runtime-real but invisible to tsc (see kit-smoke.test.ts). */
 // @ts-nocheck — exercises the untyped browser kit module under jsdom.
 // @vitest-environment jsdom

@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design";
 
 import { formatCurrencyMinor } from "../../capture.js";
 import { INTEGRATION_HUES } from "../format.js";

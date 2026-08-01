@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import * as designTokens from "@centraid/design-tokens";
+import * as designTokens from "@centraid/design";
 
 import { Channel } from "./ipc-core.js";
 import type {

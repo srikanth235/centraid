@@ -5,7 +5,7 @@ recommended: true
 summary: |
   Every top-level package (or app) under packages/*/src or apps/*/src that
   contains non-test TypeScript source, plus the non-standard executable
-  packages/blueprints/apps and packages/blueprints/kit roots, must either
+  packages/blueprints/apps and packages/design/kit roots, must either
   (a) be covered by a coverage-floors.json glob, (b) own at least one
   tests/matrix.json flow, or (c) be listed in this directive's
   intentional-ungated allowlist. Catches the blind spot where a new engine or
