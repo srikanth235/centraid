@@ -183,15 +183,31 @@ function ConnectionStep({
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
-  // Uncontrolled pairing field: Maestro/UiAutomator ACTION_SET_TEXT can fill the
-  // native EditText without firing React onChangeText on a controlled input, so
-  // Connect would submit "" while the ticket still paints (Android 30713590856 /
-  // 30714733151). defaultValue + ref keeps the visible field authoritative.
+  // Uncontrolled pairing field + ref: automation may fill the native EditText
+  // without a per-keystroke onChangeText. hideKeyboard blurs the field, and
+  // onBlur/onEndEditing copy nativeEvent.text into the ref before Connect.
   const codeRef = useRef("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
+
+  const rememberCode = (text: string): void => {
+    codeRef.current = text;
+  };
+
+  const openPaste = (): void => {
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(true);
+  };
+
+  const closePaste = (): void => {
+    if (pairing) return;
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(false);
+  };
 
   /**
    * Open the scanner, asking for the camera if we may. Resolving permission
@@ -320,13 +336,17 @@ function ConnectionStep({
             testID="pairing-code-input"
             accessibilityLabel="Paste the one-line ticket"
             defaultValue=""
-            onChangeText={(next) => {
-              codeRef.current = next;
-            }}
-            // Also take the native event text — some automation paths only
-            // deliver it here when the field is uncontrolled.
+            onChangeText={rememberCode}
             onChange={(event) => {
-              codeRef.current = event.nativeEvent.text;
+              rememberCode(event.nativeEvent.text);
+            }}
+            // Maestro often commits the full ticket via SET_TEXT; blur after
+            // hideKeyboard is when the native value is reliable in JS.
+            onEndEditing={(event) => {
+              rememberCode(event.nativeEvent.text);
+            }}
+            onBlur={(event) => {
+              rememberCode(event.nativeEvent.text);
             }}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
@@ -366,7 +386,7 @@ function ConnectionStep({
             <Pressable
               accessibilityLabel="Scan the QR code instead"
               accessibilityRole="button"
-              onPress={() => (pairing ? undefined : setShowPaste(false))}
+              onPress={closePaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>Scan the QR code instead</Text>
@@ -395,7 +415,7 @@ function ConnectionStep({
               testID="onboarding-paste"
               accessibilityLabel="Can't scan? Paste a code instead"
               accessibilityRole="button"
-              onPress={() => setShowPaste(true)}
+              onPress={openPaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>

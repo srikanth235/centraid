@@ -67,7 +67,12 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
   assert.match(firstRun, /id:\s*"onboarding-paste"/u);
   assert.match(firstRun, /id:\s*"pairing-code-input"/u);
   assert.match(firstRun, /id:\s*"onboarding-connect"/u);
-  assert.match(firstRun, /eraseText:\s*2000/u);
+  // Recovery remounts paste (never a YAML eraseText:2000 step — kills Maestro).
+  assert.match(firstRun, /Scan the QR code instead/u);
+  assert.doesNotMatch(
+    stripLineComments(firstRun),
+    /^\s*- eraseText:\s*2000\s*$/mu
+  );
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
   assert.doesNotMatch(
     stripLineComments(firstRun),

@@ -128,22 +128,19 @@ export function pasteAndConnectPairingTicketCommands(
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
 - inputText: "x"
-${dismissKeyboardOnboarding}# Bare eraseText only clears 50 characters (Maestro default) — a pairing
-# ticket is ~400 chars. Always pass an explicit high count so a retype never
-# appends onto leftover bytes (Android 30714733151: doubled ticket in field).
-- eraseText: 50
+${dismissKeyboardOnboarding}- eraseText: 50
 # e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
 # multiline React Native TextInput values; successful redemption below is the
 # end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
 # resolved by Maestro without persisting the live capability in this YAML.
 - inputText: \${MAESTRO_PAIRING_TICKET}
+# hideKeyboard blurs the field so onBlur copies native text into codeRef
+# (Android SET_TEXT can skip per-keystroke onChangeText).
 - hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 2000
 # The pasted ticket grows the field to ~14 lines, which pushes the submit button
-# off screen — and Maestro matches (and "taps") off-screen elements, so the tap
-# reports COMPLETED while nothing happens and the flow dies later on an
-# unrelated assertion. Scroll it fully into view first.
-# Tap the Pressable by testID — text "^Connect$" matches the non-clickable
-# child TextView and never fires submit (Android run 30708832841).
+# off screen — scroll it fully into view before tapping by testID.
 - scrollUntilVisible:
     element:
       id: "onboarding-connect"
@@ -153,28 +150,28 @@ ${dismissKeyboardOnboarding}# Bare eraseText only clears 50 characters (Maestro 
 - tapOn:
     id: "onboarding-connect"
     retryTapIfNoChange: true
-# Submit must enter the pairing path (Connecting…) or land on a post-pair
-# screen. A silent no-op leaves the ticket field filled and Connect idle
-# (Android 30713590856). Re-tap once first; only full clear+retype if still idle
-# so we never append a second ticket onto a partial erase (30714733151).
+# If still idle, remount the paste field (scan instead → paste) — never
+# eraseText:2000 (Android 30716166878: DEADLINE_EXCEEDED after 120s of
+# char-by-char backspace). Remount gives a clean defaultValue buffer.
 - runFlow:
     when:
       notVisible: "${progressOrError}"
     commands:
+      - tapOn: "Scan the QR code instead"
       - tapOn:
-          id: "onboarding-connect"
+          id: "onboarding-paste"
           retryTapIfNoChange: true
-- runFlow:
-    when:
-      notVisible: "${progressOrError}"
-    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "pairing-code-input"
+          timeout: 10000
       - tapOn:
           id: "pairing-code-input"
-# e2e-lint-allow: unasserted-input — same ticket; full clear then retype so
-# RN state and the native field stay one string.
-      - eraseText: 2000
+# e2e-lint-allow: unasserted-input — retype after remount; redemption is the check.
       - inputText: \${MAESTRO_PAIRING_TICKET}
       - hideKeyboard
+      - waitForAnimationToEnd:
+          timeout: 2000
       - scrollUntilVisible:
           element:
             id: "onboarding-connect"

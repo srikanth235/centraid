@@ -55,7 +55,9 @@ accessibility zero-grey (15 cells).
 
 - **iOS paste path was open but text assert failed (30713590856).** Screenshot after fail shows PAIRING CODE + Connect + Scan instead — `onboarding-paste` worked. Asserting lede/placeholder `"Paste the one-line ticket"` is unsafe on XCUITest (split Text nodes / non-exposed placeholder). home-loads + configure wait on `id: pairing-code-input` and `PAIRING CODE` / `onboarding-connect` instead.
 
-- **Android doubled ticket on re-drive (30714733151).** Bare Maestro `eraseText` only clears 50 chars; retype appended a second full ticket. Pair never left Connect. Fixes: `eraseText: 2000` on recovery, retap Connect before retype, uncontrolled pairing `TextInput` + remount on error so automation SET_TEXT is not wiped by a controlled empty value.
+- **Android doubled ticket on re-drive (30714733151).** Bare Maestro `eraseText` only clears 50 chars; retype appended a second full ticket. Pair never left Connect.
+
+- **eraseText:2000 killed Maestro (30716166878).** Device server DEADLINE_EXCEEDED after 120s of char-by-char backspace. Recovery now remounts the paste field via "Scan the QR code instead" → paste (clean `defaultValue`), and the pairing field syncs native text into the ref on blur/endEditing after `hideKeyboard`.
 
 ## Out of scope
 
