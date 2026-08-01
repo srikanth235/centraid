@@ -367,10 +367,11 @@ function ConnectionStep({
                 {pairing ? "Connecting…" : "Scan the QR code"}
               </Text>
             </Pressable>
-            {/* accessibilityRole=button is required for XCUITest/Maestro to
-                fire onPress — a bare Pressable+Text tap COMPLETED without
-                flipping showPaste on the iOS nightly re-run for #676. */}
+            {/* testID so Maestro/XCUITest taps the Pressable (run 30711575336:
+                text+accessibilityRole=button still COMPLETED without flipping
+                showPaste on iOS — same class of miss as onboarding-connect). */}
             <Pressable
+              testID="onboarding-paste"
               accessibilityLabel="Can't scan? Paste a code instead"
               accessibilityRole="button"
               onPress={() => setShowPaste(true)}

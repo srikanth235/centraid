@@ -19,10 +19,9 @@ await runFlow("home-loads", async (ctx) => {
     clearState: true
 ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
-# Product control must expose accessibilityRole=button so XCUITest fires onPress
-# (iOS re-run 30706136941: tap COMPLETED while showPaste stayed false).
+# Tap paste by testID — text+role still no-op'd onPress on iOS 30711575336.
 - tapOn:
-    text: "Can't scan? Paste a code instead"
+    id: "onboarding-paste"
     retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:

@@ -461,8 +461,10 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- tapOn:
-    text: "Can't scan? Paste a code instead"
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}# Open paste by testID — text taps can COMPLETE without flipping showPaste
+# on iOS (30711575336) even with accessibilityRole=button.
+- tapOn:
+    id: "onboarding-paste"
     retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
@@ -496,12 +498,11 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - tapOn:
     id: "onboarding-connect"
     retryTapIfNoChange: true
-# Redemption dials the gateway over iroh. After a named-member pair the
-# onboarded flag can unmount Onboarding before Done paints, and the replica
-# shell may first show the offline-capability wall ("Reconnect once") until
-# /_gateway/info is reachable over the tunnel (Android run 30710370305).
+# Redemption dials the gateway over iroh. Prefer profile / Done / Home over the
+# capability wall — the wall is a shell-only gate (App.tsx) and is handled in
+# complete-onboarding after Enter Centraid.
 - extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]|Reconnect once|${HOME_READY_MARKER}"
+    visible: "Who's using this phone[?]|You're all set, Mobile[.]|${HOME_READY_MARKER}"
     timeout: 90000
 `,
       "configure-gateway",

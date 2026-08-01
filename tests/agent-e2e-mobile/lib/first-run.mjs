@@ -94,10 +94,10 @@ ${conditionalRetry}`;
 }
 
 /**
- * Post-pair completion: profile form, Done → Enter Centraid, or the offline
- * capability wall ("Reconnect once"), then Home ready. Named-member tickets
- * can unmount Onboarding before Done paints and land on the wall until
- * /_gateway/info succeeds over iroh (Android run 30710370305).
+ * Post-pair completion: profile form, Done → Enter Centraid, then the offline
+ * capability wall ("Reconnect once") if the shell still needs a live info
+ * probe, then Home ready. The wall is shell-only (App.tsx active={onboarded});
+ * online probes also retry in-product (mobile-gateway-compatibility.ts).
  *
  * @param {string} homeReadyMarker HOME_READY_MARKER from the harness
  */
@@ -106,13 +106,7 @@ export function completeOnboardingCommands(homeReadyMarker) {
     .split("\n")
     .map((line) => (line ? `      ${line}` : line))
     .join("\n");
-  return `# Capability probe can lag the iroh handshake; retry the wall once.
-- runFlow:
-    when:
-      visible: "Reconnect once"
-    commands:
-      - tapOn: "Retry connection"
-- runFlow:
+  return `- runFlow:
     when:
       visible: "Who's using this phone[?]"
     commands:
@@ -128,12 +122,17 @@ export function completeOnboardingCommands(homeReadyMarker) {
       visible: "You're all set, (Nightly|Mobile)[.]"
     commands:
 ${enterCentraid}
-# Retry the capability wall if it reappears after Enter Centraid.
-- runFlow:
-    when:
+# After Enter Centraid the shell may show the offline-capability wall until
+# /_gateway/info succeeds over the tunnel. Tap Retry with gaps (Android
+# 30711575336 stayed on the wall after two immediate taps).
+- repeat:
+    times: 8
+    while:
       visible: "Reconnect once"
     commands:
       - tapOn: "Retry connection"
+      - waitForAnimationToEnd:
+          timeout: 5000
 - extendedWaitUntil:
     visible: "${homeReadyMarker}"
     timeout: 90000

@@ -42,9 +42,10 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
   assert.match(flow, /waitForOnboardingConnectCommands/u);
   assert.match(flow, /Scan the QR code/u);
   assert.match(flow, /Can't scan\? Paste a code instead/u);
-  const openPaste = flow.indexOf(`Can't scan? Paste a code instead`);
+  assert.match(flow, /id:\s*"onboarding-paste"/u);
+  const openPaste = flow.indexOf("onboarding-paste");
   const pasteField = flow.indexOf("Paste the one-line ticket");
-  assert.ok(openPaste >= 0, "must open the paste path");
+  assert.ok(openPaste >= 0, "must open the paste path by testID");
   assert.ok(
     pasteField > openPaste,
     "paste field only after opening paste path"
@@ -59,7 +60,7 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
 test("configureGateway opens paste, then submits with live Connect label", () => {
   const harness = read(HARNESS);
   const configure = harness.slice(harness.indexOf("ctx.configureGateway"));
-  assert.match(configure, /Can't scan\? Paste a code instead/u);
+  assert.match(configure, /id:\s*"onboarding-paste"/u);
   assert.match(configure, /Paste the one-line ticket/u);
   assert.match(configure, /id:\s*"onboarding-connect"/u);
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
@@ -68,7 +69,7 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
     /(?:tapOn|assertVisible|text):\s*["']?Continue with pasted code/u,
     "harness must not tap/assert the pre-scan-first primary label"
   );
-  const openPaste = configure.indexOf(`Can't scan? Paste a code instead`);
+  const openPaste = configure.indexOf("onboarding-paste");
   const submit = configure.indexOf("onboarding-connect");
   assert.ok(openPaste >= 0 && submit > openPaste);
 });
@@ -86,7 +87,8 @@ test("first-run dismisses Android system ANR overlays during onboarding wait", (
 
 test("paste secondary control is an accessibility button for XCUITest/Maestro", () => {
   const ui = read(ONBOARDING);
-  // Label + role must be on the Pressable that opens paste (not only the Text).
+  // Label + role + testID must be on the Pressable that opens paste.
+  assert.match(ui, /testID="onboarding-paste"/u);
   assert.match(
     ui,
     /accessibilityLabel="Can't scan\? Paste a code instead"[\s\S]{0,80}accessibilityRole="button"/u
@@ -95,6 +97,8 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
     ui,
     /accessibilityLabel="Scan the QR code instead"[\s\S]{0,80}accessibilityRole="button"/u
   );
+  const harness = read(HARNESS);
+  assert.match(harness, /id:\s*"onboarding-paste"/u);
 });
 
 test("pairing code field is focused by testID so lede text is not mistaken for the input", () => {

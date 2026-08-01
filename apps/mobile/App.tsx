@@ -288,13 +288,18 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
 }
 
 function ReplicaCompatibilityGate({
+  active,
   children,
 }: {
+  /** Only block the post-onboarding shell. Pairing can set vault links while
+   * the person is still on Done / profile; covering those steps with the wall
+   * (Android 30711575336) traps Maestro on "Reconnect once" before Home. */
+  active: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { compatibility, refresh } = useReplica();
-  if (!compatibility) return <>{children}</>;
+  if (!active || !compatibility) return <>{children}</>;
   const copy = MOBILE_COMPATIBILITY_WALL_COPY[compatibility];
   return (
     <SafeAreaView
@@ -439,7 +444,7 @@ export default function App(): React.JSX.Element | null {
             >
               <AppLockProvider>
                 <ReplicaProvider>
-                  <ReplicaCompatibilityGate>
+                  <ReplicaCompatibilityGate active={onboarded === true}>
                     <UploadReconciliation />
                     <ShareIntentIngest />
                     <NotificationCoordinator />

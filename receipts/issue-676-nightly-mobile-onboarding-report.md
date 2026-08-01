@@ -45,7 +45,11 @@ accessibility zero-grey (15 cells).
 
 - **Connect Pressable testID.** Android run 30708832841: ticket entered correctly but Maestro `tapOn: ^Connect$` hit `clickable=false` TextView; submit never ran. Added `testID="onboarding-connect"` and Maestro `tapOn: id`.
 
-- **Post-pair capability wall.** Android run 30710370305: Connect testID worked and pairing advanced to the shell, but the flow waited for Done while the app showed `Reconnect once` (offline capability probe lag over iroh). configureGateway now accepts that wall and taps `Retry connection`.
+- **Post-pair capability wall.** Android run 30710370305: Connect testID worked and pairing advanced to the shell, but the flow waited for Done while the app showed `Reconnect once` (offline capability probe lag over iroh).
+
+- **iOS paste still a no-op with role=button (30711575336).** Screenshot after tap still showed scan-first UI. Added `testID="onboarding-paste"`; Maestro taps by id (same class of miss as Connect TextView).
+
+- **Android stuck on Reconnect once after pair (30711575336).** home-loads PASS; template-gate/native-v0 FAIL asserting `Your apps, ready` while the shell showed the capability wall. Root: `ReplicaCompatibilityGate` wrapped onboarding and replaced Done/profile as soon as pair set vault links and the first `/_gateway/info` fetch over the tunnel failed. Fixes: (1) `apps/mobile/App.tsx` — gate only when `onboarded === true`; (2) `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` — online capability probe retries with backoff; (3) `tests/agent-e2e-mobile/lib/first-run.mjs` complete-onboarding loops Retry with gaps; (4) `tests/agent-e2e-mobile/lib/harness.mjs` configureGateway waits for profile/Done/Home, not the wall.
 
 ## Out of scope
 
