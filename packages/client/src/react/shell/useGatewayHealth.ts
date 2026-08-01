@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getGatewayHealth } from "../../gateway-client.js";
 import type { GatewayHealthDTO } from "../screens/SettingsDiagnosticsScreen.js";
+import { startVisibilityTicker } from "./routes/visibility-ticker.js";
 
 const POLL_MS = 15_000;
 
@@ -29,10 +30,12 @@ export function useGatewayHealth(): {
   }, []);
   useEffect(() => {
     load();
-    const timer = window.setInterval(load, POLL_MS);
+    // Suspended while the tab is hidden and caught up the moment it returns
+    // (issue #659) — a backgrounded window has no orb to keep honest.
+    const stop = startVisibilityTicker(load, POLL_MS);
     window.addEventListener("focus", load);
     return () => {
-      window.clearInterval(timer);
+      stop();
       window.removeEventListener("focus", load);
     };
   }, [load]);

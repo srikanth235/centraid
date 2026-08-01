@@ -17,6 +17,8 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { SseStream } from "@centraid/app-engine";
+
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type {
   GatewayLogEntry,
@@ -76,9 +78,12 @@ export function makeLogsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.write(`: gateway logs\n\n`);
+    // Bounded writer (issue #659 G6): the log feed is the highest-rate stream
+    // the gateway serves and a paused viewer must not turn it into RSS.
+    const stream = new SseStream(res);
+    stream.comment("gateway logs");
     const heartbeat = setInterval(() => {
-      if (!res.writableEnded) res.write(`: ping\n\n`);
+      stream.comment("ping");
     }, 30_000);
     heartbeat.unref?.();
 
@@ -99,9 +104,7 @@ export function makeLogsRouteHandler(
       entry: GatewayLogEntry,
       serialized = JSON.stringify(entry)
     ): void => {
-      if (res.writableEnded) return;
-      res.write(`event: log\n`);
-      res.write(`data: ${serialized}\n\n`);
+      stream.event("log", serialized);
     };
 
     // Replay then live. Both are synchronous against the in-process store,

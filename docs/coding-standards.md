@@ -115,10 +115,62 @@ The registry lives in `tests/matrix.json#laws` as `{ [tag]: { statement, owner, 
 
 **Mechanical vs judgment:** judgment-only in review; prefer existing store methods in `packages/gateway/src/serve/*-store.ts`.
 
+## Nothing O(vault-size) on the request path
+
+The constitution's performance principle, as a diff rule: work whose cost grows with how much is _in_ the vault does not run synchronously on a request path or on the event loop.
+
+| Shape | Why it bites |
+| --- | --- |
+| `better-sqlite3` / `node:sqlite` sync query over an unbounded table inside a handler | The loop is blocked for every other connection, SSE subscriber, and automation tick — the vault owner sees one slow list freeze the whole gateway |
+| `scryptSync`, `gzipSync`, `createHash` over a whole blob | CPU-bound and unyielding; a 512 MB blob is a multi-second stall, not a slow response |
+| A sweep, reindex, or clustering pass triggered from a request or a timer that scans everything | Cost is invisible at 50 rows and quadratic at 50,000 — the audit's worst find was an hourly O(n²) perceptual-hash clustering pass |
+
+Bounded work is fine — a `LIMIT`ed query, a keyed lookup, a fixed-size digest. Unbounded work belongs off the loop: a worker, a cursor-paged job, or an async streaming API, with a cap on what a single pass may touch.
+
+## No load-bearing "vaults are small" assumptions
+
+A comment saying a table stays small is not a bound. Either express the bound in code — a `LIMIT`, a retention cap, a paged cursor, a budget assertion in a test — or write the code that survives the table being large.
+
+The audit found the same sentence in several files, each justifying a full-table scan, none of them enforced anywhere. That is how a personal vault that is genuinely small in year one becomes a product that is unusable in year three with no single commit to blame. If you cannot state the cap, you do not have one.
+
+## Compute once, share the result
+
+When N consumers need the same derived value, derive it once and fan the result out. Per-subscriber recompute is a defect, not a simplification.
+
+- A replica/SSE broadcast computes its payload once per change, not once per connected subscriber. Two devices open should not double the gateway's work.
+- A per-request sweep or aggregate that every request repeats belongs behind a cached derivation invalidated by the write path, not re-run per caller.
+
+The failure mode is that it is _correct_ — every subscriber gets the right bytes — so it survives review and only shows up as a load curve that bends with connection count.
+
+## Client reads go through the shared cache
+
+Client data reads use `useCachedQuery` from `packages/client/src/react/shell/queryCache.ts`; mutations go through `packages/client/src/react/shell/optimisticUpdate.ts`. Do not hand-roll `useEffect` + `useState` + `fetch` per screen.
+
+- **Blanking on refetch is a defect.** A mutation that clears the rendered data and re-shows a spinner throws away a correct frame the user was already reading. Serve stale, revalidate behind it, swap when the new data lands.
+- Multiple components asking for the same key must share one in-flight request, not race N identical fetches on mount.
+- Keying follows [client-keying.md](client-keying.md) — vault path, gateway, conversation. A cache keyed too coarsely leaks another vault's data across a switch; too finely and it never hits.
+
+## Every poller is visibility-gated
+
+A `setInterval` that keeps firing on a hidden tab or a backgrounded app is spending someone's battery to render nothing.
+
+- Gate on `document.visibilityState` (web/desktop) or `AppState` (native); stop on hidden, refetch once on resume.
+- A poller must also stop on unmount — an interval that outlives its screen is a leak that compounds per navigation.
+- **New pollers need a justification over push.** The gateway already has a change-stream; "polling was easier to wire" is not one. If push genuinely cannot carry it, say why in the PR and pick the longest interval the feature tolerates.
+
+## Scale rigs are calibrated to year-3 volumes
+
+A perf rig seeded with the same fixtures the unit tests use measures nothing — it proves the fast path is fast on an empty vault, which was never in doubt.
+
+- Seed to the **declared year-3 volumes** for the surface under test (photos, ledger items, conversations, automations), not to whatever the existing fixture happened to contain.
+- The volume table lives **with the rig**, in its README, next to the numbers it produces — so a reviewer can see what "at scale" meant on the day the baseline was captured and challenge it, rather than inferring it from seed code.
+- When a budget moves, the measured value and the volume it was measured at move together. A ceiling with no stated volume is not a budget.
+
 ## Small invariants
 
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).
 - No hardcoded model ids in production source (constitution).
+- A new hot path ships with a measured perceived-latency budget (constitution).
 - Query handlers do not write; actions declare `writes:`.
 
 ## Related
@@ -126,3 +178,4 @@ The registry lives in `tests/matrix.json#laws` as `{ [tag]: { statement, owner, 
 - [CONSTITUTION.md](../CONSTITUTION.md) — mechanical directives
 - [protocol.md](protocol.md) — COMPAT tagging, no-fallback features
 - [glossary.md](glossary.md) — vocabulary
+- [scripts/perf/README.md](../scripts/perf/README.md) — the PWA fast-path perf rig and its budgets

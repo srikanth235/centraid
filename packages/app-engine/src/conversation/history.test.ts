@@ -1123,22 +1123,37 @@ describe("ConversationHistoryStore data persistence", () => {
 interface FakeReq {
   url: string;
   method: string;
+  headers: Record<string, string>;
   [Symbol.asyncIterator]: () => AsyncIterableIterator<Buffer>;
 }
 interface FakeRes {
   status: number;
+  statusCode: number;
   headers: Record<string, string>;
   bodyText: string;
   writeHead: (status: number, headers: Record<string, string>) => FakeRes;
-  end: (text?: string) => void;
+  // The transcript route negotiates compression (#659 G5), so the fake speaks
+  // the setHeader/statusCode half of ServerResponse too.
+  setHeader: (name: string, value: string) => void;
+  end: (text?: string | Buffer) => void;
   readonly body: unknown;
 }
 
-function makeReq(method: string, url: string, body?: unknown): FakeReq {
+function makeReq(
+  method: string,
+  url: string,
+  body?: unknown,
+  headers: Record<string, string> = {}
+): FakeReq {
   const bodyJson = body === undefined ? undefined : JSON.stringify(body);
   return {
     method,
     url,
+    // A real request always has headers. The transcript route negotiates
+    // compression (#659 G5) and only reads them once a body clears 1 KiB, so a
+    // fixture without them passed every small-payload test and threw on the
+    // first realistic transcript.
+    headers,
     async *[Symbol.asyncIterator](): AsyncIterableIterator<Buffer> {
       if (bodyJson !== undefined) yield Buffer.from(bodyJson, "utf8");
     },
@@ -1150,13 +1165,23 @@ function makeRes(): FakeRes {
     status: 0,
     headers: {},
     bodyText: "",
+    get statusCode(): number {
+      return res.status;
+    },
+    set statusCode(value: number) {
+      res.status = value;
+    },
     writeHead(status, headers): FakeRes {
       res.status = status;
       res.headers = headers;
       return res;
     },
-    end(text?: string): void {
-      if (text) res.bodyText = text;
+    setHeader(name: string, value: string): void {
+      res.headers[name.toLowerCase()] = value;
+    },
+    end(text?: string | Buffer): void {
+      if (text)
+        res.bodyText = Buffer.isBuffer(text) ? text.toString("utf8") : text;
     },
     get body(): unknown {
       return res.bodyText ? (JSON.parse(res.bodyText) as unknown) : null;
@@ -1169,9 +1194,10 @@ function call(
   handler: ReturnType<typeof makeConversationRouteHandler>,
   method: string,
   url: string,
-  body?: unknown
+  body?: unknown,
+  headers?: Record<string, string>
 ): Promise<FakeRes> {
-  const req = makeReq(method, url, body) as unknown as IncomingMessage;
+  const req = makeReq(method, url, body, headers) as unknown as IncomingMessage;
   const res = makeRes();
   return handler(req, res as unknown as ServerResponse).then(() => res);
 }
@@ -1201,6 +1227,129 @@ describe(makeConversationRouteHandler, () => {
     const res = await call(handler, "POST", BASE, { title: "named" });
     expect(res.status).toBe(200);
     expect((res.body as { title: string }).title).toBe("named");
+  });
+
+  // Issue #659 G5, HTTP half. The window is what makes a long thread openable;
+  // these prove it opens to the RIGHT end and that paging back is exhaustive.
+  it("GET a session windows to the newest turns and pages back with beforeSeq", async () => {
+    const s = store.createSession(APP);
+    for (let index = 0; index < 12; index += 1) {
+      store.recordTurn(
+        APP,
+        turn(s.id, `ask ${index}`, `reply ${index}`, 1000 + index)
+      );
+    }
+    const load = async (query = ""): Promise<FakeRes> =>
+      call(handler, "GET", `${BASE}/${s.id}${query}`);
+
+    // No parameters ⇒ the whole thread, unchanged for an existing caller.
+    const whole = await load();
+    expect(whole.status).toBe(200);
+    const wholeBody = whole.body as {
+      messages: Array<{ payload: { text?: string } }>;
+      hasMore: boolean;
+      oldestSeq: number;
+    };
+    expect(wholeBody.messages).toHaveLength(24);
+    expect(wholeBody.hasMore).toBe(false);
+    expect(wholeBody.oldestSeq).toBe(0);
+
+    // ?turns=3 ⇒ the NEWEST three turns, not the oldest three.
+    const newest = await load("?turns=3");
+    const newestBody = newest.body as {
+      messages: Array<{ payload: { text?: string } }>;
+      hasMore: boolean;
+      oldestSeq: number;
+    };
+    expect(newestBody.messages).toHaveLength(6);
+    expect(newestBody.messages[0]!.payload.text).toBe("ask 9");
+    expect(newestBody.messages.at(-1)!.payload.text).toBe("reply 11");
+    expect(newestBody.hasMore).toBe(true);
+    expect(newestBody.oldestSeq).toBe(9);
+
+    // Page back until the start; collect every user message exactly once.
+    const texts: string[] = [];
+    // Each page is older than the last, so pages prepend — but the messages
+    // WITHIN a page are already oldest-first and must keep that order.
+    const collect = (body: {
+      messages: Array<{ payload: { kind?: string; text?: string } }>;
+    }): void => {
+      const page = body.messages
+        .filter((m) => m.payload.kind === "user" && m.payload.text)
+        .map((m) => m.payload.text!);
+      texts.unshift(...page);
+    };
+    collect(newestBody);
+    let cursor = newestBody.oldestSeq;
+    let hasMore = newestBody.hasMore;
+    let pages = 1;
+    while (hasMore) {
+      // Each request's cursor comes from the previous page's response, so these
+      // cannot be issued together — that is what paging backwards means.
+      // oxlint-disable-next-line no-await-in-loop -- cursor depends on the prior page
+      const page = await load(`?turns=3&beforeSeq=${cursor}`);
+      const body = page.body as {
+        messages: Array<{ payload: { kind?: string; text?: string } }>;
+        hasMore: boolean;
+        oldestSeq: number;
+      };
+      collect(body);
+      cursor = body.oldestSeq;
+      hasMore = body.hasMore;
+      pages += 1;
+      expect(pages).toBeLessThan(10);
+    }
+    expect(pages).toBe(4);
+    expect(texts).toStrictEqual(
+      Array.from({ length: 12 }, (_, i) => `ask ${i}`)
+    );
+  });
+
+  it("compresses a large transcript only when the client offers an encoding", async () => {
+    const s = store.createSession(APP);
+    for (let index = 0; index < 12; index += 1) {
+      store.recordTurn(
+        APP,
+        turn(s.id, `ask ${index}`, `reply ${index}`, 2000 + index)
+      );
+    }
+    // No Accept-Encoding (the opaque-tunnel transports) → raw bytes.
+    const raw = await call(handler, "GET", `${BASE}/${s.id}`);
+    expect(raw.status).toBe(200);
+    expect(raw.headers["content-encoding"]).toBeUndefined();
+    expect((raw.body as { messages: unknown[] }).messages).toHaveLength(24);
+
+    // A real HTTP stack offers one and gets it, with Vary set for caches.
+    const negotiated = await call(
+      handler,
+      "GET",
+      `${BASE}/${s.id}`,
+      undefined,
+      {
+        "accept-encoding": "br, gzip",
+      }
+    );
+    expect(negotiated.status).toBe(200);
+    expect(negotiated.headers["content-encoding"]).toBe("br");
+    expect(negotiated.headers["vary"]).toBe("Accept-Encoding");
+  });
+
+  it("rejects a malformed window rather than silently serving the newest page", async () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, turn(s.id, "only", "reply"));
+    // A dropped beforeSeq would read to the client as "the thread ends here".
+    const queries = [
+      "?beforeSeq=abc",
+      "?turns=0",
+      "?turns=-1",
+      "?beforeSeq=1.5",
+    ];
+    const rejected = await Promise.all(
+      queries.map((query) => call(handler, "GET", `${BASE}/${s.id}${query}`))
+    );
+    expect(rejected.map((res) => res.status)).toStrictEqual(
+      queries.map(() => 400)
+    );
   });
 
   it("round-trips create → list → load → rename → delete", async () => {

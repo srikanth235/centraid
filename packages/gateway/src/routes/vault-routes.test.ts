@@ -244,6 +244,87 @@ describe("vault-routes", () => {
     expect(JSON.stringify(listed)).not.toContain("{{connection:access_token}}");
   });
 
+  // Issue #659 M5 (gateway half): apps/mobile revalidates these two polled
+  // reads with If-None-Match, which does nothing unless the server tags them.
+  test("Notifications and Parked answer 304 on an unchanged body and re-tag when it changes", async () => {
+    const dir = await tempDir();
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    registry.create("Personal");
+    cleanups.push(() => registry.stop());
+    const plane = registry.current();
+    configureConnection(plane);
+    const base = await startHandlerServer(
+      makeVaultRouteHandler(registry, {
+        notificationsEvents: new NotificationsEventBus(),
+      })
+    );
+
+    const get = (path: string, etag?: string): Promise<Response> =>
+      fetch(`${base}${path}`, {
+        headers: etag === undefined ? {} : { "If-None-Match": etag },
+      });
+
+    // The steps WITHIN a surface are sequential by necessity — you need the
+    // ETag before you can revalidate with it — but the two surfaces are
+    // independent, so they run together.
+    const revalidates = async (path: string): Promise<void> => {
+      const first = await get(path);
+      expect(first.status).toBe(200);
+      const etag = first.headers.get("etag");
+      expect(etag).toBeTruthy();
+      const body = await first.text();
+
+      const revalidated = await get(path, etag!);
+      expect(revalidated.status).toBe(304);
+      await expect(revalidated.text()).resolves.toBe("");
+
+      // A client that does not revalidate still sees the identical payload.
+      await expect(get(path).then((r) => r.text())).resolves.toBe(body);
+    };
+    await Promise.all([
+      revalidates("/centraid/_vault/notifications"),
+      revalidates("/centraid/_vault/parked"),
+    ]);
+
+    // Mutate BOTH surfaces: a notice changes Notifications, a confirm-gated
+    // assistant invocation parks and changes Parked.
+    const notificationsEtag = (
+      await get("/centraid/_vault/notifications")
+    ).headers.get("etag");
+    const parkedEtag = (await get("/centraid/_vault/parked")).headers.get(
+      "etag"
+    );
+    plane.notices.put({
+      kind: "automation",
+      sourceRef: "mail/digest",
+      headline: "Digest failed",
+      severity: "high",
+      detail: { sourceType: "automation", outcome: "failure" },
+    });
+    const parkedResult = await plane.invokeAsAssistant({
+      command: "social.send_message",
+      input: { message_id: "not-yet-real" },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(parkedResult.status).toBe("parked");
+
+    const freshNotifications = await get(
+      "/centraid/_vault/notifications",
+      notificationsEtag!
+    );
+    expect(freshNotifications.status).toBe(200);
+    expect(freshNotifications.headers.get("etag")).not.toBe(notificationsEtag);
+
+    const freshParked = await get("/centraid/_vault/parked", parkedEtag!);
+    expect(freshParked.status).toBe(200);
+    expect(freshParked.headers.get("etag")).not.toBe(parkedEtag);
+    await expect(freshParked.text()).resolves.toContain("social.send_message");
+  }, 60_000);
+
   test("Notifications projects canonical decisions beside collapsed notices and supports read/archive", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({

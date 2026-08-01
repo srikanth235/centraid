@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useMemo } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import {
   FlatList,
   Pressable,
@@ -8,7 +8,10 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -36,64 +39,110 @@ export default function FaceReview({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
-  const names = new Map(
-    parties.rows.map((row) => [
-      String(row.party_id),
-      String(row.display_name ?? "Unknown person"),
-    ])
+  const names = useMemo(
+    () =>
+      new Map(
+        parties.rows.map((row) => [
+          String(row.party_id),
+          String(row.display_name ?? "Unknown person"),
+        ])
+      ),
+    [parties.rows]
   );
-  const proposals = faces.rows.filter((row) => !row.confirmed_by_party_id);
-  const confirmedPeople = parties.rows
-    .map((party) => ({
-      party,
-      count: faces.rows.filter(
-        (face) =>
-          face.confirmed_by_party_id &&
-          String(face.party_id) === String(party.party_id)
-      ).length,
-    }))
-    .filter(({ count }) => count > 0);
-  const act = async (
-    action: "confirm-face" | "reject-face",
-    regionId: string,
-    partyId?: string
-  ): Promise<void> => {
-    const region = faces.rows.find((row) => String(row.region_id) === regionId);
-    if (!region) return;
-    if (!session) return;
-    try {
-      const result = await session.write("photos", {
-        action,
-        input: {
-          region_id: regionId,
-          ...(partyId ? { party_id: partyId } : {}),
-        },
-        optimistic:
-          action === "reject-face"
-            ? [
-                {
-                  op: "delete",
-                  entity: "media.face_region",
-                  rowId: regionId,
-                },
-              ]
-            : [
-                {
-                  op: "upsert",
-                  entity: "media.face_region",
-                  rowId: regionId,
-                  values: optimisticValues(region, {
-                    party_id: partyId ?? null,
-                    confirmed_by_party_id: partyId ?? null,
-                  }),
-                },
-              ],
-      });
-      surfaceWriteOutcome(result);
-    } catch (error) {
-      surfaceWriteFailure(error, "Face review not saved");
-    }
-  };
+  const proposals = useMemo(
+    () => faces.rows.filter((row) => !row.confirmed_by_party_id),
+    [faces.rows]
+  );
+  const confirmedPeople = useMemo(
+    () =>
+      parties.rows
+        .map((party) => ({
+          party,
+          count: faces.rows.filter(
+            (face) =>
+              face.confirmed_by_party_id &&
+              String(face.party_id) === String(party.party_id)
+          ).length,
+        }))
+        .filter(({ count }) => count > 0),
+    [faces.rows, parties.rows]
+  );
+  const act = useCallback(
+    async (
+      action: "confirm-face" | "reject-face",
+      regionId: string,
+      partyId?: string
+    ): Promise<void> => {
+      const region = faces.rows.find(
+        (row) => String(row.region_id) === regionId
+      );
+      if (!region) return;
+      if (!session) return;
+      try {
+        const result = await session.write("photos", {
+          action,
+          input: {
+            region_id: regionId,
+            ...(partyId ? { party_id: partyId } : {}),
+          },
+          optimistic:
+            action === "reject-face"
+              ? [
+                  {
+                    op: "delete",
+                    entity: "media.face_region",
+                    rowId: regionId,
+                  },
+                ]
+              : [
+                  {
+                    op: "upsert",
+                    entity: "media.face_region",
+                    rowId: regionId,
+                    values: optimisticValues(region, {
+                      party_id: partyId ?? null,
+                      confirmed_by_party_id: partyId ?? null,
+                    }),
+                  },
+                ],
+        });
+        surfaceWriteOutcome(result);
+      } catch (error) {
+        surfaceWriteFailure(error, "Face review not saved");
+      }
+    },
+    [faces.rows, session]
+  );
+  // One callback shared by every row rather than a per-row arrow, so the
+  // memoized row only re-renders when its own face changes.
+  const confirmFace = useCallback(
+    (regionId: string, partyId: string): void => {
+      void act("confirm-face", regionId, partyId);
+    },
+    [act]
+  );
+  const rejectFace = useCallback(
+    (regionId: string): void => {
+      void act("reject-face", regionId);
+    },
+    [act]
+  );
+  const renderProposal = useCallback(
+    ({
+      item,
+    }: ListRenderItemInfo<
+      ReplicaRow & { __rowId: string }
+    >): React.JSX.Element => (
+      <FaceProposalRow
+        row={item}
+        name={item.party_id ? names.get(String(item.party_id)) : undefined}
+        colors={colors}
+        onConfirm={confirmFace}
+        onReject={rejectFace}
+      />
+    ),
+    [colors, confirmFace, names, rejectFace]
+  );
   return (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: colors.bg }]}
@@ -115,7 +164,7 @@ export default function FaceReview({
       <ReplicaStatusBar />
       <FlatList
         data={proposals}
-        keyExtractor={(row) => row.__rowId}
+        keyExtractor={faceKey}
         contentContainerStyle={styles.list}
         refreshing={refreshing}
         onRefresh={refreshNow}
@@ -175,48 +224,74 @@ export default function FaceReview({
             No face proposals need review.
           </Text>
         }
-        renderItem={({ item }) => {
-          const partyId = item.party_id ? String(item.party_id) : undefined;
-          return (
-            <View style={[styles.row, { borderBottomColor: colors.line }]}>
-              <View
-                style={[styles.avatar, { backgroundColor: colors.bgSunken }]}
-              >
-                <Feather name="user" size={20} color={colors.accent} />
-              </View>
-              <View style={styles.copy}>
-                <Text style={[styles.name, { color: colors.ink }]}>
-                  {partyId ? names.get(partyId) : "Unmatched face"}
-                </Text>
-                <Text style={[styles.meta, { color: colors.ink2 }]}>
-                  {Math.round(Number(item.confidence ?? 0) * 100)}% confidence
-                </Text>
-              </View>
-              {partyId ? (
-                <Pressable
-                  accessibilityLabel={`Confirm ${names.get(partyId) ?? "person"} for this face`}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    void act("confirm-face", String(item.region_id), partyId)
-                  }
-                >
-                  <Feather name="check" size={21} color="#2f9d6a" />
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityLabel="Reject this face proposal"
-                accessibilityRole="button"
-                onPress={() => void act("reject-face", String(item.region_id))}
-              >
-                <Feather name="x" size={21} color={colors.danger} />
-              </Pressable>
-            </View>
-          );
-        }}
+        // No getItemLayout: the header carousel's height depends on whether any
+        // people are confirmed yet, so item offsets are not knowable up front.
+        // A proposal row is 70pt tall (styles.row minHeight, both texts short),
+        // so ~9 rows fill the ~650pt left under the header chrome and the
+        // CONFIRMED PEOPLE strip; ±2 viewports of retained cells absorbs a
+        // flick through a large unreviewed backlog without holding it all.
+        initialNumToRender={9}
+        maxToRenderPerBatch={9}
+        windowSize={5}
+        renderItem={renderProposal}
       />
     </SafeAreaView>
   );
 }
+
+// `__rowId` is the replica's own row identity, unique per face region.
+const faceKey = (row: ReplicaRow & { __rowId: string }): string => row.__rowId;
+
+const FaceProposalRow = memo(
+  ({
+    row,
+    name,
+    colors,
+    onConfirm,
+    onReject,
+  }: {
+    row: ReplicaRow & { __rowId: string };
+    name: string | undefined;
+    colors: ReturnType<typeof useTheme>["colors"];
+    onConfirm: (regionId: string, partyId: string) => void;
+    onReject: (regionId: string) => void;
+  }): React.JSX.Element => {
+    const partyId = row.party_id ? String(row.party_id) : undefined;
+    const regionId = String(row.region_id);
+    return (
+      <View style={[styles.row, { borderBottomColor: colors.line }]}>
+        <View style={[styles.avatar, { backgroundColor: colors.bgSunken }]}>
+          <Feather name="user" size={20} color={colors.accent} />
+        </View>
+        <View style={styles.copy}>
+          <Text style={[styles.name, { color: colors.ink }]}>
+            {partyId ? name : "Unmatched face"}
+          </Text>
+          <Text style={[styles.meta, { color: colors.ink2 }]}>
+            {Math.round(Number(row.confidence ?? 0) * 100)}% confidence
+          </Text>
+        </View>
+        {partyId ? (
+          <Pressable
+            accessibilityLabel={`Confirm ${name ?? "person"} for this face`}
+            accessibilityRole="button"
+            onPress={() => onConfirm(regionId, partyId)}
+          >
+            <Feather name="check" size={21} color="#2f9d6a" />
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityLabel="Reject this face proposal"
+          accessibilityRole="button"
+          onPress={() => onReject(regionId)}
+        >
+          <Feather name="x" size={21} color={colors.danger} />
+        </Pressable>
+      </View>
+    );
+  }
+);
+FaceProposalRow.displayName = "FaceProposalRow";
 
 const styles = StyleSheet.create({
   avatar: {

@@ -290,4 +290,82 @@ describe("journal-archive", () => {
       /positive/u
     );
   });
+
+  // ── issue #659 L2: bounded runs ────────────────────────────────────────
+
+  test("a run seals at most maxRowsPerRun and says there is more", () => {
+    const db = openVaultDb({});
+    for (let i = 0; i < 7; i += 1)
+      seedProvenance(db, {
+        entityId: `note-${i}`,
+        occurredAt: daysAgoIso(120 + i),
+      });
+
+    const first = runJournalArchival(db, {
+      windowDays: 90,
+      maxRowsPerRun: 3,
+    });
+    expect(first.rowsArchived).toBe(3);
+    expect(first.capped).toBe(true);
+    expect(
+      (
+        db.journal
+          .prepare("SELECT count(*) AS n FROM consent_provenance")
+          .get() as { n: number }
+      ).n
+    ).toBe(4);
+
+    runJournalArchival(db, { windowDays: 90, maxRowsPerRun: 3 });
+    const third = runJournalArchival(db, { windowDays: 90, maxRowsPerRun: 3 });
+    expect(third.rowsArchived).toBe(1);
+    expect(third.capped).toBe(false);
+    expect(
+      (
+        db.journal
+          .prepare("SELECT count(*) AS n FROM consent_provenance")
+          .get() as { n: number }
+      ).n
+    ).toBe(0);
+    // Every run's segment is still verifiable — a bounded run is a normal
+    // run, not a partial one.
+    for (const manifest of listArchiveManifests(db.journal, "provenance"))
+      expect(verifyArchivedSegment(db, manifest).ok).toBe(true);
+  });
+
+  test("an invocation sharing a receipt with a young one stays put", () => {
+    const db = openVaultDb({});
+    const old = seedInvocationCluster(db, {
+      requestedAt: daysAgoIso(200),
+      receiptAt: daysAgoIso(200),
+    });
+    const young = seedInvocationCluster(db, {
+      requestedAt: daysAgoIso(200),
+      receiptAt: daysAgoIso(1),
+    });
+    // The old invocation now ALSO points at the young invocation's receipt:
+    // archiving it would delete a receipt a live invocation still references.
+    db.journal
+      .prepare(
+        "UPDATE agent_command_invocation SET receipt_id = ? WHERE invocation_id = ?"
+      )
+      .run(young.receiptId, old.invocationId);
+
+    const result = runJournalArchival(db, { windowDays: 90 });
+
+    expect(result.rowsArchived).toBe(0);
+    expect(
+      (
+        db.journal
+          .prepare("SELECT count(*) AS n FROM agent_command_invocation")
+          .get() as { n: number }
+      ).n
+    ).toBe(2);
+  });
+
+  test("rejects a non-positive run cap", () => {
+    const db = openVaultDb({});
+    expect(() =>
+      runJournalArchival(db, { windowDays: 90, maxRowsPerRun: 0 })
+    ).toThrow(/positive/u);
+  });
 });

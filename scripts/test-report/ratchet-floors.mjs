@@ -44,6 +44,18 @@ export const PERF_BUDGET_SOURCES = [
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
   { path: "tests/suite-wall-clock.json" },
+  // #659 R2 — the EXPERIENCE budgets: the same regressions the files above
+  // fence, restated as what the vault owner feels (cold open → first usable
+  // screen, tap → visual response, send → first token, scroll frame drops,
+  // sync staleness after reconnect). One file per shipping surface; see
+  // tests/experience-budgets/README.md for the status vocabulary and the
+  // year-3 volume table every ceiling is stated at. Entries with
+  // `status: "unmeasured"` deliberately carry NO number, so they contribute
+  // nothing to the ratchet until a real run fills them in.
+  { path: "tests/experience-budgets/web.json" },
+  { path: "tests/experience-budgets/desktop.json" },
+  { path: "tests/experience-budgets/mobile.json" },
+  { path: "tests/experience-budgets/gateway.json" },
 ];
 
 /**

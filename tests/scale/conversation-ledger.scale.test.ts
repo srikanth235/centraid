@@ -15,6 +15,7 @@ import {
   seedConversation,
   seedTurn,
 } from "../../packages/app-engine/src/conversation/archive/test-fixtures.js";
+import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/conversation-ledger.scale.test.ts";
 
@@ -71,15 +72,20 @@ describe("conversation-ledger.scale", () => {
     // that it is now ASSERTED (it was recorded but never checked, so it could
     // never fail) and thus falsifiable against a real archival-throughput regression.
     const DURATION_BUDGET_MS = 60_000;
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       remaining === 0 &&
       result.turnsPruned === conversations * turnsPerConversation &&
       durationMs < DURATION_BUDGET_MS;
+    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Conversation archival over 7.3k turns",
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -90,6 +96,10 @@ describe("conversation-ledger.scale", () => {
         { name: "turns pruned", value: result.turnsPruned, unit: "turns" },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
     expect(result.turnsPruned).toBe(conversations * turnsPerConversation);
     expect(remaining).toBe(0);
     expect(durationMs).toBeLessThan(DURATION_BUDGET_MS);

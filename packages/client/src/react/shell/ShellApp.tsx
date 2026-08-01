@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
 import type { JSX, ReactNode } from "react";
 
 import type { ShellRoute } from "../../app-shell-context.js";
@@ -51,6 +58,27 @@ export interface ShellAppProps {
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
   r.kind === "app" || r.kind === "builder" || r.kind === "automation-builder";
+
+/**
+ * A real component boundary around a render-prop outlet (issue #659).
+ *
+ * `renderScreen(nav)` and `renderSidebar(nav)` were plain function calls, so
+ * every re-render of the shell root rebuilt the whole route's element tree —
+ * including for state the route does not read, like the 5s gateway heartbeat.
+ * A function call has no boundary React can stop at; a memoized component does.
+ * It re-renders when the nav or the render function changes, which is why both
+ * callers keep those stable.
+ */
+const Outlet = memo(
+  ({
+    nav,
+    render,
+  }: {
+    nav: ShellNav;
+    render: (nav: ShellNav) => ReactNode;
+  }): JSX.Element => <>{render(nav)}</>
+);
+Outlet.displayName = "Outlet";
 
 export default function ShellApp({
   initialRoute,
@@ -127,7 +155,7 @@ export default function ShellApp({
     onNavReady?.(nav);
   }, [nav, onNavReady]);
 
-  const screen = renderScreen(nav);
+  const screen = <Outlet nav={nav} render={renderScreen} />;
 
   // Full-bleed routes render their own window frame (app view / builder),
   // so the shell frame steps aside entirely.
@@ -145,7 +173,7 @@ export default function ShellApp({
       compact={compact}
       onToggleSidebar={toggleSidebar}
       onDismissSidebar={dismissSidebar}
-      sidebar={renderSidebar(nav)}
+      sidebar={<Outlet nav={nav} render={renderSidebar} />}
       statusBanner={statusBanner}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}

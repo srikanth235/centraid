@@ -10,12 +10,10 @@ import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600
 import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
 import SpaceGrotesk_500Medium from "@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf";
 import SpaceGrotesk_600SemiBold from "@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf";
-import type { LinkingOptions } from "@react-navigation/native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
-import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { ShareIntentProvider } from "expo-share-intent";
 import * as SplashScreen from "expo-splash-screen";
@@ -29,30 +27,11 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-import AgendaEvent from "./src/apps/agenda/AgendaEvent";
-import AgendaHome from "./src/apps/agenda/AgendaHome";
-import AssistantScreen from "./src/apps/assistant/Assistant";
-import AutomationsScreen from "./src/apps/automations/Automations";
-import DocsHome from "./src/apps/docs/DocsHome";
-import DocumentViewer from "./src/apps/docs/DocumentViewer";
-import InsightsScreen from "./src/apps/insights/Insights";
-import LockerHome from "./src/apps/locker/LockerHome";
-import NotesHome from "./src/apps/notes/NotesHome";
-import PeopleHome from "./src/apps/people/PeopleHome";
-import AlbumDetail from "./src/apps/photos/AlbumDetail";
-import BackupHealth from "./src/apps/photos/BackupHealth";
-import DuplicateReview from "./src/apps/photos/DuplicateReview";
-import FaceReview from "./src/apps/photos/FaceReview";
-import PhotoLightbox from "./src/apps/photos/PhotoLightbox";
-import PhotosHome from "./src/apps/photos/PhotosHome";
-import PhotosLibrary from "./src/apps/photos/PhotosLibrary";
-import PhotosSearch from "./src/apps/photos/PhotosSearch";
-import PhotoStateView from "./src/apps/photos/PhotoStateView";
-import PlacesMap from "./src/apps/photos/PlacesMap";
-import TallyHome from "./src/apps/tally/TallyHome";
-import TasksHome from "./src/apps/tasks/TasksHome";
+import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
+import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
+import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
   REPLICA_UNPAIRED_MESSAGE,
   ReplicaProvider,
@@ -79,17 +58,87 @@ import type {
   RootStackParamList,
   SettingsStackParamList,
 } from "./src/navigation";
-import AppDetailScreen from "./src/screens/AppDetail";
-import ApprovalsScreen from "./src/screens/Approvals";
-import CaptureScreen from "./src/screens/Capture";
+// Only the two screens that can be on screen at first paint are imported
+// eagerly: Home is the initial route of the root stack, Onboarding is what the
+// tree renders instead when the profile says the user has not been through it.
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
-import PhoneStorageScreen from "./src/screens/PhoneStorage";
-import ScanScreen from "./src/screens/Scan";
-import SettingsScreen from "./src/screens/Settings";
 
-// Keep the native splash up until fonts have loaded — avoids a flash of
-// system-font text on first render.
+/**
+ * Defer a screen module's *evaluation* until the first navigation to it.
+ *
+ * Metro has no code splitting, so the bytes still ship in the launch bundle —
+ * what this buys is that `react-native-maps`, `expo-camera`,
+ * `react-native-webview` and `expo-video` no longer run their module bodies
+ * (and therefore their `requireNativeComponent` / TurboModule registration) as
+ * part of app start. That native-module init is the measurable cold-start cost,
+ * not the parse.
+ *
+ * The wrapper exists so the result stays a plain `ComponentType<P>`:
+ * `React.lazy` returns a `LazyExoticComponent`, which react-navigation's
+ * `component=` prop does not accept.
+ */
+function lazyScreen<P extends object>(
+  load: () => Promise<{ default: React.ComponentType<P> }>
+): React.ComponentType<P> {
+  const Lazy = React.lazy(load);
+  function LazyScreen(props: P): React.JSX.Element {
+    return <Lazy {...props} />;
+  }
+  return LazyScreen;
+}
+
+// Every screen below is reachable only through a `component=` prop on a
+// navigator, so nothing else in this file may reference these bindings — that
+// is what keeps the deferral honest.
+const AgendaEvent = lazyScreen(() => import("./src/apps/agenda/AgendaEvent"));
+const AgendaHome = lazyScreen(() => import("./src/apps/agenda/AgendaHome"));
+const AssistantScreen = lazyScreen(
+  () => import("./src/apps/assistant/Assistant")
+);
+const AutomationsScreen = lazyScreen(
+  () => import("./src/apps/automations/Automations")
+);
+const DocsHome = lazyScreen(() => import("./src/apps/docs/DocsHome"));
+const DocumentViewer = lazyScreen(
+  () => import("./src/apps/docs/DocumentViewer")
+);
+const InsightsScreen = lazyScreen(() => import("./src/apps/insights/Insights"));
+const LockerHome = lazyScreen(() => import("./src/apps/locker/LockerHome"));
+const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
+const PeopleHome = lazyScreen(() => import("./src/apps/people/PeopleHome"));
+const AlbumDetail = lazyScreen(() => import("./src/apps/photos/AlbumDetail"));
+const BackupHealth = lazyScreen(() => import("./src/apps/photos/BackupHealth"));
+const DuplicateReview = lazyScreen(
+  () => import("./src/apps/photos/DuplicateReview")
+);
+const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
+const PhotoLightbox = lazyScreen(
+  () => import("./src/apps/photos/PhotoLightbox")
+);
+const PhotosHome = lazyScreen(() => import("./src/apps/photos/PhotosHome"));
+const PhotosLibrary = lazyScreen(
+  () => import("./src/apps/photos/PhotosLibrary")
+);
+const PhotosSearch = lazyScreen(() => import("./src/apps/photos/PhotosSearch"));
+const PhotoStateView = lazyScreen(
+  () => import("./src/apps/photos/PhotoStateView")
+);
+const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
+const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
+const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
+const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
+const ApprovalsScreen = lazyScreen(() => import("./src/screens/Approvals"));
+const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
+const PhoneStorageScreen = lazyScreen(
+  () => import("./src/screens/PhoneStorage")
+);
+const ScanScreen = lazyScreen(() => import("./src/screens/Scan"));
+const SettingsScreen = lazyScreen(() => import("./src/screens/Settings"));
+
+// Held until the profile prefs say onboarding vs app — see the comment on the
+// `onboarded === null` gate in App() for why fonts are deliberately *not* part
+// of this condition any more.
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
 });
@@ -124,83 +173,6 @@ const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
 } as const;
-
-const LINKING: LinkingOptions<RootStackParamList> = {
-  prefixes: ["centraid://"],
-  async getInitialURL(): Promise<string | null> {
-    const url = await Linking.getInitialURL();
-    if (url) return url;
-    return notificationUrl(
-      await Notifications.getLastNotificationResponseAsync()
-    );
-  },
-  subscribe(listener): () => void {
-    const linking = Linking.addEventListener("url", ({ url }) => listener(url));
-    const notifications = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const url = notificationUrl(response);
-        if (url) listener(url);
-      }
-    );
-    return () => {
-      linking.remove();
-      notifications.remove();
-    };
-  },
-  config: {
-    screens: {
-      Capture: "capture",
-      Scan: {
-        path: "scan",
-        parse: {
-          plaintextSize: Number,
-          deleteSourceAfterSettle: (value: string) => value === "true",
-        },
-      },
-      Agenda: {
-        screens: {
-          AgendaHome: "agenda",
-          AgendaEvent: "agenda/event/:eventId",
-        },
-      },
-      Photos: {
-        screens: {
-          PhotosHome: "photos",
-          PhotoLightbox: "photos/:assetId",
-        },
-      },
-      Docs: {
-        screens: {
-          DocsHome: "docs",
-          DocumentViewer: "docs/:documentId",
-        },
-      },
-      Locker: "locker",
-      Tasks: "apps/tasks",
-      People: "apps/people",
-      Notes: "apps/notes",
-      Tally: "apps/tally",
-      AppDetail: "apps/:appId",
-      Assistant: "assistant",
-      Automations: "automations",
-      Insights: "insights",
-      Settings: "settings",
-      Home: "",
-    },
-  },
-};
-
-function notificationUrl(
-  response: Notifications.NotificationResponse | null
-): string | null {
-  if (!response) return null;
-  const value = (
-    response.notification.request.content.data as { url?: unknown }
-  ).url;
-  return typeof value === "string" && value.startsWith("centraid://")
-    ? value
-    : null;
-}
 
 function UploadReconciliation(): null {
   const { session } = useReplica();
@@ -401,7 +373,10 @@ export default function App(): React.JSX.Element | null {
   const { colors } = resolveTheme(scheme);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
-  const [fontsLoaded, fontError] = useFonts({
+  // The return tuple is deliberately dropped: nothing gates on it any more (see
+  // the tradeoff note below the effects). `useFonts` still re-renders this
+  // component when the faces land, which is what swaps the system fallback out.
+  useFonts({
     Geist_400Regular,
     Geist_500Medium,
     Geist_600SemiBold,
@@ -415,25 +390,39 @@ export default function App(): React.JSX.Element | null {
   });
 
   useEffect(() => {
-    // Load the persisted Appearance override so the launch scheme matches the
-    // user's Settings choice instead of flashing the OS default first.
+    // Both hydrations are kicked off in the same tick and neither is awaited by
+    // the other: the appearance read must not sit behind the profile read, or
+    // first paint waits on two round trips to AsyncStorage instead of one.
     void hydrateAppearance();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
+    // expo-image ships with no ceiling on its in-memory bitmap cache, so a long
+    // scroll through the photo grid otherwise holds every decoded thumbnail
+    // alive. From an effect rather than module scope: it touches a native
+    // module, and nothing before first paint depends on it.
+    configurePhotoImageCache();
   }, []);
 
+  // Deliberate tradeoff (#659 M3): the splash lifts as soon as the profile has
+  // hydrated, *without* waiting on the ten font faces. Text therefore paints in
+  // the system font for the frame or two before `useFonts` resolves and
+  // re-renders. The alternative — the previous `!fontsLoaded` gate — held a
+  // blank screen for the whole font load on every cold start, which is a far
+  // more expensive way to avoid a brief typeface swap.
   const onReady = useCallback(async () => {
-    if ((fontsLoaded || fontError) && onboarded !== null) {
+    if (onboarded !== null) {
       await SplashScreen.hideAsync().catch(() => {
         /* noop */
       });
     }
-  }, [fontsLoaded, fontError, onboarded]);
+  }, [onboarded]);
 
   useEffect(() => {
     void onReady();
   }, [onReady]);
 
-  if ((!fontsLoaded && !fontError) || onboarded === null) {
+  // The one gate that survives: it decides onboarding vs app, so there is no
+  // correct tree to render before it resolves.
+  if (onboarded === null) {
     return null;
   }
 
@@ -467,99 +456,111 @@ export default function App(): React.JSX.Element | null {
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
                         />
-                        <RootStack.Navigator
-                          screenOptions={{ headerShown: false }}
-                          // `selection` haptic when a cover opens — preserves the
-                          // vocabulary the old tabPress listener gave, and the one
-                          // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
-                          // `closing` guards it to the open transition, not dismissal.
-                          screenListeners={{
-                            transitionStart: (e) => {
-                              if (!e.data.closing)
-                                void Haptics.selectionAsync();
-                            },
-                          }}
+                        {/* One boundary for every lazily-evaluated screen. The
+                          fallback is a bare themed fill rather than a spinner:
+                          module evaluation is sub-frame in the common case, so
+                          a spinner would only ever register as a flash. */}
+                        <React.Suspense
+                          fallback={
+                            <View
+                              style={{ backgroundColor: colors.bg, flex: 1 }}
+                            />
+                          }
                         >
-                          <RootStack.Screen
-                            name="Home"
-                            component={HomeScreen}
-                          />
-                          <RootStack.Screen
-                            name="Capture"
-                            component={CaptureScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Scan"
-                            component={ScanScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Photos"
-                            component={PhotosNavigator}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Docs"
-                            component={DocsNavigator}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Agenda"
-                            component={AgendaNavigator}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Locker"
-                            component={LockerHome}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Tasks"
-                            component={TasksHome}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="People"
-                            component={PeopleHome}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Notes"
-                            component={NotesHome}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Tally"
-                            component={TallyHome}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="AppDetail"
-                            component={AppDetailScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Assistant"
-                            component={AssistantScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Automations"
-                            component={AutomationsScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Insights"
-                            component={InsightsScreen}
-                            options={COVER_OPTIONS}
-                          />
-                          <RootStack.Screen
-                            name="Settings"
-                            component={SettingsNavigator}
-                            options={COVER_OPTIONS}
-                          />
-                        </RootStack.Navigator>
+                          <RootStack.Navigator
+                            screenOptions={{ headerShown: false }}
+                            // `selection` haptic when a cover opens — preserves the
+                            // vocabulary the old tabPress listener gave, and the one
+                            // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                            // `closing` guards it to the open transition, not dismissal.
+                            screenListeners={{
+                              transitionStart: (e) => {
+                                if (!e.data.closing)
+                                  void Haptics.selectionAsync();
+                              },
+                            }}
+                          >
+                            <RootStack.Screen
+                              name="Home"
+                              component={HomeScreen}
+                            />
+                            <RootStack.Screen
+                              name="Capture"
+                              component={CaptureScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Scan"
+                              component={ScanScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Photos"
+                              component={PhotosNavigator}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Docs"
+                              component={DocsNavigator}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Agenda"
+                              component={AgendaNavigator}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Locker"
+                              component={LockerHome}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Tasks"
+                              component={TasksHome}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="People"
+                              component={PeopleHome}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Notes"
+                              component={NotesHome}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Tally"
+                              component={TallyHome}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="AppDetail"
+                              component={AppDetailScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Assistant"
+                              component={AssistantScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Automations"
+                              component={AutomationsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Insights"
+                              component={InsightsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Settings"
+                              component={SettingsNavigator}
+                              options={COVER_OPTIONS}
+                            />
+                          </RootStack.Navigator>
+                        </React.Suspense>
                       </NavigationContainer>
                     ) : (
                       <>
@@ -571,6 +572,11 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
+            {/* Last child so its absolute readout sits above the navigator.
+              Renders nothing, installs nothing and schedules nothing outside a
+              `__DEV__` build that a probe has explicitly armed — see
+              src/kit/perf/FrameProbe.tsx. */}
+            <FrameProbe />
           </View>
         </SafeAreaProvider>
       </GestureHandlerRootView>

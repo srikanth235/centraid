@@ -337,8 +337,11 @@ export function pendingWebhookTriggerOf(
 /**
  * Retention policy applied at end-of-run to `runs` (and via CASCADE,
  * `run_nodes`). One of: `{count: N}` keep newest N, `{days: N}` drop
- * older than N days, `"all"` keep everything (no-op), `"errors"` keep
- * only failed runs. Default at validation time is `{count: 100}`.
+ * older than N days, `"errors"` keep only failed runs. Default at validation
+ * time is `{count: 100}`. `"all"` remains in the type as the historical wire
+ * vocabulary that `applyRetention` still recognizes, but `validateHistory`
+ * REJECTS it (issue #659 L9) — an automation may not declare unbounded run
+ * history.
  */
 export type HistoryKeep =
   | { readonly count: number }
@@ -745,6 +748,29 @@ function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
 
 const DEFAULT_HISTORY_KEEP_COUNT = 100;
 
+/*
+ * Retention ceilings (issue #659 L9).
+ *
+ * `keep: "all"` was a legal manifest value meaning "never prune this
+ * automation's run history". A per-minute automation writes ~500k turns a year
+ * into the vault's journal, each with its items, and `applyRetention` returned
+ * without doing anything — so the one declaration that most needed a bound was
+ * the one that removed every bound. It is now REJECTED rather than coerced: a
+ * manifest that asks for unbounded growth is asking for something the runtime
+ * will not do, and silently rewriting it to `{count: 100}` would let an author
+ * keep believing their history is complete. v0 carries no back-compat
+ * obligation, so the honest error is available and is the cleaner contract.
+ *
+ * The numeric forms get ceilings for the same reason: `{days: 100000}` is
+ * `"all"` spelled differently, and a hole that can be re-opened by arithmetic
+ * was never closed.
+ */
+const MAX_HISTORY_KEEP_COUNT = 10_000;
+const MAX_HISTORY_KEEP_DAYS = 365;
+
+const HISTORY_KEEP_SHAPES =
+  'manifest.history.keep must be {count:N} | {days:N} | "errors"';
+
 function validateHistory(raw: unknown): HistoryConfig {
   if (raw === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -758,11 +784,20 @@ function validateHistory(raw: unknown): HistoryConfig {
   if (h.keep === undefined)
     return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
   const keep = h.keep;
-  if (keep === "all" || keep === "errors") return { keep };
+  if (keep === "all") {
+    throw new ManifestError(
+      "invalid_history",
+      'manifest.history.keep may not be "all": run history must stay bounded. ' +
+        `Use {count:N} (max ${MAX_HISTORY_KEEP_COUNT}), {days:N} (max ` +
+        `${MAX_HISTORY_KEEP_DAYS}), or "errors".`,
+      "history.keep"
+    );
+  }
+  if (keep === "errors") return { keep };
   if (keep === null || typeof keep !== "object" || Array.isArray(keep)) {
     throw new ManifestError(
       "invalid_history",
-      'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
+      HISTORY_KEEP_SHAPES,
       "history.keep"
     );
   }
@@ -772,14 +807,28 @@ function validateHistory(raw: unknown): HistoryConfig {
     Number.isInteger(k.count) &&
     k.count >= 0
   ) {
+    if (k.count > MAX_HISTORY_KEEP_COUNT) {
+      throw new ManifestError(
+        "invalid_history",
+        `manifest.history.keep.count may not exceed ${MAX_HISTORY_KEEP_COUNT}`,
+        "history.keep"
+      );
+    }
     return { keep: { count: k.count } };
   }
   if (typeof k.days === "number" && Number.isInteger(k.days) && k.days >= 0) {
+    if (k.days > MAX_HISTORY_KEEP_DAYS) {
+      throw new ManifestError(
+        "invalid_history",
+        `manifest.history.keep.days may not exceed ${MAX_HISTORY_KEEP_DAYS}`,
+        "history.keep"
+      );
+    }
     return { keep: { days: k.days } };
   }
   throw new ManifestError(
     "invalid_history",
-    'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
+    HISTORY_KEEP_SHAPES,
     "history.keep"
   );
 }

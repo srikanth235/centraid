@@ -27,6 +27,17 @@ export class NodeSqliteDriver implements ReplicaSqliteDriver {
     return this.db.prepare(sql).all(...bind) as T[];
   }
 
+  /**
+   * `node:sqlite` has no off-thread read, but exposing the method keeps the
+   * mounted reader's async path — the one production takes — under test.
+   */
+  allAsync<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): Promise<T[]> {
+    return Promise.resolve(this.all<T>(sql, bind));
+  }
+
   exec(sql: string): void {
     this.db.exec(sql);
   }

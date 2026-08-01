@@ -149,6 +149,51 @@ describe("service worker fetch routing", () => {
     const shell = worker.caches.buckets.get(SHELL_CACHE)!;
     expect(shell.paths()).toStrictEqual(["/assets/late-ddd.js"]);
   });
+
+  // The iroh WASM binary is loaded by a JS `fetch()`, which carries an EMPTY
+  // destination — the one shape the routing bailout used to skip. It is also
+  // the single biggest asset the app ships (~2 MB), so "never cached" meant
+  // re-downloading it every visit (issue #659 C3).
+  test("caches a JS-initiated /assets fetch, which is how the wasm loads", async () => {
+    const worker = loadWorker({
+      routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
+    });
+    const response = await worker.dispatchFetch(
+      request("/assets/centraid_web_iroh_bg-abc.wasm", { destination: "" })
+    );
+    await expect(response.text()).resolves.toBe("wasm");
+    const shell = worker.caches.buckets.get(SHELL_CACHE)!;
+    expect(shell.paths()).toStrictEqual([
+      "/assets/centraid_web_iroh_bg-abc.wasm",
+    ]);
+  });
+
+  test("serves that wasm from the cache on the next visit, hitting no network", async () => {
+    const worker = loadWorker({
+      routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
+    });
+    const req = (): ReturnType<typeof request> =>
+      request("/assets/centraid_web_iroh_bg-abc.wasm", { destination: "" });
+    await worker.dispatchFetch(req());
+    const before = worker.fetched.length;
+    const response = await worker.dispatchFetch(req());
+    await expect(response.text()).resolves.toBe("wasm");
+    // One background revalidation, not a blocking re-download of 2 MB.
+    expect(worker.fetched.slice(before)).toStrictEqual([
+      "/assets/centraid_web_iroh_bg-abc.wasm",
+    ]);
+  });
+
+  test("still passes a JS-initiated data request straight through, uncached", async () => {
+    const worker = loadWorker({ routes: { "/api/thing": () => html("data") } });
+    const response = await worker.dispatchFetch(
+      request("/api/thing", { destination: "" })
+    );
+    await expect(response.text()).resolves.toBe("data");
+    expect(worker.caches.buckets.get(SHELL_CACHE)?.paths() ?? []).toStrictEqual(
+      []
+    );
+  });
 });
 
 describe("service worker never-cache rules", () => {

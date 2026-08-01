@@ -106,6 +106,7 @@ import {
   readBlobStoreSettings,
   custodyStateCounts,
   jitterDelayMs,
+  DEFAULT_VAULT_FOOTPRINT,
 } from "@centraid/vault";
 import type { FilterClause, PreviewCodec } from "@centraid/vault";
 
@@ -265,6 +266,7 @@ import {
   RESOURCE_MODE_PREF_KEY,
 } from "./resource-mode.js";
 import type { ResourceMode } from "./resource-mode.js";
+import { RouteLatencyMetrics } from "./route-latency.js";
 import {
   removedRunnerLadderMembers,
   resolveGatewayRunnerPrefs,
@@ -754,9 +756,18 @@ export async function buildGateway(
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
   const performanceMonitor = new GatewayPerformanceMonitor();
+  // Per-route duration histograms (issue #659 R5) — recorded in
+  // `composedHandler` below, read only when a health snapshot is taken.
+  const routeLatency = new RouteLatencyMetrics();
   health.setPerformanceMetricsSource(
-    () => performanceMonitor.snapshot(),
-    () => performanceMonitor.resetMeasurement()
+    () => ({
+      ...performanceMonitor.snapshot(),
+      routeLatency: routeLatency.snapshot(),
+    }),
+    () => {
+      performanceMonitor.resetMeasurement();
+      routeLatency.reset();
+    }
   );
   let storageFsyncMs: number | undefined;
   try {
@@ -1004,6 +1015,22 @@ export async function buildGateway(
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
+    // One memory ceiling for ALL mounted planes, divided among them (#659 L8).
+    // Previously mmap window and page cache were per-FILE constants, so a
+    // household with five vaults paid five times the memory of one — linear in
+    // vault count on exactly the small always-on box that cannot afford it.
+    // A single mounted vault still gets the default budget in full, so the
+    // common case is byte-identical; what changes is that the second vault no
+    // longer doubles the bill. A standard host gets twice the ceiling of a
+    // constrained one, because the constrained class IS the target hardware
+    // and the ceiling should not be set by the machine that can spare it.
+    footprintBudget:
+      hardwareProfile.class === "constrained"
+        ? DEFAULT_VAULT_FOOTPRINT
+        : {
+            mmapBytes: DEFAULT_VAULT_FOOTPRINT.mmapBytes * 2,
+            cacheBytes: DEFAULT_VAULT_FOOTPRINT.cacheBytes * 2,
+          },
     sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
     // Vault sweeps are a safe loop: defer under event-loop pressure, honor
     // the owner's explicit background-pause, AND yield to host power-context
@@ -1358,9 +1385,12 @@ export async function buildGateway(
   );
 
   // On-disk integrity (issue #374 tier 5b) — see vault-integrity-health.ts.
-  // Self-throttled hourly per vault (quick_check is a full logical scan,
-  // not a per-tick-cheap read); distinct from the `vaults` probe above,
-  // which only proves the file still opens.
+  // Self-throttled per vault at a SIZE-SCALED cadence, one vault per tick
+  // (#659 L6); distinct from the `vaults` probe above, which only proves the
+  // file still opens. The startup grace keeps a full-file read out of boot —
+  // the first minutes after start are when the owner is actually waiting on the
+  // gateway, and corruption that has been there since the last shutdown will
+  // still be there five minutes later (#659 G10).
   health.registerProbe(
     "vault-integrity",
     createVaultIntegrityHealthProbe({
@@ -1370,6 +1400,7 @@ export async function buildGateway(
           vault: p.db.vault,
           journal: p.db.journal,
         })),
+      startupGraceMs: 5 * 60_000,
     })
   );
 
@@ -1422,6 +1453,10 @@ export async function buildGateway(
         logsEventsSubscriberCount() +
         turnEventsSubscriberCount() +
         changesSubscriberCount(),
+      // The denominator for rssBytes (#659 L8): plane memory RESERVATIONS are
+      // now flat in vault count, but residency is not, so this is what makes
+      // "five vaults cost more than one" visible rather than inferred.
+      mountedVaults: vaultRegistry.planesList().length,
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
@@ -4374,6 +4409,13 @@ export async function buildGateway(
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
+    // Duration histogram per route (issue #659 R5). Recorded on response
+    // 'close' rather than on return, so a streamed body (SSE, blob range) is
+    // measured to the byte and not just to the handler's first await.
+    const startedAt = performance.now();
+    res.once("close", () =>
+      routeLatency.record(url.pathname, performance.now() - startedAt)
+    );
     // The Rust-owned iroh relay calls this metadata-only control surface
     // before it can inject the remote EndpointId into an upstream request.
     // Requiring that not-yet-injected identity here is circular. The route's
@@ -4575,6 +4617,9 @@ export async function buildGateway(
       void task.finally(() => lateMountTasks.delete(task));
     });
     pushWakeRelay.start();
+    // Web/control session expiry reclamation on the gateway clock instead of
+    // on every HTTP request (issue #659 G3).
+    webAppSessions.startSweeping();
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
@@ -4639,6 +4684,7 @@ export async function buildGateway(
   const stop = async (): Promise<void> => {
     unsubscribeLateMount();
     pushWakeRelay.stop();
+    webAppSessions.stopSweeping();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
     // roots; otherwise shutdown races git/SQLite initialization.

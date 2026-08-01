@@ -11,7 +11,7 @@ import {
   ReplicaIndex,
   archivedSegmentShas,
   conversationArchiveShas,
-  liveBlobShas,
+  liveBlobShasCached,
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
@@ -118,7 +118,12 @@ export async function runCasOnlyReconciliation(
     // reconciliation runs through `runBackupReconciliation`, which computes the
     // root set from the provider's retained manifests. Kept explicit so the
     // invariant is visible at both forks of the diff, not silently absent here.
-    const live = liveBlobShas(opts.db.vault);
+    // The base live set is SHARED and read-only (issue #659 L5): several
+    // consumers derive it in the same tick, and `liveBlobShasCached` memoizes
+    // it per vault write position. The two archive-root families are this
+    // caller's own extra roots, so they are unioned into a local copy rather
+    // than mutated into the shared set.
+    const live = new Set(liveBlobShasCached(opts.db.vault));
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);

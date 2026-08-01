@@ -104,6 +104,36 @@ describe("web-session-store", () => {
     expect(rows()[0]?.expiresAt as number).toBeGreaterThan(firstExpiry);
   });
 
+  test("the expiry sweep and the cookie lookup are both index-backed, not table scans", () => {
+    const store = WebControlSessionStore.open(file);
+    store.establish({
+      tokenHash: hashControlToken("t"),
+      vaultId: "v1",
+      shellOrigin: "http://shell",
+    });
+    const db = new DatabaseSync(path.join(dir, "gateway.db"), {
+      readOnly: true,
+    });
+    const plan = (sql: string): string =>
+      (
+        db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as Array<{
+          detail: string;
+        }>
+      )
+        .map((step) => step.detail)
+        .join(" | ");
+    // Issue #659 G3: the sweep ran on every HTTP request against an unindexed
+    // expires_at, and the lookup scanned every live row.
+    const sweepPlan = plan("SELECT 1 FROM web_sessions WHERE expires_at <= 0");
+    const findPlan = plan(
+      "SELECT 1 FROM web_sessions WHERE token_hash = 'x' AND expires_at > 0"
+    );
+    db.close();
+    expect(sweepPlan).toContain("web_sessions_expires_idx");
+    expect(sweepPlan).not.toContain("SCAN");
+    expect(findPlan).not.toContain("SCAN");
+  });
+
   test("establish replaces only the same cookie hash; other sessions survive", () => {
     const store = WebControlSessionStore.open(file);
     const a = hashControlToken("a");

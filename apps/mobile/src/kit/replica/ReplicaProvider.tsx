@@ -7,22 +7,17 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState } from "react-native";
-
-import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
-import type {
-  GatewayAuth,
-  ReplicaFetcher,
-} from "@centraid/client/replica/native";
+import { AppState, InteractionManager } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
+import { coalesceWork } from "../../lib/coalesce";
+import type { CoalescedWork } from "../../lib/coalesce";
 import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
-import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { resolveGatewayBase } from "../../lib/gateway";
 import {
   syncDueNotifications,
   syncNotifications,
 } from "../../lib/notifications-core";
-import { getDesktopName } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
@@ -37,12 +32,8 @@ import {
 import { NativeMultiplexChangeFeed } from "../../lib/replica/native-multiplex-change-feed";
 import { createNativeReplicaSession } from "../../lib/replica/native-session";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import { MOBILE_REPLICA_BOOTSTRAP_WINDOW } from "../../lib/replica/offline-budgets";
 import {
-  MAX_MOUNTED_NATIVE_SCOPES,
-  MOBILE_REPLICA_BOOTSTRAP_WINDOW,
-} from "../../lib/replica/offline-budgets";
-import {
-  nativeReplicaDatabasePath,
   openMountedReplicaReaderDriver,
   openNativeReplicaDriver,
 } from "../../lib/replica/op-sqlite-driver";
@@ -53,14 +44,23 @@ import {
   LAST_BASE,
   getActiveVaultLink,
   hydrateVaultLinks,
-  noteActiveIdentity,
   subscribeVaultLinks,
 } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
+import {
+  fetcher,
+  freshnessKey,
+  loadFreshness,
+  mountedScopes,
+  removeCachedScope,
+  resolveIdentity,
+} from "./replica-mount";
 
-export const REPLICA_UNPAIRED_MESSAGE =
-  "Pair a desktop once to create the local replica.";
+// Re-exported rather than moved outright: the pairing wall copy is what a
+// consumer of this provider asks for, and `replica-mount` is an implementation
+// detail of it.
+export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
 export type ReplicaReachability =
   | "device-offline"
@@ -96,12 +96,6 @@ export interface ReplicaContextValue {
   error?: string;
 }
 
-interface ScopeWire {
-  vaultId: string;
-  label: string;
-  role: "admin" | "write" | "read";
-}
-
 const REPLICA_LOADING: ReplicaContextValue = {
   scopes: [],
   ready: false,
@@ -110,149 +104,21 @@ const REPLICA_LOADING: ReplicaContextValue = {
 };
 const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
 
-function fetcher(vaultId?: string): ReplicaFetcher {
-  return async (baseUrl, pathname, init) => {
-    const headers = new Headers(init.headers);
-    for (const [key, value] of Object.entries(authHeader()))
-      headers.set(key, value);
-    if (vaultId) headers.set("x-centraid-vault", vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), {
-      ...init,
-      headers,
-    } as RequestInit);
-  };
-}
+/**
+ * Long enough to let a wifi/cellular handoff settle, short enough that walking
+ * back into range still feels like the app noticed.
+ */
+const NETWORK_FLAP_WINDOW_MS = 1_500;
 
-async function resolveIdentity(vault: VaultLink | undefined): Promise<{
-  auth: GatewayAuth;
-  gatewayId: string;
-  online: boolean;
-}> {
-  const cachedBase = await Store.hydrate(LAST_BASE, "http://127.0.0.1");
-  if (vault?.gatewayId && vault.vaultId) {
-    const liveBase = await resolveGatewayBase().catch(() => undefined);
-    if (liveBase) Store.set(LAST_BASE, liveBase);
-    return {
-      auth: {
-        baseUrl: liveBase ?? cachedBase,
-        gatewayId: vault.gatewayId,
-        vaultId: vault.vaultId,
-      },
-      gatewayId: vault.gatewayId,
-      online: liveBase !== undefined,
-    };
-  }
-  const liveBase = await resolveGatewayBase().catch(() => undefined);
-  if (!liveBase) throw new Error(REPLICA_UNPAIRED_MESSAGE);
-  const probe = await fetchReplicaBootstrapPage(
-    { baseUrl: liveBase },
-    { window: 1, fetcher: fetcher() }
-  );
-  const gatewayId = getDesktopName() || vault?.gatewayId || liveBase;
-  Store.set(LAST_BASE, liveBase);
-  await noteActiveIdentity({ gatewayId, vaultId: probe.vaultId });
-  return {
-    auth: { baseUrl: liveBase, gatewayId, vaultId: probe.vaultId },
-    gatewayId,
-    online: true,
-  };
-}
-
-async function mountedScopes(
-  identity: Awaited<ReturnType<typeof resolveIdentity>>,
-  storageLocation?: string
-): Promise<MountedReplicaScope[]> {
-  const key = `centraid:replica-scopes:${identity.gatewayId}`;
-  let scopes: ScopeWire[] | undefined;
-  if (identity.online) {
-    try {
-      const response = await fetch(
-        new URL("/centraid/_vault/scopes", identity.auth.baseUrl),
-        { headers: authHeader() }
-      );
-      if (response.ok) {
-        const body = (await response.json()) as { scopes?: ScopeWire[] };
-        if (Array.isArray(body.scopes)) {
-          scopes = body.scopes;
-          await AsyncStorage.setItem(key, JSON.stringify(scopes));
-        }
-      }
-    } catch {
-      // Offline cache below is authoritative until the gateway returns.
-    }
-  }
-  if (!scopes) {
-    try {
-      const raw = await AsyncStorage.getItem(key);
-      if (raw) scopes = JSON.parse(raw) as ScopeWire[];
-    } catch {
-      // Fall through to the active scope.
-    }
-  }
-  const active = identity.auth.vaultId!;
-  const ordered = [
-    ...(scopes ?? []).filter((scope) => scope.vaultId === active),
-    ...(scopes ?? []).filter((scope) => scope.vaultId !== active),
-  ];
-  if (!ordered.some((scope) => scope.vaultId === active)) {
-    ordered.unshift({ vaultId: active, label: "Current", role: "write" });
-  }
-  return Promise.all(
-    ordered.slice(0, MAX_MOUNTED_NATIVE_SCOPES).map(async (scope) => ({
-      ...scope,
-      databaseName: await nativeReplicaDatabasePath(
-        { gatewayId: identity.gatewayId, vaultId: scope.vaultId },
-        nativeReplicaDigest,
-        storageLocation
-      ),
-    }))
-  );
-}
-
-function freshnessKey(gatewayId: string, vaultId: string): string {
-  return `centraid:replica-freshness:${encodeURIComponent(
-    `${gatewayId} ${vaultId}`
-  )}`;
-}
-
-async function loadFreshness(
-  gatewayId: string,
-  scopes: readonly MountedReplicaScope[]
-): Promise<Map<string, string>> {
-  const rows = await Promise.all(
-    scopes.map(
-      async (scope) =>
-        [
-          scope.vaultId,
-          await AsyncStorage.getItem(
-            freshnessKey(gatewayId, scope.vaultId)
-          ).catch(() => null),
-        ] as const
-    )
-  );
-  return new Map(
-    rows.filter((row): row is readonly [string, string] => row[1] !== null)
-  );
-}
-
-async function removeCachedScope(
-  gatewayId: string,
-  vaultId: string
-): Promise<void> {
-  const scopesKey = `centraid:replica-scopes:${gatewayId}`;
-  try {
-    const raw = await AsyncStorage.getItem(scopesKey);
-    if (raw) {
-      const scopes = JSON.parse(raw) as ScopeWire[];
-      await AsyncStorage.setItem(
-        scopesKey,
-        JSON.stringify(scopes.filter((scope) => scope.vaultId !== vaultId))
-      );
-    }
-  } catch {
-    // A malformed optional scope cache must not retain revoked freshness.
-  }
-  await AsyncStorage.removeItem(freshnessKey(gatewayId, vaultId));
+/**
+ * Resolve once the navigation animation and pending touches have run. React
+ * Native's own scheduler owns this — nothing here should be guessing at a
+ * timeout for "the UI is usable now".
+ */
+function afterInteractions(): Promise<void> {
+  return new Promise((resolve) => {
+    InteractionManager.runAfterInteractions(() => resolve());
+  });
 }
 
 export function ReplicaProvider({
@@ -291,10 +157,17 @@ export function ReplicaProvider({
     let facade: MultiVaultReplicaSession | undefined;
     let multiplex: NativeMultiplexChangeFeed | undefined;
     let networkSubscription: { remove: () => void } | undefined;
+    let reachabilityWork: CoalescedWork | undefined;
     const looseDrivers: Array<{ close: () => void }> = [];
 
     void (async () => {
       try {
+        // Opening one replica database per scope runs its schema migrations
+        // synchronously, and the first frame is competing with them. Nothing
+        // here is on screen yet, so let the launch animation and first paint
+        // finish before taking the JS thread.
+        await afterInteractions();
+        if (cancelled) return;
         const identity = await resolveIdentity(activeRef.current);
         await requireMobileOfflineGateway({
           baseUrl: identity.auth.baseUrl,
@@ -305,12 +178,19 @@ export function ReplicaProvider({
         const scopes = await mountedScopes(identity, storageLocation);
         const freshness = await loadFreshness(identity.gatewayId, scopes);
         if (identity.online) {
-          void registerReplicaPushWake(identity.auth.baseUrl);
-          void scheduleDailyBriefNotification();
-          for (const scope of scopes)
-            void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
-          for (const scope of scopes)
-            void syncNotifications(identity.auth.baseUrl, scope.vaultId);
+          // Push registration, the daily brief and the per-scope notification
+          // syncs are all "eventually" work. Firing them here put four-plus
+          // requests on the radio before the user could touch anything; they
+          // wait until the app is interactive instead.
+          void afterInteractions().then(() => {
+            if (cancelled) return;
+            void registerReplicaPushWake(identity.auth.baseUrl);
+            void scheduleDailyBriefNotification();
+            for (const scope of scopes) {
+              void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
+              void syncNotifications(identity.auth.baseUrl, scope.vaultId);
+            }
+          });
         }
         if (cancelled) return;
         let connected = identity.online;
@@ -544,10 +424,23 @@ export function ReplicaProvider({
             refresh,
           },
         });
+        // Wifi/cellular handoff emits several states in a row, and each one used
+        // to re-resolve the gateway base and pull every scope. The states are
+        // not individually actionable — only the settled one is — so they
+        // collapse into one reachability pass. A manual refresh stays direct.
+        let latestNetwork: Network.NetworkState | undefined;
+        reachabilityWork = coalesceWork(async () => {
+          const network =
+            latestNetwork ?? (await Network.getNetworkStateAsync());
+          await refreshReachability(network);
+        }, NETWORK_FLAP_WINDOW_MS);
         networkSubscription = Network.addNetworkStateListener((network) => {
-          void refreshReachability(network);
+          latestNetwork = network;
+          reachabilityWork?.signal();
         });
-        void refresh();
+        void afterInteractions().then(() => {
+          if (!cancelled) void refresh();
+        });
       } catch (error) {
         if (!cancelled) {
           const compatibility =
@@ -571,6 +464,7 @@ export function ReplicaProvider({
     })();
     return () => {
       cancelled = true;
+      reachabilityWork?.cancel();
       networkSubscription?.remove();
       void facade?.close();
       multiplex?.close();

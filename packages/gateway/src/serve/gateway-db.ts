@@ -251,6 +251,13 @@ function installGatewaySchema(db: DatabaseSync): void {
       last_used_at INTEGER NOT NULL
     ) STRICT;
     /*
+     * The expiry sweep is the only full-table predicate on web_sessions and it
+     * runs on a timer, not per request (issue #659 G3). Without this index the
+     * sweep's DELETE scans every live session row.
+     */
+    CREATE INDEX IF NOT EXISTS web_sessions_expires_idx
+      ON web_sessions(expires_at);
+    /*
      * A ticket is an INVITATION: which member the joining device binds to,
      * and the full grant list that member must hold once it redeems. One
      * scan, many vaults, atomically. There is only one kind of ticket since

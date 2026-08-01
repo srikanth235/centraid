@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -14,6 +15,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -97,6 +99,19 @@ function AutomationsList({
     [state]
   );
 
+  const renderRow = useCallback(
+    ({ item }: ListRenderItemInfo<AutomationRow>): React.JSX.Element => (
+      <AutomationCard
+        row={item}
+        focused={false}
+        toggle={toggle}
+        styles={styles}
+        colors={colors}
+      />
+    ),
+    [colors, styles, toggle]
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
@@ -111,7 +126,7 @@ function AutomationsList({
 
       <FlatList
         data={rows}
-        keyExtractor={(row) => row.ref}
+        keyExtractor={automationKey}
         contentContainerStyle={[
           styles.list,
           // The back key now lives in the header, so the list only needs to clear
@@ -139,19 +154,18 @@ function AutomationsList({
             />
           ) : null
         }
-        renderItem={({ item }) => (
-          <AutomationCard
-            row={item}
-            focused={false}
-            toggle={toggle}
-            styles={styles}
-            colors={colors}
-          />
-        )}
+        // No getItemLayout and no windowing overrides: a vault holds a handful
+        // of automations, and each card's height varies with the optional
+        // description (up to 3 lines) and the focused banner.
+        renderItem={renderRow}
       />
     </SafeAreaView>
   );
 }
+
+// An automation's `ref` is its vault-unique address, so it is already the
+// stable row identity.
+const automationKey = (row: AutomationRow): string => row.ref;
 
 type Styles = ReturnType<typeof makeStyles>;
 type Colors = ReturnType<typeof useTheme>["colors"];
@@ -264,139 +278,148 @@ function EmptyState({
 
 type RunState = "idle" | "running" | "started";
 
-function AutomationCard({
-  row,
-  focused,
-  toggle,
-  styles,
-  colors,
-}: {
-  row: AutomationRow;
-  focused: boolean;
-  toggle: (ref: string, next: boolean) => Promise<void>;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  const [run, setRun] = useState<RunState>("idle");
-  const [busyToggle, setBusyToggle] = useState(false);
-  // A transient "Started" state settles back to "idle" on a timer; the mounted
-  // ref keeps that late setState from firing after the card unmounts.
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+const AutomationCard = memo(
+  ({
+    row,
+    focused,
+    toggle,
+    styles,
+    colors,
+  }: {
+    row: AutomationRow;
+    focused: boolean;
+    toggle: (ref: string, next: boolean) => Promise<void>;
+    styles: Styles;
+    colors: Colors;
+  }): React.JSX.Element => {
+    const [run, setRun] = useState<RunState>("idle");
+    const [busyToggle, setBusyToggle] = useState(false);
+    // A transient "Started" state settles back to "idle" on a timer; the mounted
+    // ref keeps that late setState from firing after the card unmounts.
+    const mounted = useRef(true);
+    useEffect(() => {
+      mounted.current = true;
+      return () => {
+        mounted.current = false;
+      };
+    }, []);
 
-  const fire = useCallback((): void => {
-    if (run === "running") return;
-    setRun("running");
-    void runAutomation(row.ref)
-      .then(() => {
-        if (!mounted.current) return;
-        setRun("started");
-        setTimeout(() => {
+    const fire = useCallback((): void => {
+      if (run === "running") return;
+      setRun("running");
+      void runAutomation(row.ref)
+        .then(() => {
+          if (!mounted.current) return;
+          setRun("started");
+          setTimeout(() => {
+            if (mounted.current) setRun("idle");
+          }, 2200);
+        })
+        .catch((error: unknown) => {
           if (mounted.current) setRun("idle");
-        }, 2200);
-      })
-      .catch((error: unknown) => {
-        if (mounted.current) setRun("idle");
-        Alert.alert(
-          "Could not run",
-          error instanceof Error ? error.message : "Please try again."
-        );
-      });
-  }, [run, row.ref]);
+          Alert.alert(
+            "Could not run",
+            error instanceof Error ? error.message : "Please try again."
+          );
+        });
+    }, [run, row.ref]);
 
-  const flip = useCallback((): void => {
-    if (busyToggle) return;
-    setBusyToggle(true);
-    void toggle(row.ref, !row.enabled)
-      .catch((error: unknown) => {
-        Alert.alert(
-          "Could not update",
-          error instanceof Error ? error.message : "The change was not saved."
-        );
-      })
-      .finally(() => {
-        if (mounted.current) setBusyToggle(false);
-      });
-  }, [busyToggle, toggle, row.ref, row.enabled]);
+    const flip = useCallback((): void => {
+      if (busyToggle) return;
+      setBusyToggle(true);
+      void toggle(row.ref, !row.enabled)
+        .catch((error: unknown) => {
+          Alert.alert(
+            "Could not update",
+            error instanceof Error ? error.message : "The change was not saved."
+          );
+        })
+        .finally(() => {
+          if (mounted.current) setBusyToggle(false);
+        });
+    }, [busyToggle, toggle, row.ref, row.enabled]);
 
-  const runLabel =
-    run === "running" ? "Running…" : run === "started" ? "Started" : "Run now";
+    const runLabel =
+      run === "running"
+        ? "Running…"
+        : run === "started"
+          ? "Started"
+          : "Run now";
 
-  return (
-    <View
-      style={[styles.card, focused && { borderColor: colors.accent }]}
-      accessibilityLabel={
-        focused ? `${row.name}, opened from Notifications` : undefined
-      }
-    >
-      <View style={styles.cardHead}>
-        <Text style={styles.cardName} numberOfLines={1}>
-          {row.name}
-        </Text>
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityState={{ checked: row.enabled, disabled: busyToggle }}
-          accessibilityLabel={`${row.enabled ? "Disable" : "Enable"} ${row.name}`}
-          onPress={flip}
-          style={[
-            styles.togglePill,
-            { backgroundColor: row.enabled ? colors.accent : colors.bgSunken },
-            busyToggle && styles.dim,
-          ]}
-        >
-          <Text
+    return (
+      <View
+        style={[styles.card, focused && { borderColor: colors.accent }]}
+        accessibilityLabel={
+          focused ? `${row.name}, opened from Notifications` : undefined
+        }
+      >
+        <View style={styles.cardHead}>
+          <Text style={styles.cardName} numberOfLines={1}>
+            {row.name}
+          </Text>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: row.enabled, disabled: busyToggle }}
+            accessibilityLabel={`${row.enabled ? "Disable" : "Enable"} ${row.name}`}
+            onPress={flip}
             style={[
-              styles.toggleText,
-              { color: row.enabled ? colors.inkInv : colors.ink3 },
+              styles.togglePill,
+              {
+                backgroundColor: row.enabled ? colors.accent : colors.bgSunken,
+              },
+              busyToggle && styles.dim,
             ]}
           >
-            {row.enabled ? "On" : "Off"}
+            <Text
+              style={[
+                styles.toggleText,
+                { color: row.enabled ? colors.inkInv : colors.ink3 },
+              ]}
+            >
+              {row.enabled ? "On" : "Off"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.scheduleRow}>
+          <Feather name="clock" size={12} color={colors.ink3} />
+          <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
+        </View>
+
+        {focused ? (
+          <Text style={[styles.scheduleText, { color: colors.accent }]}>
+            Opened from Notifications
           </Text>
-        </Pressable>
+        ) : null}
+
+        {row.description ? (
+          <Text style={styles.description} numberOfLines={3}>
+            {row.description}
+          </Text>
+        ) : null}
+
+        <View style={styles.cardActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Run ${row.name} now`}
+            onPress={fire}
+            disabled={run === "running"}
+            style={[
+              styles.runBtn,
+              { borderColor: colors.lineStrong },
+              run !== "idle" && styles.dim,
+            ]}
+          >
+            <Feather
+              name={run === "started" ? "check" : "play"}
+              size={13}
+              color={colors.accent}
+            />
+            <Text style={styles.runText}>{runLabel}</Text>
+          </Pressable>
+        </View>
       </View>
-
-      <View style={styles.scheduleRow}>
-        <Feather name="clock" size={12} color={colors.ink3} />
-        <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
-      </View>
-
-      {focused ? (
-        <Text style={[styles.scheduleText, { color: colors.accent }]}>
-          Opened from Notifications
-        </Text>
-      ) : null}
-
-      {row.description ? (
-        <Text style={styles.description} numberOfLines={3}>
-          {row.description}
-        </Text>
-      ) : null}
-
-      <View style={styles.cardActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Run ${row.name} now`}
-          onPress={fire}
-          disabled={run === "running"}
-          style={[
-            styles.runBtn,
-            { borderColor: colors.lineStrong },
-            run !== "idle" && styles.dim,
-          ]}
-        >
-          <Feather
-            name={run === "started" ? "check" : "play"}
-            size={13}
-            color={colors.accent}
-          />
-          <Text style={styles.runText}>{runLabel}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
+    );
+  }
+);
+AutomationCard.displayName = "AutomationCard";

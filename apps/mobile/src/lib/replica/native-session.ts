@@ -35,6 +35,8 @@ import type {
   ReplicaValue,
 } from "@centraid/client/replica/native";
 
+import { backoffSchedule } from "../backoff";
+import type { BackoffSchedule } from "../backoff";
 import { MobileIntentIds } from "./mobile-intent-id";
 import { NativeReplicaStore } from "./native-replica-store";
 import { SqliteIntentStore } from "./sqlite-intent-store";
@@ -145,6 +147,14 @@ export interface CreateNativeReplicaSessionOptions {
   }) => void;
 }
 
+/**
+ * Ceiling for the intent drainer's retry. Five minutes keeps a phone that lost
+ * coverage overnight at a dozen wake-ups instead of thousands, and every signal
+ * that could change the answer (reconnect, foreground, a new write) resets the
+ * sequence, so nothing waits this long once the gateway is reachable again.
+ */
+const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
+
 interface Waiter {
   resolve: (result: NativeWriteResult) => void;
   reject: (error: unknown) => void;
@@ -166,7 +176,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #feed: NativeChangeFeed;
   readonly #appState: AppStateLike | undefined;
   readonly #isConnected: () => boolean;
-  readonly #retryDelayMs: number;
+  readonly #retryBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #bootstrapWindow: number | undefined;
   readonly #progressiveBootstrap: boolean;
@@ -215,7 +225,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#isConnected = options.isConnected ?? (() => true);
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
-    this.#retryDelayMs = options.retryDelayMs ?? 2_000;
+    const baseMs = options.retryDelayMs ?? 2_000;
+    this.#retryBackoff = backoffSchedule({
+      baseMs,
+      maxMs: Math.max(baseMs, MAX_INTENT_RETRY_DELAY_MS),
+      jitter: 0.2,
+    });
     this.#intentIds = new MobileIntentIds(options.idFactory);
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
@@ -436,6 +451,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Wake the one coordinator after the platform reports connectivity. */
   notifyReachable(): void {
     if (!this.#isConnected() || this.#closed) return;
+    this.resetRetry();
     if (this.#hasCursor) {
       void this.pullNow().catch(() => undefined);
     } else {
@@ -522,6 +538,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private readonly onAppStateChange = (state: string): void => {
     if (this.#closed) return;
     if (state === "active") {
+      this.resetRetry();
       this.#feed.setActive(true);
       if (this.#hasCursor) {
         void this.pullNow().catch(() => undefined);
@@ -640,6 +657,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
           await this.#coordinator.applyIntentOutcome(outcome);
         }
         this.resolveWaiter(intent.intentId, outcome);
+        // The gateway answered, so whatever the outage was is over.
+        this.#retryBackoff.reset();
       } catch (error) {
         if (isAuthorizationError(error)) {
           this.rejectWaiter(intent.intentId, error);
@@ -677,7 +696,19 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#retryTimer = setTimeout(() => {
       this.#retryTimer = undefined;
       void this.flushIntents();
-    }, this.#retryDelayMs);
+    }, this.#retryBackoff.next());
+  }
+
+  /**
+   * Something changed that could make the next attempt succeed — a reconnect, a
+   * foreground, a fresh write — so the drainer should not keep waiting out an
+   * outage-length delay.
+   */
+  private resetRetry(): void {
+    this.#retryBackoff.reset();
+    if (!this.#retryTimer) return;
+    clearTimeout(this.#retryTimer);
+    this.#retryTimer = undefined;
   }
 
   private resolveWaiter(intentId: string, result: NativeWriteResult): void {

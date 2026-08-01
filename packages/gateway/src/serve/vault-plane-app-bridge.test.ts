@@ -89,6 +89,67 @@ describe("vault-plane app bridge", () => {
     });
   });
 
+  // Issue #659 G11 moved the locker KDF onto the threadpool, so
+  // `authenticateLocker` returns a promise. `asVaultCallResult` takes a
+  // `() => unknown`, so leaving `authenticate` in the synchronous switch
+  // typechecks and wraps the PROMISE as the result — which reaches the app as
+  // `{}` over the worker boundary. This asserts the settled value directly,
+  // because a compiler cannot.
+  test("an authenticate result is a settled value, never a promise (#659 G11)", async () => {
+    const plane = fixture.openPlane(await tempDir("locker-async-plane-"));
+    plane.installApp("locker", "Locker");
+    const bridge = plane.bridgeFor("locker");
+
+    const status = await bridge({
+      op: "authenticate",
+      payload: { operation: "status" },
+    });
+    expect(status.ok).toBe(true);
+    // The precise failure mode: a thenable where a record belongs.
+    expect(status.result).not.toBeInstanceOf(Promise);
+    expect(
+      (status.result as { then?: unknown } | undefined)?.then
+    ).toBeUndefined();
+    // …and it survives the JSON hop to the app, which is where a promise
+    // would have flattened to an empty object.
+    //
+    // The JSON round-trip is the ASSERTION, not a convenient deep clone, so
+    // `structuredClone` is not a substitute: it THROWS DataCloneError on a
+    // promise, while JSON.stringify silently yields `{}`. Silently-empty is the
+    // exact product symptom this test exists to reproduce — swapping in
+    // structuredClone would test a different failure than the one that shipped.
+    // oxlint-disable-next-line unicorn/prefer-structured-clone -- see above
+    expect(JSON.parse(JSON.stringify(status.result))).toMatchObject({
+      configured: false,
+      authenticated: false,
+    });
+
+    const configured = await bridge({
+      op: "authenticate",
+      payload: {
+        operation: "configure",
+        secret: "correct horse battery staple",
+      },
+    });
+    expect(configured.ok).toBe(true);
+    expect(
+      (configured.result as { sessionToken?: unknown }).sessionToken
+    ).toBeTypeOf("string");
+  });
+
+  test("authenticate stays Locker-only on the async lane (#659 G11)", async () => {
+    const plane = fixture.openPlane(await tempDir("locker-scope-plane-"));
+    plane.enrollApp("planner");
+    const denied = await plane.bridgeFor("planner")({
+      op: "authenticate",
+      payload: { operation: "status" },
+    });
+    expect(denied).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/only to Locker/u),
+    });
+  });
+
   test("a granted app invoke executes without parking; the risk marker rides the receipt (issue #306)", async () => {
     const plane = fixture.openPlane(await tempDir());
     const calendarId = seedCalendar(plane);

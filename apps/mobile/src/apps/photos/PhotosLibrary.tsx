@@ -1,18 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { FlashList } from "@shopify/flash-list";
+import type { ListRenderItemInfo } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
-import React, { useCallback, useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import React, { memo, useCallback, useMemo, useState } from "react";
+import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
@@ -37,11 +30,67 @@ import {
 } from "./device-media";
 import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
 import type { DeviceByteProbe } from "./free-up-space";
+import { gridImageProps } from "./grid-image";
 import { imageSource } from "./media-source";
 import { styles } from "./PhotosLibrary.styles";
+import type { PhotoAsset } from "./timeline-source";
 import { usePhotoTimeline } from "./timeline-source";
 
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
+
+type AlbumRow = {
+  album: ReturnType<typeof useReplicaQuery>["rows"][number];
+  cover: PhotoAsset | undefined;
+  count: number;
+};
+
+/**
+ * One album tile. Memoized and hoisted out of the screen body so a state change
+ * anywhere on the page (refresh flag, dialog open, pin hydration) does not
+ * re-render — and re-decode the cover of — every album in the grid.
+ */
+const AlbumCard = memo(
+  ({
+    row: { album, cover, count },
+    colors,
+    onOpen,
+  }: {
+    row: AlbumRow;
+    colors: ReturnType<typeof useTheme>["colors"];
+    onOpen: (collectionId: string) => void;
+  }) => (
+    <Pressable
+      accessibilityLabel={`Open album ${String(album.name ?? "Untitled")}, ${count} photos`}
+      accessibilityRole="button"
+      onPress={() => onOpen(String(album.collection_id))}
+      style={styles.albumCard}
+    >
+      {cover ? (
+        <Image
+          source={imageSource(cover.uri)}
+          {...gridImageProps(cover.uri)}
+          recyclingKey={cover.id}
+          style={styles.albumCover}
+        />
+      ) : (
+        <View
+          style={[styles.albumCover, { backgroundColor: colors.bgSunken }]}
+        />
+      )}
+      <Text
+        numberOfLines={1}
+        style={[styles.albumTitle, { color: colors.ink }]}
+      >
+        {String(album.name ?? "Album")}
+      </Text>
+      <Text style={[styles.rowMeta, { color: colors.ink2 }]}>
+        {count} items
+      </Text>
+    </Pressable>
+  )
+);
+
+AlbumCard.displayName = "AlbumCard";
 
 export default function PhotosLibrary({
   navigation,
@@ -124,23 +173,42 @@ export default function PhotosLibrary({
     [freeCandidates]
   );
   const duplicateCount = assets.filter((asset) => asset.duplicateHint).length;
-  const albumRows = [...collections.rows]
-    .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
-    .map((album) => {
-      const assetIds = new Set(
-        entries.rows
-          .filter((entry) => entry.collection_id === album.collection_id)
-          .map((entry) => String(entry.target_id))
-      );
-      const albumAssets = assets.filter(
-        (asset) => asset.assetId && assetIds.has(asset.assetId)
-      );
-      const cover =
-        albumAssets.find(
-          (asset) => asset.contentId === album.cover_content_id
-        ) ?? albumAssets[0];
-      return { album, cover, count: albumAssets.length };
-    });
+  // Memoized because it is the list's `data`: an array rebuilt on every render
+  // is a new identity, which makes the windowed list treat every album as a
+  // changed row. The build itself is also a full entries × albums pass.
+  const albumRows = useMemo(
+    () =>
+      [...collections.rows]
+        .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+        .map((album) => {
+          const assetIds = new Set(
+            entries.rows
+              .filter((entry) => entry.collection_id === album.collection_id)
+              .map((entry) => String(entry.target_id))
+          );
+          const albumAssets = assets.filter(
+            (asset) => asset.assetId && assetIds.has(asset.assetId)
+          );
+          const cover =
+            albumAssets.find(
+              (asset) => asset.contentId === album.cover_content_id
+            ) ?? albumAssets[0];
+          return { album, cover, count: albumAssets.length };
+        }),
+    [assets, collections.rows, entries.rows]
+  );
+  const openAlbum = useCallback(
+    (collectionId: string): void => {
+      navigation.navigate("AlbumDetail", { albumId: collectionId });
+    },
+    [navigation]
+  );
+  const renderAlbum = useCallback(
+    ({ item }: ListRenderItemInfo<AlbumRow>) => (
+      <AlbumCard row={item} colors={colors} onOpen={openAlbum} />
+    ),
+    [colors, openAlbum]
+  );
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
@@ -304,189 +372,163 @@ export default function PhotosLibrary({
         </Pressable>
       </View>
       <ReplicaStatusBar />
-      <ScrollView
+      {/* One windowed list for the whole page: the album grid is the data and
+        everything around it is header/footer. A plain ScrollView mounted every
+        album cover at once, and nesting a list inside a ScrollView would have
+        done the same thing while adding a scroll conflict. */}
+      <FlashList
+        data={albumRows}
+        numColumns={2}
+        keyExtractor={(row) => String(row.album.__rowId)}
+        renderItem={renderAlbum}
+        refreshing={refreshing}
+        onRefresh={refreshNow}
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
-        }
-      >
-        <Text style={[styles.section, { color: colors.ink2 }]}>
-          YOUR LIBRARY
-        </Text>
-        <Pressable
-          accessibilityLabel="Open favorite photos"
-          accessibilityRole="button"
-          onPress={() =>
-            navigation.navigate("PhotoStateView", { mode: "favorites" })
-          }
-        >
-          <Row
-            icon="heart"
-            title="Favorites"
-            meta={`${assets.filter((asset) => asset.favorite).length}`}
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Open archived photos"
-          accessibilityRole="button"
-          onPress={() =>
-            navigation.navigate("PhotoStateView", { mode: "archive" })
-          }
-        >
-          <Row
-            icon="archive"
-            title="Archive"
-            meta={`${assets.filter((asset) => asset.archived).length}`}
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Open photo trash"
-          accessibilityRole="button"
-          onPress={() =>
-            navigation.navigate("PhotoStateView", { mode: "trash" })
-          }
-        >
-          <Row
-            icon="trash-2"
-            title="Trash"
-            meta={`${assets.filter((asset) => asset.deleted).length} · vault purge policy`}
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Review proposed people"
-          accessibilityRole="button"
-          onPress={() => navigation.navigate("FaceReview")}
-        >
-          <Row
-            icon="users"
-            title="People"
-            meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => !row.confirmed_by_party_id).length} proposals`}
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Review possible duplicate photos"
-          accessibilityRole="button"
-          onPress={() => navigation.navigate("DuplicateReview")}
-        >
-          <Row
-            icon="copy"
-            title="Duplicates review"
-            meta={`${duplicateCount} similarity hints`}
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Open photo places map"
-          accessibilityRole="button"
-          onPress={() => navigation.navigate("PlacesMap")}
-        >
-          <Row
-            icon="map-pin"
-            title="Places"
-            meta={`${places.rows.length} saved places`}
-            colors={colors}
-          />
-        </Pressable>
-        <Text style={[styles.section, { color: colors.ink2 }]}>ALBUMS</Text>
-        {albumRows.length ? (
-          <View style={styles.albumGrid}>
-            {albumRows.map(({ album, cover, count }) => (
-              <Pressable
-                accessibilityLabel={`Open album ${String(album.name ?? "Untitled")}, ${count} photos`}
-                accessibilityRole="button"
-                key={album.__rowId}
-                onPress={() =>
-                  navigation.navigate("AlbumDetail", {
-                    albumId: String(album.collection_id),
-                  })
-                }
-                style={styles.albumCard}
-              >
-                {cover ? (
-                  <Image
-                    source={imageSource(cover.uri)}
-                    cachePolicy="memory-disk"
-                    contentFit="cover"
-                    recyclingKey={cover.id}
-                    style={styles.albumCover}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.albumCover,
-                      { backgroundColor: colors.bgSunken },
-                    ]}
-                  />
-                )}
-                <Text
-                  numberOfLines={1}
-                  style={[styles.albumTitle, { color: colors.ink }]}
-                >
-                  {String(album.name ?? "Album")}
-                </Text>
-                <Text style={[styles.rowMeta, { color: colors.ink2 }]}>
-                  {count} items
-                </Text>
-              </Pressable>
-            ))}
+        ListEmptyComponent={
+          <View style={styles.pageSection}>
+            <Text style={[styles.empty, { color: colors.ink2 }]}>
+              No albums yet. Tap + to create one.
+            </Text>
           </View>
-        ) : (
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
-            No albums yet. Tap + to create one.
-          </Text>
-        )}
-        <Text style={[styles.section, { color: colors.ink2 }]}>
-          BACKUP & STORAGE
-        </Text>
-        <Pressable
-          accessibilityLabel="Open backup health"
-          accessibilityRole="button"
-          onPress={() => navigation.navigate("BackupHealth")}
-        >
-          <Row
-            icon="cloud"
-            title="Backup health"
-            meta="Rules, queue, errors, storage policy"
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Free offline thumbnail vault"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !pinsHydrated || freeing }}
-          disabled={!pinsHydrated || freeing}
-          onPress={freeSpace}
-        >
-          <Row
-            icon="hard-drive"
-            title="Free up vault"
-            meta={
-              freeing
-                ? "Re-hashing device originals…"
-                : pinsHydrated
-                  ? `${eligibleCount} verified originals · ${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-                  : "Checking protected albums…"
-            }
-            colors={colors}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Request photo enrichment"
-          accessibilityRole="button"
-          onPress={() => void requestEnrichment()}
-        >
-          <Row
-            icon="zap"
-            title="Enrichment"
-            meta={`${policies.rows.length} consent policies · request faces, places and metadata`}
-            colors={colors}
-          />
-        </Pressable>
-      </ScrollView>
+        }
+        ListHeaderComponent={
+          <View style={styles.pageSection}>
+            <Text style={[styles.section, { color: colors.ink2 }]}>
+              YOUR LIBRARY
+            </Text>
+            <Pressable
+              accessibilityLabel="Open favorite photos"
+              accessibilityRole="button"
+              onPress={() =>
+                navigation.navigate("PhotoStateView", { mode: "favorites" })
+              }
+            >
+              <Row
+                icon="heart"
+                title="Favorites"
+                meta={`${assets.filter((asset) => asset.favorite).length}`}
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open archived photos"
+              accessibilityRole="button"
+              onPress={() =>
+                navigation.navigate("PhotoStateView", { mode: "archive" })
+              }
+            >
+              <Row
+                icon="archive"
+                title="Archive"
+                meta={`${assets.filter((asset) => asset.archived).length}`}
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open photo trash"
+              accessibilityRole="button"
+              onPress={() =>
+                navigation.navigate("PhotoStateView", { mode: "trash" })
+              }
+            >
+              <Row
+                icon="trash-2"
+                title="Trash"
+                meta={`${assets.filter((asset) => asset.deleted).length} · vault purge policy`}
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Review proposed people"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("FaceReview")}
+            >
+              <Row
+                icon="users"
+                title="People"
+                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => !row.confirmed_by_party_id).length} proposals`}
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Review possible duplicate photos"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("DuplicateReview")}
+            >
+              <Row
+                icon="copy"
+                title="Duplicates review"
+                meta={`${duplicateCount} similarity hints`}
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open photo places map"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("PlacesMap")}
+            >
+              <Row
+                icon="map-pin"
+                title="Places"
+                meta={`${places.rows.length} saved places`}
+                colors={colors}
+              />
+            </Pressable>
+            <Text style={[styles.section, { color: colors.ink2 }]}>ALBUMS</Text>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={styles.pageSection}>
+            <Text style={[styles.section, { color: colors.ink2 }]}>
+              BACKUP &amp; STORAGE
+            </Text>
+            <Pressable
+              accessibilityLabel="Open backup health"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("BackupHealth")}
+            >
+              <Row
+                icon="cloud"
+                title="Backup health"
+                meta="Rules, queue, errors, storage policy"
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Free offline thumbnail vault"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !pinsHydrated || freeing }}
+              disabled={!pinsHydrated || freeing}
+              onPress={freeSpace}
+            >
+              <Row
+                icon="hard-drive"
+                title="Free up vault"
+                meta={
+                  freeing
+                    ? "Re-hashing device originals…"
+                    : pinsHydrated
+                      ? `${eligibleCount} verified originals · ${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+                      : "Checking protected albums…"
+                }
+                colors={colors}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Request photo enrichment"
+              accessibilityRole="button"
+              onPress={() => void requestEnrichment()}
+            >
+              <Row
+                icon="zap"
+                title="Enrichment"
+                meta={`${policies.rows.length} consent policies · request faces, places and metadata`}
+                colors={colors}
+              />
+            </Pressable>
+          </View>
+        }
+      />
       <Modal
         transparent
         animationType="fade"

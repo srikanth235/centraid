@@ -13,7 +13,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { serve } from "../../packages/gateway/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/gateway/src/serve/serve.js";
-import { rigBudgetMs } from "../helpers/rig-budgets.js";
+import { rigBudgetMs, rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/gateway-sessions.scale.test.ts";
 const SESSIONS = 40;
@@ -50,12 +50,17 @@ describe("gateway-sessions.scale scenarios", () => {
     );
     const durationMs = performance.now() - started;
     const ok = results.every((s) => s !== 401 && s !== 403 && s < 500);
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed = ok && durationMs < BUDGET_MS;
+    const withinDrift = drift === null || durationMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: `Gateway ${SESSIONS} concurrent session probes`,
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         {
           name: "wall clock",
@@ -66,6 +71,10 @@ describe("gateway-sessions.scale scenarios", () => {
         { name: "sessions", value: SESSIONS, unit: "count" },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${durationMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
     expect(ok).toBe(true);
     expect(durationMs).toBeLessThan(BUDGET_MS);
   });

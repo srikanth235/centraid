@@ -121,6 +121,34 @@ describe("conversation history seam", () => {
     expect(Object.fromEntries(query)).toStrictEqual({ q: "milk", limit: "5" });
   });
 
+  it("law: a transcript page names its window on the wire", async () => {
+    await history.loadConversation("daily", "s-1", undefined, {
+      turns: 40,
+      beforeSeq: 120,
+    });
+    expect(Object.fromEntries(sent(`GET ${SESSION}`).query)).toStrictEqual({
+      turns: "40",
+      beforeSeq: "120",
+    });
+  });
+
+  it("law: a window value that could never be a cursor is dropped, not sent", async () => {
+    // The gateway 400s a malformed window rather than ignoring it (a dropped
+    // cursor would serve the NEWEST page to a client paging backwards). So the
+    // client never puts one on the wire — it asks for the default page instead
+    // of failing the whole load.
+    await history.loadConversation("daily", "s-1", undefined, {
+      turns: 0,
+      beforeSeq: Number.NaN,
+    });
+    expect([...sent(`GET ${SESSION}`).query.keys()]).toStrictEqual([]);
+  });
+
+  it("law: an unwindowed load asks for the whole transcript, unchanged", async () => {
+    await history.loadConversation("daily", "s-1");
+    expect([...sent(`GET ${SESSION}`).query.keys()]).toStrictEqual([]);
+  });
+
   it("law: absent collections read as empty, never undefined", async () => {
     respond(`GET ${SESSIONS}`, () => json({}));
     respond(`GET ${SESSIONS}/search`, () => json({}));
@@ -147,6 +175,9 @@ describe("attachment blob seam", () => {
   afterEach(() => {
     created.length = 0;
     URL.createObjectURL = realCreateObjectURL;
+    // Attachment URLs are cached across components on purpose (issue #659), so
+    // a case that asserts the FETCH must start from an empty cache.
+    history.resetAttachmentUrlCache();
   });
 
   /** jsdom ships no object-URL store; patch the method itself so `new URL` survives. */

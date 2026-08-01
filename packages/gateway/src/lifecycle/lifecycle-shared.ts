@@ -161,11 +161,18 @@ export function defaultSessionId(appId: string): string {
   return `lifecycle-${appId}`;
 }
 
-/** Coerce a wire value into an {@link automation.HistoryKeep}, or undefined. */
+/**
+ * Coerce a wire value into an {@link automation.HistoryKeep}, or undefined.
+ *
+ * `"all"` is deliberately NOT accepted (issue #659 L9): the manifest validator
+ * rejects it, and this direct-API lane must not be the door that reintroduces
+ * unbounded run history. An unrecognized value reads as "unset", which falls
+ * back to the bounded default rather than to keeping everything.
+ */
 export function parseHistoryKeep(
   raw: unknown
 ): automation.HistoryKeep | undefined {
-  if (raw === "all" || raw === "errors") return raw;
+  if (raw === "errors") return raw;
   if (raw && typeof raw === "object") {
     const obj = raw as Record<string, unknown>;
     if (typeof obj.count === "number") return { count: obj.count };

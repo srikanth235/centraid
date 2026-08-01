@@ -1382,6 +1382,15 @@ export interface AssistantSnapshot {
   additionalDirectories?: string[];
   /** Durable Centraid-owned primary workspace selection. */
   workspaceKind?: "vault-data" | "app" | "draft";
+  /**
+   * Older turns exist on the SERVER beyond what the route has fetched (issue
+   * #659 G5). The screen exhausts its local render window first and then asks
+   * for the previous page, so the "Show earlier messages" control is offered
+   * whenever either source still has history — it must never do nothing.
+   */
+  canLoadEarlier?: boolean;
+  /** A previous page is being fetched right now. */
+  loadingEarlier?: boolean;
 }
 /**
  * The composer's inline model picker (subsystem `assistant`, active runner
@@ -1431,6 +1440,12 @@ export interface AssistantBridgeProps {
   onReady: (update: (s: AssistantSnapshot) => void) => void;
   onSend: (text: string) => void;
   onStop: () => void;
+  /**
+   * Fetch the page of turns before the oldest one held and PREPEND it (issue
+   * #659 G5). Omitted by callers with no paged source (tests, older hosts) —
+   * the screen then only expands its local window.
+   */
+  onLoadEarlier?: () => void;
   /** Upload one or more just-picked/dropped/pasted files ahead of the next send. */
   onAttachFiles: (files: File[]) => void;
   onRemovePendingAttachment: (id: string) => void;

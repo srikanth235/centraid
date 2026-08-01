@@ -691,3 +691,270 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Test D — WEB VITALS (issue #659 R3a). Until this landed, the only thing the
+// PWA rig measured was BYTES: request counts and transfer sizes, which are
+// machine cost. A shell can move its whole bundle behind a lazy chunk, satisfy
+// every byte ceiling, and still paint late — LCP/INP/CLS are what the owner
+// actually experiences, and nothing in the repo captured them.
+//
+// The observers are installed via addInitScript so they exist BEFORE the
+// document runs: a PerformanceObserver attached after paint sees a truncated
+// timeline (`buffered: true` helps for LCP but not for `event`), and a vital
+// measured from a late observer is a number with no relationship to the user's
+// experience.
+//
+// Ceilings live in tests/experience-budgets/web.json (Core Web Vitals "good"
+// thresholds — see that file's _provenance for why they are standard-derived
+// and not fixture-derived). The report is published for the nightly perf lane
+// at artifacts/perf-input/web-vitals-report.json.
+// ---------------------------------------------------------------------------
+
+const VITALS_REPORT_PATH = path.resolve(
+  here,
+  "../../../..",
+  "artifacts/perf-input/web-vitals-report.json"
+);
+
+interface VitalsCapture {
+  lcpMs: number | null;
+  clsScore: number;
+  inpMs: number | null;
+  domContentLoadedMs: number | null;
+  loadEventMs: number | null;
+  installed: string[];
+  unsupported: string[];
+  paintEntries: string;
+  visibility?: string;
+  bodyText?: string;
+}
+
+/**
+ * Install the three vitals observers before any document script runs.
+ *
+ * Every entry type is checked against `PerformanceObserver.supportedEntryTypes`
+ * and the outcome recorded, because the failure that actually happens is an
+ * observer that silently never fires: a probe reporting `LCP: null` is
+ * indistinguishable from a fast page unless it can say WHY the number is
+ * missing. A policy table keyed by entry type keeps the three cases from
+ * drifting apart.
+ */
+async function installVitalsObservers(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = {
+      lcpMs: null as number | null,
+      clsScore: 0,
+      inpMs: null as number | null,
+      installed: [] as string[],
+      unsupported: [] as string[],
+    };
+    (
+      globalThis as unknown as { __centraidVitals: typeof state }
+    ).__centraidVitals = state;
+
+    const HANDLERS: Record<string, (entry: PerformanceEntry) => void> = {
+      // Last LCP candidate wins — the metric is the LARGEST paint, and later
+      // candidates supersede earlier ones by definition.
+      "largest-contentful-paint": (entry) => {
+        state.lcpMs = entry.startTime;
+      },
+      "layout-shift": (entry) => {
+        const shift = entry as PerformanceEntry & {
+          value: number;
+          hadRecentInput: boolean;
+        };
+        // Shifts within 500 ms of an input are intentional (a menu opening),
+        // not the janky reflow CLS exists to catch. The spec excludes them and
+        // so must we, or every deliberate interaction inflates the score.
+        if (!shift.hadRecentInput) state.clsScore += shift.value;
+      },
+      event: (entry) => {
+        const event = entry as PerformanceEntry & { interactionId?: number };
+        // interactionId > 0 marks an entry belonging to a real user
+        // interaction; INP is the worst such latency, so track the max.
+        if (!event.interactionId) return;
+        if (state.inpMs === null || entry.duration > state.inpMs)
+          state.inpMs = entry.duration;
+      },
+    };
+
+    const supported = new Set(PerformanceObserver.supportedEntryTypes);
+    for (const [type, handle] of Object.entries(HANDLERS)) {
+      if (!supported.has(type)) {
+        state.unsupported.push(type);
+        continue;
+      }
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) handle(entry);
+      });
+      // 16 ms is the lowest threshold the event-timing spec honours; 0 is
+      // silently clamped to it, so state the real value.
+      observer.observe(
+        type === "event"
+          ? ({
+              type,
+              buffered: true,
+              durationThreshold: 16,
+            } as PerformanceObserverInit)
+          : { type, buffered: true }
+      );
+      state.installed.push(type);
+    }
+  });
+}
+
+async function readVitals(page: Page): Promise<VitalsCapture> {
+  return (await page.evaluate(() => {
+    const state = (
+      globalThis as unknown as {
+        __centraidVitals?: {
+          lcpMs: number | null;
+          clsScore: number;
+          inpMs: number | null;
+          installed: string[];
+          unsupported: string[];
+        };
+      }
+    ).__centraidVitals;
+    const nav = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    return {
+      lcpMs: state?.lcpMs ?? null,
+      clsScore: state?.clsScore ?? 0,
+      inpMs: state?.inpMs ?? null,
+      domContentLoadedMs: nav ? nav.domContentLoadedEventEnd : null,
+      loadEventMs: nav ? nav.loadEventEnd : null,
+      installed: state?.installed ?? [],
+      unsupported: state?.unsupported ?? [],
+      // Diagnostic, not decoration: `first-paint` without
+      // `first-contentful-paint` is exactly the state this harness lands in,
+      // and without it a null LCP is unattributable.
+      paintEntries: performance
+        .getEntriesByType("paint")
+        .map((entry) => `${entry.name}=${Math.round(entry.startTime)}`)
+        .join(","),
+    };
+  })) as VitalsCapture;
+}
+
+test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => {
+  const budgets = JSON.parse(
+    await fs.readFile(
+      path.resolve(here, "../../../..", "tests/experience-budgets/web.json"),
+      "utf8"
+    )
+  ) as {
+    metrics: {
+      largestContentfulPaint: { ceilingMs: number };
+      interactionToNextPaint: { ceilingMs: number };
+      cumulativeLayoutShift: { maxScore: number };
+    };
+  };
+
+  await installVitalsObservers(page);
+
+  // ---- Cold shell, empty cache ---------------------------------------------
+  await page.goto("/");
+  await waitForShellBundle(page);
+
+  // ---- One deliberate interaction so INP exists at all ---------------------
+  // INP is undefined without an interaction; a test that reported "INP: null,
+  // passed" would be the vacuous green this rig exists to prevent, so drive a
+  // real click on whatever interactive control the cold shell offers and record
+  // explicitly when the browser still logged no event-timing entry.
+  const anyButton = page.locator("button:visible").first();
+  const clicked = await anyButton.click({ timeout: 15_000 }).then(
+    () => true,
+    () => false
+  );
+  // Event-timing entries are reported on the next frame after the interaction.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => setTimeout(resolve, 250));
+      })
+  );
+
+  const vitals = await readVitals(page);
+  const report = {
+    capturedAt: new Date().toISOString(),
+    harness: { apiUrl: API_URL, appId: APP_ID },
+    // The single most important field in this file: these numbers were taken
+    // against an EMPTY fixture vault on loopback, so they bound the shell's own
+    // boot cost and nothing else. See tests/experience-budgets/README.md.
+    volume: "empty (web-e2e fixture vault, loopback, headless Chromium)",
+    interactionDriven: clicked,
+    vitals,
+  };
+  await fs.mkdir(path.dirname(VITALS_REPORT_PATH), { recursive: true });
+  await fs.writeFile(VITALS_REPORT_PATH, JSON.stringify(report, null, 2));
+
+  console.log("\n================ WEB VITALS SUMMARY ==================");
+  console.log(
+    `LCP: ${vitals.lcpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.largestContentfulPaint.ceilingMs})`
+  );
+  console.log(
+    `INP: ${vitals.inpMs ?? "n/a"} ms   (ceiling ${budgets.metrics.interactionToNextPaint.ceilingMs}, interaction driven: ${clicked})`
+  );
+  console.log(
+    `CLS: ${vitals.clsScore}          (ceiling ${budgets.metrics.cumulativeLayoutShift.maxScore})`
+  );
+  console.log(
+    `DCL: ${vitals.domContentLoadedMs ?? "n/a"} ms   load: ${vitals.loadEventMs ?? "n/a"} ms`
+  );
+  console.log(`paint entries: [${vitals.paintEntries}]`);
+  console.log(
+    `observers installed: [${vitals.installed.join(", ")}]  unsupported: [${vitals.unsupported.join(", ")}]`
+  );
+  console.log("======================================================\n");
+
+  // A probe that cannot install its observer must say so rather than report a
+  // missing number as a fast page.
+  expect(
+    vitals.installed,
+    `vitals observers failed to install (unsupported: ${vitals.unsupported.join(", ")})`
+  ).toContain("largest-contentful-paint");
+
+  // CLS is the one vital this harness measures honestly, and it is a HARD gate.
+  expect(vitals.clsScore, "cumulative layout shift").toBeLessThanOrEqual(
+    budgets.metrics.cumulativeLayoutShift.maxScore
+  );
+
+  // LCP/INP: assert when the browser produced them, annotate when it did not.
+  //
+  // MEASURED 2026-07-31 (darwin arm64, Playwright's bundled headless Chromium):
+  // this harness records `first-paint` but NEVER `first-contentful-paint`, and
+  // therefore never an LCP candidate, on the connect screen — even though the
+  // accessibility snapshot shows fully rendered text. Both observers install
+  // (`installed` proves it), so this is the renderer withholding paint timing,
+  // not a broken probe. Failing the nightly on a number the browser refuses to
+  // emit would make the lane permanently red and teach everyone to ignore it;
+  // fabricating a pass would be worse. So: report, annotate, and keep the
+  // budget entries in tests/experience-budgets/web.json marked `unmeasured`
+  // until the cause is found (first suspect: content that stays visually empty
+  // to the paint pipeline until a font or an opacity transition resolves).
+  if (vitals.lcpMs === null) {
+    test.info().annotations.push({
+      type: "perf-note",
+      description:
+        `no largest-contentful-paint entry (paint timeline: [${vitals.paintEntries}]). ` +
+        `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
+    });
+  } else {
+    expect(vitals.lcpMs, "largest contentful paint").toBeLessThanOrEqual(
+      budgets.metrics.largestContentfulPaint.ceilingMs
+    );
+  }
+  if (vitals.inpMs === null) {
+    test.info().annotations.push({
+      type: "perf-note",
+      description: `no event-timing entry recorded (interaction driven: ${clicked}); INP not asserted this run`,
+    });
+  } else {
+    expect(vitals.inpMs, "interaction to next paint").toBeLessThanOrEqual(
+      budgets.metrics.interactionToNextPaint.ceilingMs
+    );
+  }
+});

@@ -302,7 +302,7 @@ export interface PreparedStatements {
   getTurn: StatementSync;
   deleteTurn: StatementSync;
   getTurnByIdempotency: StatementSync;
-  listTurnsAsc: StatementSync;
+  listTurnsWindow: StatementSync;
   listTurnsFiltered: StatementSync;
   listTurnsByAutomation: StatementSync;
   listInFlightAutomationTurns: StatementSync;
@@ -316,10 +316,12 @@ export interface PreparedStatements {
   openItem: StatementSync;
   closeItem: StatementSync;
   listItems: StatementSync;
+  listItemsForConversation: StatementSync;
   messageInText: StatementSync;
   insertAttachment: StatementSync;
   listAttachmentsForItem: StatementSync;
   listAttachmentsForTurn: StatementSync;
+  listAttachmentsForConversation: StatementSync;
   referencedHashes: StatementSync;
   listArchiveSegments: StatementSync;
   upsertState: StatementSync;
@@ -368,6 +370,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE c.user_id = ? AND c.kind IN ('chat','build')
         AND (? IS NULL OR c.app_id = ?)
       ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
+      LIMIT ?
     `),
     // FTS5 search over titles + inbound message text (issue #420, Wave 3),
     // mirroring the vault's search: rank order + snippet() for match context.
@@ -489,9 +492,34 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE conversation_id = ? AND idempotency_key = ?
       ORDER BY seq DESC LIMIT 1
     `),
-    // Ascending by seq — a transcript is replayed oldest-turn-first.
-    listTurnsAsc: db.prepare(`
-      SELECT * FROM turns WHERE conversation_id = ? ORDER BY seq ASC
+    /*
+     * The transcript window (issue #659 G5): the NEWEST `?3` turns strictly
+     * older than the `?2` cursor, returned oldest-first so the fold is
+     * unchanged.
+     *
+     * `ORDER BY seq DESC` in the subquery is load-bearing. The first cut of
+     * this was `ORDER BY seq ASC LIMIT ?`, which caps materialization but
+     * returns the OLDEST N — so paginating with it would have shown a reader
+     * the beginning of their conversation and silently hidden the recent part.
+     * A transcript opens to its tail; that is the end the limit must keep.
+     *
+     * A NULL cursor means "from the live end". One row past the limit is
+     * fetched so `hasMore` is answered by the same query rather than a second
+     * COUNT.
+     *
+     * Anonymous `?` with the cursor bound TWICE, matching every other statement
+     * in this file (see `listTurnsFiltered`). Numbered `?N` placeholders are not
+     * positionally bindable on the pinned Node's `node:sqlite` — it throws
+     * "column index out of range" — so the repeated value is the portable form,
+     * not a stylistic preference.
+     */
+    listTurnsWindow: db.prepare(`
+      SELECT * FROM (
+        SELECT * FROM turns
+         WHERE conversation_id = ? AND (? IS NULL OR seq < ?)
+         ORDER BY seq DESC
+         LIMIT ?
+      ) ORDER BY seq ASC
     `),
     listTurnsFiltered: db.prepare(`
       SELECT * FROM turns
@@ -577,6 +605,20 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     listItems: db.prepare(`
       SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
+    // Every item of a conversation — or of one WINDOW of it — in ONE query
+    // (issue #659 G5). Rendering a transcript used to run one listItems per
+    // turn, so a 200-turn thread cost 200 round trips through the
+    // prepared-statement + row-mapping path. The optional seq bounds let the
+    // batching and the windowing compose instead of fight: a page reads one
+    // page's rows, not the conversation's. The ordering matches listItems
+    // within a turn, so the folded transcript is byte-identical either way.
+    listItemsForConversation: db.prepare(`
+      SELECT i.* FROM items i JOIN turns t ON t.id = i.turn_id
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
+      ORDER BY t.seq ASC, i.ordinal ASC, i.started_at ASC
+    `),
     messageInText: db.prepare(
       `SELECT text FROM items WHERE turn_id = ? AND kind = 'message_in' ORDER BY ordinal ASC LIMIT 1`
     ),
@@ -591,6 +633,19 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     listAttachmentsForTurn: db.prepare(`
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
       WHERE i.turn_id = ? ORDER BY a.created_at ASC
+    `),
+    // The conversation-wide companion to listItemsForConversation (#659 G5):
+    // one query instead of one per message-bearing item. Most threads have no
+    // attachments at all, which is exactly why the per-item query was pure
+    // overhead.
+    listAttachmentsForConversation: db.prepare(`
+      SELECT a.* FROM attachments a
+        JOIN items i ON a.item_id = i.id
+        JOIN turns t ON t.id = i.turn_id
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
+      ORDER BY a.created_at ASC
     `),
     // The blob-GC live set (issue #190) UNIONED with every hash an archived
     // segment references (issue #438 decision 4) — both unpruned AND pruned

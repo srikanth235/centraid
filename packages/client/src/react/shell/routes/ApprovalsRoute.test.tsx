@@ -66,6 +66,10 @@ function makeActions(): ShellActions {
 describe("ApprovalsRoute", () => {
   beforeEach(async () => {
     ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
+    // The route's data lives in the shell's shared stale-while-revalidate
+    // cache (issue #659), which deliberately outlives a mount — so each case
+    // starts from the same empty cache a fresh vault would give it.
+    (await import("../queryCache.js")).resetQueryCache();
     ({ ShellActionsProvider } = await import("../actions.js"));
     getNotifications.mockReset().mockResolvedValue({
       decisions: {

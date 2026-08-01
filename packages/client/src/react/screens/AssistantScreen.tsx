@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
@@ -9,11 +9,21 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { clearDraft, loadDraft, saveDraft } from "./assistantDrafts.js";
+import {
+  clearDraft,
+  flushDraftSave,
+  loadDraft,
+  queueDraftSave,
+} from "./assistantDrafts.js";
 import Message from "./AssistantMessage.js";
 import type { MessageCallbacks } from "./AssistantMessage.js";
 import ChatComposer from "./ChatComposer.js";
 import { useComposerAutocomplete } from "./ComposerAutocomplete.js";
+import {
+  anchoredScrollTop,
+  TRANSCRIPT_WINDOW,
+  windowTranscript,
+} from "./transcriptWindow.js";
 import { useAssistantScroll } from "./useAssistantScroll.js";
 import { workspaceKindLabel } from "./workspaceKindLabel.js";
 
@@ -233,6 +243,7 @@ export default function AssistantScreen({
   onReady,
   onSend,
   onStop,
+  onLoadEarlier,
   onAttachFiles,
   onRemovePendingAttachment,
   onAddWorkspace,
@@ -269,9 +280,55 @@ export default function AssistantScreen({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Only the newest slice of a long transcript is mounted (issue #659); the
+  // rest is one click above, never dropped. The window resets per conversation
+  // because "how far back have I asked to see" belongs to the thread you are
+  // reading, not to the screen.
+  const [windowSize, setWindowSize] = useState(TRANSCRIPT_WINDOW);
+  // Memoized so `rendered` is referentially stable across re-renders that did
+  // not change the transcript — the scroll anchor below keys on it, and a fresh
+  // slice every render would fire (and so discard) the anchor before the page
+  // it is waiting for has landed.
+  const { rendered, hiddenCount } = useMemo(
+    () => windowTranscript(snap.messages, windowSize),
+    [snap.messages, windowSize]
+  );
+  // Two sources of older history, in order: the rows already fetched but not
+  // yet mounted, then the server's previous page. The control is offered while
+  // EITHER has more, so it never appears and then does nothing.
+  const canShowEarlier = hiddenCount > 0 || Boolean(snap.canLoadEarlier);
+
+  // Prepending older rows grows the content ABOVE the viewport, and a browser
+  // keeps `scrollTop` numerically fixed — so without this the page lurches
+  // downward by exactly the height of what you just asked to see. Anchoring on
+  // distance-from-BOTTOM is exact for a pure prepend: nothing below moved.
+  const anchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(
+    null
+  );
+  const showEarlier = (): void => {
+    const el = scrollRef.current;
+    // Captured before either path changes the content. The server path is
+    // async, so the anchor simply waits until the page lands and `rendered`
+    // changes — the layout effect is what consumes it.
+    anchorRef.current = el
+      ? { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop }
+      : null;
+    if (hiddenCount > 0) {
+      setWindowSize((size) => size + TRANSCRIPT_WINDOW);
+      return;
+    }
+    onLoadEarlier?.();
+  };
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = anchorRef.current;
+    anchorRef.current = null;
+    if (el && anchor !== null) el.scrollTop = anchoredScrollTop(anchor, el);
+  }, [rendered]);
+
   const { showJump, jumpToBottom } = useAssistantScroll(
     scrollRef,
-    snap.messages,
+    rendered,
     conversationId
   );
 
@@ -297,12 +354,19 @@ export default function AssistantScreen({
   const [seenConversationId, setSeenConversationId] = useState(conversationId);
   if (seenConversationId !== conversationId) {
     setSeenConversationId(conversationId);
+    // The outgoing thread's last keystrokes must land before we read the
+    // incoming thread's draft.
+    flushDraftSave();
     setDraft(loadDraft(conversationId));
+    setWindowSize(TRANSCRIPT_WINDOW);
   }
+
+  // Unmounting (navigating away) is the other moment a pending write must land.
+  useEffect(() => flushDraftSave, []);
 
   const changeDraft = (v: string): void => {
     setDraft(v);
-    saveDraft(conversationId, v);
+    queueDraftSave(conversationId, v);
   };
 
   // @-mentions + slash-commands (issue #420). Inert when the route wires no
@@ -348,16 +412,31 @@ export default function AssistantScreen({
       .finally(() => setModelPickerLoaded(true));
   };
 
-  const messageCallbacks: MessageCallbacks = {
-    hydrateRefs,
-    wireCodeCopy,
-    loadAttachmentImage,
-    onCopyMessage,
-    onFeedback,
-    onRegenerate,
-    onRetryError,
-    onPagerNav,
-  };
+  // Memoized because `Message` is memoized: a fresh callbacks object every
+  // render would defeat the row-level comparison and re-render the whole
+  // transcript on every keystroke and every streamed token (issue #659).
+  const messageCallbacks = useMemo<MessageCallbacks>(
+    () => ({
+      hydrateRefs,
+      wireCodeCopy,
+      loadAttachmentImage,
+      onCopyMessage,
+      onFeedback,
+      onRegenerate,
+      onRetryError,
+      onPagerNav,
+    }),
+    [
+      hydrateRefs,
+      wireCodeCopy,
+      loadAttachmentImage,
+      onCopyMessage,
+      onFeedback,
+      onRegenerate,
+      onRetryError,
+      onPagerNav,
+    ]
+  );
 
   return (
     <div className={styles.asst}>
@@ -385,9 +464,33 @@ export default function AssistantScreen({
                 </div>
               </div>
             ) : (
-              snap.messages.map((m, i) => (
-                <Message key={i} m={m} index={i} cb={messageCallbacks} />
-              ))
+              <>
+                {canShowEarlier ? (
+                  <button
+                    type="button"
+                    className={styles.showEarlier}
+                    onClick={showEarlier}
+                    disabled={snap.loadingEarlier === true}
+                  >
+                    {snap.loadingEarlier === true
+                      ? "Loading earlier messages…"
+                      : hiddenCount > 0
+                        ? `Show earlier messages (${hiddenCount} above)`
+                        : "Show earlier messages"}
+                  </button>
+                ) : null}
+                {rendered.map((m, i) => (
+                  <Message
+                    key={m.msgId ?? `${m.kind}:${i}`}
+                    m={m}
+                    // The row's index must address the FULL model — the route's
+                    // retry and pager callbacks index into `m.current.msgs`, so
+                    // a window-relative index would act on the wrong message.
+                    index={hiddenCount + i}
+                    cb={messageCallbacks}
+                  />
+                ))}
+              </>
             )}
           </div>
           {showJump ? (

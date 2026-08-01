@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { createTestVault } from "../helpers/factories.js";
+import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";
 const PHOTO_COUNT = 10_000;
@@ -153,6 +154,10 @@ describe("large-vault.scale", () => {
       )
       .all();
     const readMs = performance.now() - readStarted;
+    // #659 R4 — sustained-drift gate over this rig's own 30-sample
+    // nightly history. Null until the history is deep enough; a null is
+    // "no opinion yet", never a pass.
+    const drift = await rigDriftBudgetMs("scale", OWNER);
     const passed =
       recentPhotos.length === 200 &&
       contactHit.length === 1 &&
@@ -160,11 +165,12 @@ describe("large-vault.scale", () => {
       noteHit.length === 1 &&
       seedMs < SEED_BUDGET_MS &&
       readMs < READ_BUDGET_MS;
+    const withinDrift = drift === null || seedMs <= drift;
     await recordQualityResult({
       lane: "scale",
       owner: OWNER,
       name: "Daily-use queries on the readiness large-vault fixture",
-      status: passed ? "passed" : "failed",
+      status: passed && withinDrift ? "passed" : "failed",
       measurements: [
         {
           name: "fixture seed",
@@ -184,6 +190,10 @@ describe("large-vault.scale", () => {
         { name: "notes", value: NOTE_COUNT, unit: "rows" },
       ],
     });
+    expect(
+      withinDrift,
+      `sustained drift: ${seedMs} vs drift budget ${drift} (1.5x the trailing median of the last 30 nightly samples)`
+    ).toBe(true);
     expect(recentPhotos).toHaveLength(200);
     expect(contactHit).toHaveLength(1);
     expect(events).toHaveLength(365);

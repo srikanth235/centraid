@@ -38,6 +38,7 @@ import {
 } from "./gatewaySwitcher.js";
 import IdentityHead from "./IdentityHead.js";
 import { openPrompt } from "./prompt.js";
+import { resetQueryCache } from "./queryCache.js";
 import ApprovalsRoute from "./routes/ApprovalsRoute.js";
 import AppViewRoute from "./routes/AppViewRoute.js";
 import AssistantRoute from "./routes/AssistantRoute.js";
@@ -90,7 +91,7 @@ import { useAssistantConversations } from "./useAssistantConversations.js";
 import { useAsyncData } from "./useAsyncData.js";
 import { useNotificationsCounts } from "./useBlockingCount.js";
 import { useBuilderEnabled } from "./useBuilderEnabled.js";
-import { useGatewayRuntime } from "./useGatewayRuntime.js";
+import { useGatewayStatus } from "./useGatewayRuntime.js";
 import { useMemberScopes } from "./useMemberScopes.js";
 import { useShellApps } from "./useShellApps.js";
 import { useStarred } from "./useStarred.js";
@@ -219,7 +220,7 @@ export function SettingsRouteRedirect({
 // app-*.ts modules. NOT yet wired to #root while that work continues.
 export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
-  const { userApps, drafts, refresh, setUserApps } = useShellApps();
+  const { userApps, drafts, refresh, setUserApps, mutateApps } = useShellApps();
   const assistantConversations = useAssistantConversations();
   // Conversations mid-undo-window after a delete — optimistically hidden from
   // the sidebar until the grace timer commits or the reader undoes (§3).
@@ -318,8 +319,10 @@ export default function App(): JSX.Element {
       }
     })();
   }, []);
-  const gatewayRuntime = useGatewayRuntime();
-  const gatewayStatus = gatewayRuntime?.status;
+  // Only the reachability verdict, not the whole 5s heartbeat snapshot — the
+  // shell root renders a pill and a banner, and re-rendering the active screen
+  // every five seconds to redraw them was the entire cost (issue #659).
+  const gatewayStatus = useGatewayStatus();
   // Dev flag (issue #434, Phase 3): the builder + every entry point into it are
   // hidden from the first release unless this is set. Threaded into ShellActions
   // (menus/palette read it), used to gate drafts + the "Build new" affordances
@@ -507,13 +510,22 @@ export default function App(): JSX.Element {
       void enableWebPushWake(false);
 
     const reScope = (): void => {
+      // A different gateway or vault is a different world: every cached answer
+      // the shell holds describes the OLD one, and showing a stale row from it
+      // is a correctness bug, not a slow refresh (issue #659).
+      resetQueryCache();
       void refresh();
       navRef.current?.navigate({ kind: "home" });
     };
-    window.CentraidApi.onGatewayChanged?.(reScope);
-    window.CentraidApi.onVaultChanged?.(reScope);
+    const offGatewayScope = window.CentraidApi.onGatewayChanged?.(reScope);
+    const offVaultScope = window.CentraidApi.onVaultChanged?.(reScope);
 
     return () => {
+      // These two outlived every remount before (issue #659): the shell root
+      // subscribed on mount and never unsubscribed, so a re-mounted shell
+      // stacked another pair and one gateway change ran N re-scopes.
+      offGatewayScope?.();
+      offVaultScope?.();
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("centraid:open-capture", onOpenCapture);
       window.removeEventListener("centraid:notification-value", enablePush);
@@ -577,7 +589,26 @@ export default function App(): JSX.Element {
     [assistantConversations]
   );
 
-  // Inline rename (§3) — the shared text-prompt dialog, then a PATCH + refresh.
+  // The three sidebar row edits are optimistic (issue #659): the row changes on
+  // the click and the PATCH confirms it, instead of the reader waiting a round
+  // trip and then a full list refetch for a name they already typed. A rejected
+  // commit puts the list back exactly as it was and says why.
+  const patchConversation = useCallback(
+    (
+      apply: (
+        rows: CentraidConversationSummary[]
+      ) => CentraidConversationSummary[],
+      commit: () => Promise<unknown>,
+      failure: (message: string) => string
+    ) => {
+      void assistantConversations
+        .mutate(apply, commit)
+        .catch((error: unknown) => showToast(failure(errMsg(error))));
+    },
+    [assistantConversations]
+  );
+
+  // Inline rename (§3) — the shared text-prompt dialog, then an optimistic PATCH.
   const renameAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find(
@@ -591,67 +622,70 @@ export default function App(): JSX.Element {
           confirmLabel: "Rename",
         });
         if (!next) return;
-        await renameConversation(
-          ASSISTANT_APP_ID,
-          id,
-          next,
-          conversationScope(id)
-        ).catch((error: unknown) =>
-          showToast(
-            `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
-          )
+        patchConversation(
+          (rows) =>
+            rows.map((row) => (row.id === id ? { ...row, title: next } : row)),
+          () =>
+            renameConversation(
+              ASSISTANT_APP_ID,
+              id,
+              next,
+              conversationScope(id)
+            ),
+          (message) => `Couldn't rename: ${message}`
         );
-        await assistantConversations.refresh();
       })();
     },
-    [assistantConversations]
+    [assistantConversations, patchConversation]
   );
 
-  // Pin/unpin (§3) — a PATCH + refresh; the store sorts pinned threads first.
+  // Pin/unpin (§3) — the store sorts pinned threads first, so the local edit
+  // re-sorts too or the row would visibly jump again after the refetch.
   const pinAssistantConversation = useCallback(
     (id: string, pinned: boolean) => {
-      void (async () => {
-        await setConversationPinned(
-          ASSISTANT_APP_ID,
-          id,
-          pinned,
-          conversationScope(id)
-        ).catch((error: unknown) =>
-          showToast(`Couldn't ${pinned ? "pin" : "unpin"}: ${errMsg(error)}`)
-        );
-        await assistantConversations.refresh();
-      })();
+      patchConversation(
+        (rows) =>
+          rows
+            .map((row) => (row.id === id ? { ...row, pinned } : row))
+            .toSorted(
+              (left, right) => Number(right.pinned) - Number(left.pinned)
+            ),
+        () =>
+          setConversationPinned(
+            ASSISTANT_APP_ID,
+            id,
+            pinned,
+            conversationScope(id)
+          ),
+        (message) => `Couldn't ${pinned ? "pin" : "unpin"}: ${message}`
+      );
     },
-    [assistantConversations]
+    [patchConversation]
   );
 
-  // Archive/unarchive (§3) — a PATCH + refresh. Archiving the open thread
-  // bounces to a fresh assistant, mirroring delete (the row leaves the list).
+  // Archive/unarchive (§3). Archiving the open thread bounces to a fresh
+  // assistant, mirroring delete (the row leaves the list).
   const archiveAssistantConversation = useCallback(
     (id: string, archived: boolean) => {
-      void (async () => {
-        await setConversationArchived(
-          ASSISTANT_APP_ID,
-          id,
-          archived,
-          conversationScope(id)
-        ).catch((error: unknown) =>
-          showToast(
-            `Couldn't ${archived ? "archive" : "unarchive"}: ${errMsg(error)}`
-          )
-        );
-        const cur = navRef.current?.route;
-        if (
-          archived &&
-          cur?.kind === "assistant" &&
-          cur.conversationId === id
-        ) {
-          navRef.current?.navigate({ kind: "assistant" });
-        }
-        await assistantConversations.refresh();
-      })();
+      patchConversation(
+        (rows) =>
+          rows.map((row) => (row.id === id ? { ...row, archived } : row)),
+        () =>
+          setConversationArchived(
+            ASSISTANT_APP_ID,
+            id,
+            archived,
+            conversationScope(id)
+          ),
+        (message) =>
+          `Couldn't ${archived ? "archive" : "unarchive"}: ${message}`
+      );
+      const cur = navRef.current?.route;
+      if (archived && cur?.kind === "assistant" && cur.conversationId === id) {
+        navRef.current?.navigate({ kind: "assistant" });
+      }
     },
-    [assistantConversations]
+    [patchConversation]
   );
 
   // Export (§3) — fetch the full transcript, then serialize + download.
@@ -898,7 +932,7 @@ export default function App(): JSX.Element {
               tileVariant={prefs.tileVariant}
               isStarred={isStarred}
               toggleStar={toggleStar}
-              refreshApps={refresh}
+              mutateApps={mutateApps}
             />
           );
         case "assistant":
@@ -1071,6 +1105,56 @@ export default function App(): JSX.Element {
       renderSidebar,
       gatewaysRefreshKey,
       removeGatewayConnection,
+      mutateApps,
+    ]
+  );
+
+  // Stable so ShellApp's memoized outlet has something to compare (issue
+  // #659): an inline arrow here meant every shell-root render — every
+  // heartbeat, every toast — rebuilt the whole route tree.
+  const refreshAssistantThreads = useCallback(() => {
+    void assistantConversations.refresh();
+  }, [assistantConversations]);
+  const openCommandPalette = useCallback(() => setPaletteOpen(true), []);
+  const closeSettings = useCallback(() => setSettingsPage(null), []);
+  const closePairDevice = useCallback(() => setPairDeviceOpen(false), []);
+  const renderScreen = useCallback(
+    (nav: ShellNav) => (
+      <ShellActionsProvider
+        value={makeActions(
+          nav,
+          openCommandPalette,
+          refreshAssistantThreads,
+          builderEnabled
+        )}
+      >
+        {renderRoute(nav)}
+        {/* Inside the provider, not beside it: the dialog's pages use
+            `useShellActions` for toasts, confirms, and navigation. */}
+        {settingsPage === null ? null : (
+          <SettingsRoute
+            prefs={prefs}
+            setPrefs={setPrefs}
+            initialPage={settingsPage}
+            onClose={closeSettings}
+            onDisconnectVault={dropGatewayConnection}
+          />
+        )}
+        {pairDeviceOpen ? <PairDeviceModal onClose={closePairDevice} /> : null}
+      </ShellActionsProvider>
+    ),
+    [
+      builderEnabled,
+      closePairDevice,
+      closeSettings,
+      dropGatewayConnection,
+      openCommandPalette,
+      pairDeviceOpen,
+      prefs,
+      refreshAssistantThreads,
+      renderRoute,
+      setPrefs,
+      settingsPage,
     ]
   );
 
@@ -1115,34 +1199,7 @@ export default function App(): JSX.Element {
         onNavReady={(nav) => {
           navRef.current = nav;
         }}
-        renderScreen={(nav) => (
-          <ShellActionsProvider
-            value={makeActions(
-              nav,
-              () => setPaletteOpen(true),
-              () => {
-                void assistantConversations.refresh();
-              },
-              builderEnabled
-            )}
-          >
-            {renderRoute(nav)}
-            {/* Inside the provider, not beside it: the dialog's pages use
-                `useShellActions` for toasts, confirms, and navigation. */}
-            {settingsPage === null ? null : (
-              <SettingsRoute
-                prefs={prefs}
-                setPrefs={setPrefs}
-                initialPage={settingsPage}
-                onClose={() => setSettingsPage(null)}
-                onDisconnectVault={dropGatewayConnection}
-              />
-            )}
-            {pairDeviceOpen ? (
-              <PairDeviceModal onClose={() => setPairDeviceOpen(false)} />
-            ) : null}
-          </ShellActionsProvider>
-        )}
+        renderScreen={renderScreen}
         {...(builderEnabled
           ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
           : {})}

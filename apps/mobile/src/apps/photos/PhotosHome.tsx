@@ -4,7 +4,7 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
 // governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   SafeAreaView,
@@ -42,6 +42,10 @@ import { imageSource } from "./media-source";
 import PhotosCollectionsView from "./PhotosCollectionsView";
 import PhotosDrawer from "./PhotosDrawer";
 import PhotoTimeline from "./PhotoTimeline";
+import {
+  pinnedThumbnailCandidates,
+  pinnedThumbnailSignature,
+} from "./pinned-thumbnails";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -105,24 +109,31 @@ export default function PhotosHome({
     }
   };
 
+  // The pack refresh stats every pinned file and downloads the missing ones, so
+  // it must not ride every timeline snapshot — the engine republishes on each
+  // replica tick, and the candidate set is unchanged in almost all of them.
+  // `packSignature` holds the set last handed to the pack; `packRun` serializes,
+  // so a snapshot landing mid-refresh queues behind it instead of racing it.
+  const packSignature = useRef<string | undefined>(undefined);
+  const packRun = useRef<Promise<void> | undefined>(undefined);
   useEffect(() => {
     if (!gatewayBase) return;
-    void refreshPinnedThumbnailPack(
-      timeline.assets.flatMap((asset) => {
-        if (!asset.contentId || asset.source === "device") return [];
-        return (asset.scopeIds ?? []).map((scopeId) => ({
-          contentId: asset.contentId!,
-          scopeId,
-          uri: `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
-            scopeId
-          )}/${encodeURIComponent(asset.contentId!)}?variant=${
-            asset.kind === "video" ? "poster" : "thumb"
-          }`,
-          capturedAt: asset.capturedAt,
-          favorite: asset.favorite,
-        }));
-      })
-    );
+    const assets = timeline.assets;
+    const signature = pinnedThumbnailSignature(gatewayBase, assets);
+    if (signature === packSignature.current) return;
+    packSignature.current = signature;
+    packRun.current = (packRun.current ?? Promise.resolve())
+      .then(() =>
+        refreshPinnedThumbnailPack(
+          pinnedThumbnailCandidates(gatewayBase, assets)
+        )
+      )
+      // Forgetting the signature is the recovery: a failed pack refresh leaves
+      // thumbnails to be fetched on demand (degraded, not broken), and the next
+      // snapshot retries instead of being skipped as "already done".
+      .catch(() => {
+        packSignature.current = undefined;
+      });
   }, [gatewayBase, timeline.assets]);
 
   useEffect(() => {

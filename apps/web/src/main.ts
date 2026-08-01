@@ -6,6 +6,7 @@ import {
   ensureIrohServiceWorker,
   irohFetch,
   irohVirtualUrl,
+  warmIrohTransport,
 } from "./iroh-transport.js";
 import { installWebChrome } from "./web-chrome.js";
 import { installWebHost } from "./web-host.js";
@@ -44,3 +45,9 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 }
 
 void import("@centraid/client/react/boot");
+
+// After first paint, and only when this page will actually dial over the WASM
+// transport: bring it up during idle rather than in front of the first request
+// that needs it (issue #659 C3). The service worker holds the binary across
+// visits, so this is paid once per build, not once per visit.
+window.addEventListener("load", warmIrohTransport);

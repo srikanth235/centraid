@@ -100,7 +100,7 @@ import type {
 import { VaultRegistryError } from "../serve/vault-registry.js";
 import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
 import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
-import { readJson, sendJson } from "./route-helpers.js";
+import { readJson, sendJson, sendJsonConditional } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
 const PREFIX = "/centraid/_vault";
@@ -754,7 +754,11 @@ export function makeVaultRouteHandler(
         segments[0] === "parked" &&
         segments.length === 1
       ) {
-        return sendJson(res, 200, { parked: plane.listParked() });
+        // Conditional GET (#659 M5 gateway half): mobile polls this and the
+        // list is unchanged between confirmations far more often than not.
+        return sendJsonConditional(req, res, 200, {
+          parked: plane.listParked(),
+        });
       }
 
       // The outbox (issue #306): external writes as artifacts. GET lists the
@@ -918,10 +922,16 @@ export function makeVaultRouteHandler(
         const notifications = plane.notificationsSummary(
           url.searchParams.get("include_archived") === "true"
         );
+        // Conditional GET (#659 M5 gateway half) on both projections — the
+        // scoped count and the full summary each get an ETag over their own
+        // body, so a grant-profiled caller can never revalidate into the other
+        // shape's cached response.
         if (vaultContext()?.grantProfile !== undefined) {
-          return sendJson(res, 200, { count: notifications.decisions.count });
+          return sendJsonConditional(req, res, 200, {
+            count: notifications.decisions.count,
+          });
         }
-        return sendJson(res, 200, {
+        return sendJsonConditional(req, res, 200, {
           ...notifications,
           decisions: {
             ...notifications.decisions,

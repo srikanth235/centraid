@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { formatDuration, relativeTime } from "../../../app-format.js";
@@ -6,6 +5,8 @@ import {
   listAutomationTurns,
   pinAutomationTurn,
 } from "../../../gateway-client.js";
+import { useCachedQuery } from "../queryCache.js";
+import { showToast } from "../toast.js";
 
 import styles from "./RunsPane.module.css";
 
@@ -19,54 +20,36 @@ export default function RunsPane({
 }: {
   automationId: string;
 }): JSX.Element {
-  const [nonce, setNonce] = useState(0);
-  // Stamped with the (automation, nonce) it was fetched for so a switch or a
-  // pin-triggered refetch reads as "loading" during render — no effect has to
-  // clear the previous result first.
-  const [settled, setSettled] = useState<{
-    key: string;
-    result: CentraidAutomationTurnRecord[] | { error: string };
-  } | null>(null);
-  const key = `${automationId} ${nonce}`;
-  const current =
-    settled !== null && settled.key === key ? settled.result : null;
-  const runs = Array.isArray(current) ? current : null;
-  const error =
-    current !== null && !Array.isArray(current) ? current.error : null;
-
-  useEffect(() => {
-    let alive = true;
-    listAutomationTurns({ automationId, limit: 25 })
-      .then((r) => {
-        if (alive) setSettled({ key, result: r });
-      })
-      .catch((caughtError: unknown) => {
-        if (alive) {
-          setSettled({
-            key,
-            result: {
-              error:
-                caughtError instanceof Error
-                  ? caughtError.message
-                  : String(caughtError),
-            },
-          });
-        }
-      });
-    return () => {
-      alive = false;
-    };
-  }, [automationId, key]);
+  // Keyed on the automation (docs/client-keying.md): reopening the popover for
+  // the same order paints its runs immediately from cache and revalidates
+  // behind them, and a pin no longer destroys the list to rebuild it.
+  const { state, mutate } = useCachedQuery(
+    `automation-runs:${automationId}`,
+    () => listAutomationTurns({ automationId, limit: 25 })
+  );
+  const runs = state.status === "ready" ? state.data : undefined;
+  const loadError = state.status === "error" ? state.error : null;
 
   const togglePin = (run: CentraidAutomationTurnRecord): void => {
-    void pinAutomationTurn({ turnId: run.turnId, pinned: !run.pinned })
-      .then(() => setNonce((n) => n + 1))
-      .catch(() => setNonce((n) => n + 1));
+    const pinned = !run.pinned;
+    // The star fills on the click; the wire call confirms it. A rejection puts
+    // the previous list back exactly (queryCache.mutate).
+    void mutate(
+      (rows) =>
+        rows.map((row) =>
+          row.turnId === run.turnId ? { ...row, pinned } : row
+        ),
+      () => pinAutomationTurn({ turnId: run.turnId, pinned })
+    ).catch((error: unknown) =>
+      showToast(
+        `Couldn't ${pinned ? "pin" : "unpin"} that run: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   };
 
-  if (error)
+  if (loadError)
     return (
-      <div className={styles.empty}>{`Failed to load runs: ${error}`}</div>
+      <div className={styles.empty}>{`Failed to load runs: ${loadError}`}</div>
     );
   if (!runs) return <div className={styles.empty}>Loading…</div>;
   if (runs.length === 0)

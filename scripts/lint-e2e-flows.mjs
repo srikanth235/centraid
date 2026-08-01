@@ -49,8 +49,10 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 // A flow that lives elsewhere is unchecked — add it here, exactly like
 // lint-css-classes.mjs's TARGETS.
 const FILES = [
+  "tests/agent-e2e-mobile/flows/cold-start.mjs",
   "tests/agent-e2e-mobile/flows/home-loads.mjs",
   "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+  "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
   "tests/agent-e2e-mobile/flows/template-gate.mjs",
   "tests/agent-e2e-mobile/lib/first-run.mjs",
   "tests/agent-e2e-mobile/lib/harness.mjs",

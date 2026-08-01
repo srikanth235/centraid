@@ -21,6 +21,7 @@ import type { FilterClause, ConsentAllow, ReplicaRow } from "@centraid/vault";
 
 import { canWrite } from "../serve/enrollment-store.js";
 import type { GrantableRole } from "../serve/enrollment-store.js";
+import { preparedStatement } from "./sql-statement-cache.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
@@ -85,13 +86,36 @@ interface TableColumn {
 
 interface TemporalFingerprintCacheEntry {
   epoch: string;
-  watermarkSeq: number;
+  /**
+   * The last replica-log seq that touched THIS entity — not the global
+   * watermark (issue #659 G7). Keyed on the watermark, the cache was invalid
+   * after any commit anywhere in the vault, so a note edit forced a full-table
+   * scan + sha256 of the calendar's temporal membership on the very next poll.
+   */
+  entitySeq: number;
   computedAt: number;
   validUntil: number;
   digest: string;
 }
 
 const DAY_MS = 86_400_000;
+
+/**
+ * The highest replica-log seq recorded against one entity in the current epoch.
+ * Backed by `idx_replica_change_latest_row (epoch, entity, row_id, seq DESC)`,
+ * so this is an index probe, not a scan.
+ */
+function entityChangeSeq(
+  db: DatabaseSync,
+  epoch: string,
+  entity: string
+): number {
+  const row = preparedStatement(
+    db,
+    `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ? AND entity = ?`
+  ).get(epoch, entity) as { seq: number | null } | undefined;
+  return row?.seq ?? 0;
+}
 const temporalFingerprintCache = new WeakMap<
   DatabaseSync,
   Map<string, TemporalFingerprintCacheEntry>
@@ -289,10 +313,11 @@ function temporalFingerprint(
     temporalFingerprintCache.get(db) ??
     new Map<string, TemporalFingerprintCacheEntry>();
   temporalFingerprintCache.set(db, cache);
+  const entitySeq = entityChangeSeq(db, state.epoch, entity.entity);
   const cached = cache.get(key);
   if (
     cached?.epoch === state.epoch &&
-    cached.watermarkSeq === state.watermark.seq &&
+    cached.entitySeq === entitySeq &&
     nowMs >= cached.computedAt &&
     nowMs < cached.validUntil
   ) {
@@ -337,7 +362,7 @@ function temporalFingerprint(
     .digest("hex");
   cache.set(key, {
     epoch: state.epoch,
-    watermarkSeq: state.watermark.seq,
+    entitySeq,
     computedAt: nowMs,
     validUntil,
     digest,

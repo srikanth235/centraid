@@ -15,6 +15,7 @@ import { workerMaxConcurrentFromEnv } from "./worker-admission.js";
 import {
   WorkerPool,
   workerPoolSizeFromEnv,
+  CONSTRAINED_WORKER_POOL_SIZE,
   workerResourceLimitsFromEnv,
   DEFAULT_WORKER_POOL_SIZE,
 } from "./worker-pool.js";
@@ -221,9 +222,18 @@ describe("handler-pool", () => {
     expect(
       workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: "" })
     ).toBe(DEFAULT_WORKER_POOL_SIZE);
+    // A constrained host keeps ONE warm spare (#659 G11): it is the target
+    // hardware, and it is where a cold worker boot hurts most.
     expect(
       workerPoolSizeFromEnv({
         CENTRAID_RESOLVED_HARDWARE_PROFILE: "constrained",
+      })
+    ).toBe(CONSTRAINED_WORKER_POOL_SIZE);
+    // Warming is still explicitly disableable.
+    expect(
+      workerPoolSizeFromEnv({
+        CENTRAID_RESOLVED_HARDWARE_PROFILE: "constrained",
+        CENTRAID_WORKER_POOL_SIZE: "0",
       })
     ).toBe(0);
     expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: "0" })).toBe(0);

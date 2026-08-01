@@ -3,9 +3,11 @@ import { StyleSheet } from "react-native";
 import { family } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
-  albumCard: { width: "48%" },
+  // The grid is two FlashList columns, so each cell already owns half the
+  // width; the 6pt inset on both sides is what produces the 12pt gutter between
+  // them and, with `content`'s 12pt page padding, the 18pt page margin.
+  albumCard: { paddingBottom: 14, paddingHorizontal: 6 },
   albumCover: { aspectRatio: 1.35, borderRadius: 10, width: "100%" },
-  albumGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10 },
   albumTitle: { fontFamily: family.sansMedium, fontSize: 13, marginTop: 7 },
   albumInput: {
     borderRadius: 10,
@@ -16,7 +18,7 @@ export const styles = StyleSheet.create({
     padding: 12,
   },
   backdrop: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
-  content: { padding: 18, paddingBottom: 60 },
+  content: { padding: 12, paddingBottom: 60 },
   create: {
     alignItems: "center",
     borderRadius: 10,
@@ -41,6 +43,8 @@ export const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 14,
   },
+  /** Header/footer bands, inset to line up with the album cells' 6pt gutter. */
+  pageSection: { paddingHorizontal: 6 },
   icon: {
     alignItems: "center",
     borderRadius: 10,

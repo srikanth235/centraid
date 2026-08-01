@@ -74,6 +74,44 @@ async function endpoint(): Promise<BrowserEndpoint> {
 }
 
 /**
+ * Bring the WASM endpoint up during idle time, ahead of the first request that
+ * needs it (issue #659 C3).
+ *
+ * This is a 2 MB download, so the gate is deliberately narrow and was set by
+ * measurement, not intuition. An earlier version gated only on "already
+ * paired" and cost a returning visit the full 2 MB on EVERY visit
+ * (perf-waterfall warm shell 0 B -> 1,995,918 B). Two things fixed that:
+ *
+ *  1. `public/sw.js` now serves JS-initiated `/assets/` fetches through the
+ *     shell cache, so the binary is downloaded once per build rather than once
+ *     per visit. Without that, warming can only ever move the cost around.
+ *  2. The gate below also requires that this page will actually ROUTE through
+ *     this transport. A page can be paired to an iroh endpoint and still send
+ *     its traffic somewhere else — `window.CentraidIroh` is a replaceable seam,
+ *     and the e2e harness replaces it with a direct-HTTP control transport.
+ *     Warming a transport nothing will dial is pure waste, and it is the same
+ *     waste whether the replacement came from a harness or a host.
+ *
+ * Still lazy in every other respect: `endpoint()` owns the single-flight
+ * promise, and a failed warm just leaves the next real caller to surface it.
+ */
+export function warmIrohTransport(): void {
+  if (endpointPromise) return;
+  if (!webGatewayId(loadConnection())) return;
+  // Identity check, not a feature check: only warm the transport we installed.
+  if (window.CentraidIroh?.fetch !== irohFetch) return;
+  const warm = (): void => {
+    void endpoint().catch(() => {
+      // The first real request re-attempts and reports; a failed warm is not
+      // an event the reader should hear about.
+    });
+  };
+  if (typeof requestIdleCallback === "function")
+    requestIdleCallback(warm, { timeout: 4000 });
+  else setTimeout(warm, 1500);
+}
+
+/**
  * Move (never copy) the stable browser device key into durable storage.
  *
  * This key IS the enrolled device identity — losing it means the gateway no

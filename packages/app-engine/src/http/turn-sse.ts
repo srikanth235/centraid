@@ -39,6 +39,7 @@ import type * as TypeImport_wkgbyq from "../conversation/schema.js";
 import type { TurnAttachment } from "../conversation/turn.js";
 import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { costForUsage } from "../model-pricing.js";
+import { SseStream } from "./sse-stream.js";
 import { writeTurnBusy } from "./turn-limiter.js";
 import type { TurnLimiter } from "./turn-limiter.js";
 import { buildReplayEvents } from "./turn-replay.js";
@@ -246,16 +247,19 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  res.write(`: ${opts.banner}\n\n`);
+  // Bounded writer (issue #659 G6): a client that stops draining a turn stream
+  // is dropped instead of buffering the whole run in gateway memory. The turn
+  // itself keeps running and is recorded in the ledger, so a reconnect replays
+  // it from there — nothing is lost by dropping the socket.
+  const stream = new SseStream(res);
+  stream.comment(opts.banner);
   const heartbeat = setInterval(() => {
-    if (!res.writableEnded) res.write(`: ping\n\n`);
+    stream.comment("ping");
   }, 30_000);
   heartbeat.unref?.();
 
   const writeEvent = (event: TurnStreamEvent): void => {
-    if (res.writableEnded) return;
-    res.write(`event: ${event.type}\n`);
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
+    stream.event(event.type, JSON.stringify(event));
   };
 
   // Turn accumulator — folds the runner's `TurnStreamEvent`s into the
@@ -440,10 +444,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         clearInterval(heartbeat);
         req.off("close", onClientClose);
         req.off("error", onClientClose);
-        if (!res.writableEnded) {
-          res.write(`event: end\ndata: {}\n\n`);
-          res.end();
-        }
+        stream.event("end", "{}");
+        stream.end();
         return;
       }
       const lockLeaseHeartbeat = conversationStore
@@ -477,10 +479,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             clearInterval(heartbeat);
             req.off("close", onClientClose);
             req.off("error", onClientClose);
-            if (!res.writableEnded) {
-              res.write(`event: end\ndata: {}\n\n`);
-              res.end();
-            }
+            stream.event("end", "{}");
+            stream.end();
             return;
           }
         }
@@ -874,10 +874,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               }
             }
           }
-          if (!res.writableEnded) {
-            res.write(`event: end\ndata: {}\n\n`);
-            res.end();
-          }
+          stream.event("end", "{}");
+          stream.end();
         }
       } finally {
         if (lockLeaseHeartbeat) clearInterval(lockLeaseHeartbeat);

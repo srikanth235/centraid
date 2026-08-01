@@ -23,6 +23,34 @@ import {
 import type { StoredReplicaRow } from "./multi-vault-provenance";
 import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
+import { planReplicaRead } from "./replica-read-pushdown";
+import type { ReplicaReadPlan } from "./replica-read-pushdown";
+
+/**
+ * Column names `dedupeReplicaRowsByContent` collapses rows on. An entity that
+ * exposes one can merge rows across scopes, which is what makes a per-scope
+ * `LIMIT` unsafe: the duplicate that supplies a source badge may sit outside the
+ * other scope's page.
+ */
+const CONTENT_HASH_COLUMNS = ["sha256", "content_sha256", "blob_sha256"];
+
+/**
+ * The off-thread read op-sqlite offers on top of the shared driver contract.
+ * `ReplicaSqliteDriver` lives in `@centraid/client` and is deliberately
+ * synchronous (the web engine drives it from inside a worker). On the phone the
+ * driver runs on the JS thread, so a 50k-row scan freezes the UI; the native
+ * driver adds this and the reader prefers it when present.
+ */
+interface AsyncReadDriver {
+  allAsync?: <T extends object>(
+    sql: string,
+    bind?: readonly ReplicaBindValue[]
+  ) => Promise<T[]>;
+}
+
+interface StoredEntitySchemaRow {
+  columns_json: string;
+}
 
 export interface MountedReplicaScope {
   vaultId: string;
@@ -85,6 +113,7 @@ interface AttachedScope extends MountedReplicaScope {
 export class MultiVaultReplicaReader {
   readonly #driver: ReplicaSqliteDriver;
   readonly #scopes: AttachedScope[];
+  readonly #contentHashed = new Map<string, boolean>();
 
   constructor(
     driver: ReplicaSqliteDriver,
@@ -124,14 +153,49 @@ export class MultiVaultReplicaReader {
     return this.#scopes;
   }
 
-  read(appId: string, request: NativeReadRequest): ReplicaReadWireResult {
+  async read(
+    appId: string,
+    request: NativeReadRequest
+  ): Promise<ReplicaReadWireResult> {
     const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
-    const byScope = this.rowsForAll(appId, purpose, request.entity).map(
-      (row) => ({
-        scope: this.#scopes[row.scope_index]!,
-        row,
+    const plan = planReplicaRead({
+      request,
+      contentHashed: await this.contentHashed(appId, purpose, request.entity),
+      scopeCount: this.#scopes.length,
+    });
+    const scoped = await this.rowsForAll(appId, purpose, request.entity, plan);
+    const result = this.evaluate(appId, purpose, request, scoped);
+    const limit = plan.perScopeLimit;
+    if (limit === undefined || result.rows.length >= limit) return result;
+    // A short page only proves there is no more data when nothing was cut off.
+    // Dedupe collapses rows, so a saturated scope page can hide rows the
+    // unlimited read would have surfaced: pay for the full scan exactly then.
+    const saturated = this.#scopes.some(
+      (_scope, index) =>
+        scoped.filter((row) => row.scope_index === index).length === limit
+    );
+    if (!saturated) return result;
+    return this.evaluate(
+      appId,
+      purpose,
+      request,
+      await this.rowsForAll(appId, purpose, request.entity, {
+        ...plan,
+        perScopeLimit: undefined,
       })
     );
+  }
+
+  private evaluate(
+    appId: string,
+    purpose: string,
+    request: NativeReadRequest,
+    scoped: readonly ScopedStoredRow[]
+  ): ReplicaReadWireResult {
+    const byScope = scoped.map((row) => ({
+      scope: this.#scopes[row.scope_index]!,
+      row,
+    }));
     if (byScope.length === 0) {
       return {
         rows: [],
@@ -169,7 +233,10 @@ export class MultiVaultReplicaReader {
    * Federated FTS5: execute the same bounded MATCH against every attached
    * index, then rank and dedupe the combined hits on the single read plane.
    */
-  search(appId: string, request: NativeSearchRequest): ReplicaSearchWireResult {
+  async search(
+    appId: string,
+    request: NativeSearchRequest
+  ): Promise<ReplicaSearchWireResult> {
     const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
     if ((request.where?.length ?? 0) > 0) {
       throw new ReplicaProtocolError(
@@ -212,7 +279,7 @@ export class MultiVaultReplicaReader {
       })
       .join(" UNION ALL ");
     parameters.push(limit);
-    const combined = this.#driver.all<ScopedSearchRow>(
+    const combined = await this.query<ScopedSearchRow>(
       `SELECT * FROM (${union}) ORDER BY rank LIMIT ?`,
       parameters
     );
@@ -269,6 +336,8 @@ export class MultiVaultReplicaReader {
     }
     this.#driver.exec(`DETACH DATABASE ${scope.alias};`);
     this.#scopes.splice(this.#scopes.indexOf(scope), 1);
+    // Scope count and the union of shape columns both feed the pushdown plan.
+    this.#contentHashed.clear();
   }
 
   enqueuePlacement(input: PlacementIntent): PlacementRecord {
@@ -344,13 +413,14 @@ export class MultiVaultReplicaReader {
   private rowsForAll(
     appId: string,
     purpose: string,
-    entity: string
-  ): ScopedStoredRow[] {
+    entity: string,
+    plan: ReplicaReadPlan
+  ): Promise<ScopedStoredRow[]> {
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
-        parameters.push(appId, purpose, entity);
-        return `SELECT ${scopeIndex} AS scope_index,
+        parameters.push(appId, purpose, entity, ...plan.filterParams);
+        const select = `SELECT ${scopeIndex} AS scope_index,
                        r.shape_id, r.row_id, r.payload_json, r.oversized_json,
                        es.primary_key, es.columns_json,
                        es.has_unavailable_fields, m.cursor_epoch, m.cursor_seq
@@ -360,13 +430,66 @@ export class MultiVaultReplicaReader {
                   JOIN ${scope.alias}.replica_shape AS sh
                     ON sh.shape_id = r.shape_id
                   JOIN (${cursorSql(scope)}) AS m
-                 WHERE sh.app_id = ? AND sh.purpose = ? AND r.entity = ?`;
+                 WHERE sh.app_id = ? AND sh.purpose = ? AND r.entity = ?${plan.filterSql}`;
+        if (plan.perScopeLimit === undefined) return select;
+        parameters.push(plan.perScopeLimit);
+        // A compound arm cannot carry its own LIMIT; wrapping each one keeps
+        // the page per source rather than across the union.
+        return `SELECT * FROM (${select} LIMIT ?)`;
       })
       .join(" UNION ALL ");
-    return this.#driver.all<ScopedStoredRow>(
+    return this.query<ScopedStoredRow>(`SELECT * FROM (${union})`, parameters);
+  }
+
+  /**
+   * Does this entity expose a content hash? Only then can dedupe merge rows
+   * from different scopes, which is what makes a per-scope page unsafe. Cached
+   * because it is shape metadata: one row, stable until a scope is revoked.
+   */
+  private async contentHashed(
+    appId: string,
+    purpose: string,
+    entity: string
+  ): Promise<boolean> {
+    const key = `${appId} ${purpose} ${entity}`;
+    const cached = this.#contentHashed.get(key);
+    if (cached !== undefined) return cached;
+    // Every scope revoked: there is no union to build, and the read itself
+    // reports the empty plane. Do not turn that into a SQL syntax error here.
+    if (this.#scopes.length === 0) return false;
+    const parameters: ReplicaBindValue[] = [];
+    const union = this.#scopes
+      .map((scope) => {
+        parameters.push(appId, purpose, entity);
+        return `SELECT es.columns_json
+                  FROM ${scope.alias}.replica_entity_schema AS es
+                  JOIN ${scope.alias}.replica_shape AS sh
+                    ON sh.shape_id = es.shape_id
+                 WHERE sh.app_id = ? AND sh.purpose = ? AND es.entity = ?`;
+      })
+      .join(" UNION ALL ");
+    const schemas = await this.query<StoredEntitySchemaRow>(
       `SELECT * FROM (${union})`,
       parameters
     );
+    const hashed = schemas.some((row) =>
+      parseStringArray(row.columns_json).some((column) =>
+        CONTENT_HASH_COLUMNS.includes(column)
+      )
+    );
+    this.#contentHashed.set(key, hashed);
+    return hashed;
+  }
+
+  /** Prefer op-sqlite's off-thread read; fall back to the shared sync contract. */
+  private query<T extends object>(
+    sql: string,
+    parameters: readonly ReplicaBindValue[]
+  ): Promise<T[]> {
+    const asyncAll = (this.#driver as AsyncReadDriver).allAsync;
+    if (asyncAll)
+      return asyncAll.call(this.#driver, sql, parameters) as Promise<T[]>;
+    return Promise.resolve(this.#driver.all<T>(sql, parameters));
   }
 
   private storePlacement(record: PlacementRecord): void {

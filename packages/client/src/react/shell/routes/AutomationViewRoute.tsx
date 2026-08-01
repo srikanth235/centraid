@@ -29,6 +29,7 @@ import type { AutomationThreadDataEx } from "../../screens/AutomationThreadScree
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { openWebhookReveal } from "../webhookReveal.js";
+import { createKeyedMessageProjection } from "./assistantProjection.js";
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
@@ -161,7 +162,11 @@ async function askAutomationWithConsent(input: {
   }) => Promise<boolean>;
 }): Promise<string | null> {
   let live = createAutomationLiveTrace(input.text);
-  input.onMessages(automationLiveMessages(live));
+  // Reference-stable rows for the memoized transcript (issue #659): a streamed
+  // event rebuilds the whole projection, but only the rows that actually moved
+  // should reach React.
+  const projectLive = createKeyedMessageProjection();
+  input.onMessages(projectLive(automationLiveMessages(live)));
   // Approvals accumulate across this ask: consent for provider A then a
   // failover to B must resend BOTH, or the server re-asks for A forever (#567).
   let approvedProviders: string[] = [];
@@ -184,7 +189,7 @@ async function askAutomationWithConsent(input: {
             input.turn.onContext?.({ used: event.used, size: event.size });
           }
           live = reduceAutomationTurnEvent(live, event);
-          input.onMessages(automationLiveMessages(live));
+          input.onMessages(projectLive(automationLiveMessages(live)));
         }
       },
       input.signal,

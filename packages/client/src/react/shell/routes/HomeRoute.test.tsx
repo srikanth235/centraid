@@ -114,9 +114,15 @@ const app = (id: string, name = id): UserAppMeta =>
     updatedAt: "2020-01-01T00:00:00Z",
   }) as unknown as UserAppMeta;
 
-const refreshApps = vi
-  .fn<HomeRouteProps["refreshApps"]>()
-  .mockResolvedValue(undefined);
+// Home no longer refetches after a mutation — it edits its lists optimistically
+// and lets the reconcile settle (issue #659), so the seam under test is
+// `mutateApps`. The fake runs the edit against a fixed snapshot and the commit.
+const mutateApps = vi
+  .fn<HomeRouteProps["mutateApps"]>()
+  .mockImplementation(async (edit, commit) => {
+    edit({ userApps: [], drafts: [] });
+    await commit();
+  });
 
 async function render(userApps: UserAppMeta[]): Promise<HTMLElement> {
   host = document.createElement("div");
@@ -131,7 +137,7 @@ async function render(userApps: UserAppMeta[]): Promise<HTMLElement> {
           tileVariant="gradient"
           isStarred={() => false}
           toggleStar={vi.fn<HomeRouteProps["toggleStar"]>()}
-          refreshApps={refreshApps}
+          mutateApps={mutateApps}
         />
       </ShellActionsProvider>
     );
@@ -205,7 +211,10 @@ describe("HomeRoute", () => {
     showToast.mockClear();
     navigate.mockClear();
     confirm.mockReset().mockResolvedValue(true);
-    refreshApps.mockClear();
+    // The route's automation feed lives in the shared cache; start each case
+    // from an empty one (issue #659).
+    (await import("../queryCache.js")).resetQueryCache();
+    mutateApps.mockClear();
   });
 
   afterEach(() => {

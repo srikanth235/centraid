@@ -7,6 +7,7 @@
 
 import crypto from "node:crypto";
 import path from "node:path";
+import type { StatementSync } from "node:sqlite";
 
 import { GatewayDatabase } from "./gateway-db.js";
 
@@ -50,9 +51,28 @@ function toSession(row: StoredSessionRow): ControlSessionRow {
   };
 }
 
+/**
+ * SQL prepared once per store (issue #659 G3). `GatewayDatabase.db` is a
+ * `readonly` handle for the process lifetime, so a statement compiled here
+ * stays valid; re-preparing on every authorize() re-parsed six statements per
+ * HTTP request.
+ */
+interface SessionStatements {
+  establish: StatementSync;
+  findOne: StatementSync;
+  touch: StatementSync;
+  remove: StatementSync;
+  sweep: StatementSync;
+  list: StatementSync;
+}
+
+const SELECT_COLUMNS =
+  "token_hash, vault_id, device_key, shell_origin, created_at, expires_at, last_used_at";
+
 export class WebControlSessionStore {
   private readonly memory: ControlSessionRow[] | undefined;
   private readonly gatewayDatabase: GatewayDatabase | undefined;
+  private prepared: SessionStatements | undefined;
 
   private constructor(
     gatewayDatabase: GatewayDatabase | undefined,
@@ -60,6 +80,38 @@ export class WebControlSessionStore {
   ) {
     this.gatewayDatabase = gatewayDatabase;
     this.memory = gatewayDatabase ? undefined : [];
+  }
+
+  private statements(database: GatewayDatabase): SessionStatements {
+    if (this.prepared) return this.prepared;
+    const { db } = database;
+    this.prepared = {
+      establish: db.prepare(
+        `INSERT INTO web_sessions (
+            token_hash, vault_id, device_key, shell_origin, created_at, expires_at, last_used_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(token_hash) DO UPDATE SET
+            vault_id = excluded.vault_id,
+            device_key = excluded.device_key,
+            shell_origin = excluded.shell_origin,
+            created_at = excluded.created_at,
+            expires_at = excluded.expires_at,
+            last_used_at = excluded.last_used_at`
+      ),
+      findOne: db.prepare(
+        `SELECT ${SELECT_COLUMNS} FROM web_sessions
+           WHERE token_hash = ? AND expires_at > ?`
+      ),
+      touch: db.prepare(
+        "UPDATE web_sessions SET expires_at = ?, last_used_at = ? WHERE token_hash = ?"
+      ),
+      remove: db.prepare("DELETE FROM web_sessions WHERE token_hash = ?"),
+      sweep: db.prepare("DELETE FROM web_sessions WHERE expires_at <= ?"),
+      list: db.prepare(
+        `SELECT ${SELECT_COLUMNS} FROM web_sessions WHERE expires_at > ? ORDER BY created_at`
+      ),
+    };
+    return this.prepared;
   }
 
   static open(
@@ -94,28 +146,15 @@ export class WebControlSessionStore {
       lastUsedAt: now,
     };
     if (this.gatewayDatabase) {
-      this.gatewayDatabase.db
-        .prepare(
-          `INSERT INTO web_sessions (
-            token_hash, vault_id, device_key, shell_origin, created_at, expires_at, last_used_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(token_hash) DO UPDATE SET
-            vault_id = excluded.vault_id,
-            device_key = excluded.device_key,
-            shell_origin = excluded.shell_origin,
-            created_at = excluded.created_at,
-            expires_at = excluded.expires_at,
-            last_used_at = excluded.last_used_at`
-        )
-        .run(
-          row.tokenHash,
-          row.vaultId,
-          row.deviceKey ?? null,
-          row.shellOrigin,
-          row.createdAt,
-          row.expiresAt,
-          row.lastUsedAt
-        );
+      this.statements(this.gatewayDatabase).establish.run(
+        row.tokenHash,
+        row.vaultId,
+        row.deviceKey ?? null,
+        row.shellOrigin,
+        row.createdAt,
+        row.expiresAt,
+        row.lastUsedAt
+      );
     } else {
       const existing = this.memory!.findIndex(
         (candidate) => candidate.tokenHash === row.tokenHash
@@ -126,9 +165,28 @@ export class WebControlSessionStore {
     return row;
   }
 
+  /**
+   * Look a live session up by its cookie hash.
+   *
+   * The row is fetched by PRIMARY KEY rather than by scanning every live
+   * session (issue #659 G3): the scan was O(sessions) SQL on every authorized
+   * request. The constant-time comparison is kept on the returned row, and the
+   * value being matched is already a SHA-256 of the cookie — `touch()` and
+   * `remove()` have always looked it up by key, so the index lookup exposes
+   * nothing new. Expired rows never match, so authorization does not depend on
+   * the sweep having run.
+   */
   find(tokenHash: string): ControlSessionRow | undefined {
     const expected = Buffer.from(tokenHash, "hex");
-    for (const row of this.list()) {
+    const candidates = this.gatewayDatabase
+      ? (
+          this.statements(this.gatewayDatabase).findOne.all(
+            tokenHash,
+            this.now()
+          ) as unknown as StoredSessionRow[]
+        ).map(toSession)
+      : this.list();
+    for (const row of candidates) {
       const actual = Buffer.from(row.tokenHash, "hex");
       if (
         expected.length === actual.length &&
@@ -146,11 +204,11 @@ export class WebControlSessionStore {
     const nextExpiry = now + CONTROL_IDLE_TTL_MS;
     if (nextExpiry - row.expiresAt < TOUCH_THROTTLE_MS) return;
     if (this.gatewayDatabase) {
-      this.gatewayDatabase.db
-        .prepare(
-          "UPDATE web_sessions SET expires_at = ?, last_used_at = ? WHERE token_hash = ?"
-        )
-        .run(nextExpiry, now, tokenHash);
+      this.statements(this.gatewayDatabase).touch.run(
+        nextExpiry,
+        now,
+        tokenHash
+      );
     } else {
       row.expiresAt = nextExpiry;
       row.lastUsedAt = now;
@@ -160,9 +218,7 @@ export class WebControlSessionStore {
   remove(tokenHash: string): boolean {
     if (this.gatewayDatabase) {
       return (
-        this.gatewayDatabase.db
-          .prepare("DELETE FROM web_sessions WHERE token_hash = ?")
-          .run(tokenHash).changes > 0
+        this.statements(this.gatewayDatabase).remove.run(tokenHash).changes > 0
       );
     }
     const index = this.memory!.findIndex((row) => row.tokenHash === tokenHash);
@@ -174,9 +230,7 @@ export class WebControlSessionStore {
   sweepExpired(): void {
     const now = this.now();
     if (this.gatewayDatabase) {
-      this.gatewayDatabase.db
-        .prepare("DELETE FROM web_sessions WHERE expires_at <= ?")
-        .run(now);
+      this.statements(this.gatewayDatabase).sweep.run(now);
       return;
     }
     for (let index = this.memory!.length - 1; index >= 0; index--) {
@@ -192,12 +246,9 @@ export class WebControlSessionStore {
       }));
     }
     return (
-      this.gatewayDatabase.db
-        .prepare(
-          `SELECT token_hash, vault_id, device_key, shell_origin, created_at, expires_at, last_used_at
-             FROM web_sessions WHERE expires_at > ? ORDER BY created_at`
-        )
-        .all(now) as unknown as StoredSessionRow[]
+      this.statements(this.gatewayDatabase).list.all(
+        now
+      ) as unknown as StoredSessionRow[]
     ).map(toSession);
   }
 }

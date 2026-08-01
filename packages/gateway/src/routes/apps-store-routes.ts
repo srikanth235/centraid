@@ -45,7 +45,12 @@ import { validateManifestAt } from "../validate-manifest.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import { WorktreeStoreError } from "../worktree-store/index.js";
 import { readDraftFiles, writeDraftFile } from "./apps-store-draft-files.js";
-import { readBody, readJson, sendJson } from "./route-helpers.js";
+import {
+  readBody,
+  readJson,
+  sendJson,
+  sendJsonConditional,
+} from "./route-helpers.js";
 
 // Re-exported so existing importers (lifecycle-shared) keep their path; the
 // implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
@@ -128,8 +133,9 @@ export function makeAppsStoreRouteHandler(
           ...bundled,
           ...storeApps.filter((a) => !bundledIds.has(a.id)),
         ];
-        sendJson(res, 200, apps);
-        return true;
+        // Conditional GET (#659 M5 gateway half): the registry list is polled
+        // on every app-shelf render and changes only on install/publish/delete.
+        return sendJsonConditional(req, res, 200, apps);
       }
 
       // ---- session lifecycle: /_apps/_sessions[/<id>] ----

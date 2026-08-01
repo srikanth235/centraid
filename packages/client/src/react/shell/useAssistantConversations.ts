@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-
 import { ASSISTANT_APP_ID, listConversations } from "../../gateway-client.js";
+import { useCachedQuery } from "./queryCache.js";
 
 export interface AssistantConversationsController {
   conversations: CentraidConversationSummary[];
@@ -9,14 +8,28 @@ export interface AssistantConversationsController {
    *  vault assistant's conversations (create/first-turn-title/delete/turn
    *  complete) via ShellActions.refreshAssistantThreads. */
   refresh: () => Promise<void>;
+  /**
+   * Rename / pin / archive, applied to the sidebar row before the wire call
+   * (issue #659). These used to await the PATCH and then refetch the whole
+   * list, so a rename took a round trip to appear and a pin rebuilt the
+   * sidebar. A rejected commit restores the list exactly and rethrows.
+   */
+  mutate: (
+    apply: (
+      rows: CentraidConversationSummary[]
+    ) => CentraidConversationSummary[],
+    commit: () => Promise<unknown>
+  ) => Promise<void>;
 }
 
 // The shell sidebar's "Chats" list state — the vault assistant's persisted
-// conversations (issue: sidebar-as-conversation-list). Owned by App.tsx so
-// it survives AssistantRoute unmounting (navigating away and back shouldn't
-// re-fetch), mirroring useShellApps' ownership of the Apps list.
-/** The list fetch, with the "a failed list reads as empty" rule applied once
- *  for both entry points (the mount effect and the imperative `refresh`). */
+// conversations (issue: sidebar-as-conversation-list). Held in the shell's
+// shared query cache so it survives AssistantRoute unmounting (navigating away
+// and back shouldn't re-fetch) and so a vault switch drops it wholesale.
+const CONVERSATIONS_KEY = "assistant:conversations";
+const NO_CONVERSATIONS: CentraidConversationSummary[] = [];
+
+/** The list fetch, with the "a failed list reads as empty" rule applied once. */
 async function loadAssistantConversations(): Promise<
   CentraidConversationSummary[]
 > {
@@ -28,24 +41,13 @@ async function loadAssistantConversations(): Promise<
 }
 
 export function useAssistantConversations(): AssistantConversationsController {
-  const [conversations, setConversations] = useState<
-    CentraidConversationSummary[]
-  >([]);
-
-  const refresh = useCallback(async () => {
-    setConversations(await loadAssistantConversations());
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const next = await loadAssistantConversations();
-      if (alive) setConversations(next);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return { conversations, refresh };
+  const { state, refresh, mutate } = useCachedQuery(
+    CONVERSATIONS_KEY,
+    loadAssistantConversations
+  );
+  return {
+    conversations: state.status === "ready" ? state.data : NO_CONVERSATIONS,
+    refresh,
+    mutate,
+  };
 }

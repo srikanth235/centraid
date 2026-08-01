@@ -1,10 +1,15 @@
 import { Feather } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
-import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
+import { useNetworkState } from "expo-network";
 import * as Sharing from "expo-sharing";
-import { VideoView, useVideoPlayer } from "expo-video";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   FlatList,
@@ -15,11 +20,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import OptionSheet from "../../kit/components/OptionSheet";
@@ -35,8 +37,8 @@ import { authHeader } from "../../lib/gateway";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import { InCloudOriginalError, openDeviceOriginal } from "./device-media";
-import { buildDismissGesture, buildZoomGesture } from "./lightbox-gestures";
-import { imageSource, videoSource } from "./media-source";
+import { buildDismissGesture } from "./lightbox-gestures";
+import { MediaPage } from "./MediaPage";
 import { styles } from "./PhotoLightbox.styles";
 import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
 import type { PhotoAsset } from "./timeline-model";
@@ -45,121 +47,6 @@ import { usePhotoTimeline } from "./timeline-source";
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
 // for why the builder chains must stay outside component render bodies.
 
-function VideoAsset({
-  uri,
-  width,
-  height,
-}: {
-  uri: string;
-  width: number;
-  height: number;
-}): React.JSX.Element {
-  const player = useVideoPlayer(videoSource(uri), (instance) => {
-    instance.loop = false;
-  });
-  return (
-    <VideoView
-      player={player}
-      nativeControls
-      contentFit="contain"
-      style={{ width, height }}
-    />
-  );
-}
-
-function MediaPage({
-  asset,
-  companionUri,
-  width,
-  height,
-}: {
-  asset: PhotoAsset;
-  companionUri?: string;
-  width: number;
-  height: number;
-}): React.JSX.Element {
-  const [playingLive, setPlayingLive] = useState(false);
-  const [quality, setQuality] = useState<"thumb" | "preview" | "original">(
-    "thumb"
-  );
-  // Re-point at a different asset ⇒ start again at the thumbnail. Adjusting the
-  // state during render (React's documented "derive state from props" escape
-  // hatch) rather than in an effect means the reset lands before paint, so a new
-  // asset can never flash the previous one's full-resolution source.
-  const [qualityAssetId, setQualityAssetId] = useState(asset.id);
-  if (qualityAssetId !== asset.id) {
-    setQualityAssetId(asset.id);
-    setQuality("thumb");
-  }
-  const scale = useSharedValue(1);
-  const startScale = useSharedValue(1);
-  const zoomStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const zoom = buildZoomGesture(scale, startScale);
-  if (asset.kind === "video")
-    return <VideoAsset uri={asset.originalUri} width={width} height={height} />;
-  if (playingLive && companionUri)
-    return <VideoAsset uri={companionUri} width={width} height={height} />;
-  return (
-    <View style={{ width, height }}>
-      <GestureDetector gesture={zoom}>
-        <Animated.View
-          style={[styles.mediaCenter, { width, height }, zoomStyle]}
-        >
-          <Image
-            source={imageSource(
-              quality === "original"
-                ? asset.originalUri
-                : quality === "preview"
-                  ? asset.previewUri || asset.uri
-                  : asset.uri
-            )}
-            cachePolicy="memory-disk"
-            recyclingKey={`${asset.id}:${quality}`}
-            placeholder={
-              asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
-            }
-            contentFit="contain"
-            transition={120}
-            onLoad={() => {
-              if (
-                quality === "thumb" &&
-                asset.previewUri &&
-                asset.previewUri !== asset.uri
-              )
-                setQuality("preview");
-            }}
-            style={{ width, height }}
-          />
-        </Animated.View>
-      </GestureDetector>
-      {companionUri ? (
-        <Pressable
-          accessibilityLabel="Play Live Photo"
-          accessibilityRole="button"
-          style={styles.liveButton}
-          onPress={() => setPlayingLive(true)}
-        >
-          <Feather name="play" size={18} color="#fff" />
-          <Text style={styles.liveText}>LIVE</Text>
-        </Pressable>
-      ) : null}
-      {quality !== "original" && asset.originalUri !== asset.previewUri ? (
-        <Pressable
-          accessibilityLabel="Load original photo"
-          accessibilityRole="button"
-          style={styles.originalButton}
-          onPress={() => setQuality("original")}
-        >
-          <Feather name="maximize" size={15} color="#fff" />
-          <Text style={styles.liveText}>ORIGINAL</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 export default function PhotoLightbox({
   route,
   navigation,
@@ -167,6 +54,8 @@ export default function PhotoLightbox({
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const { session, scopes = [] } = useReplica();
+  // Live: switching from wifi to cellular mid-session must gate the next photo.
+  const networkType = useNetworkState().type;
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -208,6 +97,20 @@ export default function PhotoLightbox({
     (row) => row.place_id === current?.placeId
   );
   const dismiss = buildDismissGesture(navigation.goBack);
+  // Hoisted so paging does not hand the list a fresh renderer — and therefore a
+  // fresh MediaPage identity, which would reset the quality ladder mid-swipe.
+  const renderPage = useCallback(
+    ({ item }: ListRenderItemInfo<PhotoAsset>) => (
+      <MediaPage
+        asset={item}
+        companionUri={item.liveVideoUri}
+        networkType={networkType}
+        width={width}
+        height={height - 160}
+      />
+    ),
+    [height, networkType, width]
+  );
 
   useEffect(() => {
     if (!slideshow || assets.length < 2) return;
@@ -352,14 +255,7 @@ export default function PhotoLightbox({
             );
             setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
           }}
-          renderItem={({ item }) => (
-            <MediaPage
-              asset={item}
-              companionUri={item.liveVideoUri}
-              width={width}
-              height={height - 160}
-            />
-          )}
+          renderItem={renderPage}
           showsHorizontalScrollIndicator={false}
         />
         <PhotoLightboxToolbar

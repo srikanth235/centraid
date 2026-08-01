@@ -845,3 +845,22 @@
   border-radius: 6px;
   flex: none;
 }
+
+/* "Show earlier messages" — the top edge of the mounted transcript window
+   (issue #659). A real button, so it is reachable and operable by keyboard;
+   the transcript above it is deferred, never discarded. */
+.showEarlier {
+  align-self: center;
+  margin: 4px 0 12px;
+  padding: 6px 14px;
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.showEarlier:hover {
+  color: var(--ink-1);
+}

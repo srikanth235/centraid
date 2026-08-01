@@ -56,6 +56,25 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
+  /**
+   * Off-thread read. `executeSync` runs the whole scan on the JS thread, so a
+   * mounted read of a ten-year library blocks every frame until it lands;
+   * op-sqlite's promise API runs the same statement on its own thread and only
+   * the result crosses back. Reads only — the store core's write path is
+   * synchronous by contract and must stay ordered against it.
+   */
+  async allAsync<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): Promise<T[]> {
+    try {
+      const result = await this.db.execute(sql, bind as ReplicaBindValue[]);
+      return result.rows as T[];
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
+  }
+
   exec(sql: string): void {
     // op-sqlite's synchronous path runs one statement per call; the store core
     // only passes multi-statement scripts to `exec` (DDL, PRAGMA blocks, tx

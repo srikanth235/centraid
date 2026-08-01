@@ -27,6 +27,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { ChangeBus } from "../changes/change-bus.js";
 import { sendJson } from "./http-utils.js";
+import { SseStream } from "./sse-stream.js";
 
 // 55s keeps the stream warm while staying under the ~60s idle cut common to
 // mobile carrier NATs and reverse proxies (issue #404) — one heartbeat still
@@ -125,19 +126,19 @@ export async function handleAppChanges(
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
+  // Bounded writer (issue #659 G6): a subscriber that stops reading is dropped
+  // rather than buffered, and reconnects into a fresh `_changes` stream.
+  const stream = new SseStream(res);
   // Send an initial comment so the client's `onopen` fires immediately
   // instead of waiting for the first real event.
-  res.write(`: connected to ${appId}\n\n`);
+  stream.comment(`connected to ${appId}`);
 
   const unsubscribe = bus.subscribe(appId, (_change, serialized) => {
-    if (res.writableEnded) return;
-    res.write(`event: change\n`);
-    res.write(`data: ${serialized}\n\n`);
+    stream.event("change", serialized);
   });
 
   const heartbeat = setInterval(() => {
-    if (res.writableEnded) return;
-    res.write(`: ping\n\n`);
+    stream.comment("ping");
   }, HEARTBEAT_MS);
   // Don't block process exit waiting on the heartbeat; the SSE socket
   // owns the lifetime here.
