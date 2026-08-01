@@ -86,6 +86,7 @@
       }
     ]
   },
+  "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "add-receipt-expense",

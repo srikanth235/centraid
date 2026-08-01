@@ -386,6 +386,8 @@ export type {
 } from "./gateway/types.js";
 export {
   SEALED_COLUMNS,
+  SEALED_ENFORCEMENT_POINTS,
+  SEALED_LEAK_SURFACES,
   SEALED_PLACEHOLDER,
   SEALED_PREFIX,
   isSealedValue,
@@ -639,6 +641,7 @@ export {
 } from "./gateway/portability.js";
 export {
   exportPortableVault,
+  importPortableVault,
   verifyPortableVault,
   exportIcs,
   exportVcards,

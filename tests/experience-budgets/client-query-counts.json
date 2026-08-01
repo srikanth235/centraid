@@ -1,0 +1,9 @@
+{
+  "approvedDeviation": null,
+  "screens": {
+    "photos-grid": { "sqlStatements": 61, "httpRequests": 1 },
+    "notifications": { "sqlStatements": 8, "httpRequests": 3 },
+    "atlas": { "sqlStatements": 123, "httpRequests": 2 },
+    "assistant": { "sqlStatements": 22, "httpRequests": 1 }
+  }
+}
