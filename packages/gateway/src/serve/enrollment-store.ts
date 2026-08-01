@@ -145,13 +145,9 @@ const ENROLLMENT_VIEW_SQL = `
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
-  const resolved = path.resolve(source);
-  // File path → parent dir; directory path → use as gateway root.
-  const root =
-    path.basename(resolved) === "gateway.db"
-      ? path.dirname(resolved)
-      : resolved;
-  return GatewayDatabase.open(root);
+  // Callers pass a gateway.db path (or a legacy registry file under the same
+  // root). Always open the containing directory — never the file itself.
+  return GatewayDatabase.open(path.dirname(path.resolve(source)));
 }
 
 function parseJson<T>(raw: string | null): T | undefined {
