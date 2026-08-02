@@ -73,6 +73,8 @@ accessibility zero-grey (15 cells).
 
 - **Android Retry still starved on Home|wall wait (30749590369).** Wall stays visible for the whole in-product probe, so `extendedWaitUntil: Home|Reconnect` returned immediately and Maestro remounted 24 times in ~70s. complete-onboarding now gives a quiet optional Home wait after Enter Centraid, then sparse Retries each followed by an optional 25s Home wait (never keyed on the wall).
 
+- **Android probe used RN fetch over the tunnel (30752829174).** Even with quiet waits, `/_gateway/info` never succeeded on emulator. `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` now uses `expo/fetch` (same as the tunnel client) and still probes the last-known base when `online` flaps false after pair; `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` covers the offline probe path.
+
 - **iOS Photos open selectors (30745625780).** Onboarding + cold-start green under the 90m cap. `tests/agent-e2e-mobile/flows/mobile-scroll-frames` / `tests/agent-e2e-mobile/flows/scroll-frames.mjs` failed tapping bare `Photos`/`People` (tiles publish `Open Photos` / `Open People`). `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` Photos assert uses the exact a11y label with a longer first-paint wait.
 
 - **iOS Tally re-tap + perf deep-link alert (30748673657).** native-v0 opened Tally then `retryableTapCommands` re-tapped `Open Tally` under the cover and failed; launcher opens are a single tap. scroll-frames hit iOS "Open in 'Centraid'?" on `centraid://perf-frames` — dismiss Open before asserting `perf-frame-sampling`; `apps/mobile/src/kit/perf/FrameProbe.tsx` also accepts hostname-form deep links.

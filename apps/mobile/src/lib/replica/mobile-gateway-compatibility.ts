@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fetch as expoFetch } from "expo/fetch";
 
 import { authHeader } from "../gateway";
 import {
@@ -19,6 +20,10 @@ const ONLINE_PROBE_GAP_MS = 1500;
  * Online probes retry briefly: after a named-member pair the shell can mount
  * before the tunnel's first bi-stream is live (Android nightly 30711575336 —
  * permanent "Reconnect once" wall on a single failed fetch).
+ *
+ * Uses `expo/fetch` like the rest of the tunnel client — RN's global `fetch`
+ * was starving Android `/_gateway/info` over the localhost proxy
+ * (30752829174) while Maestro waited a full probe budget.
  */
 export async function requireMobileOfflineGateway(input: {
   baseUrl: string;
@@ -28,13 +33,14 @@ export async function requireMobileOfflineGateway(input: {
   const key = compatibilityKey(input.gatewayId);
   if (!input.online) {
     if ((await AsyncStorage.getItem(key)) === "supported") return;
-    throw new MobileGatewayCompatibilityError("reconnect");
+    // resolveGatewayBase() can flap false right after pair while LAST_BASE
+    // still points at a live localhost tunnel — probe before reconnect wall.
   }
   await probeOnlineWithReconnectRetries(input.baseUrl, key, 0);
 }
 
 /**
- * Sequential reconnect retries with linear backoff. Written as recursion so
+ * Sequential reconnect retries with a fixed gap. Written as recursion so
  * the intentional serial await is not flagged as a parallelizable loop.
  */
 async function probeOnlineWithReconnectRetries(
@@ -60,9 +66,10 @@ async function probeOnlineCapabilities(
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(new URL("/centraid/_gateway/info", baseUrl), {
-      headers: authHeader(),
-    });
+    response = await expoFetch(
+      new URL("/centraid/_gateway/info", baseUrl).toString(),
+      { headers: authHeader() }
+    );
   } catch {
     throw new MobileGatewayCompatibilityError("reconnect");
   }

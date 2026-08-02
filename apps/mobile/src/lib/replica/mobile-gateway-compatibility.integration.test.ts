@@ -1,9 +1,12 @@
+import type * as ExpoFetch from "expo/fetch";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
 
 const storage = vi.hoisted(() => new Map<string, string>());
+const expoFetch = vi.hoisted(() =>
+  vi.fn<(input: string, init?: RequestInit) => Promise<Response>>()
+);
 
 vi.mock(
   import("@react-native-async-storage/async-storage") as Promise<unknown>,
@@ -28,6 +31,13 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
 }));
 
+vi.mock(import("expo/fetch") as Promise<typeof ExpoFetch>, () => ({
+  fetch: expoFetch,
+}));
+
+const { requireMobileOfflineGateway } =
+  await import("./mobile-gateway-compatibility");
+
 const supportedInfo = {
   version: "0.1.0",
   protocolVersion: 2,
@@ -47,6 +57,7 @@ const supportedInfo = {
 describe("mobile gateway compatibility handshake", () => {
   beforeEach(() => {
     storage.clear();
+    expoFetch.mockReset();
   });
 
   afterEach(() => {
@@ -54,10 +65,7 @@ describe("mobile gateway compatibility handshake", () => {
   });
 
   test("judges the live info response, caches support, and admits an offline restart", async () => {
-    const fetchInfo = vi.fn<() => Promise<Response>>(async () =>
-      Response.json(supportedInfo)
-    );
-    vi.stubGlobal("fetch", fetchInfo);
+    expoFetch.mockImplementation(async () => Response.json(supportedInfo));
 
     await expect(
       requireMobileOfflineGateway({
@@ -66,17 +74,14 @@ describe("mobile gateway compatibility handshake", () => {
         online: true,
       })
     ).resolves.toBeUndefined();
-    expect(fetchInfo).toHaveBeenCalledWith(
-      new URL("http://127.0.0.1:18789/centraid/_gateway/info"),
+    expect(expoFetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:18789/centraid/_gateway/info",
       { headers: { Authorization: "Bearer test-mobile" } }
     );
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<() => Promise<Response>>(async () => {
-        throw new Error("offline");
-      })
-    );
+    expoFetch.mockImplementation(async () => {
+      throw new Error("offline");
+    });
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
@@ -109,10 +114,7 @@ describe("mobile gateway compatibility handshake", () => {
   ] as const)(
     "$name",
     async ({ response, disposition }) => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<() => Promise<Response>>(async () => response)
-      );
+      expoFetch.mockImplementation(async () => response);
 
       const result = requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
@@ -128,13 +130,18 @@ describe("mobile gateway compatibility handshake", () => {
     45_000
   );
 
-  test("an uncached offline start never guesses compatibility", async () => {
+  test("an uncached offline start still probes the last-known base before reconnect", async () => {
+    expoFetch.mockImplementation(async () => Response.json(supportedInfo));
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
         gatewayId: "unknown-gateway",
         online: false,
       })
-    ).rejects.toMatchObject({ disposition: "reconnect" });
-  });
+    ).resolves.toBeUndefined();
+    expect(expoFetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:18789/centraid/_gateway/info",
+      { headers: { Authorization: "Bearer test-mobile" } }
+    );
+  }, 45_000);
 });
