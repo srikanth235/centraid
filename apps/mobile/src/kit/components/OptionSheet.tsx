@@ -137,7 +137,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
-    rowDetail: { ...t("tiny"), color: colors.textFaint },
+    rowDetail: { ...t("control"), color: colors.textFaint },
     rowDisabled: { color: colors.textFaint },
     rowLabel: { ...t("body"), color: colors.text },
     // Scrims are shadow, not surface — the same literal the vault drawer uses.

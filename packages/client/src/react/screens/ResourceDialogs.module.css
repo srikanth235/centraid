@@ -67,7 +67,7 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 16.5px;
   letter-spacing: -0.015em;
@@ -161,7 +161,7 @@
 }
 /* The radio is invisible, so the label carries the focus ring. */
 .cmpMode:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .cmpName {
@@ -239,10 +239,10 @@
 @media (max-width: 520px) {
   .cmp {
     grid-template-columns: 1fr repeat(4, minmax(46px, 1fr));
-    font-size: var(--t-tiny-size);
+    font-size: var(--t-control-size);
   }
   .cmpCell,
   .cmpName {
-    font-size: var(--t-tiny-size);
+    font-size: var(--t-control-size);
   }
 }

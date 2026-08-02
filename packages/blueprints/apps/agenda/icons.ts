@@ -1,41 +1,28 @@
-// Icon glyphs — plain string constants, no JSX. Split out so every component
-// that needs a glyph (Sidebar, HeaderBar, EventDrawer) imports from one place
-// instead of the icon map being re-declared or threaded as props.
+// Agenda glyphs lower through the product icon registry.  The app keeps its
+// local names for call-site readability; artwork, stroke grammar, and SVG
+// serialization live in @centraid/design.
+import { iconSvg } from "@centraid/design";
+import type { IconName } from "@centraid/design";
 
-// Object literal (not `Record<string, string>`) so each glyph is reached by
-// static property access — under noUncheckedIndexedAccess a record index would
-// widen every `I.foo` to `string | undefined` and break `<Icon svg={…}>`.
+const glyph = (name: IconName, size: number, strokeWidth = 1.75): string =>
+  iconSvg(name, { size, strokeWidth });
+
 export const I = {
-  brand:
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
-  plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-  chevronLeft:
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
-  chevronRight:
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  miniLeft:
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
-  miniRight:
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  close:
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-  menu: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-  search:
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
-  shield:
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="m9.5 12 2 2 3.5-3.5"/></svg>',
-  check:
-    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 6"/></svg>',
-  maybe:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 17v.01M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 4"/></svg>',
-  decline:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-  empty:
-    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
-  attach:
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12 20a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 9"/></svg>',
-  repeat:
-    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
-  video:
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>',
+  brand: glyph("CalendarBlank", 16, 1.9),
+  plus: glyph("Plus", 18, 2),
+  chevronLeft: glyph("ChevronLeft", 18, 1.8),
+  chevronRight: glyph("ChevronRight", 18, 1.8),
+  miniLeft: glyph("ChevronLeft", 15, 1.9),
+  miniRight: glyph("ChevronRight", 15, 1.9),
+  close: glyph("X", 18),
+  menu: glyph("Menu", 19),
+  search: glyph("Search", 16),
+  shield: glyph("CheckCircle", 14, 1.6),
+  check: glyph("Check", 12, 3.2),
+  maybe: glyph("AlertCircle", 11, 3),
+  decline: glyph("X", 11, 3),
+  empty: glyph("CheckCircle", 26, 1.6),
+  attach: glyph("Paperclip", 15),
+  repeat: glyph("Repeat", 12, 2.2),
+  video: glyph("Video", 15, 1.8),
 };

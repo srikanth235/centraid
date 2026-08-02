@@ -7,7 +7,12 @@ import Icon from "./Icon.js";
 
 import styles from "./Button.module.css";
 
-export type ButtonVariant = "solid" | "primary" | "soft" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "quiet"
+  | "destructive"
+  | "destructiveFilled";
 export type ButtonSize = "md" | "sm" | "chrome";
 
 export interface ButtonProps {
@@ -31,22 +36,23 @@ export interface ButtonProps {
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
-  ghost: styles.ghost,
+  destructive: styles.destructive,
+  destructiveFilled: styles.destructiveFilled,
   primary: styles.primary,
-  soft: styles.soft,
-  solid: undefined,
+  quiet: styles.quiet,
+  secondary: styles.secondary,
 };
 
 /**
  * Button, mirroring the mobile `<Button>` API. Styled by the co-located
- * `Button.module.css` — the single button system for the shell. `solid` is
- * the ink-filled default look; `primary` is the accent CTA.
+ * `Button.module.css` — the single button system for the shell. `secondary` is
+ * the default raised action; `primary` is the one accent-filled CTA.
  */
 export default function Button({
   label,
   children,
   onClick,
-  variant = "primary",
+  variant = "secondary",
   size = "md",
   icon,
   disabled,
@@ -72,7 +78,9 @@ export default function Button({
         <Icon
           name={icon}
           size={14}
-          strokeWidth={variant === "primary" ? 2 : 1.75}
+          strokeWidth={
+            variant === "primary" || variant === "destructiveFilled" ? 2 : 1.75
+          }
         />
       ) : null}
       {children ?? label}
@@ -80,7 +88,7 @@ export default function Button({
   );
 }
 
-/** Standalone 36px icon-only square button (the old `.btn-icon`). */
+/** Standalone target-min icon-only button. */
 export function IconButton(props: {
   icon?: IconName;
   children?: ReactNode;

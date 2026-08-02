@@ -1,8 +1,9 @@
 // Pure formatting + display helpers lifted out of the app.ts shell IIFE.
 // Every function here is stateless: it depends only on its arguments and
 // ambient globals (Icon, ICON_PALETTE) declared in types.d.ts, so it can be
-// imported by app.ts and the route modules split out of it. No closure state,
-// no imports — keep it that way so this module stays trivially testable.
+// imported by app.ts and the route modules split out of it. The shared design
+// formatter is the one exception: relative time is a cross-surface contract.
+import { formatRelativeTime } from "@centraid/design";
 
 // Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
 // bold.jsx APPS fixture. Every app type has a fixed colour identity in the
@@ -128,22 +129,7 @@ export function inferAppVisual(prompt: string): {
 // "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
 // co-located here so app.ts doesn't need to reach into the builder IIFE.
 export function relativeTime(iso?: string): string {
-  if (!iso) return "Recently";
-  try {
-    const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return "Recently";
-    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-    if (s < 60) return "just now";
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 30) return `${d}d ago`;
-    return new Date(iso).toLocaleDateString();
-  } catch {
-    return "Recently";
-  }
+  return formatRelativeTime(iso);
 }
 
 // Compact token count for the standing-order list / run rail.

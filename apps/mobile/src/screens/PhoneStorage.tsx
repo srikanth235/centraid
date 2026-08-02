@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { File } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -11,6 +10,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { formatBytes } from "@centraid/design";
+
+import Icon from "../kit/components/Icon";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { family, radii, useTheme } from "../kit/theme";
 import {
@@ -83,7 +85,7 @@ export default function PhoneStorage({
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -148,7 +150,7 @@ export default function PhoneStorage({
           <View
             style={[styles.explainer, { backgroundColor: colors.bgSunken }]}
           >
-            <Feather name="alert-circle" size={18} color={colors.accent} />
+            <Icon name="alert-circle" size={18} color={colors.accent} />
             <Text style={[styles.explainerText, { color: colors.textSoft }]}>
               {formatBytes(unassignedPendingBytes)} of pending uploads are not
               assigned to a vault. They remain durable and are not assigned to
@@ -157,7 +159,7 @@ export default function PhoneStorage({
           </View>
         ) : null}
         <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="shield" size={18} color={colors.accent} />
+          <Icon name="shield" size={18} color={colors.accent} />
           <Text style={[styles.explainerText, { color: colors.textSoft }]}>
             Databases live in protected app storage, survive cache eviction, and
             are excluded from iCloud Backup and Android Auto Backup. Originals
@@ -184,7 +186,7 @@ export default function PhoneStorage({
             )
           }
         >
-          <Feather name="trash-2" size={18} color={colors.danger} />
+          <Icon name="trash-2" size={18} color={colors.danger} />
           <Text style={[styles.buttonText, { color: colors.danger }]}>
             Free up thumbnail cache
           </Text>
@@ -209,13 +211,6 @@ function StorageLine({
       <Text style={[styles.lineValue, { color }]}>{formatBytes(bytes)}</Text>
     </View>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
 function fileBytes(path: string): number {

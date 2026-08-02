@@ -153,7 +153,7 @@ function ConnectionRow({
       </div>
       <div className={styles.rowActions}>
         <Button
-          variant="soft"
+          variant="secondary"
           size="sm"
           label={testResult === "testing" ? "Testing…" : "Test connection"}
           disabled={busy || testResult === "testing"}
@@ -236,7 +236,7 @@ function ConnectProviderForm({
       ) : null}
 
       <div className={styles.wizardFoot}>
-        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button variant="quiet" size="sm" label="Cancel" onClick={onCancel} />
         <Button
           variant="primary"
           size="sm"
@@ -494,7 +494,7 @@ export default function SettingsStorageScreen({
                 No storage provider connected yet.
               </div>
               <Button
-                variant="soft"
+                variant="secondary"
                 size="sm"
                 icon="Plus"
                 label="Connect your storage provider"

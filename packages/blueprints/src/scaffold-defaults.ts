@@ -37,24 +37,24 @@
 //     also resets `font-family`, so every use is followed by
 //     `font-family: inherit;` to keep the appFont knob flowing down.
 //   - No px/rem spacing by feel — padding/margin/gap come from `--sp-1…7`.
-//   - Radii from `--r-sm` / `--r-md` / `--r-card` / `--r-pill`.
+//   - Radii from `--r-sm` / `--r-md` / `--r-xl` / `--r-pill`.
 //   - Hit targets ≥ 44px via min-height on the toggle; kit owns its own.
-//   - `:focus-visible` outlines preserved with `var(--accent)`.
+//   - `:focus-visible` outlines preserved with the product focus role.
 //   - `prefers-reduced-motion` respected.
 //   - Mobile-first with one breakpoint at 720px.
 //   - Honors the four standard per-app knobs declared in the matching
 //     `app.json#knobs[]`: `appFont` / `appWidth` / `appRadius` via
-//     `:root[data-app-*]` selectors, and `appColor` consumed wherever
-//     the accent paints (focus rings, pressed toggle) via
-//     `var(--app-color, var(--accent))`. Falls back to `--accent` when no
-//     knob value is set.
+//     `:root[data-app-*]` selectors, and `appColor` consumed only by identity
+//     marks via `--app-identity`. Product accent remains the action/selection
+//     color and is never replaced by an app identity knob.
 export const DEFAULT_APP_CSS = `/* Design-system contract: --app-hue drives the
-   whole neutral ramp (ink, lines, surfaces, shadows); --accent is the app's
-   identity color — pick one of the palette vars (--c-amber, --c-forest,
-   --c-indigo, --c-ochre, --c-rose, --c-slate, --c-teal, --c-violet). */
+   whole neutral ramp (ink, lines, surfaces, shadows); --accent is the
+   product action color. --app-identity is the app identity color and may use
+   one of the palette vars (--c-amber, --c-forest, --c-indigo, --c-ochre,
+   --c-rose, --c-slate, --c-teal, --c-violet). */
 :root {
   --app-hue: 222;
-  --accent: var(--c-indigo);
+  --app-identity: var(--c-indigo);
 }
 
 /* Components come from kit.css (.kit-btn, .kit-input, .kit-muted, .kit-empty,
@@ -96,7 +96,7 @@ main {
 .head h1 {
   font: var(--t-title);
   font-family: inherit;
-  letter-spacing: var(--tracking-h);
+  letter-spacing: -0.01em;
   margin: 0 0 var(--sp-1);
 }
 
@@ -104,7 +104,7 @@ main {
 .surface {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   padding: var(--sp-4);
 }
 
@@ -138,12 +138,12 @@ main {
   background: transparent;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
-  color: var(--on-accent);
+  color: var(--text-inv);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.circle[aria-pressed='true'] { background: var(--app-color, var(--accent)); border-color: var(--app-color, var(--accent)); }
-.circle:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
+.circle[aria-pressed='true'] { background: var(--bg-sel); border-color: var(--line-sel); }
+.circle:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; }
 
 /* --- Loading / error states (the kit owns the empty state: .kit-empty) --- */
 .loading {
@@ -171,7 +171,7 @@ main {
 /* ---------- App-level knobs ----------
    Per-app aesthetic customizations declared in 'app.json#knobs[]' and
    persisted in the '__centraid_settings' table. The runtime bakes
-   '<html data-app-* style="--app-color: ...">' before serving and
+   '<html data-app-* style="--app-identity: ...">' before serving and
    live-updates the same surface via postMessage. Defaults match the
    base look above so an unset knob renders unchanged.
 
@@ -188,7 +188,7 @@ main {
   font-family: var(--font-serif);
 }
 :root[data-app-font='mono'] body {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 
 :root[data-app-width='narrow'] main { max-width: 36rem; }

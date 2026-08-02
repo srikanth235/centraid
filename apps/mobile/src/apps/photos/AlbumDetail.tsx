@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -13,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
+import Icon from "../../kit/components/Icon";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -205,7 +205,7 @@ export default function AlbumDetail({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -237,7 +237,7 @@ export default function AlbumDetail({
               accessibilityRole="button"
               onPress={() => setShareOpen(true)}
             >
-              <Feather name="users" size={20} color={colors.accent} />
+              <Icon name="users" size={20} color={colors.accent} />
             </Pressable>
             <Pressable
               accessibilityLabel="Rename album"
@@ -247,14 +247,14 @@ export default function AlbumDetail({
                 setRenameOpen(true);
               }}
             >
-              <Feather name="edit-2" size={19} color={colors.accent} />
+              <Icon name="edit-2" size={19} color={colors.accent} />
             </Pressable>
             <Pressable
               accessibilityLabel="Delete album"
               accessibilityRole="button"
               onPress={deleteAlbum}
             >
-              <Feather name="trash-2" size={20} color={colors.danger} />
+              <Icon name="trash-2" size={20} color={colors.danger} />
             </Pressable>
           </View>
         )}
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     right: 28,
     top: "34%",
   },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
+  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -381,5 +381,5 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   save: { alignItems: "center", borderRadius: 10, marginTop: 12, padding: 12 },
   saveText: { color: "#fff", fontFamily: family.sansBold, fontSize: 13 },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
+  title: { fontFamily: family.sansBold, fontSize: 18 },
 });

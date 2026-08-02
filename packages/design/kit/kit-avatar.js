@@ -1,16 +1,5 @@
 import { KitElement } from "./elements-base.js";
-
-function avatarHue(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1)
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return ((hash % 360) + 360) % 360;
-}
-
-function avatarInitials(name) {
-  const parts = name.split(/\s+/u);
-  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
-}
+import { identityColor, identityInitials } from "./identity.js";
 
 export class KitAvatar extends KitElement {
   static properties = {
@@ -34,7 +23,7 @@ export class KitAvatar extends KitElement {
 
   render() {
     const text = String(this.name ?? "?").trim() || "?";
-    const fill = this.color || `hsl(${avatarHue(text)} 45% 42%)`;
+    const fill = this.color || identityColor(text);
     const span = document.createElement("span");
     span.className = "kit-avatar";
     span.setAttribute(
@@ -48,7 +37,7 @@ export class KitAvatar extends KitElement {
       img.src = this.src;
       img.alt = "";
       span.appendChild(img);
-    } else span.textContent = this.initials || avatarInitials(text);
+    } else span.textContent = this.initials || identityInitials(text);
     return span;
   }
 }

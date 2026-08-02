@@ -81,8 +81,8 @@ export default function Gallery(): JSX.Element {
 
       <Section title="Buttons">
         <Button label="Primary" variant="primary" icon="Bolt" />
-        <Button label="Soft" variant="soft" />
-        <Button label="Ghost" variant="ghost" />
+        <Button label="Secondary" variant="secondary" />
+        <Button label="Quiet" variant="quiet" />
         <Button label="Disabled" variant="primary" disabled />
       </Section>
 

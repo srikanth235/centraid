@@ -30,7 +30,7 @@ export const styles = StyleSheet.create({
     width: `${100 / 7}%`,
   },
   dayHeader: { justifyContent: "flex-end", minHeight: 45, paddingBottom: 6 },
-  dayHeaderTitle: { fontFamily: family.displayBold, fontSize: 15 },
+  dayHeaderTitle: { fontFamily: family.sansBold, fontSize: 15 },
   dayNumber: { fontFamily: family.sansMedium, fontSize: 12 },
   dayText: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 3 },
   dialog: {
@@ -47,7 +47,7 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
+  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
   dot: { borderRadius: 2, height: 4, marginTop: 2, width: 4 },
   empty: {
     fontFamily: family.sansRegular,
@@ -140,10 +140,10 @@ export const styles = StyleSheet.create({
   todayText: { fontFamily: family.sansMedium, fontSize: 12 },
   time: { width: 68 },
   timeText: { fontFamily: family.monoMedium, fontSize: 12 },
-  title: { fontFamily: family.displayBold, fontSize: 23 },
+  title: { fontFamily: family.sansBold, fontSize: 23 },
   week: { gap: 8, padding: 14, paddingHorizontal: 18 },
   weekCount: { fontFamily: family.monoBold, fontSize: 10, marginTop: 7 },
   weekDay: { alignItems: "center", borderRadius: 12, padding: 10, width: 52 },
   weekName: { fontFamily: family.sansMedium, fontSize: 10 },
-  weekNumber: { fontFamily: family.displayBold, fontSize: 17, marginTop: 5 },
+  weekNumber: { fontFamily: family.sansBold, fontSize: 17, marginTop: 5 },
 });

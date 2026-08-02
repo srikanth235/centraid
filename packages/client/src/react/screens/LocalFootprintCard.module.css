@@ -49,7 +49,7 @@
   --tone: var(--danger);
 }
 .headlineFigure {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.03em;
@@ -159,7 +159,7 @@
   background: var(--bg-sunken);
 }
 .legendRow:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 @keyframes legendIn {
@@ -197,7 +197,7 @@
 }
 .legendShare {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
 }

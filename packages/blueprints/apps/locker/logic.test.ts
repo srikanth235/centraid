@@ -29,7 +29,6 @@ function state(): AppState {
     reveal: {},
     search: "",
     searchResults: null,
-    dark: false,
     narrow: false,
     sideOpen: false,
     showList: true,

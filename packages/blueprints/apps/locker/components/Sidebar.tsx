@@ -8,7 +8,6 @@ import { CAT_ORDER, CATS } from "../format.ts";
 import type { Nav } from "../types.ts";
 import { Icon, CatIcon } from "./Shared.tsx";
 
-import shared from "./shared.module.css";
 import styles from "./Sidebar.module.css";
 
 function NavItem({
@@ -46,24 +45,20 @@ export function LockerSidebar({
   tags,
   trashCount,
   nav,
-  dark,
   onNav,
   onNewItem,
   onCloseSide,
   onLock,
-  onToggleTheme,
 }: {
   counts: { all: number; fav: number; watch: number };
   catCounts: Record<string, number>;
   tags: Array<{ tag: string; count: number }>;
   trashCount: number;
   nav: Nav;
-  dark: boolean;
   onNav: (nav: Nav) => void;
   onNewItem: () => void;
   onCloseSide: () => void;
   onLock: () => void;
-  onToggleTheme: () => void;
 }) {
   return (
     <aside className={styles.side}>
@@ -151,14 +146,6 @@ export function LockerSidebar({
       <div className={styles.sideFoot}>
         <button type="button" className={styles.lock} onClick={onLock}>
           <Icon name="lock" sw={1.75} /> Lock
-        </button>
-        <button
-          type="button"
-          className={shared.iconbtn}
-          aria-label="Theme"
-          onClick={onToggleTheme}
-        >
-          <Icon name={dark ? "sun" : "moon"} sw={1.75} />
         </button>
       </div>
     </aside>

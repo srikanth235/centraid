@@ -31,7 +31,7 @@
 /* Bordered list surface — group/friend ledger, search results, skeleton. */
 .explist {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -60,7 +60,7 @@
   margin-top: 15px;
 }
 .flabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -76,7 +76,7 @@
   font: var(--t-body);
 }
 .in:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .amtwrap {
@@ -87,7 +87,7 @@
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 18px;
   color: var(--text-faint);
 }
@@ -98,12 +98,12 @@
   border-radius: var(--r-md);
   background: var(--bg);
   outline: none;
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 20px;
   font-weight: 600;
 }
 .amt:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .row2 {

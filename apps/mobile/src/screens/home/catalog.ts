@@ -9,9 +9,8 @@
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.
 
+import { apps as BUILTIN_APPS } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
-
-import { resolveAppMeta } from "../../lib/gateway";
 
 // Where a launcher tile goes when tapped. The three native kinds map onto the
 // nested cover navigators; `app` opens a remote app's WebView cover; `pair`
@@ -37,67 +36,10 @@ export interface LauncherItem {
   installed: boolean;
 }
 
-// The three native covers. These are always installed — their UI is in the
-// binary — so they never dim. Colours here only tint `resolveAppMeta`'s derived
-// metadata; the engraved AppIcon is monochrome, so the glyph is what reads.
-const NATIVE_APPS: readonly AppMetaResolved[] = [
-  resolveAppMeta({
-    id: "photos",
-    name: "Photos",
-    description: "Timeline, memories, albums and private backup.",
-    iconKey: "Camera",
-    colorKey: "ochre",
-  }),
-  resolveAppMeta({
-    id: "docs",
-    name: "Docs",
-    description: "Files, folders, offline search and secure custody.",
-    iconKey: "Folder",
-    colorKey: "slate",
-  }),
-  resolveAppMeta({
-    id: "tasks",
-    name: "Tasks",
-    description: "Inbox, projects, ordering and offline repeat rules.",
-    iconKey: "Todo",
-    colorKey: "forest",
-  }),
-  resolveAppMeta({
-    id: "people",
-    name: "People",
-    description: "Contacts, duplicate review and merge receipts.",
-    iconKey: "Users",
-    colorKey: "rose",
-  }),
-  resolveAppMeta({
-    id: "notes",
-    name: "Notes",
-    description: "Portable CommonMark, wikilinks and backlinks.",
-    iconKey: "Journal",
-    colorKey: "amber",
-  }),
-  resolveAppMeta({
-    id: "tally",
-    name: "Tally",
-    description: "Multi-currency expenses and recurring shared costs.",
-    iconKey: "Coin",
-    colorKey: "violet",
-  }),
-  resolveAppMeta({
-    id: "agenda",
-    name: "Agenda",
-    description: "Calendar, schedule, guests and reminders.",
-    iconKey: "Calendar",
-    colorKey: "indigo",
-  }),
-  resolveAppMeta({
-    id: "locker",
-    name: "Locker",
-    description: "Passwords, codes and secrets under custody.",
-    iconKey: "Key",
-    colorKey: "slate",
-  }),
-];
+// The native covers are always installed — their UI is in the binary — so
+// they never dim. This is the product catalog, not a second mobile catalog:
+// app name, icon, colour, and description resolve through one source of truth.
+const NATIVE_APPS: readonly AppMetaResolved[] = BUILTIN_APPS;
 
 /** Native app ids — Home uses this to drop native rows out of the live listing. */
 export const NATIVE_APP_IDS: ReadonlySet<string> = new Set(

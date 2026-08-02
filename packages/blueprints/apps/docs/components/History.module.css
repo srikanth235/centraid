@@ -34,7 +34,7 @@
   text-align: left;
 }
 .versionBadge {
-  font: var(--t-tiny);
+  font: var(--t-control);
   letter-spacing: 0.04em;
   color: var(--text-faint);
   border: 1px solid var(--line);
@@ -54,13 +54,13 @@
   color: var(--text);
 }
 .versionSize {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
 .versionTag {
-  font: var(--t-tiny);
-  color: var(--accent-deep-fg);
+  font: var(--t-control);
+  color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 var(--sp-1);

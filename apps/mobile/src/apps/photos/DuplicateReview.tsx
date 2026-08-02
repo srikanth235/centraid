@@ -1,8 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { family, useTheme } from "../../kit/theme";
@@ -33,7 +33,7 @@ export default function DuplicateReview({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -82,5 +82,5 @@ const styles = StyleSheet.create({
   },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   safe: { flex: 1 },
-  title: { fontFamily: family.displayBold, fontSize: 17 },
+  title: { fontFamily: family.sansBold, fontSize: 17 },
 });

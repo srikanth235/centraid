@@ -3,6 +3,8 @@ import path from "node:path";
 
 import sharp from "sharp";
 
+import { toCss } from "@centraid/design";
+
 const root = path.resolve(import.meta.dir, "..");
 const repo = path.resolve(root, "../..");
 const out = path.join(root, "dist");
@@ -26,9 +28,13 @@ if (!result.success) {
 }
 
 await Promise.all(
-  ["popup.html", "popup.css", "pair.html"].map((file) =>
+  ["popup.html", "pair.html"].map((file) =>
     cp(path.join(root, "static", file), path.join(out, file))
   )
+);
+await writeFile(
+  path.join(out, "popup.css"),
+  `${toCss()}\n${await readFile(path.join(root, "static", "popup.css"), "utf8")}`
 );
 await cp(
   path.join(repo, "apps/web/src/generated/centraid_web_iroh_bg.wasm"),

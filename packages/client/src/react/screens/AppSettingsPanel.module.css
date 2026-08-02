@@ -70,7 +70,7 @@
   flex: 1;
 }
 .settingsName {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: var(--t-body-size);
   line-height: 1.05;
@@ -343,7 +343,7 @@
   border: 0;
   padding: 0;
   margin: 0;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
   text-decoration: underline;
@@ -406,7 +406,7 @@
 }
 .orderRunsToggle {
   margin-left: auto;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   background: none;
   border: none;
   color: color-mix(in oklab, var(--text) 55%, transparent);
@@ -422,7 +422,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .orderToggle {
   position: relative;
@@ -539,7 +539,7 @@
 .settingsMenuSub {
   display: block;
   margin-top: 3px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   line-height: 1.35;
   overflow: hidden;

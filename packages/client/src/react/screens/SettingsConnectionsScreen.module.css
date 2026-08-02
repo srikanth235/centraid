@@ -24,7 +24,7 @@
 }
 .title {
   margin: 0;
-  font: var(--t-h2);
+  font: var(--t-title);
   color: var(--text);
 }
 .subtitle {
@@ -265,7 +265,7 @@
   font-weight: 600;
 }
 .syncMeta {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .healthBlock {
@@ -344,21 +344,21 @@
   gap: 2px;
 }
 .rowName {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rowAuthNote {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--c-amber-text);
 }
 
@@ -661,7 +661,7 @@
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   padding: 2px 0;
 }

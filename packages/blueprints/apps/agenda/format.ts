@@ -3,6 +3,8 @@
 // text-highlight segmentation. No app state, no vault IO — every function is
 // a plain projection of its arguments so app.tsx and the components can both
 // call them without a circular import.
+import { identityInitials } from "@centraid/design";
+
 import { localDayKey } from "./kit.ts";
 import type { AgEvent, Calendar, DaySegment, LaidSegment } from "./types.ts";
 
@@ -106,13 +108,7 @@ export function nextRoundHourOn(date: Date): Date {
 }
 
 export function initials(name: string | null | undefined): string {
-  return String(name ?? "?")
-    .trim()
-    .split(/\s+/u)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  return identityInitials(String(name ?? ""));
 }
 
 // ---------- View ranges (the bounded reads each view needs) ----------

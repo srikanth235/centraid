@@ -2,39 +2,20 @@
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
    The shared design-token layer
    (--text, --bg, --line, --accent, --accent-deep, --shadow-sm/md/lg, the type
-   scale, --sel, --r-card …) is supplied by the shell (the scoped token block
+   scale, --accent-soft, --r-xl …) is supplied by the shell (the scoped token block
    InlineAppRoute
    injects under .centraid-inline-scope), so this file references those directly
-   and never loads tokens.css/wall.css. The one notes-SPECIFIC token app.css's
-   :root added on top of that layer — --accent-deep-fg, which the reused
-   components/*.module.css read — is NOT in the shared layer, so it is folded in
-   here on .shell (trap #3). */
+   and never loads tokens.css/wall.css. App-specific identity stays on the
+   shared `--app-identity` role; action ink stays on `--accent-text`. */
 
 .shell {
-  /* Notes-specific token folded from app.css :root (light). The shared blueprint
-     layer supplies everything else; this alias is the app's own — nav-active
-     labels/chips show accent-deep AS foreground on --accent-soft. */
-  --accent-deep-fg: var(--accent-deep);
-
   composes: kit-app-shell from global;
   --app-drawer-width: 270px;
 }
 
 .shell.shell :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
-}
-
-/* Dark override for the folded token — mirrors app.css's dark block, emitted for
-   both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
-   fallback (the same two-selector shape the token layer uses). */
-:global(:root[data-theme="dark"]) .shell {
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .shell {
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  }
 }
 
 /* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
@@ -48,7 +29,7 @@
   --font-sans: "New York", "Iowan Old Style", Georgia, Cambria, serif;
 }
 :global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--mono);
+  --font-sans: var(--font-mono);
 }
 
 /* ---------- Sidebar (static chrome; nav/notebooks/summary → Sidebar.module.css) ---------- */
@@ -85,7 +66,7 @@
   border-radius: var(--r-md);
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
@@ -171,7 +152,7 @@
 .viewToggle button[aria-pressed="true"] {
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
 }
 .askMount {

@@ -12,6 +12,12 @@ export interface IconPath {
 // then re-typed via `Record<IconName, readonly IconPath[]>` so that consumers
 // see the optional `fill` field on each path entry.
 const ICON_DATA = {
+  AddressBook: [
+    {
+      d: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+    },
+    { d: "M8 10h.01M8 14h.01M11 10h6M11 14h6" },
+  ],
   Check: [{ d: "M5 12l5 5L20 7" }],
   Plus: [{ d: "M12 5v14M5 12h14" }],
   X: [{ d: "M6 6l12 12M18 6L6 18" }],
@@ -213,11 +219,41 @@ const ICON_DATA = {
     },
     { d: "M3 10h18M8 3v4M16 3v4" },
   ],
+  CalendarBlank: [
+    {
+      d: "M5 4h14a2 2 0 0 1 2 2v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a2 2 0 0 1 2-2z",
+    },
+    { d: "M3 9h18" },
+  ],
+  CalendarPlus: [
+    {
+      d: "M5 4h14a2 2 0 0 1 2 2v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a2 2 0 0 1 2-2z",
+    },
+    { d: "M3 9h18M12 12v6M9 15h6" },
+  ],
   Camera: [
     {
       d: "M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     },
     { d: "M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+  ],
+  EnvelopeSimple: [
+    {
+      d: "M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+    },
+    { d: "M3 7l9 6 9-6" },
+  ],
+  GitBranch: [
+    { d: "M6 3v12a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9" },
+    {
+      d: "M6 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+    },
+  ],
+  Lock: [{ d: "M5 10h14v10H5z" }, { d: "M8 10V7a4 4 0 0 1 8 0v3M12 14v2" }],
+  PaperPlaneTilt: [{ d: "M22 2L11 13M22 2l-7 20-4-9-9-4z" }],
+  Receipt: [
+    { d: "M5 3h14v18l-3-2-4 2-4-2-3 2z" },
+    { d: "M8 8h8M8 12h8M8 16h5" },
   ],
 
   // Automation glyphs (Automations redesign). Lucide-style, expressed as
@@ -293,7 +329,102 @@ const ICON_DATA = {
     { d: "M8.5 2h7M7 16h10" },
   ],
   ChevronRight: [{ d: "M9 6l6 6-6 6" }],
+  ChevronLeft: [{ d: "M15 6l-6 6 6 6" }],
+  Menu: [{ d: "M4 7h16M4 12h16M4 17h16" }],
+  Heart: [
+    {
+      d: "M12 20s-7-4.4-9.2-8.4C1.3 8.9 2.6 6 5.4 6c1.8 0 3 1 3.6 2 .6-1 1.8-2 3.6-2 2.8 0 4.1 2.9 2.6 5.6C19 15.6 12 20 12 20z",
+    },
+  ],
+  Pin: [{ d: "M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5" }],
+  Image: [
+    { d: "M3 5h18v14H3z" },
+    { d: "M5 17l4-4 3 3 2-2 5 3" },
+    { d: "M8 9h.01" },
+  ],
+  Grid: [{ d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" }],
+  List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
+  Archive: [{ d: "M4 5h16v4H4z" }, { d: "M6 9v10h12V9M9 13h6" }],
+  Upload: [{ d: "M12 15V3m0 0 4 4m-4-4-4 4M5 21h14" }],
+  Download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
+  FolderPlus: [
+    { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z" },
+    { d: "M12 11v5M9.5 13.5h5" },
+  ],
+  Bookmark: [{ d: "M6 4h12v17l-6-3-6 3z" }],
+  EyeOff: [
+    { d: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" },
+    { d: "m4 4 16 16" },
+  ],
+  Sun: [
+    {
+      d: "M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4",
+    },
+    { d: "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z" },
+  ],
+  Moon: [{ d: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" }],
+  Repeat: [
+    { d: "M17 2l4 4-4 4" },
+    { d: "M3 11V9a4 4 0 0 1 4-4h14" },
+    { d: "M7 22l-4-4 4-4" },
+    { d: "M21 13v2a4 4 0 0 1-4 4H3" },
+  ],
+  Video: [{ d: "M3 6h14v12H3z" }, { d: "m17 10 4-3v10l-4-3" }],
+  CirclePlus: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M12 8v8M8 12h8" },
+  ],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;
 export const icons: Record<IconName, readonly IconPath[]> = ICON_DATA;
+
+export type IconConcept =
+  | "add"
+  | "ask"
+  | "back"
+  | "close"
+  | "leave"
+  | "settings"
+  | "trash"
+  | "up";
+
+export const ICON_CONCEPTS: Record<IconConcept, IconName> = {
+  add: "Plus",
+  ask: "Sparkle",
+  back: "ArrowLeft",
+  close: "X",
+  leave: "ArrowRight",
+  settings: "Settings",
+  trash: "Trash",
+  up: "ArrowRight",
+};
+
+export function isIconName(value: string): value is IconName {
+  return value in icons;
+}
+
+export function iconForConcept(concept: IconConcept): IconName {
+  return ICON_CONCEPTS[concept];
+}
+
+export function iconPathMarkup(name: IconName): string {
+  return icons[name]
+    .map((path) => {
+      const fill =
+        path.fill === "currentColor"
+          ? ' fill="currentColor" stroke="none"'
+          : "";
+      return `<path d="${path.d}"${fill}/>`;
+    })
+    .join("");
+}
+
+export function iconSvg(
+  name: IconName,
+  options: { size?: number; strokeWidth?: number } = {}
+): string {
+  const size = options.size ?? 20;
+  const strokeWidth = options.strokeWidth ?? 1.5;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${iconPathMarkup(name)}</svg>`;
+}

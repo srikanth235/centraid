@@ -99,7 +99,7 @@ describe("publish-time app CSS token purity", () => {
     const err = await validateManifestAt(dir);
     expect(err).toContain("--text-soft:");
     expect(err).toContain("owned by @centraid/design");
-    expect(err).toContain("--app-hue and --accent");
+    expect(err).toContain("--app-hue and --app-identity");
   });
 
   test("an app-authored violation after the generated baseline is still caught", async () => {

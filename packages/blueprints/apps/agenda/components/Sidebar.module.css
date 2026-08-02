@@ -64,12 +64,12 @@
 }
 .miniDay[data-selected="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .miniDay[data-today="true"] {
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
   font-weight: 600;
 }
@@ -81,10 +81,10 @@
   width: 3px;
   height: 3px;
   border-radius: 999px;
-  background: var(--accent-deep-fg);
+  background: var(--accent-fill);
 }
 .miniDay[data-today="true"] .miniDot {
-  background: var(--on-accent);
+  background: var(--text-inv);
 }
 
 .cals {
@@ -117,7 +117,7 @@
   justify-content: center;
   flex-shrink: 0;
   border: 1.5px solid var(--line-strong);
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 .calBox[data-shown="true"] {
   border: none;
@@ -133,7 +133,7 @@
   color: var(--text-faint);
 }
 .calCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   opacity: 0.55;
 }

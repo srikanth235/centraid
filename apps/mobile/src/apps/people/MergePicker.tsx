@@ -7,7 +7,6 @@
 // scroll axis, so it can window, and the search field keeps the candidate set
 // small enough to read.
 
-import { Feather } from "@expo/vector-icons";
 import React, {
   useCallback,
   useEffect,
@@ -26,6 +25,7 @@ import {
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
 import type { useTheme } from "../../kit/theme";
 import { mergeCandidates } from "./merge-candidates";
 import { styles } from "./PeopleHome.styles";
@@ -100,7 +100,7 @@ export function MergePicker({
             </Text>
           </View>
           <Pressable accessibilityLabel="Cancel merge" onPress={onClose}>
-            <Feather name="x" size={24} color={colors.text} />
+            <Icon name="x" size={24} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.mergeSearch}>

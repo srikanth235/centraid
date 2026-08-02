@@ -1,13 +1,5 @@
-import { Feather } from "@expo/vector-icons";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
@@ -16,6 +8,8 @@ import {
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { showToast } from "../../kit/components/Toast";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
@@ -62,10 +56,10 @@ export default function AutomationThread(props: {
     void runAutomation(props.automationRef)
       .then(load)
       .catch((error: unknown) =>
-        Alert.alert(
-          "Could not run",
-          error instanceof Error ? error.message : "Please try again."
-        )
+        showToast({
+          message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
+          tone: "danger",
+        })
       )
       .finally(() => setRunning(false));
   };
@@ -96,7 +90,7 @@ export default function AutomationThread(props: {
           label={running ? "Running…" : "Run now"}
           disabled={running}
           onPress={runNow}
-          variant="soft"
+          variant="secondary"
         />
       </View>
       <FlatList
@@ -141,7 +135,7 @@ const TurnCard = memo(
   }): React.JSX.Element => (
     <View style={styles.turn}>
       <View style={styles.turnHead}>
-        <Feather
+        <Icon
           name={turn.ok ? "check-circle" : "alert-circle"}
           size={16}
           color={turn.ok ? colors.accent : colors.danger}

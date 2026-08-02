@@ -8,7 +8,7 @@
    reused components/*.module.css, which key on the GLOBAL `.locker.is-narrow`
    / `.show-list` / `.side-open` state classes Chrome.tsx stamps on this frame.
 
-   The shared design-token layer (--text/--bg/--line/--_accent, shadows, type
+   The shared design-token layer (--text/--bg/--line/--app-identity, shadows, type
    scale …) is supplied by the shell (the scoped blueprint-token block
    InlineAppRoute injects under .centraid-inline-scope), so this file references
    those directly and never loads tokens.css/wall.css. The locker-SPECIFIC
@@ -22,7 +22,7 @@
   composes: kit-app-shell from global;
   /* Locker-specific tokens folded from app.css :root (light). The shared
      blueprint layer supplies everything else; these are the app's own palette
-     add-ons the reused components/*.module.css reference. --app-hue/--_accent
+     add-ons the reused components/*.module.css reference. --app-hue/--app-identity
      resolve from the injected .centraid-inline-scope ancestor. */
   --accs: var(--accent-soft);
   --accd: var(--accent-deep);
@@ -39,8 +39,8 @@
   --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, var(--text-inv)),
-    var(--accd)
+    color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
+    var(--app-identity)
   );
   --app-side-foot-padding: 12px;
 
@@ -55,7 +55,7 @@
 }
 
 .appRoot.appRoot :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -74,8 +74,7 @@
    :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
    that wrapper. */
 :global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--mono);
-  --font-title: var(--mono);
+  --font-sans: var(--font-mono);
 }
 
 /* The reused Sidebar/List/Detail modules bake app.css's served `height: 100vh`

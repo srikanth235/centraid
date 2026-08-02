@@ -111,6 +111,41 @@
       "command": "bun run lint:schema-export",
       "seed": "change the schema fingerprint without moving the portable export owner",
       "failure": "the schema/export ratchet exits non-zero"
+    },
+    "D1": {
+      "command": "bun run --cwd packages/design test -- roles.test.ts",
+      "seed": "remove one profile lowering from the product role registry",
+      "failure": "the role registry reports the missing lowering before emit"
+    },
+    "D2": {
+      "command": "bun run --cwd packages/design test -- recipes.test.ts",
+      "seed": "delete one interaction recipe or omit a required state",
+      "failure": "the recipe inventory or state contract test fails"
+    },
+    "D3": {
+      "command": "bun run --cwd apps/mobile test -- generate.test.ts",
+      "seed": "introduce a CSS expression into the native lowering output",
+      "failure": "native theme generation rejects non-concrete values"
+    },
+    "D4": {
+      "command": "bun run lint:design-tokens",
+      "seed": "add a raw color, font, size, weight, or radius to a shipped CSS consumer",
+      "failure": "the design-token ratchet reports the exact consumer regression"
+    },
+    "D5": {
+      "command": "bun run --cwd packages/design test -- icons-contract.test.ts",
+      "seed": "point one shipped catalog entry at an unregistered icon key",
+      "failure": "the shared icon registry rejects the catalog drift"
+    },
+    "D6": {
+      "command": "bun run --cwd packages/design test -- format.test.ts",
+      "seed": "change the shared byte or relative-time formatter in one client lane",
+      "failure": "the canonical formatter contract fails before clients diverge"
+    },
+    "D7": {
+      "command": "bun run --cwd packages/design test -- css-properties.test.ts",
+      "seed": "emit a retired alias or omit a required shell/blueprint token",
+      "failure": "the profile contract parity test rejects the emitter drift"
     }
   },
   "qualities": [
@@ -173,6 +208,17 @@
           "knob": "scripts/release/nightly-quality-blockers.mjs",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D1",
+          "name": "total product role lowering",
+          "owner": "packages/design/src/roles.test.ts",
+          "evidence": "every registered role has an explicit lowering",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/roles.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -202,6 +248,17 @@
           "knob": "tests/matrix.json",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D2",
+          "name": "complete interaction recipe inventory",
+          "owner": "packages/design/src/recipes/recipes.test.ts",
+          "evidence": "publishes the complete 26-recipe inventory",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/recipes/index.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -242,6 +299,17 @@
           "knob": "packages/gateway/src/serve/health-registry.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D3",
+          "name": "typed native theme lowering",
+          "owner": "apps/mobile/src/kit/theme/generate.test.ts",
+          "evidence": "returns concrete light and dark values",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "apps/mobile/src/kit/theme/generate.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -282,6 +350,17 @@
           "knob": "tests/quality/unbounded-query-waivers.json",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D4",
+          "name": "shipped CSS token ratchet",
+          "owner": "scripts/lint-design-tokens.mjs",
+          "evidence": "design-token CSS ratchet",
+          "lane": "check:pr",
+          "wallClockCost": "low",
+          "knob": "tests/design-token-css-budget.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -345,6 +424,17 @@
           "knob": "scripts/validate-ui-receipt.mjs",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D5",
+          "name": "single icon registry",
+          "owner": "packages/design/src/icons-contract.test.ts",
+          "evidence": "single icon registry",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/icons.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -374,6 +464,17 @@
           "knob": "packages/vault/src/schema/agent.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D6",
+          "name": "canonical cross-surface formatters",
+          "owner": "packages/design/src/format.test.ts",
+          "evidence": "canonical formatter contract",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/format.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     },
@@ -403,6 +504,17 @@
           "knob": "packages/vault/src/gateway/portable-export.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D7",
+          "name": "profile contract parity",
+          "owner": "packages/design/src/css-properties.test.ts",
+          "evidence": "profile contract parity",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/contract.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
         }
       ]
     }

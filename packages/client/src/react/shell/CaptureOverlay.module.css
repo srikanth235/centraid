@@ -8,7 +8,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: var(--accent);
-  color: var(--on-accent);
+  color: var(--text-inv);
   box-shadow: 0 12px 32px color-mix(in srgb, var(--text) 20%, transparent);
   font: 600 14px var(--font-sans);
   cursor: pointer;
@@ -44,7 +44,7 @@
 .head h2 {
   flex: 1;
   margin: 0;
-  font: 600 20px var(--font-display, var(--font-sans));
+  font: 600 20px var(--font-sans, var(--font-sans));
 }
 
 .head button,
@@ -97,7 +97,8 @@
 .foot button:focus-visible,
 .kinds button:focus-visible,
 .launcher:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 52%, transparent);
+  outline: 3px solid
+    color-mix(in srgb, var(--focus-ring-color) 52%, transparent);
   outline-offset: 2px;
 }
 
@@ -129,7 +130,7 @@
 
 .scanPanel h3 {
   margin: 0;
-  font: 600 17px var(--font-display, var(--font-sans));
+  font: 600 17px var(--font-sans, var(--font-sans));
 }
 
 .participants {
@@ -188,7 +189,7 @@
 .foot .primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--on-accent);
+  color: var(--text-inv);
   padding-inline: 18px;
 }
 

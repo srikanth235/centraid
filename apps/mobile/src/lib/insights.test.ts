@@ -44,8 +44,8 @@ describe("Insights format helpers", () => {
   });
 
   it("formatBytes picks MB / GB", () => {
-    expect(formatBytes(0)).toBe("0 MB");
-    expect(formatBytes(50 * 1024 * 1024)).toBe("50 MB");
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(50 * 1024 * 1024)).toBe("50.0 MB");
     expect(formatBytes(2.5 * 1024 * 1024 * 1024)).toBe("2.5 GB");
   });
 
@@ -66,7 +66,7 @@ describe("Insights format helpers", () => {
       expect(relativeTime(Date.now() - 5 * 60_000)).toBe("5m ago");
       expect(relativeTime(Date.now() - 3 * 60 * 60_000)).toBe("3h ago");
       expect(relativeTime(Date.now() - 2 * 24 * 60 * 60_000)).toBe("2d ago");
-      expect(relativeTime("not-a-date")).toBe("");
+      expect(relativeTime("not-a-date")).toBe("Recently");
     });
   });
 });

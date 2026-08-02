@@ -222,7 +222,7 @@
 }
 .mainLogical {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .machineryTag {
@@ -497,7 +497,7 @@
 }
 .fkCell {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   cursor: help;
   border-bottom: 1px dotted var(--line-strong);
@@ -536,7 +536,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
 }
@@ -590,7 +590,7 @@
 }
 .drawerTable {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .fields {
@@ -611,7 +611,7 @@
   align-items: baseline;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .reqStar {
@@ -659,7 +659,7 @@
   background: var(--bg-sunken);
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 
 .fkField {
@@ -849,7 +849,7 @@
 .depCount {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }

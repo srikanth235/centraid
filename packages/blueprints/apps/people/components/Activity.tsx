@@ -2,7 +2,9 @@
 // 'activity'). The timeline atoms (`activity*`) and the 640px column (`jWrap`)
 // are shared with DetailSections/Journal via shared.module.css; the empty
 // state rides kit.css `.kit-empty*` (global strings).
-import { daysSinceIso, fmt, hashInt, PALETTE } from "../format.ts";
+import { identityColor } from "@centraid/design";
+
+import { daysSinceIso, fmt } from "../format.ts";
 import { I } from "../icons.ts";
 import type { RecentItem } from "../types.ts";
 import { Icon, KitAvatar } from "./Shared.tsx";
@@ -16,7 +18,7 @@ function ActivityItem({
   a: RecentItem;
   onOpenDetails: (id: string) => void;
 }) {
-  const color = a.avatar_color || PALETTE[hashInt(a.name) % PALETTE.length]!;
+  const color = a.avatar_color || identityColor(a.name ?? "");
   return (
     <div className={shared.activityItem}>
       <div className={shared.activityRail}>

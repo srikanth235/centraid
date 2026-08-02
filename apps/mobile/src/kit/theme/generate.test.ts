@@ -1,177 +1,61 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildTheme,
-  cssColorToRn,
-  cssLengthToPx,
-  parseTokensCss,
-  renderTokensModule,
-} from "./generate";
+import { buildTheme, renderTokensModule } from "./generate";
 
-// A trimmed stand-in for toBlueprintCss() that exercises
-// every translation path: hsl+var, alpha, calc, var-with-fallback, aliases,
-// color-mix (skip), swatch (skip), internal var (skip), radii, and a dark
-// override that references the undefined --bg-wall.
-const FIXTURE = `
-:root {
-  --app-hue: 171;
-  --accent: #2EA098;
-  --c-teal: #2EA098;
-  --_accent: var(--app-color, var(--accent));
-  --text: hsl(var(--app-hue) 22% 13%);
-  --text-soft: hsl(var(--app-hue) 9% 41%);
-  --bg: hsl(var(--app-hue) 20% 98%);
-  --bg-elev: #ffffff;
-  --line: hsl(var(--app-hue) 19% 13% / 0.095);
-  --accent-soft: color-mix(in oklab, var(--_accent) 12%, transparent);
-  --r-card: 14px;
-  --r-sm: 6px;
-  --radius: 0.75rem;
-  --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --t-title: 600 1.15rem/1.2 var(--font-title);
-}
+describe("typed native lowering", () => {
+  const theme = buildTheme();
 
-:root[data-theme='dark'] {
-  --bg-l: 10%;
-  --text: hsl(var(--app-hue) 16% 94%);
-  --bg-elev: hsl(var(--app-hue) 12% calc(var(--bg-l) + 5%));
-  --bg: var(--bg-wall);
-}
-`;
-
-describe(cssColorToRn, () => {
-  it("resolves hsl space syntax to hex", () => {
-    expect(cssColorToRn("hsl(0 0% 100%)")).toBe("#ffffff");
-    expect(cssColorToRn("hsl(0 0% 0%)")).toBe("#000000");
-    expect(cssColorToRn("hsl(0 100% 50%)")).toBe("#ff0000");
-    expect(cssColorToRn("hsl(120 100% 50%)")).toBe("#00ff00");
-    expect(cssColorToRn("hsl(240 100% 50%)")).toBe("#0000ff");
-  });
-
-  it("resolves hsl with an alpha channel to rgba", () => {
-    expect(cssColorToRn("hsl(0 0% 0% / 0.5)")).toBe("rgba(0, 0, 0, 0.5)");
-    expect(cssColorToRn("hsl(0 0% 100% / 1)")).toBe("#ffffff");
-  });
-
-  it("normalizes hex and passes rgba through", () => {
-    expect(cssColorToRn("#2EA098")).toBe("#2ea098");
-    expect(cssColorToRn("#abc")).toBe("#aabbcc");
-    expect(cssColorToRn("rgba(1, 2, 3, 0.4)")).toBe("rgba(1, 2, 3, 0.4)");
-  });
-
-  it("skips values RN cannot consume", () => {
-    expect(
-      cssColorToRn("color-mix(in oklab, red 12%, transparent)")
-    ).toBeNull();
-    expect(cssColorToRn("linear-gradient(180deg, #000, #fff)")).toBeNull();
-    expect(cssColorToRn("var(--nope)")).toBeNull();
-    expect(cssColorToRn("")).toBeNull();
-  });
-});
-
-describe(cssLengthToPx, () => {
-  it("reads px directly and converts rem at 16px", () => {
-    expect(cssLengthToPx("14px")).toBe(14);
-    expect(cssLengthToPx("0.75rem")).toBe(12);
-    expect(cssLengthToPx("0.5rem")).toBe(8);
-    expect(cssLengthToPx("nope")).toBeNull();
-  });
-});
-
-describe(parseTokensCss, () => {
-  it("splits the light root and dark override blocks", () => {
-    const { light, darkOverride } = parseTokensCss(FIXTURE);
-    expect(light["--accent"]).toBe("#2EA098");
-    expect(light["--app-hue"]).toBe("171");
-    expect(darkOverride["--bg-l"]).toBe("10%");
-    // Dark override only carries what it changes.
-    expect(darkOverride["--accent"]).toBeUndefined();
-  });
-});
-
-describe(buildTheme, () => {
-  const theme = buildTheme(FIXTURE);
-
-  it("extracts resolved light colors", () => {
-    expect(theme.light.accent).toBe("#2ea098");
-    expect(theme.light.text).toMatch(/^#[0-9a-f]{6}$/u);
-    expect(theme.light.bgElev).toBe("#ffffff");
-    expect(theme.light.line).toMatch(/^rgba\(/u); // alpha → rgba
-  });
-
-  it("skips color-mix, swatch, and internal vars", () => {
-    expect(theme.light.accentSoft).toBeUndefined();
-    expect(theme.light.cTeal).toBeUndefined();
-    expect(theme.light.Accent).toBeUndefined();
-    // Non-color declarations never appear.
-    expect(theme.light.shadowSm).toBeUndefined();
-    expect(theme.light.tTitle).toBeUndefined();
-  });
-
-  it("resolves dark overrides, including calc and the --bg-wall fallback", () => {
-    expect(theme.dark.text).not.toBe(theme.light.text);
-    expect(theme.dark.bgElev).toMatch(/^#[0-9a-f]{6}$/u); // calc(10% + 5%)
-    expect(theme.dark.bg).toBe("#161d1c"); // var(--bg-wall) fallback → hsl(171 12% 10%)
-  });
-
-  it("keeps light and dark key sets identical", () => {
-    expect(Object.keys(theme.dark).sort()).toStrictEqual(
-      Object.keys(theme.light).sort()
+  it("returns concrete light and dark values with identical role keys", () => {
+    expect(Object.keys(theme.light).sort()).toStrictEqual(
+      Object.keys(theme.dark).sort()
     );
+    for (const value of Object.values(theme.light)) {
+      expect(value).not.toMatch(/var\(|calc\(|color-mix\(/u);
+    }
+    for (const value of Object.values(theme.dark)) {
+      expect(value).not.toMatch(/var\(|calc\(|color-mix\(/u);
+    }
   });
 
-  it("lowers radii, dropping the r- prefix", () => {
-    expect(theme.radii.card).toBe(14);
-    expect(theme.radii.sm).toBe(6);
-    expect(theme.radii.radius).toBe(12);
+  it("keeps the shared scale and native accessibility floors", () => {
+    expect(theme.spacing["4"]).toBe(16);
+    expect(theme.radii.md).toBe(6);
+    expect(theme.radii.pill).toBe(999);
+    expect(theme.targetMin).toStrictEqual({ coarse: 48, fine: 32 });
+    expect(theme.type.body.fontSize).toBe(17);
+    expect(theme.type.body.lineHeight).toBe(24);
+    expect(theme.type.greeting.family).toBe("serif");
   });
 
-  it("exposes the spacing scale and font role mapping", () => {
-    expect(theme.spacing[4]).toBe(16);
-    expect(theme.fonts.sans.regular).toBe("Geist_400Regular");
-    expect(theme.fonts.title.semibold).toBe("SpaceGrotesk_600SemiBold");
-    expect(theme.fonts.mono.medium).toBe("JetBrainsMono_500Medium");
+  it("uses the one action accent and no legacy display face", () => {
+    expect(theme.light.accent).toBe("#3EC8B4");
+    expect(theme.dark.accent).toBe("#3EC8B4");
+    expect(theme.fonts.serif.semibold).toBe("PlayfairDisplay_600SemiBold");
+    expect(theme.fonts).not.toHaveProperty("title");
   });
-});
 
-describe(renderTokensModule, () => {
-  const theme = buildTheme(FIXTURE);
+  it("lowers every legal product accent into the native surface", () => {
+    expect(Object.keys(theme.accentThemes).sort()).toStrictEqual([
+      "blue",
+      "ochre",
+      "rose",
+      "teal",
+      "violet",
+    ]);
+    expect(theme.accentThemes.violet.light.accent).toBe("#7C5BD9");
+    expect(theme.accentThemes.violet.dark.accent).toBe("#7C5BD9");
+    expect(theme.accentThemes.ochre.light.bgSel).toContain("rgba(");
+  });
 
-  it("is deterministic across runs", () => {
-    const a = renderTokensModule(theme, "src.css");
-    const b = renderTokensModule(theme, "src.css");
+  it("renders deterministic formatter-shaped source", () => {
+    const a = renderTokensModule(theme, "@centraid/design#toNativeTheme");
+    const b = renderTokensModule(theme, "@centraid/design#toNativeTheme");
     expect(a).toBe(b);
-  });
-
-  it("sorts palette keys alphabetically", () => {
-    const out = renderTokensModule(theme, "src.css");
-    const block =
-      /export const lightPalette = \{(?<body>[\s\S]*?)\} as const;/u.exec(
-        out
-      )?.[1] ?? "";
-    const keys = [...block.matchAll(/^\s*(?<key>[A-Za-z0-9_$]+):/gmu)].map(
-      (m) => m[1]
-    );
-    expect(keys).toStrictEqual(
-      [...keys].sort((a, b) => String(a).localeCompare(String(b)))
-    );
-    expect(keys.length).toBeGreaterThan(0);
-  });
-
-  // The generator writes a checked-in file that `bun run format` also touches;
-  // emitting formatter-shaped source keeps regeneration from churning quotes.
-  it("emits formatter-shaped literals (bare keys, single quotes)", () => {
-    const out = renderTokensModule(theme, "src.css");
-    expect(out).toContain("accent: '#2ea098',");
-    expect(out).toContain("'1': 4,"); // numeric keys need quoting
-    expect(out).not.toContain('"accent"');
-  });
-
-  it("emits the generated header and font families", () => {
-    const out = renderTokensModule(theme, "@centraid/design#toBlueprintCss");
-    expect(out).toContain("GENERATED — do not edit");
-    expect(out).toContain("@centraid/design#toBlueprintCss");
-    expect(out).toContain("export const lightPalette");
-    expect(out).toContain("Geist_400Regular");
+    expect(a).toContain("export const lightPalette");
+    expect(a).toContain("export const type");
+    expect(a).toContain("Geist_400Regular");
+    expect(a).not.toContain("SpaceGrotesk");
+    expect(a).not.toContain("parseTokensCss");
+    expect(a).toContain("export const accentThemes");
   });
 });

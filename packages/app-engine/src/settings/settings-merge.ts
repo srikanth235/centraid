@@ -66,6 +66,16 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
   accent: { kind: "css", cssVar: "accent", coerce: asString },
   accentLight: { kind: "css", cssVar: "accent-light", coerce: asString },
   accentDeep: { kind: "css", cssVar: "accent-deep", coerce: asString },
+  accentFill: { kind: "css", cssVar: "accent-fill", coerce: asString },
+  accentDeepHover: {
+    kind: "css",
+    cssVar: "accent-deep-hover",
+    coerce: asString,
+  },
+  accentSoft: { kind: "css", cssVar: "accent-soft", coerce: asString },
+  accentText: { kind: "css", cssVar: "accent-text", coerce: asString },
+  bgSel: { kind: "css", cssVar: "bg-sel", coerce: asString },
+  lineSel: { kind: "css", cssVar: "line-sel", coerce: asString },
 };
 
 /**
@@ -105,6 +115,8 @@ function appKnobTarget(
 ): { kind: "data"; attr: string } | { kind: "css"; cssVar: string } {
   const kebab = camelTailToKebab(key.slice(3));
   const name = `app-${kebab}`;
+  if (key === "appColor" || key === "appAccent")
+    return { kind: "css", cssVar: "app-identity" };
   return /(?:Color|Accent)$/u.test(key)
     ? { kind: "css", cssVar: name }
     : { kind: "data", attr: name };

@@ -2,15 +2,15 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { IconName } from "@centraid/design";
+import { tileFinish } from "@centraid/design";
 
 import { useTheme } from "../theme/useTheme";
 import Icon from "./Icon";
 
-// The "Pressed Card" launcher icon: a monochrome engraved emblem stamped into a
-// translucent glass tile. There is no per-app colour — apps are told apart by
-// silhouette, which is the point of the engraved direction. The pressed-in look
-// is faked with a two-layer emblem (an offset highlight/shadow copy behind the
-// ink copy), since React Native has no CSS `filter: drop-shadow`.
+// The "Pressed Card" launcher icon: an app-coloured glyph engraved into a
+// translucent glass tile. `tileFinish` is the shared M1 app identity lowering;
+// the two-layer emblem keeps the pressed-in material on native, which has no
+// CSS `filter: drop-shadow`.
 //
 // Slice C polish: the tile paper is now semi-translucent (an rgba of the aged
 // paper / near-black tones) with a hairline light border, so the cream canvas
@@ -41,15 +41,18 @@ const ENGRAVED = {
 
 export interface AppIconProps {
   name: IconName;
+  color: string;
   size?: number;
 }
 
 export default function AppIcon({
   name,
+  color,
   size = 62,
 }: AppIconProps): React.JSX.Element {
   const { scheme } = useTheme();
   const t = ENGRAVED[scheme];
+  const finish = tileFinish(color, "glassy");
   const glyph = Math.round(size * 0.48);
   return (
     <View
@@ -59,7 +62,7 @@ export default function AppIcon({
           width: size,
           height: size,
           borderRadius: Math.round(size * 0.29),
-          backgroundColor: t.paper,
+          backgroundColor: finish.backgroundColor,
           borderColor: t.border,
           shadowOpacity: t.shadowOpacity,
         },
@@ -74,7 +77,12 @@ export default function AppIcon({
           <Icon name={name} size={glyph} color={t.deboss} strokeWidth={1.9} />
         </View>
       </View>
-      <Icon name={name} size={glyph} color={t.ink} strokeWidth={1.9} />
+      <Icon
+        name={name}
+        size={glyph}
+        color={finish.glyphColor}
+        strokeWidth={1.9}
+      />
     </View>
   );
 }

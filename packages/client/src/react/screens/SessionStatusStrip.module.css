@@ -19,7 +19,7 @@
 .telemetry {
   justify-content: flex-end;
   color: var(--text-faint);
-  font: var(--t-tiny);
+  font: var(--t-control);
 }
 .context {
   gap: 5px;

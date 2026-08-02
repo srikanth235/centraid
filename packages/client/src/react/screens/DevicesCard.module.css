@@ -223,7 +223,7 @@
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  font: var(--t-tiny);
+  font: var(--t-control);
   padding: 3px 5px;
 }
 .renameAction:hover,
@@ -264,7 +264,7 @@
   align-items: center;
   gap: 12px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .meta span[data-quiet="true"] {
@@ -307,7 +307,7 @@
   margin-top: 4px;
   color: var(--text-soft);
   cursor: pointer;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.35;
 }
 .computeToggle input {

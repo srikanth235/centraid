@@ -23,7 +23,7 @@ export function CalDot({ color }: { color?: string | null }) {
   return (
     <span
       className="ag-dot"
-      style={{ background: color ?? "var(--_accent)" }}
+      style={{ background: color ?? "var(--app-identity)" }}
     />
   );
 }

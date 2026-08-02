@@ -17,7 +17,7 @@
   --amber: #b3690e;
   --shadow: rgba(32, 38, 31, 0.14);
   --grain-opacity: 0.5;
-  --sel: rgba(62, 200, 180, 0.35);
+  --accent-soft: rgba(62, 200, 180, 0.35);
 
   /* fixed night sub-palette for .dark bands inside paper pages */
   --night: #111612;
@@ -32,7 +32,7 @@
 
   --display: "Fraunces", georgia, serif;
   --body: "Newsreader", georgia, serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --rail-w: 224px;
   /* One shared shell gutter. The header, the section rail, and the prose
@@ -64,7 +64,7 @@
   --amber: #dfa044;
   --shadow: rgba(0, 0, 0, 0.5);
   --grain-opacity: 0.28;
-  --sel: rgba(78, 208, 188, 0.3);
+  --accent-soft: rgba(78, 208, 188, 0.3);
 
   --night: #0c110d;
   --night-2: #090d0a;
@@ -102,7 +102,7 @@ html {
   }
 }
 ::selection {
-  background: var(--sel);
+  background: var(--accent-soft);
 }
 body {
   font-family: var(--body);
@@ -205,7 +205,7 @@ button {
   display: block;
 }
 .brand .docs-tag {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -221,7 +221,7 @@ button {
   gap: 2px;
 }
 .head-nav a {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   letter-spacing: 0.05em;
   text-transform: lowercase;
@@ -333,7 +333,7 @@ button {
   gap: 22px;
 }
 .mm-label {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -372,7 +372,7 @@ button {
   background: color-mix(in oklab, var(--accent) 7%, transparent);
 }
 .mm-arrow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--accent);
 }
@@ -381,7 +381,7 @@ button {
 }
 .mm-rail a {
   padding: 9px 12px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13.5px;
   color: var(--text-soft);
   justify-content: flex-start;
@@ -411,7 +411,7 @@ button {
   border: 1px solid var(--line);
   background: color-mix(in oklab, var(--card) 55%, transparent);
   color: var(--text-faint);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   cursor: text;
   transition:
@@ -439,7 +439,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 1px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 6px;
@@ -504,7 +504,7 @@ button {
 }
 .search-esc {
   flex: none;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-faint);
   border: 1px solid var(--line);
@@ -541,7 +541,7 @@ button {
   color: var(--text);
 }
 .search-hit .hit-page {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -588,7 +588,7 @@ button {
   position: relative;
   display: block;
   padding: 6px 10px 6px 14px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-faint);
@@ -691,7 +691,7 @@ section.sec + section.sec {
   border-top: 1px solid var(--line-soft);
 }
 .eyebrow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -757,7 +757,7 @@ h3 {
   max-width: 36em;
 }
 .note {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--text-faint);
@@ -765,7 +765,7 @@ h3 {
 }
 .aside {
   margin-top: 20px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--text-faint);
@@ -786,7 +786,7 @@ h3 {
 
 code,
 .k {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 0.78em;
   color: var(--accent);
   background: color-mix(in oklab, var(--accent) 8%, transparent);
@@ -799,7 +799,7 @@ code,
 }
 pre code {
   all: unset;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 
 /* ---------- dark bands (night sections inside a paper page) ---------- */
@@ -854,7 +854,7 @@ section.dark .note a {
   background: var(--card);
   border: 1px solid var(--text);
   box-shadow: 9px 9px 0 var(--shadow);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.75;
   transition:
@@ -975,7 +975,7 @@ section.dark .tool-chip {
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -984,7 +984,7 @@ section.dark .tool-chip {
 .term-body {
   position: relative;
   padding: 20px 22px 22px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.85;
   overflow-x: auto;
@@ -1011,7 +1011,7 @@ section.dark .tool-chip {
 }
 .term-body code {
   all: unset;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   color: var(--text);
 }
 .copy-btn {
@@ -1067,7 +1067,7 @@ section.dark .tool-chip {
   transform: translate(-1px, -1px);
 }
 .card .c-no {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.16em;
   color: var(--amber);
@@ -1115,7 +1115,7 @@ section.dark .card p {
   gap: 7px;
 }
 .pill {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   border: 1px solid var(--line);
   background: var(--card);
@@ -1172,7 +1172,7 @@ body:not(.ontology-page) section.dark .pill {
   background: var(--card);
   display: grid;
   place-items: center;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--amber);
 }
@@ -1221,7 +1221,7 @@ table.dt {
   vertical-align: top;
 }
 .dt thead th {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1239,7 +1239,7 @@ table.dt {
 }
 .dt td:first-child,
 .dt th[scope="row"] {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text);
   font-weight: 500;
@@ -1319,7 +1319,7 @@ section.dark .dt td:first-child {
   box-shadow: 12px 12px 0 var(--shadow);
 }
 .path .c-no {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.16em;
   color: var(--amber);
@@ -1339,7 +1339,7 @@ section.dark .dt td:first-child {
 }
 .path .go {
   margin-top: 18px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--accent);
 }
@@ -1356,7 +1356,7 @@ section.dark .dt td:first-child {
   background: transparent;
   border-radius: 999px;
   padding: 6px 14px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   letter-spacing: 0.02em;
   transition: all 0.15s ease;
@@ -1405,7 +1405,7 @@ footer.site-foot {
   justify-content: space-between;
   gap: 18px;
   flex-wrap: wrap;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--text-faint);
 }
@@ -1428,7 +1428,7 @@ footer.site-foot {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.02em;
   color: var(--text-faint);
@@ -1457,7 +1457,7 @@ footer.site-foot {
   flex-wrap: wrap;
 }
 .chapter-next a {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   text-decoration: none;
   color: var(--text);

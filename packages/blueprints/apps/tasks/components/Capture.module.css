@@ -5,7 +5,7 @@
 
 .capture {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -13,7 +13,11 @@
   transition: border-color 0.15s var(--ease);
 }
 .capture:focus-within {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+  border-color: color-mix(
+    in oklab,
+    var(--app-identity) 40%,
+    var(--line-strong)
+  );
 }
 .captureRow {
   display: flex;
@@ -54,7 +58,7 @@
 /* The When/Flag capture chips read in the metadata voice — mono, a notch
    smaller than kit-seg's default sans buttons. */
 .captureSeg > button {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: var(--t-mono-size);
   min-height: 1.9rem;
   padding: 0.25rem 0.6rem;
@@ -67,7 +71,7 @@
 }
 .nlHint {
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--accent-text);
 }

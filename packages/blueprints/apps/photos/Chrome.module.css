@@ -3,13 +3,13 @@
    keeps its media-specific selection, lightbox, slideshow, and picker rules.
 
    Token layer: the shell injects the GENERIC blueprint token layer onto this
-   same element via `.centraid-inline-scope` (hue 222, teal `--accent`). Photos'
+   same element via `.centraid-inline-scope` (hue 222, product teal `--accent`). Photos'
    identity is violet (--app-hue 255) with a handful of app-specific tokens the
-   generic layer lacks (--ph-sidebar-w, --ph-tile-r*, --accent-deep-fg,
+   generic layer lacks (--ph-sidebar-w, --ph-tile-r*,
    --custody-warn). Overriding just `--app-hue` retunes every generic neutral to
-   violet (they all read `hsl(var(--app-hue) …)`); `--_accent` is re-pinned to a
-   LITERAL violet fallback so the host's inline `--accent: var(--c-teal)` is
-   bypassed while the `--app-color` swatch knob still wins. The fold doubles the
+   violet (they all read `hsl(var(--app-hue) …)`); `--app-identity` is re-pinned to a
+   LITERAL violet fallback so the Photos identity stays independent from the
+   product accent while the `--app-identity` swatch knob still wins. The fold doubles the
    class (`.appRoot.appRoot` → 0,2,0) to beat the injected layer's `.centraid-
    inline-scope` (0,1,0); dark/media variants add the theme ancestor.
 
@@ -28,20 +28,15 @@
   color-scheme: light dark;
   /* Violet identity — retunes every generic neutral (they read --app-hue). */
   --app-hue: 255;
-  /* Bypass the host's inline `--accent: teal` while keeping the swatch knob. */
-  --_accent: var(--app-color, var(--c-violet));
+  /* Keep Photos identity independent from the host's product accent. */
+  --app-identity: var(--c-violet);
   --ph-sidebar-w: 250px;
   --ph-tile-r: 3px;
   --ph-tile-r-sel: 13px;
-  /* accent-deep tuned as background+white-text; the fg escape hatch shows
-     accent-deep AS foreground on accent-soft (dark mode needs the brighter
-     tint below). */
-  --accent-deep-fg: var(--accent-deep);
   --custody-warn: var(--warning);
 }
 
 :global(:root[data-theme="dark"]) .appRoot.appRoot {
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --custody-warn: var(--warning);
   /* The generic dark layer sets `--bg: var(--bg-wall)`; wall.css (which would
      define it) never loads inline, so pin a violet-dark backdrop here. */
@@ -50,7 +45,6 @@
 
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .appRoot.appRoot {
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --custody-warn: var(--warning);
     --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l, 10%) + 1%));
   }
@@ -91,7 +85,7 @@
   font-family: var(--font-serif);
 }
 .appRoot[data-app-font="mono"] {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 .appRoot[data-app-width="narrow"] .scroll {
   max-width: 68rem;
@@ -223,8 +217,8 @@
   gap: 0.5rem;
   max-width: calc(100% - 1.5rem);
   background: var(--bg-elev);
-  border: 1px solid var(--selb);
-  background-color: var(--sel);
+  border: 1px solid var(--line-strong);
+  background-color: var(--accent-soft);
   border-radius: 999px;
   padding: 0.4rem 0.5rem 0.4rem 1rem;
   box-shadow: var(--shadow-lg);
@@ -286,8 +280,8 @@
   border-color: var(--line-strong);
 }
 :global(.ph-header-icon-btn)[data-active="true"] {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
-  color: var(--accent-deep-fg);
+  border-color: var(--line-sel);
+  color: var(--accent-text);
   background: var(--accent-soft);
 }
 :global(.ph-hamburger) {
@@ -327,7 +321,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 :global(.ph-tile-video-badge) svg {
   width: 42px;
@@ -344,7 +338,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  color: color-mix(in oklab, var(--text-soft) 82%, var(--_accent));
+  color: color-mix(in oklab, var(--text-soft) 82%, var(--app-identity));
 }
 :global(.ph-tile-audio-badge) svg {
   width: 54px;
@@ -362,8 +356,8 @@
   padding: 2px var(--sp-1);
   border-radius: 4px;
   background: color-mix(in oklab, var(--scrim) 92%, transparent);
-  color: var(--on-accent);
-  font-family: var(--mono);
+  color: var(--text-inv);
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.25;
   pointer-events: none;
@@ -377,9 +371,9 @@
 :global(.lightbox-faces-title) {
   margin: 0 0 var(--sp-2);
   color: var(--text-faint);
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
 }
 :global(.lightbox-face) {
   display: flex;

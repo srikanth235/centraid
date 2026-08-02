@@ -1,10 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../theme";
 import GlassBar from "./GlassBar";
+import Icon from "./Icon";
 
 // The one "leave this mini-app for your apps" key, shared by every full-page app
 // cover so the escape hatch looks and lands the same everywhere. Design grammar:
@@ -28,7 +28,7 @@ import GlassBar from "./GlassBar";
 //     to the left of an app's tab pill (Photos), mirroring the "+" create disc on
 //     the right.
 //
-// The teal wash is BRAND_TEAL at low alpha — a quiet tint that reads as system
+// The teal wash is BRAND at low alpha — a quiet tint that reads as system
 // furniture, not a shouting button (no solid fill). Like GlassBar's TINT it is
 // hardcoded because the palette tokens are opaque and a wash must be translucent;
 // this is the same teal as `accent` on both schemes (see theme/resolve.ts).
@@ -71,7 +71,7 @@ export default function HomeKey({
           style={styles.headerKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Feather name="grid" size={19} color={colors.accent} />
+          <Icon name="grid" size={19} color={colors.accent} />
         </Pressable>
       </GlassBar>
     );
@@ -88,7 +88,7 @@ export default function HomeKey({
           style={styles.barKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Feather name="grid" size={22} color={colors.accent} />
+          <Icon name="grid" size={22} color={colors.accent} />
         </Pressable>
       </GlassBar>
     );
@@ -111,7 +111,7 @@ export default function HomeKey({
           style={styles.floatKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Feather name="grid" size={22} color={colors.accent} />
+          <Icon name="grid" size={22} color={colors.accent} />
         </Pressable>
       </GlassBar>
     </View>

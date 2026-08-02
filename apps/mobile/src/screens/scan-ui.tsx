@@ -1,7 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import Icon from "../kit/components/Icon";
 import { family } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 
@@ -21,7 +21,7 @@ export function CloseHeader({
         accessibilityLabel="Close scan"
         onPress={onClose}
       >
-        <Feather name="x" size={24} color={colors.text} />
+        <Icon name="x" size={24} color={colors.text} />
       </Pressable>
       <Text style={[styles.title, { color: colors.text }]}>Scan & review</Text>
       <View style={styles.headerGap} />
@@ -51,7 +51,7 @@ export function PrimaryButton({
         { backgroundColor: colors.accent, opacity: disabled ? 0.55 : 1 },
       ]}
     >
-      <Text style={[styles.primaryText, { color: colors.onAccent }]}>
+      <Text style={[styles.primaryText, { color: colors.textInv }]}>
         {label}
       </Text>
     </Pressable>
@@ -177,11 +177,11 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   title: {
     flex: 1,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 21,
     textAlign: "center",
   },
-  total: { fontFamily: family.displayBold, fontSize: 18 },
+  total: { fontFamily: family.sansBold, fontSize: 18 },
 });
 
 export { styles as scanStyles };

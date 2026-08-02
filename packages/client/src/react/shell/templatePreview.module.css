@@ -65,7 +65,7 @@
 }
 .tmplAccessVerb {
   flex: 0 0 auto;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text);
   min-width: 78px;

@@ -19,15 +19,15 @@
   box-shadow: var(--shadow-md);
 }
 .card[data-selected="true"] {
-  border-color: var(--selb);
-  box-shadow: 0 0 0 2px var(--sel);
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 /* The whole-card "open details" target: a transparent `kit-stretch-btn` laid
    under every control on the card. `.card` clips overflow, so its focus ring is
    drawn inset rather than as an outline that would be cut off. */
 .cardOpen:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--selb);
+  box-shadow: inset 0 0 0 2px var(--line-strong);
 }
 .thumb {
   position: relative;
@@ -49,7 +49,7 @@
    off that ratio, applied after the fact and invisible to the token layer. If
    the label needs to recede, the rung is the place to say so. */
 .thumbLabel {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: 0.06em;
@@ -108,7 +108,7 @@
   white-space: nowrap;
 }
 .cardMeta {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
   margin-top: var(--sp-1);

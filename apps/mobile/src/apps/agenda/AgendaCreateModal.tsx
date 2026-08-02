@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
 import {
   Modal,
@@ -12,6 +12,7 @@ import {
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
+import Icon from "../../kit/components/Icon";
 import { family, useTheme } from "../../kit/theme";
 
 type TimeSemantics = "zoned" | "floating" | "all-day";
@@ -58,6 +59,7 @@ export default function AgendaCreateModal({
   const [reminders, setReminders] = useState("15");
   const [guestIds, setGuestIds] = useState(new Set<string>());
   const [saving, setSaving] = useState(false);
+  const [datePicker, setDatePicker] = useState<"start" | "end">();
   const partyOptions = useMemo(
     () =>
       parties.map((party) => ({
@@ -126,6 +128,45 @@ export default function AgendaCreateModal({
     </View>
   );
 
+  const dateField = (
+    label: string,
+    value: string,
+    kind: "start" | "end",
+    onChange: (next: string) => void
+  ): React.JSX.Element => {
+    const date = new Date(value);
+    const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    return (
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} date and time`}
+          onPress={() => setDatePicker(kind)}
+          style={[
+            styles.dateButton,
+            { borderColor: colors.lineStrong, backgroundColor: colors.bgElev },
+          ]}
+        >
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {safeDate.toLocaleString()}
+          </Text>
+        </Pressable>
+        {datePicker === kind ? (
+          <DateTimePicker
+            value={safeDate}
+            mode="datetime"
+            display="default"
+            onChange={(_, next) => {
+              setDatePicker(undefined);
+              if (next) onChange(next.toISOString());
+            }}
+          />
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -140,7 +181,7 @@ export default function AgendaCreateModal({
             accessibilityLabel="Close event composer"
             onPress={onClose}
           >
-            <Feather name="x" size={23} color={colors.text} />
+            <Icon name="x" size={23} color={colors.text} />
           </Pressable>
           <Text style={[styles.title, { color: colors.text }]}>New event</Text>
           <Pressable
@@ -163,8 +204,8 @@ export default function AgendaCreateModal({
           {field("Description", description, setDescription, {
             multiline: true,
           })}
-          {field("Start · ISO 8601", start, setStart)}
-          {field("End · ISO 8601", end, setEnd)}
+          {dateField("Start", start, "start", setStart)}
+          {dateField("End", end, "end", setEnd)}
           {field("Start timezone", startTz, setStartTz)}
           {field("End timezone", endTz, setEndTz)}
           <Text style={[styles.label, { color: colors.textSoft }]}>
@@ -315,6 +356,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  dateButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  dateText: { fontFamily: family.sansRegular, fontSize: 14 },
   label: {
     fontFamily: family.monoBold,
     fontSize: 10,

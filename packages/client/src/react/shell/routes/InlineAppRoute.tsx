@@ -53,8 +53,28 @@ export interface InlineAppRouteProps {
 }
 
 const INLINE_SCOPE_CLASS = "centraid-inline-scope";
+const PRODUCT_ACCENT_ROLES = [
+  "--accent",
+  "--accent-deep",
+  "--accent-fill",
+  "--accent-deep-hover",
+  "--accent-light",
+  "--accent-soft",
+  "--accent-text",
+  "--bg-sel",
+  "--line-sel",
+  "--focus-ring-color",
+] as const;
 
-// The blueprint token layer (--mono/--bg-elev/--_accent/--ease/type scale …),
+function syncInlineProductAccent(root: HTMLElement): void {
+  const source = getComputedStyle(document.documentElement);
+  for (const role of PRODUCT_ACCENT_ROLES) {
+    const value = source.getPropertyValue(role).trim();
+    if (value) root.style.setProperty(role, value);
+  }
+}
+
+// The blueprint token layer (--font-mono/--bg-elev/--accent/--ease/type scale …),
 // rescoped from `:root` to the inline app subtree so it never restyles the
 // shell chrome. Injected once; the shell's own `data-theme` on <html> still
 // drives the dark block. Kept synchronous so inline theming needs no paint gap.
@@ -252,7 +272,7 @@ export default function InlineAppRoute({
       appRootRef.current = el;
       if (!el) return;
       el.classList.add(INLINE_SCOPE_CLASS);
-      el.style.setProperty("--accent", "var(--c-teal)");
+      syncInlineProductAccent(el);
       for (const [k, v] of Object.entries(knobValues.current))
         pushKnobToInlineRoot(el, k, v);
       // Authorize blob-backed <img>/background-image refs (grids, lightbox,
@@ -274,6 +294,11 @@ export default function InlineAppRoute({
     },
     [appId]
   );
+
+  useEffect(() => {
+    const root = appRootRef.current;
+    if (root) syncInlineProductAccent(root);
+  }, [prefs]);
 
   useEffect(
     () => () => {

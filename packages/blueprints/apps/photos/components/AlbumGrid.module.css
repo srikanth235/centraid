@@ -20,7 +20,7 @@
   display: block;
   position: relative;
   aspect-ratio: 1;
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-sunken) center/cover no-repeat;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--line);
@@ -49,13 +49,13 @@
   gap: var(--sp-2);
   aspect-ratio: 1;
   border: 1.5px dashed var(--line-strong);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   color: var(--text-faint);
 }
 .albumCardNew:hover {
-  border-color: var(--_accent);
-  color: var(--accent-deep-fg);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 .albumCardNew span:last-child {
   font: var(--t-small);

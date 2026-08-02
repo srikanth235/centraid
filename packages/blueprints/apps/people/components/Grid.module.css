@@ -7,7 +7,7 @@
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--bg-elev);
   transition:
@@ -19,8 +19,8 @@
   box-shadow: var(--shadow-md);
 }
 .card[data-selected="true"] {
-  border-color: var(--selb);
-  box-shadow: 0 0 0 2px var(--sel);
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .cardTop {
   /* Deliberately NOT positioned: the card's stretched "Open <name>" button is
@@ -79,7 +79,7 @@
   opacity: 1;
 }
 .cardStar.on {
-  color: var(--_accent);
+  color: var(--app-identity);
 }
 .cardBody {
   padding: 11px 13px 13px;
@@ -103,7 +103,7 @@
   white-space: nowrap;
 }
 .cardMeta {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
   margin-top: 9px;

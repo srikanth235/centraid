@@ -33,14 +33,14 @@
   gap: 6px;
 }
 .rowName {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,7 +74,7 @@
 }
 
 .testResult {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 .testResult[data-ok="true"] {
@@ -212,7 +212,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .binaryOption:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .binaryOption:has(:disabled) {

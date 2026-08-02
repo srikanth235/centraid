@@ -154,11 +154,11 @@
 }
 .selectedConnOk {
   color: var(--success);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .selectedConnWarn {
   color: var(--c-amber-text);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .selectedConnX {
@@ -257,7 +257,7 @@
 .agentPickerField {
   display: grid;
   gap: 5px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
 }
@@ -447,7 +447,7 @@
 .connAccountPrincipal {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -468,14 +468,14 @@
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-soft);
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 .connDanglingNote {
   flex-basis: 100%;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--danger);
 }
@@ -505,7 +505,7 @@
 /* Helper caption under the connection Label — clarifies naming and that a
    distinct label is what lets more than one account of a provider coexist. */
 .connFieldHint {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
@@ -588,7 +588,7 @@
   align-self: flex-start;
 }
 .headName {
-  font: var(--t-h2);
+  font: var(--t-title);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -683,7 +683,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-soft);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .entityToken code {
   color: var(--accent);
@@ -957,7 +957,7 @@
 }
 .trigHint code {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 
@@ -972,7 +972,7 @@
 }
 .cronPreviewPill {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -1103,7 +1103,7 @@
 }
 .chipMono {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .vaultPurpose {
   margin: 0;
@@ -1218,7 +1218,7 @@
 }
 .grantVerb {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border-radius: 5px;
@@ -1244,7 +1244,7 @@
 .grantRevokeBtn {
   flex: none;
   font: inherit;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
   background: none;
   border: 0.5px solid color-mix(in srgb, var(--danger) 35%, var(--line));

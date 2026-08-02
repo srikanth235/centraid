@@ -122,7 +122,7 @@ function ConnectInlineForm({
         </div>
       ) : null}
       <div className={styles.connFormActions}>
-        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button variant="quiet" size="sm" label="Cancel" onClick={onCancel} />
         <Button
           variant="primary"
           size="sm"
@@ -471,7 +471,7 @@ export function AutomationEditorConnectorsPicker({
                   {hasAccountChoice ? null : health === "ok" ? null : health ===
                       "needs-auth" && item.connection ? (
                     <Button
-                      variant="soft"
+                      variant="secondary"
                       size="sm"
                       label={busy ? "Waiting…" : "Authorize"}
                       disabled={busy || !beginAuthorize}
@@ -479,7 +479,7 @@ export function AutomationEditorConnectorsPicker({
                     />
                   ) : (
                     <Button
-                      variant="soft"
+                      variant="secondary"
                       size="sm"
                       label={connecting ? "Cancel" : "Connect"}
                       disabled={busy || !configureConnection}

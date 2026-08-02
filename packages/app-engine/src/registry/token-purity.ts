@@ -47,7 +47,7 @@ const RESERVED_PREFIXES = [
  * (`DESIGN.md`, "Do's and Don'ts"). Everything else
  * in the contract is read-only to an app.
  */
-const APP_OWNED_PROPS = new Set(["--app-hue", "--accent"]);
+const APP_OWNED_PROPS = new Set(["--app-hue", "--app-identity"]);
 
 // `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Longest alternative first so a
 // 6-digit literal is never reported as a 3-digit one plus trailing junk.
@@ -62,19 +62,19 @@ const HEX_FIX =
   "use a contract token instead — var(--text) / var(--text-soft) / " +
   "var(--text-faint) for ink, var(--bg) / var(--bg-elev) / var(--bg-sunken) " +
   "for fills, var(--line) / var(--line-strong) for hairlines, " +
-  "var(--_accent) / var(--accent-soft) / var(--accent-deep) for the accent, " +
+  "var(--accent) / var(--accent-soft) / var(--accent-deep) for the accent, " +
   "and var(--danger) / var(--warning) / var(--success) for states";
 
 const FUNCTIONAL_FIX =
   "use a contract token instead of an rgb()/hsl() literal — " +
-  "var(--text), var(--bg-elev), var(--line), var(--_accent), var(--scrim) " +
+  "var(--text), var(--bg-elev), var(--line), var(--accent), var(--scrim) " +
   "for overlays; for a tint of the accent use var(--accent-soft)";
 
 const FONT_FAMILY_FIX =
   "delete the family — type comes from the contract: set " +
   "`font: var(--t-body)` (or --t-title / --t-body-strong / --t-small / " +
-  "--t-tiny / --t-mono), and if you must name a family use " +
-  "var(--font-sans) / var(--mono) / var(--font-serif)";
+  "--t-control / --t-mono), and if you must name a family use " +
+  "var(--font-sans) / var(--font-mono) / var(--font-serif)";
 
 /**
  * Replace every CSS comment with the same number of newlines, so a documented
@@ -174,7 +174,7 @@ export function scanCssTokenPurity(
       fix:
         `${name} is owned by @centraid/design — reference it with ` +
         `var(${name}) instead of redeclaring it. The only custom properties ` +
-        "an app may define are --app-hue and --accent (its identity); any " +
+        "an app may define are --app-hue and --app-identity (its identity); any " +
         "other name you need must be app-local and outside the reserved " +
         "--c-/--t-/--r-/--sp-/--bg-/--text- namespaces",
     });

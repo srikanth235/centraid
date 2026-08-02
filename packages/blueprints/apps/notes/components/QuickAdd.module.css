@@ -6,14 +6,18 @@
   max-width: 620px;
   margin: 0 auto 22px;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: border-color 0.15s var(--ease);
 }
 .quickadd:focus-within {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+  border-color: color-mix(
+    in oklab,
+    var(--app-identity) 40%,
+    var(--line-strong)
+  );
 }
 .qaTitle {
   width: 100%;

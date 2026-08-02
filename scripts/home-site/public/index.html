@@ -30,11 +30,11 @@
         --amber: #b3690e;
         --shadow: rgba(32, 38, 31, 0.14);
         --grain-opacity: 0.5;
-        --sel: rgba(62, 200, 180, 0.35);
+        --accent-soft: rgba(62, 200, 180, 0.35);
 
         --display: "Fraunces", georgia, serif;
         --body: "Newsreader", georgia, serif;
-        --mono: "IBM Plex Mono", ui-monospace, monospace;
+        --font-mono: "IBM Plex Mono", ui-monospace, monospace;
       }
       [data-theme="night"] {
         --paper: #111612;
@@ -50,7 +50,7 @@
         --amber: #dfa044;
         --shadow: rgba(0, 0, 0, 0.5);
         --grain-opacity: 0.28;
-        --sel: rgba(78, 208, 188, 0.3);
+        --accent-soft: rgba(78, 208, 188, 0.3);
       }
 
       * {
@@ -65,7 +65,7 @@
         scroll-margin-top: 86px;
       }
       ::selection {
-        background: var(--sel);
+        background: var(--accent-soft);
       }
       body {
         font-family: var(--body);
@@ -160,7 +160,7 @@
         gap: 2px;
       }
       nav a {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         letter-spacing: 0.05em;
         text-transform: lowercase;
@@ -219,7 +219,7 @@
         padding-block: clamp(64px, 12vh, 140px) clamp(56px, 8vh, 96px);
       }
       .kicker {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         letter-spacing: 0.22em;
         text-transform: uppercase;
@@ -269,7 +269,7 @@
         flex-wrap: wrap;
       }
       .btn {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 14px;
         font-weight: 500;
         letter-spacing: 0.02em;
@@ -305,7 +305,7 @@
       }
       .hero-notes {
         margin-top: 34px;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         letter-spacing: 0.04em;
         color: var(--ink-3);
@@ -318,7 +318,7 @@
         color: var(--accent);
       }
       .beta-pill {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.12em;
         color: var(--amber);
@@ -352,7 +352,7 @@
       .rule-label {
         display: flex;
         justify-content: space-between;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 11.5px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
@@ -376,7 +376,7 @@
         order: 1;
       }
       .ch-no {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         letter-spacing: 0.2em;
         text-transform: uppercase;
@@ -418,7 +418,7 @@
       }
       .chapter .prose .aside {
         margin-top: 22px;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         line-height: 1.7;
         color: var(--ink-3);
@@ -442,7 +442,7 @@
         background: var(--card);
         border: 1px solid var(--ink);
         box-shadow: 9px 9px 0 var(--shadow);
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 13px;
         line-height: 1.75;
         transition:
@@ -570,7 +570,7 @@
         margin: 16px 0 12px;
       }
       .consent-btn {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         padding: 8px 18px;
         border: 1.5px solid var(--ink);
@@ -613,7 +613,7 @@
         color: var(--accent);
       }
       .strip .strip-note {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         color: var(--ink-3);
         max-width: 26em;
@@ -636,7 +636,7 @@
         border-right: 0;
       }
       .home .h-no {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.16em;
         color: var(--amber);
@@ -656,7 +656,7 @@
         color: var(--ink-2);
       }
       .home code {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12px;
         color: var(--accent);
       }
@@ -700,7 +700,7 @@
         flex-wrap: wrap;
       }
       .tab {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12px;
         letter-spacing: 0.04em;
         padding: 6px 13px;
@@ -720,7 +720,7 @@
       .term-body {
         position: relative;
         padding: 22px 22px 24px;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 13.5px;
         line-height: 1.8;
       }
@@ -747,7 +747,7 @@
       .cmd code {
         color: var(--ink);
         word-break: break-all;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
       }
       .copy {
         position: absolute;
@@ -784,7 +784,7 @@
         margin-top: 14px;
       }
       .install-notes code {
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 13px;
         color: var(--accent);
         background: color-mix(in oklab, var(--accent) 8%, transparent);
@@ -817,7 +817,7 @@
         justify-content: space-between;
         gap: 18px;
         flex-wrap: wrap;
-        font-family: var(--mono);
+        font-family: var(--font-mono);
         font-size: 12.5px;
         color: var(--ink-3);
       }

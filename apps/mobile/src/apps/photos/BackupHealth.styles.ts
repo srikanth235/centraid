@@ -13,7 +13,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   hero: { alignItems: "center", borderRadius: 16, borderWidth: 1, padding: 26 },
-  heroValue: { fontFamily: family.displayBold, fontSize: 20, marginTop: 12 },
+  heroValue: { fontFamily: family.sansBold, fontSize: 20, marginTop: 12 },
   meta: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 5 },
   rule: {
     alignItems: "center",
@@ -42,7 +42,7 @@ export const styles = StyleSheet.create({
   },
   settingsText: { fontFamily: family.sansMedium, fontSize: 14 },
   storage: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 20 },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
+  title: { fontFamily: family.sansBold, fontSize: 18 },
   warning: {
     alignItems: "flex-start",
     borderRadius: 12,

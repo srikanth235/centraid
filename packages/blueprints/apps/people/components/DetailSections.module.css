@@ -7,7 +7,7 @@
    Authored camelCase. */
 
 .detailLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -101,8 +101,8 @@
 .note {
   padding: var(--sp-3) 14px;
   border-radius: var(--r-md);
-  background: color-mix(in oklab, var(--_accent) 6%, transparent);
-  border: 1px solid color-mix(in oklab, var(--_accent) 16%, transparent);
+  background: color-mix(in oklab, var(--app-identity) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--app-identity) 16%, transparent);
   margin-bottom: var(--sp-2);
 }
 .note p {

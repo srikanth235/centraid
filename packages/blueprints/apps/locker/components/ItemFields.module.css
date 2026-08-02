@@ -19,7 +19,7 @@
   min-width: 0;
 }
 .fieldK {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -33,7 +33,7 @@
   white-space: nowrap;
 }
 .fieldV.mono {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.02em;
 }
@@ -84,7 +84,7 @@
 .note {
   padding: 14px var(--sp-4);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   font: var(--t-body);
   font-size: 14px;
@@ -120,7 +120,7 @@
   gap: 10px;
 }
 .otpCode {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 19px;
   letter-spacing: 0.14em;
   color: var(--accd-fg);

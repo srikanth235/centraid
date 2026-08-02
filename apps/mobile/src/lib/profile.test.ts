@@ -23,7 +23,7 @@ vi.mock(import("../storage"), () => ({
 }));
 
 import {
-  BRAND_TEAL,
+  BRAND,
   firstNameOf,
   getProfileColor,
   getProfileName,
@@ -50,7 +50,7 @@ describe("profile", () => {
     });
 
     it("defaults profile color to brand teal", () => {
-      expect(getProfileColor()).toBe(BRAND_TEAL);
+      expect(getProfileColor()).toBe(BRAND);
       setProfileColor("#112233");
       expect(getProfileColor()).toBe("#112233");
     });

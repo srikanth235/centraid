@@ -774,5 +774,5 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   templates: { gap: 8, paddingHorizontal: 12, paddingVertical: 4 },
-  title: { fontFamily: family.displayBold, fontSize: 28 },
+  title: { fontFamily: family.sansBold, fontSize: 28 },
 });

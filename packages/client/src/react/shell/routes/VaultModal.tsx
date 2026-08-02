@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import { IDENTITY_COLORS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import { cx } from "../../ui/cx.js";
@@ -15,16 +16,7 @@ import styles from "./VaultModal.module.css";
 // `.cd-prof-*` chrome the vanilla emitted (already in styles.css). Gateway I/O +
 // the delete flow live in the caller (SettingsRoute); this is pure presentation.
 
-export const PROFILE_COLORS: readonly string[] = [
-  "#4E68DD",
-  "#E55772",
-  "#7C5BD9",
-  "#2EA098",
-  "#5C8A4E",
-  "#E89A3C",
-  "#B47B3F",
-  "#5C677D",
-];
+export const PROFILE_COLORS: readonly string[] = IDENTITY_COLORS;
 export const PROFILE_ICONS: readonly IconName[] = [
   "Home",
   "Bolt",

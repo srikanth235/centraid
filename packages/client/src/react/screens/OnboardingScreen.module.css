@@ -248,7 +248,7 @@
   height: 46px;
   padding: 0 14px;
   font: inherit;
-  font-size: var(--t-h3-size);
+  font-size: var(--t-small-size);
   font-weight: 500;
   letter-spacing: -0.005em;
   color: var(--text);
@@ -427,13 +427,13 @@
 }
 .errorDetail > summary {
   cursor: pointer;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: color-mix(in srgb, currentColor 70%, transparent);
 }
 .errorDetailText {
   margin: 6px 0 0;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   word-break: break-word;
   color: color-mix(in srgb, currentColor 78%, transparent);

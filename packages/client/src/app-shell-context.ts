@@ -3,44 +3,17 @@
 // against. Once the seam between the vanilla app.ts shell and its route modules;
 // after the full-React flip (#325) app.ts is gone and this is just the types +
 // the ACCENT_PALETTE the appearance code shares.
-import {
-  ACCENT_DEEP,
-  ACCENT_LIGHT,
-  ACCENT_TEXT_LIGHT,
-  accentRamp,
-  BRAND,
-  palette,
-} from "@centraid/design";
-import type { AccentRamp } from "@centraid/design";
+import type { AccentKey } from "@centraid/design";
+
+export { ACCENT_PALETTE } from "@centraid/design";
+export type { AccentKey } from "@centraid/design";
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
 /** What the owner asked for. `system` tracks the OS appearance live. */
 export type ThemeMode = ThemeName | "system";
 export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
-export type AccentKey = "blue" | "violet" | "teal" | "ochre" | "rose";
 export type CardVariant = "flat" | "outlined" | "elevated";
-
-// Accent key → resolved swatches (Centraid Redesign Tweaks panel). Shared
-// between the appearance core and the settings page.
-//
-// `teal` is the brand accent and uses the AUTHORED brand ramp, so picking it
-// paints exactly what the themes already declare. The other four are DERIVED
-// from their palette base (see `accentRamp`) rather than hand-picked, because
-// hand-picked variants drift off their own hue — this table once shipped a
-// green "deep" for teal and a violet "light" for rose.
-export const ACCENT_PALETTE: Record<AccentKey, AccentRamp> = {
-  blue: accentRamp(palette.indigo),
-  ochre: accentRamp(palette.ochre),
-  rose: accentRamp(palette.rose),
-  teal: {
-    accent: BRAND,
-    deep: ACCENT_DEEP,
-    light: ACCENT_LIGHT,
-    text: ACCENT_TEXT_LIGHT,
-  },
-  violet: accentRamp(palette.violet),
-};
 
 // A gateway profile as returned by the listGateways IPC.
 export type GatewayProfile = Awaited<

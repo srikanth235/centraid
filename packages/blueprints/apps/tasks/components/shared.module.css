@@ -8,9 +8,9 @@
 
 /* Metadata eyebrow label (Capture When/Flag, Detail sections, Sidebar Today). */
 .eyebrowLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 
@@ -71,7 +71,7 @@
 .due {
   flex-shrink: 0;
   align-self: center;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
@@ -107,7 +107,7 @@
   border-radius: 999px;
 }
 .circle:hover {
-  border-color: var(--_accent);
+  border-color: var(--accent);
 }
 .circle:active {
   transform: scale(0.92);

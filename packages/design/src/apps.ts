@@ -1,5 +1,5 @@
-// Built-in app catalog — names, descriptions, color/icon picks.
-// Shared across desktop + mobile so both home grids stay in sync.
+// Built-in product catalog — the shipped blueprint apps, not demo placeholders.
+// Shared across desktop + mobile so launcher identity cannot drift by client.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";
@@ -19,60 +19,60 @@ export interface AppMetaResolved extends AppMeta {
 
 const BUILTIN_APPS: readonly AppMeta[] = [
   {
-    colorKey: "violet",
-    desc: "Capture and clear small things.",
-    iconKey: "Todo",
-    id: "todos",
-    name: "Todos",
+    colorKey: "amber",
+    desc: "Write and revisit durable notes.",
+    iconKey: "Book",
+    id: "notes",
+    name: "Notes",
   },
   {
     colorKey: "rose",
-    desc: "A streak counter for daily things.",
-    iconKey: "Habit",
-    id: "habits",
-    name: "Habits",
-  },
-  {
-    colorKey: "amber",
-    desc: "A clean place to write each day.",
-    iconKey: "Journal",
-    id: "journal",
-    name: "Journal",
+    desc: "Keep people and relationships close.",
+    iconKey: "AddressBook",
+    id: "people",
+    name: "People",
   },
   {
     colorKey: "teal",
-    desc: "25-minute work blocks with breaks.",
-    iconKey: "Pomodoro",
-    id: "focus",
-    name: "Focus",
+    desc: "Browse and protect your photos.",
+    iconKey: "Camera",
+    id: "photos",
+    name: "Photos",
+  },
+  {
+    colorKey: "violet",
+    desc: "Keep private secrets behind a lock.",
+    iconKey: "Lock",
+    id: "locker",
+    name: "Locker",
   },
   {
     colorKey: "forest",
-    desc: "Watering reminders for my plants.",
-    iconKey: "Plant",
-    id: "plants",
-    name: "Plant Care",
+    desc: "See balances and simple trends.",
+    iconKey: "Receipt",
+    id: "tally",
+    name: "Tally",
   },
   {
     colorKey: "indigo",
-    desc: "Track 8 cups a day.",
-    iconKey: "Water",
-    id: "hydrate",
-    name: "Hydrate",
+    desc: "Capture the next thing to do.",
+    iconKey: "Check",
+    id: "tasks",
+    name: "Tasks",
   },
   {
     colorKey: "ochre",
-    desc: "Half-formed ideas for friends.",
-    iconKey: "Gift",
-    id: "gifts",
-    name: "Gift Ideas",
+    desc: "Read and organize your documents.",
+    iconKey: "Folder",
+    id: "docs",
+    name: "Docs",
   },
   {
     colorKey: "slate",
-    desc: "A 5-second daily check-in.",
-    iconKey: "Mood",
-    id: "mood",
-    name: "Mood",
+    desc: "Keep dates, events, and plans together.",
+    iconKey: "Calendar",
+    id: "agenda",
+    name: "Agenda",
   },
 ];
 
