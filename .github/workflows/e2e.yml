@@ -146,7 +146,14 @@ jobs:
     # JSI xcframework step exits 65 with an empty "Could not resolve package
     # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    timeout-minutes: 60
+    # Outer backstop only. Setup (~11m) + home/template/native-v0/volume
+    # (~37m wall on 30742507573) + cold-start (8 launches) + scroll-frames
+    # already exceeds 60m once onboarding is healthy — the job cancelled mid
+    # cold-start-6 with four prior flows green. Match android's 90m so a
+    # green suite is not cancelled by the outer cap (same rationale as
+    # desktop-e2e: the suite must finish and flush evidence before Actions
+    # kills the runner).
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup

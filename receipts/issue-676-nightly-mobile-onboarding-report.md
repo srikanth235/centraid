@@ -63,6 +63,8 @@ accessibility zero-grey (15 cells).
 
 - **Pairing suite consolidation.** `.github/workflows/e2e.yml` now runs lifecycle, ticket-hygiene, and cross-network-relay concurrently inside one `pairing-e2e` job. Each flow still writes its own e2e verdict and grouped log, and the final aggregate step fails the job if any flow fails; the report consumes one merged `nightly-evidence-pairing` artifact. `scripts/test-report/validate-nightly-wiring.mjs` and `scripts/test-report/validate-nightly-wiring.test.mjs` enforce the single-job/concurrent wiring, and `tests/agent-e2e-pairing/README.md` documents the suite shape.
 
+- **iOS job timeout 60→90.** Run 30742507573 (`1a78bd73`): home-loads / template-gate / native-v0-resilience / mobile-volume-proof all PASS; cancelled at the 60m Actions cap mid `mobile-cold-start` launch 6/8 (scroll-frames never started). Setup ~11m + four flows ~37m leaves too little budget for cold-start + scroll-frames. Match `mobile-e2e-android`'s 90m outer backstop.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
