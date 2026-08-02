@@ -156,6 +156,7 @@ PASS — the fresh-context re-audit after remediation found no remaining stop-sh
 | codex-019fbe3d-6c4-1785615434-1 | codex | 019fbe3d-6c48-7e73-9c1a-8cff7fa1d9ed | #679 | gpt-5.6-sol | 54354 | 0 | 550144 | 4425 | 58779 | 0.3398 | 2045118 | 0 | 129928704 | 256297 | feat: add user-facing failing quality gates (#679) |
 | codex-019fbe3d-6c4-1785615493-1 | codex | 019fbe3d-6c48-7e73-9c1a-8cff7fa1d9ed | #679 | gpt-5.6-sol | 1899 | 0 | 102912 | 231 | 2130 | 0.0339 | 2047017 | 0 | 130031616 | 256528 | feat: add user-facing failing quality gates (#679) -m governance: allow-toolchai |
 | codex-019fbe3d-6c4-1785615765-1 | codex | 019fbe3d-6c48-7e73-9c1a-8cff7fa1d9ed | #679 | gpt-5.6-sol | 33235 | 0 | 635904 | 1350 | 34585 | 0.2623 | 2080252 | 0 | 130667520 | 257878 | feat: add user-facing failing quality gates (#679) -m governance: allow-toolchai |
+| codex-019fbe3d-6c4-1785647649-1 | codex | 019fbe3d-6c48-7e73-9c1a-8cff7fa1d9ed | #679 | gpt-5.6-luna | 168943 | 0 | 2011904 | 10352 | 179295 | 1.0806 | 2249195 | 0 | 132679424 | 268230 | fix: reduce SonarCloud duplication in quality registries (#679) |
 
 ### Steering
 

@@ -1,11 +1,28 @@
 export type RouteAuthTier = "public" | "device" | "member" | "admin";
+export type RouteVaultScope = "none" | "active" | "path";
 
 export interface RouteSecurityRegistration {
   readonly prefix: string;
   readonly owner: string;
   readonly auth: RouteAuthTier;
-  readonly vaultScope: "none" | "active" | "path";
+  readonly vaultScope: RouteVaultScope;
   readonly reason?: string;
+}
+
+type RouteGroupValue = string | readonly [owner: string, reason: string];
+
+/** Build one compact, typed group while keeping the complete registry enumerable. */
+function defineRouteGroup(
+  auth: RouteAuthTier,
+  vaultScope: RouteVaultScope,
+  entries: Readonly<Record<string, RouteGroupValue>>
+): readonly RouteSecurityRegistration[] {
+  return Object.entries(entries).map(([prefix, value]) => {
+    const [owner, reason] = typeof value === "string" ? [value] : value;
+    return reason === undefined
+      ? { prefix, owner, auth, vaultScope }
+      : { prefix, owner, auth, vaultScope, reason };
+  });
 }
 
 /**
@@ -14,195 +31,61 @@ export interface RouteSecurityRegistration {
  * surface cannot boot without an explicit auth and vault-scope decision.
  */
 export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
-  {
-    prefix: "/_centraid-conversations",
-    owner: "conversation-routes",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/_centraid-user",
-    owner: "user-store-routes",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_web",
-    owner: "web-app-sessions",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_apps",
-    owner: "apps-store-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_automations",
-    owner: "automations-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_insights",
-    owner: "automations-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_gateway/info",
-    owner: "gateway-info-routes.ts",
-    auth: "public",
-    vaultScope: "none",
-    reason: "metadata-only capability handshake",
-  },
-  {
-    prefix: "/centraid/_gateway/tunnel",
-    owner: "data-plane-control.ts",
-    auth: "public",
-    vaultScope: "none",
-    reason:
+  ...defineRouteGroup("device", "active", {
+    "/_centraid-conversations": "conversation-routes",
+    "/_centraid-user": "user-store-routes",
+    "/centraid/_web": "web-app-sessions",
+    "/centraid/_apps": "apps-store-routes.ts",
+    "/centraid/_automations": "automations-routes.ts",
+    "/centraid/_insights": "automations-routes.ts",
+  }),
+  ...defineRouteGroup("public", "none", {
+    "/centraid/_gateway/info": [
+      "gateway-info-routes.ts",
+      "metadata-only capability handshake",
+    ],
+    "/centraid/_gateway/tunnel": [
+      "data-plane-control.ts",
       "protected by per-boot control secret before device identity exists",
-  },
-  {
-    prefix: "/centraid/_gateway/devices",
-    owner: "devices-routes.ts",
-    auth: "device",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_gateway/members",
-    owner: "members-routes.ts",
-    auth: "admin",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_gateway/device-work",
-    owner: "device-work-routes.ts",
-    auth: "device",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_gateway/health",
-    owner: "health-routes.ts",
-    auth: "device",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_gateway/resource",
-    owner: "resource-routes.ts",
-    auth: "admin",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_gateway/capture",
-    owner: "capture-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_gateway/diagnostics",
-    owner: "diagnostics-routes.ts",
-    auth: "admin",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_gateway/backup",
-    owner: "backup-routes.ts",
-    auth: "admin",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_gateway/storage",
-    owner: "storage-routes.ts",
-    auth: "admin",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_reminders",
-    owner: "reminders-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_brief",
-    owner: "reminders-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_logs",
-    owner: "logs-routes.ts",
-    auth: "admin",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_vault/assistant",
-    owner: "assistant-routes.ts",
-    auth: "member",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_vault/demo",
-    owner: "demo-routes.ts",
-    auth: "admin",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_vault/imports",
-    owner: "import-routes.ts",
-    auth: "member",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_vault/blobs",
-    owner: "blob-routes.ts",
-    auth: "device",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_vault/connections",
-    owner: "connections-routes.ts",
-    auth: "member",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_vault/oauth/callback",
-    owner: "connections-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_vault/replica",
-    owner: "replica-routes.ts",
-    auth: "device",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_vault/changes",
-    owner: "replica-routes.ts",
-    auth: "device",
-    vaultScope: "path",
-  },
-  {
-    prefix: "/centraid/_vault",
-    owner: "vault-routes.ts",
-    auth: "member",
-    vaultScope: "active",
-  },
-  {
-    prefix: "/centraid/_templates",
-    owner: "templates-routes.ts",
-    auth: "device",
-    vaultScope: "none",
-  },
-  {
-    prefix: "/centraid/_agents",
-    owner: "agents-routes.ts",
-    auth: "device",
-    vaultScope: "active",
-  },
+    ],
+  }),
+  ...defineRouteGroup("device", "path", {
+    "/centraid/_gateway/devices": "devices-routes.ts",
+    "/centraid/_gateway/device-work": "device-work-routes.ts",
+    "/centraid/_vault/blobs": "blob-routes.ts",
+    "/centraid/_vault/replica": "replica-routes.ts",
+    "/centraid/_vault/changes": "replica-routes.ts",
+  }),
+  ...defineRouteGroup("admin", "path", {
+    "/centraid/_gateway/members": "members-routes.ts",
+  }),
+  ...defineRouteGroup("device", "none", {
+    "/centraid/_gateway/health": "health-routes.ts",
+    "/centraid/_templates": "templates-routes.ts",
+  }),
+  ...defineRouteGroup("admin", "none", {
+    "/centraid/_gateway/resource": "resource-routes.ts",
+    "/centraid/_gateway/diagnostics": "diagnostics-routes.ts",
+    "/centraid/_gateway/storage": "storage-routes.ts",
+    "/centraid/_logs": "logs-routes.ts",
+  }),
+  ...defineRouteGroup("device", "active", {
+    "/centraid/_gateway/capture": "capture-routes.ts",
+    "/centraid/_reminders": "reminders-routes.ts",
+    "/centraid/_brief": "reminders-routes.ts",
+    "/centraid/_vault/oauth/callback": "connections-routes.ts",
+    "/centraid/_agents": "agents-routes.ts",
+  }),
+  ...defineRouteGroup("admin", "active", {
+    "/centraid/_gateway/backup": "backup-routes.ts",
+    "/centraid/_vault/demo": "demo-routes.ts",
+  }),
+  ...defineRouteGroup("member", "active", {
+    "/centraid/_vault/assistant": "assistant-routes.ts",
+    "/centraid/_vault/imports": "import-routes.ts",
+    "/centraid/_vault/connections": "connections-routes.ts",
+    "/centraid/_vault": "vault-routes.ts",
+  }),
 ] as const;
 
 export function assertRouteSecurityCoverage(

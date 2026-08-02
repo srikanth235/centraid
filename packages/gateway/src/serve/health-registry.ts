@@ -55,68 +55,52 @@ export interface ExpectedHealthComponent {
   readonly waiver?: string;
 }
 
+function defineExpectedHealthGroup(
+  owner: string,
+  induction: ExpectedHealthComponent["induction"],
+  components: readonly string[]
+): readonly ExpectedHealthComponent[] {
+  return components.map((component) => ({ component, owner, induction }));
+}
+
 /**
  * Expected production health surface. The drill iterates this list rather
  * than whatever happened to register, so a deleted registration is visible.
  */
 export const EXPECTED_HEALTH_COMPONENTS: readonly ExpectedHealthComponent[] = [
-  {
-    component: "agent-failover",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  {
-    component: "automation-runs",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  {
-    component: "automations",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  { component: "backups", owner: "backup-service", induction: "probe" },
-  { component: "blob-sweep", owner: "vault-plane", induction: "report-error" },
-  { component: "broker", owner: "build-gateway", induction: "probe" },
-  { component: "catalog", owner: "build-gateway", induction: "logger" },
-  { component: "connections", owner: "build-gateway", induction: "probe" },
-  { component: "disk", owner: "build-gateway", induction: "probe" },
-  { component: "enrichment", owner: "build-gateway", induction: "probe" },
-  { component: "event-loop", owner: "build-gateway", induction: "probe" },
-  {
-    component: "filesystem",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  {
-    component: "hardware-profile",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  { component: "instance", owner: "build-gateway", induction: "report-error" },
-  {
-    component: "load-shed",
-    owner: "health-registry",
-    induction: "report-error",
-  },
-  { component: "outbox", owner: "build-gateway", induction: "logger" },
-  {
-    component: "power-posture",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  { component: "pricing", owner: "build-gateway", induction: "logger" },
-  { component: "scheduler", owner: "build-gateway", induction: "probe" },
-  {
-    component: "storage-latency",
-    owner: "build-gateway",
-    induction: "report-error",
-  },
-  { component: "storage-limit", owner: "build-gateway", induction: "probe" },
-  { component: "storage-quota", owner: "build-gateway", induction: "probe" },
-  { component: "vault-integrity", owner: "build-gateway", induction: "probe" },
-  { component: "vaults", owner: "build-gateway", induction: "probe" },
-] as const;
+  ...defineExpectedHealthGroup("build-gateway", "report-error", [
+    "agent-failover",
+    "automation-runs",
+    "automations",
+    "filesystem",
+    "hardware-profile",
+    "instance",
+    "power-posture",
+    "storage-latency",
+  ]),
+  ...defineExpectedHealthGroup("backup-service", "probe", ["backups"]),
+  ...defineExpectedHealthGroup("vault-plane", "report-error", ["blob-sweep"]),
+  ...defineExpectedHealthGroup("build-gateway", "probe", [
+    "broker",
+    "connections",
+    "disk",
+    "enrichment",
+    "event-loop",
+    "scheduler",
+    "storage-limit",
+    "storage-quota",
+    "vault-integrity",
+    "vaults",
+  ]),
+  ...defineExpectedHealthGroup("build-gateway", "logger", [
+    "catalog",
+    "outbox",
+    "pricing",
+  ]),
+  ...defineExpectedHealthGroup("health-registry", "report-error", [
+    "load-shed",
+  ]),
+].toSorted((left, right) => left.component.localeCompare(right.component));
 
 export type ComponentStatus = "ok" | "degraded" | "error";
 
