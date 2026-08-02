@@ -11,13 +11,12 @@ import {
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
-  validateOptimisticMutation,
+  prepareReplicaWrite,
 } from "@centraid/client/replica/native";
 import type {
   EnqueueIntentInput,
   GatewayAuth,
   IntentOutcome,
-  OptimisticMutation,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
   ReplicaBaseVersion,
@@ -34,6 +33,7 @@ import type {
   ReplicaSqliteDriver,
   ReplicaStatus,
   ReplicaValue,
+  ReplicaWriteMutationInput,
 } from "@centraid/client/replica/native";
 
 import { backoffSchedule } from "../backoff";
@@ -50,15 +50,7 @@ export type NativeSearchRequest = Omit<ReplicaSearchRequest, "shapeId"> & {
   shapeId?: string;
 };
 
-export type NativeOptimisticMutation =
-  | (Omit<Extract<OptimisticMutation, { op: "upsert" }>, "shapeId"> & {
-      shapeId?: string;
-      purpose?: string;
-    })
-  | (Omit<Extract<OptimisticMutation, { op: "delete" }>, "shapeId"> & {
-      shapeId?: string;
-      purpose?: string;
-    });
+export type NativeOptimisticMutation = ReplicaWriteMutationInput;
 
 export interface NativeWriteInput {
   action: string;
@@ -318,39 +310,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const optimistic = (input.optimistic ?? []).map((mutation) => {
-      const { purpose, shapeId, ...rest } = mutation;
-      return {
-        ...rest,
-        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
-      };
-    }) as OptimisticMutation[];
-    // Validate at enqueue time exactly as the web shell session does. The native
-    // write path never re-checked, so an invalid optimistic mutation (e.g. a
-    // synthetic __rowId column spread into the values) was silently dropped by
-    // applyOptimisticMutations and the edit simply never rendered. Reject loudly.
-    for (const mutation of optimistic) {
-      const shape = this.#catalog.find(
-        (candidate) => candidate.shapeId === mutation.shapeId
-      );
-      const schema = shape?.entities.find(
-        (candidate) => candidate.entity === mutation.entity
-      );
-      if (!schema) {
-        throw new ReplicaProtocolError(
-          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`
-        );
-      }
-      validateOptimisticMutation(mutation, schema);
-    }
-    const dependencies = this.#catalog
-      .filter((shape) => shape.appId === appId)
-      .flatMap((shape) =>
-        shape.entities.map((entity) => ({
-          shapeId: shape.shapeId,
-          entity: entity.entity,
-        }))
-      );
+    const { optimistic, dependencies } = prepareReplicaWrite(
+      appId,
+      input.optimistic,
+      this.#catalog,
+      this.resolveShapeId.bind(this)
+    );
     const intent = await this.#coordinator.enqueue({
       intentId: this.#intentIds.forWrite(
         appId,

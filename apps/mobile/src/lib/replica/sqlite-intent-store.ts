@@ -1,4 +1,7 @@
-import { ReplicaProtocolError } from "@centraid/client/replica/native";
+import {
+  buildIntentOutcome,
+  ReplicaProtocolError,
+} from "@centraid/client/replica/native";
 import type {
   IntentRecordStore,
   IntentOutcome,
@@ -172,18 +175,7 @@ export class SqliteIntentStore implements IntentRecordStore {
           ]
         );
       }
-      const outcome: IntentOutcome = {
-        intentId: settled.intentId,
-        status: settled.conflict
-          ? "conflict"
-          : (settled.state as IntentOutcome["status"]),
-        ...(settled.reason === undefined ? {} : { reason: settled.reason }),
-        ...(settled.output === undefined ? {} : { output: settled.output }),
-        ...(settled.conflict === undefined
-          ? {}
-          : { conflict: settled.conflict }),
-        settledAt: new Date().toISOString(),
-      };
+      const outcome = buildIntentOutcome(settled);
       this.driver.run(
         `INSERT INTO replica_intent_outcome(intent_id, settled_at, record_json)
          VALUES (?, ?, ?)

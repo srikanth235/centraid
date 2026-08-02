@@ -3,6 +3,7 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
+import { buildIntentOutcome } from "./intent-record-store.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export class MemoryIntentStore implements IntentRecordStore {
@@ -91,16 +92,7 @@ export class MemoryIntentStore implements IntentRecordStore {
       createdOrder: existing.createdOrder,
     };
     this.#records.delete(intentId);
-    const outcome: IntentOutcome = {
-      intentId: settled.intentId,
-      status: settled.conflict
-        ? "conflict"
-        : (settled.state as IntentOutcome["status"]),
-      ...(settled.reason === undefined ? {} : { reason: settled.reason }),
-      ...(settled.output === undefined ? {} : { output: settled.output }),
-      ...(settled.conflict === undefined ? {} : { conflict: settled.conflict }),
-      settledAt: new Date().toISOString(),
-    };
+    const outcome = buildIntentOutcome(settled);
     this.#outcomes.set(intentId, outcome);
     return clone(settled);
   }

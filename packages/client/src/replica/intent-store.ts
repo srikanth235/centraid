@@ -3,6 +3,7 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
+import { buildIntentOutcome } from "./intent-record-store.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export { MemoryIntentStore } from "./memory-intent-store.js";
@@ -194,16 +195,7 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       intentId,
       createdOrder: existing.createdOrder,
     };
-    const outcome: IntentOutcome = {
-      intentId: settled.intentId,
-      status: settled.conflict
-        ? "conflict"
-        : (settled.state as IntentOutcome["status"]),
-      ...(settled.reason === undefined ? {} : { reason: settled.reason }),
-      ...(settled.output === undefined ? {} : { output: settled.output }),
-      ...(settled.conflict === undefined ? {} : { conflict: settled.conflict }),
-      settledAt: new Date().toISOString(),
-    };
+    const outcome = buildIntentOutcome(settled);
     // Outcome journaling and payload scrubbing share one transaction: a
     // restart can observe either the queued intent or its terminal outcome,
     // never a silently lost delivery.

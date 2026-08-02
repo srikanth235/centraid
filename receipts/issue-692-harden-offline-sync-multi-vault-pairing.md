@@ -15,6 +15,8 @@ The implementation satisfies the six checklist items above. Pairing responses no
 
 Offline intent delivery now settles browser IndexedDB and native SQLite records into sanitized outcome journals before scrubbing queued input. Memory fallback is explicitly non-durable. Bounded base versions produce structured expected/actual conflicts; optimistic overlays are cleared while terminal outcomes remain reviewable. Change-log rows carry commit groups, page boundaries do not split groups, bootstrap/catch-up resumes from committed cursors, and cancellation plus `hasMore` are explicit. Replica status exposes coverage and durability, and transport failures carry safe structured retry guidance.
 
+The browser and native shells now share optimistic-write preparation and the durable intent stores share outcome construction. That keeps validation, dependency coverage, and settlement status identical across runtimes while avoiding quality-gate duplication in the new sync paths.
+
 Protocol/offline documentation, compatibility metadata, schema/export fingerprints, matrix ownership, and first-run evidence were updated with the implementation.
 
 ### Checklist crosswalk
@@ -80,6 +82,8 @@ Protocol/offline documentation, compatibility metadata, schema/export fingerprin
 - `packages/client/src/replica/payload-hash.test.ts`
 - `packages/client/src/replica/payload-hash.ts`
 - `packages/client/src/replica/query.ts`
+- `packages/client/src/replica/index.ts`
+- `packages/client/src/replica/native.ts`
 - `packages/client/src/replica/shell-session.ts`
 - `packages/client/src/replica/shell-transport.ts`
 - `packages/client/src/replica/sqlite-store.test.ts`
@@ -88,6 +92,7 @@ Protocol/offline documentation, compatibility metadata, schema/export fingerprin
 - `packages/client/src/replica/store-core.test.ts`
 - `packages/client/src/replica/store-core.ts`
 - `packages/client/src/replica/types.ts`
+- `packages/client/src/replica/write-helpers.ts`
 - `packages/client/src/replica/worker-client.ts`
 - `packages/gateway/src/cli/endpoint-host.ts`
 - `packages/gateway/src/routes/replica-intent-route.test.ts`
@@ -170,3 +175,4 @@ Focused coverage includes multi-vault pairing normalization/persistence, durable
 | codex-019fc267-a07-1785690170-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 9180 | 0 | 1589248 | 1947 | 11127 | 0.4495 | 3018850 | 0 | 110156800 | 282969 | feat(sync): harden offline multi-vault pairing (#692) |
 | codex-019fc267-a07-1785692337-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 276159 | 0 | 22460160 | 35056 | 311215 | 6.8313 | 3295009 | 0 | 132616960 | 318025 | chore(sync): integrate current mainline into offline hardening (#692) |
 | codex-019fc267-a07-1785692495-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 16180 | 0 | 2344192 | 1774 | 17954 | 0.6531 | 3311189 | 0 | 134961152 | 319799 | fix(sync): strengthen replica mutation coverage (#692) |
+| codex-019fc267-a07-1785695775-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 447625 | 0 | 32802048 | 34817 | 482442 | 9.8418 | 3758814 | 0 | 167763200 | 354616 | fix(sync): remove replica quality-gate duplication (#692) |
