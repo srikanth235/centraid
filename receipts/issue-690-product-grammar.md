@@ -123,6 +123,10 @@ The package-root API exception is file-scoped in `oxlint.config.ts`: the client
 barrel remains the one supported public import surface while `oxc/no-barrel-file`
 stays enforced across the rest of the repository.
 
+The shared recipe contract suite now exercises the scoped web CSS lowering as
+well as native lowering. The aggregate design-source coverage is 429/437 lines
+(98.17%), above the enforced 98% floor.
+
 Acceptance crosswalk:
 
 - [x] **P0.1 Design-system constitution.** DECIDED — constitution §§1–5: role registry with total `by` maps over `shell|blueprint|native`, Surface-axis scoping with a declared Surface→Profile lowering, five laws, role families, retirements.
@@ -239,7 +243,7 @@ bun run check:push
 ```
 
 - `bun run format`
-- `bun run --cwd packages/design test` — 25 files, 279 tests
+- `bun run --cwd packages/design test` — 25 files, 283 tests
 - `bun run --cwd packages/blueprints test` — 45 files, 649 tests
 - `bun run --cwd apps/mobile test` — 68 files, 369 tests
 - Focused client regression tests — 3 files, 29 tests
@@ -249,6 +253,7 @@ bun run check:push
 - `bun run lint:design-md`
 - `bun run design:gallery` — 22 baselines verified
 - `node scripts/mutation/run.mjs --package design` — 100% mutation score (140 mutants, zero survivors)
+- `bun run coverage` — `packages/design/src/**` at 98.17% line coverage (429/437), above the 98% floor
 - `bun run check:push` — all repository push gates pass
 
 Evidence ledger:
@@ -258,7 +263,7 @@ Evidence ledger:
 - P4: `scripts/design-gallery.mjs`, `tests/design-gallery/manifest.json`, `tests/design-gallery/baselines/`, and `apps/desktop/tests/e2e/onboarding-home.spec.ts` provide the committed RGBA diff engine, reference store, and capture emitter; `bun run design:gallery` verified all 22 baselines.
 - P5/P6: `scripts/lint-mobile-design.mjs`, `scripts/lint-design-tokens.mjs`, `DESIGN.md`, `docs/refactors/product-grammar.md`, `packages/design/src/moment-matrix.test.ts`, and the extension static assets provide the surface gates, docs, responsive/agent guidance, accessibility contracts, and matrix evidence.
 - B1–B29: the live-regression fixes are covered by the changed native/theme, blueprint, PWA, kit, mobile, client, extension, app-engine, and desktop files; the exact issue register is retained in `tests/design-grammar-matrix.json`, with behavioral/contract coverage in the affected package suites. The final `bun run check:push` result was 31/31 gates green.
-- Process evidence: this branch contains the implementation commit candidate only; no command in this task wrote to `main`, and the new `tests/matrix.json` entries are seeded demonstrated-red records rather than suppressed checks.
+- Process evidence: this branch contains the implementation plus verification-hardening commits; no command in this task wrote to `main`, and the new `tests/matrix.json` entries are seeded demonstrated-red records rather than suppressed checks.
 
 ## Decisions
 
@@ -291,6 +296,7 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785677468-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 23225 | 0 | 3147776 | 3690 | 26915 | 0.9004 | 4090220 | 0 | 176470016 | 472057 | fix(lint): scope client package barrel exception (#690) -m governance: allow-too |
 | codex-019fc1af-c03-1785678773-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 125458 | 0 | 10363136 | 15846 | 141304 | 3.1421 | 4215678 | 0 | 186833152 | 487903 | test(design): close mutation gaps in product grammar (#690) |
 | codex-019fc1af-c03-1785678822-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 4262 | 0 | 670976 | 525 | 4787 | 0.1863 | 4219940 | 0 | 187504128 | 488428 | test(design): close mutation gaps in product grammar (#690) |
+| codex-019fc1af-c03-1785680909-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 271851 | 0 | 17108992 | 13280 | 285131 | 5.1561 | 4491791 | 0 | 204613120 | 501708 | test(design): close coverage gap in product grammar (#690) |
 
 ## File map
 

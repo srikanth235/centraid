@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "../contract.js";
 import { toNativeTheme } from "../native.js";
+import { emitRecipeCss } from "./css.js";
 import {
   BUTTON_VARIANTS,
   RECIPES,
@@ -62,5 +63,17 @@ describe("revision 3 recipe registry", () => {
       expect(style.borderRadius).toBe(theme.radii.md);
       expect(style.color).toMatch(/^#/u);
     }
+  });
+
+  test("emits the scoped web lowering from the shared recipe contract", () => {
+    const css = emitRecipeCss(".centraid-inline-scope");
+
+    expect(css).toContain(
+      ".centraid-inline-scope .kit-btn { min-height: var(--target-min, 44px);"
+    );
+    expect(css).toContain(
+      '.centraid-inline-scope .kit-btn[data-variant="destructiveFilled"]'
+    );
+    expect(css.endsWith("\n")).toBe(true);
   });
 });
