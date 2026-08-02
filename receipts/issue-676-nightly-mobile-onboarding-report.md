@@ -11,6 +11,7 @@ accessibility zero-grey (15 cells).
 - [x] Register unmapped desktop e2e + mobile cold-start/scroll-frames owners in matrix
 - [x] Wire accessibility contract evidence into nightly report generation
 - [x] Prove honesty exits clean locally with staged evidence + structural contract tests
+- [x] Recreate a half-open mobile tunnel before compatibility retries
 
 ## What changed
 
@@ -75,6 +76,8 @@ accessibility zero-grey (15 cells).
 
 - **Android probe used RN fetch over the tunnel (30752829174).** Even with quiet waits, `/_gateway/info` never succeeded on emulator. `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` now uses `expo/fetch` (same as the tunnel client) and still probes the last-known base when `online` flaps false after pair; `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` covers the offline probe path.
 
+- **Recreate a half-open mobile tunnel before compatibility retries (Android run 30754204236).** The retry testID was tapped successfully eight times, but `ensureTunnelStarted()` treated the stale localhost listener as healthy and reused its broken iroh session on every remount. `apps/mobile/src/lib/phone-link.ts` now exposes a serialized `restartTunnel()` reset, `apps/mobile/src/kit/replica/ReplicaProvider.tsx` stops that proxy before remounting on a `reconnect` compatibility wall, and `apps/mobile/src/lib/phone-link.test.ts` covers the stop contract. The integration mock in `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` is typed against Expo's fetch signature.
+
 - **iOS Photos open selectors (30745625780).** Onboarding + cold-start green under the 90m cap. `tests/agent-e2e-mobile/flows/mobile-scroll-frames` / `tests/agent-e2e-mobile/flows/scroll-frames.mjs` failed tapping bare `Photos`/`People` (tiles publish `Open Photos` / `Open People`). `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` Photos assert uses the exact a11y label with a longer first-paint wait.
 
 - **iOS Tally re-tap + perf deep-link alert (30748673657).** native-v0 opened Tally then `retryableTapCommands` re-tapped `Open Tally` under the cover and failed; launcher opens are a single tap. scroll-frames hit iOS "Open in 'Centraid'?" on `centraid://perf-frames` — dismiss Open before asserting `perf-frame-sampling`; `apps/mobile/src/kit/perf/FrameProbe.tsx` also accepts hostname-form deep links.
@@ -108,6 +111,8 @@ bun run test:matrix
 node --test scripts/mobile-onboarding-maestro-contract.test.mjs
 bun run test:accessibility
 node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts
+bun run turbo run typecheck --filter=@centraid/mobile
+bun run --cwd apps/mobile test -- src/lib/phone-link.test.ts src/lib/replica/mobile-gateway-compatibility.integration.test.ts src/lib/replica/mobile-gateway-compatibility.test.ts
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
 ```
 
@@ -134,3 +139,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc146-e88-1785654623-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 203269 | 0 | 5997824 | 22355 | 225624 | 2.3430 | 203269 | 0 | 5997824 | 22355 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
 | codex-019fc146-e88-1785654708-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 9988 | 0 | 2096384 | 1137 | 11125 | 0.5661 | 213257 | 0 | 8094208 | 23492 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
 | codex-019fc146-e88-1785659650-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 440881 | 0 | 6656256 | 16394 | 457275 | 3.0122 | 654138 | 0 | 14750464 | 39886 | ci(e2e): run pairing suite flows concurrently (#676) -m governance: allow-toolch |
+| codex-019fc399-ba8-1785694321-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 393675 | 0 | 10030848 | 35112 | 428787 | 4.0186 | 393675 | 0 | 10030848 | 35112 | fix(mobile): reset stale tunnel on compatibility retry (#676) |
+| codex-019fc399-ba8-1785694444-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 12575 | 0 | 1643008 | 1675 | 14250 | 0.4673 | 406250 | 0 | 11673856 | 36787 | fix(mobile): reset stale tunnel on compatibility retry (#676) |

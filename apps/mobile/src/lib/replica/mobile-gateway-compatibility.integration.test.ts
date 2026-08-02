@@ -1,12 +1,18 @@
-import type * as ExpoFetch from "expo/fetch";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
 
 const storage = vi.hoisted(() => new Map<string, string>());
 const expoFetch = vi.hoisted(() =>
-  vi.fn<(input: string, init?: RequestInit) => Promise<Response>>()
+  vi.fn<(typeof import("expo/fetch"))["fetch"]>()
 );
+type ExpoFetchResponse = Awaited<
+  ReturnType<(typeof import("expo/fetch"))["fetch"]>
+>;
+
+function expoResponse(response: Response): ExpoFetchResponse {
+  return response as unknown as ExpoFetchResponse;
+}
 
 vi.mock(
   import("@react-native-async-storage/async-storage") as Promise<unknown>,
@@ -31,7 +37,7 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
 }));
 
-vi.mock(import("expo/fetch") as Promise<typeof ExpoFetch>, () => ({
+vi.mock(import("expo/fetch"), () => ({
   fetch: expoFetch,
 }));
 
@@ -65,7 +71,9 @@ describe("mobile gateway compatibility handshake", () => {
   });
 
   test("judges the live info response, caches support, and admits an offline restart", async () => {
-    expoFetch.mockImplementation(async () => Response.json(supportedInfo));
+    expoFetch.mockImplementation(async () =>
+      expoResponse(Response.json(supportedInfo))
+    );
 
     await expect(
       requireMobileOfflineGateway({
@@ -94,21 +102,23 @@ describe("mobile gateway compatibility handshake", () => {
   test.each([
     {
       name: "missing info route means the gateway is old",
-      response: new Response("missing", { status: 404 }),
+      response: expoResponse(new Response("missing", { status: 404 })),
       disposition: "update-gateway",
     },
     {
       name: "a newer protocol window means the store app is old",
-      response: Response.json({
-        ...supportedInfo,
-        protocolVersion: 3,
-        minSupportedProtocol: 3,
-      }),
+      response: expoResponse(
+        Response.json({
+          ...supportedInfo,
+          protocolVersion: 3,
+          minSupportedProtocol: 3,
+        })
+      ),
       disposition: "update-app",
     },
     {
       name: "a transient server failure asks for a reconnect",
-      response: new Response("failed", { status: 503 }),
+      response: expoResponse(new Response("failed", { status: 503 })),
       disposition: "reconnect",
     },
   ] as const)(
@@ -131,7 +141,9 @@ describe("mobile gateway compatibility handshake", () => {
   );
 
   test("an uncached offline start still probes the last-known base before reconnect", async () => {
-    expoFetch.mockImplementation(async () => Response.json(supportedInfo));
+    expoFetch.mockImplementation(async () =>
+      expoResponse(Response.json(supportedInfo))
+    );
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
