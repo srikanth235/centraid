@@ -90,6 +90,17 @@ function makeProps(
   };
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((_resolve) => {
+    resolve = _resolve;
+  });
+  return { promise, resolve };
+}
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let update: ((s: AssistantSnapshot) => void) | null = null;
@@ -829,6 +840,151 @@ describe("AssistantScreen suite", () => {
           'select[aria-label="Assistant runner"]'
         )?.disabled
       ).toBe(false);
+    });
+
+    it("re-enables the composer when the initial picker load rejects", async () => {
+      const props = makeProps({
+        loadModelPicker: vi
+          .fn<AssistantBridgeProps["loadModelPicker"]>()
+          .mockRejectedValue(new Error("provider status unavailable")),
+      });
+      const el = await mount(props);
+      push(emptySnap());
+      await flush();
+
+      // A failed capability read must not strand the composer in its
+      // loading-disabled state forever.
+      expect((el.querySelector(".input") as HTMLTextAreaElement).disabled).toBe(
+        false
+      );
+    });
+
+    it("ignores an older picker response after a conversation revision", async () => {
+      const first = deferred<AsstModelPickerDTO>();
+      const codex = modelPickerDTO();
+      const claude = modelPickerDTO({
+        runners: [
+          {
+            kind: "codex",
+            title: "Codex",
+            connected: true,
+            sessionReady: true,
+            hint: "ready",
+          },
+          {
+            kind: "claude-code",
+            title: "Claude Code",
+            connected: true,
+            sessionReady: true,
+            hint: "ready",
+          },
+        ],
+        selectedRunnerKind: "claude-code",
+        defaultModelName: "Claude default",
+      });
+      const props = makeProps({
+        loadModelPicker: vi
+          .fn<AssistantBridgeProps["loadModelPicker"]>()
+          .mockReturnValueOnce(first.promise)
+          .mockResolvedValue(claude),
+      });
+      const el = await mount(props);
+
+      push(emptySnap({ pickerRevision: 1 }));
+      await flush();
+      expect(
+        (
+          el.querySelector(
+            'select[aria-label="Assistant runner"]'
+          ) as HTMLSelectElement
+        ).value
+      ).toBe("claude-code");
+
+      first.resolve(codex);
+      await flush();
+      // The response for the superseded revision must not repaint Codex.
+      expect(
+        (
+          el.querySelector(
+            'select[aria-label="Assistant runner"]'
+          ) as HTMLSelectElement
+        ).value
+      ).toBe("claude-code");
+    });
+
+    it("keeps the latest overlapping runner switch", async () => {
+      const claudeResult = deferred<AsstModelPickerDTO>();
+      const copilotResult = deferred<AsstModelPickerDTO>();
+      const initial = modelPickerDTO({
+        runners: [
+          {
+            kind: "codex",
+            title: "Codex",
+            connected: true,
+            sessionReady: true,
+            hint: "ready",
+          },
+          {
+            kind: "claude-code",
+            title: "Claude Code",
+            connected: true,
+            sessionReady: true,
+            hint: "ready",
+          },
+          {
+            kind: "copilot",
+            title: "Copilot",
+            connected: true,
+            sessionReady: true,
+            hint: "ready",
+          },
+        ],
+      });
+      const props = makeProps({
+        loadModelPicker: vi
+          .fn<AssistantBridgeProps["loadModelPicker"]>()
+          .mockResolvedValue(initial),
+        onSetRunner: vi
+          .fn<AssistantBridgeProps["onSetRunner"]>()
+          .mockReturnValueOnce(claudeResult.promise)
+          .mockReturnValueOnce(copilotResult.promise),
+      });
+      const el = await mount(props);
+      push(emptySnap());
+      await flush();
+      const runner = el.querySelector(
+        'select[aria-label="Assistant runner"]'
+      ) as HTMLSelectElement;
+
+      await act(async () => {
+        runner.value = "claude-code";
+        runner.dispatchEvent(new Event("change", { bubbles: true }));
+        runner.value = "copilot";
+        runner.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(props.onSetRunner).toHaveBeenNthCalledWith(1, "claude-code");
+      expect(props.onSetRunner).toHaveBeenNthCalledWith(2, "copilot");
+
+      copilotResult.resolve(
+        modelPickerDTO({
+          runners: initial.runners,
+          selectedRunnerKind: "copilot",
+          defaultModelName: "Copilot default",
+        })
+      );
+      await flush();
+      expect(runner.value).toBe("copilot");
+
+      claudeResult.resolve(
+        modelPickerDTO({
+          runners: initial.runners,
+          selectedRunnerKind: "claude-code",
+          defaultModelName: "Claude default",
+        })
+      );
+      await flush();
+      expect(runner.value).toBe("copilot");
+      expect(runner.disabled).toBe(false);
     });
 
     it("hides the workspace select while there is only one workspace", async () => {
