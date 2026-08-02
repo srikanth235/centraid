@@ -121,6 +121,7 @@ export default function FrameProbe(): React.JSX.Element | null {
   return (
     <Pressable
       testID={FRAME_PROBE_ARM_ID}
+      accessible
       accessibilityLabel={FRAME_PROBE_ARM_ID}
       accessibilityRole="button"
       onPress={() => arm(MAESTRO_ARM_WINDOW_MS)}

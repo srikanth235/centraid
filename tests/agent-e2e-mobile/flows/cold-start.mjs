@@ -62,6 +62,14 @@ await runFlow("mobile-cold-start", async (ctx) => {
 ---
 - stopApp
 - launchApp
+- runFlow:
+    when:
+      visible: "No script URL provided.*"
+    commands:
+      # A stopped Expo dev client can occasionally lose its remembered Metro
+      # URL on iOS. Reload only that explicit redbox; a second failure still
+      # falls through to the Home assertion and keeps the sample red.
+      - tapOn: "Reload"
 - extendedWaitUntil:
     visible:
       text: "${HOME_READY_MARKER}"

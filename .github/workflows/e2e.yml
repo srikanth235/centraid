@@ -1,5 +1,6 @@
 # governance: allow-toolchain-config issue #637 — turbo-cache on build-bearing
-# nightly jobs; mobile-e2e-ios intentionally excluded (macOS native binary risk).
+# nightly jobs, including mobile-e2e-ios now that turbo.json separates native
+# artifacts by runner OS.
 name: e2e
 
 # Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
@@ -157,8 +158,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-        # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
-        # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
+        with:
+          # turbo.json includes RUNNER_OS in every task hash, so the signed
+          # macOS tunnel addon cannot restore the Linux native artifact. This
+          # makes the gateway dependency build reuse the same granular cache
+          # Android already hits without changing the native .app cache key.
+          turbo-cache: "true"
       - name: Select Xcode 26.4 or newer
         run: |
           set -euo pipefail
@@ -209,10 +214,9 @@ jobs:
       #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
       #             the part of the image that actually matters here).
       #
-      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
-      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
-      # per-repo budget with LRU eviction, the natural victim is the .app entry
-      # below — which is only ever read, never re-saved on a hit.
+      # The native .app cache below remains separate and all-or-nothing. Turbo
+      # caches only the gateway dependency tasks; its global RUNNER_OS hash
+      # keeps Linux/macOS native addons isolated.
       - name: Fingerprint the iOS native build inputs
         id: native
         working-directory: apps/mobile

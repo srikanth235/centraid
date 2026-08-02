@@ -12,6 +12,8 @@ accessibility zero-grey (15 cells).
 - [x] Wire accessibility contract evidence into nightly report generation
 - [x] Prove honesty exits clean locally with staged evidence + structural contract tests
 - [x] Recreate a half-open mobile tunnel before compatibility retries
+- [x] Expose the DEV frame-probe arm to iOS accessibility automation
+- [x] Recover a transient iOS dev-client redbox during cold-start sampling
 
 ## What changed
 
@@ -78,6 +80,8 @@ accessibility zero-grey (15 cells).
 
 - **Recreate a half-open mobile tunnel before compatibility retries (Android run 30754204236).** The retry testID was tapped successfully eight times, but `ensureTunnelStarted()` treated the stale localhost listener as healthy and reused its broken iroh session on every remount. `apps/mobile/src/lib/phone-link.ts` now exposes a serialized `restartTunnel()` reset, `apps/mobile/src/kit/replica/ReplicaProvider.tsx` stops that proxy before remounting on a `reconnect` compatibility wall, and `apps/mobile/src/lib/phone-link.test.ts` covers the stop contract. The integration mock in `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` is typed against Expo's fetch signature.
 
+- **iOS warm-run timing and follow-up fixes (30760887247).** The native `.app` cache was a hit: native build/install and cache-save steps were skipped, with restore/install taking about 35–47 seconds. The remaining setup was the uncached gateway dependency build (~5m25) and simulator boot (~2m); the sequential six-journey suite consumed ~47 minutes. The run exposed two independent automation issues. To **Expose the DEV frame-probe arm to iOS accessibility automation**, `apps/mobile/src/kit/perf/FrameProbe.tsx` marks its DEV arm as `accessible`. To **Recover a transient iOS dev-client redbox during cold-start sampling**, `tests/agent-e2e-mobile/flows/cold-start.mjs` reloads only when the explicit `No script URL provided` redbox appears before asserting Home. `.github/workflows/e2e.yml` now enables the existing OS-isolated Turbo cache for iOS too, removing that repeat gateway rebuild on subsequent warm runs.
+
 - **iOS Photos open selectors (30745625780).** Onboarding + cold-start green under the 90m cap. `tests/agent-e2e-mobile/flows/mobile-scroll-frames` / `tests/agent-e2e-mobile/flows/scroll-frames.mjs` failed tapping bare `Photos`/`People` (tiles publish `Open Photos` / `Open People`). `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` Photos assert uses the exact a11y label with a longer first-paint wait.
 
 - **iOS Tally re-tap + perf deep-link alert (30748673657).** native-v0 opened Tally then `retryableTapCommands` re-tapped `Open Tally` under the cover and failed; launcher opens are a single tap. scroll-frames hit iOS "Open in 'Centraid'?" on `centraid://perf-frames` — dismiss Open before asserting `perf-frame-sampling`; `apps/mobile/src/kit/perf/FrameProbe.tsx` also accepts hostname-form deep links.
@@ -112,6 +116,8 @@ node --test scripts/mobile-onboarding-maestro-contract.test.mjs
 bun run test:accessibility
 node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts
 bun run turbo run typecheck --filter=@centraid/mobile
+bun run lint:e2e-flows
+bun run --cwd apps/mobile lint
 bun run --cwd apps/mobile test -- src/lib/phone-link.test.ts src/lib/replica/mobile-gateway-compatibility.integration.test.ts src/lib/replica/mobile-gateway-compatibility.test.ts
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
 ```
@@ -141,3 +147,6 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc146-e88-1785659650-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 440881 | 0 | 6656256 | 16394 | 457275 | 3.0122 | 654138 | 0 | 14750464 | 39886 | ci(e2e): run pairing suite flows concurrently (#676) -m governance: allow-toolch |
 | codex-019fc399-ba8-1785694321-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 393675 | 0 | 10030848 | 35112 | 428787 | 4.0186 | 393675 | 0 | 10030848 | 35112 | fix(mobile): reset stale tunnel on compatibility retry (#676) |
 | codex-019fc399-ba8-1785694444-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 12575 | 0 | 1643008 | 1675 | 14250 | 0.4673 | 406250 | 0 | 11673856 | 36787 | fix(mobile): reset stale tunnel on compatibility retry (#676) |
+| codex-019fc399-ba8-1785699206-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 516265 | 0 | 37841408 | 64653 | 580918 | 11.7208 | 922515 | 0 | 49515264 | 101440 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
+| codex-019fc399-ba8-1785699311-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9286 | 0 | 1121024 | 984 | 10270 | 0.3182 | 931801 | 0 | 50636288 | 102424 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
+| codex-019fc399-ba8-1785699413-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5462 | 0 | 678144 | 233 | 5695 | 0.1867 | 937263 | 0 | 51314432 | 102657 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) -m governance: a |
