@@ -117,16 +117,63 @@ export interface VaultMcpHandle {
 }
 
 /** The tool descriptors this turn's `ToolContext` can actually serve. */
+export type VaultMcpSideEffect = "none" | "write";
+
+export interface VaultMcpToolRegistration {
+  readonly descriptor:
+    | typeof VAULT_SQL_TOOL
+    | typeof VAULT_INVOKE_TOOL
+    | typeof VAULT_CONTENT_TOOL;
+  readonly sideEffect: VaultMcpSideEffect;
+  readonly consent: "owner-read" | "capability-confirmation";
+  readonly ledger: true;
+  readonly available: (ctx: ToolContext) => boolean;
+  readonly run: (
+    ctx: ToolContext,
+    args: Record<string, unknown>
+  ) => ReturnType<typeof runVaultSqlTool>;
+}
+
+/**
+ * Single enumerable source of truth for the MCP surface. Adding a tool without
+ * classifying consent, side effects, and ledger coverage is intentionally a
+ * type error; list and dispatch both derive from this registry.
+ */
+export const VAULT_MCP_TOOL_REGISTRY: readonly VaultMcpToolRegistration[] = [
+  {
+    descriptor: VAULT_SQL_TOOL,
+    sideEffect: "none",
+    consent: "owner-read",
+    ledger: true,
+    available: (ctx) => Boolean(ctx.vaultSql),
+    run: (ctx, args) => runVaultSqlTool(ctx, args.sql),
+  },
+  {
+    descriptor: VAULT_INVOKE_TOOL,
+    sideEffect: "write",
+    consent: "capability-confirmation",
+    ledger: true,
+    available: (ctx) => Boolean(ctx.vaultInvoke),
+    run: (ctx, args) => runVaultInvokeTool(ctx, args),
+  },
+  {
+    descriptor: VAULT_CONTENT_TOOL,
+    sideEffect: "none",
+    consent: "owner-read",
+    ledger: true,
+    available: (ctx) => Boolean(ctx.vaultContent),
+    run: (ctx, args) => runVaultContentTool(ctx, args),
+  },
+] as const;
+
 function toolsFor(ctx: ToolContext): Array<{
   name: string;
   description: string;
   inputSchema: unknown;
 }> {
-  return [
-    { ...VAULT_SQL_TOOL },
-    ...(ctx.vaultInvoke ? [{ ...VAULT_INVOKE_TOOL }] : []),
-    ...(ctx.vaultContent ? [{ ...VAULT_CONTENT_TOOL }] : []),
-  ];
+  return VAULT_MCP_TOOL_REGISTRY.filter((tool) => tool.available(ctx)).map(
+    (tool) => ({ ...tool.descriptor })
+  );
 }
 
 async function callTool(
@@ -134,9 +181,10 @@ async function callTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<{ ok: true; result: unknown } | { ok: false; errorText: string }> {
-  if (name === VAULT_SQL_TOOL.name) return runVaultSqlTool(ctx, args.sql);
-  if (name === VAULT_INVOKE_TOOL.name) return runVaultInvokeTool(ctx, args);
-  if (name === VAULT_CONTENT_TOOL.name) return runVaultContentTool(ctx, args);
+  const tool = VAULT_MCP_TOOL_REGISTRY.find(
+    (candidate) => candidate.descriptor.name === name
+  );
+  if (tool?.available(ctx)) return tool.run(ctx, args);
   return { ok: false, errorText: `unknown tool "${name}"` };
 }
 

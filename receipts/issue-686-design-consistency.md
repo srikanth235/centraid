@@ -507,6 +507,14 @@ These five rows are the post-umbrella findings; their full descriptions, file li
   - `docs/decisions.md` — new entry **"#686 — `--t-*` role parity is now a law with a test behind it"**, carrying the law, why family is compared by genus, the full six-role derived comparison table, and why `--t-tiny` is waived rather than fixed in either direction.
   - `DESIGN.md` — the closing clause of the "`--t-tiny` is not the eyebrow rung" paragraph said the shell/blueprint split was "same role, different rendering per surface, which the contract permits". That is now false: it is a **known violation held under a waiver**. Replaced with the law, a pointer to the enforcing test, and a pointer to `docs/decisions.md`. **Front matter is unchanged and no token value moved** — `packages/design/src/design-md.test.ts` needed no edit and passes against the untouched TS source; no budget or ratchet file changed (`lint:design-tokens` reports zero regressions and `git status` shows no budget-file delta).
 
+## User impact
+
+The shell and generated apps now render from one measured token vocabulary for spacing, motion, type, radius, and semantic colour roles. Existing navigation and first-run behaviour are unchanged; the visible differences are the intentional legibility and consistency corrections recorded above.
+
+First-run: the desktop onboarding flow remains unchanged; the existing first-run home harness emits a screenshot showing the merged token contract rendered after onboarding.
+
+![Desktop first-run home under the #686 design contract](artifacts/e2e/ui-impact/issue-686-design-consistency.png)
+
 ## Out of scope
 
 - Renaming the blueprint type rungs, or naming the shell's eyebrow rung — open decisions (b) and (1)-second-half. Naming is what would let `--t-tiny` align; it is new vocabulary plus a visual change, and lane (1) deliberately stopped short of it.

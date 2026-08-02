@@ -25,6 +25,20 @@
         "headroom": "~3x observed"
       }
     },
+    "coreRouteP95Ms": {
+      "status": "measured",
+      "volume": "empty vault, 30 serial requests per core route identity",
+      "probe": "tests/perf/gateway-request.perf.test.ts",
+      "gatewayInfo": 120,
+      "apps": 120,
+      "health": 120
+    },
+    "gatewayColdStartMs": {
+      "status": "measured",
+      "volume": "fork to authenticated ready message, empty vault",
+      "probe": "tests/perf/gateway-request.perf.test.ts",
+      "ceilingMs": 5000
+    },
     "year3RestoreSeconds": {
       "status": "measured",
       "volume": "10 GiB of CAS bytes + 95,640 FK-checked rows (90,640 core_content_item + 5,000 core_party)",

@@ -1,0 +1,136 @@
+import { createHash } from "node:crypto";
+import path from "node:path";
+
+import { ConversationStore } from "../../../packages/app-engine/src/conversation/store.js";
+import { ensureConversationLedger } from "../../../packages/app-engine/src/stores/gateway-db.js";
+import { buildGateway } from "../../../packages/gateway/src/serve/build-gateway.js";
+
+const [root, faultPoint, mode = "crash"] = process.argv.slice(2);
+if (!root || !faultPoint) throw new Error("root and fault point required");
+
+const gateway = await buildGateway({
+  paths: { vaultDir: path.join(root, "vault") },
+});
+await gateway.start("http://127.0.0.1");
+const vaultId = gateway.vaults.defaultVaultId();
+const plane = gateway.vaults.get(vaultId)!;
+const db = plane.db;
+ensureConversationLedger(db.journal);
+
+const conversationId = `quality-${faultPoint}`;
+
+if (mode === "recover") {
+  const integrity = {
+    vault: db.vault.prepare("PRAGMA integrity_check").get(),
+    journal: db.journal.prepare("PRAGMA integrity_check").get(),
+  };
+  let observation: unknown;
+  if (faultPoint === "journal-after-append") {
+    observation = db.journal
+      .prepare(
+        `SELECT count(DISTINCT t.id) AS turns, count(i.id) AS items
+           FROM turns t JOIN items i ON i.turn_id = t.id
+          WHERE t.conversation_id = ?`
+      )
+      .get(conversationId);
+  } else if (faultPoint === "blob-after-stage") {
+    observation = db.vault
+      .prepare(
+        `SELECT count(*) AS sessions, max(received_bytes) AS received,
+                min(state) AS state
+           FROM blob_ingress_session
+          WHERE expected_size = 7`
+      )
+      .get();
+  } else if (faultPoint === "wal-before-checkpoint") {
+    observation = db.vault
+      .prepare(
+        "SELECT count(*) AS items FROM locker_item WHERE title = 'checkpoint canary'"
+      )
+      .get();
+  } else if (faultPoint === "automation-after-claim") {
+    const store = new ConversationStore(() => db.journal);
+    observation = {
+      conversations: (
+        db.journal
+          .prepare("SELECT count(*) AS n FROM conversations WHERE id = ?")
+          .get(conversationId) as { n: number }
+      ).n,
+      duplicateClaimAccepted: store.acquireTurnLock(
+        conversationId,
+        "duplicate-runner"
+      ),
+    };
+  }
+  process.stdout.write(
+    `QUALITY_RECOVERY ${JSON.stringify({ integrity, observation })}\n`
+  );
+  await gateway.stop();
+  process.exit(0);
+}
+
+if (faultPoint === "journal-after-append") {
+  const session = gateway.conversationHistoryStore.createSession(
+    "_assistant",
+    "quality crash append"
+  );
+  // Stable id lets recovery query the exact acknowledged append.
+  db.journal
+    .prepare("UPDATE conversations SET id = ? WHERE id = ?")
+    .run(conversationId, session.id);
+  gateway.conversationHistoryStore.recordTurn("_assistant", {
+    conversationId,
+    userMessage: "acknowledged journal input",
+    nodes: [],
+    finalText: "acknowledged journal output",
+    adapter: { kind: "codex", sessionId: "quality-crash" },
+    startedAt: 1,
+    endedAt: 2,
+    ok: true,
+  });
+} else if (faultPoint === "blob-after-stage") {
+  const begin = await db.blobTransfers.beginIngress({
+    expectedSize: 7,
+    expectedSha256: createHash("sha256").update("staged!").digest("hex"),
+    resumable: true,
+    stagedBy: plane.boot.deviceId,
+  });
+  if (begin.mode !== "spool")
+    throw new Error(`expected spool ingress, got ${begin.mode}`);
+  await db.blobTransfers.appendIngress(
+    begin.sessionId,
+    0,
+    Buffer.from("staged!")
+  );
+} else if (faultPoint === "wal-before-checkpoint") {
+  const result = await plane.invoke(plane.ownerCredential, {
+    command: "locker.add_item",
+    input: { type: "note", title: "checkpoint canary", content: "durable" },
+    purpose: "dpv:ServiceProvision",
+  });
+  if (result.status !== "executed")
+    throw new Error(`checkpoint canary was not acknowledged: ${result.status}`);
+  // The named seam is immediately before the production checkpoint call.
+} else if (faultPoint === "automation-after-claim") {
+  const store = new ConversationStore(() => db.journal);
+  store.createConversation({
+    id: conversationId,
+    kind: "automation",
+    userId: plane.boot.ownerPartyId,
+    appId: "quality",
+    automationId: "quality/crash",
+  });
+  if (!store.acquireTurnLock(conversationId, "first-runner"))
+    throw new Error("automation run was not claimed");
+} else {
+  throw new Error(`unknown fault point ${faultPoint}`);
+}
+
+process.stdout.write(`FAULT_READY ${faultPoint}\n`);
+process.kill(process.pid, "SIGSTOP");
+
+// Reached only if a broken harness resumes instead of SIGKILLing. The WAL
+// seam's operation deliberately sits after the stop so the parent proves it
+// did not run while the acknowledged write before it survives.
+if (faultPoint === "wal-before-checkpoint")
+  plane.gateway.checkpoint(plane.ownerCredential);

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 
+import { IntentQueue } from "./intents.js";
+import { MemoryIntentStore } from "./memory-intent-store.js";
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
 import { ReplicaSqliteStore } from "./store-core.js";
 import type {
@@ -180,7 +182,7 @@ function batch(
 }
 
 describe("app-level multi-device convergence", () => {
-  test("task, contact, expense, and event converge after simultaneous offline writers replay the canonical log", () => {
+  test("task, contact, expense, and event converge after simultaneous offline writers survive flaky reconnect", async () => {
     const phone = new ReplicaSqliteStore(
       new NodeSqliteDriver(),
       "vault-convergence"
@@ -193,12 +195,66 @@ describe("app-level multi-device convergence", () => {
       phone.bootstrap(initial());
       laptop.bootstrap(initial());
 
-      // Both offline writes may be visible optimistically on their source
-      // device, but the gateway serializes their accepted commands once. Every
-      // replica then consumes that same cursor-ordered truth.
+      const queues = ["device-a", "device-b"].map(
+        (writer) =>
+          new IntentQueue(new MemoryIntentStore(), {
+            idFactory: () => `intent-${writer}`,
+          })
+      );
+      const accepted: Array<{
+        intentId: string;
+        changes: ReplicaChangeBatch;
+      }> = [];
+      await Promise.all(
+        queues.map(async (queue, index) => {
+          const writer = index === 0 ? "device-a" : "device-b";
+          const intent = await queue.enqueue({
+            appId: "tasks",
+            action: "task.update",
+            input: { writer },
+          });
+          const reconnect = async (
+            reason: string | undefined
+          ): Promise<ReplicaChangeBatch | undefined> => {
+            const claimed = await queue.claimNext();
+            expect(claimed?.intentId).toBe(intent.intentId);
+            expect(claimed?.input).toMatchObject({ writer });
+            if (reason) {
+              await queue.transportFailed(intent.intentId, reason);
+              return undefined;
+            }
+            // The canonical batch is derived at the reconnect boundary from
+            // the claimed durable intent. It is not a disconnected fixture
+            // applied later by the test.
+            const acceptedBatch = batch(index + 1, writer);
+            await queue.awaitingChange(intent.intentId);
+            await queue.applyOutcomes([
+              { intentId: intent.intentId, status: "executed" },
+            ]);
+            accepted.push({
+              intentId: intent.intentId,
+              changes: acceptedBatch,
+            });
+            return acceptedBatch;
+          };
+          await reconnect("offline");
+          await reconnect("connection-reset");
+          const canonical = await reconnect(undefined);
+          expect(canonical?.changes).toHaveLength(4);
+          await expect(queue.pending()).resolves.toStrictEqual([]);
+        })
+      );
+
+      expect(accepted.map(({ intentId }) => intentId).toSorted()).toStrictEqual(
+        ["intent-device-a", "intent-device-b"]
+      );
+      accepted.sort(
+        (left, right) => left.changes.from.seq - right.changes.from.seq
+      );
+      // Both replicas consume exactly the canonical batches returned by the
+      // successful reconnects, in gateway order.
       for (const store of [phone, laptop]) {
-        store.applyChanges(batch(1, "device-a"));
-        store.applyChanges(batch(2, "device-b"));
+        for (const outcome of accepted) store.applyChanges(outcome.changes);
       }
 
       for (const [shapeId, entity] of [

@@ -1,0 +1,10 @@
+{
+  "approvedDeviation": null,
+  "entries": [
+    {
+      "file": "packages/blueprints/apps/tasks/components/Board.tsx",
+      "literal": "Inbox",
+      "reason": "Task workflow column, not the unified owner-facing Notifications surface."
+    }
+  ]
+}

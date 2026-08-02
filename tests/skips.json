@@ -200,7 +200,7 @@
     },
     "tests/scale/restore-10gib.scale.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 99,
+      "line": 101,
       "snippet": "test.skipIf(!ENABLED)(",
       "issue": 659,
       "reason": "#659 S3. Ten GiB of chunk + AEAD + restore is ~5 minutes and ~25 GiB of scratch; it has its own nightly job (restore-year3 in e2e.yml) which sets CENTRAID_SCALE_RESTORE_GIB=10. Skipping loudly when unset is deliberate — the alternative is silently shrinking to a size that proves nothing."

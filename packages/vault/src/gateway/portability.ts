@@ -140,7 +140,8 @@ export function exportVault(
  */
 export function importVaultExport(
   db: VaultDb,
-  artifact: VaultExport
+  artifact: VaultExport,
+  options: { replaceBootstrap?: boolean } = {}
 ): { imported: number } {
   const actual = sha256Hex(canonicalJson(artifact.tables));
   if (actual !== artifact.verifyHash) {
@@ -151,11 +152,43 @@ export function importVaultExport(
   const existing = db.vault
     .prepare("SELECT count(*) AS n FROM core_party")
     .get() as { n: number };
-  if (existing.n > 0) throw new Error("import target is not a fresh vault");
+  if (existing.n > 0 && !options.replaceBootstrap)
+    throw new Error("import target is not a fresh vault");
+  if (existing.n > 0 && options.replaceBootstrap) {
+    const growthTables = [
+      "core_content_item",
+      "core_event",
+      "locker_item",
+      "media_media_asset",
+      "schedule_task",
+      "sync_import_batch",
+      "tally_expense",
+    ];
+    const populated = growthTables.filter((table) => {
+      const row = db.vault
+        .prepare(`SELECT count(*) AS n FROM "${table}"`)
+        .get() as { n: number };
+      return row.n > 0;
+    });
+    if (populated.length > 0) {
+      throw new Error(
+        `portable import target contains user data (${populated.join(", ")}); replacement is allowed only on a fresh bootstrap`
+      );
+    }
+  }
   let imported = 0;
   db.vault.exec("PRAGMA foreign_keys = OFF");
   db.vault.exec("BEGIN");
   try {
+    if (existing.n > 0) {
+      const physical = new Set(
+        listVaultEntities(db.vault)
+          .map((logical) => resolveEntity(logical, db.vault)?.physical)
+          .filter((value): value is string => Boolean(value))
+      );
+      for (const table of [...physical].toReversed())
+        db.vault.exec(`DELETE FROM "${table}"`);
+    }
     const load = (logical: string): number => {
       const rows = artifact.tables[logical];
       if (!rows || rows.length === 0) return 0;

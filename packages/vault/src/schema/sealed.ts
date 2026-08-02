@@ -71,6 +71,27 @@ export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+/** Six pipeline enforcement points plus provider egress, enumerated for T3. */
+export const SEALED_ENFORCEMENT_POINTS = [
+  "ciphertext-at-rest",
+  "default-read-placeholder",
+  "receipted-reveal",
+  "journal-hash",
+  "fts-exclusion",
+  "draft-stage-sealing",
+] as const;
+
+export const SEALED_LEAK_SURFACES = [
+  "logs",
+  "sse",
+  "errors",
+  "backup-manifest",
+  "portable-export",
+  "fts-index",
+  "replica-snapshot",
+  "provider-egress",
+] as const;
+
 /**
  * Sealed columns of a logical entity ([] for everything unsealed). Canonical
  * entities resolve from the static registry above; ext-band entities (issue
@@ -127,7 +148,23 @@ function extSealedColumns(
 export const SEALED_PAYLOAD_FIELDS: Readonly<
   Record<string, readonly string[]>
 > = {
-  "locker.item": ["password", "otpSeed"],
+  // Accept both importer-shaped camelCase and canonical column-shaped keys.
+  // Staging is a generic persistence boundary: even a publisher which is
+  // registered later must never leave a declared secret in a draft row.
+  "locker.item": [
+    "password",
+    "otpSeed",
+    "otp_seed",
+    "card_number",
+    "cvv",
+    "content",
+  ],
+  "sync.connection_credential": [
+    "client_secret",
+    "access_token",
+    "refresh_token",
+    "api_key",
+  ],
 };
 
 export function sealedPayloadFieldsOf(entityType: string): readonly string[] {

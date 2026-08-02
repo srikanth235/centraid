@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { readFile, rm, stat } from "node:fs/promises";
+import { cp, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 
 import {
   createKeyring,
@@ -14,9 +14,22 @@ import {
 import type { SourceEntry } from "@centraid/backup";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { FsBlobStore, sha256OfBytes, blobUriFor } from "@centraid/vault";
+import {
+  seedYear3Vault,
+  materializeYear3Fixture,
+  year3VaultProfile,
+} from "@centraid/test-kit/year3-vault";
+import {
+  FsBlobStore,
+  bootstrapVault,
+  openVaultDb,
+  sha256OfBytes,
+  blobUriFor,
+  sealAad,
+  sealValue,
+} from "@centraid/vault";
 
-import { createTestVault } from "../helpers/factories.js";
+import { ensureConversationLedger } from "../../packages/app-engine/src/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
@@ -71,8 +84,10 @@ const ENABLED = Number.isFinite(TARGET_GIB) && TARGET_GIB > 0;
 // foreign_key_check number meaningless (measured 8.8 ms over 5,256 rows at
 // 1 GiB). Restore duration is driven by BYTES; foreign_key_check is driven by
 // ROWS. Both must be at year-3 or the rig answers the wrong question.
-const PARTY_COUNT = 5_000; // year-3 contacts
-const CONTENT_ROWS = 90_000; // year-3 photo assets
+const YEAR3 = year3VaultProfile();
+const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x67);
+const PARTY_COUNT = YEAR3.parties; // year-3 contacts
+const CONTENT_ROWS = YEAR3.photos; // year-3 photo assets
 // `core_content_item.sha256` is UNIQUE, so the row axis cannot share one CAS
 // object across rows. It also does not need to MATERIALIZE one: no foreign key
 // ties a content row to a CAS file, and foreign_key_check — the thing being
@@ -105,13 +120,39 @@ describe("restore-10gib.scale", () => {
       const restoreDir = await tempDir("restore-10gib-restore-");
       await rm(restoreDir, { recursive: true, force: true });
 
-      const db = await createTestVault({ dir: sourceDir });
-      const cas = new FsBlobStore(path.join(sourceDir, "blobs"));
-      const insertParty = db.vault.prepare(
-        `INSERT INTO core_party
-         (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, ?, '1.2')`
+      const cacheRoot =
+        process.env.CENTRAID_YEAR3_CACHE_DIR ??
+        (await tempDir("restore-year3-cache-"));
+      const materialized = await materializeYear3Fixture(
+        cacheRoot,
+        async (target) => {
+          const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
+          try {
+            bootstrapVault(seeded, { ownerName: "Restore owner" });
+            ensureConversationLedger(seeded.journal);
+            seedYear3Vault(
+              {
+                vault: seeded.vault,
+                journal: seeded.journal,
+                sealCell: (entity, column, rowId, plaintext) =>
+                  sealValue(
+                    seeded.sealKey,
+                    sealAad(entity.replace(".", "_"), column, rowId),
+                    plaintext
+                  ),
+              },
+              YEAR3
+            );
+          } finally {
+            seeded.close();
+          }
+        },
+        YEAR3
       );
+      await cp(materialized.dir, sourceDir, { recursive: true });
+      const db = openVaultDb({ dir: sourceDir, sealKey: YEAR3_SEAL_KEY });
+      onTestFinished(() => db.close());
+      const cas = new FsBlobStore(path.join(sourceDir, "blobs"));
       const insertContent = db.vault.prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
@@ -119,35 +160,10 @@ describe("restore-10gib.scale", () => {
       );
       const now = new Date().toISOString();
 
-      db.vault.exec("BEGIN IMMEDIATE");
-      for (let index = 0; index < PARTY_COUNT; index += 1) {
-        insertParty.run(`party-${index}`, `Person ${index}`, 0, 0);
-      }
-      db.vault.exec("COMMIT");
-
-      // Row axis: year-3 content rows with distinct synthetic digests.
+      // Byte axis: the fixture's 90k logical photos deliberately do not
+      // materialize 90k CAS files; large filler objects carry the real bytes.
       const blobShas: string[] = [];
-      const ROW_BATCH = 5_000;
-      for (let start = 0; start < CONTENT_ROWS; start += ROW_BATCH) {
-        db.vault.exec("BEGIN IMMEDIATE");
-        for (
-          let index = start;
-          index < Math.min(start + ROW_BATCH, CONTENT_ROWS);
-          index += 1
-        ) {
-          const sha = createHash("sha256").update(`row-${index}`).digest("hex");
-          insertContent.run(
-            `content-${index}`,
-            blobUriFor(sha),
-            sha,
-            4_096,
-            now
-          );
-        }
-        db.vault.exec("COMMIT");
-      }
-
-      // Byte axis: large filler objects, written in committed batches so a
+      // Large filler objects are written in committed batches so a
       // 10 GiB seed never holds one transaction open for the whole run.
       const BATCH = 8;
       for (let start = 0; start < BLOB_COUNT; start += BATCH) {

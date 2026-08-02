@@ -196,6 +196,7 @@ import {
   isLoopbackRequest,
   sendJson,
 } from "../routes/route-helpers.js";
+import { assertRouteSecurityCoverage } from "../routes/route-security.js";
 import {
   makeScopesRouteHandler,
   SCOPES_PATH,
@@ -752,6 +753,9 @@ export async function buildGateway(
   // aggregates it all. Hosts push externally-owned components (e.g. the
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
+  // Push-only components must exist before their first error; otherwise a
+  // never-exercised registration is invisible to the R3 expected-list drill.
+  health.registerExpectedPushComponents();
   const performanceMonitor = new GatewayPerformanceMonitor();
   // Per-route duration histograms (issue #659 R5) — recorded in
   // `composedHandler` below, read only when a health snapshot is taken.
@@ -4349,11 +4353,13 @@ export async function buildGateway(
       },
     }
   );
-  const prefixDispatch = createRoutePrefixDispatch([
+  const compiledRouteEntries = [
     forRoutePrefixes(CONVERSATIONS_PREFIX, conversationHandler),
     forRoutePrefixes(USER_STORE_PREFIX, userStoreHandler),
     ...routeEntries,
-  ]);
+  ];
+  assertRouteSecurityCoverage(compiledRouteEntries);
+  const prefixDispatch = createRoutePrefixDispatch(compiledRouteEntries);
   // Retain the public BuiltGateway seam as a one-entry compiled dispatcher;
   // callers never receive or linearly walk the underlying route registry.
   const extraHandlers: RouteHandler[] = [prefixDispatch];

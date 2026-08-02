@@ -42,6 +42,7 @@
       { "schema": "blob", "table": "custody_state", "verbs": "read" }
     ]
   },
+  "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "upload",

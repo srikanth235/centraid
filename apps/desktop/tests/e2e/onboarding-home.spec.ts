@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+
 import { test, expect } from "@playwright/test";
 
 import {
@@ -106,6 +109,19 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
     // Onboarding view gone, home shell present.
     await onboarding.waitFor({ state: "detached" });
     await waitForHome(page);
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-679-first-run-home.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-686-design-consistency.png"),
+      fullPage: true,
+    });
 
     // Persisted flag means a relaunch would skip onboarding, and the local
     // gateway is now really running.

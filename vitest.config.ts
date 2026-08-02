@@ -6,6 +6,7 @@ import coverageFloors from "./tests/coverage-floors.json";
 // coverage.config.ts` (#576) filters this same list down to the packages a diff
 // touches, so the two configs cannot drift into disagreeing about what exists.
 export const coverageProjects = [
+  "vitest.quality.config.ts",
   "packages/agent-runtime",
   "packages/app-engine",
   "packages/automation",

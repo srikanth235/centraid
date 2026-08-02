@@ -65,6 +65,7 @@
       }
     ]
   },
+  "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "add-person",

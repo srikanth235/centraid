@@ -22,6 +22,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - Escape hatches exist (`SKIP_GOVERNANCE=1`, `git commit --no-verify`) — but every skipped commit is still checked in CI.
 - Every user-facing interaction has a perceived-latency budget. A hot path that ships without a measured budget is an incomplete feature, not a fast one nobody got around to measuring.
 - Nothing whose cost scales with vault size runs synchronously on the request path or the event loop. Growth is the default assumption; "it is small today" is an observation, not a design.
+- Every user-facing quality gate lands with a seeded demonstrated-red run, recorded in the receipt and dated in the [`tests/matrix.json`](tests/matrix.json) qualities layer. Green-only evidence is incomplete evidence.
+- Every gate knob is tighten-only or waiver-gated. A budget, allowlist, classification, or expected-component list that can be silently widened in the same change is not a gate.
 
 ## Directives
 
