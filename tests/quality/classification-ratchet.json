@@ -4,7 +4,7 @@
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
     "packages/automation/src/manifest/manifest.ts": "0aa200d5ba16a0fcd200032aab3129e3f974692a01478137f440d1d9a08d0c0d",
-    "packages/gateway/src/routes/route-security.ts": "ce6df375d8b798959ed6aa5c555f8ac30e9cf2f48b89f16c861988c4c85cc45c",
+    "packages/gateway/src/routes/route-security.ts": "26008724a88da1af21fa416f8b4fc0e62d196fddd6d9618e295b4ab8743e8cb3",
     "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
     "packages/vault/src/schema/sealed.ts": "064b112ba05240dbac2a1360f0f5b79b452273577e1ddf7844e2a23a27551248",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
