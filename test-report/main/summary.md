@@ -4,7 +4,7 @@
 
 | Signal | Value |
 | --- | ---: |
-| Evidence passed | 887 |
+| Evidence passed | 891 |
 | Evidence failed | 0 |
 | Cells failed (ran) | 0 |
 | Cells not run | 55 |
@@ -14,6 +14,6 @@
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Generated: `2026-08-01T16:44:27.282Z`
+Generated: `2026-08-02T06:14:14.493Z`
 
 <!-- centraid-test-health-report -->
