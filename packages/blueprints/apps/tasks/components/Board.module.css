@@ -29,7 +29,7 @@
   color: var(--danger);
 }
 .eyebrow.toneAccent {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .eyebrowCount {
   font-family: var(--mono);

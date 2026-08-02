@@ -187,7 +187,7 @@
 .receiptChip {
   font-family: var(--mono);
   font-size: 9px;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 var(--sp-1);

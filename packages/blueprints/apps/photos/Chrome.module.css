@@ -45,14 +45,14 @@
   --custody-warn: var(--warning);
   /* The generic dark layer sets `--bg: var(--bg-wall)`; wall.css (which would
      define it) never loads inline, so pin a violet-dark backdrop here. */
-  --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l) + 1%));
+  --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l, 10%) + 1%));
 }
 
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .appRoot.appRoot {
     --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --custody-warn: var(--warning);
-    --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l) + 1%));
+    --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l, 10%) + 1%));
   }
 }
 

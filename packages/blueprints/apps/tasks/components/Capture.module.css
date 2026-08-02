@@ -69,7 +69,7 @@
   margin-left: auto;
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 
 @media (max-width: 519px) {

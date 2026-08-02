@@ -28,7 +28,7 @@
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .navCount {
@@ -40,7 +40,7 @@
 .projectLabel {
   margin: var(--sp-4) 10px 6px;
   color: var(--text-faint);
-  font: var(--t-label);
+  font: var(--t-tiny);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -111,7 +111,7 @@
   color: var(--text-faint);
 }
 .consentLine svg {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 .consentLine span {
