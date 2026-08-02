@@ -140,13 +140,13 @@ export function pasteAndConnectPairingTicketCommands(
   homeReadyMarker,
   dismissKeyboardOnboarding = DISMISS_KEYBOARD_ONBOARDING
 ) {
-  // Trailing \\.? so "Paste a pairing ticket first." (with period) matches —
-  // Maestro textRegex is full-string; a bare alternative missed the error and
-  // fell through into eraseText:2000 (30716166878).
+  // Trailing .? so "Paste a pairing ticket first." (with period) matches —
+  // Maestro textRegex is full-string. Do NOT use \. inside the double-quoted
+  // YAML value (BAD_DQ_ESCAPE → configure-gateway exits in ~3s, 30735481514).
   const progressOrError =
     "Connecting…|Who's using|Enter Centraid|" +
     homeReadyMarker +
-    "|Paste a pairing ticket first\\.?|not a Centraid pairing|expired|Could not reach";
+    "|Paste a pairing ticket first.?|not a Centraid pairing|expired|Could not reach";
   return `${openPastePathCommands()}# Focus the pairing TextInput by testID — not the lede text that also
 # contains "Paste the one-line ticket" (empty Connect is a silent no-op).
 - tapOn:

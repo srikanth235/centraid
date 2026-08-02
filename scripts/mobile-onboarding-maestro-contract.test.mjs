@@ -72,6 +72,9 @@ test("configureGateway opens paste, then submits with live Connect label", () =>
     stripLineComments(firstRun),
     /^\s*- eraseText:\s*2000\s*$/mu
   );
+  // Period-tolerant empty-ticket error — must not use \. inside YAML "…" quotes.
+  assert.match(firstRun, /Paste a pairing ticket first\.\?/u);
+  assert.doesNotMatch(firstRun, /Paste a pairing ticket first\\\.\?/u);
   // Maestro YAML steps only — ban the stale label as a step value, not comments.
   assert.doesNotMatch(
     stripLineComments(firstRun),
