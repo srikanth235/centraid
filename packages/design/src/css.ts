@@ -9,7 +9,7 @@ import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { BRAND, EASE, themes } from "./themes";
+import { EASE, themes } from "./themes";
 import type { Theme, ThemeName } from "./themes";
 import {
   fontStacks,
@@ -51,7 +51,7 @@ function themeProps(theme: Theme): Record<string, string> {
     "--danger": theme.danger,
     "--device-wall": theme.deviceWall,
     "--glass-film": theme.sidebarBg,
-    "--glass-sheen": theme.sidebarBlur === "none" ? "none" : theme.sidebarBlur,
+    "--glass-sheen": theme.sidebarBlur,
     "--focus-ring": "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)",
     "--focus-ring-color": theme.accent,
     "--line": theme.line,
@@ -92,11 +92,6 @@ export function toCss(): string {
   staticProps["--o-disabled"] = "0.45";
   staticProps["--dur-1"] = "120ms";
   staticProps["--dur-2"] = "200ms";
-  staticProps["--app-identity-text"] = paletteText.light.teal;
-  staticProps["--accent"] = BRAND;
-  staticProps["--focus-ring"] =
-    "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)";
-
   for (const [key, value] of Object.entries(fontStacks))
     staticProps[`--font-${key}`] = value;
   for (const [key, value] of Object.entries(type)) {

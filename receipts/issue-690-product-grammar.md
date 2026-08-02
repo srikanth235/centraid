@@ -115,6 +115,10 @@ failures, the unimplemented shortcut hint, and extension off-token styling.
 tests, mobile token gate, and `scripts/design-gallery.mjs` make the constitution
 executable and keep the reference states reviewable.
 
+The design mutation seam now exercises the newly added CSS/theme/type lowering
+branches and tile parser boundary; the scoped `packages/design` run is at 100%
+(140 mutants, zero survivors) against its 93% floor.
+
 The package-root API exception is file-scoped in `oxlint.config.ts`: the client
 barrel remains the one supported public import surface while `oxc/no-barrel-file`
 stays enforced across the rest of the repository.
@@ -244,6 +248,7 @@ bun run check:push
 - `bun run lint:design-tokens`
 - `bun run lint:design-md`
 - `bun run design:gallery` — 22 baselines verified
+- `node scripts/mutation/run.mjs --package design` — 100% mutation score (140 mutants, zero survivors)
 - `bun run check:push` — all repository push gates pass
 
 Evidence ledger:
@@ -284,6 +289,8 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785674692-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 146048 | 0 | 6058752 | 22061 | 168109 | 2.2107 | 3581586 | 0 | 148630784 | 426575 | feat(design): establish product grammar across surfaces (#690) |
 | codex-019fc1af-c03-1785675619-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 297237 | 0 | 14227968 | 17744 | 314981 | 4.5662 | 3878823 | 0 | 162858752 | 444319 | fix(gallery): avoid unused lint suppression in capture lane (#690) |
 | codex-019fc1af-c03-1785677468-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 23225 | 0 | 3147776 | 3690 | 26915 | 0.9004 | 4090220 | 0 | 176470016 | 472057 | fix(lint): scope client package barrel exception (#690) -m governance: allow-too |
+| codex-019fc1af-c03-1785678773-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 125458 | 0 | 10363136 | 15846 | 141304 | 3.1421 | 4215678 | 0 | 186833152 | 487903 | test(design): close mutation gaps in product grammar (#690) |
+| codex-019fc1af-c03-1785678822-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 4262 | 0 | 670976 | 525 | 4787 | 0.1863 | 4219940 | 0 | 187504128 | 488428 | test(design): close mutation gaps in product grammar (#690) |
 
 ## File map
 
@@ -646,6 +653,7 @@ Changed paths covered by this receipt:
 - `packages/design/src/css-properties.test.ts`
 - `packages/design/src/css.test.ts`
 - `packages/design/src/css.ts`
+- `packages/design/src/tile.ts`
 - `packages/design/src/design-md.test.ts`
 - `packages/design/src/format.test.ts`
 - `packages/design/src/format.ts`
