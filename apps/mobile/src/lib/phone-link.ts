@@ -296,6 +296,8 @@ let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 export async function restartTunnel(): Promise<void> {
   // Do not race a start that another foreground consumer already requested.
   await startInFlight?.catch(() => undefined);
+  // The next resolveGatewayBase call binds a replacement native transport; its
+  // first request must not inherit the connection that this stop just closed.
   await stopTunnel().catch(() => {
     /* already stopped or unavailable */
   });

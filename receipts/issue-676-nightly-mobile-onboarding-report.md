@@ -12,6 +12,7 @@ accessibility zero-grey (15 cells).
 - [x] Wire accessibility contract evidence into nightly report generation
 - [x] Prove honesty exits clean locally with staged evidence + structural contract tests
 - [x] Recreate a half-open mobile tunnel before compatibility retries
+- [x] Drop failed native tunnel connections before retrying compatibility probes
 - [x] Expose the DEV frame-probe arm to iOS accessibility automation
 - [x] Recover a transient iOS dev-client redbox during cold-start sampling
 
@@ -79,6 +80,10 @@ accessibility zero-grey (15 cells).
 - **Android probe used RN fetch over the tunnel (30752829174).** Even with quiet waits, `/_gateway/info` never succeeded on emulator. `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` now uses `expo/fetch` (same as the tunnel client) and still probes the last-known base when `online` flaps false after pair; `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` covers the offline probe path.
 
 - **Recreate a half-open mobile tunnel before compatibility retries (Android run 30754204236).** The retry testID was tapped successfully eight times, but `ensureTunnelStarted()` treated the stale localhost listener as healthy and reused its broken iroh session on every remount. `apps/mobile/src/lib/phone-link.ts` now exposes a serialized `restartTunnel()` reset, `apps/mobile/src/kit/replica/ReplicaProvider.tsx` stops that proxy before remounting on a `reconnect` compatibility wall, and `apps/mobile/src/lib/phone-link.test.ts` covers the stop contract. The integration mock in `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` is typed against Expo's fetch signature.
+
+- **Drop failed native tunnel connections before retrying compatibility probes.** The Android debug bundle showed the compatibility wall surviving a full proxy restart. Both native `TunnelTransport` implementations in `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelWire.kt` and `apps/mobile/modules/centraid-tunnel/ios/TunnelWire.swift` now close a cached connection when `openBi` fails and only cache a fresh QUIC connection after its first bidirectional stream opens; a failed fresh open is closed immediately, so the next probe can make a genuinely new connection instead of inheriting a poisoned one.
+
+- **Ratchet the native cache identities.** `apps/mobile/native-fingerprints.json` now records the reviewed Android and iOS native recipes after the two `TunnelWire` changes; L1–L3 stayed complete and `ci:native-state --write` moved only the L4 hashes.
 
 - **iOS warm-run timing and follow-up fixes (30760887247).** The native `.app` cache was a hit: native build/install and cache-save steps were skipped, with restore/install taking about 35–47 seconds. The remaining setup was the uncached gateway dependency build (~5m25) and simulator boot (~2m); the sequential six-journey suite consumed ~47 minutes. The run exposed two independent automation issues. To **Expose the DEV frame-probe arm to iOS accessibility automation**, `apps/mobile/src/kit/perf/FrameProbe.tsx` marks its DEV arm as `accessible`. To **Recover a transient iOS dev-client redbox during cold-start sampling**, `tests/agent-e2e-mobile/flows/cold-start.mjs` reloads only when the explicit `No script URL provided` redbox appears before asserting Home. `.github/workflows/e2e.yml` now enables the existing OS-isolated Turbo cache for iOS too, removing that repeat gateway rebuild on subsequent warm runs.
 
@@ -150,3 +155,6 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785699206-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 516265 | 0 | 37841408 | 64653 | 580918 | 11.7208 | 922515 | 0 | 49515264 | 101440 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
 | codex-019fc399-ba8-1785699311-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9286 | 0 | 1121024 | 984 | 10270 | 0.3182 | 931801 | 0 | 50636288 | 102424 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
 | codex-019fc399-ba8-1785699413-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5462 | 0 | 678144 | 233 | 5695 | 0.1867 | 937263 | 0 | 51314432 | 102657 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) -m governance: a |
+| codex-019fc399-ba8-1785704912-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 507334 | 0 | 12752896 | 25567 | 532901 | 4.8401 | 1444597 | 0 | 64067328 | 128224 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785706418-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 19988 | 0 | 2605056 | 3278 | 23266 | 0.7504 | 1464585 | 0 | 66672384 | 131502 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785706602-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 27169 | 0 | 4895488 | 2748 | 29917 | 1.3330 | 1491754 | 0 | 71567872 | 134250 | fix(mobile): retire poisoned tunnel streams (#676) |

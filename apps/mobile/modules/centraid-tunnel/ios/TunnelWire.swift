@@ -221,12 +221,19 @@ actor TunnelTransport {
       do {
         return try await IrohAdapter.openBi(connection)
       } catch {
+        IrohAdapter.closeConnection(connection)
         self.connection = nil
       }
     }
     let fresh = try await IrohAdapter.dial(endpoint, ticket: ticket, alpn: TunnelWire.tunnelAlpn)
-    connection = fresh
-    return try await IrohAdapter.openBi(fresh)
+    do {
+      let stream = try await IrohAdapter.openBi(fresh)
+      connection = fresh
+      return stream
+    } catch {
+      IrohAdapter.closeConnection(fresh)
+      throw error
+    }
   }
 
   func close() async {
