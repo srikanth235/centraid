@@ -1153,6 +1153,19 @@ both are green above.
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
 
+## Pre-merge gate
+
+`AGENTS.md` requires `bun run check:full` for shared-infrastructure changes, which this is (`packages/design` moves values in both emitters and adds contract vocabulary). Everything above was verified at the `check:push` tier plus CI; this is the tier-2 gate:
+
+```
+$ bun run check:full
+# check:pr && test:affected:full && coverage && test:mutation:pr
+#   && test:perf:pr && desktop e2e && web e2e   — chained with &&
+exit 0
+# web e2e tail: 15 passed (30.1s), incl. web vitals — LCP / INP / CLS
+#   CLS 0 (ceiling 0.1), DCL 13.8ms, load 20.6ms
+```
+
 ## Accounting
 
 <!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
@@ -1217,6 +1230,10 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785633145-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 20434 | 13305822 | 18206 | 38690 | 7.2360 | 1573 | 1818688 | 242629940 | 634797 | docs(design): record that the two type scales have diverged in meaning (#686)--t |
 | claude-code-ab8b1729-92f-1785633752-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 40 | 27337 | 10908675 | 20041 | 47418 | 6.1264 | 1613 | 1846025 | 253538615 | 654838 | docs(design): record why --t-tiny is not the eyebrow rung (#686)Proposed alignin |
 | claude-code-ab8b1729-92f-1785635007-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 38 | 23096 | 10650491 | 15896 | 39030 | 5.8672 | 1651 | 1869121 | 264189106 | 670734 | docs(design): correct the eyebrow-rung claim; 94 rules carry 51 shapes (#686)The |
+| claude-code-ab8b1729-92f-1785637258-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 34 | 11214 | 9747793 | 9290 | 20538 | 5.1764 | 1685 | 1880335 | 273936899 | 680024 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637307-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 1186 | 577383 | 200 | 1388 | 0.3011 | 1687 | 1881521 | 274514282 | 680224 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637381-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 4547 | 5214212 | 2838 | 7403 | 2.7066 | 1705 | 1886068 | 279728494 | 683062 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637429-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 312 | 580500 | 200 | 514 | 0.2972 | 1707 | 1886380 | 280308994 | 683262 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
 
 ### Steering
 
