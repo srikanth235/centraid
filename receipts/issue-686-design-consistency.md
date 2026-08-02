@@ -12,8 +12,8 @@
 - [x] B2 shell type-scale adoption + ratchet
 - [x] B3 shell radius adoption + ratchet
 - [x] B4 mono body face decided + documented
-- [x] C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference — **landed as `docs/design-language.md`, then superseded by F2**: that file was folded into root `DESIGN.md` and deleted. At HEAD the index row and the `ui-grounding.ts` pointer name `DESIGN.md`; `docs/design-language.md` does not exist.
-- [x] C2 `.design-sync` stale conventions neutralized — **superseded by F2**: the two files were first replaced with stale-version warnings, then the whole `.design-sync/` directory (25 files) was deleted.
+- [x] C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference
+- [x] C2 `.design-sync` stale conventions neutralized
 - [x] C3 stale mobile-theming comments fixed
 - [x] C4 `styles.css` eaten comment restored
 - [x] D1 typeface decision recorded in docs/decisions.md
@@ -425,6 +425,22 @@
   - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/DESIGN.md` — the Typography section gains a **"`--t-tiny` is not the eyebrow rung"** paragraph directly under "Mono is the signature", which is the sentence that invited the misreading. It records what the five shell consumers actually are, that the chrome's eyebrow idiom is mono at 8–10.5px *below* this rung, that the sub-11px rung is unnamed debt, and why the blueprint's `--t-tiny` is legitimately mono (its rung is 0.6rem/9.6px and lands inside that band). **Front matter is unchanged** — no token value moved, so `packages/design/src/design-md.test.ts` needed no edit and still passes against the untouched TS source.
 
 - **Self-correction recorded** — `docs/decisions.md`'s claim that the shell has "an unnamed sub-11px mono eyebrow rung" was measured and refuted: the 94 mono eyebrow rules carry **51 distinct (size, weight, tracking) shapes**, largest cluster 6. A `--t-eyebrow` shorthand would fit 6% of sites and become a second `--r-lg` — vocabulary that exists because it seemed principled rather than because anything could adopt it. The entry now records that converging 51 ad-hoc decisions is a design pass, not a naming exercise.
+
+- **Recognisability split from legibility in the gate** — `packages/design/src/contrast.test.ts` now asserts the `readsAsRole` hue-and-chroma law in its own tests ("semantic states still read as their role", shell and app surfaces) rather than inside the body-floor tests. The audit flagged that greying `DANGER_BASE` failed under a heading about contrast floors, which named the wrong cause. Verified by sabotage: `#6E6E6E` now fails 2 tests, both named for recognisability, and reverts clean. The split pushed `contrast.test.ts` over the 625-line cap, so the semantic-state helpers (`readsAsRole`, `selfTint`, `SEMANTIC_STATES`, `SELF_TINT`, `RECOGNISABLE_STATE`, `STATE_HUE`, `MIN_STATE_SATURATION`) moved to `packages/design/src/oklab.ts` — extraction, not a waiver.
+
+### Checklist annotations (moved out of the checklist so the crosswalk matches verbatim)
+
+- **C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference** **landed as `docs/design-language.md`, then superseded by F2**: that file was folded into root `DESIGN.md` and deleted. At HEAD the index row and the `ui-grounding.ts` pointer name `DESIGN.md`; `docs/design-language.md` does not exist.
+- **C2 `.design-sync` stale conventions neutralized** **superseded by F2**: the two files were first replaced with stale-version warnings, then the whole `.design-sync/` directory (25 files) was deleted.
+
+- **E1 docs — `--c-*` shadow palette retired to `--kind-*`, hex/rgb purged**; **E2 photos — scrims through `--scrim`, kit composition raised, serif resolved**; **E3 tally — `--pos`/`--neg` → `--success`/`--danger`, literal-mixed `color-mix()` endpoints removed**; **E4 locker + people — `composes` raised (locker app 2 → 9), hex/rgb purged**; **E5 agenda/notes/tasks — literals swept; blueprint `font-size` moved onto the type scale (see F6)** — these five are the per-app split of the burn-down described in the E bullet above; the file lists and counts for each are in that bullet and in `packages/blueprints/src/token-purity-allowlist.ts`.
+
+These five rows are the post-umbrella findings; their full descriptions, file lists and verification are in the bullets and fenced blocks above:
+
+- F4 Extend the unresolved-`var()` gate to `packages/client`. The scan found **13 unresolvable names across 15 files** (31 references); **12 were bound to real tokens, 1 (`--profile-accent`) was allowlisted** as legitimately runtime-provided from TSX — so "fixed 13" overstates it by one.
+- F5 Clear the pinned blueprint `UNRESOLVED_VAR_DEBT` — all 12 phantoms bound, list now `[]`
+- F6 composable size rungs + the exact-match sweep (411 conversions)
+- F7 Shell `--t-tiny` → mono realignment investigated and **deliberately declined** on the measurement; the real gap (an unnamed sub-11px mono eyebrow rung, 51 distinct shapes) is recorded as debt in `docs/decisions.md`, not taken here.
 
 ## Out of scope
 
@@ -1307,6 +1323,16 @@ exit 0
 | claude-code-ab8b1729-92f-1785637307-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 1186 | 577383 | 200 | 1388 | 0.3011 | 1687 | 1881521 | 274514282 | 680224 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
 | claude-code-ab8b1729-92f-1785637381-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 4547 | 5214212 | 2838 | 7403 | 2.7066 | 1705 | 1886068 | 279728494 | 683062 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
 | claude-code-ab8b1729-92f-1785637429-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 312 | 580500 | 200 | 514 | 0.2972 | 1707 | 1886380 | 280308994 | 683262 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785639425-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 80 | 40859 | 23738921 | 27739 | 68678 | 12.8187 | 1787 | 1927239 | 304047915 | 711001 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639478-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 599 | 606400 | 198 | 799 | 0.3119 | 1789 | 1927838 | 304654315 | 711199 | test(design): fail recognisability under its own name (#686)Co-Authored-By: Clau |
+| claude-code-ab8b1729-92f-1785639532-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 6 | 1791 | 1820997 | 1620 | 3417 | 0.9622 | 1795 | 1929629 | 306475312 | 712819 | x (#686) |
+| claude-code-ab8b1729-92f-1785639680-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 4906 | 5490029 | 3862 | 8786 | 2.8723 | 1813 | 1934535 | 311965341 | 716681 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639736-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 708 | 612102 | 198 | 908 | 0.3154 | 1815 | 1935243 | 312577443 | 716879 | test(design): fail recognisability under its own name (#686)Co-Authored-By: Clau |
+| claude-code-ab8b1729-92f-1785639799-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2546 | 2452208 | 2136 | 4690 | 1.2955 | 1823 | 1937789 | 315029651 | 719015 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639849-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 803 | 614083 | 197 | 1002 | 0.3170 | 1825 | 1938592 | 315643734 | 719212 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
+| claude-code-ab8b1729-92f-1785639907-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 572 | 614886 | 636 | 1210 | 0.3269 | 1827 | 1939164 | 316258620 | 719848 | test(design): recognisability fails under its own name, not the contrast floor ( |
+| claude-code-ab8b1729-92f-1785639957-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 670 | 615458 | 197 | 869 | 0.3169 | 1829 | 1939834 | 316874078 | 720045 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
+| claude-code-ab8b1729-92f-1785640016-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2442 | 2466220 | 1392 | 3842 | 1.2832 | 1837 | 1942276 | 319340298 | 721437 | test(design): recognisability fails under its own name, not the contrast floor ( |
 
 ### Steering
 

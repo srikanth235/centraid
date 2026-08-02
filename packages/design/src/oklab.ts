@@ -6,7 +6,7 @@
 // oklab mix, extracted from `contrast.test.ts` so both that file and its
 // callers stay under the file-size limit.
 
-import { parseColor, toHex } from "./color.js";
+import { parseColor, rgbToHsl, toHex } from "./color.js";
 
 type Triple = [number, number, number];
 
@@ -158,4 +158,55 @@ export function declarations(
     if (m?.groups?.name && m.groups.value) out[m.groups.name] = m.groups.value;
   }
   return out;
+}
+
+// ── Semantic states ────────────────────────────────────────────────────────
+/** The three state roles, in the order the separation check reports them. */
+export const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
+/** The self-wash strength `color.ts` solves these rungs for, and the strength
+ *  every `color-mix(… var(--danger) N%, transparent)` chip in the tree uses. */
+export const SELF_TINT = 0.12;
+/** Past this a state has stopped being its hue and become near-black (light)
+ *  or near-white (dark). Same guard the accent fills carry. */
+export const RECOGNISABLE_STATE = 12;
+/** …and the other way a solve can cheat: desaturate. A grey clears every
+ *  contrast floor on every surface and stays 0.06 from its neighbours in
+ *  oklab, and codes nothing — "this is an error" has to be legible as RED, not
+ *  just legible. So each role is held to its hue family and to real chroma.
+ *  Bands are wide (they are a sanity check, not a tuning knob) but they are
+ *  closed: nothing outside them can be the role. */
+export const STATE_HUE = {
+  // Red, wrapping 0.
+  "--danger": [340, 20],
+  // Green.
+  "--success": [70, 160],
+  // Amber/ochre.
+  "--warning": [20, 60],
+} as const;
+export const MIN_STATE_SATURATION = 0.2;
+
+/** True while `value` still reads as `role`'s colour: right hue family, and
+ *  saturated enough to be a hue at all rather than a grey. */
+export function readsAsRole(
+  value: string,
+  role: keyof typeof STATE_HUE
+): boolean {
+  const [hue, sat] = rgbToHsl(parseColor(value).rgb);
+  const [lo, hi] = STATE_HUE[role];
+  const inBand = lo > hi ? hue >= lo || hue <= hi : hue >= lo && hue <= hi;
+  return inBand && sat >= MIN_STATE_SATURATION;
+}
+
+/** `color-mix(in oklab, C 12%, transparent)` over `bg` — the alpha composite a
+ *  browser performs for a state-tinted chip. */
+export function selfTint(value: string, bg: string): string {
+  const fg = parseColor(value).rgb;
+  const back = parseColor(bg).rgb;
+  return toHex(
+    [0, 1, 2].map((i) => {
+      const a = fg[i] ?? 0;
+      const b = back[i] ?? 0;
+      return a * SELF_TINT + b * (1 - SELF_TINT);
+    }) as unknown as [number, number, number]
+  );
 }

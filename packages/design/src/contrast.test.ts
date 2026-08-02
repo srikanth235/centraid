@@ -16,7 +16,16 @@ import { describe, expect, test } from "vitest";
 import { toBlueprintCss } from "./blueprint.js";
 import { contrastRatio, parseColor, rgbToHsl, toHex } from "./color.js";
 import { toCss } from "./css.js";
-import { declarations, evalColorMix, oklabDistance } from "./oklab.js";
+import {
+  declarations,
+  evalColorMix,
+  oklabDistance,
+  readsAsRole,
+  RECOGNISABLE_STATE,
+  SELF_TINT,
+  SEMANTIC_STATES,
+  selfTint,
+} from "./oklab.js";
 import { palette } from "./palette.js";
 import { BRAND } from "./themes/shared.js";
 
@@ -50,54 +59,6 @@ function resolve(value: string, scope: Record<string, string>): string {
       (_whole: string, a: string, op: string, b: string) =>
         `${op === "+" ? Number(a) + Number(b) : Number(a) - Number(b)}%`
     );
-}
-
-// ── Semantic states ────────────────────────────────────────────────────────
-/** The three state roles, in the order the separation check reports them. */
-const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
-/** The self-wash strength `color.ts` solves these rungs for, and the strength
- *  every `color-mix(… var(--danger) N%, transparent)` chip in the tree uses. */
-const SELF_TINT = 0.12;
-/** Past this a state has stopped being its hue and become near-black (light)
- *  or near-white (dark). Same guard the accent fills carry. */
-const RECOGNISABLE_STATE = 12;
-/** …and the other way a solve can cheat: desaturate. A grey clears every
- *  contrast floor on every surface and stays 0.06 from its neighbours in
- *  oklab, and codes nothing — "this is an error" has to be legible as RED, not
- *  just legible. So each role is held to its hue family and to real chroma.
- *  Bands are wide (they are a sanity check, not a tuning knob) but they are
- *  closed: nothing outside them can be the role. */
-const STATE_HUE = {
-  // Red, wrapping 0.
-  "--danger": [340, 20],
-  // Green.
-  "--success": [70, 160],
-  // Amber/ochre.
-  "--warning": [20, 60],
-} as const;
-const MIN_STATE_SATURATION = 0.2;
-
-/** True while `value` still reads as `role`'s colour: right hue family, and
- *  saturated enough to be a hue at all rather than a grey. */
-function readsAsRole(value: string, role: keyof typeof STATE_HUE): boolean {
-  const [hue, sat] = rgbToHsl(parseColor(value).rgb);
-  const [lo, hi] = STATE_HUE[role];
-  const inBand = lo > hi ? hue >= lo || hue <= hi : hue >= lo && hue <= hi;
-  return inBand && sat >= MIN_STATE_SATURATION;
-}
-
-/** `color-mix(in oklab, C 12%, transparent)` over `bg` — the alpha composite a
- *  browser performs for a state-tinted chip. */
-function selfTint(value: string, bg: string): string {
-  const fg = parseColor(value).rgb;
-  const back = parseColor(bg).rgb;
-  return toHex(
-    [0, 1, 2].map((i) => {
-      const a = fg[i] ?? 0;
-      const b = back[i] ?? 0;
-      return a * SELF_TINT + b * (1 - SELF_TINT);
-    }) as unknown as [number, number, number]
-  );
 }
 
 function measurable(value: string): boolean {
@@ -239,6 +200,15 @@ describe("shell token contrast floors", () => {
             `${name} ${token} on its own ${SELF_TINT * 100}% tint over ${surface}`
           ).toBeGreaterThanOrEqual(AA_BODY);
         }
+      }
+    });
+
+    // Split from the floor test above: a recognisability failure reported under
+    // the heading "clears the BODY floor" names the wrong cause, and a test that
+    // misnames its own failure is the thing this whole change set is about.
+    test(`${name}: semantic states still read as their role`, () => {
+      for (const token of SEMANTIC_STATES) {
+        const value = resolve(tokens[token] ?? "", scope);
         // The counterpart of the accent fills' cap: a state walked past this
         // has stopped being red/green/amber and become near-black or
         // near-white, which is the failure mode of "darken until it passes".
@@ -246,6 +216,8 @@ describe("shell token contrast floors", () => {
           Math.max(...surfaces.map((s) => contrastRatio(value, s))),
           `${name} ${token} still reads as its hue`
         ).toBeLessThan(RECOGNISABLE_STATE);
+        // A grey clears every contrast floor and codes nothing; hue band plus
+        // minimum chroma is what stops "legible" from passing for "meaningful".
         expect(
           readsAsRole(value, token),
           `${name} ${token} (${value}) is no longer a ${token.slice(2)} colour`
@@ -337,6 +309,15 @@ describe("blueprint token contrast floors", () => {
             `blueprint ${name} ${token} on its own tint over ${surface}`
           ).toBeGreaterThanOrEqual(AA_BODY);
         }
+      }
+    });
+
+    // Split for the same reason as the shell pair above: legibility and
+    // recognisability are different properties and must fail under different
+    // headings.
+    test(`${name}: app-surface semantic states still read as their role`, () => {
+      for (const token of SEMANTIC_STATES) {
+        const value = resolve(tokens[token] ?? "", scope);
         expect(
           Math.max(...surfaces.map((s) => contrastRatio(value, s))),
           `blueprint ${name} ${token} still reads as its hue`
