@@ -7,8 +7,8 @@ import {
 } from "./mobile-gateway-compatibility-core";
 
 /** Tunnel dial + first HTTP stream often lag the pair ALPN on cold iroh. */
-const ONLINE_PROBE_ATTEMPTS = 5;
-const ONLINE_PROBE_GAP_MS = 400;
+const ONLINE_PROBE_ATTEMPTS = 8;
+const ONLINE_PROBE_GAP_MS = 800;
 
 /**
  * One central compatibility wall for foreground and background construction.

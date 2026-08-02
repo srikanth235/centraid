@@ -69,6 +69,8 @@ accessibility zero-grey (15 cells).
 
 - **Android Retry connection TextView miss (30745070094).** After the profile regex fix, configure + profile + Enter Centraid succeeded; Maestro then tapped `Retry connection` on the capability wall via the child TextView (`clickable=false`), so `refresh()` never ran and Home never appeared. `ReplicaCompatibilityGate` now exposes `testID="replica-compatibility-retry"`; complete-onboarding taps by id.
 
+- **Android Retry starved probes (30745618435).** testID taps worked, but eight Retries in ~17s each bumped `retryNonce` and cancelled the in-flight online probe before `/_gateway/info` could succeed. complete-onboarding now waits up to 20s for Home|wall between taps (12 tries); online probe budget is 8×800ms.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

@@ -157,6 +157,7 @@ test("compatibility wall Retry is targeted by testID so Maestro does not tap the
   );
   const firstRun = read(FIRST_RUN);
   assert.match(firstRun, /id:\s*"replica-compatibility-retry"/u);
+  assert.match(firstRun, /visible:\s*"\$\{homeReadyMarker\}\|Reconnect once"/u);
   assert.doesNotMatch(
     stripLineComments(firstRun),
     /tapOn:\s*"Retry connection"/u
