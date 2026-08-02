@@ -8,6 +8,7 @@ import {
 
 /** Tunnel dial + first HTTP stream often lag the pair ALPN on cold iroh. */
 const ONLINE_PROBE_ATTEMPTS = 12;
+/** Fixed gap (not linear) so a true reconnect wall stays ~18s, not ~99s. */
 const ONLINE_PROBE_GAP_MS = 1500;
 
 /**
@@ -48,7 +49,7 @@ async function probeOnlineWithReconnectRetries(
     // Definite product-side mismatch — do not burn the retry budget.
     if (error.disposition !== "reconnect") throw error;
     if (attempt + 1 >= ONLINE_PROBE_ATTEMPTS) throw error;
-    await sleep(ONLINE_PROBE_GAP_MS * (attempt + 1));
+    await sleep(ONLINE_PROBE_GAP_MS);
     await probeOnlineWithReconnectRetries(baseUrl, key, attempt + 1);
   }
 }

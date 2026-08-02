@@ -106,23 +106,27 @@ describe("mobile gateway compatibility handshake", () => {
       response: new Response("failed", { status: 503 }),
       disposition: "reconnect",
     },
-  ] as const)("$name", async ({ response, disposition }) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<() => Promise<Response>>(async () => response)
-    );
+  ] as const)(
+    "$name",
+    async ({ response, disposition }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<() => Promise<Response>>(async () => response)
+      );
 
-    const result = requireMobileOfflineGateway({
-      baseUrl: "http://127.0.0.1:18789",
-      gatewayId: "gateway-two",
-      online: true,
-    });
-    await expect(result).rejects.toBeInstanceOf(
-      MobileGatewayCompatibilityError
-    );
-    await expect(result).rejects.toMatchObject({ disposition });
-    expect(storage.size).toBe(0);
-  });
+      const result = requireMobileOfflineGateway({
+        baseUrl: "http://127.0.0.1:18789",
+        gatewayId: "gateway-two",
+        online: true,
+      });
+      await expect(result).rejects.toBeInstanceOf(
+        MobileGatewayCompatibilityError
+      );
+      await expect(result).rejects.toMatchObject({ disposition });
+      expect(storage.size).toBe(0);
+    },
+    45_000
+  );
 
   test("an uncached offline start never guesses compatibility", async () => {
     await expect(
