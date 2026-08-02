@@ -43,6 +43,27 @@ describe("validate-nightly-wiring structure (#545)", () => {
     expect(failBlock).toMatch(/needs\.mutation-testing\.result/u);
   });
 
+  test("pairing flows run under one suite job", () => {
+    const pairingJobs = [
+      ...e2e.matchAll(/^\s{2}(?<job>pairing-[^:]+):/gmu),
+    ].map(({ groups }) => groups.job);
+    expect(pairingJobs).toEqual(["pairing-e2e"]);
+
+    const pairingBlock = e2e.slice(
+      e2e.indexOf("  pairing-e2e:"),
+      e2e.indexOf("  mutation-testing:")
+    );
+    for (const flow of [
+      "device-pairing-lifecycle.mjs",
+      "pairing-ticket-hygiene.mjs",
+      "cross-network-relay.mjs",
+    ]) {
+      expect(pairingBlock).toContain(flow);
+    }
+    expect(pairingBlock).toMatch(/Fail if pairing suite failed/u);
+    expect(pairingBlock).toMatch(/nightly-evidence-pairing/u);
+  });
+
   test("a failed issue create is loud, never swallowed (A11)", () => {
     // #557 moved the open-or-update logic out of four near-identical inline
     // shell blocks into scripts/ci/file-tracking-issue.mjs. The A11 invariant

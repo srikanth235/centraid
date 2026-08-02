@@ -20,17 +20,19 @@ const requiredFlowScripts = [
 ];
 
 const requiredJobs = [
-  "pairing-lifecycle:",
-  "pairing-ticket-hygiene:",
-  "pairing-cross-network-relay:",
+  "pairing-e2e:",
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
 ];
 
+const retiredPairingJobs = [
+  "pairing-lifecycle:",
+  "pairing-ticket-hygiene:",
+  "pairing-cross-network-relay:",
+];
+
 const requiredArtifactNames = [
-  "nightly-evidence-pairing-lifecycle",
-  "nightly-evidence-pairing-ticket-hygiene",
-  "nightly-evidence-pairing-cross-network-relay",
+  "nightly-evidence-pairing",
   "nightly-evidence-mutation",
 ];
 
@@ -49,6 +51,11 @@ const e2eCode = e2e
 
 for (const job of requiredJobs) {
   if (!e2eCode.includes(job)) errors.push(`e2e.yml missing job key ${job}`);
+}
+
+for (const job of retiredPairingJobs) {
+  if (e2eCode.includes(job))
+    errors.push(`e2e.yml must consolidate retired pairing job ${job}`);
 }
 
 for (const script of requiredFlowScripts) {
@@ -72,9 +79,7 @@ if (reportIdx === -1) {
   const reportChunk = e2eCode.slice(reportIdx, reportIdx + 1_200);
   for (const need of [
     "mobile-e2e-android",
-    "pairing-lifecycle",
-    "pairing-ticket-hygiene",
-    "pairing-cross-network-relay",
+    "pairing-e2e",
     "mutation-testing",
   ]) {
     if (!reportChunk.includes(need)) {
@@ -244,6 +249,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns one pairing suite (lifecycle, ticket-hygiene, cross-network-relay) and mutation-testing; standalone pairing-relay-e2e removed"
   );
 }

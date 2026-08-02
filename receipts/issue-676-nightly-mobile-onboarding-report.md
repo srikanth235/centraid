@@ -61,12 +61,16 @@ accessibility zero-grey (15 cells).
 
 - **iOS paste tap no-op under LogBox (30716166878).** Screenshot after fail still showed scan-first UI plus "Open debugger to view warnings." Maestro `tapOn id:onboarding-paste` COMPLETED (hierarchy noise fooled `retryTapIfNoChange`) without flipping `showPaste`. Fixes: `apps/mobile/index.ts` `__DEV__` `LogBox.ignoreAllLogs(true)` so the toast never covers bottom controls; `tests/agent-e2e-mobile/lib/first-run.mjs` / `tests/agent-e2e-mobile/flows/home-loads.mjs` destination-aware `openPastePathCommands` keeps tapping while `onboarding-paste` remains visible; `apps/mobile/src/screens/Onboarding.tsx` Connect `submitPaste` blurs then re-reads via `onEndEditing` when `codeRef` is empty so Android SET_TEXT reaches JS (`onBlur` cannot — RN `TargetedEvent` has no text); progress/error regex accepts the trailing period on `Paste a pairing ticket first.` via `.?` (not `\.` — YAML double-quoted `\.` is `BAD_DQ_ESCAPE` and aborted configure-gateway in ~3s on 30735480622/30735481514); `scripts/mobile-onboarding-maestro-contract.test.mjs` pins LogBox + blur-before-connect + paste retry. Restored `tests/experience-budgets/gateway.json` `coreRouteP95Ms` / `gatewayColdStartMs` from main (#688) so local `check:push` ratchet does not treat the branch as loosening floors.
 
+- **Pairing suite consolidation.** `.github/workflows/e2e.yml` now runs lifecycle, ticket-hygiene, and cross-network-relay as independent steps inside one `pairing-e2e` job. Each flow still writes its own e2e verdict and the final aggregate step fails the job if any flow fails; the report consumes one merged `nightly-evidence-pairing` artifact. `scripts/test-report/validate-nightly-wiring.mjs` and `scripts/test-report/validate-nightly-wiring.test.mjs` enforce the single-job wiring, and `tests/agent-e2e-pairing/README.md` documents the suite shape.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
   in this environment); green CI re-run of `mobile-e2e-*` is the launch proof.
 - Reverting product UX to paste-first.
-- Desktop/web/pairing quality lanes (already green on the baseline run).
+- Desktop/web quality lanes (already green on the baseline run).
+- Running the pairing flows on separate GitHub Actions jobs; they now share the
+  pairing suite setup while retaining per-flow verdicts and failure reporting.
 
 ## Decisions
 
@@ -99,3 +103,14 @@ redirects.
 PASS — diff matches checklist: scan-first Maestro alignment in home-loads and
 harness, matrix owner registration, accessibility evidence wiring via
 run-accessibility + e2e.yml, and structural/honesty proofs.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex-019fc146-e88-1785654623-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 203269 | 0 | 5997824 | 22355 | 225624 | 2.3430 | 203269 | 0 | 5997824 | 22355 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
+| codex-019fc146-e88-1785654708-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 9988 | 0 | 2096384 | 1137 | 11125 | 0.5661 | 213257 | 0 | 8094208 | 23492 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |

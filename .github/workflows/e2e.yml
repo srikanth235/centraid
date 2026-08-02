@@ -579,13 +579,14 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
-  # one failure still leaves evidence from the others for the health report.
-  pairing-lifecycle:
+  # Pairing journeys (issue #289 / matrix tunnel-pairing). Keep the three flow
+  # verdicts independent inside one suite so the Actions UI has one pairing
+  # entry while a failure in one flow does not skip the others.
+  pairing-e2e:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -593,74 +594,47 @@ jobs:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - name: Run device-pairing-lifecycle
+        id: pairing_lifecycle
+        if: always()
+        continue-on-error: true
+        run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - name: Run pairing-ticket-hygiene
+        id: pairing_ticket_hygiene
+        if: always()
+        continue-on-error: true
+        run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - name: Run cross-network-relay
+        id: pairing_cross_network_relay
+        if: always()
+        continue-on-error: true
+        run: |
+          docker info
+          # Production must never silently fall back to the JS byte pump.
+          test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+          node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - name: Fail if pairing suite failed
+        if: always()
+        run: |
+          echo "lifecycle=${{ steps.pairing_lifecycle.outcome }}"
+          echo "ticket-hygiene=${{ steps.pairing_ticket_hygiene.outcome }}"
+          echo "cross-network-relay=${{ steps.pairing_cross_network_relay.outcome }}"
+          if [ "${{ steps.pairing_lifecycle.outcome }}" != "success" ] || \
+             [ "${{ steps.pairing_ticket_hygiene.outcome }}" != "success" ] || \
+             [ "${{ steps.pairing_cross_network_relay.outcome }}" != "success" ]; then
+            echo "::error::Pairing suite failed — see the individual flow steps above"
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-pairing-lifecycle
+          name: nightly-evidence-pairing
           path: artifacts/
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-pairing-lifecycle-runs
-          path: tests/agent-e2e-pairing/runs/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  pairing-ticket-hygiene:
-    if: >
-      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-evidence-pairing-ticket-hygiene
-          path: artifacts/
-          retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-debug-pairing-ticket-hygiene-runs
-          path: tests/agent-e2e-pairing/runs/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  pairing-cross-network-relay:
-    if: >
-      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: docker info
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      # Production must never silently fall back to the JS byte pump.
-      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
-      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-evidence-pairing-cross-network-relay
-          path: artifacts/
-          retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-debug-pairing-cross-network-relay-runs
+          name: nightly-debug-pairing-runs
           path: tests/agent-e2e-pairing/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -804,9 +778,7 @@ jobs:
         web-e2e,
         mobile-e2e-ios,
         mobile-e2e-android,
-        pairing-lifecycle,
-        pairing-ticket-hygiene,
-        pairing-cross-network-relay,
+        pairing-e2e,
         mutation-testing,
         quality-performance-scale,
         restore-year3,
@@ -1059,9 +1031,7 @@ jobs:
         web-e2e,
         mobile-e2e-ios,
         mobile-e2e-android,
-        pairing-lifecycle,
-        pairing-ticket-hygiene,
-        pairing-cross-network-relay,
+        pairing-e2e,
         mutation-testing,
         quality-performance-scale,
         restore-year3,
@@ -1129,9 +1099,7 @@ jobs:
           - web-e2e: \`${{ needs.web-e2e.result }}\`
           - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
-          - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
-          - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
-          - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
+          - pairing-e2e: \`${{ needs.pairing-e2e.result }}\`
           - mutation-testing: \`${{ needs.mutation-testing.result }}\`
           - quality-performance-scale: \`${{ needs.quality-performance-scale.result }}\`
           - test-health-report: \`${{ needs.test-health-report.result }}\`
