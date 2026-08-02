@@ -61,8 +61,8 @@ export function canonicalJson(value: ReplicaValue): string {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const entries = Object.entries(value)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`);
+  const entries = Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`);
   return `{${entries.join(",")}}`;
 }

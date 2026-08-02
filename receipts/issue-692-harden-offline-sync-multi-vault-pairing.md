@@ -77,6 +77,7 @@ Protocol/offline documentation, compatibility metadata, schema/export fingerprin
 - `packages/client/src/replica/intents.ts`
 - `packages/client/src/replica/memory-intent-store.ts`
 - `packages/client/src/replica/multi-writer.contract.test.ts`
+- `packages/client/src/replica/payload-hash.test.ts`
 - `packages/client/src/replica/payload-hash.ts`
 - `packages/client/src/replica/query.ts`
 - `packages/client/src/replica/shell-session.ts`
@@ -110,7 +111,7 @@ Protocol/offline documentation, compatibility metadata, schema/export fingerprin
 - `packages/vault/src/replica/snapshot.ts`
 - `packages/vault/src/schema/replica.ts`
 - `packages/vault/src/share/placement.ts`
-- `receipts/issue-692.md`
+- `receipts/issue-692-harden-offline-sync-multi-vault-pairing.md`
 - `tests/matrix.json`
 - `tests/quality/classification-ratchet.json`
 - `tests/schema-export-fingerprint.json`
@@ -144,7 +145,7 @@ bun run check:pr
 
 Result: 30/30 PR gates passed, full typecheck passed, 666 test files passed with 4,979 tests passing, and diff coverage passed at 94.7% (956/1009; minimum 80%). The affected suite also passed 24 package tasks, including 1,284 gateway tests.
 
-Focused coverage includes multi-vault pairing normalization/persistence, durable intent migrations, structured conflicts, grouped change-log paging, resumable bootstrap, multi-writer behavior, and UI first-run evidence.
+Focused coverage includes multi-vault pairing normalization/persistence, durable intent migrations, structured conflicts, grouped change-log paging, resumable bootstrap, multi-writer behavior, canonical payload hashing, mutation score enforcement, and UI first-run evidence. The affected mutation lane now measures 82.03% for `packages/client/src/replica` against the 72% floor.
 
 ## Audit
 
@@ -168,3 +169,4 @@ Focused coverage includes multi-vault pairing normalization/persistence, durable
 | codex-019fc267-a07-1785690068-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 10445 | 0 | 2143488 | 1753 | 12198 | 0.5883 | 3009670 | 0 | 108567552 | 281022 | feat(sync): harden offline multi-vault pairing (#692) |
 | codex-019fc267-a07-1785690170-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 9180 | 0 | 1589248 | 1947 | 11127 | 0.4495 | 3018850 | 0 | 110156800 | 282969 | feat(sync): harden offline multi-vault pairing (#692) |
 | codex-019fc267-a07-1785692337-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 276159 | 0 | 22460160 | 35056 | 311215 | 6.8313 | 3295009 | 0 | 132616960 | 318025 | chore(sync): integrate current mainline into offline hardening (#692) |
+| codex-019fc267-a07-1785692495-1 | codex | 019fc267-a077-73a0-b86e-742418586349 | #692 | gpt-5.6-luna | 16180 | 0 | 2344192 | 1774 | 17954 | 0.6531 | 3311189 | 0 | 134961152 | 319799 | fix(sync): strengthen replica mutation coverage (#692) |

@@ -1,8 +1,14 @@
 import { describe, expect, test } from "vitest";
 
-import { intentPayloadHash } from "./payload-hash.js";
+import { canonicalJson, intentPayloadHash } from "./payload-hash.js";
 
 describe("intent payload hash", () => {
+  test("canonicalJson preserves array boundaries and sorts nested object keys", () => {
+    expect(canonicalJson(["first", { zulu: 1, alpha: true }])).toBe(
+      '["first",{"alpha":true,"zulu":1}]'
+    );
+  });
+
   test("is stable across object key insertion order and changes with payload", async () => {
     const first = await intentPayloadHash({
       appId: "agenda",
