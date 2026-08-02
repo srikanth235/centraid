@@ -32,7 +32,9 @@
 - [x] F6 composable size rungs + the exact-match sweep (411 conversions)
 - [x] F7 Shell `--t-tiny` → mono realignment investigated and **deliberately declined** on the measurement; the real gap (an unnamed sub-11px mono eyebrow rung, 51 distinct shapes) is recorded as debt in `docs/decisions.md`, not taken here.
 
-**Crosswalk to the issue checklist (#686).** The issue carries A1–A5, B1–B4, C1–C4, D1–D3, E1–E5, F1–F3 (24 items); all 24 are represented above. `A2` is split into two rows here (the test and the governance directive) because they landed separately. **F4, F5, F6 and F7 exist only in this receipt** — they are follow-on work this PR took on after F1–F3 exposed it, and were never added to the issue body. The issue's Status line also still says "15 commits"; the branch is 26.
+- [x] F9 codify the role-parity law as a test, and waive `--t-tiny` under it (lane 3)
+
+**Crosswalk to the issue checklist (#686).** The issue carries A1–A5, B1–B4, C1–C4, D1–D3, E1–E5, F1–F3 (24 items); all 24 are represented above. `A2` is split into two rows here (the test and the governance directive) because they landed separately. **F4, F5, F6, F7 and F9 exist only in this receipt** — they are follow-on work this PR took on after F1–F3 exposed it, and were never added to the issue body. (F8, lane (1) of the accepted sequence, is recorded in Decisions / What changed / Verification but has no checklist row; not corrected here, to leave another lane's rows alone.) The issue's Status line also still says "15 commits"; the branch is 26.
 
 ## Decisions (orchestrator recommendations, per user directive)
 
@@ -55,7 +57,9 @@
 - **The maintainer accepted converge-first, name-second (lane 1 of the agreed (1) → (3) → (2) sequence), 2026-08-02.** The three recommendations recorded in `docs/decisions.md` under "#686 — the three questions this issue left open, and their answers" are decisions now, not proposals. Lane (1) is done here and **names nothing**: the two rungs are left as literals (`9.5px` / `10.5px`, `letter-spacing: 0.06em`), because naming a rung against 51 shapes is the `--r-lg` failure mode this PR already hit twice. The rung spelling is the follow-up PR's job, once there is something real for it to describe.
 - **The eyebrow weight does not converge, and the data says so.** Of the 94 mono-uppercase rules, **63 (67%) declare no `font-weight` at all** — the modal value is *absent*, i.e. "inherit from context". Among the 31 that do declare one, 600 leads 500 by 19–7 (plus 4 taking 500 via `font: var(--t-mono)` and 1 via `font: inherit`). Neither candidate is derivable as dominant in the sense size and tracking are: forcing 600 would thicken 63 inheriting sites plus the 7 at 500, and stripping to the true mode (absent) would visibly thin the 19 at 600. Weight was therefore left untouched at all 94 sites, and the converged set carries 9 shapes rather than 2 for exactly that reason — 2 on the (size, tracking) axes that were converged, multiplied by the weight variants that were not.
 - **Chips, badges, pills, controls and chart ticks are a third idiom, not eyebrows.** 37 of the 94 are boxed or self-contained (`.kindBadge`, `.tlStatus`, `.machineryTag`, `.connBadge`, the two `.tab` controls, the SVG `.ringTick`/`.sectorName`, the `.caption` measured-fact strip, the `.stripAxis` chart axis, `.heroDate`'s sibling readouts). Converging a 8.5px pill to 9.5px changes chip geometry, not label rhythm, so they were left alone. They carry their own ~21 shapes and are the obvious next convergence target — but they are not the two rungs this lane agreed to converge.
-- (running log — appended as work proceeds)
+- **F9 — the role-parity law is a test, and `--t-tiny` is waived under it rather than fixed (lane 3 of the agreed (1) → (3) → (2) sequence).** The premise was re-derived from `packages/design/src` rather than taken from this receipt or from `docs/decisions.md`, because several earlier figures here had to be corrected. **The premise holds and is narrower than it looked**: of the ten `--t-*` shorthands the two emitters publish between them, **six are shared** (`--t-body`, `--t-body-strong`, `--t-mono`, `--t-small`, `--t-tiny`, `--t-title`) and **exactly one — `--t-tiny` — diverges**, in both family and weight (shell sans-serif/500, blueprint monospace/600). The other five agree on both facets while differing on size and line-height, which is the intended design. `--t-display`, `--t-display-1`, `--t-h2` and `--t-h3` are shell-only and outside the law. **Family is compared by genus, not by property name or stack string** — the emitters legitimately spell one role with different properties (`--font-display` vs `--font-title`, both aliasing sans) and ship different concrete stacks for the same genus (the blueprint layer is sandboxed and loads no fonts), so the test resolves `var()` aliases and compares the generic family the stack ends in. Comparing names or strings would have produced three false positives (`--t-title`, and both sans roles).
+- **F9 — `--t-tiny` was fixed in NEITHER direction, on the consumers, and that is the honest answer.** Both consumer lists were re-derived after lane (1) landed. **The shell list is unchanged by lane (1)**: still **5 sites in 4 files**, still zero eyebrows — `AssistantScreen` `.effortPicker select` and `SettingsProvidersScreen` `.ladderAdd` (native `<select>`s), `DevicesCard` `.renameAction`/`.renameIcon` ("Save"/"Cancel" plus a pencil glyph), `SettingsProvidersScreen` `.ladderMember` (a pill holding an agent title), `SessionStatusStrip` `.telemetry` (whose own text is "Working"/"Ready"; its numeric child `.context` sets `font-family: var(--font-mono)` itself). Mobile still has 7 `t("tiny")` consumers, 5 prose (including `Assistant.selectionError`, an error message) and 2 eyebrows that already hand-patch the family. So the prior F7 conclusion survives lane (1) intact. **What F7 never measured is the other side**: the blueprint's `--t-tiny` has **12 consumers, and 10 are unambiguous eyebrows** — `uppercase` + `letter-spacing: var(--tracking-eyebrow)` — across `photos` (4), `docs` (4), `agenda` (2); the two that are not are a 28px badge glyph and a receipt chip. That makes this a genuine two-sided conflict, not a case of one side being wrong: forcing mono monospaces `<select>` chrome and prose, forcing sans de-monospaces an entire surface's eyebrow idiom. **Picking a winner would have been the wrong move in either direction**, so the divergence sits in `ROLE_PARITY_ALLOWLIST` with the measurement attached, and the test asserts the waiver is still *needed* — the moment the two sides agree, the stale entry fails the suite. The resolution is open decision (b) (name the eyebrow role); lane (1) converged the 94 shell eyebrows but deliberately named nothing, so that vocabulary does not exist yet and `--t-tiny` still cannot align without collateral.
+- **F9 — the gate was sabotage-tested in four directions before being trusted.** A gate never seen to fail is not known to work. Each sabotage was applied to `packages/design/src/typography.ts`, run, and reverted by `cp` from a saved copy (md5-verified, never `git checkout`, since sibling agents share this tree). (1) **Weight-only** — `blueprintType.small` 400→600: red on `--t-small`, "the shell emits sans-serif/400, the blueprint layer emits sans-serif/600". (2) **Family-only** — `blueprintType.mono` `mono`→`font-sans`: red on `--t-mono`, "the shell emits monospace/500, the blueprint layer emits sans-serif/500" — this is the one that proves genus resolution actually resolves, since both sides still name a `--font-*`/`--mono` property. (3) **Stale waiver** — `blueprintType.tiny`→`font-sans`/500, i.e. making the waived role *agree*: red on "every waiver is still needed", so the allowlist cannot outlive its justification. (4) **Law widened past what was agreed** — `blueprintType.body.size`→`15px`: red on "size and line-height are explicitly allowed to diverge", which is the test that stops a future edit from quietly promoting size into the law. All four reverted clean; `git status` shows no residue.
 
 ## What changed
 
@@ -484,8 +488,15 @@ These five rows are the post-umbrella findings; their full descriptions, file li
 
 - **Recommendations recorded for the three open questions** — `docs/decisions.md` gains "#686 — recommendations for the three questions this issue leaves open": (1) converge the 94 eyebrows to two rungs (9.5px standard, 10.5px section header, tracking 0.06em — the measured mode) *before* naming anything, since naming against 51 shapes produces a second `--r-lg`; (2) do **not** blueprint-scope `kit.css` — bind its sizes to `--t-<key>-size` so a component reads at the scale of the surface it is on, which is the correct behaviour and not merely the cheap one; (3) codify that size and line-height may diverge per emitter but family and weight may not. Sequence (1) → (3) → (2); doing (3) first recreates the problem #686 already declined to cause. Each is a recommendation needing a human yes, not a decision taken.
 
+- **F9 codify the role-parity law as a test, and waive `--t-tiny` under it (lane 3).** _Size and line-height may diverge per emitter; family and weight may not._ Six shared `--t-*` roles; five agree, and `--t-tiny` is the sole violation, waived under `ROLE_PARITY_ALLOWLIST` because both sides were measured and neither can move without visible collateral. Three files:
+  - `packages/design/src/type-role-parity.test.ts` — **new**, 9 tests. Parses the `:root` block of `toCss()` and `toBlueprintCss()`, splits every `--t-*` shorthand into weight / size / line-height / family property, resolves the family property through its `var()` aliases to the generic family the stack ends in, and asserts family + weight agree for every **shared** role. Carries `ROLE_PARITY_ALLOWLIST` (one entry, `--t-tiny`, with the two-sided measurement inline), a `test.each` over the gated roles, a "every waiver is still needed" ratchet test, an explicit "size and line-height are allowed to diverge" permission test pinned on `--t-body`, and a non-vacuity guard (≥6 shared roles, ≥5 gated) so a rename cannot silently empty the gate.
+  - `docs/decisions.md` — new entry **"#686 — `--t-*` role parity is now a law with a test behind it"**, carrying the law, why family is compared by genus, the full six-role derived comparison table, and why `--t-tiny` is waived rather than fixed in either direction.
+  - `DESIGN.md` — the closing clause of the "`--t-tiny` is not the eyebrow rung" paragraph said the shell/blueprint split was "same role, different rendering per surface, which the contract permits". That is now false: it is a **known violation held under a waiver**. Replaced with the law, a pointer to the enforcing test, and a pointer to `docs/decisions.md`. **Front matter is unchanged and no token value moved** — `packages/design/src/design-md.test.ts` needed no edit and passes against the untouched TS source; no budget or ratchet file changed (`lint:design-tokens` reports zero regressions and `git status` shows no budget-file delta).
+
 ## Out of scope
 
+- Renaming the blueprint type rungs, or naming the shell's eyebrow rung — open decisions (b) and (1)-second-half. Naming is what would let `--t-tiny` align; it is new vocabulary plus a visual change, and lane (1) deliberately stopped short of it.
+- Converging the 37 chip/badge/pill/control rules lane (1) classified as a third idiom.
 - ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
 - Collapsing the app-local `--accent-deep-fg` declarations into `--accent-text`. F5 established they are re-derivations of the contract token, but the declaring apps *declare* the property, so they are not phantoms and not in this gate's class; folding them is a separate visual-equivalence change. **Correction: four apps declare it, not two — `agenda`, `docs`, `notes` and `photos`** (12 declarations, 41 surviving `var(--accent-deep-fg)` references across those four apps). Naming only `docs` and `photos` understated the remaining surface by half.
 - ~~Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations.~~ **Partly superseded by F6** — the size rungs exist and the 411 provably-zero-change exact matches are converted. Still out of scope, and still ratcheted debt: the ~477 near-misses (within 0.6px of a rung) and the ~314 genuinely off-scale declarations, both of which are visual changes needing per-site judgement; and `packages/design/kit/kit.css`, which resolves under two token layers at once. Line-height rungs were considered and rejected on the evidence, not deferred (see Decisions).
@@ -1373,6 +1384,94 @@ $ <media-query override scan over all 98 client stylesheets>
 media scan done                # no @media/@container rule re-sets a converged class's size or tracking
 ```
 
+### F9 — role-parity law (lane 3)
+
+Derived comparison, produced from `packages/design/src` by parsing both emitters' `:root` output. Six shared roles; `--t-display` / `--t-display-1` / `--t-h2` / `--t-h3` are shell-only.
+
+| role | shell | blueprint | family | weight |
+| --- | --- | --- | --- | --- |
+| `--t-body` | sans-serif 400, 15px/22px | sans-serif 400, 0.855rem/1.5 | OK | OK |
+| `--t-body-strong` | sans-serif 600, 15px/22px | sans-serif 600, 0.855rem/1.4 | OK | OK |
+| `--t-mono` | monospace 500, 12px/16px | monospace 500, 0.72rem/1.4 | OK | OK |
+| `--t-small` | sans-serif 400, 13px/18px | sans-serif 400, 0.8rem/1.45 | OK | OK |
+| **`--t-tiny`** | **sans-serif 500**, 11px/14px | **monospace 600**, 0.6rem/1.4 | **DIFFER** | **DIFFER** |
+| `--t-title` | sans-serif 600, 20px/26px | sans-serif 600, 1.15rem/1.2 | OK | OK |
+
+Sabotage evidence — each applied to `packages/design/src/typography.ts`, run, then reverted by `cp` from a saved copy:
+
+```
+### S1 weight flip: blueprintType.small 400 -> 600
+     × --t-small resolves to one family and one weight 5ms
+AssertionError: --t-small means two different things: the shell emits sans-serif/400, the blueprint layer emits sans-serif/600. Size and line-height may diverge per surface; family and weight may not (#686).: expected { family: 'sans-serif', weight: '400' } to strictly equal { family: 'sans-serif', weight: '600' }
+      Tests  1 failed | 8 passed (9)
+
+### S2 family flip: blueprintType.mono mono -> font-sans
+     × --t-mono resolves to one family and one weight 4ms
+AssertionError: --t-mono means two different things: the shell emits monospace/500, the blueprint layer emits sans-serif/500. Size and line-height may diverge per surface; family and weight may not (#686).: expected { family: 'monospace', weight: '500' } to strictly equal { family: 'sans-serif', weight: '500' }
+      Tests  1 failed | 8 passed (9)
+
+### S3 stale-waiver: blueprintType.tiny -> font-sans/500 (makes --t-tiny AGREE)
+     × every waiver is still needed 5ms
+AssertionError: --t-tiny now agrees (sans-serif/500) — delete its ROLE_PARITY_ALLOWLIST entry: shell control label (sans/500) vs blueprint eyebrow (mono/600): expected { family: 'sans-serif', weight: '500' } to not strictly equal { family: 'sans-serif', weight: '500' }
+      Tests  1 failed | 8 passed (9)
+
+### S4 widen the law: make --t-body sizes equal (the permission test)
+     × size and line-height are explicitly allowed to diverge 3ms
+AssertionError: expected '15px' not to be '15px' // Object.is equality
+      Tests  1 failed | 8 passed (9)
+
+### RESTORED md5: 1363357761fe16ca8cb22f7327b6e253   # == the pre-sabotage copy
+$ git status --porcelain
+ M DESIGN.md
+ M docs/decisions.md
+?? packages/design/src/type-role-parity.test.ts
+```
+
+Full gate run at HEAD of this lane:
+
+```
+$ bun run --cwd packages/design test
+ Test Files  20 passed (20)
+      Tests  285 passed (285)
+
+$ bun run --cwd packages/design test -- type-role-parity
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+
+$ bun run --cwd packages/client test
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ bun run lint:design-md
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+
+$ bun run lint:design-tokens
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 882 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text, zero regressions
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .
+                               # clean, no output
+
+$ bun run format
+Finished in 2851ms on 3402 files using 8 threads.
+                               # no rewrites outside this lane's files
+
+$ git status --porcelain
+ M DESIGN.md
+ M docs/decisions.md
+?? packages/design/src/type-role-parity.test.ts
+```
+
+No budget or ratchet file changed, so nothing needed regenerating with `--write`.
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -1469,6 +1568,8 @@ exit 0
 | claude-code-ab8b1729-92f-1785639957-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 670 | 615458 | 197 | 869 | 0.3169 | 1829 | 1939834 | 316874078 | 720045 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
 | claude-code-ab8b1729-92f-1785640016-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2442 | 2466220 | 1392 | 3842 | 1.2832 | 1837 | 1942276 | 319340298 | 721437 | test(design): recognisability fails under its own name, not the contrast floor ( |
 | claude-code-ab8b1729-92f-1785647977-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 910 | 2127288 | 211517607 | 367767 | 2495965 | 128.2531 | 2747 | 4069564 | 530857905 | 1089204 |  |
+| claude-code-ab8b1729-92f-1785649140-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 40 | 27219 | 1740864 | 10161 | 37420 | 1.2948 | 2787 | 4096783 | 532598769 | 1099365 |  |
+| claude-code-ab8b1729-92f-1785649242-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 16 | 14180 | 791277 | 3122 | 17318 | 0.5624 | 2803 | 4110963 | 533390046 | 1102487 |  |
 
 ### Steering
 

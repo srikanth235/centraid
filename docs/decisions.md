@@ -259,6 +259,31 @@ That makes `--t-tiny` (sans/500 shell, mono/600 blueprint) the one genuine viola
 
 **Sequence:** (1) → (3) → (2). Each is independently shippable; doing (3) before (1) recreates the problem #686 already declined to cause.
 
+## #686 — `--t-*` role parity is now a law with a test behind it
+
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Implements decision (3) above (accepted by the maintainer 2026-08-02). Enforced by `packages/design/src/type-role-parity.test.ts`.
+
+**The law.** _Size and line-height may diverge per emitter. Family and weight may not._ A shell and an embedded app pane are different reading contexts, so optical size is legitimately a per-surface value choice — that is what two emitters over one contract are _for_. Family and weight are not a value choice; they are the role. `font: var(--t-tiny)` has to mean something.
+
+**Family is compared by genus, not by name or stack.** The two emitters legitimately spell one role with different custom properties (`--font-display` in the shell, `--font-title` in the blueprint layer, both aliasing a sans stack) and ship different concrete stacks for the same genus — the blueprint layer is sandboxed and loads no fonts, so its stacks are system-only and ordered differently. What the law gates is `sans-serif` vs `monospace` vs `serif`, resolved by following `var()` aliases to the generic family the stack ends in.
+
+**The full derived comparison**, from `packages/design/src` rather than from any prior table. Six roles are published by both emitters:
+
+| role | shell | blueprint | family | weight |
+| --- | --- | --- | --- | --- |
+| `--t-body` | sans-serif 400, 15px/22px | sans-serif 400, 0.855rem/1.5 | agree | agree |
+| `--t-body-strong` | sans-serif 600, 15px/22px | sans-serif 600, 0.855rem/1.4 | agree | agree |
+| `--t-mono` | monospace 500, 12px/16px | monospace 500, 0.72rem/1.4 | agree | agree |
+| `--t-small` | sans-serif 400, 13px/18px | sans-serif 400, 0.8rem/1.45 | agree | agree |
+| **`--t-tiny`** | **sans-serif 500**, 11px/14px | **monospace 600**, 0.6rem/1.4 | **DIFFER** | **DIFFER** |
+| `--t-title` | sans-serif 600, 20px/26px | sans-serif 600, 1.15rem/1.2 | agree | agree |
+
+`--t-display`, `--t-display-1`, `--t-h2` and `--t-h3` are shell-only and out of the law's scope — the law governs shared spellings, not the union.
+
+**So `--t-tiny` is the only violation, and it is waived, not fixed.** Both sides were re-derived after lane (1) landed and the earlier reading holds: the shell's five `font: var(--t-tiny)` sites are two native `<select>`s, a Save/Cancel pair plus a pencil glyph, a pill holding an agent title, and the "Working"/"Ready" telemetry strip — **zero** eyebrows, plus five mobile prose consumers including an error message. The blueprint's **twelve** sites are **ten** uppercase + `--tracking-eyebrow` eyebrows at 0.6rem (9.6px), with two chips. Forcing mono monospaces prose and controls; forcing sans de-monospaces an entire surface's eyebrow idiom. Neither side is wrong; the spelling is.
+
+The fix is therefore **not** to pick a winner — it is open decision (b), naming the eyebrow role separately. Lane (1) converged the 94 shell eyebrows onto two rungs but deliberately did not name them, so the vocabulary that would let `--t-tiny` align does not exist yet. Until it does, the divergence sits in `ROLE_PARITY_ALLOWLIST` with this reasoning attached, and the test asserts the entry is still _needed_ — the moment the two sides agree, the stale waiver fails the suite.
+
 ## Related docs
 
 | Doc | Covers |
