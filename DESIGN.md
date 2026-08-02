@@ -594,6 +594,8 @@ Marketing/hero styles (`--t-display-1` 40, `--t-h2` 22, `--t-h3` 16) are **web-o
 
 **Mono is the signature.** Metadata, counts, dates, and eyebrows are mono; prose is not.
 
+**`--t-tiny` is not the eyebrow rung.** It is sans/500 in the chrome by design, and the five shell rules that take the shorthand are `<select>` chrome, "Save"/"Cancel" buttons and a pill holding an agent's title — prose and controls, which the clause above puts on sans. The chrome's eyebrow idiom is mono at **8–10.5px**, below this rung: 94 of the 120 `text-transform: uppercase` rules in `packages/client/src` set a mono family themselves, and 90 of those sit under 11px. That sub-11px mono rung is **unnamed** — recorded as debt in the #686 entry of [docs/decisions.md](docs/decisions.md) — which is why an eyebrow here spells mono by hand rather than reaching for `--t-tiny`. The blueprint surface's `--t-tiny` _is_ mono, because its rung is 0.6rem (9.6px) and lands inside that band; same role, different rendering per surface, which the contract permits.
+
 ## Layout
 
 `--sp-1`…`--sp-7` = **4 · 8 · 12 · 16 · 24 · 32 · 48** px. Emitted identically by `toCss()` and `toBlueprintCss()` from `src/density.ts`, and typed for mobile as `spacing`. The scale is fixed — there is no density switch on the token layer, and these are the only rungs.

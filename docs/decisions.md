@@ -167,13 +167,52 @@ Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/iss
 | `--t-mono` | 12px / 16px, mono, 500 | 0.72rem (11.52px) / 1.4, mono, 500 |
 | **`--t-tiny`** | 11px / 14px, **sans**, **500** | 0.6rem (9.6px) / 1.4, **mono**, **600** |
 
-Size and line-height differing per surface is defensible — an embedded app pane is not the chrome. `--t-tiny` changing **family and weight** is not: a rule that reads "the eyebrow rung" gets sans-500 in the shell and mono-600 in an app.
+Size and line-height differing per surface is defensible — an embedded app pane is not the chrome. `--t-tiny` changing **family and weight** looked like the one indefensible cell: a rule that reads "the eyebrow rung" gets sans-500 in the shell and mono-600 in an app.
 
 This matters because **`kit.css` is served to both surfaces**. Of its 80 hardcoded `font-size` declarations, **20 exactly match a blueprint rung and 0 match a shell rung** — the kit's type was authored against the app scale while rendering on both. Because those values are hardcoded, kit components currently render at app sizes _inside the chrome_, and cannot be tokenised without moving on one surface or the other. That is why the size-rung sweep skipped `kit.css` entirely.
 
-**Options, none taken here.** (a) Reconcile the two scales so a role means one thing, and let only the _values_ differ. (b) Rename the blueprint rungs so the divergence is explicit rather than implied. (c) Declare `kit.css` blueprint-scoped and give the chrome its own component sheet. Each is a real product decision about whether an embedded app should look like the chrome or like itself.
+**Options as first recorded.** (a) Reconcile the two scales so a role means one thing, and let only the _values_ differ. (b) Rename the blueprint rungs so the divergence is explicit rather than implied. (c) Declare `kit.css` blueprint-scoped and give the chrome its own component sheet. The sub-entry above closes the family/weight half of (a) on evidence — the two surfaces bind the same role to different faces because they carry different rungs, which the contract permits; (b) and (c) stand.
 
 Until then, `DESIGN.md`'s claim that the kit "holds no design decisions of its own" is true of colour, radius and spacing, and **false of type** — 80 sizes live there.
+
+### Resolved by measurement: the shell's `--t-tiny` is not the eyebrow rung, so it does not move
+
+Recorded **2026-08-02**, same issue. The obvious reading — that the shell's sans is a plain outlier against `DESIGN.md`'s "**Mono is the signature.** Metadata, counts, dates, and eyebrows are mono" and against shell practice — was tested and **does not survive the measurement**. `type.tiny` stays `sans` / 500.
+
+The eyebrow idiom in the shell is real and is overwhelmingly mono: of **120** rules under `packages/client/src` carrying `text-transform: uppercase`, **94 set a mono family in the same block**. But those 94 rules are not `--t-tiny` sites and never were — the sizes they pair with mono are:
+
+| size                         | rules |
+| ---------------------------- | ----- |
+| 9.5px                        | 36    |
+| 10px                         | 21    |
+| 10.5px                       | 19    |
+| 9px                          | 9     |
+| 8.5px                        | 4     |
+| `var(--t-tiny-size)` (11px)  | 3     |
+| 8px                          | 1     |
+| `font: var(--t-mono)` (12px) | 1     |
+
+**90 of the 94 sit below `--t-tiny`'s 11px.** The shell's eyebrow is a sub-11px mono rung that the scale does not name, not the 11px rung it does. Two shell eyebrows go further and opt _out_ of mono on purpose — `chrome.module.css` `.sbSection` pairs `font-family: var(--font-sans)` with `font-size: var(--t-tiny-size)`, and `.sbSubLabel` is sans at 10px.
+
+What actually consumes the shell shorthand `font: var(--t-tiny)` is **5 sites in 4 files**, and none of them is an eyebrow or metadata:
+
+| Site | What it is | Verdict |
+| --- | --- | --- |
+| `packages/client/src/react/screens/SettingsProvidersScreen.module.css` `.ladderMember` | pill holding an agent's display title (`card.title`) | prose label — sans |
+| `packages/client/src/react/screens/SettingsProvidersScreen.module.css` `.ladderAdd` | native `<select>`, options are agent titles | form control — sans |
+| `packages/client/src/react/screens/SessionStatusStrip.module.css` `.telemetry` | container; its own text is "Working"/"Ready". The numeric readout is the child `.context`, which already sets `font-family: var(--font-mono)` itself | the metadata was already mono; the parent is prose — sans |
+| `packages/client/src/react/screens/DevicesCard.module.css` `.renameAction` / `.renameIcon` | buttons reading "Save"/"Cancel", and a pencil glyph | action labels — sans |
+| `packages/client/src/react/screens/AssistantScreen.module.css` `.effortPicker select` | native `<select>` (runner / effort / workspace pickers) | form control — sans |
+
+Mobile agrees. Of the seven `t("tiny")` consumers in `apps/mobile/src`, five are prose — `AppHeader.subtitle`, `OptionSheet.rowDetail`, `AttentionLine.chipSub`, `Assistant.statusText`, `Assistant.selectionError` (an error message) — and the two that _are_ eyebrows already override the family themselves: `AppLock.eyebrow` to `family.monoBold`, `LockerHome.fieldLabel` to `family.monoMedium`.
+
+So aligning `type.tiny` to mono would improve **zero** of the 94 mono eyebrows (they already say mono, at sizes the rung does not carry), and would regress **all five** shell sites plus five mobile prose sites — putting `<select>` chrome, "Save"/"Cancel" buttons and an error message into a monospace face. `DESIGN.md`'s "prose is not" clause governs here, not the eyebrow clause.
+
+**The weight question answers itself the same way**, and also refutes the premise that the blueprint's 600 is the settled reading: the two mobile eyebrows that hand-patch the family disagree with each other — 600 and 500 — so there is no single mono eyebrow weight to converge on. The shell's 500 is the correct weight for what the shell rung actually is (a quiet control label; 600 would make "Save" compete with the row it sits in), and the blueprint's 600 is correct for what _its_ rung is (a 9.6px eyebrow, which needs the extra weight to hold at that size). This is a legitimate per-surface difference of a role's _rendering_, not two roles wearing one name.
+
+**What this leaves.** The genuine gap is the opposite of the one recorded above: the shell has an **unnamed sub-11px mono eyebrow rung**, spelled six different ways across 94 rules (8, 8.5, 9, 9.5, 10, 10.5px). Naming it is new vocabulary and a visual change at 94 sites, so it is recorded here as debt, not taken.
+
+**Still genuinely open, and unresolved by any of the above:** (b) whether the blueprint rungs should be renamed so the size/line-height divergence is explicit; (c) whether `kit.css` is blueprint-scoped and the chrome gets its own component sheet. Those remain product decisions.
 
 ## Related docs
 
