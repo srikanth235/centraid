@@ -296,6 +296,7 @@ describe("ConnectFlow scenarios", () => {
         displayLabel: "Office",
         gatewayId: "gw1",
         vaultId: "v1",
+        vaultIds: ["v1"],
       });
     });
 
@@ -415,6 +416,7 @@ describe("ConnectFlow scenarios", () => {
         displayLabel: "A",
         gatewayId: "gw",
         vaultId: "a",
+        vaultIds: ["a"],
       });
     });
 

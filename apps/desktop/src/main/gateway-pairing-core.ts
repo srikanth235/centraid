@@ -74,8 +74,22 @@ export type RedeemPairingErrorCode =
   | "unreachable"
   | "bad_response";
 
+export interface PairedVault {
+  vaultId: string;
+  enrollmentId?: string;
+  vaultName?: string;
+  role?: "admin" | "write" | "read";
+}
+
 export type RedeemGatewayPairingResult =
-  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
+  | {
+      ok: true;
+      gatewayId: string;
+      vaultId: string;
+      vaultName: string;
+      vaultIds: string[];
+      vaults: PairedVault[];
+    }
   | { ok: false; error: RedeemPairingErrorCode; message: string };
 
 type FoldedPairing =
@@ -83,6 +97,8 @@ type FoldedPairing =
       gatewayId: string;
       vaultId: string;
       vaultName: string;
+      vaultIds: string[];
+      vaults: PairedVault[];
       gatewayName?: string;
     }
   | { error: RedeemPairingErrorCode; message: string };
@@ -101,6 +117,8 @@ export function foldIrohPairResponse(response: {
   gatewayName?: string;
   vaultId?: string;
   vaultName?: string;
+  vaultIds?: string[];
+  vaults?: PairedVault[];
 }): FoldedPairing {
   if (!response.ok) {
     if (response.error === "ticket_expired") {
@@ -127,10 +145,26 @@ export function foldIrohPairResponse(response: {
       message: "Gateway did not return its EndpointId.",
     };
   }
+  const vaults = (response.vaults ?? []).filter(
+    (vault) => typeof vault.vaultId === "string" && vault.vaultId.length > 0
+  );
+  // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
+  const vaultIds = [
+    response.vaultId,
+    ...(response.vaultIds ?? []),
+    ...vaults.map((vault) => vault.vaultId),
+  ].filter(
+    (vaultId, index, all): vaultId is string =>
+      typeof vaultId === "string" &&
+      vaultId.length > 0 &&
+      all.indexOf(vaultId) === index
+  );
   return {
     gatewayId: response.gatewayId,
     vaultId: response.vaultId,
     vaultName: response.vaultName ?? "",
+    vaultIds,
+    vaults,
     ...(response.gatewayName ? { gatewayName: response.gatewayName } : {}),
   };
 }

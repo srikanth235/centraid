@@ -275,12 +275,25 @@ export interface CentraidGatewayProfile {
 
 /**
  * Result of redeeming a gateway pairing ticket (issue #376). On success, the
- * paired gateway AND the vault it enrolled into are both now active — the
+ * paired gateway AND the primary vault it enrolled into are both now active — the
  * renderer should treat this the same as a `setActiveGateway` +
  * `setActiveVault` response and drop gateway/vault-scoped state.
  */
 export type CentraidRedeemGatewayPairingResult =
-  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
+  | {
+      ok: true;
+      gatewayId: string;
+      vaultId: string;
+      vaultName: string;
+      /** Every vault granted by the one-time ticket. */
+      vaultIds?: string[];
+      vaults?: Array<{
+        vaultId: string;
+        enrollmentId?: string;
+        vaultName?: string;
+        role?: "admin" | "write" | "read";
+      }>;
+    }
   | {
       ok: false;
       /** Stable error code — safe to switch on for copy. */
@@ -839,8 +852,9 @@ interface CentraidApi {
   }) => Promise<{ rememberDevice: boolean }>;
   /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
-   * over the iroh pairing plane (issue #376). On success the paired gateway AND the vault
-   * it enrolled into are both active — treat the result like a combined
+   * over the iroh pairing plane (issue #376). On success the paired gateway AND the primary vault
+   * it enrolled into are both active; the result also carries every vault granted by a
+   * multi-vault ticket. Treat it like a combined
    * `setActiveGateway` + `setActiveVault` and drop gateway/vault-scoped
    * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
    * Never rejects — failures come back as `{ok:false, error, message}`.

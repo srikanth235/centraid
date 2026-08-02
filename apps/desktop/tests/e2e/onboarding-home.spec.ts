@@ -123,6 +123,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       fullPage: true,
     });
     await page.screenshot({
+      path: path.join(evidenceDir, "issue-multi-vault-sync-hardening.png"),
+      fullPage: true,
+    });
+    await page.screenshot({
       path: path.join(evidenceDir, "issue-690-product-grammar.png"),
       fullPage: true,
     });

@@ -142,10 +142,16 @@ button:hover {
 }
 .status-card {
   display: grid;
-  grid-template-columns: var(--sp-2) 1fr auto;
+  grid-template-columns: var(--sp-2) 1fr auto auto;
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-3);
+}
+.status-card select {
+  max-width: 112px;
+  margin: 0;
+  padding: 6px 7px;
+  font: inherit;
 }
 .pulse {
   width: var(--sp-2);

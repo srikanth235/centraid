@@ -40,6 +40,8 @@ describe("gatewayModals", () => {
         ok: true,
         vaultId: "v1",
         vaultName: "Home",
+        vaultIds: ["v1"],
+        vaults: [{ vaultId: "v1", vaultName: "Home" }],
       });
       const result = await connectGateway({
         kind: "ticket",
@@ -56,6 +58,7 @@ describe("gatewayModals", () => {
         label: "Home",
         ok: true,
         vaultId: "v1",
+        vaultIds: ["v1"],
       });
     });
 

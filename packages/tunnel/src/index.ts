@@ -39,6 +39,7 @@ export type {
   GatewayEndpointOptions,
   GatewayPairRequest,
   GatewayPairResponse,
+  GatewayPairVault,
 } from "./gateway-endpoint.js";
 export {
   DEVICE_IDENTITY_HEADER,

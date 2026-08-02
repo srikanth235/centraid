@@ -16,6 +16,8 @@ export type ReplicaChangeOp = "insert" | "update" | "delete";
 export interface ReplicaChangeEntry {
   seq: number;
   epoch: string;
+  /** All trigger rows from one committed gateway transaction share this id. */
+  commitId: string;
   entity: string;
   rowId: string;
   op: ReplicaChangeOp;
@@ -62,6 +64,7 @@ interface MetaRow {
   floor_seq: number;
   schema_epoch: number;
   trigger_schema_version: number;
+  active_commit_id: string | null;
   epoch_reason: string;
   epoch_started_at: string;
 }
@@ -155,11 +158,11 @@ function triggerSql(
     const oldId = rowIdExpression("old", spec.primaryKey);
     const newId = rowIdExpression("new", spec.primaryKey);
     return `CREATE TRIGGER ${quoteIdentifier(name)} AFTER ${event} ON ${quoteIdentifier(spec.physical)} BEGIN
-  INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
-  SELECT epoch, ${sqlString(spec.logical)}, ${oldId}, 'delete', ${oldValuesExpression(spec)}, ${changedAt}
+  INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
+  SELECT epoch, COALESCE(active_commit_id, 'implicit:' || lower(hex(randomblob(16)))), ${sqlString(spec.logical)}, ${oldId}, 'delete', ${oldValuesExpression(spec)}, ${changedAt}
     FROM replica_meta WHERE singleton = 1 AND ${oldId} IS NOT ${newId};
-  INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
-  SELECT epoch, ${sqlString(spec.logical)}, ${newId},
+  INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
+  SELECT epoch, COALESCE(active_commit_id, 'implicit:' || lower(hex(randomblob(16)))), ${sqlString(spec.logical)}, ${newId},
          CASE WHEN ${oldId} IS ${newId} THEN 'update' ELSE 'insert' END,
          CASE WHEN ${oldId} IS ${newId} THEN ${oldValuesExpression(spec)} ELSE NULL END,
          ${changedAt}
@@ -170,8 +173,8 @@ END`;
   const alias = suffix === "ai" ? "new" : "old";
   const oldValues = suffix === "ad" ? oldValuesExpression(spec) : "NULL";
   return `CREATE TRIGGER ${quoteIdentifier(name)} AFTER ${event} ON ${quoteIdentifier(spec.physical)} BEGIN
-  INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
-  SELECT epoch, ${sqlString(spec.logical)}, ${rowIdExpression(alias, spec.primaryKey)}, ${sqlString(op)},
+  INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
+  SELECT epoch, COALESCE(active_commit_id, 'implicit:' || lower(hex(randomblob(16)))), ${sqlString(spec.logical)}, ${rowIdExpression(alias, spec.primaryKey)}, ${sqlString(op)},
          ${oldValues}, ${changedAt}
     FROM replica_meta WHERE singleton = 1;
 END`;
@@ -251,12 +254,135 @@ function meta(vault: DatabaseSync): MetaRow {
   const row = vault
     .prepare(
       `SELECT epoch, floor_seq, schema_epoch, trigger_schema_version,
+              active_commit_id,
               epoch_reason, epoch_started_at
          FROM replica_meta WHERE singleton = 1`
     )
     .get() as MetaRow | undefined;
   if (!row) throw new Error("replica metadata is missing");
   return row;
+}
+
+/**
+ * Add the commit-group columns to databases created before grouped deltas.
+ * The repository is still pre-release, but local vaults are long-lived and
+ * must not lose their change history merely because this process learned a
+ * stronger paging invariant.
+ */
+function ensureReplicaCommitColumns(vault: DatabaseSync): void {
+  const metaColumns = new Set(
+    (
+      vault.prepare("PRAGMA table_info(replica_meta)").all() as {
+        name: string;
+      }[]
+    ).map((column) => column.name)
+  );
+  const changeColumns = new Set(
+    (
+      vault.prepare("PRAGMA table_info(replica_change)").all() as {
+        name: string;
+      }[]
+    ).map((column) => column.name)
+  );
+  if (!metaColumns.has("active_commit_id"))
+    vault.exec("ALTER TABLE replica_meta ADD COLUMN active_commit_id TEXT");
+  if (!changeColumns.has("commit_id")) {
+    vault.exec("ALTER TABLE replica_change ADD COLUMN commit_id TEXT");
+    vault.exec(
+      `UPDATE replica_change
+          SET commit_id = 'legacy:' || seq
+        WHERE commit_id IS NULL`
+    );
+  }
+  vault.exec(
+    `CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_commit_seq
+       ON replica_change(epoch, commit_id, seq)`
+  );
+  const intentTable = vault
+    .prepare(
+      `SELECT sql FROM sqlite_master
+        WHERE type = 'table' AND name = 'replica_intent_outcome'`
+    )
+    .get() as { sql: string | null } | undefined;
+  if (intentTable?.sql && !intentTable.sql.includes("'conflict'")) {
+    // The status CHECK constraint is part of the old table definition and
+    // SQLite cannot widen CHECK constraints with ALTER TABLE. Rebuild this
+    // small protocol table before triggers are refreshed.
+    vault.exec(`
+      DROP TRIGGER IF EXISTS trg_replica_replica_intent_outcome_ai;
+      DROP TRIGGER IF EXISTS trg_replica_replica_intent_outcome_au;
+      DROP TRIGGER IF EXISTS trg_replica_replica_intent_outcome_ad;
+      CREATE TABLE replica_intent_outcome_next (
+        intent_id TEXT PRIMARY KEY,
+        device_id TEXT NOT NULL,
+        app_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+          status IN ('queued','sending','parked','executed','denied','failed','conflict')
+        ),
+        invocation_id TEXT,
+        reason TEXT,
+        conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO replica_intent_outcome_next (
+        intent_id, device_id, app_id, action, payload_hash, status,
+        invocation_id, reason, conflict_json, created_at, updated_at
+      )
+      SELECT intent_id, device_id, app_id, action, payload_hash, status,
+             invocation_id, reason, NULL, created_at, updated_at
+        FROM replica_intent_outcome;
+      DROP TABLE replica_intent_outcome;
+      ALTER TABLE replica_intent_outcome_next RENAME TO replica_intent_outcome;
+      CREATE INDEX IF NOT EXISTS idx_replica_intent_device_status
+        ON replica_intent_outcome(device_id, status, updated_at);
+    `);
+  }
+  const intentColumns = new Set(
+    (
+      vault.prepare("PRAGMA table_info(replica_intent_outcome)").all() as {
+        name: string;
+      }[]
+    ).map((column) => column.name)
+  );
+  if (!intentColumns.has("conflict_json"))
+    vault.exec(
+      "ALTER TABLE replica_intent_outcome ADD COLUMN conflict_json TEXT"
+    );
+}
+
+export interface ReplicaCommitHandle {
+  commitId: string;
+  owner: boolean;
+}
+
+/** Mark the caller's open SQLite transaction so triggers share one group id. */
+export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
+  const current = vault
+    .prepare(`SELECT active_commit_id FROM replica_meta WHERE singleton = 1`)
+    .get() as { active_commit_id: string | null } | undefined;
+  if (current?.active_commit_id)
+    return { commitId: current.active_commit_id, owner: false };
+  const commitId = randomUUID();
+  vault
+    .prepare(`UPDATE replica_meta SET active_commit_id = ? WHERE singleton = 1`)
+    .run(commitId);
+  return { commitId, owner: true };
+}
+
+/** Clear the transaction marker before the caller commits its write window. */
+export function endReplicaCommit(
+  vault: DatabaseSync,
+  handle: ReplicaCommitHandle
+): void {
+  if (!handle.owner) return;
+  vault
+    .prepare(
+      `UPDATE replica_meta SET active_commit_id = NULL WHERE singleton = 1`
+    )
+    .run();
 }
 
 function currentSchemaEpoch(vault: DatabaseSync): number {
@@ -291,6 +417,7 @@ export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
 export function initializeReplicaProtocol(
   vault: DatabaseSync
 ): ReplicaLogState {
+  ensureReplicaCommitColumns(vault);
   const row = meta(vault);
   const contractChanged = row.schema_epoch !== currentSchemaEpoch(vault);
   if (
@@ -331,14 +458,19 @@ export function appendReplicaChange(
   const changedAt = input.changedAt ?? new Date().toISOString();
   const result = vault
     .prepare(
-      `INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
-       SELECT epoch, ?, ?, ?, NULL, ? FROM replica_meta WHERE singleton = 1`
+      `INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
+       SELECT epoch, COALESCE(active_commit_id, 'implicit:' || lower(hex(randomblob(16)))), ?, ?, ?, NULL, ? FROM replica_meta WHERE singleton = 1`
     )
     .run(input.entity, input.rowId, input.op, changedAt);
   const seq = Number(result.lastInsertRowid);
   return {
     seq,
     epoch: meta(vault).epoch,
+    commitId: (
+      vault
+        .prepare("SELECT commit_id FROM replica_change WHERE seq = ?")
+        .get(seq) as { commit_id: string }
+    ).commit_id,
     entity: input.entity,
     rowId: input.rowId,
     op: input.op,
@@ -378,7 +510,7 @@ export function readReplicaChanges(
   }
   const rows = vault
     .prepare(
-      `SELECT seq, epoch, entity, row_id, op, old_values_json, changed_at
+      `SELECT seq, epoch, commit_id, entity, row_id, op, old_values_json, changed_at
          FROM replica_change
         WHERE epoch = ? AND seq > ? AND seq <= ?
         ORDER BY seq
@@ -387,27 +519,59 @@ export function readReplicaChanges(
     .all(state.epoch, since.seq, state.watermark.seq, limit + 1) as {
     seq: number;
     epoch: string;
+    commit_id: string;
     entity: string;
     row_id: string;
     op: ReplicaChangeOp;
     old_values_json: string | null;
     changed_at: string;
   }[];
-  const hasMore = rows.length > limit;
-  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  let pageRows = rows.length > limit ? rows.slice(0, limit) : rows;
+  let last = pageRows.at(-1);
+  if (last) {
+    const groupTail = vault
+      .prepare(
+        `SELECT seq, epoch, commit_id, entity, row_id, op, old_values_json, changed_at
+           FROM replica_change
+          WHERE epoch = ? AND commit_id = ? AND seq > ? AND seq <= ?
+          ORDER BY seq`
+      )
+      .all(state.epoch, last.commit_id, last.seq, state.watermark.seq) as {
+      seq: number;
+      epoch: string;
+      commit_id: string;
+      entity: string;
+      row_id: string;
+      op: ReplicaChangeOp;
+      old_values_json: string | null;
+      changed_at: string;
+    }[];
+    if (groupTail.length > 0) pageRows = [...pageRows, ...groupTail];
+    last = pageRows.at(-1);
+  }
+  const hasMore = Boolean(
+    last &&
+    vault
+      .prepare(
+        `SELECT 1 AS present FROM replica_change
+            WHERE epoch = ? AND seq > ? AND seq <= ? LIMIT 1`
+      )
+      .get(state.epoch, last.seq, state.watermark.seq)
+  );
   const changes = pageRows.map((row) => ({
     seq: row.seq,
     epoch: row.epoch,
+    commitId: row.commit_id,
     entity: row.entity,
     rowId: row.row_id,
     op: row.op,
     oldValuesJson: row.old_values_json,
     changedAt: row.changed_at,
   }));
-  const last = changes.at(-1);
+  const lastChange = changes.at(-1);
   const next =
-    hasMore && last
-      ? { epoch: state.epoch, seq: last.seq }
+    hasMore && lastChange
+      ? { epoch: state.epoch, seq: lastChange.seq }
       : { ...state.watermark };
   return {
     changes,
@@ -495,6 +659,29 @@ function maxSeq(
   return row.seq ?? 0;
 }
 
+/** Extend a retention cutoff to the end of the commit group it touches. */
+function completeCommitThrough(
+  vault: DatabaseSync,
+  epoch: string,
+  through: number
+): number {
+  if (through <= 0) return 0;
+  const group = vault
+    .prepare(
+      `SELECT commit_id FROM replica_change
+        WHERE epoch = ? AND seq <= ? ORDER BY seq DESC LIMIT 1`
+    )
+    .get(epoch, through) as { commit_id: string } | undefined;
+  if (!group) return 0;
+  return maxSeq(
+    vault,
+    `SELECT MAX(seq) AS seq FROM replica_change
+      WHERE epoch = ? AND commit_id = ?`,
+    epoch,
+    group.commit_id
+  );
+}
+
 /** Apply the smaller of the age/count windows and advance only across deleted prefixes. */
 export function pruneReplicaChanges(
   vault: DatabaseSync,
@@ -529,11 +716,15 @@ export function pruneReplicaChanges(
         .changes
     );
 
-    const ageThrough = maxSeq(
+    const ageThrough = completeCommitThrough(
       vault,
-      `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ? AND changed_at < ?`,
       epoch,
-      cutoff
+      maxSeq(
+        vault,
+        `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ? AND changed_at < ?`,
+        epoch,
+        cutoff
+      )
     );
     if (ageThrough > 0) {
       // Delete the whole prefix, not only timestamp matches: floor cursors
@@ -561,7 +752,7 @@ export function pruneReplicaChanges(
       // already consumed every entry we remove. Delete the rest of that
       // prefix too because rows at/below the new floor are unreachable after
       // rebootstrap and retaining them would be pure storage waste.
-      const compactionThrough = maxSeq(
+      const compactionCandidate = maxSeq(
         vault,
         `SELECT MAX(older.seq) AS seq
            FROM replica_change older
@@ -574,6 +765,11 @@ export function pruneReplicaChanges(
                  AND newer.seq > older.seq
             )`,
         epoch
+      );
+      const compactionThrough = completeCommitThrough(
+        vault,
+        epoch,
+        compactionCandidate
       );
       if (compactionThrough > 0) {
         compacted = Number(
@@ -610,13 +806,18 @@ export function pruneReplicaChanges(
       // only the residual excess, again advancing across a complete prefix.
       if (count > maxEntries) {
         const excess = count - maxEntries;
-        const countThrough = (
+        const countCandidate = (
           vault
             .prepare(
               `SELECT seq FROM replica_change WHERE epoch = ? ORDER BY seq LIMIT 1 OFFSET ?`
             )
             .get(epoch, excess - 1) as { seq: number }
         ).seq;
+        const countThrough = completeCommitThrough(
+          vault,
+          epoch,
+          countCandidate
+        );
         overflow += Number(
           vault
             .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)

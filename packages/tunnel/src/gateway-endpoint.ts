@@ -87,10 +87,23 @@ export interface GatewayPairResponse {
   vaultName?: string;
   /** Every vault the invitation granted — one scan, many vaults, atomically. */
   vaultIds?: string[];
+  /**
+   * Per-vault enrollment details. `vaultIds` remains for older clients that
+   * only need to discover the mounted scopes; new clients use this list to
+   * retain the vault-specific enrollment handle and presentation metadata.
+   */
+  vaults?: GatewayPairVault[];
   /** Product version (display). Protocol fields gate connect (#512). */
   version?: string;
   protocolVersion?: number;
   minSupportedProtocol?: number;
+}
+
+export interface GatewayPairVault {
+  vaultId: string;
+  enrollmentId?: string;
+  vaultName?: string;
+  role?: "admin" | "write" | "read";
 }
 
 export interface GatewayEndpointOptions {

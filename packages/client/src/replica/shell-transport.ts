@@ -41,7 +41,23 @@ export class ReplicaTransportError extends GatewayClientError {
   constructor(
     code: string,
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly category:
+      | "auth"
+      | "validation"
+      | "conflict"
+      | "rebootstrap"
+      | "transient"
+      | "server" = "server",
+    readonly retryable = false,
+    readonly recommendedAction:
+      | "reauthenticate"
+      | "rebootstrap"
+      | "retry"
+      | "fix-request"
+      | "resolve-conflict"
+      | "none" = "none",
+    readonly details?: unknown
   ) {
     super(code, message);
     this.name = "ReplicaTransportError";
@@ -296,6 +312,7 @@ export async function postReplicaIntent(
         action: intent.action,
         input: intent.input,
         payloadHash: intent.payloadHash,
+        ...(intent.baseVersions ? { baseVersions: intent.baseVersions } : {}),
       }),
     }
   );
@@ -355,6 +372,16 @@ async function readReplicaJson<T>(
     typeof (body as { error?: unknown }).error === "string"
       ? String((body as { error: string }).error)
       : undefined;
+  const envelope =
+    body && typeof body === "object"
+      ? (body as {
+          message?: unknown;
+          category?: unknown;
+          retryable?: unknown;
+          recommendedAction?: unknown;
+          details?: unknown;
+        })
+      : {};
   if (
     response.status === 401 ||
     (response.status === 403 && serverCode === "replica_device_not_enrolled")
@@ -365,14 +392,69 @@ async function readReplicaJson<T>(
     );
   }
   if (!response.ok) {
+    const category = isReplicaErrorCategory(envelope.category)
+      ? envelope.category
+      : response.status === 409
+        ? "conflict"
+        : response.status >= 500
+          ? "server"
+          : "validation";
+    const retryable =
+      typeof envelope.retryable === "boolean"
+        ? envelope.retryable
+        : response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status >= 500;
+    const recommendedAction = isReplicaErrorAction(envelope.recommendedAction)
+      ? envelope.recommendedAction
+      : retryable
+        ? "retry"
+        : category === "validation"
+          ? "fix-request"
+          : category === "conflict"
+            ? "resolve-conflict"
+            : "none";
     throw new ReplicaTransportError(
       serverCode ??
         (response.status >= 500 ? "gateway_error" : "replica_request_rejected"),
-      `${operation} failed (HTTP ${response.status})`,
-      response.status
+      typeof envelope.message === "string"
+        ? `${operation}: ${envelope.message}`
+        : `${operation} failed (HTTP ${response.status})`,
+      response.status,
+      category,
+      retryable,
+      recommendedAction,
+      envelope.details
     );
   }
   return body as T;
+}
+
+function isReplicaErrorCategory(
+  value: unknown
+): value is ReplicaTransportError["category"] {
+  return (
+    value === "auth" ||
+    value === "validation" ||
+    value === "conflict" ||
+    value === "rebootstrap" ||
+    value === "transient" ||
+    value === "server"
+  );
+}
+
+function isReplicaErrorAction(
+  value: unknown
+): value is ReplicaTransportError["recommendedAction"] {
+  return (
+    value === "reauthenticate" ||
+    value === "rebootstrap" ||
+    value === "retry" ||
+    value === "fix-request" ||
+    value === "resolve-conflict" ||
+    value === "none"
+  );
 }
 
 function rebootstrapReason(body: unknown): RebootstrapReason {
@@ -405,8 +487,15 @@ function parseOutcome(
   }
   const candidate = value as Record<string, unknown>;
   const allowed = allowInFlight
-    ? new Set(["executed", "parked", "denied", "failed", "in-flight"])
-    : new Set(["executed", "parked", "denied", "failed"]);
+    ? new Set([
+        "executed",
+        "parked",
+        "denied",
+        "failed",
+        "conflict",
+        "in-flight",
+      ])
+    : new Set(["executed", "parked", "denied", "failed", "conflict"]);
   if (
     typeof candidate.intentId !== "string" ||
     !allowed.has(String(candidate.status))
@@ -419,6 +508,20 @@ function parseOutcome(
     throw new ReplicaProtocolError(
       "Replica intent outcome reason is malformed"
     );
+  }
+  if (candidate.conflict !== undefined) {
+    const conflict = candidate.conflict;
+    if (!conflict || typeof conflict !== "object")
+      throw new ReplicaProtocolError("Replica conflict details are malformed");
+    const detail = conflict as Record<string, unknown>;
+    if (
+      typeof detail.entity !== "string" ||
+      typeof detail.rowId !== "string" ||
+      !Number.isSafeInteger(detail.expectedVersion) ||
+      !Number.isSafeInteger(detail.actualVersion)
+    ) {
+      throw new ReplicaProtocolError("Replica conflict details are malformed");
+    }
   }
   return value as
     | IntentOutcome

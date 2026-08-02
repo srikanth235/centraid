@@ -15,6 +15,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
+  readReplicaRow,
 } from "@centraid/vault";
 
 import { replicaDispatchOutcome } from "../serve/build-gateway.js";
@@ -22,6 +23,7 @@ import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { handleReplicaIntent } from "./replica-intent-route.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
+import { buildReplicaShapes, shapeReplicaRow } from "./replica-shape.js";
 
 const logger = {
   info: () => undefined,
@@ -29,6 +31,28 @@ const logger = {
   error: () => undefined,
 };
 const cleanups: Array<() => Promise<void> | void> = [];
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === "boolean" || typeof value === "string")
+    return JSON.stringify(value);
+  if (typeof value === "number") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (typeof value !== "object") throw new Error("test value is not JSON-safe");
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+    .join(",")}}`;
+}
+
+function intentHash(input: {
+  appId: string;
+  action: string;
+  input: unknown;
+  baseVersions?: unknown[];
+}): string {
+  return crypto.createHash("sha256").update(canonicalJson(input)).digest("hex");
+}
+
 describe("replica-intent-route suite", () => {
   afterEach(async () => {
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
@@ -920,6 +944,99 @@ describe("replica-intent-route suite", () => {
 
     expect(reply.res.statusCode).toBe(200);
     expect(reply.body()).toMatchObject({ outcome: { status: "denied" } });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  test("checks opaque row versions before dispatching an offline edit", async () => {
+    const vault = await plane();
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [
+        {
+          schema: "schedule",
+          table: "task",
+          verbs: "read+act",
+          fieldMask: ["title"],
+        },
+      ],
+    });
+    vault.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority)
+         VALUES ('opaque-conflict', ?, 'Before', 'needs-action', 0)`
+      )
+      .run(vault.boot.ownerPartyId);
+    const access = {
+      role: "write" as const,
+      rememberDevice: true,
+      deviceId: "device-opaque-conflict",
+      appId: "planner",
+    };
+    const shape = buildReplicaShapes(vault.db.vault, access).find((item) =>
+      item.entityMap.has("schedule.task")
+    )!;
+    expect(shape.entityMap.get("schedule.task")?.primaryKey).toBe(
+      "__centraid_row_id"
+    );
+    const before = shapeReplicaRow(
+      shape,
+      "schedule.task",
+      readReplicaRow(vault.db.vault, "schedule.task", "opaque-conflict")!
+    )!;
+    const version = readReplicaRow(
+      vault.db.vault,
+      "schedule.task",
+      "opaque-conflict"
+    )!.rowVersion!;
+    vault.db.vault
+      .prepare(
+        `UPDATE schedule_task SET title = 'After' WHERE task_id = 'opaque-conflict'`
+      )
+      .run();
+
+    const input = { title: "offline edit" };
+    const baseVersions = [
+      {
+        shapeId: shape.shapeId,
+        entity: "schedule.task",
+        rowId: before.rowId,
+        version,
+      },
+    ];
+    const dispatch = vi.fn<ReplicaIntentDispatcher>();
+    const reply = response();
+    await handleReplicaIntent(
+      request({
+        intentId: "opaque-conflict-1",
+        appId: "planner",
+        action: "edit_task",
+        input,
+        baseVersions,
+        payloadHash: intentHash({
+          appId: "planner",
+          action: "edit_task",
+          input,
+          baseVersions,
+        }),
+      }),
+      reply.res,
+      { plane: vault, access, dispatch }
+    );
+
+    expect(reply.res.statusCode).toBe(200);
+    expect(reply.body()).toMatchObject({
+      outcome: {
+        status: "conflict",
+        conflict: {
+          shapeId: shape.shapeId,
+          entity: "schedule.task",
+          rowId: before.rowId,
+          expectedVersion: version,
+          actualVersion: expect.any(Number),
+        },
+      },
+    });
     expect(dispatch).not.toHaveBeenCalled();
   });
 

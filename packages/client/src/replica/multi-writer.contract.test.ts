@@ -80,6 +80,79 @@ describe("multi-writer", () => {
       await expect(tabA.list()).resolves.toHaveLength(1);
     });
 
+    test("upgrading the outbox preserves a pending v2 intent and adds the outcome journal", async () => {
+      const factory = new IDBFactory();
+      const name = `centraid-intent-upgrade-${crypto.randomUUID()}`;
+      const legacy = factory.open(name, 2);
+      await new Promise<void>((resolve, reject) => {
+        legacy.addEventListener("upgradeneeded", () => {
+          const db = legacy.result;
+          const intents = db.createObjectStore("intents", {
+            keyPath: "intentId",
+          });
+          intents.createIndex("createdOrder", "createdOrder", {
+            unique: true,
+          });
+          intents.createIndex("stateCreatedOrder", ["state", "createdOrder"], {
+            unique: true,
+          });
+          db.createObjectStore("meta", { keyPath: "key" });
+        });
+        legacy.addEventListener("success", () => {
+          legacy.result.close();
+          resolve();
+        });
+        legacy.addEventListener("error", () =>
+          reject(legacy.error ?? new Error("legacy database failed"))
+        );
+      });
+      const legacyWrite = factory.open(name, 2);
+      await new Promise<void>((resolve, reject) => {
+        legacyWrite.addEventListener("success", () => {
+          const db = legacyWrite.result;
+          const tx = db.transaction("intents", "readwrite");
+          tx.objectStore("intents").put({
+            intentId: "upgrade-intent",
+            payloadHash: "hash-upgrade",
+            appId: "agenda",
+            action: "edit",
+            input: { title: "pending" },
+            state: "queued",
+            createdOrder: 1,
+            attempts: 0,
+            optimistic: [],
+            dependencies: [],
+          });
+          tx.addEventListener("complete", () => {
+            db.close();
+            resolve();
+          });
+          tx.addEventListener("error", () =>
+            reject(tx.error ?? new Error("legacy write failed"))
+          );
+        });
+        legacyWrite.addEventListener("error", () =>
+          reject(legacyWrite.error ?? new Error("legacy reopen failed"))
+        );
+      });
+
+      const upgraded = await IndexedDbIntentStore.open(name, factory);
+      onTestFinished(async () => {
+        upgraded.close();
+        await new Promise<void>((resolve, reject) => {
+          const request = factory.deleteDatabase(name);
+          request.addEventListener("success", () => resolve());
+          request.addEventListener("error", () =>
+            reject(request.error ?? new Error("database deletion failed"))
+          );
+        });
+      });
+      await expect(upgraded.list()).resolves.toMatchObject([
+        { intentId: "upgrade-intent", state: "queued" },
+      ]);
+      await expect(upgraded.listSettled()).resolves.toStrictEqual([]);
+    });
+
     // #496 P3 / web.concurrency double-write: concurrent optimistic enqueue of
     // *distinct* intent ids must both survive, and only one claimer may own each.
     test("two tabs double-write distinct intents: both durable, claims exclusive per intent", async () => {

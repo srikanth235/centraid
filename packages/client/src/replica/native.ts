@@ -29,6 +29,7 @@ export * from "./store.js";
 export * from "./store-core.js";
 export * from "./types.js";
 export * from "./windowed-bootstrap.js";
+export * from "./write-helpers.js";
 export {
   authHeaders,
   GatewayClientError,

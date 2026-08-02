@@ -603,16 +603,6 @@
       "glob": "packages/automation/src/**/*.ts",
       "contains": "COMPAT\\(",
       "trackingIssue": 656
-    },
-    "desktop.compat": {
-      "glob": "apps/desktop/src/**/*.ts",
-      "contains": "COMPAT\\(",
-      "trackingIssue": 656
-    },
-    "web.compat": {
-      "glob": "apps/web/src/**/*.ts",
-      "contains": "COMPAT\\(",
-      "trackingIssue": 656
     }
   },
   "workspaceSurfaces": {
@@ -695,9 +685,9 @@
     "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #656.",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
-    "desktop.compat": "Skip: no desktop settings/schema migration suite in v0; settings-merge contracts cover preserve-or-set durability of prefs.",
+    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #656.",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Skip: no web storage migration suite in v0; sw-version + webGatewayId contracts cover identity/version stability.",
+    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #656.",
     "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #656.",
     "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #656.",
     "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
@@ -1130,7 +1120,10 @@
       "tier": "unit"
     },
     "desktop.offline": null,
-    "desktop.compat": null,
+    "desktop.compat": {
+      "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
+      "tier": "unit"
+    },
     "desktop.journey": {
       "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
       "tier": "e2e"
@@ -1167,7 +1160,10 @@
       "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts",
       "tier": "e2e"
     },
-    "web.compat": null,
+    "web.compat": {
+      "owner": "apps/web/src/web-host.test.ts",
+      "tier": "unit"
+    },
     "web.journey": {
       "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
       "tier": "e2e"
@@ -1571,7 +1567,7 @@
         "scalability": "solid",
         "security": "partial",
         "offline": "skip",
-        "compat": "skip",
+        "compat": "partial",
         "journey": "solid",
         "accessibility": "partial"
       }
@@ -1588,7 +1584,7 @@
         "scalability": "solid",
         "security": "partial",
         "offline": "solid",
-        "compat": "skip",
+        "compat": "partial",
         "journey": "partial",
         "accessibility": "partial"
       }

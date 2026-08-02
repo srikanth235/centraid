@@ -32,7 +32,18 @@ export interface TunnelPairResult {
   gatewayName?: string;
   vaultId?: string;
   vaultName?: string;
+  /** Every vault enrolled by a multi-vault ticket. */
+  vaultIds?: string[];
+  /** Vault-scoped enrollment metadata returned by newer gateways. */
+  vaults?: TunnelPairVault[];
   error?: string;
+}
+
+export interface TunnelPairVault {
+  vaultId: string;
+  enrollmentId?: string;
+  vaultName?: string;
+  role?: "admin" | "write" | "read";
 }
 
 export interface TunnelPairArgs {

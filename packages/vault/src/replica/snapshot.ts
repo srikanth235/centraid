@@ -11,6 +11,8 @@ export const DEFAULT_REPLICA_MAX_VALUE_BYTES = 64 * 1_024;
 export interface ReplicaRow {
   rowId: string;
   values: Record<string, unknown>;
+  /** Last change-log sequence for this row in the current replica epoch. */
+  rowVersion?: number;
   /** Oversized and binary values omitted from `values`; fetch them on demand. */
   deferredColumns: string[];
 }
@@ -103,7 +105,8 @@ function valueBytes(value: unknown): number {
 function publicRow(
   raw: Record<string, unknown>,
   shape: EntityShape,
-  maxValueBytes: number
+  maxValueBytes: number,
+  rowVersion: number
 ): ReplicaRow {
   const values: Record<string, unknown> = {};
   const deferredColumns: string[] = [];
@@ -118,7 +121,36 @@ function publicRow(
       values[column] = value;
     }
   }
-  return { rowId: rowIdOf(raw, shape.primaryKey), values, deferredColumns };
+  return {
+    rowId: rowIdOf(raw, shape.primaryKey),
+    values,
+    deferredColumns,
+    ...(rowVersion > 0 ? { rowVersion } : {}),
+  };
+}
+
+function latestRowVersions(
+  vault: DatabaseSync,
+  entity: string,
+  rowIds: readonly string[],
+  epoch: string
+): Map<string, number> {
+  const versions = new Map<string, number>();
+  for (let offset = 0; offset < rowIds.length; offset += 500) {
+    const chunk = rowIds.slice(offset, offset + 500);
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = vault
+      .prepare(
+        `SELECT row_id, MAX(seq) AS seq FROM replica_change
+          WHERE epoch = ? AND entity = ? AND row_id IN (${placeholders})
+          GROUP BY row_id`
+      )
+      .all(epoch, entity, ...chunk) as { row_id: string; seq: number | null }[];
+    for (const row of rows)
+      if (row.seq !== null) versions.set(row.row_id, row.seq);
+  }
+  return versions;
 }
 
 function validateOptions(options: ReadReplicaRowsOptions): {
@@ -183,7 +215,21 @@ export function readReplicaRows(
     ) as unknown as Record<string, unknown>[];
   const hasMore = rawRows.length > limit;
   const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
-  const rows = pageRows.map((row) => publicRow(row, shape, maxValueBytes));
+  const rowIds = pageRows.map((row) => rowIdOf(row, shape.primaryKey));
+  const versions = latestRowVersions(
+    vault,
+    entity,
+    rowIds,
+    currentReplicaLogState(vault).epoch
+  );
+  const rows = pageRows.map((row) =>
+    publicRow(
+      row,
+      shape,
+      maxValueBytes,
+      versions.get(rowIdOf(row, shape.primaryKey)) ?? 0
+    )
+  );
   return {
     entity,
     columns: [...shape.columns],
@@ -218,7 +264,17 @@ export function readReplicaRow(
     .get(...(values as (string | number | bigint | Uint8Array | null)[])) as
     | Record<string, unknown>
     | undefined;
-  return raw ? publicRow(raw, shape, maxValueBytes) : undefined;
+  if (!raw) return undefined;
+  const canonicalRowId = rowIdOf(raw, shape.primaryKey);
+  const version = vault
+    .prepare(
+      `SELECT MAX(seq) AS seq FROM replica_change
+        WHERE epoch = ? AND entity = ? AND row_id = ?`
+    )
+    .get(currentReplicaLogState(vault).epoch, entity, canonicalRowId) as {
+    seq: number | null;
+  };
+  return publicRow(raw, shape, maxValueBytes, version.seq ?? 0);
 }
 
 export interface ReplicaSnapshotReader {

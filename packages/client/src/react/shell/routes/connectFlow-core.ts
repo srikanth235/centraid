@@ -79,6 +79,8 @@ export type VaultChoice =
 export interface ConnectFlowResult {
   gatewayId: string;
   vaultId: string;
+  /** Every vault enrolled by the ticket; `vaultId` remains the initial focus. */
+  vaultIds?: string[];
   displayLabel: string;
   /** True only when `vaultId` is the gateway's auto-founded "Personal" vault
    *  — i.e. a vault first run may safely rename to the owner's display name.
@@ -100,7 +102,8 @@ export interface ConnectFlowState {
   step: ConnectStep;
   method: ConnectMethod | null;
 
-  // "gateway" method details — one iroh pairing ticket.
+  // "gateway" method details — one iroh pairing ticket, potentially covering
+  // several vault grants.
   ticket: string;
   label: string;
   /**
@@ -310,14 +313,15 @@ export function canStartTest(state: ConnectFlowState): boolean {
 
 /** Whether the current method can create a brand-new vault as part of this
  *  flow (design doc step C): the desktop admins its own embedded gateway's
- *  vault lifecycle; a ticket's vault is fixed by the ticket payload. */
+ *  vault lifecycle; a ticket's initial vault is fixed by the ticket payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
   return state.method === "local";
 }
 
 export interface ConnectVaultCapability {
-  /** Set only for a ticket-mode "Existing gateway" connect — the vault is
-   *  fixed by the ticket payload, shown as a locked, non-selectable row. */
+  /** Set only for a ticket-mode "Existing gateway" connect — the initial
+   *  vault is fixed by the ticket payload, shown as a locked, non-selectable
+   *  row. Additional grants are surfaced after redemption. */
   locked: { vaultName: string } | null;
   options: ConnectivityVaultPreview[];
   canCreate: boolean;

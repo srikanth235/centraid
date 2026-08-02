@@ -142,6 +142,8 @@ describe("store-core", () => {
         expect(store.status()).toStrictEqual({
           cursor: { epoch: "replica-1", seq: 2 },
           schemaEpoch: "schema-1",
+          coverage: "complete",
+          durability: "durable",
         });
         expect(store.catalog()).toStrictEqual(snapshot().shapes);
       } finally {
@@ -233,6 +235,66 @@ describe("store-core", () => {
             .read({ shapeId: "shape-agenda", entity: "core.event" })
             .rows.map((row) => row.values.title)
         ).toStrictEqual(["Canonical update"]);
+      } finally {
+        store.close();
+      }
+    });
+
+    test("ignores stale row-version changes while still advancing the cursor", () => {
+      const store = makeStore();
+      try {
+        const full = snapshot();
+        store.bootstrap({
+          ...full,
+          rows: full.rows.map((row, index) => ({
+            ...row,
+            rowVersion: index + 1,
+          })),
+        });
+        store.applyChanges({
+          protocolVersion: 1,
+          schemaEpoch: "schema-1",
+          from: { epoch: "replica-1", seq: 2 },
+          to: { epoch: "replica-1", seq: 3 },
+          changes: [
+            {
+              op: "upsert",
+              shapeId: "shape-agenda",
+              entity: "core.event",
+              rowId: "event-1",
+              rowVersion: 0,
+              values: {
+                event_id: "event-1",
+                title: "stale",
+                status: "open",
+                starts_at: "2026-07-15T08:00:00.000Z",
+              },
+            },
+            {
+              op: "delete",
+              shapeId: "shape-agenda",
+              entity: "core.event",
+              rowId: "event-2",
+              rowVersion: 1,
+            },
+          ],
+        });
+        expect(
+          store.read({ shapeId: "shape-agenda", entity: "core.event" }).rows
+        ).toStrictEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              rowId: "event-1",
+              rowVersion: 1,
+              values: expect.objectContaining({ title: "Earlier" }),
+            }),
+            expect.objectContaining({ rowId: "event-2", rowVersion: 2 }),
+          ])
+        );
+        expect(store.status().cursor).toStrictEqual({
+          epoch: "replica-1",
+          seq: 3,
+        });
       } finally {
         store.close();
       }
@@ -334,6 +396,8 @@ describe("store-core", () => {
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
+          coverage: "partial",
+          durability: "durable",
         });
       } finally {
         store.close();
@@ -346,6 +410,8 @@ describe("store-core", () => {
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
+          coverage: "partial",
+          durability: "durable",
         });
         expect(store.catalog()).toStrictEqual([]);
         expect(store.bootstrap(snapshot())).toStrictEqual({
@@ -378,6 +444,8 @@ describe("store-core", () => {
         expect(store.status()).toStrictEqual({
           cursor: { epoch: "replica-1", seq: 2 },
           schemaEpoch: "schema-1",
+          coverage: "complete",
+          durability: "durable",
         });
         expect(store.catalog()).toStrictEqual(full.shapes);
         expect(
@@ -408,6 +476,8 @@ describe("store-core", () => {
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
+          coverage: "partial",
+          durability: "durable",
         });
         expect(() =>
           store.read({ shapeId: "shape-agenda", entity: "core.event" })

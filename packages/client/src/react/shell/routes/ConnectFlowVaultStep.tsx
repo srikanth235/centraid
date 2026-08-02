@@ -48,8 +48,8 @@ export function VaultStep({
           </span>
           <span className={styles.lockedName}>{cap.locked.vaultName}</span>
           <p className={styles.hint}>
-            Fixed by the pairing ticket — connecting to a different vault on
-            this gateway needs a new ticket.
+            The first vault is fixed by the pairing ticket. Other vaults
+            included in the same ticket become available after connection.
           </p>
         </div>
       ) : (

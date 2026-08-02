@@ -21,6 +21,7 @@ import type {
   OptimisticMutation,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
+  ReplicaCoverage,
   ReplicaCursor,
   ReplicaEntitySchema,
   ReplicaInvalidation,
@@ -33,6 +34,7 @@ import type {
   ReplicaShape,
   ReplicaSnapshot,
   ReplicaSnapshotRow,
+  ReplicaDurability,
 } from "./types.js";
 
 /** Values the store binds to `?` placeholders: no blobs, no booleans (mapped to 0/1). */
@@ -77,6 +79,7 @@ interface StoredRow {
   row_id: string;
   payload_json: string;
   oversized_json: string;
+  server_version: number;
 }
 
 interface StoredSchema {
@@ -105,16 +108,16 @@ interface StoredSearchRow extends StoredRow {
   snippet: string | null;
 }
 
-const LOCAL_REPLICA_SCHEMA_VERSION = 5;
+const LOCAL_REPLICA_SCHEMA_VERSION = 6;
 
 const DDL = `
   CREATE TABLE IF NOT EXISTS replica_bootstrap_progress (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     protocol_version INTEGER NOT NULL,
     vault_id TEXT NOT NULL,
-    schema_epoch TEXT NOT NULL
-    ,cursor_epoch TEXT
-    ,cursor_seq INTEGER
+    schema_epoch TEXT NOT NULL,
+    cursor_epoch TEXT,
+    cursor_seq INTEGER
   );
   CREATE TABLE IF NOT EXISTS replica_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -144,6 +147,7 @@ const DDL = `
     row_id TEXT NOT NULL,
     payload_json TEXT NOT NULL,
     oversized_json TEXT NOT NULL,
+    server_version INTEGER NOT NULL DEFAULT 0 CHECK (server_version >= 0),
     PRIMARY KEY (shape_id, entity, row_id),
     FOREIGN KEY (shape_id, entity)
       REFERENCES replica_entity_schema(shape_id, entity) ON DELETE CASCADE
@@ -174,7 +178,8 @@ const DDL = `
 export class ReplicaSqliteStore {
   constructor(
     protected readonly driver: ReplicaSqliteDriver,
-    private readonly expectedVaultId: string
+    private readonly expectedVaultId: string,
+    private readonly durability: ReplicaDurability = "durable"
   ) {
     this.driver.exec("PRAGMA foreign_keys=ON;");
     this.driver.exec("PRAGMA journal_mode=DELETE;");
@@ -187,11 +192,22 @@ export class ReplicaSqliteStore {
     this.driver.close();
   }
 
-  status(): { cursor: ReplicaCursor | null; schemaEpoch: string | null } {
+  status(): {
+    cursor: ReplicaCursor | null;
+    schemaEpoch: string | null;
+    coverage: ReplicaCoverage;
+    durability: ReplicaDurability;
+  } {
     const meta = this.meta();
+    const preview = this.previewMeta();
+    const current = meta ?? preview;
     return {
-      cursor: meta ? { epoch: meta.cursor_epoch, seq: meta.cursor_seq } : null,
-      schemaEpoch: meta?.schema_epoch ?? null,
+      cursor: current
+        ? { epoch: current.cursor_epoch, seq: current.cursor_seq }
+        : null,
+      schemaEpoch: current?.schema_epoch ?? null,
+      coverage: meta ? "complete" : "partial",
+      durability: this.durability,
     };
   }
 
@@ -307,7 +323,8 @@ export class ReplicaSqliteStore {
   }
 
   applyChanges(batch: ReplicaChangeBatch): ApplyChangesResult {
-    const meta = this.meta() ?? this.previewMeta();
+    const completeMeta = this.meta();
+    const meta = completeMeta ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
     validateCursor(batch.from);
     validateCursor(batch.to);
@@ -327,7 +344,12 @@ export class ReplicaSqliteStore {
           );
         }
         if (change.op === "delete") {
-          this.deleteRow(change.shapeId, change.entity, change.rowId);
+          this.deleteRow(
+            change.shapeId,
+            change.entity,
+            change.rowId,
+            change.rowVersion
+          );
         } else {
           this.validateRow(change, schema);
           this.upsert(change, schema);
@@ -339,10 +361,18 @@ export class ReplicaSqliteStore {
           source: "canonical",
         });
       }
-      this.run(
-        "UPDATE replica_meta SET cursor_epoch = ?, cursor_seq = ? WHERE singleton = 1",
-        [batch.to.epoch, batch.to.seq]
-      );
+      if (completeMeta) {
+        this.run(
+          "UPDATE replica_meta SET cursor_epoch = ?, cursor_seq = ? WHERE singleton = 1",
+          [batch.to.epoch, batch.to.seq]
+        );
+      } else {
+        this.run(
+          `UPDATE replica_bootstrap_progress
+              SET cursor_epoch = ?, cursor_seq = ? WHERE singleton = 1`,
+          [batch.to.epoch, batch.to.seq]
+        );
+      }
     });
     return {
       cursor: batch.to,
@@ -356,7 +386,8 @@ export class ReplicaSqliteStore {
     mutations: OptimisticMutation[] = [],
     now: Date = new Date()
   ): ReplicaReadWireResult {
-    const meta = this.meta() ?? this.previewMeta();
+    const completeMeta = this.meta();
+    const meta = completeMeta ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
     const schema = this.schema(request.shapeId, request.entity);
     if (!schema) {
@@ -378,6 +409,7 @@ export class ReplicaSqliteStore {
       rows: evaluateReplicaRead(canonical, schema, request, relevant, now),
       cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
       dependency: { shapeId: request.shapeId, entity: request.entity },
+      coverage: completeMeta ? "complete" : "partial",
     };
   }
 
@@ -389,7 +421,8 @@ export class ReplicaSqliteStore {
     request: ReplicaSearchRequest,
     mutations: OptimisticMutation[] = []
   ): ReplicaSearchWireResult {
-    const meta = this.meta();
+    const completeMeta = this.meta();
+    const meta = completeMeta ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
     const schema = this.schema(request.shapeId, request.entity);
     if (!schema) {
@@ -460,7 +493,8 @@ export class ReplicaSqliteStore {
     const tieOrder = hasOpaqueIdentity ? "" : ", replica_search.row_id";
     const rows = this.all<StoredSearchRow>(
       `SELECT replica_search.row_id, replica_row.payload_json,
-              replica_row.oversized_json, replica_search.rank AS rank,
+              replica_row.oversized_json, replica_row.server_version,
+              replica_search.rank AS rank,
               snippet(replica_search, -1, '⟦', '⟧', '…', 12) AS snippet
          FROM replica_search
          JOIN replica_row
@@ -481,6 +515,7 @@ export class ReplicaSqliteStore {
       },
       oversizedFields: parseStringArray(row.oversized_json, "oversized fields"),
       hasUnavailableFields: schema.hasUnavailableFields === true,
+      ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
     }));
     const canonicalHitIds = new Set(rows.map((row) => row.rowId));
     const overlaid = applyOptimisticMutations(rows, relevant, schema).filter(
@@ -507,6 +542,7 @@ export class ReplicaSqliteStore {
       rows: overlaid.slice(0, limit),
       cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
       dependency: { shapeId: request.shapeId, entity: request.entity },
+      coverage: completeMeta ? "complete" : "partial",
     };
   }
 
@@ -653,7 +689,7 @@ export class ReplicaSqliteStore {
     hasUnavailableFields: boolean
   ): ReplicaRowEnvelope[] {
     const rows = this.all<StoredRow>(
-      `SELECT row_id, payload_json, oversized_json FROM replica_row
+      `SELECT row_id, payload_json, oversized_json, server_version FROM replica_row
          WHERE shape_id = ? AND entity = ?`,
       [shapeId, entity]
     );
@@ -662,6 +698,7 @@ export class ReplicaSqliteStore {
       values: JSON.parse(row.payload_json) as ReplicaRow,
       oversizedFields: parseStringArray(row.oversized_json, "oversized fields"),
       hasUnavailableFields,
+      ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
     }));
   }
 
@@ -669,18 +706,27 @@ export class ReplicaSqliteStore {
     row: ReplicaSnapshotRow,
     knownSchema?: ReplicaEntitySchema
   ): void {
+    const serverVersion = row.rowVersion ?? 0;
+    const current = this.one<{ server_version: number }>(
+      `SELECT server_version FROM replica_row
+        WHERE shape_id = ? AND entity = ? AND row_id = ?`,
+      [row.shapeId, row.entity, row.rowId]
+    );
+    if (current && current.server_version > serverVersion) return;
     this.run(
-      `INSERT INTO replica_row(shape_id, entity, row_id, payload_json, oversized_json)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO replica_row(shape_id, entity, row_id, payload_json, oversized_json, server_version)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(shape_id, entity, row_id) DO UPDATE SET
          payload_json = excluded.payload_json,
-         oversized_json = excluded.oversized_json`,
+         oversized_json = excluded.oversized_json,
+         server_version = excluded.server_version`,
       [
         row.shapeId,
         row.entity,
         row.rowId,
         JSON.stringify(row.values),
         JSON.stringify(row.oversizedFields ?? []),
+        serverVersion,
       ]
     );
     const schema = knownSchema ?? this.schema(row.shapeId, row.entity);
@@ -692,7 +738,20 @@ export class ReplicaSqliteStore {
     this.indexRow(row, schema);
   }
 
-  private deleteRow(shapeId: string, entity: string, rowId: string): void {
+  private deleteRow(
+    shapeId: string,
+    entity: string,
+    rowId: string,
+    serverVersion?: number
+  ): void {
+    if (serverVersion !== undefined) {
+      const current = this.one<{ server_version: number }>(
+        `SELECT server_version FROM replica_row
+          WHERE shape_id = ? AND entity = ? AND row_id = ?`,
+        [shapeId, entity, rowId]
+      );
+      if (current && current.server_version > serverVersion) return;
+    }
     this.run(
       "DELETE FROM replica_search WHERE shape_id = ? AND entity = ? AND row_id = ?",
       [shapeId, entity, rowId]
@@ -825,6 +884,12 @@ export class ReplicaSqliteStore {
   ): void {
     if (!row.rowId)
       throw new ReplicaProtocolError("Replica row id is required");
+    if (
+      row.rowVersion !== undefined &&
+      (!Number.isSafeInteger(row.rowVersion) || row.rowVersion < 0)
+    ) {
+      throw new ReplicaProtocolError("Replica row version is invalid");
+    }
     const columns = new Set(schema.columns);
     for (const field of Object.keys(row.values)) {
       if (!columns.has(field)) {

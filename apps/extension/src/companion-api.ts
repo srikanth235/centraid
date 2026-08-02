@@ -2,11 +2,13 @@ import { ROUTES } from "@centraid/protocol";
 
 import { anchoredCaptureText, documentCaptureTitle } from "./capture.js";
 import { isEligiblePageUrl, matchesOrigin } from "./origin-matching.js";
+import { normalizePairingVaults } from "./pairing-vaults.js";
 import {
   isLocked,
   loadPairing,
   purgeCompanionState,
   savePairing,
+  selectPairingVault,
   setLocked,
 } from "./storage.js";
 import { decodePairingTicket } from "./ticket.js";
@@ -86,11 +88,13 @@ async function pair(
       `Centraid Companion · ${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
     grantProfile,
   });
-  if (
-    response["ok"] !== true ||
-    typeof response["vaultId"] !== "string" ||
-    typeof response["enrollmentId"] !== "string"
-  ) {
+  const vaults = normalizePairingVaults(response);
+  const primary = vaults[0];
+  const enrollmentId =
+    typeof response["enrollmentId"] === "string"
+      ? response["enrollmentId"]
+      : primary?.enrollmentId;
+  if (response["ok"] !== true || !primary || !enrollmentId) {
     throw new Error(
       typeof response["error"] === "string"
         ? response["error"]
@@ -100,8 +104,9 @@ async function pair(
   const state: PairingState = {
     endpointTicket: ticket.endpointTicket,
     endpointId,
-    enrollmentId: response["enrollmentId"],
-    vaultId: response["vaultId"],
+    enrollmentId,
+    vaultId: primary.vaultId,
+    vaults,
     pairedAt: new Date().toISOString(),
     grantProfile,
     ...(typeof response["gatewayId"] === "string"
@@ -110,8 +115,8 @@ async function pair(
     ...(typeof response["gatewayName"] === "string"
       ? { gatewayName: response["gatewayName"] }
       : {}),
-    ...(typeof response["vaultName"] === "string"
-      ? { vaultName: response["vaultName"] }
+    ...(primary.vaultName || typeof response["vaultName"] === "string"
+      ? { vaultName: primary.vaultName ?? (response["vaultName"] as string) }
       : {}),
     ...(ticket.relayUrls ? { relayUrls: ticket.relayUrls } : {}),
   };
@@ -184,6 +189,12 @@ export async function handleCompanionRequest(
     }
     case "pair":
       return pair(message.ticket, message.deviceName, message.grants);
+    case "select-vault": {
+      const selected = await selectPairingVault(message.vaultId);
+      if (!selected)
+        throw new Error("That vault is not paired to this browser.");
+      return selected;
+    }
     case "unpair": {
       const pairing = await loadPairing();
       if (!pairing) return { ok: true };

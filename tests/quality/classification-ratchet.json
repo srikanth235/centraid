@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#690 — Product grammar gates and native lowering ratchet",
+  "approvedDeviation": "Issue #599 approves the compatibility-matrix regrade for the desktop and web pairing surfaces introduced with multi-vault pairing and sync hardening.",
   "matrixGovernanceFingerprint": "8a83d43679ec6c4dc88d0ac13fe5b76e938b24f0301595e67db8b063aaa4545a",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
@@ -8,6 +8,6 @@
     "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
     "packages/vault/src/schema/sealed.ts": "064b112ba05240dbac2a1360f0f5b79b452273577e1ddf7844e2a23a27551248",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "b673266fef36875e755fcb6f6a53baf5db1c5a61dbe385570ae6e1aec3f69b27"
+    "tests/matrix.json": "ce6c4ea68a07257e5f1eea10327e4ba777ce1abce56dc2052eb7d12410040519"
   }
 }

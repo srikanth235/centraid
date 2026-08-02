@@ -2,6 +2,7 @@ import type { VaultDb } from "../db.js";
 import { writeExplanation, writeReceipt } from "../gateway/evidence.js";
 import type { Identity, InvokeRequest } from "../gateway/types.js";
 import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
+import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "./intents.js";
 import type {
   ReplicaIntentOutcome,
@@ -279,7 +280,9 @@ export function settleDurableParkedPayload(
   settlement?: DurableParkedIntentSettlement
 ): { deleted: boolean; outcome?: ReplicaIntentOutcome } {
   db.vault.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     const deleted = deleteDurableParkedPayload(db, invocationId);
     const outcome = settlement
       ? transitionReplicaIntentOutcomeInTransaction(
@@ -288,6 +291,7 @@ export function settleDurableParkedPayload(
           settlement.outcome
         )
       : undefined;
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
     return { deleted, ...(outcome ? { outcome } : {}) };
   } catch (error) {
