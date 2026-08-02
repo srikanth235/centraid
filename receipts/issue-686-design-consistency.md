@@ -315,10 +315,13 @@
   - **The three singletons.** `--acc` → `var(--accent)` on the shared audience picker's focus ring, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/_shared/AudiencePlacement.module.css`; `--t-label` → `var(--t-tiny)` on the sidebar project label, `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/tasks/components/Sidebar.module.css`; `--bg-l` → `var(--bg-l, 10%)` (dark-block-only token, given its documented default explicitly rather than added to the light-rung contract), `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/photos/Chrome.module.css`.
   - **The ledger** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/src/token-purity-allowlist.ts`: `UNRESOLVED_VAR_DEBT` is now `[]`, and its doc comment records what each of the twelve turned out to mean so a future reader does not have to re-derive it. The export and the gate in `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/src/token-purity.test.ts` are kept and unmodified — the list being empty is exactly what makes the gate strongest, and it stays red-capable (proven below).
 
+- **Type-scale finding recorded** — `docs/decisions.md` gains "#686 — the type scale is not under-adopted, it is under-shaped": measurement of all 1,284 raw `font-size` declarations shows 38% are exactly a token size, 37% within 0.6px, and only 24% genuinely off-scale, with 181 rules already setting `font: var(--t-*)` and then overriding `font-size`. The `--t-*` shorthands cannot express size-without-weight, so the ratchet count is a symptom of token shape rather than author indiscipline.
+
 ## Out of scope
 
 - ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
 - Collapsing `docs`' and `photos`' app-local `--accent-deep-fg` declarations into `--accent-text`. F5 established they are re-derivations of the contract token, but those two apps *declare* the property, so they are not phantoms and not in this gate's class; folding them is a separate visual-equivalence change.
+- Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations. The measurement and the recommendation are recorded in `docs/decisions.md`; the change is a contract addition plus a large mechanical diff, and belongs in its own reviewable PR.
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
 - Mobile typeface change (recorded as decision, not churned).
 
@@ -970,6 +973,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785624677-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 68 | 32575 | 15656804 | 21411 | 54054 | 8.5676 | 1355 | 1709948 | 187432207 | 551260 | fix(client): bind palette-hue text to the solved text rungs (#686)The shell pain |
 | claude-code-ab8b1729-92f-1785627287-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 48 | 28404 | 11502137 | 18202 | 46654 | 6.3839 | 1403 | 1738352 | 198934344 | 569462 | fix(client): resolve phantom token references the stale doc left behind (#686)-- |
 | claude-code-ab8b1729-92f-1785629006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 18115 | 10873090 | 14431 | 32590 | 5.9108 | 1447 | 1756467 | 209807434 | 583893 | fix(blueprints): resolve the last twelve phantom var() references (#686)Every on |
+| claude-code-ab8b1729-92f-1785630418-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 23241 | 11170342 | 19784 | 43069 | 6.2252 | 1491 | 1779708 | 220977776 | 603677 | docs(design): record that the type scale is under-shaped, not under-adopted (#68 |
 
 ### Steering
 

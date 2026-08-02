@@ -121,6 +121,24 @@ Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://g
 - **Mobile maps the same roles to platform-appropriate loaded faces.** React Native cannot combine `fontFamily` with `fontWeight` reliably across platforms, so each (role, weight) pair must be its own family name. The current mapping in `apps/mobile/src/kit/theme/index.ts` — Geist (sans), Space Grotesk (display), JetBrains Mono (mono), Playfair Display (serif) — is **recorded here as the sanctioned per-role mapping**, pending a future revisit toward native faces (San Francisco / Roboto) if the download weight or the cross-platform look argues for it.
 - **Therefore the web↔mobile face divergence is decided, not drift.** An audit that finds different family names on the two surfaces has found the intended state. The thing to check is that mobile still resolves _roles and the numeric scale_ from `@centraid/design`, and that the size/lineHeight/weight values are not re-typed by hand.
 
+## #686 — the type scale is not under-adopted, it is under-shaped
+
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686).
+
+`--t-*` are CSS `font` **shorthands**, so using one sets family, weight, size and line-height together. A rule that wants the scale's _size_ but a different weight — or that must inherit the family — cannot use the token at all, and has to write a raw `font-size`. The repo-wide ratchet counts those as debt, which framed 1,284 declarations as indiscipline. The measurement says otherwise:
+
+| relation to the scale | declarations | share |
+| --------------------- | ------------ | ----- |
+| exactly a token size  | 494          | 38%   |
+| within 0.6px of one   | 477          | 37%   |
+| genuinely off-scale   | 314          | 24%   |
+
+**181 of those rules already set `font: var(--t-*)` and then override `font-size`.** That is the shape problem stated in the authors' own hands: they reached for the token, then had to fight it.
+
+**Decision.** Treat this as a token-shape gap, not a cleanup backlog. The scale should expose composable size (and line-height) rungs alongside the shorthands, so a rule can take the size without inheriting the weight. Roughly 971 of the 1,284 declarations would then become token references with **no visual change** — the values already match.
+
+**Not done here.** #686 is already 243 files; adding vocabulary plus a 971-site sweep would make the visual diff unreviewable. The ratchet in `scripts/lint-design-tokens.mjs` holds the count meanwhile, and this entry records that the count is a symptom rather than the fault.
+
 ## Related docs
 
 | Doc | Covers |
