@@ -71,6 +71,8 @@ accessibility zero-grey (15 cells).
 
 - **Android Retry starved probes (30745618435).** testID taps worked, but eight Retries in ~17s each bumped `retryNonce` and cancelled the in-flight online probe before `/_gateway/info` could succeed. complete-onboarding now waits up to 20s for Home|wall between taps (12 tries); online probe budget is 8×800ms.
 
+- **iOS Photos open selectors (30745625780).** Onboarding + cold-start green under the 90m cap. `tests/agent-e2e-mobile/flows/mobile-scroll-frames` / `tests/agent-e2e-mobile/flows/scroll-frames.mjs` failed tapping bare `Photos`/`People` (tiles publish `Open Photos` / `Open People`). `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` Photos assert uses the exact a11y label with a longer first-paint wait.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

@@ -140,7 +140,11 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "Photos"
+# Home tiles publish accessibilityLabel "Open Photos" (not the visible
+# "Photos" caption) — bare tapOn Photos ElementNotFound on iOS 30745625780.
+- tapOn:
+    text: "Open Photos"
+    retryTapIfNoChange: true
 `,
     "open-photos"
   );
@@ -155,7 +159,9 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "People"
+- tapOn:
+    text: "Open People"
+    retryTapIfNoChange: true
 `,
     "open-people"
   );

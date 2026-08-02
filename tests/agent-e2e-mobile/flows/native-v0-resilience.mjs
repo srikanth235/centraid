@@ -18,12 +18,14 @@ import {
 const SURFACES = [
   // Maestro anchors a text selector to the WHOLE node text, so the marker has
   // to cover all of it: the Photos search field publishes
-  // "Search photos and moments" as its accessible name and renders
-  // "Search photos & moments" — a bare "Search photos" matches neither.
+  // "Search photos and moments" as its accessible name (visible copy uses &).
+  // Exact match — Search photos.* failed on a blank Photos cover after open
+  // (iOS 30745625780); prefer the durable a11y label and a longer first paint.
   {
-    marker: "Search photos.*",
+    marker: "Search photos and moments",
     open: "Open Photos",
     name: "photos",
+    markerTimeoutMs: 45_000,
   },
   {
     marker: "Add document or folder",
@@ -92,6 +94,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     if (surface === undefined) return;
     const openCommands =
       surface.openCommands ?? retryableTapCommands(surface.open);
+    const markerTimeoutMs = surface.markerTimeoutMs ?? 20_000;
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -102,9 +105,11 @@ await runFlow("native-v0-resilience", async (ctx) => {
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${openCommands}
+- waitForAnimationToEnd:
+    timeout: 3000
 - extendedWaitUntil:
     visible: "${surface.marker}"
-    timeout: 20000
+    timeout: ${markerTimeoutMs}
 - takeScreenshot: native-${surface.name}
 `,
       surface.name
