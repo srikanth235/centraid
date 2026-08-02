@@ -23,7 +23,7 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: 3px;
+  gap: var(--sp-1);
   align-content: start;
 }
 .empty {
@@ -68,7 +68,9 @@
   height: 1.25rem;
   border-radius: 50%;
   background: var(--accent-deep);
-  color: var(--on-accent);
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -84,5 +86,5 @@
   margin-right: auto;
   color: var(--text-soft);
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }

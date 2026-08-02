@@ -15,6 +15,9 @@
      --bg-elev   card / raised fill
      --line      hairline border
      --text      primary ink            --text-soft     secondary ink
+     --text-inv  ink ON an --accent-deep fill (flips per theme; NOT
+                 --on-accent, which is the fixed white for saturated
+                 accent + scrim surfaces)
      --accent    per-app accent (may be overridden by --app-color)
 
    Optional tokens the redesigned apps ALSO define — kit degrades gracefully
@@ -24,6 +27,24 @@
      --shadow-md   soft elevation             --accent-soft  ~12% accent tint
 
    Motion: --ease: cubic-bezier(.2,.7,.3,1); standard <=200ms.
+
+   ── TYPE: this sheet renders under TWO token layers (#686) ─────────────────
+   kit.css is served, not bundled, to BOTH the shell (tokens from `toCss()`)
+   and a sandboxed blueprint app pane (tokens from `toBlueprintCss()`). Size
+   and line-height are permitted to diverge between those emitters (the role
+   parity law in docs/decisions.md gates family and weight, not size), so
+   `var(--t-<key>-size)` deliberately resolves to DIFFERENT pixels on the two
+   surfaces — 13px vs 0.8rem for `--t-small-size`, and so on. Binding a rule
+   to a rung is therefore a decision that the rule SHOULD track its surface.
+   Body text, labels and control text should. Icon glyphs, badge boxes whose
+   height IS the line box, and anything paired with `em`-derived geometry
+   should not — those hold one size on purpose and stay literals.
+
+   Only the five rungs BOTH emitters publish are usable here: body, mono,
+   small, tiny, title. `--t-display-size` / `--t-display-1-size` /
+   `--t-h2-size` / `--t-h3-size` are shell-only; naming one here yields an
+   invalid declaration inside an app pane, which is dropped whole and leaves
+   the element at its inherited size, silently.
    ========================================================================== */
 
 /* ---------- App chrome ---------------------------------------------------- */
@@ -67,7 +88,7 @@
   height: 30px;
   border-radius: var(--app-brand-radius, 8px);
   background: var(--app-brand-background, var(--accent-deep));
-  color: var(--text);
+  color: var(--text-inv);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -276,7 +297,7 @@ kit-reference-strip,
   background: color-mix(in oklab, var(--bg-elev) 14%, transparent);
   color: inherit;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 500;
   border-radius: 0.5rem;
   padding: 0.3rem 0.6rem;
@@ -657,16 +678,27 @@ kit-reference-strip,
   opacity: 0.55;
   cursor: default;
 }
+/* The filled primary is the one control where the accent carries text, so the
+   pair is `--accent-deep` + `--text-inv` — NOT `--on-accent`. `--accent-deep`
+   is solved per theme against `--text-inv` (deep under near-white ink on the
+   light ramp, lifted under near-black ink on the dark one); `--on-accent` is
+   the fixed white for saturated/scrim surfaces and fails here at every hue
+   (#686 F3).
+
+   Hover steps the fill 12% toward `--text`, i.e. always AWAY from the ink it
+   carries — darker on light, lighter on dark — so the state can only raise
+   the measured ratio. The old `filter: brightness(1.08)` moved one direction
+   regardless of theme and cost the light ramp ~20% of its luminance headroom. */
 .kit-btn.primary {
   border-color: transparent;
   background: var(--accent-deep);
-  color: var(--on-accent);
+  color: var(--text-inv);
   font-weight: 600;
 }
 .kit-btn.primary:hover {
   border-color: transparent;
-  color: var(--on-accent);
-  filter: brightness(1.08);
+  background: color-mix(in oklab, var(--accent-deep) 88%, var(--text));
+  color: var(--text-inv);
 }
 .kit-btn.primary:active {
   transform: scale(0.98);
@@ -676,11 +708,18 @@ kit-reference-strip,
   border-color: var(--danger);
   color: var(--danger);
 }
+/* The filled destructive confirm is a FILL carrying ink, exactly like
+   `.kit-btn.primary` above, so it takes the same pair: the theme's inverse
+   ink, not `--text`. `--text` is the SAME-side ink — near-black on the light
+   ramp, near-white on the dark one — and `--danger` sits mid-lightness in
+   both, so that pairing measured 3.81:1 light / 4.09:1 dark, under the body
+   floor on both ramps at the button's 13px. `--text-inv` flips with the theme
+   the way the fill's solve does, so both halves land at 5.1:1 / 5.7:1. */
 .kit-btn.primary.danger,
 .kit-btn.primary.danger[data-kit-armed] {
   background: var(--danger);
   border-color: transparent;
-  color: var(--text);
+  color: var(--text-inv);
 }
 
 /* ---------- Icon buttons ----------------------------------------------------
@@ -843,7 +882,7 @@ kit-reference-strip,
   align-items: center;
   gap: 0.4rem;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   padding: 0.3rem 0.85rem;
   min-height: 2.4rem;
   border-radius: 999px;
@@ -869,7 +908,7 @@ kit-reference-strip,
 .kit-chip[data-active="true"] {
   background: var(--accent-deep);
   border-color: transparent;
-  color: var(--on-accent);
+  color: var(--text-inv);
   font-weight: 500;
 }
 .kit-chip.quiet[aria-pressed="true"],
@@ -901,7 +940,7 @@ kit-reference-strip,
 }
 .kit-seg > button {
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text-soft);
   background: transparent;
@@ -1152,7 +1191,7 @@ kit-reference-strip,
   border: none;
   border-radius: 10px;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font-weight: 600;
   font-size: 12.5px;
   padding: 9px 16px;
@@ -1330,7 +1369,7 @@ kit-reference-strip,
   text-align: center;
   padding: 1.25rem 0 0.5rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 
@@ -1451,7 +1490,7 @@ kit-reference-strip,
 }
 .kit-ask-head .kit-ask-note {
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -1487,7 +1526,7 @@ kit-reference-strip,
 .kit-msg.user {
   align-self: flex-end;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   border-bottom-right-radius: 0.35rem;
 }
 .kit-msg.ai {
@@ -1558,7 +1597,7 @@ kit-reference-strip,
 .kit-msg.ai .asstTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 .kit-msg.ai .asstTable th {
   text-align: left;
@@ -1634,7 +1673,7 @@ kit-reference-strip,
 }
 .kit-msg.ai .asstPre {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   background: color-mix(in oklab, var(--_accent) 6%, transparent);
   border: 0.5px solid var(--line);
@@ -1658,7 +1697,7 @@ kit-reference-strip,
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   padding: 3px 7px;
   cursor: pointer;
   opacity: 0;
@@ -1742,7 +1781,7 @@ kit-reference-strip,
   align-items: center;
   gap: 0.35rem;
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--accent-text);
@@ -1785,9 +1824,9 @@ kit-reference-strip,
   border: none;
   border-radius: 0.5rem;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1799,7 +1838,7 @@ kit-reference-strip,
   background: var(--bg-elev);
   color: var(--text-soft);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   cursor: pointer;
 }
 /* Busy = the owner's decision is in flight at the vault plane. */
@@ -1812,7 +1851,7 @@ kit-reference-strip,
 /* A refusal or failure the vault reported for this card — shown, not hidden. */
 .kit-ask-action .aa-note {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--accent-text);
   margin-top: 0.5rem;
 }
@@ -1928,7 +1967,7 @@ kit-reference-strip,
   border: none;
   border-radius: 999px;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -2062,7 +2101,7 @@ kit-reference-strip,
   color: var(--text);
   text-align: left;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   cursor: pointer;
   transition: background 0.1s var(--ease);
 }
@@ -2101,7 +2140,7 @@ kit-reference-strip,
 }
 .kit-ask-scope {
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -2125,7 +2164,7 @@ kit-reference-strip,
   height: 1.3rem;
   border-radius: 50%;
   background: var(--accent-deep);
-  color: var(--text);
+  color: var(--text-inv);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2565,7 +2604,7 @@ kit-reference-strip,
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-sunken, var(--bg-elev));
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 
 .kit-ref-kind {
@@ -2646,7 +2685,7 @@ kit-reference-strip,
   margin: 0;
 }
 .kit-small {
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 
 /* ---------- Accessibility primitives ---------------------------------------- */

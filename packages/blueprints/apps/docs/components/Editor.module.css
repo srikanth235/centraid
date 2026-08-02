@@ -10,7 +10,7 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  background: color-mix(in oklab, var(--text) 30%, rgba(10, 12, 16, 0.55));
+  background: color-mix(in oklab, var(--text) 30%, var(--scrim));
   animation: kit-fade 0.2s ease;
 }
 .editor {
@@ -31,7 +31,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: var(--sp-3) 14px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -43,20 +43,19 @@
 }
 .editorSave {
   margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   color: var(--text-faint);
   flex-shrink: 0;
 }
 .editorBody {
   flex: 1;
   min-height: 0;
-  padding: 16px 20px 20px;
+  padding: var(--sp-4) 20px 20px;
 }
 .editorStatus {
   font: var(--t-small);
   color: var(--text-faint);
-  padding: 12px 0;
+  padding: var(--sp-3) 0;
 }
 .editorTextarea {
   width: 100%;

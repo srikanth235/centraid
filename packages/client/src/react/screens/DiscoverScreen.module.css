@@ -96,7 +96,7 @@
 .grid[data-layout="rows"] .cardIcon {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .grid[data-layout="rows"] .cardIcon svg {
   width: 19px;
@@ -174,7 +174,7 @@
 .cardName {
   font: var(--t-title);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);
   white-space: nowrap;
@@ -214,7 +214,7 @@
   align-items: center;
   gap: 5px;
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   color: var(--accent);
 }
@@ -238,8 +238,8 @@
 }
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-faint);
 }

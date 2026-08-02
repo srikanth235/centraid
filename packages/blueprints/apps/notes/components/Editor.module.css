@@ -13,7 +13,7 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  background: color-mix(in oklab, var(--text) 30%, rgba(10, 12, 16, 0.55));
+  background: var(--scrim);
   backdrop-filter: blur(2px);
   animation: kit-fade-in 0.18s ease;
 }
@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: var(--sp-3) 14px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -54,7 +54,7 @@
 }
 .editorTools :global(.kit-icon-btn) {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
 }
 .editorTools :global(.kit-icon-btn):hover {
@@ -82,7 +82,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 20px 24px 8px;
+  padding: 20px var(--sp-5) var(--sp-2);
 }
 .editorTitle {
   display: block;
@@ -95,7 +95,7 @@
   background: none;
   border: none;
   outline: none;
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .editorTitle::placeholder {
   color: var(--text-faint);
@@ -146,7 +146,7 @@
 .mdH1,
 .mdH2,
 .mdH3 {
-  margin: 14px 0 4px;
+  margin: 14px 0 var(--sp-1);
   font-family: var(--font-title);
   font-weight: 600;
   color: var(--text);
@@ -195,7 +195,7 @@
   margin-top: 2px;
   width: 19px;
   height: 19px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -232,10 +232,10 @@
 }
 
 .editorAttach {
-  margin: 8px 0 10px;
+  margin: var(--sp-2) 0 10px;
 }
 .attachBtn {
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-1);
 }
 
 .tagStrip {
@@ -243,7 +243,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 8px 0 14px;
+  margin: var(--sp-2) 0 14px;
 }
 .tagRemove {
   display: inline-flex;
@@ -269,7 +269,7 @@
   font-size: 12px;
   border: 1px dashed var(--line);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: var(--sp-1) 10px;
   background: transparent;
   color: var(--text);
   min-width: 90px;
@@ -283,7 +283,7 @@
 .editorFoot {
   flex-shrink: 0;
   border-top: 1px solid var(--line);
-  padding: 12px 24px;
+  padding: var(--sp-3) var(--sp-5);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -348,7 +348,7 @@
   white-space: nowrap;
 }
 :global(.nt-shell.is-narrow) .editorTools {
-  gap: 4px;
+  gap: var(--sp-1);
 }
 :global(.nt-shell.is-narrow) .nbSelect {
   max-width: 25vw;

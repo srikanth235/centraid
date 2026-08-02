@@ -6,9 +6,9 @@
 
 .genout {
   flex: 1;
-  padding: 11px 12px;
+  padding: 11px var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-sunken);
   font-family: var(--mono);
   font-size: 14px;
@@ -43,9 +43,9 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--on-accent);
   transition: left 0.15s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 .switch.on i {
   left: 18px;

@@ -31,7 +31,7 @@ function ActivityItem({
       </div>
       <div style={{ flex: 1, minWidth: 0, paddingTop: "2px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-          <span style={{ font: "var(--t-strong)", fontSize: "14px" }}>
+          <span style={{ font: "var(--t-body-strong)", fontSize: "14px" }}>
             {a.name}
           </span>
           <span className={shared.activityKind} style={{ color }}>

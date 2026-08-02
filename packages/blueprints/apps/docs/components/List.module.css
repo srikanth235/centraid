@@ -55,7 +55,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   transition: background 0.1s;
@@ -96,9 +96,7 @@
   object-fit: cover;
 }
 .badge span {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 9px;
+  font: var(--t-tiny);
   letter-spacing: 0.04em;
 }
 .rowMain {
@@ -121,8 +119,7 @@
   max-width: 100%;
 }
 .rowMeta {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   color: var(--text-faint);
   margin-top: 2px;
 }
@@ -139,21 +136,19 @@
 }
 .cell.size {
   width: 70px;
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   text-align: right;
 }
 .cell.added {
   width: 88px;
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   /* Flex (not the shared .cell's plain nowrap+ellipsis) so the trailing
      custody dot (issue #352 phase 4) sits beside the date instead of
      getting clipped by the cell's own text-overflow. */
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 .cell.purge {
   color: var(--danger);

@@ -62,7 +62,7 @@
   width: 14px;
   height: 8px;
   border: 1.2px solid var(--text);
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   position: relative;
 }
 .battery::after {
@@ -113,7 +113,7 @@
 }
 .cell {
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .buildingPill {
   position: absolute;
@@ -130,7 +130,7 @@
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 0.5px solid var(--line);
   box-shadow: var(--shadow-md);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 .buildingDot {
@@ -178,7 +178,7 @@
   border: 0.5px solid var(--line);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0;
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);

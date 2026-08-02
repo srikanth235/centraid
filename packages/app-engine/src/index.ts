@@ -168,6 +168,12 @@ export {
   type ManifestValidationCode as AppManifestValidationCode,
 } from "./registry/manifest.js";
 export {
+  scanCssTokenPurity,
+  formatTokenPurityError,
+  type TokenPurityFinding,
+  type TokenPurityOptions,
+} from "./registry/token-purity.js";
+export {
   Dispatcher,
   statusForToolError,
   type CentraidWriteInput,

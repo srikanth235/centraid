@@ -23,7 +23,7 @@
     "check:full": "bun run check:pr && bun run test:affected:full && bun run coverage && bun run test:mutation:pr && bun run test:perf:pr && bun run --cwd apps/desktop test:e2e && bun run --cwd apps/web e2e",
     "check:mobile-native-state": "node scripts/check-mobile-native-state.mjs",
     "check:pr": "bun install --frozen-lockfile && bun run check:push && bun run typecheck && bun run lint:types && bun run lint:workflow-pins && bun run check:diff-coverage",
-    "check:push": "node scripts/ci/run-gates.mjs lint:node-version test:affected typecheck:affected knip format:check lint scripts:test test:ratchet:unit test:governance-shell lint:packages turbo:lint lint:tsconfigs test:matrix test:qualities test:ratchet lint:css lint:design-tokens lint:e2e-flows lint:law-registry lint:protocol-routes lint:acp-min-versions lint:quality-knobs lint:schema-export check:ui-receipt test:quarantine test:accessibility test:report:smoke check:mobile-native-state lockfile:lint",
+    "check:push": "node scripts/ci/run-gates.mjs lint:node-version test:affected typecheck:affected knip format:check lint scripts:test test:ratchet:unit test:governance-shell lint:packages turbo:lint lint:tsconfigs test:matrix test:qualities test:ratchet lint:css lint:design-tokens lint:design-md lint:e2e-flows lint:law-registry lint:protocol-routes lint:acp-min-versions lint:quality-knobs lint:schema-export check:ui-receipt test:quarantine test:accessibility test:report:smoke check:mobile-native-state lockfile:lint",
     "check:ui-receipt": "node scripts/validate-ui-receipt.mjs",
     "ci": "bun run check:pr",
     "ci:retry": "node scripts/ci/retry.mjs",
@@ -53,6 +53,7 @@
     "lint:acp-min-versions": "node scripts/lint-acp-min-versions.mjs",
     "lint:actions": "actionlint",
     "lint:css": "node scripts/lint-css-classes.mjs",
+    "lint:design-md": "design.md lint DESIGN.md",
     "lint:design-tokens": "node scripts/lint-design-tokens.mjs",
     "lint:e2e-flows": "node scripts/lint-e2e-flows.mjs",
     "lint:fix": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings --fix .",
@@ -108,6 +109,7 @@
     "web:smoke": "node scripts/web/smoke.mjs"
   },
   "devDependencies": {
+    "@google/design.md": "0.4.0",
     "@stryker-mutator/core": "^9.0.1",
     "@stryker-mutator/vitest-runner": "^9.0.1",
     "@vitest/coverage-v8": "4.1.10",

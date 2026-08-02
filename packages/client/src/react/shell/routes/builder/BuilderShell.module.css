@@ -63,7 +63,7 @@
   background: transparent;
   padding: 7px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-faint);
   display: inline-flex;
@@ -112,7 +112,7 @@
   width: 24px;
   height: 24px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -136,7 +136,7 @@
   padding: 0 4px 0 10px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   max-width: 320px;
   min-width: 0;
 }
@@ -203,7 +203,7 @@
   width: 20px;
   height: 20px;
   flex: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text);
@@ -243,7 +243,7 @@
   gap: 4px;
   flex: none;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--accent-light) 18%, transparent);
   color: var(--accent-light);
   font-family: var(--font-mono);
@@ -261,7 +261,8 @@
   animation: cd-pulse 1400ms ease-in-out infinite;
 }
 .tlStatus[data-state="idle-live"] {
-  background: color-mix(in srgb, var(--success) 18%, transparent);
+  /* 12%: the strength `--success` is solved against — see color.ts. */
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
 }
 .tlStatus[data-state="idle-live"] .tlStatusDot {
@@ -277,7 +278,7 @@
   padding: 0 12px;
   gap: 6px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   letter-spacing: 0;
 }

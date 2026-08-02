@@ -27,6 +27,21 @@
       "types": "./dist/kit.d.ts",
       "default": "./dist/kit.js"
     },
+    "./color": {
+      "types": "./dist/color.d.ts",
+      "react-native": "./src/color.ts",
+      "default": "./dist/color.js"
+    },
+    "./css-vars": {
+      "types": "./dist/css-vars.d.ts",
+      "react-native": "./src/css-vars.ts",
+      "default": "./dist/css-vars.js"
+    },
+    "./oklab": {
+      "types": "./dist/oklab.d.ts",
+      "react-native": "./src/oklab.ts",
+      "default": "./dist/oklab.js"
+    },
     "./kit/*": "./kit/*"
   },
   "publishConfig": {

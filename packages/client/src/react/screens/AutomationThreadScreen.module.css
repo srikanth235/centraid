@@ -52,7 +52,7 @@
 }
 .headSub {
   margin: 3px 0 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -95,7 +95,7 @@
   flex-direction: column;
   gap: 1px;
   padding: 5px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--line);
   background: var(--bg-elev);
   box-shadow: var(--shadow-lg);
@@ -120,10 +120,10 @@
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -162,7 +162,7 @@
   border-radius: 8px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .chip code {
@@ -194,7 +194,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: none;
   background: none;
   color: var(--text-ghost);
@@ -238,12 +238,16 @@
 .planBanner[data-state="compiling"] {
   --plan-tone: var(--accent);
 }
+/* `--plan-tone` is the FILL (2px rail + 6% wash); `--plan-ink` is the glyph on
+   top of it. The other two branches are ink-grade roles and set both at once
+   by falling through; only the palette hue needs the split. */
 .planBanner[data-state="never"] {
   --plan-tone: var(--c-amber);
+  --plan-ink: var(--c-amber-text);
 }
 .planIc {
   display: inline-flex;
-  color: var(--plan-tone, var(--text-faint));
+  color: var(--plan-ink, var(--plan-tone, var(--text-faint)));
   flex: none;
 }
 .planIc[data-spin="true"] {
@@ -259,13 +263,13 @@
   min-width: 0;
 }
 .planTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .planDetail {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
   overflow-wrap: anywhere;
@@ -286,7 +290,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 45%, var(--line));
   border-left: 3px solid var(--c-amber);
   background: color-mix(in srgb, var(--c-amber) 7%, var(--bg-elev));
@@ -303,7 +307,7 @@
   flex: none;
   display: inline-flex;
   margin-top: 1px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .consentBody {
   flex: 1;
@@ -313,12 +317,12 @@
   gap: 4px;
 }
 .consentTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .consentTitle code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 .consentMeta {
@@ -349,18 +353,18 @@
 }
 .consentBtnSm {
   padding: 5px 11px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 
 /* ── Standing grants — quiet, neutral (not amber) ──────────────────────── */
 .grantsLine {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .grantsLine summary {
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.04em;
   color: var(--text-faint);
   list-style: none;
@@ -431,7 +435,7 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -487,7 +491,8 @@
     var(--au-hue, var(--accent)) 55%,
     transparent
   );
-  color: var(--au-hue, var(--accent));
+  /* The ring is the fill; the digit inside it is type, so it takes the ink. */
+  color: var(--au-ink, var(--accent));
 }
 .node[data-spin="true"] {
   animation: auNodeSpin 0.9s linear infinite;
@@ -516,7 +521,7 @@
 }
 .turnTime {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
 }
 .turnHeadSpacer {
@@ -528,10 +533,10 @@
   gap: 5px;
   padding: 3px 7px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-ghost);
   cursor: pointer;
   opacity: 0;
@@ -583,7 +588,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-faint);
 }
@@ -604,10 +609,10 @@
   gap: 4px;
   padding: 3px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   cursor: pointer;
   transition:
@@ -647,7 +652,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 0.5px solid color-mix(in srgb, var(--danger) 30%, var(--line));
   border-left: 3px solid var(--danger);
   background: color-mix(in srgb, var(--danger) 6%, var(--bg-elev));
@@ -674,7 +679,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   /* No `--warn` in the shell theme — same documented fallback the Assistant
      and Providers screens use. */
@@ -703,7 +708,7 @@
 }
 .emptyTitle {
   font: var(--t-h2);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   color: var(--text);
 }
 .emptyHint {
@@ -798,7 +803,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 8px 8px 14px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line-strong);
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);

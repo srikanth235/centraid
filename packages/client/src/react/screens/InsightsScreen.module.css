@@ -102,8 +102,8 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -128,7 +128,7 @@
   gap: 7px;
 }
 .kpiSub {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 
@@ -139,7 +139,7 @@
   font-weight: 600;
 }
 .delta[data-tone="up"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .delta[data-tone="down"] {
   color: var(--text-faint);
@@ -194,7 +194,7 @@
 
 /* Panel — shared card shell for chart / table / lists. */
 .panel {
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -209,7 +209,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -231,8 +231,8 @@
 }
 .chartStatLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-bottom: 3px;
@@ -244,7 +244,7 @@
   color: var(--text);
 }
 .chartStatAccent {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .chartStatSub {
   font-family: var(--font-mono);
@@ -367,13 +367,13 @@
 }
 .th {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
 .td {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   min-width: 0;
 }
@@ -401,7 +401,7 @@
   place-items: center;
 }
 .appName {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -414,9 +414,9 @@
   font-size: 8.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 14%, transparent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 2px 5px;
 }
 .mixbar {
@@ -457,7 +457,7 @@
   gap: 7px;
 }
 .modelName {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -466,7 +466,7 @@
   justify-content: space-between;
 }
 .modelFoot .mono {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 
@@ -505,7 +505,7 @@
   min-width: 0;
 }
 .actApp {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -514,7 +514,7 @@
   color: var(--text-faint);
 }
 .actNote {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -527,7 +527,7 @@
   gap: 1px;
 }
 .actCost .mono {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .actUsd {
   color: var(--text-ghost) !important;
@@ -539,7 +539,7 @@
   grid-template-columns: 1.4fr 1fr;
   gap: 16px;
   padding: 20px 22px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
 }
@@ -551,21 +551,21 @@
 }
 .heroLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .heroValue {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 40px;
+  font-size: var(--t-display-1-size);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--text);
 }
 .heroHonesty {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   line-height: 1.35;
 }
@@ -582,8 +582,8 @@
 }
 .heroStatLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -621,7 +621,7 @@
   line-height: 1.4;
 }
 .peakNote {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   margin-bottom: 10px;
 }

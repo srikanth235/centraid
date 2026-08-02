@@ -77,7 +77,7 @@
   background: none;
   padding: 2px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1;
   color: color-mix(in oklab, var(--text) 28%, transparent);
   transition: color 100ms;

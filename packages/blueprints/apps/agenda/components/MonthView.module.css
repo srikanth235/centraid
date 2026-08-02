@@ -22,7 +22,7 @@
 .dow {
   background: var(--bg-elev);
   text-align: center;
-  padding: 8px 0 6px;
+  padding: var(--sp-2) 0 6px;
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
@@ -33,7 +33,7 @@
   /* Containing block for .dayOpen, the cell's stretched "propose here" button. */
   position: relative;
   background: var(--bg-elev);
-  padding: 4px 5px;
+  padding: var(--sp-1) 5px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -69,11 +69,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
 }
 .dayCell[data-today="true"] .dayNum {
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-weight: 600;
 }
 .dayPills {
@@ -98,7 +100,7 @@
   color: var(--text);
   background: none;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
   cursor: pointer;
 }
@@ -107,7 +109,7 @@
 }
 .pill[data-spans="true"] {
   background: var(--ev-color);
-  color: #fff;
+  color: var(--on-accent);
 }
 .pill[data-spans="true"]:hover {
   filter: brightness(1.08);
@@ -131,7 +133,7 @@
   text-align: left;
   padding: 1px 5px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--text-faint);
 }

@@ -84,7 +84,9 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -152,7 +154,7 @@
   display: flex;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
 }
 .viewToggle button {
@@ -162,13 +164,15 @@
   width: 32px;
   height: 30px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--text-faint);
 }
 .viewToggle button[aria-pressed="true"] {
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
 }
 .askMount {
   composes: kit-app-ask-mount from global;
@@ -186,7 +190,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 22px 48px;
+  padding: var(--sp-3) 22px var(--sp-7);
 }
 
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
@@ -206,12 +210,12 @@
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .scroll {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .topbar {
   flex-wrap: wrap;

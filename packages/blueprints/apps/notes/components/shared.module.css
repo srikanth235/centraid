@@ -19,7 +19,7 @@
 .tagChip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
   font-size: 12px;
   color: var(--accent-deep-fg);
   background: var(--accent-soft);

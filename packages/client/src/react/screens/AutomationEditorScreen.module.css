@@ -49,7 +49,7 @@
   background: transparent;
   color: var(--text-faint);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
@@ -137,8 +137,8 @@
   background: var(--bg-sunken);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: var(--t-mono-size);
+  font-weight: 600;
   border-radius: 999px;
   padding: 4px 8px 4px 6px;
   cursor: pointer;
@@ -154,16 +154,16 @@
 }
 .selectedConnOk {
   color: var(--success);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .selectedConnWarn {
-  color: var(--c-amber);
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--c-amber-text);
+  font-size: var(--t-tiny-size);
+  font-weight: 600;
 }
 .selectedConnX {
   color: var(--text-ghost);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1;
   margin-left: 2px;
 }
@@ -189,8 +189,8 @@
   background: var(--bg-elev);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 999px;
@@ -212,7 +212,7 @@
 .instrHint {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-ghost);
   white-space: nowrap;
   overflow: hidden;
@@ -241,7 +241,7 @@
   padding: 14px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
 }
 .agentPickerTitle {
@@ -250,15 +250,15 @@
 }
 .agentPickerHint {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
 .agentPickerField {
   display: grid;
   gap: 5px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--t-tiny-size);
+  font-weight: 600;
   color: var(--text-faint);
 }
 .agentPickerField select {
@@ -268,7 +268,7 @@
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   padding: 8px 30px 8px 9px;
 }
@@ -285,7 +285,7 @@
   padding: 12px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
 }
 .connPickerHead {
@@ -296,12 +296,12 @@
 }
 .connPickerTitle {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 .connPickerHint {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -319,7 +319,7 @@
   background: var(--bg-sunken);
 }
 .connPickerSearch {
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .connPickerList {
   overflow: auto;
@@ -330,7 +330,7 @@
 }
 .connPickerEmpty {
   margin: 12px 4px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .connPickerRow {
@@ -447,7 +447,7 @@
 .connAccountPrincipal {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -468,14 +468,14 @@
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
   color: var(--text-soft);
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 .connDanglingNote {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
   color: var(--danger);
 }
@@ -493,7 +493,7 @@
 }
 .connFormLead {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -505,7 +505,7 @@
 /* Helper caption under the connection Label — clarifies naming and that a
    distinct label is what lets more than one account of a provider coexist. */
 .connFieldHint {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
@@ -514,7 +514,7 @@
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -523,7 +523,7 @@
 .connGuideList {
   margin: 6px 0 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -618,7 +618,7 @@
   gap: 7px;
 }
 .fieldLabel {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-faint);
@@ -683,7 +683,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .entityToken code {
   color: var(--accent);
@@ -734,7 +734,7 @@
 }
 .pickerKind {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text);
 }
 @keyframes mention-in {
@@ -756,7 +756,7 @@
 }
 .sectionTitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text-soft);
 }
@@ -774,7 +774,7 @@
 .sectionHint {
   margin: 4px 0 0;
   color: var(--text-ghost);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .addTrigger {
   display: flex;
@@ -839,7 +839,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -859,9 +859,9 @@
   gap: 8px;
   padding: 9px 12px;
   border-radius: var(--r-md);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 12%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 32%, transparent);
 }
@@ -924,7 +924,7 @@
   color: var(--text);
 }
 .trigDesc {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .trigDetail {
@@ -952,12 +952,12 @@
 }
 .trigHint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .trigHint code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
 }
 
@@ -972,7 +972,7 @@
 }
 .cronPreviewPill {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -1039,7 +1039,7 @@
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .webhookUrl {
@@ -1094,7 +1094,7 @@
   gap: 6px;
 }
 .chip {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -1103,7 +1103,7 @@
 }
 .chipMono {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .vaultPurpose {
   margin: 0;
@@ -1119,13 +1119,13 @@
 }
 .notifLine {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-faint);
 }
 .notifLine code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 .notifMeta {
@@ -1218,7 +1218,7 @@
 }
 .grantVerb {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border-radius: 5px;
@@ -1227,7 +1227,7 @@
 .grantTarget {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1244,11 +1244,11 @@
 .grantRevokeBtn {
   flex: none;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--danger);
   background: none;
   border: 0.5px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 4px 8px;
   cursor: pointer;
 }
@@ -1278,7 +1278,7 @@
 .footerHint {
   margin: 0;
   flex: 1 1 12ch;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-ghost);
   min-width: 0;
@@ -1309,7 +1309,7 @@
   user-select: none;
 }
 .enableText {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   color: var(--text-faint);
   min-width: 1.6em;
@@ -1334,7 +1334,7 @@
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 600;
   border-radius: 999px;
   padding: 7px 12px;
   cursor: pointer;

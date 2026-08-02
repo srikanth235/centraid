@@ -4,12 +4,21 @@
 // blocks as a single CSS string. Desktop injects this into a <style> tag
 // at preload time — the only token-related CSS it ships.
 
+import { paletteText } from "./color";
+import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { BRAND, themes } from "./themes";
+import { BRAND, EASE, ON_ACCENT, themes } from "./themes";
 import type { Theme, ThemeName } from "./themes";
-import { fontStacks, marketingType, type, typeShorthand } from "./typography";
+import {
+  fontStacks,
+  marketingType,
+  type,
+  typeKeyToKebab,
+  typeShorthand,
+  typeSizeRungs,
+} from "./typography";
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -58,6 +67,11 @@ function themeProps(t: Theme): Record<string, string> {
     "--sidebar-blur": t.sidebarBlur,
     "--sidebar-divider": t.sidebarDivider,
   });
+  // The palette hues as TEXT. The `--c-*` hues themselves are icon fills and
+  // are theme-independent; this solved rung is not — it deepens on light and
+  // lifts on dark, so it belongs to the theme block rather than the static one.
+  for (const [k, v] of Object.entries(paletteText[t.kind]))
+    out[`--c-${k}-text`] = v;
   return out;
 }
 
@@ -73,19 +87,31 @@ export function toCss(): string {
   }
   for (const [k, v] of Object.entries(radii))
     staticProps[`--r-${k}`] = `${v}px`;
+  // Fixed spacing scale (density.ts) — the only rungs any surface may use.
+  for (const [k, v] of Object.entries(spacing))
+    staticProps[`--sp-${k}`] = `${v}px`;
+  // The one easing curve — same value the blueprint layer publishes.
+  staticProps["--ease"] = EASE;
   // Brand teal — theme-independent, matches the logo / app-icon SVGs.
   staticProps["--brand"] = BRAND;
+  // Ink for a saturated-accent or scrim surface. Theme-independent for the
+  // same reason `--brand` is: the surfaces it lands on (a photo, a 52% scrim,
+  // an `--accent` badge) are dark in both themes. The ink for `--accent-deep`
+  // is `--text-inv`, which DOES flip — see themes/shared.ts.
+  staticProps["--on-accent"] = ON_ACCENT;
   // Typography — web font stacks + the semantic type scale as CSS `font`
   // shorthands (`font: var(--t-title)`). camelCase keys emit kebab-case
   // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).
   for (const [k, v] of Object.entries(fontStacks))
     staticProps[`--font-${k}`] = v;
-  for (const [k, v] of Object.entries({ ...type, ...marketingType })) {
-    const kebab = k
-      .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
-      .toLowerCase();
-    staticProps[`--t-${kebab}`] = typeShorthand(v);
+  const shellScale = { ...type, ...marketingType };
+  for (const [k, v] of Object.entries(shellScale)) {
+    staticProps[`--t-${typeKeyToKebab(k)}`] = typeShorthand(v);
   }
+  // …and the SIZE of each rung on its own, for the rules the shorthand cannot
+  // serve (see `typeSizeRungs`). Emitted after the shorthands so a reader sees
+  // the whole scale before its facets; CSS custom properties do not care.
+  Object.assign(staticProps, typeSizeRungs(shellScale));
   // Shared library-tile tokens (Home + Discover render the same tile).
   for (const [k, v] of Object.entries(library)) staticProps[`--lib-${k}`] = v;
 

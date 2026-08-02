@@ -34,7 +34,7 @@
   position: absolute;
   inset: 8px;
   background: var(--bg-elev);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 .meta {
   min-width: 0;
@@ -48,21 +48,21 @@
   gap: 8px;
 }
 .title b {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
 .tag {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--accent);
 }
 .when {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .prompt {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   line-height: 1.4;
   overflow: hidden;

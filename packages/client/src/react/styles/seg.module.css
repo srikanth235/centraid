@@ -10,9 +10,9 @@
 .seg button {
   border: 0;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-faint);
   text-transform: capitalize;

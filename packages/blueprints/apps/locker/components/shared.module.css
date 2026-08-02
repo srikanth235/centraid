@@ -11,7 +11,7 @@
   height: 38px;
   flex-shrink: 0;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text-soft);
   display: flex;
@@ -27,12 +27,12 @@
 .itile {
   width: 36px;
   height: 36px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-accent);
   font: var(--font-title);
   font-weight: 600;
   font-size: 15px;
@@ -42,7 +42,7 @@
   min-width: 0;
 }
 .ititle {
-  font: var(--t-strong);
+  font: var(--t-body-strong);
   font-size: 13.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -71,16 +71,16 @@
 .listEmpty .ic {
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: var(--r-md);
   background: var(--bg-sunken);
   color: var(--text-faint);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 12px;
+  margin: 0 auto var(--sp-3);
 }
 .listEmptyTitle {
-  font: var(--t-strong);
+  font: var(--t-body-strong);
   color: var(--text-soft);
 }
 .listEmptySub {
@@ -99,18 +99,18 @@
 .dhead {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--sp-4);
   margin-bottom: 22px;
 }
 .dtile {
   width: 60px;
   height: 60px;
-  border-radius: 14px;
+  border-radius: var(--r-card);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-accent);
   font: var(--font-title);
   font-weight: 600;
   font-size: 24px;
@@ -127,7 +127,7 @@
 }
 .fields {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -136,7 +136,7 @@
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
-  margin: 22px 4px 10px;
+  margin: 22px var(--sp-1) 10px;
 }
 
 /* Password strength meter row (Generator + ItemFields secret reveal). The bar
@@ -165,6 +165,6 @@
 }
 .genrow {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   align-items: center;
 }

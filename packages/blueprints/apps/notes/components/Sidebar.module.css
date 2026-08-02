@@ -17,7 +17,7 @@
   width: 100%;
   padding: 9px 11px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   font: var(--t-body);
   font-size: 13.5px;
   background: none;
@@ -60,7 +60,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 10px 8px;
+  padding: var(--sp-4) 10px var(--sp-2);
 }
 .nbAdd {
   width: 22px;
@@ -70,7 +70,7 @@
   justify-content: center;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--text-faint);
 }
 .nbAdd:hover {
@@ -92,7 +92,7 @@
 .summary {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px 13px;
+  padding: var(--sp-3) 13px;
   background: var(--bg-elev);
 }
 .summaryLine {
@@ -109,7 +109,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 11px 4px 2px;
+  padding: 11px var(--sp-1) 2px;
   color: var(--text-faint);
 }
 .consentLine svg {

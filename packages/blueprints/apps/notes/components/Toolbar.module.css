@@ -6,7 +6,7 @@
    label lives in shared.module.css. */
 
 .toolbar {
-  padding: 16px 22px 4px;
+  padding: var(--sp-4) 22px var(--sp-1);
   flex-shrink: 0;
 }
 .toolbarTitleRow {
@@ -36,11 +36,11 @@
 .sub {
   font: var(--t-small);
   color: var(--text-soft);
-  margin-top: 4px;
+  margin-top: var(--sp-1);
 }
 
 /* Narrow (phone) padding — global shell state on #shell (chrome.ts). */
 :global(.nt-shell.is-narrow) .toolbar {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }

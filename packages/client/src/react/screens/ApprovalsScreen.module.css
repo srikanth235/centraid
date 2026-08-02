@@ -41,7 +41,7 @@
 .subtitle {
   margin: 0;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -82,7 +82,7 @@
 .list {
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -143,14 +143,14 @@ button.rowMain:hover {
 }
 .rowTitle {
   font-size: 13.5px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rowSub {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,14 +199,14 @@ button.rowMain:hover {
 .field dt {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
   text-transform: uppercase;
 }
 .field dd {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
@@ -282,7 +282,7 @@ button.rowMain:hover {
 .grantsList {
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -300,12 +300,12 @@ button.rowMain:hover {
   border-bottom: none;
 }
 .grantActor {
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text);
 }
 .grantVerb {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .grantTarget {
@@ -315,7 +315,7 @@ button.rowMain:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .grantMeta {
   font-family: var(--font-mono);
@@ -346,7 +346,7 @@ button.rowMain:hover {
   gap: 10px;
   padding-left: 12px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: transparent;
   overflow: hidden;
   transition: background 0.12s ease;
@@ -356,7 +356,11 @@ button.rowMain:hover {
 }
 
 /* Correspondent identity tile — a palette hue derived from the source, so the
-   same automation/agent/app always presents the same colour + glyph. */
+   same automation/agent/app always presents the same colour + glyph.
+   Two rungs per hue, not one: `--notice-hue` is the FILL (the 18% wash) and
+   `--notice-ink` is the glyph on top of it. Painting the glyph with the fill
+   put `--c-amber` on an 18% `--c-amber` wash — 1.9:1, under even the 3:1
+   non-text floor. */
 .noticeTile {
   display: grid;
   place-items: center;
@@ -364,32 +368,43 @@ button.rowMain:hover {
   height: 27px;
   border-radius: 8px;
   flex: none;
-  color: var(--notice-hue, var(--text-faint));
-  background: color-mix(in oklab, var(--notice-hue) 18%, transparent);
+  color: var(--notice-ink, var(--text-faint));
+  /* 12%, not the 18% this shipped at: the ink rung is solved for a 12% wash
+     of its own hue, and at 18% indigo and violet fall back under AA (4.44 /
+     4.49). Same normalisation #686 already applied to the state washes. */
+  background: color-mix(in oklab, var(--notice-hue) 12%, transparent);
 }
 .noticeTile[data-hue="amber"] {
   --notice-hue: var(--c-amber);
+  --notice-ink: var(--c-amber-text);
 }
 .noticeTile[data-hue="forest"] {
   --notice-hue: var(--c-forest);
+  --notice-ink: var(--c-forest-text);
 }
 .noticeTile[data-hue="indigo"] {
   --notice-hue: var(--c-indigo);
+  --notice-ink: var(--c-indigo-text);
 }
 .noticeTile[data-hue="ochre"] {
   --notice-hue: var(--c-ochre);
+  --notice-ink: var(--c-ochre-text);
 }
 .noticeTile[data-hue="rose"] {
   --notice-hue: var(--c-rose);
+  --notice-ink: var(--c-rose-text);
 }
 .noticeTile[data-hue="slate"] {
   --notice-hue: var(--c-slate);
+  --notice-ink: var(--c-slate-text);
 }
 .noticeTile[data-hue="teal"] {
   --notice-hue: var(--c-teal);
+  --notice-ink: var(--c-teal-text);
 }
 .noticeTile[data-hue="violet"] {
   --notice-hue: var(--c-violet);
+  --notice-ink: var(--c-violet-text);
 }
 
 /* Unread: a 6px dot, not a coloured left rail (rails are off-system here).
@@ -409,7 +424,7 @@ button.rowMain:hover {
   margin-right: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 500;
   vertical-align: baseline;
 }
@@ -417,12 +432,11 @@ button.rowMain:hover {
   color: color-mix(in oklab, var(--danger) 80%, var(--text));
   background: color-mix(in oklab, var(--danger) 14%, transparent);
 }
+/* `--c-amber-text` is already solved per theme, so the hand-mixed light value
+   and the dark override it needed both collapse into the one rung. */
 .noticeRow[data-severity="warning"] .severityPill {
-  color: color-mix(in srgb, var(--c-amber) 65%, var(--text));
+  color: var(--c-amber-text);
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
-}
-:root[data-theme="dark"] .noticeRow[data-severity="warning"] .severityPill {
-  color: var(--c-amber);
 }
 
 /* Failure-streak strip on a collapsed notice — one bar per attempt, capped. */
@@ -470,8 +484,8 @@ button.rowMain:hover {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 590;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   color: var(--text);
 }
 .noticeHeadlineText {
@@ -539,7 +553,7 @@ button.rowMain:hover {
   top: 10px;
   bottom: 10px;
   width: 3px;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
   background: color-mix(in oklab, var(--danger) 70%, var(--accent));
 }
 .decisionAllow .activityIcon {
@@ -558,7 +572,7 @@ button.rowMain:hover {
   display: inline-block;
   margin-left: 8px;
   font-size: 10px;
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   padding: 1px 6px;
@@ -587,8 +601,8 @@ button.rowMain:hover {
   display: inline-block;
   margin-left: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 550;
+  font-size: var(--t-tiny-size);
+  font-weight: 600;
   color: var(--text-faint);
   vertical-align: middle;
 }
@@ -599,7 +613,7 @@ button.rowMain:hover {
 }
 .monoId {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   word-break: break-all;
 }
 .seeAllRow {

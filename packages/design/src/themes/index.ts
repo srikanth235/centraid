@@ -1,12 +1,22 @@
 // Centraid — themes barrel.
 // Collects every preset under this folder into a typed registry +
-// ordered display list. Both desktop (CSS vars via `toCss()`) and mobile
-// (RN StyleSheet via `themes.light`) drink from this same well.
+// ordered display list. The desktop/web shell drinks from here via CSS vars
+// (`toCss()`). Mobile does NOT import these presets: it lowers the blueprint
+// emit instead — `apps/mobile/scripts/generate-theme.ts` runs
+// `toBlueprintCss()` through `src/kit/theme/generate.ts` into the checked-in
+// `src/kit/theme/tokens.generated.ts`, which `useTheme()` reads.
 
 import { darkTheme, lightTheme } from "./centraid";
 
 export type { Theme } from "./shared";
-export { ACCENT_DEEP, ACCENT_LIGHT, ACCENT_TEXT_LIGHT, BRAND } from "./shared";
+export {
+  ACCENT_DEEP,
+  ACCENT_LIGHT,
+  ACCENT_TEXT_LIGHT,
+  BRAND,
+  EASE,
+  ON_ACCENT,
+} from "./shared";
 
 export { darkTheme, lightTheme } from "./centraid";
 
@@ -19,7 +29,7 @@ export { darkTheme, lightTheme } from "./centraid";
 // those rules unfired — light chrome painted over a dark surface (#608 O).
 // `themes.test.ts` pins the invariant; adding a third preset means either
 // naming it `light`/`dark` (impossible) or moving those rules onto the
-// resolved kind first. Mobile imports `themes.light` directly.
+// resolved kind first.
 export const themes = {
   light: lightTheme,
   dark: darkTheme,

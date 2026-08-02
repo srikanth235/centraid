@@ -48,7 +48,7 @@
   background-color: var(--bg-sunken);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   cursor: pointer;
   transition:
     border-color 0.15s,

@@ -15,7 +15,7 @@
 }
 .rowNote mark {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -26,9 +26,9 @@
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   background: var(--accent-soft);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: 1px 6px;
 }
 .recur {
@@ -61,10 +61,10 @@
 .rowTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-1);
   margin-top: 2px;
 }
 .tagChipStatic {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px var(--sp-2);
 }

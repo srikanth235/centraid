@@ -3,7 +3,7 @@
 .act {
   display: flex;
   gap: 13px;
-  padding: 12px 4px;
+  padding: var(--sp-3) var(--sp-1);
   border-bottom: 1px solid var(--line);
 }
 .actIc {

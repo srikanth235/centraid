@@ -69,7 +69,7 @@
 
 .identityName {
   font: var(--t-title);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: break-word;
@@ -93,7 +93,7 @@
 .fieldLabel {
   font: var(--t-mono);
   font-size: 9.5px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }

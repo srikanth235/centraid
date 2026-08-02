@@ -21,8 +21,8 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.6rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: color-mix(in oklab, var(--on-accent) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--on-accent) 16%, transparent);
   border-radius: 999px;
   box-shadow: var(--shadow-lg);
   cursor: default;
@@ -36,12 +36,12 @@
   color: var(--on-accent);
 }
 .bar :global(.kit-btn):hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in oklab, var(--on-accent) 12%, transparent);
 }
 .count {
   font-family: var(--mono);
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: var(--t-small-size);
+  color: color-mix(in oklab, var(--on-accent) 75%, transparent);
   white-space: nowrap;
 }
 .empty {

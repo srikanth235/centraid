@@ -30,7 +30,7 @@
   position: fixed;
   inset: 0;
   z-index: 44;
-  background: rgba(15, 18, 26, 0.28);
+  background: color-mix(in oklab, var(--scrim) 39%, transparent);
   animation: fade 0.2s ease;
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 18px;
+  padding: var(--sp-4) 18px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -98,11 +98,10 @@
   overflow-wrap: anywhere;
 }
 .detailExt {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   color: var(--text-faint);
   text-align: center;
-  margin-top: 3px;
+  margin-top: var(--sp-1);
 }
 
 /* ---------- Custody badge (issue #352 phase 4) ---------- */
@@ -110,7 +109,7 @@
 .detailCustody {
   display: flex;
   justify-content: center;
-  margin-top: 9px;
+  margin-top: var(--sp-2);
 }
 /* Same tone vocabulary as .kit-chip.quiet's selected state, just with an
    owner-facing tone (ok/warn/danger) instead of the generic accent —
@@ -130,8 +129,8 @@
   border-color: color-mix(in oklab, var(--_accent) 35%, var(--line));
 }
 .custodyChip.custodyWarn {
-  color: var(--custody-warn);
-  border-color: color-mix(in oklab, #c9922e 35%, var(--line));
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 35%, var(--line));
 }
 .custodyChip.custodyDanger {
   color: var(--danger);
@@ -143,18 +142,17 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
   color: var(--text-faint);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 .detailGrid {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 9px 14px;
+  gap: var(--sp-2) 14px;
   font: var(--t-small);
   margin-bottom: 22px;
 }
 .detailGrid dt {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   color: var(--text-faint);
   margin: 0;
 }
@@ -165,8 +163,8 @@
 }
 .detailsFoot {
   display: flex;
-  gap: 7px;
-  padding: 12px 18px;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 18px;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
 }

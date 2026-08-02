@@ -44,12 +44,15 @@
   height: 100%;
   object-fit: cover;
 }
+/* No `opacity` here. This label is `color: var(--kind-*)`, a rung solved to a
+   measured floor against the tint behind it; a 0.9 fade is an unmeasured 0.6
+   off that ratio, applied after the fact and invisible to the token layer. If
+   the label needs to recede, the rung is the place to say so. */
 .thumbLabel {
   font-family: var(--mono);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: 0.06em;
-  opacity: 0.9;
 }
 .thumbLines {
   position: absolute;
@@ -58,7 +61,7 @@
   bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 .thumbLines > i {
   height: 4px;
@@ -94,7 +97,7 @@
   opacity: 1;
 }
 .cardBody {
-  padding: 11px 12px 12px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-3);
 }
 .cardTitle {
   font: var(--t-body-strong);
@@ -108,5 +111,5 @@
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-faint);
-  margin-top: 5px;
+  margin-top: var(--sp-1);
 }

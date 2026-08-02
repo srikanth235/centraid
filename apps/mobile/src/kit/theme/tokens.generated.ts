@@ -10,17 +10,17 @@ export const lightPalette = {
   bg: '#f9fbfb',
   bgElev: '#ffffff',
   bgSunken: '#f1f6f5',
-  danger: '#c8382f',
+  danger: '#ab3028',
   line: 'rgba(27, 39, 38, 0.095)',
   lineStrong: 'rgba(27, 39, 38, 0.165)',
   onAccent: '#ffffff',
   scrim: 'rgba(16, 25, 24, 0.48)',
-  success: '#2f7d4f',
+  success: '#286a43',
   text: '#182523',
   textFaint: '#637471',
   textInv: '#ffffff',
   textSoft: '#546462',
-  warning: '#9a6b1f',
+  warning: '#7c5619',
 } as const;
 
 export const darkPalette = {
@@ -28,17 +28,17 @@ export const darkPalette = {
   bg: '#161d1c',
   bgElev: '#222b29',
   bgSunken: '#2b3634',
-  danger: '#f0645b',
+  danger: '#f69d98',
   line: 'rgba(171, 206, 201, 0.11)',
   lineStrong: 'rgba(178, 210, 205, 0.2)',
   onAccent: '#ffffff',
   scrim: 'rgba(0, 0, 0, 0.68)',
-  success: '#5cc98a',
+  success: '#60ca8d',
   text: '#edf2f1',
   textFaint: '#8da09d',
   textInv: '#1f2827',
   textSoft: '#a0b0ae',
-  warning: '#e0a94a',
+  warning: '#e1ab4e',
 } as const;
 
 export const radii = {

@@ -72,13 +72,13 @@
 .settingsName {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   line-height: 1.05;
   color: var(--text);
 }
 .settingsEyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--text-ghost);
   margin-top: 2px;
   letter-spacing: 0.06em;
@@ -188,8 +188,8 @@
 }
 .settingsDangerLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--danger);
   margin-bottom: 8px;
@@ -208,7 +208,7 @@
   white-space: nowrap;
   color: var(--danger);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
@@ -233,7 +233,7 @@
   min-height: 0;
 }
 .settingsPane .settingsRowLabel {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 .settingsPane .settingsRow:has(.paneSwatches) {
@@ -253,7 +253,7 @@
 .settingsPane .paneSeg button {
   padding: 5px 10px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .settingsPane .paneSeg button[data-active="true"] {
   background: var(--bg-elev);
@@ -298,7 +298,7 @@
 .orderRail {
   align-self: stretch;
   width: 3px;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
   background: var(
     --accent-color,
     color-mix(in oklab, var(--text) 35%, transparent)
@@ -343,7 +343,7 @@
   border: 0;
   padding: 0;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
   text-decoration: underline;
@@ -406,7 +406,7 @@
 }
 .orderRunsToggle {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   background: none;
   border: none;
   color: color-mix(in oklab, var(--text) 55%, transparent);
@@ -422,7 +422,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .orderToggle {
   position: relative;
@@ -478,9 +478,9 @@
 }
 .settingsSectionLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
 }
 .settingsRow {
@@ -531,7 +531,7 @@
 }
 .settingsMenuLabel {
   display: block;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
   line-height: 1.1;
@@ -539,7 +539,7 @@
 .settingsMenuSub {
   display: block;
   margin-top: 3px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   line-height: 1.35;
   overflow: hidden;

@@ -74,7 +74,7 @@
 }
 .metricValue {
   font-size: 13.5px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
 }
@@ -82,7 +82,7 @@
   color: var(--success);
 }
 .metricValue[data-tone="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .metricValue[data-tone="bad"] {
   color: var(--danger);
@@ -104,7 +104,7 @@
   width: fit-content;
   cursor: pointer;
   color: var(--accent-deep, var(--accent));
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .metricHow p,
 .exitHow {
@@ -136,8 +136,8 @@
   align-self: flex-start;
 }
 .exitMeteredNote {
-  color: var(--c-amber);
-  font-size: 11px;
+  color: var(--c-amber-text);
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 
@@ -153,7 +153,7 @@
   cursor: pointer;
   color: var(--text-soft);
   font-size: 11.5px;
-  font-weight: 550;
+  font-weight: 600;
 }
 .diagnosticsBody {
   padding-top: 12px;
@@ -192,7 +192,7 @@
 }
 
 .loadError {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--danger);
 }
 
@@ -210,7 +210,7 @@
 
 .runError {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }
@@ -219,7 +219,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .vaultRow {
@@ -237,7 +237,7 @@
   gap: 8px;
 }
 .vaultName {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -256,11 +256,11 @@
   flex-wrap: wrap;
   gap: 12px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .vaultMeta span[data-emphasis="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .vaultError {
   font-family: var(--font-mono);
@@ -290,8 +290,8 @@
 .policyGroup h4 {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 620;
+  font-size: var(--t-mono-size);
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 .destinationGrid {
@@ -309,7 +309,7 @@
 .destinationGrid dd {
   margin: 2px 0 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   overflow-wrap: anywhere;
 }
 .localWarning {
@@ -318,7 +318,7 @@
   border-left: 2px solid var(--c-amber);
   background: color-mix(in srgb, var(--c-amber) 7%, transparent);
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 .policySetting {
@@ -389,7 +389,7 @@
   color: var(--text-soft);
   cursor: pointer;
   font-size: 11.5px;
-  font-weight: 550;
+  font-weight: 600;
 }
 .advancedGrid {
   padding-top: 12px;
@@ -439,7 +439,7 @@
 }
 .inventoryHead > span[data-state="degraded"] {
   background: color-mix(in srgb, var(--c-amber) 10%, transparent);
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .inventoryHead > span[data-state="error"] {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -448,7 +448,7 @@
 .inventoryWarning,
 .inventoryEmpty {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 .inventoryWarning {
@@ -472,8 +472,8 @@
 }
 .inventoryStore strong {
   color: var(--text-soft);
-  font-size: 11px;
-  font-weight: 550;
+  font-size: var(--t-tiny-size);
+  font-weight: 600;
 }
 .inventoryStore > span,
 .inventoryStore em {
@@ -483,7 +483,7 @@
 }
 .inventoryStore em {
   flex-basis: 100%;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   text-align: right;
 }
 .inventoryStore[data-state="error"] em {
@@ -520,11 +520,11 @@
   color: var(--text-soft);
   font-family: var(--font-sans);
   font-size: 10.5px;
-  font-weight: 550;
+  font-weight: 600;
 }
 .inventoryHistory b {
   color: var(--text-soft);
-  font-weight: 550;
+  font-weight: 600;
 }
 .verifyBucket {
   align-self: flex-start;
@@ -568,7 +568,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 35%, var(--line));
   background: color-mix(in srgb, var(--c-amber) 8%, transparent);
   color: var(--text-soft);
@@ -578,7 +578,7 @@
 .sealNudge svg {
   flex: none;
   margin-top: 1px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .sealNudge code {
   font-family: var(--font-mono);
@@ -614,7 +614,7 @@
   padding: 7px 9px;
   border: 0.5px solid var(--line);
   border-radius: 7px;
-  background: var(--bg-elev-raised);
+  background: var(--bg-elev);
   color: var(--text);
   font: inherit;
 }

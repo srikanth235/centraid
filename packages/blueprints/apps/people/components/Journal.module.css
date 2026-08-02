@@ -7,12 +7,12 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--bg-elev);
-  padding: 16px;
+  padding: var(--sp-4);
 }
 .moodrow {
   display: flex;
-  gap: 8px;
-  margin: 12px 0;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
 }
 .mood {
   width: 44px;
@@ -65,7 +65,7 @@
   color: var(--text-faint);
 }
 .entry p {
-  margin: 4px 0 0;
+  margin: var(--sp-1) 0 0;
   font: var(--t-body);
   font-size: 14px;
   line-height: 1.55;

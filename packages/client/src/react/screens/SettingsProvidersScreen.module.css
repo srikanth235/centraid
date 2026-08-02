@@ -82,7 +82,7 @@
 /* Raw px, not `font: var(--t-tiny)`: the --t-* tokens are `font` shorthands
    (css.ts:88-95) and --t-tiny carries weight 500 — too heavy for a hint. */
 .routeHint {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -149,7 +149,9 @@
   gap: 3px;
   padding: 3px 5px 3px 8px;
   border: 1px solid var(--line);
-  border-radius: var(--r-pill);
+  /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
+     at `--r-xl` and composes the pill inline (radii.ts). */
+  border-radius: 999px;
   color: var(--text-soft);
   font: var(--t-tiny);
 }
@@ -244,7 +246,7 @@
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -282,7 +284,7 @@
   background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .usedByChip[data-warn="true"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
 }
 .usedByNone {

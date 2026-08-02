@@ -51,7 +51,7 @@
 }
 .configTitle {
   font-size: 17px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -61,7 +61,7 @@
 }
 .chip {
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 8px;
@@ -84,8 +84,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--t-tiny-size);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-ghost);
@@ -131,7 +131,7 @@
 }
 .codeFile {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text);
 }
 .codeTag {
@@ -141,7 +141,7 @@
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 .codePre {
@@ -189,7 +189,7 @@
 .flowKind {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-bottom: 2px;
@@ -201,7 +201,7 @@
 }
 .flowSub {
   margin-top: 3px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-faint);
   white-space: pre-wrap;
@@ -257,7 +257,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 9px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .triggerIcon {
@@ -267,7 +267,7 @@
 .triggerDesc {
   flex: 1 1 auto;
   min-width: 0;
-  font-weight: 550;
+  font-weight: 600;
 }
 .triggerExpr {
   flex: none;
@@ -285,7 +285,7 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .nextrun {
@@ -338,7 +338,7 @@
   align-self: flex-start;
   padding: 7px 11px;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text-soft);
   background: transparent;
   border: 1px dashed var(--line-strong);
@@ -366,8 +366,8 @@
 }
 .triggerKindBtn {
   padding: 6px 11px;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: var(--t-mono-size);
+  font-weight: 600;
   color: var(--text-faint);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
@@ -415,13 +415,13 @@
 }
 .formHint {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
 .formError {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
@@ -445,7 +445,7 @@
   display: flex;
   gap: 12px;
   padding: 9px 13px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .row + .row {
   border-top: 1px solid var(--line);
@@ -469,7 +469,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   padding: 3px 9px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
@@ -491,7 +491,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 9px 13px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .activityRow + .activityRow {
   border-top: 1px solid var(--line);

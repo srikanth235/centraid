@@ -9,5 +9,5 @@
 .bulkActions {
   margin-left: auto;
   display: flex;
-  gap: 7px;
+  gap: var(--sp-2);
 }

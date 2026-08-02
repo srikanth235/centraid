@@ -2,22 +2,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: var(--sp-1);
 }
 
 .list {
   display: grid;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 .row {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 12px;
+  gap: 6px var(--sp-3);
   align-items: center;
   padding: 10px 11px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
 }
 
 .value {
@@ -45,10 +45,10 @@
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: var(--sp-2);
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
 }
 
 .wide {

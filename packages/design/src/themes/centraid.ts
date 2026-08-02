@@ -8,11 +8,13 @@
 import { palette } from "../palette";
 import {
   ACCENT_DEEP,
+  ACCENT_DEEP_DARK,
   ACCENT_LIGHT,
   ACCENT_MIDNIGHT,
   ACCENT_TEXT_LIGHT,
   BRAND,
   DANGER,
+  DANGER_DARK,
   SUCCESS,
   SUCCESS_LIGHT,
   WARNING,
@@ -73,7 +75,13 @@ export const lightTheme: Theme = {
 export const darkTheme: Theme = {
   kind: "dark",
   accent: BRAND,
-  accentDeep: ACCENT_DEEP,
+  // "Deep" is a role, not a direction: it is the accent AS A FILL, and the ink
+  // it carries (`--text-inv`) is near-black here, so this ramp's filled rung
+  // is the LIGHT half of the pair. Deepening it instead would have put dark
+  // ink on a dark fill, and a fill dark enough for white ink cannot also clear
+  // 3:1 against a 5%-lightness surface — the two floors have no overlap on
+  // near-black. See `ACCENT_DEEP` in shared.ts.
+  accentDeep: ACCENT_DEEP_DARK,
   accentLight: ACCENT_LIGHT,
   accentMidnight: ACCENT_MIDNIGHT,
   accentText: BRAND,
@@ -129,6 +137,6 @@ export const darkTheme: Theme = {
   sidebarBlur: "blur(28px) saturate(180%)",
   sidebarDivider: "0.5px solid rgba(255,255,255,0.10)",
   success: SUCCESS,
-  danger: DANGER,
+  danger: DANGER_DARK,
   warning: WARNING,
 };

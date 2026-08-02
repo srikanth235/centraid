@@ -14,7 +14,7 @@
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background: var(--bg-elev);
-  padding: 16px 16px 13px;
+  padding: var(--sp-4) var(--sp-4) 13px;
   cursor: pointer;
   transition:
     border-color 0.16s var(--ease),
@@ -38,7 +38,7 @@
 .cardHead {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .cardTitle {
   flex: 1;
@@ -110,7 +110,7 @@
 .cardMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-top: 11px;
 }
 .cardNotebook {
@@ -134,10 +134,10 @@
 .cardTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 2px 0 8px;
+  gap: var(--sp-1);
+  margin: 2px 0 var(--sp-2);
 }
 .cardTags .tagChipStatic {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px var(--sp-2);
 }

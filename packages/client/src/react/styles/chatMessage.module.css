@@ -20,7 +20,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   background: var(--bg-sunken);
   padding: 6px 12px;
@@ -44,7 +44,7 @@
   border: 0.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--text);
   padding: 10px 14px;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
   font-size: 14px;
   line-height: 1.45;
 }

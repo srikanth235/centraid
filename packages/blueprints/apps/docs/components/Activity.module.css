@@ -4,7 +4,7 @@
 
 .activityItem {
   display: flex;
-  gap: 11px;
+  gap: var(--sp-3);
   padding-bottom: 14px;
 }
 .activityRail {
@@ -18,13 +18,13 @@
   height: 8px;
   border-radius: var(--r-pill);
   background: var(--accent-deep-fg);
-  margin-top: 5px;
+  margin-top: var(--sp-1);
 }
 .activityLine {
   width: 1px;
   flex: 1;
   background: var(--line);
-  margin-top: 3px;
+  margin-top: var(--sp-1);
 }
 .activityText {
   font: var(--t-small);
@@ -42,15 +42,14 @@
   color: var(--text-faint);
 }
 .receiptChip {
-  font-family: var(--mono);
-  font-size: 9.5px;
+  font: var(--t-tiny);
   color: var(--accent-deep-fg);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
 }
 .activityStatus {
   font: var(--t-small);
   color: var(--text-faint);
-  padding: 4px 0 10px;
+  padding: var(--sp-1) 0 10px;
 }

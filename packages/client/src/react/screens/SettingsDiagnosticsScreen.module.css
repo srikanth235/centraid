@@ -7,7 +7,7 @@
 .loading,
 .loadError {
   padding: 20px 4px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .loadError {
@@ -39,7 +39,7 @@
 }
 .overallSub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 
@@ -58,7 +58,7 @@
 }
 .metricLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -67,7 +67,7 @@
 .metricValue {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -140,7 +140,7 @@
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   /* `disk`/`vaults` (and any long lastError) can bake several items into
      one detail string — wrap instead of the single-line ellipsis this used
@@ -177,7 +177,7 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--diag-health, var(--text-faint));
@@ -185,8 +185,9 @@
 .healthLabel[data-health="ok"] {
   --diag-health: var(--success);
 }
+/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
 .healthLabel[data-health="degraded"] {
-  --diag-health: var(--c-amber);
+  --diag-health: var(--c-amber-text);
 }
 .healthLabel[data-health="error"] {
   --diag-health: var(--danger);
@@ -195,9 +196,9 @@
 .eventsHead {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -208,7 +209,7 @@
   gap: 10px;
   padding: 8px 16px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .eventRow + .eventRow {
   border-top: 1px solid var(--line);
@@ -219,13 +220,13 @@
 }
 .eventLevel {
   flex: none;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   font-size: 9.5px;
   letter-spacing: 0.06em;
 }
 .eventLevel[data-level="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .eventLevel[data-level="error"] {
   color: var(--danger);
@@ -243,7 +244,7 @@
 
 .empty {
   padding: 20px 16px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   font-style: italic;
 }

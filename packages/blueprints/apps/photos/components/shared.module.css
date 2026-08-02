@@ -8,5 +8,5 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-eyebrow);
   color: var(--text-faint);
-  padding: 14px 9px 6px;
+  padding: 14px var(--sp-2) 6px;
 }

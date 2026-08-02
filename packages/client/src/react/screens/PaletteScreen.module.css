@@ -49,7 +49,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.005em;
   padding: 0;
 }
@@ -62,7 +62,7 @@
   font-size: 10.5px;
   color: var(--text-ghost);
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   border: 0.5px solid var(--line);
 }
@@ -86,12 +86,12 @@
   font-weight: 600;
 }
 .noResults span {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .group {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 12px 18px 6px;
@@ -179,7 +179,7 @@
   font-size: 10px;
   color: var(--text-faint);
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
@@ -201,7 +201,7 @@
   font-size: 10px;
   color: var(--text-soft);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   border: 0.5px solid var(--line);
 }

@@ -1,7 +1,7 @@
 .status {
   color: var(--text-faint);
   font: var(--t-small);
-  margin: 8px 0;
+  margin: var(--sp-2) 0;
 }
 .list {
   display: flex;
@@ -15,7 +15,7 @@
   justify-content: space-between;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  padding: 8px 10px;
+  padding: var(--sp-2) 10px;
 }
 .row div {
   display: flex;

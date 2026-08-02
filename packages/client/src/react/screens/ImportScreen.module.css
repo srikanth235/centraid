@@ -14,14 +14,14 @@
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   padding: 2px 0;
 }
 .rowDisposition {
   flex: none;
   width: 52px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-soft);
 }
 .row[data-disposition="create"] .rowDisposition {
   color: var(--accent);
@@ -32,11 +32,11 @@
   white-space: nowrap;
 }
 .rowNote {
-  color: var(--text-secondary);
+  color: var(--text-soft);
   flex: none;
 }
 .mapping {
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   font-size: 10px;
   flex: 1;
   min-width: 120px;
@@ -45,7 +45,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   padding: 3px 0;
 }
 .connectionLabel {
@@ -59,9 +59,9 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   padding: 3px 0;
 }
 .historySub {
-  color: var(--text-secondary);
+  color: var(--text-soft);
 }

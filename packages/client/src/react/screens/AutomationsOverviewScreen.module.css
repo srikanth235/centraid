@@ -43,7 +43,7 @@
 .subtitle {
   margin: 0;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .actions {
@@ -69,13 +69,13 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
 .sectionCount {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
 }
 .filterWrap {
@@ -110,7 +110,7 @@
   padding: 20px 16px;
   border: 0.5px dashed var(--line);
   border-radius: var(--r-md, 12px);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .filterClear {
@@ -195,9 +195,9 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 32%, transparent);
 }
@@ -221,7 +221,7 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 12%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--c-amber) 28%, transparent);
 }
@@ -249,9 +249,9 @@
 }
 .activityGroupLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding-left: 2px;
@@ -305,7 +305,7 @@
   flex: none;
   max-width: 220px;
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -314,7 +314,7 @@
 .activityOrigin {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -328,7 +328,7 @@
 .activityEmpty {
   padding: 24px 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -349,19 +349,19 @@
   height: 48px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
 .emptyTitle {
   font: var(--t-h2);
-  font-size: 16px;
+  font-size: var(--t-h3-size);
   color: var(--text);
 }
 .emptyText {
   margin: 0;
   max-width: 420px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.55;
   color: var(--text-faint);
 }
@@ -410,7 +410,7 @@
 }
 .suggestDesc {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
   display: -webkit-box;
@@ -429,12 +429,12 @@
   /* An <output> (implicit role=status) replaced the div this was written for;
      `display` keeps the block box the surrounding stack assumes. */
   display: block;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .skelHead {
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 6%, transparent);
   animation: cd-pulse 1.4s ease-in-out infinite;
 }
@@ -477,7 +477,7 @@
 }
 .errorText {
   max-width: 420px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   margin-bottom: 6px;
 }

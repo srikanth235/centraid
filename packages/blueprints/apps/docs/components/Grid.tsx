@@ -2,6 +2,7 @@
 import type { MouseEvent } from "react";
 
 import {
+  fillVar,
   fmtBytes,
   fmtDate,
   isImage,
@@ -47,7 +48,7 @@ export function GridCard({
       <button
         type="button"
         className={`kit-plain-btn ${styles.thumb}`}
-        style={{ background: tintBg(m.cv, 15) }}
+        style={{ background: tintBg(m.cv, 12) }}
         aria-label={`Preview ${doc.title ?? "Untitled"}`}
         onClick={() => onOpenQuick(doc.document_id)}
       >
@@ -80,21 +81,21 @@ export function GridCard({
               <i
                 style={{
                   width: "70%",
-                  background: `var(${m.cv})`,
+                  background: `var(${fillVar(m.cv)})`,
                   opacity: 0.18,
                 }}
               />
               <i
                 style={{
                   width: "90%",
-                  background: `var(${m.cv})`,
+                  background: `var(${fillVar(m.cv)})`,
                   opacity: 0.14,
                 }}
               />
               <i
                 style={{
                   width: "55%",
-                  background: `var(${m.cv})`,
+                  background: `var(${fillVar(m.cv)})`,
                   opacity: 0.14,
                 }}
               />

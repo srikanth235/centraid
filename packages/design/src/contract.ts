@@ -1,28 +1,41 @@
 // The one public CSS-token vocabulary. Emitters may choose values appropriate
 // to their surface, but cannot invent a second spelling for a semantic role.
 
+import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { fontStacks, marketingType, type } from "./typography";
-
-const kebab = (key: string): string =>
-  key
-    .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
-    .toLowerCase();
+import {
+  blueprintType,
+  fontStacks,
+  marketingType,
+  type,
+  typeKeyToKebab as kebab,
+  typeSizeRungs,
+} from "./typography";
 
 const shellStatic = [
   ...Object.keys(palette).map((key) => `--c-${key}`),
   ...Object.keys(radii).map((key) => `--r-${key}`),
+  ...Object.keys(spacing).map((key) => `--sp-${key}`),
+  "--ease",
   "--brand",
+  "--on-accent",
   ...Object.keys(fontStacks).map((key) => `--font-${key}`),
   ...Object.keys({ ...type, ...marketingType }).map(
     (key) => `--t-${kebab(key)}`
   ),
+  // Derived, never hand-listed: the rung set collapses keys that share a size
+  // (body/bodyStrong), so a literal list here would drift the moment the scale
+  // gains or merges a size.
+  ...Object.keys(typeSizeRungs({ ...type, ...marketingType })),
   ...Object.keys(library).map((key) => `--lib-${key}`),
 ] as const;
 
 const surface = [
+  // The palette hues as `color:` — solved per theme, unlike the `--c-*` fills
+  // above, which are theme-independent. See `paletteText` in color.ts.
+  ...Object.keys(palette).map((key) => `--c-${key}-text`),
   "--accent",
   "--accent-deep",
   "--accent-light",
@@ -66,6 +79,7 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
   "--font-title",
   "--mono",
   ...Object.keys(palette).map((key) => `--c-${key}`),
+  ...Object.keys(palette).map((key) => `--c-${key}-text`),
   "--accent",
   "--on-accent",
   "--_accent",
@@ -93,6 +107,7 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
   "--r-pill",
   "--radius",
   "--radius-sm",
+  ...Object.keys(spacing).map((key) => `--sp-${key}`),
   "--ease",
   "--focus-ring",
   "--shadow-sm",
@@ -101,10 +116,8 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
   "--tracking-body",
   "--tracking-h",
   "--tracking-eyebrow",
-  "--t-title",
-  "--t-body",
-  "--t-body-strong",
-  "--t-small",
-  "--t-tiny",
-  "--t-mono",
+  // The blueprint type scale and its size rungs — both derived from
+  // `blueprintType`, for the same reason the shell half above is.
+  ...Object.keys(blueprintType).map((key) => `--t-${kebab(key)}`),
+  ...Object.keys(typeSizeRungs(blueprintType)),
 ].sort();

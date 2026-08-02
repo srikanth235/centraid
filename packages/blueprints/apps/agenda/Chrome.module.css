@@ -23,15 +23,12 @@
   flex-direction: column;
   /* app.css :root escape hatches, absent from the blueprint token layer. */
   --accent-deep-fg: var(--accent-deep);
-  --warning: #b06a12;
 }
 :global(:root[data-theme="dark"]) .root {
-  --warning: #e0a13c;
   --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .root {
-    --warning: #e0a13c;
     --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
   }
 }
@@ -43,7 +40,7 @@
   color: var(--text-soft);
 }
 .root :global(.small) {
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 .root :global(mark) {
   background: var(--accent-soft);
@@ -154,11 +151,13 @@
   gap: 9px;
   width: 100%;
   padding: 11px 14px;
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --on-accent (kit.css header contract, #686). */
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -170,7 +169,7 @@
   transform: scale(0.99);
 }
 .calsLabel {
-  padding: 16px 10px 8px;
+  padding: var(--sp-4) 10px var(--sp-2);
   margin: 0;
 }
 .sideFoot {
@@ -180,7 +179,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 2px 4px;
+  padding: 2px var(--sp-1);
   color: var(--text-faint);
 }
 .consentLine svg {
@@ -235,7 +234,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 22px 22px;
+  padding: var(--sp-4) 22px 22px;
   display: flex;
   flex-direction: column;
 }
@@ -251,12 +250,12 @@
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .canvas {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .topbar {
   flex-wrap: wrap;
@@ -312,7 +311,7 @@
 :global(.ag-day-pop-time) {
   flex-shrink: 0;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 :global(.ag-day-pop-text) {

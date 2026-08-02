@@ -13,8 +13,8 @@
    InlineAppRoute injects under .centraid-inline-scope), so this file references
    those directly and never loads tokens.css/wall.css. The locker-SPECIFIC
    tokens app.css's :root added on top of that layer — the accent-derived
-   --accs/--accd/--accd-fg, the sidebar surface --bg-side, and the
-   --warn/--t-strong/--tk-eye aliases the reused component CSS modules read —
+   --accs/--accd/--accd-fg and the
+   --warn/--tk-eye aliases the reused component CSS modules read —
    are NOT in the shared layer, so they are folded in here on .appRoot (trap
    #3). */
 
@@ -24,13 +24,25 @@
      blueprint layer supplies everything else; these are the app's own palette
      add-ons the reused components/*.module.css reference. --app-hue/--_accent
      resolve from the injected .centraid-inline-scope ancestor. */
-  --accs: color-mix(in oklab, var(--_accent) 12%, transparent);
-  --accd: color-mix(in oklab, var(--_accent) 92%, hsl(var(--app-hue) 45% 7%));
+  --accs: var(--accent-soft);
+  --accd: var(--accent-deep);
   --accd-fg: var(--accd);
-  --bg-side: hsl(var(--app-hue) 20% 97%);
-  --warning: #e0902e;
-  --t-strong: 600 0.855rem/1.4 var(--font-sans);
   --tk-eye: 0.09em;
+
+  /* Kit shell knobs (#686) — the sidebar/brand geometry that used to be
+     hand-written in components/Sidebar.module.css now rides kit-app-*. The
+     sidebar surface itself drops to the kit's --bg-elev, the same panel every
+     other blueprint sidebar uses. */
+  --app-side-width: 230px;
+  --app-side-padding: 14px 12px;
+  --app-brand-padding: 2px 6px 12px;
+  --app-brand-radius: 9px;
+  --app-brand-background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--_accent) 78%, var(--text-inv)),
+    var(--accd)
+  );
+  --app-side-foot-padding: 12px;
 
   /* The `.locker` frame: a horizontal flex row (sidebar | list | detail). It is
      the flex:1 child of the app-inline wrapper (a flex column), so it gets a
@@ -53,26 +65,9 @@
   display: contents;
 }
 
-/* Dark overrides for the folded locker tokens — mirrors app.css's dark block.
-   Emitted for both the explicit [data-theme='dark'] and the standalone
-   prefers-color-scheme fallback, the same two-selector shape the token layer
-   uses. */
-:global(:root[data-theme="dark"]) .appRoot {
-  --accd: color-mix(in oklab, var(--_accent) 76%, hsl(var(--app-hue) 40% 12%));
-  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .appRoot {
-    --accd: color-mix(
-      in oklab,
-      var(--_accent) 76%,
-      hsl(var(--app-hue) 40% 12%)
-    );
-    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
-    --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
-  }
-}
+/* No dark block: --accs/--accd now alias --accent-soft / --accent-deep, each
+   of which already carries its own dark ramp from the blueprint token layer
+   (#686). */
 
 /* Knob: appFont swaps the body/UI face between sans and mono. The host sets
    data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
@@ -135,7 +130,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 12px;
   box-shadow: var(--shadow-md);
-  padding: 11px 16px;
+  padding: 11px var(--sp-4);
   font: var(--t-small);
   color: var(--text-soft);
 }
@@ -166,7 +161,7 @@
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(12, 18, 32, 0.4);
+  background: var(--scrim);
 }
 
 /* Narrow: keep the floating ask launcher clear of the fixed detail/back button

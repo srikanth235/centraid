@@ -1,13 +1,13 @@
 .status {
   color: var(--text-faint);
   font: var(--t-small);
-  margin: 8px 0 18px;
+  margin: var(--sp-2) 0 18px;
 }
 .list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 20px;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 20px;
 }
 .version {
   border: 1px solid var(--line);

@@ -17,8 +17,17 @@
 // identity overrides now sit in Chrome.module.css; this module generalizes the
 // shared formulas so portable surfaces don't re-derive them per app.
 
+import { paletteText, semanticShade } from "./color";
+import { spacing } from "./density";
 import { palette } from "./palette";
 import { radii } from "./radii";
+import { EASE } from "./themes/shared";
+import {
+  blueprintType,
+  blueprintTypeShorthand,
+  typeKeyToKebab,
+  typeSizeRungs,
+} from "./typography";
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -64,12 +73,36 @@ function lightProps(): Record<string, string> {
     props[`--c-${name}`] = hex;
   }
 
+  // …and the same eight as TEXT. The hexes above are FILLS — `--c-amber` is
+  // 2.3:1 as `color:` on this surface — so an app that wants a hue on type
+  // reads `--c-<name>-text`, the rung `color.ts` solves per theme. Before this
+  // existed, `docs` hand-picked six darker literals for its file-kind labels
+  // and #686 replaced them with the raw fills, dropping five of six below AA.
+  for (const [name, hex] of Object.entries(paletteText.light)) {
+    props[`--c-${name}-text`] = hex;
+  }
+
   Object.assign(props, {
+    // Ink for a SATURATED accent or a scrim — the photo lightbox chrome, an
+    // `--accent`-filled badge. White in both themes, because those surfaces
+    // are dark in both. The ink for `--accent-deep` is `--text-inv`, which
+    // flips per theme; the two are different roles (#686 F3).
     "--on-accent": "#ffffff",
     "--_accent": "var(--app-color, var(--accent))",
     "--accent-soft": "color-mix(in oklab, var(--_accent) 12%, transparent)",
+    // The accent as a FILLED surface — the one place the accent carries text.
+    // 80% measured 3.49:1 under white for `--c-amber` and 3.16:1 for the brand
+    // teal: a WCAG 1.4.3 failure at every retuned hue, not just the default.
+    // An app moves `--accent`/`--app-color` to any of the eight palette hues,
+    // and CSS still has no shipped way to pick ink from a background
+    // (`color-contrast()` is unimplemented), so the FILL is the only lever
+    // that can be correct for all of them at once. 62% is the largest accent
+    // share at which all eight hues plus both teals clear 4.5:1 — the binding
+    // hue is the brand teal at 4.86:1, and the deepest, `--c-slate`, still
+    // lands at 10.1:1 rather than black. `contrast.test.ts` measures the whole
+    // hue × theme grid off this emit.
     "--accent-deep":
-      "color-mix(in oklab, var(--_accent) 80%, hsl(var(--app-hue) 45% 7%))",
+      "color-mix(in oklab, var(--_accent) 62%, hsl(var(--app-hue) 45% 6%))",
     "--accent-text": "var(--accent-deep)",
     "--sel": "var(--accent-soft)",
     "--selb": "color-mix(in oklab, var(--_accent) 34%, var(--line-strong))",
@@ -93,9 +126,18 @@ function lightProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 19% 13% / 0.165)",
     "--scrim": "hsl(var(--app-hue) 22% 8% / 0.48)",
 
-    "--danger": "#c8382f",
-    "--warning": "#9a6b1f",
-    "--success": "#2f7d4f",
+    // Semantic states, SOLVED as text rather than hand-picked — see the block
+    // comment on `semanticShade()` in color.ts. Apps paint these as `color:`
+    // on 10–13px prose (`tasks` flags, `agenda` guest stats, `docs` custody
+    // chips, `tally`'s `--pos`/`--neg` aliases), usually on a 12% self-tint,
+    // and the hand-picked literals missed AA there: `#9a6b1f` measured 4.13:1
+    // on the light track and `#c8382f` 3.86:1 on its own tint. The blueprint
+    // bases are solved against the BLUEPRINT surfaces, not the shell's — this
+    // ramp's `--bg-l` is 10%, so its darkest surface is much lighter than the
+    // shell's 5% one and the two need different answers.
+    "--danger": semanticShade("#c8382f", "blueprintLight"),
+    "--warning": semanticShade("#9a6b1f", "blueprintLight"),
+    "--success": semanticShade("#2f7d4f", "blueprintLight"),
 
     // Radii — hard-edged cards; buttons/chips are kit pills (kit.css).
     "--r-card": `${radii.xl}px`,
@@ -106,7 +148,7 @@ function lightProps(): Record<string, string> {
     "--radius": "0.75rem",
     "--radius-sm": "0.5rem",
 
-    "--ease": "cubic-bezier(0.2, 0.7, 0.3, 1)",
+    "--ease": EASE,
     "--focus-ring": "0 0 0 3px var(--accent-soft)",
     "--shadow-sm": "0 0 0 0.5px var(--line-strong)",
     "--shadow-md":
@@ -116,16 +158,26 @@ function lightProps(): Record<string, string> {
     "--tracking-body": "0",
     "--tracking-h": "-0.01em",
     "--tracking-eyebrow": "0.09em",
-
-    // Type shorthands (font: style weight size/line family) retained from the
-    // original Docs identity layer.
-    "--t-title": "600 1.15rem/1.2 var(--font-title)",
-    "--t-body": "400 0.855rem/1.5 var(--font-sans)",
-    "--t-body-strong": "600 0.855rem/1.4 var(--font-sans)",
-    "--t-small": "400 0.8rem/1.45 var(--font-sans)",
-    "--t-tiny": "600 0.6rem/1.4 var(--mono)",
-    "--t-mono": "500 0.72rem/1.4 var(--mono)",
   });
+
+  // Type shorthands (font: weight size/line family), from the `blueprintType`
+  // table in typography.ts — the values are the ones the original Docs identity
+  // layer carried, now data rather than opaque strings so the size rungs below
+  // can be derived from them instead of re-typed.
+  for (const [key, style] of Object.entries(blueprintType)) {
+    props[`--t-${typeKeyToKebab(key)}`] = blueprintTypeShorthand(style);
+  }
+  // …and the SIZE of each rung on its own (#686). Same names as the shell
+  // publishes, different values — the two scales are separate by design, and an
+  // inline app resolves these from the `.centraid-inline-scope` block, not from
+  // the shell `:root`.
+  Object.assign(props, typeSizeRungs(blueprintType));
+
+  // Fixed spacing scale (density.ts) — apps had no spacing token at all, so
+  // every gutter was a hardcoded px literal. Same rungs the shell emits.
+  for (const [step, px] of Object.entries(spacing)) {
+    props[`--sp-${step}`] = `${px}px`;
+  }
 
   return props;
 }
@@ -143,7 +195,16 @@ function lightProps(): Record<string, string> {
  * the old compatibility aliases.
  */
 function darkProps(): Record<string, string> {
+  const paletteTextDark: Record<string, string> = {};
+  // The palette-text rung flips direction per theme: it DEEPENS the hue on a
+  // near-white surface and LIFTS it on a near-black one. The fills themselves
+  // (`--c-*`) are the same eight hexes in both themes, so only this rung is
+  // re-emitted here.
+  for (const [name, hex] of Object.entries(paletteText.dark)) {
+    paletteTextDark[`--c-${name}-text`] = hex;
+  }
   return {
+    ...paletteTextDark,
     // Default so a standalone dark app (no host wiring a real value) still
     // resolves every calc() below — docs/photos both set this same default.
     "--bg-l": "10%",
@@ -163,12 +224,22 @@ function darkProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 26% 76% / 0.2)",
     "--scrim": "hsl(0 0% 0% / 0.68)",
 
-    "--danger": "#f0645b",
-    "--warning": "#e0a94a",
-    "--success": "#5cc98a",
+    // The dark half of the same solve. `#f0645b` was 3.98:1 on the `--bg-sunken`
+    // track and 3.44:1 on its own 12% tint — the `agenda` declined-guest chip
+    // paints exactly that pairing.
+    "--danger": semanticShade("#f0645b", "blueprintDark"),
+    "--warning": semanticShade("#e0a94a", "blueprintDark"),
+    "--success": semanticShade("#5cc98a", "blueprintDark"),
 
+    // Same role as the light rung — the accent as a FILLED surface — but
+    // `--text-inv` is near-black here, so the fill is the LIGHT half of the
+    // pair. 82% left the ink at 3.96:1 on `--c-slate`; 70% clears 4.5:1 for
+    // every hue (slate is the binding one at 4.89:1) and keeps the fill 4.7:1
+    // clear of the card behind it. There is no percentage that would let this
+    // ramp carry white ink instead: a fill dark enough for white cannot also
+    // separate from a 15%-lightness surface.
     "--accent-deep":
-      "color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%))",
+      "color-mix(in oklab, var(--_accent) 70%, hsl(var(--app-hue) 60% 96%))",
 
     // Shadows are hue-agnostic (pure black in both source apps) — no hue
     // substitution needed, just deeper/darker than the light-mode values.
