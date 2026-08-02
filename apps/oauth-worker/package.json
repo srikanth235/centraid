@@ -17,6 +17,6 @@
     "@centraid/test-kit": "workspace:*",
     "@types/node": "^26.1.2",
     "typescript": "catalog:",
-    "wrangler": "^4.36.0"
+    "wrangler": "^4.116.0"
   }
 }
