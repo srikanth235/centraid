@@ -268,14 +268,18 @@ export function completeOnboardingCommands(homeReadyMarker) {
     commands:
 ${enterCentraid}
 # After Enter Centraid the shell may show the offline-capability wall until
-# /_gateway/info succeeds over the tunnel. refresh() bumps retryNonce and
-# briefly clears compatibility while remounting — a while-visible-Reconnect
-# loop then exits mid-probe (Android 30748665073) and the final Home wait
-# sits idle with the wall back. Keep retrying until Home is visible (or the
-# attempt budget is spent), tapping Retry only while the wall is up. Online
-# probes also retry in-product (mobile-gateway-compatibility.ts).
+# /_gateway/info succeeds over the tunnel. The in-product probe is ~18s
+# (12x1500ms). Waiting for Home|Reconnect between Retries is wrong: the wall
+# stays up for the whole probe, so that wait returns immediately and Maestro
+# remounts every ~3s (Android 30749590369: 24 Retries, probes never finish).
+# Give the first probe a quiet window, then Retry sparsely with optional Home
+# waits so a failed probe does not abort the loop.
+- extendedWaitUntil:
+    visible: "${homeReadyMarker}"
+    timeout: 25000
+    optional: true
 - repeat:
-    times: 24
+    times: 8
     while:
       notVisible: "${homeReadyMarker}"
     commands:
@@ -286,9 +290,10 @@ ${enterCentraid}
             - tapOn:
                 id: "replica-compatibility-retry"
                 retryTapIfNoChange: true
-      - extendedWaitUntil:
-          visible: "${homeReadyMarker}|Reconnect once"
-          timeout: 20000
+            - extendedWaitUntil:
+                visible: "${homeReadyMarker}"
+                timeout: 25000
+                optional: true
 - extendedWaitUntil:
     visible: "${homeReadyMarker}"
     timeout: 60000

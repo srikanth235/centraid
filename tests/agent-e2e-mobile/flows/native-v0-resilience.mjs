@@ -5,6 +5,17 @@ import {
   runFlow,
 } from "../lib/harness.mjs";
 
+/**
+ * One launcher-tile tap. retryableTapCommands re-taps while the tile stays in
+ * the hierarchy under the cover (iOS 30748673657: Open Tally opened, then the
+ * second/third retry failed looking for Open Tally on the Tally screen).
+ */
+function openLauncherTileCommands(open) {
+  return `- tapOn:
+    text: "${open}"
+    retryTapIfNoChange: true`;
+}
+
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
 // covers opened from Home's launcher tiles; Settings is opened from the vault
@@ -93,7 +104,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
     const openCommands =
-      surface.openCommands ?? retryableTapCommands(surface.open);
+      surface.openCommands ?? openLauncherTileCommands(surface.open);
     const markerTimeoutMs = surface.markerTimeoutMs ?? 20_000;
     await ctx.run(
       `appId: ${ctx.state.appId}

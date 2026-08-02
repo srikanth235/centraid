@@ -40,7 +40,10 @@ const FRAME_PROBE_REPORT_ID = "perf-frame-report";
 
 function windowMsFrom(url: string): number | undefined {
   const parsed = Linking.parse(url);
-  if (!parsed.path?.includes(PROBE_PATH)) return undefined;
+  // expo-linking may put `perf-frames` in `path` or `hostname` depending on
+  // whether the open came as centraid://perf-frames vs centraid:///perf-frames.
+  const route = `${parsed.path ?? ""}/${parsed.hostname ?? ""}`;
+  if (!route.includes(PROBE_PATH)) return undefined;
   const requested = Number(parsed.queryParams?.ms);
   if (!Number.isFinite(requested) || requested <= 0) return DEFAULT_WINDOW_MS;
   return Math.min(requested, MAX_WINDOW_MS);

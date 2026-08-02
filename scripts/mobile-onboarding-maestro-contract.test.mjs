@@ -161,7 +161,15 @@ test("compatibility wall Retry is targeted by testID so Maestro does not tap the
     firstRun,
     /while:\s*\n\s*notVisible:\s*"\$\{homeReadyMarker\}"/u
   );
-  assert.match(firstRun, /visible:\s*"\$\{homeReadyMarker\}\|Reconnect once"/u);
+  // Quiet window for the in-product probe — never Home|wall (wall stays up).
+  assert.match(
+    firstRun,
+    /optional:\s*true[\s\S]*?id:\s*"replica-compatibility-retry"/u
+  );
+  assert.doesNotMatch(
+    stripLineComments(firstRun),
+    /\$\{homeReadyMarker\}\|Reconnect once/u
+  );
   assert.doesNotMatch(
     stripLineComments(firstRun),
     /tapOn:\s*"Retry connection"/u
