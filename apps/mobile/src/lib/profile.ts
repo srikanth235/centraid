@@ -7,7 +7,7 @@
 // secure-storage via phone-link.ts). Callers `hydrateProfile()` once at boot,
 // then read synchronously on the render path.
 
-import { palette } from "@centraid/design";
+import { BRAND, IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
 import { Store } from "../storage";
 
@@ -20,29 +20,20 @@ const PROFILE_ONBOARDED_KEY = "profile.onboarded";
 // ts) and also the default profile colour used for the avatar + greeting
 // highlight. So out of the box the whole app is teal; personalising the profile
 // colour re-tints only the avatar + greeting, leaving the controls teal.
-export const BRAND_TEAL = "#128A78";
+export { BRAND } from "@centraid/design";
 
 // Swatch options offered in Settings → You for the avatar + greeting tint. Teal
 // (the brand default) leads; the rest are the shared design-tokens palette, so a
 // person and their vault (Settings → Vault uses the same palette) can wear the
 // same colour. The profile colour is stored as a free hex string (see
 // `setProfileColor`), which is exactly what these values are.
-export const PROFILE_COLORS: readonly string[] = [
-  BRAND_TEAL,
-  palette.indigo,
-  palette.rose,
-  palette.violet,
-  palette.amber,
-  palette.forest,
-  palette.ochre,
-  palette.slate,
-];
+export const PROFILE_COLORS: readonly string[] = IDENTITY_COLORS;
 
 /** Pull the profile prefs into the Store cache. Idempotent. */
 export async function hydrateProfile(): Promise<void> {
   await Promise.all([
     Store.hydrate<string>(PROFILE_NAME_KEY, ""),
-    Store.hydrate<string>(PROFILE_COLOR_KEY, BRAND_TEAL),
+    Store.hydrate<string>(PROFILE_COLOR_KEY, BRAND),
     Store.hydrate<boolean>(PROFILE_ONBOARDED_KEY, false),
   ]);
 }
@@ -56,7 +47,7 @@ export function setProfileName(name: string): void {
 }
 
 export function getProfileColor(): string {
-  return Store.get<string>(PROFILE_COLOR_KEY, BRAND_TEAL) || BRAND_TEAL;
+  return Store.get<string>(PROFILE_COLOR_KEY, BRAND) || BRAND;
 }
 
 export function setProfileColor(hex: string): void {
@@ -73,12 +64,7 @@ export function setOnboarded(value: boolean): void {
 
 /** Up-to-two-letter initials for an avatar. Falls back to a person glyph. */
 export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/u).filter(Boolean);
-  if (parts.length === 0) return "·";
-  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
-  return (
-    parts[0]!.slice(0, 1) + parts[parts.length - 1]!.slice(0, 1)
-  ).toUpperCase();
+  return identityInitials(name);
 }
 
 /** First name only, for the greeting line. */

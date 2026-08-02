@@ -1,8 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, Pressable, View } from "react-native";
 
+import Icon from "../../kit/components/Icon";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
@@ -40,7 +40,7 @@ export function PhotoLightboxToolbar({
         accessibilityState={{ selected: slideshow }}
         onPress={onToggleSlideshow}
       >
-        <Feather name={slideshow ? "pause" : "play"} size={22} color="#fff" />
+        <Icon name={slideshow ? "pause" : "play"} size={22} color="#fff" />
       </Pressable>
       <Pressable
         accessibilityLabel={
@@ -68,7 +68,7 @@ export function PhotoLightboxToolbar({
         }}
         disabled={!writable}
       >
-        <Feather
+        <Icon
           name="heart"
           size={23}
           color={writable ? (asset.favorite ? "#ff625f" : "#fff") : "#777"}
@@ -79,7 +79,7 @@ export function PhotoLightboxToolbar({
         accessibilityRole="button"
         onPress={() => onExport(false)}
       >
-        <Feather name="share" size={23} color="#fff" />
+        <Icon name="share" size={23} color="#fff" />
       </Pressable>
       <Pressable
         accessibilityLabel="Add photo to another vault"
@@ -90,7 +90,7 @@ export function PhotoLightboxToolbar({
         disabled={!asset.assetId || !asset.scopeIds?.length}
         onPress={() => onPlacement("add")}
       >
-        <Feather name="copy" size={22} color="#fff" />
+        <Icon name="copy" size={22} color="#fff" />
       </Pressable>
       <Pressable
         accessibilityLabel="Move photo to another vault"
@@ -101,18 +101,14 @@ export function PhotoLightboxToolbar({
         disabled={!writable || !asset.scopeIds?.length}
         onPress={() => onPlacement("move")}
       >
-        <Feather
-          name="folder-plus"
-          size={22}
-          color={writable ? "#fff" : "#777"}
-        />
+        <Icon name="folder-plus" size={22} color={writable ? "#fff" : "#777"} />
       </Pressable>
       <Pressable
         accessibilityLabel="Export original photo"
         accessibilityRole="button"
         onPress={() => onExport(true)}
       >
-        <Feather name="download" size={23} color="#fff" />
+        <Icon name="download" size={23} color="#fff" />
       </Pressable>
       <Pressable
         accessibilityLabel={
@@ -141,7 +137,7 @@ export function PhotoLightboxToolbar({
           )
         }
       >
-        <Feather name="archive" size={23} color={writable ? "#fff" : "#777"} />
+        <Icon name="archive" size={23} color={writable ? "#fff" : "#777"} />
       </Pressable>
       <Pressable
         accessibilityLabel="Move photo to trash"
@@ -171,7 +167,7 @@ export function PhotoLightboxToolbar({
           )
         }
       >
-        <Feather name="trash-2" size={23} color={writable ? "#fff" : "#777"} />
+        <Icon name="trash-2" size={23} color={writable ? "#fff" : "#777"} />
       </Pressable>
     </View>
   );

@@ -60,7 +60,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -94,7 +94,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 10px 4px 9px;
@@ -246,7 +246,7 @@
 }
 
 .statusWord {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 30px;
   line-height: 1.05;
@@ -258,7 +258,7 @@
 .statusSub {
   margin-top: 5px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   line-height: 1.45;
   color: var(--text-faint);
@@ -318,7 +318,7 @@
 .figureValue {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: var(--t-h2-size);
+  font-size: var(--t-title-size);
   letter-spacing: -0.01em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -437,7 +437,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .resourceModeBtn:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .resourceModeBtn:has(:disabled) {
@@ -452,7 +452,7 @@
     color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .resourceModeLabel {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 12.5px;
   letter-spacing: -0.01em;
@@ -682,7 +682,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
@@ -731,7 +731,7 @@
 }
 .resourceDetailsValue {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text);
   text-align: right;
 }
@@ -814,17 +814,17 @@
   color: var(--text-ghost);
 }
 .resourceKnobHelp {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
 .resourceKnobError {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--danger);
 }
 .resourceKnobWarn {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--c-amber-text);
 }
@@ -855,7 +855,7 @@
 }
 .panelHead h2 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: var(--t-body-size);
   letter-spacing: -0.01em;

@@ -27,7 +27,7 @@
 .text:focus-visible,
 .select:focus-visible,
 .input:focus-visible {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
   outline: none;
 }
@@ -44,7 +44,7 @@
   font: var(--t-small);
 }
 .field > span {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
@@ -68,9 +68,9 @@
   font: var(--t-small);
 }
 .guest[aria-pressed="true"] {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .actions {
   display: flex;

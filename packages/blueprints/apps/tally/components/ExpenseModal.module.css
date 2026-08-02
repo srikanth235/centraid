@@ -47,7 +47,7 @@
   text-align: right;
 }
 .splitin:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
 }
 .splitshare {
   width: 78px;

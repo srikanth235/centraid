@@ -42,7 +42,6 @@ export interface ChromeProps {
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onUploadChange: () => void;
   searchRef: (el: HTMLInputElement | null) => void;
-  themeButtonRef: (el: HTMLButtonElement | null) => void;
   uploadRef: (el: HTMLInputElement | null) => void;
   sidebarNav: ReactNode;
   folderList: ReactNode;
@@ -59,7 +58,7 @@ export function Chrome(props: ChromeProps): ReactNode {
   // Callback refs come off `props` first: a ref read from the props object taints
   // every later `props.*` read for the React compiler ("cannot access refs during
   // render"), so they are destructured into plain locals here (#573).
-  const { searchRef, themeButtonRef, uploadRef } = props;
+  const { searchRef, uploadRef } = props;
 
   const shellClass = [
     styles.shell,
@@ -291,12 +290,6 @@ export function Chrome(props: ChromeProps): ReactNode {
                 </svg>
               </button>
             </fieldset>
-            <button
-              ref={themeButtonRef}
-              type="button"
-              className="kit-icon-btn"
-              aria-label="Toggle light/dark"
-            />
             <div className={styles.askMount} data-ask-mount />
           </div>
         </div>

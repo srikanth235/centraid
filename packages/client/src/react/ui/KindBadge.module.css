@@ -22,9 +22,9 @@
 .badge[data-kind="assistant"] {
   color: var(--text-soft);
 }
-/* Rows layout — the badge takes a fixed slot (shared `--lib-row-badge-w`
+/* Rows layout — the badge takes a fixed slot (shared `--tile-row-badge-w`
    token) so APP / AUTOMATION align into a column across Home and Discover
    row strips. */
 :global([data-layout="rows"]) .badge {
-  width: var(--lib-row-badge-w);
+  width: var(--tile-row-badge-w);
 }

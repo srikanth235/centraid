@@ -1,0 +1,610 @@
+{
+  "issue": 690,
+  "revision": 3,
+  "surfaces": {
+    "SH": { "profile": "shell", "renderer": "client", "host": "desktop-pwa" },
+    "SH-c": { "profile": "shell", "renderer": "client", "host": "compact-720" },
+    "BI": { "profile": "blueprint", "renderer": "kit-inline", "host": "shell" },
+    "BS": {
+      "profile": "blueprint",
+      "renderer": "kit-served",
+      "host": "iframe-webview"
+    },
+    "MO": {
+      "profile": "native",
+      "renderer": "react-native",
+      "host": "ios-android"
+    }
+  },
+  "moments": {
+    "M1": {
+      "name": "Launch",
+      "shared": [
+        "hierarchy",
+        "manifest-identity",
+        "no-tile-badges",
+        "tileFinish"
+      ],
+      "adapted": ["tile-material", "touch-placement"],
+      "local": ["springboard-layout"],
+      "referenceStates": ["sh-light-launch", "mo-dark-launch"]
+    },
+    "M2": {
+      "name": "Back",
+      "shared": ["leave-up-close-meanings", "semantic-icon-registry"],
+      "adapted": ["host-navigation"],
+      "local": ["gesture-or-keyboard"],
+      "referenceStates": ["sh-compact-close", "bi-light-up"]
+    },
+    "M3": {
+      "name": "Vaults",
+      "shared": ["vault-only-switcher", "active-check", "host-second-line"],
+      "adapted": ["switcher-container"],
+      "local": ["vault-storage-layout"],
+      "referenceStates": ["sh-dark-vaults", "mo-light-vaults"]
+    },
+    "M4": {
+      "name": "Primary create",
+      "shared": ["one-accent-fill", "verb-object-label", "button-variants"],
+      "adapted": ["toolbar-vs-touch-placement"],
+      "local": ["host-chrome-placement"],
+      "referenceStates": ["sh-light-create", "mo-light-create"]
+    },
+    "M5": {
+      "name": "Ask / Assistant",
+      "shared": ["ask-entry", "assistant-destination", "sse-contract"],
+      "adapted": ["sheet-vs-panel"],
+      "local": ["message-prose"],
+      "referenceStates": ["sh-dark-ask", "bs-light-ask"]
+    },
+    "M6": {
+      "name": "Row to detail",
+      "shared": ["row-anatomy", "up-navigation", "one-action-surface"],
+      "adapted": ["persistent-pane-vs-navigation", "media-viewer"],
+      "local": ["drag-implementation"],
+      "referenceStates": ["sh-light-row-detail", "mo-dark-row-detail"]
+    },
+    "M7": {
+      "name": "Status / notification",
+      "shared": [
+        "decision-notice-status-tiers",
+        "badge-only-decisions",
+        "tone-data"
+      ],
+      "adapted": ["toast-vs-banner"],
+      "local": ["host-notification-plumbing"],
+      "referenceStates": ["sh-dark-status", "bi-light-status"]
+    },
+    "M8": {
+      "name": "Empty / loading / error",
+      "shared": ["triad-anatomy", "error-not-empty", "subject-glyph"],
+      "adapted": ["skeleton-vs-native-activity"],
+      "local": ["content-shape"],
+      "referenceStates": ["sh-light-empty", "mo-dark-error"]
+    },
+    "M9": {
+      "name": "Containers",
+      "shared": ["news-toast", "decision-dialog", "720-sheet-switch"],
+      "adapted": ["dom-vs-native-container"],
+      "local": ["safe-area-and-focus-plumbing"],
+      "referenceStates": ["bi-light-toast", "mo-dark-sheet"]
+    },
+    "M10": {
+      "name": "App identity",
+      "shared": ["manifest-catalog", "identity-color", "identity-not-action"],
+      "adapted": ["host-mark-renderer"],
+      "local": ["tile-artwork"],
+      "referenceStates": ["sh-light-identity", "mo-light-identity"]
+    },
+    "M11": {
+      "name": "Consent / parked write",
+      "shared": [
+        "pending-in-place",
+        "review-toast",
+        "notifications-decision",
+        "dismiss-declines"
+      ],
+      "adapted": ["permission-request-timing"],
+      "local": ["platform-permission-api"],
+      "referenceStates": ["bi-dark-consent", "mo-light-permission"]
+    },
+    "M12": {
+      "name": "Offline / sync",
+      "shared": [
+        "one-status-line",
+        "consequence-copy",
+        "canonical-status-vocabulary"
+      ],
+      "adapted": ["status-line-placement"],
+      "local": ["replica-transport"],
+      "referenceStates": ["sh-dark-offline", "mo-light-offline"]
+    },
+    "M13": {
+      "name": "Search / palette",
+      "shared": [
+        "global-vs-in-app-search",
+        "palette-reachability",
+        "implemented-shortcuts"
+      ],
+      "adapted": ["dock-vs-overlay"],
+      "local": ["keyboard-or-touch-entry"],
+      "referenceStates": ["sh-light-palette", "sh-compact-palette"]
+    },
+    "M14": {
+      "name": "Scope / audience",
+      "shared": ["all-first-scope", "share-means-audience", "scope-not-fill"],
+      "adapted": ["chip-vs-picker"],
+      "local": ["native-share-out"],
+      "referenceStates": ["bi-light-scope", "mo-dark-audience"]
+    },
+    "M15": {
+      "name": "Threshold / first run",
+      "shared": [
+        "contract-typography",
+        "one-primary",
+        "one-recovery-action",
+        "themed-wall"
+      ],
+      "adapted": ["step-indicator", "native-lock-wall"],
+      "local": ["os-update-wall"],
+      "referenceStates": [
+        "sh-light-first-run",
+        "sh-dark-compat",
+        "mo-light-pairing",
+        "bs-dark-offline-wall"
+      ]
+    },
+    "M16": {
+      "name": "Destroy / recover",
+      "shared": ["confirm-ladder", "undo-toast", "restore-primary"],
+      "adapted": ["arm-vs-dialog"],
+      "local": ["vault-erase-type-name"],
+      "referenceStates": [
+        "sh-dark-delete",
+        "mo-light-unpair",
+        "bi-light-restore"
+      ]
+    },
+    "M17": {
+      "name": "Settings / preferences",
+      "shared": ["field-grammar", "switch-booleans", "host-owned-appearance"],
+      "adapted": ["native-picker", "shell-popover"],
+      "local": ["platform-settings-api"],
+      "referenceStates": [
+        "sh-light-settings",
+        "mo-dark-settings",
+        "bi-light-settings"
+      ]
+    },
+    "M18": {
+      "name": "Selection / bulk",
+      "shared": [
+        "explicit-selection",
+        "selected-checkmark",
+        "count-actions-exit",
+        "bulk-confirm"
+      ],
+      "adapted": ["bottom-pill-vs-inline-strip", "long-press-vs-select"],
+      "local": ["range-selection"],
+      "referenceStates": [
+        "sh-light-selection",
+        "mo-dark-selection",
+        "bi-light-bulk-delete"
+      ]
+    },
+    "M19": {
+      "name": "Progress / background work",
+      "shared": [
+        "progress-meter",
+        "verb-object-count",
+        "cancel-long-work",
+        "in-app-visibility"
+      ],
+      "adapted": ["native-background-service", "activity-vs-determinate"],
+      "local": ["os-notification"],
+      "referenceStates": [
+        "sh-dark-upload",
+        "mo-light-upload",
+        "bs-light-background-work"
+      ]
+    },
+    "M20": {
+      "name": "Capture / share-into",
+      "shared": ["capture-anatomy", "confidence-tiers", "park-dont-block"],
+      "adapted": ["ambient-overlay-vs-fullscreen", "drop-paste-share-target"],
+      "local": ["camera-and-share-intents"],
+      "referenceStates": [
+        "sh-light-capture",
+        "sh-compact-capture",
+        "mo-dark-capture",
+        "bs-light-share-target"
+      ]
+    }
+  },
+  "referenceStates": [
+    {
+      "id": "sh-light-launch",
+      "moment": "M1",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "ready",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "sh-dark-launch",
+      "moment": "M1",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "ready",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "sh-compact-close",
+      "moment": "M2",
+      "surface": "SH-c",
+      "scheme": "light",
+      "state": "overlay",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-up",
+      "moment": "M2",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "detail",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-dark-vaults",
+      "moment": "M3",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "switcher",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-vaults",
+      "moment": "M3",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "switcher",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-light-create",
+      "moment": "M4",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "ready",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-create",
+      "moment": "M4",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "ready",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-dark-ask",
+      "moment": "M5",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "panel",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "bs-light-ask",
+      "moment": "M5",
+      "surface": "BS",
+      "scheme": "light",
+      "state": "sheet",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-light-row-detail",
+      "moment": "M6",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "detail",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-dark-row-detail",
+      "moment": "M6",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "detail",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-dark-status",
+      "moment": "M7",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "notice",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "bi-light-status",
+      "moment": "M7",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "decision",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-light-empty",
+      "moment": "M8",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "empty",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-dark-error",
+      "moment": "M8",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "error",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-toast",
+      "moment": "M9",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "toast",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "mo-dark-sheet",
+      "moment": "M9",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "sheet",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-light-identity",
+      "moment": "M10",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "ready",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-identity",
+      "moment": "M10",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "ready",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-dark-consent",
+      "moment": "M11",
+      "surface": "BI",
+      "scheme": "dark",
+      "state": "pending",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "mo-light-permission",
+      "moment": "M11",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "permission",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-dark-offline",
+      "moment": "M12",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "offline",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-offline",
+      "moment": "M12",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "offline",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-light-palette",
+      "moment": "M13",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "open",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "sh-compact-palette",
+      "moment": "M13",
+      "surface": "SH-c",
+      "scheme": "dark",
+      "state": "open",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-scope",
+      "moment": "M14",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "selected",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "mo-dark-audience",
+      "moment": "M14",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "picker",
+      "viewport": "390x844"
+    },
+    {
+      "id": "sh-light-first-run",
+      "moment": "M15",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "first-run",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "sh-dark-compat",
+      "moment": "M15",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "compat-wall",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-pairing",
+      "moment": "M15",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "pairing",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bs-dark-offline-wall",
+      "moment": "M15",
+      "surface": "BS",
+      "scheme": "dark",
+      "state": "offline-wall",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-dark-delete",
+      "moment": "M16",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "destructive-confirm",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-unpair",
+      "moment": "M16",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "destructive-confirm",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-restore",
+      "moment": "M16",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "restore",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-light-settings",
+      "moment": "M17",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "settings",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-dark-settings",
+      "moment": "M17",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "settings",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-settings",
+      "moment": "M17",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "host-settings",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-light-selection",
+      "moment": "M18",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "selected",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-dark-selection",
+      "moment": "M18",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "selected",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bi-light-bulk-delete",
+      "moment": "M18",
+      "surface": "BI",
+      "scheme": "light",
+      "state": "bulk-confirm",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-dark-upload",
+      "moment": "M19",
+      "surface": "SH",
+      "scheme": "dark",
+      "state": "determinate",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "mo-light-upload",
+      "moment": "M19",
+      "surface": "MO",
+      "scheme": "light",
+      "state": "determinate",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bs-light-background-work",
+      "moment": "M19",
+      "surface": "BS",
+      "scheme": "light",
+      "state": "background",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "sh-light-capture",
+      "moment": "M20",
+      "surface": "SH",
+      "scheme": "light",
+      "state": "capture",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "sh-compact-capture",
+      "moment": "M20",
+      "surface": "SH-c",
+      "scheme": "dark",
+      "state": "capture",
+      "viewport": "390x844"
+    },
+    {
+      "id": "mo-dark-capture",
+      "moment": "M20",
+      "surface": "MO",
+      "scheme": "dark",
+      "state": "capture",
+      "viewport": "390x844"
+    },
+    {
+      "id": "bs-light-share-target",
+      "moment": "M20",
+      "surface": "BS",
+      "scheme": "light",
+      "state": "share-target",
+      "viewport": "1024x768"
+    }
+  ]
+}

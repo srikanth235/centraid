@@ -16,7 +16,7 @@
 }
 .hero h1 {
   margin: 0;
-  font: var(--t-display-1);
+  font: var(--t-hero);
   font-size: 44px;
   letter-spacing: -0.03em;
   color: var(--text);
@@ -162,7 +162,7 @@
 .briefHead h2 {
   margin: 2px 0 0;
   color: var(--text);
-  font: var(--t-h2);
+  font: var(--t-title);
 }
 .briefEyebrow,
 .briefDate {
@@ -190,7 +190,7 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .briefFact:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .briefFact strong,
@@ -200,7 +200,7 @@
 }
 .briefFact strong {
   margin: 7px 0 4px;
-  font: var(--t-h2);
+  font: var(--t-title);
 }
 .briefFactLabel,
 .briefFactDetail {
@@ -225,9 +225,9 @@
   /* The library shelf runs wider than the centered hero so the tile grid sits
      4-up on a roomy window (matching the gallery spec); it reflows to 3/2 as
      the pane narrows. Shares its envelope with Discover's .cd-disc-wrap. */
-  max-width: var(--lib-shelf-max);
+  max-width: var(--tile-shelf-max);
   margin: 40px auto 0;
-  padding: 0 var(--lib-shelf-pad-x);
+  padding: 0 var(--tile-shelf-pad-x);
   box-sizing: border-box;
 }
 .hsec:last-child {

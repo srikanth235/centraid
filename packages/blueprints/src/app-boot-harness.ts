@@ -22,6 +22,7 @@ import { createRoot } from "react-dom/client";
 import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { BRAND } from "@centraid/design";
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -199,7 +200,7 @@ function replicaFixture(app: string): unknown {
         {
           calendar_id: "calendar-local",
           name: "Local calendar",
-          color: "#6f5bf6",
+          color: BRAND,
         },
       ],
     };

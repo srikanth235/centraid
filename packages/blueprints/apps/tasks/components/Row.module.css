@@ -22,7 +22,7 @@
 
 .badge.doing {
   flex-shrink: 0;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -38,7 +38,7 @@
 }
 .meta {
   flex-shrink: 0;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
   align-self: center;

@@ -20,7 +20,7 @@ import {
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
-  BRAND_TEAL,
+  BRAND,
   PROFILE_COLORS,
   initialsOf,
   setOnboarded,
@@ -381,7 +381,7 @@ function ProfileStep({
   onSave: (name: string, color: string) => void;
 }): React.JSX.Element {
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string>(BRAND_TEAL);
+  const [color, setColor] = useState<string>(BRAND);
   const [error, setError] = useState<string>();
 
   const save = (): void => {

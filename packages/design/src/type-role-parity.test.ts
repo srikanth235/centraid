@@ -1,65 +1,17 @@
-// The `--t-*` role-parity law (#686).
-//
-//   Size and line-height may diverge per emitter. Family and weight may not.
-//
-// `toCss()` (the shell) and `toBlueprintCss()` (sandboxed app surfaces) both
-// publish the same `--t-<role>` spellings. A shell and an app pane can
-// legitimately want different optical sizes — different viewing distance,
-// different density — which is why the two scales in `typography.ts` carry
-// different numbers on purpose. But if `--t-tiny` is mono on one surface and
-// sans on the other, the NAME has stopped carrying meaning: a developer
-// reading `font: var(--t-tiny)` cannot know what they will get.
-//
-// So this file gates the two facets that make a role a role — the face and the
-// weight — and deliberately does not gate the two that are surface-local.
-//
-// Family is compared by GENUS (the generic family the stack ends in), not by
-// custom-property name or stack string. The two emitters legitimately spell
-// the same role differently (`--font-display` vs `--font-title`) and ship
-// different concrete stacks for the same genus (the blueprint layer is
-// sandboxed and loads no fonts). What must not differ is sans vs mono vs serif.
+// Shared type roles may adapt units per surface, but family and weight are
+// semantic meaning and therefore cannot drift between CSS lowerings.
 
 import { describe, expect, test } from "vitest";
 
 import { toBlueprintCss } from "./blueprint.js";
 import { toCss } from "./css.js";
-
-/**
- * Roles that are KNOWN to break the law, each with the reason it has not been
- * fixed. Same ratchet contract as `token-purity-allowlist.ts` in
- * `packages/blueprints`: an entry is asserted to STILL diverge, so fixing the
- * role turns the suite red until the entry is deleted in the same change. The
- * list may only ever get shorter.
- */
-const ROLE_PARITY_ALLOWLIST: Readonly<Record<string, string>> = {
-  // Measured on both sides (#686, and see docs/decisions.md). The two surfaces
-  // bind this spelling to two genuinely different roles, and neither side can
-  // move without visible collateral:
-  //
-  //  * SHELL — 5 sites, 0 of them eyebrows: two native `<select>`s, a
-  //    Save/Cancel pair plus a pencil glyph, a pill holding an agent title,
-  //    and the "Working"/"Ready" telemetry strip. Mobile adds 7 `t("tiny")`
-  //    consumers of which 5 are prose (including an error message) and the 2
-  //    that ARE eyebrows already hand-patch the family to mono. Forcing mono
-  //    here would monospace `<select>` chrome and prose, which DESIGN.md's
-  //    "prose is not [mono]" clause forbids, and would improve zero eyebrows.
-  //  * BLUEPRINT — 12 sites, 10 of them uppercase + `--tracking-eyebrow`
-  //    eyebrows at 0.6rem (9.6px). Forcing sans here would de-monospace the
-  //    app surfaces' entire eyebrow idiom, which is the "Mono is the
-  //    signature" rule.
-  //
-  // The clean fix is NOT to pick a winner: it is to give the eyebrow role its
-  // own name, which is open product decision (b) in docs/decisions.md and new
-  // vocabulary rather than a value change. Until that lands, this is one
-  // spelling carrying two roles and it is recorded, not hidden.
-  "--t-tiny": "shell control label (sans/500) vs blueprint eyebrow (mono/600)",
-};
+import { type } from "./typography.js";
 
 interface Shorthand {
-  weight: string;
-  size: string;
+  family: string;
   lineHeight: string;
-  familyVar: string;
+  size: string;
+  weight: string;
 }
 
 function rootProps(css: string): Record<string, string> {
@@ -75,109 +27,53 @@ function rootProps(css: string): Record<string, string> {
   return out;
 }
 
-/** `600 20px/26px var(--font-display)` → its four facets. */
-function parseShorthand(value: string): Shorthand | null {
+function parse(value: string): Shorthand {
   const match =
-    /^(?<weight>\d{3}) (?<size>[^ ]+)\/(?<lineHeight>[^ ]+) var\((?<familyVar>--[\w-]+)\)$/u.exec(
+    /^(?<weight>\d{3}) (?<size>[^ ]+)\/(?<lineHeight>[^ ]+) var\((?<family>--[\w-]+)\)$/u.exec(
       value
     );
-  const { familyVar, lineHeight, size, weight } = match?.groups ?? {};
-  return familyVar && lineHeight && size && weight
-    ? { familyVar, lineHeight, size, weight }
-    : null;
+  if (!match?.groups) throw new Error(`${value} is not a type shorthand`);
+  return {
+    family: match.groups.family ?? "",
+    lineHeight: match.groups.lineHeight ?? "",
+    size: match.groups.size ?? "",
+    weight: match.groups.weight ?? "",
+  };
 }
 
-/**
- * The generic family a stack ends in — `sans-serif` / `monospace` / `serif`.
- * Follows `var()` aliases (the blueprint layer's `--font-title` is
- * `var(--font-sans)`).
- */
-function genus(props: Record<string, string>, familyVar: string): string {
-  let value: string | undefined = props[familyVar];
-  for (let hop = 0; hop < 5; hop++) {
-    const alias = /^var\((?<name>--[\w-]+)\)$/u.exec(value ?? "");
-    if (!alias?.groups?.name) break;
-    value = props[alias.groups.name];
-  }
-  if (!value) throw new Error(`${familyVar} is referenced but never declared`);
-  return (value.split(",").pop() ?? "").trim();
-}
+const shell = rootProps(toCss());
+const blueprint = rootProps(toBlueprintCss());
+const shared = Object.keys(type).map(
+  (key) =>
+    `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
+);
 
-function shorthands(css: string): Map<string, Shorthand & { genus: string }> {
-  const props = rootProps(css);
-  const out = new Map<string, Shorthand & { genus: string }>();
-  for (const [prop, value] of Object.entries(props)) {
-    if (!prop.startsWith("--t-") || prop.endsWith("-size")) continue;
-    const parsed = parseShorthand(value);
-    if (!parsed) throw new Error(`${prop} is not a font shorthand: ${value}`);
-    out.set(prop, { ...parsed, genus: genus(props, parsed.familyVar) });
-  }
-  return out;
-}
-
-const shell = shorthands(toCss());
-const blueprint = shorthands(toBlueprintCss());
-const shared = [...shell.keys()].filter((key) => blueprint.has(key)).sort();
-const gated = shared.filter((key) => !(key in ROLE_PARITY_ALLOWLIST));
-
-function facets(key: string): {
-  a: Shorthand & { genus: string };
-  b: Shorthand & { genus: string };
-} {
-  const a = shell.get(key);
-  const b = blueprint.get(key);
-  if (!(a && b)) throw new Error(`${key} is not published by both emitters`);
-  return { a, b };
-}
-
-describe("--t-* role parity across the two emitters", () => {
-  test("the two emitters share type roles, and most are gated", () => {
-    // Guards the guard: if the shared set ever empties (a rename, a scale
-    // moved out of an emitter) or the allowlist swallows it, the per-role
-    // assertions below would pass vacuously and the law would be silently
-    // unenforced.
-    expect(shared.length).toBeGreaterThanOrEqual(6);
-    expect(gated.length).toBeGreaterThanOrEqual(5);
-  });
-
-  test.each(gated)("%s resolves to one family and one weight", (key) => {
-    const { a, b } = facets(key);
-    expect(
-      { family: a.genus, weight: a.weight },
-      `${key} means two different things: the shell emits ${a.genus}/${a.weight}, the blueprint layer emits ${b.genus}/${b.weight}. Size and line-height may diverge per surface; family and weight may not (#686).`
-    ).toStrictEqual({ family: b.genus, weight: b.weight });
-  });
-
-  test("every waiver is still needed", () => {
-    // A waiver may not outlive the divergence it excuses: the moment the two
-    // sides agree, the stale entry has to be deleted in the same change.
-    for (const [key, reason] of Object.entries(ROLE_PARITY_ALLOWLIST)) {
-      const { a, b } = facets(key);
-      expect(
-        { family: a.genus, weight: a.weight },
-        `${key} now agrees (${a.genus}/${a.weight}) — delete its ROLE_PARITY_ALLOWLIST entry: ${reason}`
-      ).not.toStrictEqual({ family: b.genus, weight: b.weight });
-    }
-  });
-
-  test("size and line-height are explicitly allowed to diverge", () => {
-    // Not incidental: `--t-body` is 15px/22px in the chrome and 0.855rem/1.5
-    // on an app surface, and that is the intended design. If this ever starts
-    // failing, someone has widened the law past what was agreed.
-    const a = shell.get("--t-body");
-    const b = blueprint.get("--t-body");
-    expect(a?.size).not.toBe(b?.size);
-    expect(a?.lineHeight).not.toBe(b?.lineHeight);
-    expect(a?.genus).toBe(b?.genus);
-    expect(a?.weight).toBe(b?.weight);
-  });
-
-  test("every allowlisted role still exists on both surfaces", () => {
-    // A waiver naming a role neither emitter publishes any more is dead text.
-    for (const key of Object.keys(ROLE_PARITY_ALLOWLIST)) {
-      expect(shared, `${key} is waived but is not a shared role`).toContain(
-        key
+describe("type role parity across emitters", () => {
+  test("every shared role is published by both emitters", () => {
+    for (const name of shared) {
+      expect(shell[name], `${name} shell`).toBeDefined();
+      const blueprintRole = blueprint[name];
+      expect(blueprintRole === undefined, `${name} blueprint support`).toBe(
+        name === "--t-hero" || name === "--t-greeting"
       );
     }
+  });
+
+  test.each(
+    shared.filter((name) => name !== "--t-hero" && name !== "--t-greeting")
+  )("%s keeps family genus and weight", (name) => {
+    const a = parse(shell[name] ?? "");
+    const b = parse(blueprint[name] ?? "");
+    expect({ family: a.family, weight: a.weight }).toStrictEqual({
+      family: b.family,
+      weight: b.weight,
+    });
+  });
+
+  test("the blueprint adapts units while retaining the semantic body role", () => {
+    expect(shell["--t-body"]).toContain("15px/22px");
+    expect(blueprint["--t-body"]).toContain("0.9375rem/1.4666666666666666");
+    expect(parse(shell["--t-body"] ?? "").weight).toBe("400");
+    expect(parse(blueprint["--t-body"] ?? "").weight).toBe("400");
   });
 });

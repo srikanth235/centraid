@@ -112,7 +112,7 @@ function LauncherTile({
       >
         <Animated.View style={[styles.tileInner, animStyle]}>
           <View style={installed ? undefined : styles.dimmed}>
-            <AppIcon name={meta.iconKey} />
+            <AppIcon name={meta.iconKey} color={meta.color} />
           </View>
           <Text
             style={[styles.tileLabel, !installed && styles.tileLabelDim]}

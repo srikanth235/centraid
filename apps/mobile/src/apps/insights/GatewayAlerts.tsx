@@ -132,7 +132,7 @@ export default function GatewayAlerts(props: {
                       label="Mark read"
                       disabled={busy === row.noticeId}
                       onPress={() => update(row.noticeId, "read")}
-                      variant="soft"
+                      variant="secondary"
                       style={styles.button}
                     />
                   ) : null}
@@ -140,7 +140,7 @@ export default function GatewayAlerts(props: {
                     label="Archive"
                     disabled={busy === row.noticeId}
                     onPress={() => update(row.noticeId, "archive")}
-                    variant="soft"
+                    variant="secondary"
                     style={styles.button}
                   />
                 </View>

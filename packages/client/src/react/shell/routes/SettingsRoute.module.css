@@ -35,7 +35,7 @@
   /* Two shadows: a tight contact edge so the border doesn't float, and a wide
      soft one for the lift. A single shadow reads as either flat or smeared. */
   box-shadow:
-    0 1px 0 0 color-mix(in srgb, var(--on-accent) 6%, transparent) inset,
+    0 1px 0 0 color-mix(in srgb, var(--text-inv) 6%, transparent) inset,
     0 2px 6px var(--scrim),
     0 28px 70px -18px var(--scrim);
   overflow: hidden;
@@ -116,7 +116,7 @@
 }
 .settingsNavTitle {
   margin-top: 6px;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--t-body-size);
   font-weight: 600;
   color: var(--text);
@@ -212,7 +212,7 @@
 }
 .settingsPageTitle {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 21px;
   letter-spacing: -0.02em;

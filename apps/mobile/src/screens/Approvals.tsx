@@ -301,7 +301,7 @@ function renderBody(input: {
           <Button
             label="Open Settings"
             icon="Settings"
-            variant="soft"
+            variant="secondary"
             onPress={openSettings}
           />
         </View>
@@ -426,7 +426,7 @@ function renderBody(input: {
               <View style={styles.cardActions}>
                 <Button
                   label={busy === row.connectionId ? "Opening…" : "Reconnect"}
-                  variant="soft"
+                  variant="secondary"
                   disabled={busy === row.connectionId}
                   onPress={() => void reconnectConnection(row.connectionId)}
                   style={styles.cardBtn}
@@ -492,7 +492,7 @@ function DecisionCard(props: {
         <Button
           label="Deny"
           icon="X"
-          variant="soft"
+          variant="secondary"
           disabled={props.busy}
           onPress={() => void props.onDeny()}
           style={props.styles.cardBtn}
@@ -531,7 +531,7 @@ function NoticeCard(props: {
           {row.readAt === null ? (
             <Button
               label="Mark read"
-              variant="soft"
+              variant="secondary"
               disabled={props.busy}
               onPress={() => void props.onRead()}
               style={styles.cardBtn}
@@ -539,7 +539,7 @@ function NoticeCard(props: {
           ) : null}
           <Button
             label="Archive"
-            variant="soft"
+            variant="secondary"
             disabled={props.busy}
             onPress={() => void props.onArchive()}
             style={styles.cardBtn}

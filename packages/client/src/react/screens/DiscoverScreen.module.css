@@ -3,10 +3,10 @@
 }
 .wrap {
   width: 100%;
-  max-width: var(--lib-shelf-max);
+  max-width: var(--tile-shelf-max);
   margin: 0 auto;
   /* Same side padding as .cd-hsec; top/bottom replace what cd-disc-scroll drops. */
-  padding: 48px var(--lib-shelf-pad-x) 56px;
+  padding: 48px var(--tile-shelf-pad-x) 56px;
   box-sizing: border-box;
 }
 .head {
@@ -20,7 +20,7 @@
 }
 .headText h1 {
   margin: 8px 0 0;
-  font: var(--t-display-1);
+  font: var(--t-hero);
   font-size: 34px;
   letter-spacing: -0.03em;
   color: var(--text);
@@ -55,7 +55,7 @@
   margin-bottom: 13px;
 }
 .catLabel {
-  font: var(--t-h2);
+  font: var(--t-title);
   font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -130,13 +130,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--lib-tile-gap);
-  min-height: var(--lib-tile-h);
+  gap: var(--tile-gap);
+  min-height: var(--tile-h);
   text-align: left;
-  padding: var(--lib-tile-pad);
+  padding: var(--tile-pad);
   border: 0.5px solid var(--line);
-  border-radius: var(--lib-tile-radius, 12px);
-  background: var(--lib-tile-bg);
+  border-radius: var(--tile-radius, 12px);
+  background: var(--tile-bg);
   cursor: pointer;
   color: inherit;
   font: inherit;
@@ -145,7 +145,7 @@
     transform 120ms;
 }
 .card:hover {
-  background: var(--lib-tile-bg-hover);
+  background: var(--tile-bg-hover);
 }
 .card:active {
   transform: scale(0.99);
@@ -154,13 +154,13 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--lib-tile-gap);
+  gap: var(--tile-gap);
 }
 .cardIcon {
-  width: var(--lib-tile-icon);
-  height: var(--lib-tile-icon);
+  width: var(--tile-icon);
+  height: var(--tile-icon);
   flex: none;
-  border-radius: var(--lib-tile-icon-radius);
+  border-radius: var(--tile-icon-radius);
   display: grid;
   place-items: center;
 }
@@ -214,7 +214,7 @@
   align-items: center;
   gap: 5px;
   margin-left: auto;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--accent);
 }

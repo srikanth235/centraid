@@ -290,7 +290,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 32,
     },
-    chipSub: { ...t("tiny"), color: colors.textFaint, marginTop: 1 },
+    chipSub: { ...t("control"), color: colors.textFaint, marginTop: 1 },
     chipTitle: {
       ...t("small"),
       color: colors.text,

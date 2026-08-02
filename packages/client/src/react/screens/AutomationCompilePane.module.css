@@ -313,7 +313,7 @@
   background: transparent;
   font: inherit;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 4px 9px;
   border-radius: var(--r-md);
@@ -333,7 +333,7 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   cursor: pointer;
   padding: 4px 6px;

@@ -84,11 +84,11 @@ describe("kit smoke", () => {
     expect(span.textContent.trim()).toBe("You");
   });
 
-  it("letterAvatar defaults to hashed hue + derived initials", () => {
+  it("letterAvatar defaults to a stable identity fill + derived initials", () => {
     const av = letterAvatar("Ada Lovelace");
     document.body.appendChild(av);
     const span = av.querySelector(".kit-avatar");
-    expect(span.getAttribute("style")).toMatch(/background:hsl\(/u);
+    expect(span.getAttribute("style")).toMatch(/background:#[\da-f]{6}/iu);
     expect(span.textContent.trim()).toBe("AL");
   });
 
@@ -120,7 +120,7 @@ describe("kit smoke", () => {
     renderAttachments(strip, list, () => {}, { onZoom: () => {} });
     expect(strip.querySelectorAll(".kit-attach-remove")).toHaveLength(2);
     expect(strip.querySelector("img.kit-attach-zoom")).toBeTruthy();
-    expect(strip.querySelector(".kit-attach-meta").textContent).toBe("2 KB");
+    expect(strip.querySelector(".kit-attach-meta").textContent).toBe("2.0 KB");
   });
 
   it("popover opens, reports, closes", () => {

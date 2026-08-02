@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, {
   memo,
   useCallback,
@@ -7,14 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
@@ -22,6 +14,8 @@ import {
 } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { showToast } from "../../kit/components/Toast";
 import { spacing, useTheme } from "../../kit/theme";
 import {
   cloneAutomationTemplate,
@@ -81,13 +75,16 @@ function AutomationsList({
       void cloneAutomationTemplate(template.id)
         .then(async () => {
           await refresh();
-          Alert.alert("Automation added", `${template.name} is ready to use.`);
+          showToast({
+            message: `${template.name} is ready to use.`,
+            tone: "accent",
+          });
         })
         .catch((error: unknown) => {
-          Alert.alert(
-            "Could not add automation",
-            error instanceof Error ? error.message : "Please try again."
-          );
+          showToast({
+            message: `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`,
+            tone: "danger",
+          });
         })
         .finally(() => setInstalling(null));
     },
@@ -196,7 +193,7 @@ function AutomationGallery({
         return (
           <View key={template.id} style={styles.templateCard}>
             <View style={styles.templateIcon} accessibilityElementsHidden>
-              <Feather name="zap" size={16} color={colors.accent} />
+              <Icon name="zap" size={16} color={colors.accent} />
             </View>
             <View style={styles.templateCopy}>
               <Text style={styles.templateName}>{template.name}</Text>
@@ -245,7 +242,7 @@ function EmptyState({
   if (state.kind === "no-gateway") {
     return (
       <View style={styles.emptyWrap}>
-        <Feather name="zap-off" size={30} color={colors.accent} />
+        <Icon name="zap-off" size={30} color={colors.accent} />
         <Text style={styles.emptyTitle}>Not connected</Text>
         <Text style={styles.emptyCopy}>
           Connect your desktop to see your automations and run them from here.
@@ -256,7 +253,7 @@ function EmptyState({
   if (state.kind === "error") {
     return (
       <View style={styles.emptyWrap}>
-        <Feather name="alert-circle" size={30} color={colors.accent} />
+        <Icon name="alert-circle" size={30} color={colors.accent} />
         <Text style={styles.emptyTitle}>Could not load automations</Text>
         <Text style={styles.emptyCopy}>{state.message}</Text>
         <Text style={styles.emptyHint}>Pull to refresh to retry.</Text>
@@ -266,7 +263,7 @@ function EmptyState({
   // ready + no rows
   return (
     <View style={styles.emptyWrap}>
-      <Feather name="zap" size={30} color={colors.accent} />
+      <Icon name="zap" size={30} color={colors.accent} />
       <Text style={styles.emptyTitle}>No automations yet</Text>
       <Text style={styles.emptyCopy}>
         An automation is a saved conversation that fires on a trigger. Pick a
@@ -317,10 +314,10 @@ const AutomationCard = memo(
         })
         .catch((error: unknown) => {
           if (mounted.current) setRun("idle");
-          Alert.alert(
-            "Could not run",
-            error instanceof Error ? error.message : "Please try again."
-          );
+          showToast({
+            message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
+            tone: "danger",
+          });
         });
     }, [run, row.ref]);
 
@@ -329,10 +326,10 @@ const AutomationCard = memo(
       setBusyToggle(true);
       void toggle(row.ref, !row.enabled)
         .catch((error: unknown) => {
-          Alert.alert(
-            "Could not update",
-            error instanceof Error ? error.message : "The change was not saved."
-          );
+          showToast({
+            message: `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`,
+            tone: "danger",
+          });
         })
         .finally(() => {
           if (mounted.current) setBusyToggle(false);
@@ -382,7 +379,7 @@ const AutomationCard = memo(
         </View>
 
         <View style={styles.scheduleRow}>
-          <Feather name="clock" size={12} color={colors.textFaint} />
+          <Icon name="clock" size={12} color={colors.textFaint} />
           <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
         </View>
 
@@ -410,7 +407,7 @@ const AutomationCard = memo(
               run !== "idle" && styles.dim,
             ]}
           >
-            <Feather
+            <Icon
               name={run === "started" ? "check" : "play"}
               size={13}
               color={colors.accent}

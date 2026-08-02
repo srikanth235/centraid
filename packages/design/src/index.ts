@@ -17,9 +17,18 @@
 
 export { palette } from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";
+export { IDENTITY_COLORS, identityColor, identityInitials } from "./identity";
+export type { IdentityPaletteKey } from "./identity";
+export { formatBytes, formatRelativeTime } from "./format";
 
 export { themes, lightTheme, darkTheme, THEME_PRESETS } from "./themes";
-export { ACCENT_DEEP, ACCENT_LIGHT, ACCENT_TEXT_LIGHT } from "./themes";
+export {
+  ACCENT_PALETTE,
+  ACCENT_DEEP,
+  ACCENT_LIGHT,
+  ACCENT_TEXT_LIGHT,
+} from "./themes";
+export type { AccentKey } from "./themes";
 
 // Accent ramp derivation — keeps a picked accent's tint/shade/text variants on
 // the accent's own hue instead of hand-picking them. See src/accent.ts.
@@ -34,7 +43,7 @@ export type { AccentRamp } from "./color";
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
 // Brand teal — theme-independent identity color shared by the logo /
-// app-icon SVGs and emitted as `--brand`. Also aliased as `brand`.
+// app-icon SVGs and emitted as `--accent`. Also aliased as `brand`.
 export { BRAND, BRAND as brand } from "./themes";
 
 export { spacing } from "./density";
@@ -46,14 +55,18 @@ export type { RadiusKey } from "./radii";
 export {
   fonts,
   fontStacks,
-  marketingType,
+  blueprintType,
+  blueprintTypeShorthand,
+  nativeTypeStyle,
   type,
   typeShorthand,
+  typeForProfile,
+  typeSizeRungs,
 } from "./typography";
 export type {
+  BlueprintTypeStyle,
   FontFamily,
-  MarketingTypeKey,
-  MarketingTypeStyle,
+  NativeDelta,
   TypeKey,
   TypeStyle,
 } from "./typography";
@@ -66,14 +79,55 @@ export type { TileVariant, TileFinish } from "./tile";
 
 export { toCss } from "./css";
 export { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "./contract";
+export {
+  ADAPTERS,
+  PROFILE_SURFACES,
+  ROLE_REGISTRY,
+  assertTotalProfileValues,
+  contractForProfile,
+  profileForSurface,
+  rolesForProfile,
+} from "./roles";
+export type {
+  Profile,
+  ProfileValue,
+  RoleCategory,
+  RoleDef,
+  RoleValueKind,
+  Surface,
+} from "./roles";
+
+export {
+  BUTTON_VARIANTS,
+  RECIPES,
+  RECIPE_NAMES,
+  getRecipe,
+} from "./recipes/index";
+export type {
+  ButtonVariant,
+  Recipe,
+  RecipeName,
+  RecipeState,
+} from "./recipes/index";
+export { emitRecipeCss } from "./recipes/css";
+export { NATIVE_RECIPES, nativeButtonStyle } from "./recipes/native";
+export type { NativeButtonStyle, NativeRecipeLowering } from "./recipes/native";
 
 // Blueprint-app ("field notebook") token layer — a separate design
 // language for the sandboxed blueprint apps, not a variant of `toCss()`'s
 // desktop theme. See src/blueprint.ts for the rationale.
 export { toBlueprintCss } from "./blueprint";
+export { toNativeTheme } from "./native";
+export type {
+  NativeColors,
+  NativeScheme,
+  NativeTheme,
+  NativeTypeStyle,
+} from "./native";
 
-export { icons } from "./icons";
-export type { IconName, IconPath } from "./icons";
+export { iconPathMarkup, icons } from "./icons";
+export { ICON_CONCEPTS, iconForConcept, iconSvg, isIconName } from "./icons";
+export type { IconConcept, IconName, IconPath } from "./icons";
 
 export { apps } from "./apps";
 export type { AppMeta, AppMetaResolved } from "./apps";

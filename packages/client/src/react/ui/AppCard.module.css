@@ -1,7 +1,7 @@
 /* Library tile ("RefinedAppTile") — the app/automation card shared by the
    Home shelf, Discover grid, and the `<AppCard>` primitive. A vertical card:
    gradient icon plate w/ status dot, name, 2-line blurb, state-aware foot
-   strip. Shared sizing/tone values come from the `--lib-*` design tokens so
+   strip. Shared sizing/tone values come from the `--tile-*` design tokens so
    Home and Discover tiles resolve identically.
 
    `.wrap` is the grid item; it hosts the card and sibling hover affordances
@@ -22,9 +22,9 @@
   height: 100%;
   min-height: 92px;
   padding: 12px;
-  background: var(--lib-tile-bg);
+  background: var(--tile-bg);
   border: 0.5px solid var(--line);
-  border-radius: var(--lib-tile-radius, 12px);
+  border-radius: var(--tile-radius, 12px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -37,15 +37,15 @@
     transform 120ms;
 }
 .small {
-  min-height: var(--lib-tile-h);
-  padding: var(--lib-tile-pad);
+  min-height: var(--tile-h);
+  padding: var(--tile-pad);
   /* Vertical rhythm between the head, the (automation) meta strip, and the
      footer so nothing collides; the footer still floats to the bottom via its
      margin-top:auto. */
-  gap: var(--lib-tile-gap);
+  gap: var(--tile-gap);
 }
 .card:hover {
-  background: var(--lib-tile-bg-hover);
+  background: var(--tile-bg-hover);
 }
 .card:active {
   transform: scale(0.99);
@@ -95,9 +95,9 @@
 /* Small (library) tiles read as prominent, app-store-style glyph plates —
    big rounded squares with a generous glyph. */
 .small .icon {
-  width: var(--lib-tile-icon);
-  height: var(--lib-tile-icon);
-  border-radius: var(--lib-tile-icon-radius);
+  width: var(--tile-icon);
+  height: var(--tile-icon);
+  border-radius: var(--tile-icon-radius);
 }
 .icon svg {
   display: block;

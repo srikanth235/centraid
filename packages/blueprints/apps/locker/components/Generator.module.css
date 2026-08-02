@@ -10,13 +10,13 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-sunken);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 14px;
   word-break: break-all;
 }
 .slider {
   width: 100%;
-  accent-color: var(--_accent);
+  accent-color: var(--accent);
 }
 .toggleRow {
   display: flex;
@@ -43,7 +43,7 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: var(--on-accent);
+  background: var(--text-inv);
   transition: left 0.15s;
   box-shadow: var(--shadow-sm);
 }

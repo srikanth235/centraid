@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, {
   memo,
   useCallback,
@@ -24,6 +23,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
 import { useTheme } from "../../kit/theme";
@@ -180,7 +180,7 @@ export default function AssistantScreen({
           hitSlop={10}
           onPress={() => navigation.goBack()}
         >
-          <Feather name="arrow-left" size={26} color={colors.text} />
+          <Icon name="arrow-left" size={26} color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Assistant</Text>
@@ -190,7 +190,7 @@ export default function AssistantScreen({
 
       {phase === "offline" ? (
         <View style={styles.emptyWrap}>
-          <Feather name="cpu" size={30} color={colors.accent} />
+          <Icon name="cpu" size={30} color={colors.accent} />
           <Text style={styles.emptyTitle}>Not connected</Text>
           <Text style={styles.emptyBody}>
             Connect your desktop to chat with your assistant. Pair it in
@@ -217,7 +217,7 @@ export default function AssistantScreen({
                   <Text style={styles.emptyBody}>Opening your assistant…</Text>
                 ) : (
                   <>
-                    <Feather
+                    <Icon
                       name="message-circle"
                       size={28}
                       color={colors.accent}
@@ -328,15 +328,11 @@ export default function AssistantScreen({
                     onPress={() => removeAttachment(attachment.hash)}
                     style={styles.attachmentChip}
                   >
-                    <Feather
-                      name="paperclip"
-                      size={12}
-                      color={colors.textSoft}
-                    />
+                    <Icon name="paperclip" size={12} color={colors.textSoft} />
                     <Text numberOfLines={1} style={styles.statusText}>
                       {attachment.filename}
                     </Text>
-                    <Feather name="x" size={12} color={colors.textSoft} />
+                    <Icon name="x" size={12} color={colors.textSoft} />
                   </Pressable>
                 ))}
               </View>
@@ -350,7 +346,7 @@ export default function AssistantScreen({
                   disabled={attaching || sending}
                   style={styles.attachButton}
                 >
-                  <Feather name="paperclip" size={18} color={colors.textSoft} />
+                  <Icon name="paperclip" size={18} color={colors.textSoft} />
                 </Pressable>
               ) : null}
               <TextInput
@@ -374,7 +370,7 @@ export default function AssistantScreen({
                   !sending && !canSend && styles.sendButtonDisabled,
                 ]}
               >
-                <Feather
+                <Icon
                   name={sending ? "square" : "arrow-up"}
                   size={sending ? 16 : 20}
                   color={sending || canSend ? colors.textInv : colors.textFaint}

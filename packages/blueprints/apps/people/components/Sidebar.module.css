@@ -35,7 +35,7 @@
   font-weight: 600;
 }
 .navCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   opacity: 0.6;
 }
@@ -98,7 +98,7 @@
   font: var(--t-body);
   color: var(--text);
   background: var(--bg-elev);
-  border: 1px solid var(--selb);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   padding: 6px var(--sp-2);
 }
@@ -117,13 +117,13 @@
   margin-bottom: 6px;
 }
 .storageTop .lbl {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
 }
 .storageTop .val {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }

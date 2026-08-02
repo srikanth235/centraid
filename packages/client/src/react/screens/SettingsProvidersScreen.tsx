@@ -629,7 +629,7 @@ export default function SettingsProvidersScreen({
         </div>
         <div className={styles.actionsRow}>
           <Button
-            variant="soft"
+            variant="secondary"
             size="sm"
             icon="Reset"
             disabled={busyModels}
@@ -637,7 +637,7 @@ export default function SettingsProvidersScreen({
             onClick={() => doRefresh(refreshModels, setBusyModels)}
           />
           <Button
-            variant="ghost"
+            variant="quiet"
             size="sm"
             icon="Copy"
             label={

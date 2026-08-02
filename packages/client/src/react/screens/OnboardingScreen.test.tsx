@@ -284,7 +284,7 @@ describe("OnboardingScreen scenarios", () => {
       click(el.querySelector(".cta"));
       await flush(4);
       expect(onComplete).toHaveBeenCalledWith({
-        avatarColor: "#E36AD2",
+        avatarColor: "#E55772",
         displayName: "Grace",
         gatewayId: "local",
         memberId: "mem_1",

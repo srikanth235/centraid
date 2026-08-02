@@ -38,7 +38,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     },
     fieldCopy: { gap: 4 },
     fieldLabel: {
-      ...t("tiny"),
+      ...t("control"),
       color: colors.textFaint,
       fontFamily: family.monoMedium,
       textTransform: "uppercase",

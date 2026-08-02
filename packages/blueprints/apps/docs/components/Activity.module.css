@@ -17,7 +17,7 @@
   width: 8px;
   height: 8px;
   border-radius: var(--r-pill);
-  background: var(--accent-deep-fg);
+  background: var(--accent-fill);
   margin-top: var(--sp-1);
 }
 .activityLine {
@@ -37,13 +37,13 @@
   margin-top: 2px;
 }
 .activityDate {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }
 .receiptChip {
-  font: var(--t-tiny);
-  color: var(--accent-deep-fg);
+  font: var(--t-control);
+  color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 var(--sp-1);

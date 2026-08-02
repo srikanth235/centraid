@@ -119,7 +119,7 @@ export default function OutboxDecisionCard(props: {
         {props.row.canEdit && fields.length > 0 ? (
           <Button
             label={editing ? "Cancel edit" : "Edit"}
-            variant="soft"
+            variant="secondary"
             disabled={props.busy}
             onPress={() => {
               setExpanded(true);
@@ -145,7 +145,7 @@ export default function OutboxDecisionCard(props: {
         <Button
           label="Deny"
           icon="X"
-          variant="soft"
+          variant="secondary"
           disabled={props.busy}
           onPress={() => void props.onDeny()}
           style={styles.button}

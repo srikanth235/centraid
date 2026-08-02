@@ -2,13 +2,15 @@
 // Each preset under this folder builds a `Theme` literal; the
 // `themes/index.ts` barrel collects them into a typed registry.
 
-import { semanticShade } from "../color";
+import { accentRamp, semanticShade } from "../color";
+import type { AccentRamp } from "../color";
+import { palette } from "../palette";
 import type { Palette } from "../palette";
 
 // Brand teal — the single source of truth for the Centraid identity.
 // This is the exact hue used by the logo + app-icon marks; the SVG
 // assets under `assets/` and `docs/assets/` hardcode this same hex, and
-// `toCss()` emits it as a theme-independent `--brand` var.
+// `toCss()` emits it as a theme-independent `--accent` var.
 export const BRAND = "#3EC8B4";
 
 // Teal accent ramp derived from BRAND. Used for the FAB, sparkle button,
@@ -17,7 +19,6 @@ export const BRAND = "#3EC8B4";
 // only overrides it once the owner picks a different one (#608 group P).
 // The base accent is BRAND itself (see above); the ramp extends from it.
 export const ACCENT_LIGHT = "#62D6C6";
-export const ACCENT_MIDNIGHT = "#12645A";
 
 // The accent as a FILLED surface — the primary button, the brand mark, the
 // pressed chip. This rung is the one place the accent carries text, so it is
@@ -31,7 +32,7 @@ export const ACCENT_MIDNIGHT = "#12645A";
 // is what moves: `accentFillShade()` in `../color.ts` walks BRAND down its own
 // hue to the lightest shade that clears 4.8:1. Saturation and hue are
 // untouched — this is still unmistakably the brand teal, one stop before
-// `--accent-midnight`.
+// `--accent-deep`.
 //
 // The two ramps take OPPOSITE halves of the same pair, because `--text-inv`
 // itself flips: near-white (#F4F5F7) on light, near-black (#141820) on dark.
@@ -40,21 +41,29 @@ export const ACCENT_MIDNIGHT = "#12645A";
 export const ACCENT_DEEP = "#22776B";
 export const ACCENT_DEEP_DARK = "#34B7A4";
 
-// Ink for a FULLY SATURATED accent or a media scrim — the photo lightbox
-// chrome, the capture overlay, an `--accent`-filled badge. Theme-independent
-// white, because those surfaces are dark in both themes (a photo, a 52%
-// scrim). It is NOT the ink for `--accent-deep`: that pair flips per theme
-// and is `--text-inv`. The shell never emitted this name, so the five
-// `var(--on-accent)` rules in `packages/client` resolved to nothing and
-// inherited the surrounding ink (#686 F3).
-export const ON_ACCENT = "#FFFFFF";
-
 // BRAND as TEXT. It is legible as a button face with white on it, and as text
 // on the dark ramp (9.4:1), but on a near-white surface it lands at 2.0:1 —
 // below the floor for text at any size. Every `color: var(--accent-text)` site
 // reads this instead, so a light surface gets a deepened teal that still reads
 // as the brand hue (5.1:1 on `--bg`). Fills and focus rings keep `--accent`.
 export const ACCENT_TEXT_LIGHT = "#0F7A6C";
+
+/** Product-wide accent choices. These are legal only as an owner preference;
+ * app-local surfaces must consume `--app-identity` instead. Keeping the
+ * solved ramps here lets shell and native share the same override values. */
+export type AccentKey = "blue" | "ochre" | "rose" | "teal" | "violet";
+export const ACCENT_PALETTE: Record<AccentKey, AccentRamp> = {
+  blue: accentRamp(palette.indigo),
+  ochre: accentRamp(palette.ochre),
+  rose: accentRamp(palette.rose),
+  teal: {
+    accent: BRAND,
+    deep: ACCENT_DEEP,
+    light: ACCENT_LIGHT,
+    text: ACCENT_TEXT_LIGHT,
+  },
+  violet: accentRamp(palette.violet),
+};
 
 // Semantic states, as TEXT. All three are overwhelmingly `color:` on small
 // prose in this repo (131 `color:` rules between them, 9–13.7px, none of them
@@ -91,11 +100,6 @@ export const DANGER_DARK = semanticShade(DANGER_BASE, "shellDark");
 export const WARNING = semanticShade(WARNING_BASE_DARK, "shellDark");
 export const WARNING_LIGHT = semanticShade(WARNING_BASE_LIGHT, "shellLight");
 
-// The phone-frame bezel constants that used to live here existed so six
-// emulation presets could share one value. With the registry cut to Centraid
-// Light + Dark (#608 group O) both themes declare their own `bezel` /
-// `bezelInner` in centraid.ts, which is also the only file that reads them.
-
 export interface Theme {
   /** Light vs dark family — drives the picker grouping and the
    * applicability of dark-only tuning knobs (surface temperature, --bg-l).
@@ -108,8 +112,6 @@ export interface Theme {
   accentLight: string;
   /** Darker accent for pressed states / depth. */
   accentDeep: string;
-  /** Deepest accent — used sparingly for "midnight" treatments. */
-  accentMidnight: string;
   /** Accent value chosen for text against the current theme's surface. */
   accentText: string;
 
@@ -132,10 +134,6 @@ export interface Theme {
   bgSunken: string;
   bgElev: string;
   bgApp: string;
-
-  // Phone-frame bezel + inner ring.
-  bezel: string;
-  bezelInner: string;
 
   // Text (text + icon foreground). Roles, not arbitrary brightness rungs.
   text: string;

@@ -405,7 +405,7 @@ function OutboxRow({
             {row.canEdit && !editing ? (
               <Button
                 label="Edit"
-                variant="ghost"
+                variant="quiet"
                 size="sm"
                 disabled={busy}
                 onClick={startEdit}
@@ -413,7 +413,7 @@ function OutboxRow({
             ) : null}
             <Button
               label="Deny"
-              variant="ghost"
+              variant="quiet"
               size="sm"
               disabled={busy}
               onClick={onDeny}
@@ -422,7 +422,7 @@ function OutboxRow({
             {editing ? (
               <Button
                 label="Cancel"
-                variant="ghost"
+                variant="quiet"
                 size="sm"
                 disabled={busy}
                 onClick={cancelEdit}
@@ -463,7 +463,7 @@ function NeedsAuthRow({
         </span>
         <Button
           label="Reconnect"
-          variant="soft"
+          variant="secondary"
           size="sm"
           onClick={onOpenSettings}
         />
@@ -525,7 +525,7 @@ function ParkedRow({
           <div className={styles.actions}>
             <Button
               label="Deny"
-              variant="ghost"
+              variant="quiet"
               size="sm"
               disabled={busy}
               onClick={() => onConfirm(false)}
@@ -570,7 +570,7 @@ function ScopeRequestRow({
         <div className={styles.inlineActions}>
           <Button
             label="Deny"
-            variant="ghost"
+            variant="quiet"
             size="sm"
             disabled={busy}
             onClick={() => onDecide(false)}
@@ -611,7 +611,7 @@ function GrantRow({
       <span className={styles.grantMeta}>{row.createdAgo}</span>
       <Button
         label="Revoke"
-        variant="ghost"
+        variant="quiet"
         size="sm"
         disabled={busy}
         onClick={onRevoke}
@@ -793,7 +793,7 @@ function ActivityRow({
             <div className={styles.actions} data-testid="activity-revoke-grant">
               <Button
                 label="Revoke grant"
-                variant="ghost"
+                variant="quiet"
                 size="sm"
                 disabled={busy}
                 onClick={() => onRevokeGrant(row.grantId!)}
@@ -1021,7 +1021,7 @@ function NoticeRow({
         {row.readAt === null && row.archivedAt === null ? (
           <Button
             label="Mark read"
-            variant="ghost"
+            variant="quiet"
             size="sm"
             disabled={busy}
             onClick={onRead}
@@ -1030,7 +1030,7 @@ function NoticeRow({
         {row.archivedAt === null ? (
           <Button
             label="Archive"
-            variant="ghost"
+            variant="quiet"
             size="sm"
             disabled={busy}
             onClick={onArchive}
@@ -1364,7 +1364,7 @@ export default function ApprovalsScreen(
             <div className={styles.seeAllRow} data-testid="activity-see-all">
               <Button
                 label="See all"
-                variant="ghost"
+                variant="quiet"
                 size="sm"
                 onClick={onSeeAllActivity}
               />

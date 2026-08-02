@@ -59,9 +59,9 @@
   flex-shrink: 0;
 }
 .detailsHead .lbl {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 /* Close button: kit.css's .kit-icon-btn. */
@@ -85,7 +85,7 @@
   object-fit: cover;
 }
 .hero span {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-size: 22px;
   letter-spacing: 0.06em;
@@ -125,8 +125,8 @@
   ); /* not interactive — suppress kit-chip's hover cue */
 }
 .custodyChip.custodyOk {
-  color: var(--accent-deep-fg);
-  border-color: color-mix(in oklab, var(--_accent) 35%, var(--line));
+  color: var(--accent-text);
+  border-color: color-mix(in oklab, var(--app-identity) 35%, var(--line));
 }
 .custodyChip.custodyWarn {
   color: var(--warning);
@@ -138,9 +138,9 @@
 }
 
 .detailLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   margin-bottom: var(--sp-2);
 }
@@ -180,9 +180,9 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 .versionToggle svg {

@@ -57,7 +57,7 @@
   font-size: 19px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 
 .identityText {

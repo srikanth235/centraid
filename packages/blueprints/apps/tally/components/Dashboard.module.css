@@ -40,7 +40,7 @@
   margin-top: 1px;
 }
 .balAmt {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
   text-align: right;
@@ -55,18 +55,18 @@
 }
 .stat {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: var(--sp-4) 18px;
 }
 .stat .k {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
 }
 .stat .v {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 26px;
   font-weight: 600;
   margin-top: var(--sp-2);
@@ -79,21 +79,21 @@
 }
 .card {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
 .cardH {
   padding: 13px var(--sp-4);
   border-bottom: 1px solid var(--line);
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
 }
 
 .sectionTitle {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -106,7 +106,7 @@
 }
 .gcard {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: var(--sp-4);
   text-align: left;
@@ -164,7 +164,7 @@
 
 .dashEmpty {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 40px var(--sp-5);
   text-align: center;

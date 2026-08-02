@@ -71,7 +71,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     avatarInitial: {
       color: "#fff",
-      fontFamily: family.displayBold,
+      fontFamily: family.sansBold,
       fontSize: 17,
     },
     greeting: { flex: 1, paddingRight: 12 },

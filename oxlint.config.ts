@@ -297,6 +297,15 @@ export default defineConfig({
   },
   overrides: [
     {
+      // The client package root is intentionally the single public contract
+      // barrel. Consumers import this boundary rather than reaching into
+      // implementation modules; the no-barrel rule remains active elsewhere.
+      files: ["packages/client/src/index.ts"],
+      rules: {
+        "oxc/no-barrel-file": "off",
+      },
+    },
+    {
       // This deliberate negative fixture proves the corresponding type-aware
       // rules emit. Disable only the ordinary equivalents so the fixture
       // remains linted by every unrelated rule.

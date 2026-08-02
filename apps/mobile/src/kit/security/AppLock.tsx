@@ -198,7 +198,7 @@ const makeStyles = (colors: ThemeColors) =>
     copy: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     eyebrow: {
-      ...t("tiny"),
+      ...t("control"),
       color: colors.textFaint,
       fontFamily: family.monoBold,
       letterSpacing: 1.2,

@@ -30,9 +30,10 @@ describe("scaffold-defaults", () => {
     expect(DEFAULT_APP_CSS).toContain("--accent");
     expect(DEFAULT_APP_CSS).toContain("prefers-reduced-motion");
     expect(DEFAULT_APP_CSS).toContain("720px");
-    expect(DEFAULT_APP_CSS).toContain("var(--accent)");
+    expect(DEFAULT_APP_CSS).toContain("var(--bg-sel)");
+    expect(DEFAULT_APP_CSS).toContain("var(--focus-ring-color)");
     // Colors come from CSS vars only — the old `var(--text-inv, #fff)`
-    // carve-out is gone now that `--on-accent` is in the token contract.
+    // carve-out is gone now that `--text-inv` is in the token contract.
     expect(CSS).not.toMatch(/#[0-9a-fA-F]{3,8}\b/u);
     expect(CSS).not.toMatch(/\b(?:rgba?|hsla?)\(/u);
     expect(DEFAULT_APP_CSS).toMatchSnapshot();

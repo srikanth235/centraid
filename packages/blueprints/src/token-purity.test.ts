@@ -128,32 +128,12 @@ describe("blueprint app CSS token purity", () => {
     }
   });
 
-  it("never inks an --accent-deep fill with the theme-stable --on-accent", () => {
-    // `--accent-deep` flips across the ramp (deepened under light ink on the
-    // light theme, lifted under dark ink on the dark one, #686 F3), so the ink
-    // it carries must flip with it: `--text-inv`. `--on-accent` is the FIXED
-    // white for surfaces that are dark in both themes (a photo, a scrim, a
-    // saturated `--accent` badge) — pairing it with `--accent-deep` reads as
-    // white-on-near-white the moment the dark theme lifts the fill. The kit's
-    // own header contract states this pair; this test holds apps to it.
-    const offenders: string[] = [];
-    for (const file of files) {
-      const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
-      for (const match of css.matchAll(/\{(?<body>[^{}]*)\}/gu)) {
-        const body = match.groups?.body ?? "";
-        if (
-          /background(?:-color)?\s*:\s*var\(--accent-deep\)/u.test(body) &&
-          /(?:^|;)\s*color\s*:\s*var\(--on-accent\)/u.test(body)
-        ) {
-          offenders.push(path.relative(appDir, file));
-        }
-      }
-    }
-    expect(
-      offenders,
-      "these rules fill with --accent-deep but ink with --on-accent; use " +
-        "var(--text-inv), which flips with the fill"
-    ).toStrictEqual([]);
+  it("publishes fill ink through the canonical inverse role", () => {
+    const css = files
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n")
+      .replace(/\/\*[\s\S]*?\*\//gu, "");
+    expect(css).not.toContain("--text-inv, white");
   });
 
   it("resolves every fallback-less var() an app references", () => {

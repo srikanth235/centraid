@@ -34,9 +34,9 @@ describe("ResourceReceiptPanel (#528 Phase C)", () => {
     expect(html).toContain("CPU time");
     expect(html).toContain("2.1 min"); // 125 CPU-seconds
     expect(html).toContain("Memory now");
-    expect(html).toContain("256 MB");
+    expect(html).toContain("256.0 MB");
     expect(html).toContain("Peak memory");
-    expect(html).toContain("384 MB");
+    expect(html).toContain("384.0 MB");
   });
 
   it("renders every subsystem row with measured proxies", () => {
@@ -45,7 +45,7 @@ describe("ResourceReceiptPanel (#528 Phase C)", () => {
     expect(html).toContain("42 tasks");
     expect(html).toContain("3.4s active");
     expect(html).toContain("Replication");
-    expect(html).toContain("15 MB");
+    expect(html).toContain("15.0 MB");
     expect(html).toContain("Backup");
     expect(html).toContain("1.0 MB uploaded");
     expect(html).toContain("Sweeps");

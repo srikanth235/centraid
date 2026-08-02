@@ -4,9 +4,9 @@
    strip. */
 
 .sectionLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   padding: 14px var(--sp-2) 6px;
 }

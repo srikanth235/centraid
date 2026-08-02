@@ -17,15 +17,15 @@
 }
 .title {
   font: var(--t-title);
-  letter-spacing: var(--tracking-h);
+  letter-spacing: -0.01em;
 }
 .titleInput {
   font: var(--t-title);
-  letter-spacing: var(--tracking-h);
+  letter-spacing: -0.01em;
   color: var(--text);
   background: none;
   border: none;
-  border-bottom: 1px solid var(--selb);
+  border-bottom: 1px solid var(--line-strong);
   outline: none;
   min-width: 8ch;
 }

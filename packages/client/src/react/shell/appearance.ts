@@ -117,6 +117,11 @@ export function toRemoteShape(
       out.accentLight = swatch.light;
       out.accentDeep = swatch.deep;
       out.accentText = swatch.text;
+      out.accentFill = swatch.deep;
+      out.accentDeepHover = swatch.deep;
+      out.accentSoft = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
+      out.bgSel = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
+      out.lineSel = `color-mix(in oklab, ${swatch.accent} 42%, transparent)`;
     }
   }
   return out;
@@ -172,6 +177,37 @@ export function applyPrefsToDocument(
     "--accent-text",
     prefs.theme === "dark" ? swatch?.accent : swatch?.text
   );
+  const fill = prefs.theme === "dark" ? swatch?.light : swatch?.deep;
+  setOrClear(html, "--accent-fill", fill);
+  setOrClear(
+    html,
+    "--accent-deep-hover",
+    fill === undefined
+      ? undefined
+      : `color-mix(in oklab, ${fill} 88%, var(--text) 12%)`
+  );
+  setOrClear(
+    html,
+    "--accent-soft",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
+  );
+  setOrClear(
+    html,
+    "--bg-sel",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
+  );
+  setOrClear(
+    html,
+    "--line-sel",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 42%, var(--line))`
+  );
+  setOrClear(html, "--focus-ring-color", swatch?.accent);
 }
 
 /**

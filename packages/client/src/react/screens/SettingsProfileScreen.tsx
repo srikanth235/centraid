@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import { IDENTITY_COLORS, identityInitials } from "@centraid/design";
+
 import type { SelfProfile } from "../shell/routes/profileData.js";
 import { cx } from "../ui/cx.js";
 
@@ -18,32 +20,11 @@ import styles from "./SettingsProfileScreen.module.css";
  * changed afterwards, and the only place the colour can be changed at all.
  */
 
-// Mirrors OnboardingScreen's palette, which mirrors gateway-store's
-// AVATAR_PALETTE — `updateProfileMetadata` validates #RRGGBB against it.
-const AVATAR_PALETTE = [
-  "#5B8DEF",
-  "#7C5CFF",
-  "#E36AD2",
-  "#E5734A",
-  "#E0B53D",
-  "#4FB077",
-  "#3FB5C7",
-  "#B07A4A",
-] as const;
+// The same identity palette as onboarding, native, and kit avatars.
+const AVATAR_PALETTE = IDENTITY_COLORS;
 
 export function initials(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/u)
-    .filter((word) => word.length > 0);
-  if (parts.length === 0) return "·";
-  if (parts.length === 1) {
-    const word = parts[0] ?? "";
-    return (word.charAt(0) + (word.charAt(1) || "")).toUpperCase();
-  }
-  return (
-    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
-  ).toUpperCase();
+  return identityInitials(name);
 }
 
 export interface SettingsProfileScreenProps {

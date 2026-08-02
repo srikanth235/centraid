@@ -73,7 +73,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 32,
     },
-    subtitle: { ...t("tiny"), color: colors.textFaint, marginTop: 2 },
+    subtitle: { ...t("control"), color: colors.textFaint, marginTop: 2 },
     title: { ...t("bodyStrong"), color: colors.text },
     titleWrap: { flex: 1, minWidth: 0 },
   });

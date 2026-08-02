@@ -34,7 +34,7 @@ export const C = {
   textFaint: dark.textFaint,
   textGhost: dark.textGhost,
   /** Ink that sits on `brand` / on a profile swatch. */
-  onBrand: dark.onAccent,
+  onBrand: dark.textInv,
   danger: dark.danger,
   brand: dark.accent,
 };
@@ -91,7 +91,7 @@ export const styles = StyleSheet.create({
   fieldGap: { marginTop: 20 },
   h1: {
     color: C.text,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 31,
     letterSpacing: -0.8,
     lineHeight: 37,

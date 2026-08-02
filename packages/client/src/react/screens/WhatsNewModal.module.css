@@ -52,7 +52,7 @@
 }
 .heading {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 24px;
   letter-spacing: -0.025em;
@@ -133,9 +133,9 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: var(--t-h3-size);
+  font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -155,7 +155,7 @@
   padding: 2px 7px;
 }
 .installed {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: white;
   background: var(--accent);
@@ -163,7 +163,7 @@
   padding: 2px 7px;
 }
 .pre {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text);
   background: color-mix(in oklab, var(--c-amber) 26%, transparent);
@@ -185,7 +185,7 @@
 }
 .notes h4 {
   margin: 14px 0 6px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

@@ -1,3 +1,5 @@
+import { IDENTITY_COLORS } from "@centraid/design";
+
 /**
  * Gateway profile registry — pure core (issue #109 / #545 C1).
  *
@@ -26,16 +28,7 @@ export interface GatewayProfileShape {
  * background and for being visually distinct from each other at 24×24px.
  * The order matters — `defaultAvatarColor` hashes id into this array.
  */
-export const AVATAR_PALETTE: readonly string[] = [
-  "#5B8DEF", // blue
-  "#7C5CFF", // violet
-  "#E36AD2", // pink
-  "#E5734A", // orange
-  "#E0B53D", // amber
-  "#4FB077", // green
-  "#3FB5C7", // teal
-  "#B07A4A", // brown
-] as const;
+export const AVATAR_PALETTE: readonly string[] = IDENTITY_COLORS;
 
 /**
  * Deterministic palette pick from a profile id. Stable across launches —

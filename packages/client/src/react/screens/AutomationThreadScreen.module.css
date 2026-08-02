@@ -44,7 +44,7 @@
 }
 .headText h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -364,7 +364,7 @@
 .grantsLine summary {
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   color: var(--text-faint);
   list-style: none;
@@ -521,7 +521,7 @@
 }
 .turnTime {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .turnHeadSpacer {
@@ -707,7 +707,7 @@
   color: var(--text-faint);
 }
 .emptyTitle {
-  font: var(--t-h2);
+  font: var(--t-title);
   font-size: var(--t-body-size);
   color: var(--text);
 }

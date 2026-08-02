@@ -212,8 +212,6 @@ export default function PaletteScreen({
           <span>navigate</span>
           <span className={styles.kbd}>↵</span>
           <span>open</span>
-          <span className={styles.kbd}>⌘↵</span>
-          <span>open in new window</span>
           <span className={styles.footerSp} />
           <span className={styles.kbd}>esc</span>
           <span>close</span>

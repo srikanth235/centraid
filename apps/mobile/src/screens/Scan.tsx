@@ -7,14 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -27,6 +20,7 @@ import type {
 } from "@centraid/client/receipt-capture";
 
 import { recognizeText } from "../../modules/centraid-ocr";
+import { showToast } from "../kit/components/Toast";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -320,13 +314,14 @@ export default function ScanScreen({
           line_items: lineItems,
         });
       }
-      Alert.alert(
-        destination === "tally" ? "Receipt published" : "Scan saved",
-        destination === "tally"
-          ? "The canonical receipt, reviewed lines, tax/tip, and allocations are now in Tally."
-          : `The reviewed scan was saved to ${destination}.`,
-        [{ text: "Done", onPress: () => navigation.goBack() }]
-      );
+      showToast({
+        message:
+          destination === "tally"
+            ? "Receipt published to Tally."
+            : `Scan saved to ${destination}.`,
+        tone: "accent",
+        action: { label: "Done", onPress: () => navigation.goBack() },
+      });
     } catch (error) {
       surfaceWriteFailure(error, "Scan not saved");
     } finally {

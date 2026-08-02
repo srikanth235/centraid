@@ -48,7 +48,7 @@
 }
 .countLabel {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   margin-right: auto;
 }
@@ -82,7 +82,7 @@
 
 .exportStatus {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 .exportStatus[data-tone="ok"] {

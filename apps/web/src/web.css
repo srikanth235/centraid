@@ -6,23 +6,23 @@ body {
 }
 
 body {
-  background: var(--bg, #111317);
+  background: var(--bg);
 }
 
 .web-notice {
   align-items: center;
-  background: color-mix(in srgb, var(--bg-elev, #20242b) 94%, transparent);
-  border: 1px solid var(--line-strong, rgb(255 255 255 / 14%));
-  border-radius: 10px;
-  bottom: 18px;
-  box-shadow: var(--shadow-md, 0 12px 32px rgb(0 0 0 / 35%));
-  color: var(--text, #f4f6f8);
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  bottom: var(--sp-4);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
   display: flex;
-  font: var(--t-small, 400 13px/18px system-ui);
-  gap: 10px;
+  font: var(--t-small);
+  gap: var(--sp-2);
   left: 50%;
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 10px 12px;
+  max-width: min(520px, calc(100vw - (var(--sp-4) * 2)));
+  padding: var(--sp-2) var(--sp-3);
   position: fixed;
   transform: translateX(-50%);
   z-index: 10000;
@@ -32,18 +32,19 @@ body {
   flex: 1;
 }
 .web-notice button {
-  background: var(--accent, #3ec8b4);
+  background: var(--accent-fill);
   border: 0;
-  border-radius: 6px;
-  color: #07120f;
+  border-radius: var(--r-md);
+  color: var(--text-inv);
   cursor: pointer;
   font: inherit;
-  font-weight: 650;
-  padding: 6px 10px;
+  font-weight: 600;
+  min-height: var(--target-min);
+  padding: var(--sp-2) var(--sp-3);
 }
 .web-notice button.web-notice-quiet {
   background: transparent;
-  color: var(--text-soft, #bbc0c8);
+  color: var(--text-soft);
 }
 .web-notice-offline {
   display: none;
@@ -54,7 +55,7 @@ body {
 
 @media (display-mode: browser) and (max-width: 720px) {
   body::before {
-    background: var(--accent, #c9ff74);
+    background: var(--accent);
     content: "";
     display: block;
     height: env(safe-area-inset-top, 0);

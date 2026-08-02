@@ -35,7 +35,7 @@ export const styles = StyleSheet.create({
     right: 24,
     top: "25%",
   },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 20 },
+  dialogTitle: { fontFamily: family.sansBold, fontSize: 20 },
   empty: {
     fontFamily: family.sansRegular,
     fontSize: 13,
@@ -43,7 +43,7 @@ export const styles = StyleSheet.create({
     marginTop: 7,
     textAlign: "center",
   },
-  emptyTitle: { fontFamily: family.displayBold, fontSize: 18, marginTop: 14 },
+  emptyTitle: { fontFamily: family.sansBold, fontSize: 18, marginTop: 14 },
   emptyWrap: { alignItems: "center", paddingHorizontal: 30, paddingTop: 60 },
   filter: {
     alignItems: "center",
@@ -116,7 +116,7 @@ export const styles = StyleSheet.create({
     paddingTop: 13,
   },
   libraryMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  libraryTitle: { fontFamily: family.displayBold, fontSize: 17 },
+  libraryTitle: { fontFamily: family.sansBold, fontSize: 17 },
   list: { paddingBottom: 48, paddingHorizontal: 18 },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
   newFolderLabel: {
@@ -142,7 +142,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
-  title: { fontFamily: family.displayBold, fontSize: 23, letterSpacing: -0.5 },
+  title: { fontFamily: family.sansBold, fontSize: 23, letterSpacing: -0.5 },
   viewButton: {
     alignItems: "center",
     borderRadius: 7,

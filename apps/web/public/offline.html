@@ -6,11 +6,22 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#111317" />
+    <meta name="theme-color" content="#f4f5f7" />
     <title>Centraid — offline</title>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light;
+        --offline-bg: #f4f5f7;
+        --offline-text: #20242a;
+        --offline-text-soft: #636a75;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --offline-bg: #111317;
+          --offline-text: #e8e9ec;
+          --offline-text-soft: #a8adb8;
+        }
       }
       body {
         margin: 0;
@@ -26,8 +37,8 @@
           "Segoe UI",
           Roboto,
           sans-serif;
-        background: #111317;
-        color: #e8e9ec;
+        background: var(--offline-bg);
+        color: var(--offline-text);
       }
       main {
         max-width: 28rem;
@@ -41,7 +52,7 @@
       p {
         margin: 0;
         line-height: 1.5;
-        color: #a8adb8;
+        color: var(--offline-text-soft);
         font-size: 0.95rem;
       }
     </style>

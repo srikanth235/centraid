@@ -1,15 +1,11 @@
 /* Agenda chrome shared by the served and inline routes (issue #505). Common
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary;
-   this module retains Agenda's variations. Design tokens (--text, --_accent,
-   --bg-elev, --line, --r-md, --t-title, --mono, …) are supplied by the shell
+   this module retains Agenda's variations. Design tokens (--text, --app-identity,
+   --bg-elev, --line, --r-md, --t-title, --font-mono, …) are supplied by the shell
    document (the scoped blueprint-token block InlineAppRoute injects), so this
    file references them directly.
 
-   Two things app.css carries at :root that the blueprint token layer does NOT,
-   yet agenda's component modules consume heavily (--accent-deep-fg ×10, --warn),
-   are folded in below under the app-root scope (`.root` == the host's
-   `.centraid-inline-scope` element) with the same light/dark variants app.css
-   defines. The day "+N more" popover (kit portals it to <body>, outside the
+   The day "+N more" popover (kit portals it to <body>, outside the
    inline scope) keeps its `ag-day-pop*` rules global; its ink/mono vars resolve
    from the shell's own :root token layer. */
 
@@ -21,16 +17,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* app.css :root escape hatches, absent from the blueprint token layer. */
-  --accent-deep-fg: var(--accent-deep);
-}
-:global(:root[data-theme="dark"]) .root {
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .root {
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  }
 }
 
 /* app.css globals reused components (Sidebar/HeaderBar/the canvas views/the
@@ -44,7 +30,7 @@
 }
 .root :global(mark) {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -55,9 +41,9 @@
   border-radius: 3px;
 }
 .root :global(.ag-eyebrow-label) {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   margin: 18px 0 9px;
 }
@@ -92,7 +78,7 @@
 }
 .root :global(.ag-field-row) input:focus,
 .root :global(.ag-field-row) select:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 /* Schedule-view row title — also a global test selector the app-boot harness
@@ -120,7 +106,7 @@
   --app-drawer-width: 270px;
   --app-topbar-gap: 10px;
   --app-topbar-padding: 14px 22px;
-  letter-spacing: var(--tracking-body);
+  letter-spacing: normal;
 }
 
 /* ---- Sidebar ---- */
@@ -156,7 +142,7 @@
   border-radius: var(--r-md);
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
@@ -183,7 +169,7 @@
   color: var(--text-faint);
 }
 .consentLine svg {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 .consentLine span {
@@ -284,9 +270,9 @@
   padding: 0.5rem;
 }
 :global(.ag-day-pop-title) {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   padding: 0.3rem 0.5rem 0.5rem;
 }
@@ -310,7 +296,7 @@
 }
 :global(.ag-day-pop-time) {
   flex-shrink: 0;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: var(--t-mono-size);
   color: var(--text-soft);
 }

@@ -52,7 +52,7 @@
   text-transform: uppercase;
 }
 .activityDate {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }

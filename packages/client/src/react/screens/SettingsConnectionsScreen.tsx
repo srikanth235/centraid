@@ -513,7 +513,7 @@ function ConnectionRow({
           </span>
         ) : null}
         <Button
-          variant="soft"
+          variant="secondary"
           size="sm"
           label={row.health === "paused" ? "Resume" : "Pause"}
           disabled={busy}
@@ -721,7 +721,7 @@ function ConnectForm({
       <SetupGuide steps={[...provider.setup]} />
 
       <div className={styles.wizardFoot}>
-        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button variant="quiet" size="sm" label="Cancel" onClick={onCancel} />
         <Button
           variant="primary"
           size="sm"
@@ -884,7 +884,7 @@ function AssistConnectForm({
         </p>
       ) : null}
       <div className={styles.wizardFoot}>
-        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button variant="quiet" size="sm" label="Cancel" onClick={onCancel} />
         <Button
           variant="primary"
           size="sm"
@@ -935,7 +935,7 @@ function ManualAssistHandoff({
           onChange={(event) => setReturnLink(event.target.value)}
         />
         <Button
-          variant="soft"
+          variant="secondary"
           size="sm"
           label={busy ? "Finishing…" : "Finish connecting"}
           disabled={busy || returnLink.trim().length === 0}
@@ -1795,7 +1795,7 @@ export default function SettingsConnectionsScreen({
                         {sheet.featured.provider.credKind === "oauth2" &&
                         sheet.featured.provider.assist?.enabled ? (
                           <Button
-                            variant="soft"
+                            variant="secondary"
                             label="Use my own OAuth app (Advanced)"
                             onClick={() =>
                               setSheet({

@@ -1,123 +1,152 @@
-// The one public CSS-token vocabulary. Emitters may choose values appropriate
-// to their surface, but cannot invent a second spelling for a semantic role.
+// Canonical property contracts for the two CSS lowerings.
+//
+// Keep this list derived from the same public tables as the emitters.  The
+// contract test compares it to actual generated output, while role tests
+// ensure semantic properties have a total profile lowering.
 
 import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import {
-  blueprintType,
-  fontStacks,
-  marketingType,
-  type,
-  typeKeyToKebab as kebab,
-  typeSizeRungs,
-} from "./typography";
+import { blueprintType, fontStacks, type, typeSizeRungs } from "./typography";
 
-const shellStatic = [
-  ...Object.keys(palette).map((key) => `--c-${key}`),
-  ...Object.keys(radii).map((key) => `--r-${key}`),
-  ...Object.keys(spacing).map((key) => `--sp-${key}`),
-  "--ease",
-  "--brand",
-  "--on-accent",
-  ...Object.keys(fontStacks).map((key) => `--font-${key}`),
-  ...Object.keys({ ...type, ...marketingType }).map(
-    (key) => `--t-${kebab(key)}`
-  ),
-  // Derived, never hand-listed: the rung set collapses keys that share a size
-  // (body/bodyStrong), so a literal list here would drift the moment the scale
-  // gains or merges a size.
-  ...Object.keys(typeSizeRungs({ ...type, ...marketingType })),
-  ...Object.keys(library).map((key) => `--lib-${key}`),
-] as const;
-
-const surface = [
-  // The palette hues as `color:` — solved per theme, unlike the `--c-*` fills
-  // above, which are theme-independent. See `paletteText` in color.ts.
-  ...Object.keys(palette).map((key) => `--c-${key}-text`),
+const themePropertyNames = [
   "--accent",
   "--accent-deep",
+  "--accent-fill",
+  "--accent-deep-hover",
   "--accent-light",
-  "--accent-midnight",
+  "--accent-soft",
   "--accent-text",
-  "--danger",
-  "--success",
-  "--warning",
-  "--bezel",
-  "--bezel-inner",
+  "--app-identity-text",
   "--bg",
   "--bg-app",
+  "--bg-chrome",
   "--bg-elev",
+  "--bg-hud",
+  "--bg-hover",
+  "--bg-press",
+  "--bg-sel",
   "--bg-sunken",
   "--bg-wall",
+  "--danger",
   "--device-wall",
+  "--glass-film",
+  "--glass-sheen",
+  "--focus-ring",
+  "--focus-ring-color",
+  "--line",
+  "--line-strong",
+  "--line-sel",
+  "--on-accent",
+  "--scrim",
+  "--shadow-lg",
+  "--shadow-md",
+  "--shadow-sm",
+  "--success",
   "--text",
-  "--text-soft",
   "--text-faint",
   "--text-ghost",
   "--text-inv",
-  "--line",
-  "--line-strong",
-  "--scrim",
-  "--shadow-lg",
-  "--shadow-md",
-  "--shadow-sm",
-  "--sidebar-bg",
-  "--sidebar-blur",
-  "--sidebar-divider",
-] as const;
-
-export const SHELL_TOKEN_CONTRACT = [...shellStatic, ...surface].sort();
-
-// Blueprint apps share the semantic surface names and add their portable
-// identity/type primitives. These are all emitted in the default root block.
-export const BLUEPRINT_TOKEN_CONTRACT = [
-  "--app-hue",
-  "--font-sans",
-  "--font-serif",
-  "--font-title",
-  "--mono",
-  ...Object.keys(palette).map((key) => `--c-${key}`),
-  ...Object.keys(palette).map((key) => `--c-${key}-text`),
-  "--accent",
-  "--on-accent",
-  "--_accent",
-  "--accent-soft",
-  "--accent-deep",
-  "--accent-text",
-  "--sel",
-  "--selb",
-  "--text",
+  "--text-disabled",
   "--text-soft",
-  "--text-faint",
-  "--text-inv",
+  "--warning",
+];
+
+const paletteNames = Object.keys(palette).flatMap((key) => [
+  `--c-${key}`,
+  `--c-${key}-text`,
+]);
+const commonScale = [
+  ...Object.keys(radii).map((key) => `--r-${key}`),
+  ...Object.keys(spacing).map((key) => `--sp-${key}`),
+];
+const shellType = [
+  ...Object.keys(fontStacks).map((key) => `--font-${key}`),
+  ...Object.keys(type).map(
+    (key) =>
+      `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
+  ),
+  ...Object.keys(typeSizeRungs(type)),
+];
+
+export const SHELL_TOKEN_CONTRACT = [
+  ...new Set([
+    ...paletteNames,
+    ...commonScale,
+    "--accent",
+    "--dur-1",
+    "--dur-2",
+    "--ease",
+    "--focus-ring",
+    "--o-disabled",
+    "--target-min",
+    ...shellType,
+    ...Object.keys(library).map((key) => {
+      const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
+      return `--tile-${suffix}`;
+    }),
+    ...themePropertyNames,
+  ]),
+].sort();
+
+const blueprintTheme = [
+  "--accent",
+  "--accent-deep",
+  "--accent-fill",
+  "--accent-deep-hover",
+  "--accent-light",
+  "--accent-soft",
+  "--accent-text",
+  "--app-hue",
+  "--app-identity",
+  "--app-identity-text",
   "--bg",
   "--bg-elev",
+  "--bg-hover",
+  "--bg-press",
+  "--bg-sel",
   "--bg-sunken",
-  "--line",
-  "--line-strong",
-  "--scrim",
   "--danger",
-  "--warning",
-  "--success",
-  "--r-card",
-  "--r-md",
-  "--r-sm",
-  "--r-pill",
-  "--radius",
-  "--radius-sm",
-  ...Object.keys(spacing).map((key) => `--sp-${key}`),
+  "--dur-1",
+  "--dur-2",
   "--ease",
   "--focus-ring",
-  "--shadow-sm",
-  "--shadow-md",
+  "--focus-ring-color",
+  "--line",
+  "--line-strong",
+  "--line-sel",
+  "--on-accent",
+  "--o-disabled",
+  "--scrim",
   "--shadow-lg",
-  "--tracking-body",
-  "--tracking-h",
-  "--tracking-eyebrow",
-  // The blueprint type scale and its size rungs — both derived from
-  // `blueprintType`, for the same reason the shell half above is.
-  ...Object.keys(blueprintType).map((key) => `--t-${kebab(key)}`),
-  ...Object.keys(typeSizeRungs(blueprintType)),
+  "--shadow-md",
+  "--shadow-sm",
+  "--success",
+  "--target-min",
+  "--text",
+  "--text-faint",
+  "--text-ghost",
+  "--text-inv",
+  "--text-disabled",
+  "--text-soft",
+  "--warning",
+];
+
+export const BLUEPRINT_TOKEN_CONTRACT = [
+  ...new Set([
+    ...paletteNames,
+    ...commonScale,
+    ...blueprintTheme,
+    ...Object.keys(fontStacks).map((key) => `--font-${key}`),
+    ...Object.keys(blueprintType).map(
+      (key) =>
+        `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
+    ),
+    ...Object.keys(typeSizeRungs(blueprintType)),
+  ]),
 ].sort();
+
+// Keep the imports above visibly tied to the registered theme set.  The
+// registry is intentionally referenced here so adding a theme cannot make
+// the contract appear complete while its solved palette is untested.
