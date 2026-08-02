@@ -268,24 +268,29 @@ export function completeOnboardingCommands(homeReadyMarker) {
     commands:
 ${enterCentraid}
 # After Enter Centraid the shell may show the offline-capability wall until
-# /_gateway/info succeeds over the tunnel. Each Retry remounts the replica
-# provider (retryNonce) and cancels an in-flight probe — so wait for Home or
-# the wall again before tapping again (Android 30745618435: eight taps in ~17s
-# starved every probe). Online probes also retry in-product
-# (mobile-gateway-compatibility.ts).
+# /_gateway/info succeeds over the tunnel. refresh() bumps retryNonce and
+# briefly clears compatibility while remounting — a while-visible-Reconnect
+# loop then exits mid-probe (Android 30748665073) and the final Home wait
+# sits idle with the wall back. Keep retrying until Home is visible (or the
+# attempt budget is spent), tapping Retry only while the wall is up. Online
+# probes also retry in-product (mobile-gateway-compatibility.ts).
 - repeat:
-    times: 12
+    times: 24
     while:
-      visible: "Reconnect once"
+      notVisible: "${homeReadyMarker}"
     commands:
-      - tapOn:
-          id: "replica-compatibility-retry"
-          retryTapIfNoChange: true
+      - runFlow:
+          when:
+            visible: "Reconnect once"
+          commands:
+            - tapOn:
+                id: "replica-compatibility-retry"
+                retryTapIfNoChange: true
       - extendedWaitUntil:
           visible: "${homeReadyMarker}|Reconnect once"
           timeout: 20000
 - extendedWaitUntil:
     visible: "${homeReadyMarker}"
-    timeout: 120000
+    timeout: 60000
 `;
 }
