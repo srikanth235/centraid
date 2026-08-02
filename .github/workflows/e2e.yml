@@ -580,8 +580,8 @@ jobs:
           if-no-files-found: ignore
 
   # Pairing journeys (issue #289 / matrix tunnel-pairing). Keep the three flow
-  # verdicts independent inside one suite so the Actions UI has one pairing
-  # entry while a failure in one flow does not skip the others.
+  # verdicts independent and concurrent inside one suite so the Actions UI has
+  # one pairing entry while a failure in one flow does not skip the others.
   pairing-e2e:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
@@ -594,35 +594,67 @@ jobs:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      - name: Run device-pairing-lifecycle
-        id: pairing_lifecycle
-        if: always()
-        continue-on-error: true
-        run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
-      - name: Run pairing-ticket-hygiene
-        id: pairing_ticket_hygiene
-        if: always()
-        continue-on-error: true
-        run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
-      - name: Run cross-network-relay
-        id: pairing_cross_network_relay
+      - name: Run pairing flows concurrently
+        id: pairing_flows
         if: always()
         continue-on-error: true
         run: |
-          docker info
-          # Production must never silently fall back to the JS byte pump.
-          test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
-          node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+          set +e
+          lifecycle_log="$RUNNER_TEMP/pairing-lifecycle.log"
+          ticket_hygiene_log="$RUNNER_TEMP/pairing-ticket-hygiene.log"
+          cross_network_relay_log="$RUNNER_TEMP/pairing-cross-network-relay.log"
+
+          (set -e; node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs) >"$lifecycle_log" 2>&1 &
+          lifecycle_pid=$!
+          (set -e; node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs) >"$ticket_hygiene_log" 2>&1 &
+          ticket_hygiene_pid=$!
+          (
+            set -e
+            docker info
+            # Production must never silently fall back to the JS byte pump.
+            test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+            node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+          ) >"$cross_network_relay_log" 2>&1 &
+          cross_network_relay_pid=$!
+
+          wait "$lifecycle_pid"
+          lifecycle_status=$?
+          wait "$ticket_hygiene_pid"
+          ticket_hygiene_status=$?
+          wait "$cross_network_relay_pid"
+          cross_network_relay_status=$?
+
+          echo "::group::device-pairing-lifecycle"
+          cat "$lifecycle_log"
+          echo "::endgroup::"
+          echo "::group::pairing-ticket-hygiene"
+          cat "$ticket_hygiene_log"
+          echo "::endgroup::"
+          echo "::group::cross-network-relay"
+          cat "$cross_network_relay_log"
+          echo "::endgroup::"
+
+          lifecycle_result=failed
+          [ "$lifecycle_status" -eq 0 ] && lifecycle_result=passed
+          ticket_hygiene_result=failed
+          [ "$ticket_hygiene_status" -eq 0 ] && ticket_hygiene_result=passed
+          cross_network_relay_result=failed
+          [ "$cross_network_relay_status" -eq 0 ] && cross_network_relay_result=passed
+          {
+            echo "lifecycle=$lifecycle_result"
+            echo "ticket_hygiene=$ticket_hygiene_result"
+            echo "cross_network_relay=$cross_network_relay_result"
+          } >> "$GITHUB_OUTPUT"
       - name: Fail if pairing suite failed
         if: always()
         run: |
-          echo "lifecycle=${{ steps.pairing_lifecycle.outcome }}"
-          echo "ticket-hygiene=${{ steps.pairing_ticket_hygiene.outcome }}"
-          echo "cross-network-relay=${{ steps.pairing_cross_network_relay.outcome }}"
-          if [ "${{ steps.pairing_lifecycle.outcome }}" != "success" ] || \
-             [ "${{ steps.pairing_ticket_hygiene.outcome }}" != "success" ] || \
-             [ "${{ steps.pairing_cross_network_relay.outcome }}" != "success" ]; then
-            echo "::error::Pairing suite failed — see the individual flow steps above"
+          echo "lifecycle=${{ steps.pairing_flows.outputs.lifecycle }}"
+          echo "ticket-hygiene=${{ steps.pairing_flows.outputs.ticket_hygiene }}"
+          echo "cross-network-relay=${{ steps.pairing_flows.outputs.cross_network_relay }}"
+          if [ "${{ steps.pairing_flows.outputs.lifecycle }}" != "passed" ] || \
+             [ "${{ steps.pairing_flows.outputs.ticket_hygiene }}" != "passed" ] || \
+             [ "${{ steps.pairing_flows.outputs.cross_network_relay }}" != "passed" ]; then
+            echo "::error::Pairing suite failed — see the grouped flow logs above"
             exit 1
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

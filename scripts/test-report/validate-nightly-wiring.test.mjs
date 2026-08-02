@@ -60,6 +60,14 @@ describe("validate-nightly-wiring structure (#545)", () => {
     ]) {
       expect(pairingBlock).toContain(flow);
     }
+    expect(pairingBlock).toMatch(/Run pairing flows concurrently/u);
+    for (const pid of [
+      "lifecycle_pid=$!",
+      "ticket_hygiene_pid=$!",
+      "cross_network_relay_pid=$!",
+    ]) {
+      expect(pairingBlock).toContain(pid);
+    }
     expect(pairingBlock).toMatch(/Fail if pairing suite failed/u);
     expect(pairingBlock).toMatch(/nightly-evidence-pairing/u);
   });

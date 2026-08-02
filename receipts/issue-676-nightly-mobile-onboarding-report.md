@@ -61,7 +61,7 @@ accessibility zero-grey (15 cells).
 
 - **iOS paste tap no-op under LogBox (30716166878).** Screenshot after fail still showed scan-first UI plus "Open debugger to view warnings." Maestro `tapOn id:onboarding-paste` COMPLETED (hierarchy noise fooled `retryTapIfNoChange`) without flipping `showPaste`. Fixes: `apps/mobile/index.ts` `__DEV__` `LogBox.ignoreAllLogs(true)` so the toast never covers bottom controls; `tests/agent-e2e-mobile/lib/first-run.mjs` / `tests/agent-e2e-mobile/flows/home-loads.mjs` destination-aware `openPastePathCommands` keeps tapping while `onboarding-paste` remains visible; `apps/mobile/src/screens/Onboarding.tsx` Connect `submitPaste` blurs then re-reads via `onEndEditing` when `codeRef` is empty so Android SET_TEXT reaches JS (`onBlur` cannot — RN `TargetedEvent` has no text); progress/error regex accepts the trailing period on `Paste a pairing ticket first.` via `.?` (not `\.` — YAML double-quoted `\.` is `BAD_DQ_ESCAPE` and aborted configure-gateway in ~3s on 30735480622/30735481514); `scripts/mobile-onboarding-maestro-contract.test.mjs` pins LogBox + blur-before-connect + paste retry. Restored `tests/experience-budgets/gateway.json` `coreRouteP95Ms` / `gatewayColdStartMs` from main (#688) so local `check:push` ratchet does not treat the branch as loosening floors. Connect scroll: drop the center flag (swiped a bottom-visible Connect off-screen, 30736533921) and drop the post-tap `notVisible → scroll` fallback (a successful Connect removes the button, so that branch then ElementNotFound'd — 30738128995). Plain `scrollUntilVisible` + `tapOn` only.
 
-- **Pairing suite consolidation.** `.github/workflows/e2e.yml` now runs lifecycle, ticket-hygiene, and cross-network-relay as independent steps inside one `pairing-e2e` job. Each flow still writes its own e2e verdict and the final aggregate step fails the job if any flow fails; the report consumes one merged `nightly-evidence-pairing` artifact. `scripts/test-report/validate-nightly-wiring.mjs` and `scripts/test-report/validate-nightly-wiring.test.mjs` enforce the single-job wiring, and `tests/agent-e2e-pairing/README.md` documents the suite shape.
+- **Pairing suite consolidation.** `.github/workflows/e2e.yml` now runs lifecycle, ticket-hygiene, and cross-network-relay concurrently inside one `pairing-e2e` job. Each flow still writes its own e2e verdict and grouped log, and the final aggregate step fails the job if any flow fails; the report consumes one merged `nightly-evidence-pairing` artifact. `scripts/test-report/validate-nightly-wiring.mjs` and `scripts/test-report/validate-nightly-wiring.test.mjs` enforce the single-job/concurrent wiring, and `tests/agent-e2e-pairing/README.md` documents the suite shape.
 
 ## Out of scope
 
@@ -70,7 +70,8 @@ accessibility zero-grey (15 cells).
 - Reverting product UX to paste-first.
 - Desktop/web quality lanes (already green on the baseline run).
 - Running the pairing flows on separate GitHub Actions jobs; they now share the
-  pairing suite setup while retaining per-flow verdicts and failure reporting.
+  pairing suite setup and run concurrently while retaining per-flow verdicts and
+  failure reporting.
 
 ## Decisions
 
@@ -114,3 +115,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019fc146-e88-1785654623-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 203269 | 0 | 5997824 | 22355 | 225624 | 2.3430 | 203269 | 0 | 5997824 | 22355 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
 | codex-019fc146-e88-1785654708-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 9988 | 0 | 2096384 | 1137 | 11125 | 0.5661 | 213257 | 0 | 8094208 | 23492 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
+| codex-019fc146-e88-1785659650-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 440881 | 0 | 6656256 | 16394 | 457275 | 3.0122 | 654138 | 0 | 14750464 | 39886 | ci(e2e): run pairing suite flows concurrently (#676) -m governance: allow-toolch |
