@@ -227,6 +227,38 @@ What the 94 rules genuinely share is a **family** (`--font-mono`, already tokeni
 
 **Still genuinely open, and unresolved by any of the above:** (b) whether the blueprint rungs should be renamed so the size/line-height divergence is explicit; (c) whether `kit.css` is blueprint-scoped and the chrome gets its own component sheet. Those remain product decisions.
 
+## #686 — recommendations for the three questions this issue leaves open
+
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). These are **recommendations, not decisions** — each changes what ships and wants a human yes. The measurements behind them are in the entries above.
+
+### 1. The 94 mono eyebrows: converge to two rungs, then name them
+
+Measured distribution — sizes `9.5px ×36, 10px ×21, 10.5px ×19, 9px ×9, 8.5px ×4`; tracking `0.06em ×20, 0.05em ×15, 0.04em ×15, 0.1em ×14, 0.08em ×9`. 51 distinct shapes, largest cluster 6.
+
+**Recommend:** converge _first_, name _second_ — the reverse of the instinct. Two rungs cover the real span: a standard eyebrow at **9.5px** (the plurality, 38%) and a section header at **10.5px**, both mono at one tracking value. Pick the tracking from the cluster, not by eye: `0.06em` is the mode and sits mid-range.
+
+The order matters. Naming a rung against 51 shapes produces vocabulary that fits 6% and rots — the `--r-lg` failure. Converging first makes the rung describe something real, and the conversion afterwards is mechanical.
+
+**Cost:** a visual diff at ~94 sites, none individually large. **Do not** attempt it inside a change set that is already doing something else.
+
+### 2. `kit.css`: do NOT blueprint-scope it — make it consume the size rungs
+
+`kit.css` renders under both token layers, and 20 of its 80 hardcoded sizes match a blueprint rung against **0** shell rungs, so its type was authored for the app surface while shipping on both.
+
+**Recommend against** splitting it into two component sheets. That doubles the divergence this issue documented rather than resolving it, and every future component then has two homes. Instead, bind those sizes to `--t-<key>-size`, which now emits from both emitters — a kit button becomes 15px in the chrome and 13.68px in an app.
+
+That is the right answer on the merits, not just the cheap one: an embedded app pane **should** read at app scale. A component that renders identically in both contexts is the actual bug, and it is what ships today.
+
+**Caveat, stated plainly:** this is a visible change on both surfaces, and the eight exact matches were skipped in #686 for exactly this reason. It needs its own PR.
+
+### 3. Should the two emitters' scales diverge? Size yes, role no
+
+**Recommend:** codify the split the contract already implies. **Size and line-height may differ per surface** — a chrome and an embedded pane are different reading contexts, and the emitters exist precisely so values can differ. **Family and weight may not** — those are the role, and one spelling with two roles is the inverse of the contract's own rule.
+
+That makes `--t-tiny` (sans/500 shell, mono/600 blueprint) the one genuine violation. Note that #686 investigated aligning it and **declined**: 90 of the 94 mono eyebrows sit below its 11px, so `--t-tiny` is a quiet control label on the shell side and changing it would monospace prose. The clean fix is therefore (1) first, not a direct edit — once the eyebrow rung exists and is named, `--t-tiny` can be aligned without collateral.
+
+**Sequence:** (1) → (3) → (2). Each is independently shippable; doing (3) before (1) recreates the problem #686 already declined to cause.
+
 ## Related docs
 
 | Doc | Covers |

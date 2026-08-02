@@ -442,6 +442,8 @@ These five rows are the post-umbrella findings; their full descriptions, file li
 - F6 composable size rungs + the exact-match sweep (411 conversions)
 - F7 Shell `--t-tiny` → mono realignment investigated and **deliberately declined** on the measurement; the real gap (an unnamed sub-11px mono eyebrow rung, 51 distinct shapes) is recorded as debt in `docs/decisions.md`, not taken here.
 
+- **Recommendations recorded for the three open questions** — `docs/decisions.md` gains "#686 — recommendations for the three questions this issue leaves open": (1) converge the 94 eyebrows to two rungs (9.5px standard, 10.5px section header, tracking 0.06em — the measured mode) *before* naming anything, since naming against 51 shapes produces a second `--r-lg`; (2) do **not** blueprint-scope `kit.css` — bind its sizes to `--t-<key>-size` so a component reads at the scale of the surface it is on, which is the correct behaviour and not merely the cheap one; (3) codify that size and line-height may diverge per emitter but family and weight may not. Sequence (1) → (3) → (2); doing (3) first recreates the problem #686 already declined to cause. Each is a recommendation needing a human yes, not a decision taken.
+
 ## Out of scope
 
 - ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
