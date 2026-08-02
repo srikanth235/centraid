@@ -165,17 +165,31 @@ ${dismissKeyboardOnboarding}- eraseText: 50
 - hideKeyboard
 - waitForAnimationToEnd:
     timeout: 2000
-# The pasted ticket grows the field to ~14 lines, which pushes the submit button
-# off screen — scroll it fully into view before tapping by testID.
-- scrollUntilVisible:
-    element:
-      id: "onboarding-connect"
-    direction: DOWN
-    visibilityPercentage: 100
-    centerElement: true
-- tapOn:
-    id: "onboarding-connect"
-    retryTapIfNoChange: true
+# The pasted ticket can grow the field enough to push Connect off screen.
+# Prefer a direct tap when it is already visible — scrollUntilVisible with
+# centerElement:true previously swiped a bottom-visible Connect off-screen
+# (Android 30736533921 ElementNotFound). Scroll only when needed, no center.
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-connect"
+    commands:
+      - tapOn:
+          id: "onboarding-connect"
+          retryTapIfNoChange: true
+- runFlow:
+    when:
+      notVisible:
+        id: "onboarding-connect"
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "onboarding-connect"
+          direction: DOWN
+          visibilityPercentage: 100
+      - tapOn:
+          id: "onboarding-connect"
+          retryTapIfNoChange: true
 # If still idle, remount the paste field (scan instead → paste) — never
 # eraseText:2000 (Android 30716166878: DEADLINE_EXCEEDED after 120s of
 # char-by-char backspace). Remount gives a clean defaultValue buffer.
@@ -196,15 +210,27 @@ ${openPastePathCommands()
       - hideKeyboard
       - waitForAnimationToEnd:
           timeout: 2000
-      - scrollUntilVisible:
-          element:
-            id: "onboarding-connect"
-          direction: DOWN
-          visibilityPercentage: 100
-          centerElement: true
-      - tapOn:
-          id: "onboarding-connect"
-          retryTapIfNoChange: true
+      - runFlow:
+          when:
+            visible:
+              id: "onboarding-connect"
+          commands:
+            - tapOn:
+                id: "onboarding-connect"
+                retryTapIfNoChange: true
+      - runFlow:
+          when:
+            notVisible:
+              id: "onboarding-connect"
+          commands:
+            - scrollUntilVisible:
+                element:
+                  id: "onboarding-connect"
+                direction: DOWN
+                visibilityPercentage: 100
+            - tapOn:
+                id: "onboarding-connect"
+                retryTapIfNoChange: true
 # Iroh redemption can take >90s on cold CI. Done heading is split across
 # Text nodes so match Enter Centraid / Who's using / Home. Pairing errors
 # surface here too so a bad ticket fails fast instead of timing out.
