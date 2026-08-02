@@ -344,6 +344,11 @@ function ReplicaCompatibilityGate({
           {copy.body}
         </Text>
         <Pressable
+          // testID so Maestro taps the Pressable, not the child TextView
+          // (Android 30745070094: tapOn "Retry connection" hit clickable=false
+          // Text and never called refresh — wall stayed for the full Home wait).
+          testID="replica-compatibility-retry"
+          accessibilityLabel="Retry connection"
           accessibilityRole="button"
           onPress={() => void refresh?.()}
           style={{

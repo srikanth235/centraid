@@ -148,14 +148,17 @@ test("pairing code field is focused by testID so lede text is not mistaken for t
   assert.match(firstRun, /id:\s*"pairing-code-input"/u);
 });
 
-test("Connect submit is targeted by testID so Maestro does not tap the TextView", () => {
-  const ui = read(ONBOARDING);
-  assert.match(ui, /testID="onboarding-connect"/u);
+test("compatibility wall Retry is targeted by testID so Maestro does not tap the TextView", () => {
+  const app = read("apps/mobile/App.tsx");
+  assert.match(app, /testID="replica-compatibility-retry"/u);
+  assert.match(
+    app,
+    /accessibilityLabel="Retry connection"[\s\S]{0,80}accessibilityRole="button"/u
+  );
   const firstRun = read(FIRST_RUN);
-  assert.match(firstRun, /id:\s*"onboarding-connect"/u);
-  // Must not use bare text Connect as the submit tap (matches non-clickable label).
+  assert.match(firstRun, /id:\s*"replica-compatibility-retry"/u);
   assert.doesNotMatch(
     stripLineComments(firstRun),
-    /tapOn:\s*\n\s*text:\s*"\^Connect\$"/u
+    /tapOn:\s*"Retry connection"/u
   );
 });

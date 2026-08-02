@@ -275,7 +275,9 @@ ${enterCentraid}
     while:
       visible: "Reconnect once"
     commands:
-      - tapOn: "Retry connection"
+      - tapOn:
+          id: "replica-compatibility-retry"
+          retryTapIfNoChange: true
       - waitForAnimationToEnd:
           timeout: 5000
 - extendedWaitUntil:

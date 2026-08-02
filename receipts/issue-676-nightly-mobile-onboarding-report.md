@@ -67,6 +67,8 @@ accessibility zero-grey (15 cells).
 
 - **Android remount after successful pair (30742508620).** `home-loads` PASS; `configure-gateway` paired through to the profile screen ("Who's using this phone?") then remount fired because Maestro full-string textRegex never matched bare `Who's using`. Recovery tapped `onboarding-scan-instead` on the profile screen → ElementNotFound. Fix: progress/wait selectors use `Who.?s using.*`, and remount is gated on `id: onboarding-scan-instead` still being visible.
 
+- **Android Retry connection TextView miss (30745070094).** After the profile regex fix, configure + profile + Enter Centraid succeeded; Maestro then tapped `Retry connection` on the capability wall via the child TextView (`clickable=false`), so `refresh()` never ran and Home never appeared. `ReplicaCompatibilityGate` now exposes `testID="replica-compatibility-retry"`; complete-onboarding taps by id.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
