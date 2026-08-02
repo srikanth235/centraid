@@ -65,6 +65,8 @@ accessibility zero-grey (15 cells).
 
 - **iOS job timeout 60→90.** Run 30742507573 (`1a78bd73`): home-loads / template-gate / native-v0-resilience / mobile-volume-proof all PASS; cancelled at the 60m Actions cap mid `mobile-cold-start` launch 6/8 (scroll-frames never started). Setup ~11m + four flows ~37m leaves too little budget for cold-start + scroll-frames. Match `mobile-e2e-android`'s 90m outer backstop.
 
+- **Android remount after successful pair (30742508620).** `home-loads` PASS; `configure-gateway` paired through to the profile screen ("Who's using this phone?") then remount fired because Maestro full-string textRegex never matched bare `Who's using`. Recovery tapped `onboarding-scan-instead` on the profile screen → ElementNotFound. Fix: progress/wait selectors use `Who.?s using.*`, and remount is gated on `id: onboarding-scan-instead` still being visible.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available

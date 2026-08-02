@@ -120,6 +120,13 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
   assert.match(firstRun, /openPastePathCommands/u);
   assert.match(firstRun, /id:\s*"onboarding-scan-instead"/u);
   assert.match(firstRun, /waitForAnimationToEnd:\s*\n\s*timeout:\s*3000/u);
+  // Android merges the profile h1; bare "Who's using" is a full-string miss.
+  assert.match(firstRun, /Who\.\?s using\.\*/u);
+  // Remount only while still on the paste form (scan-instead visible).
+  assert.match(
+    firstRun,
+    /when:\s*\n\s*visible:\s*\n\s*id:\s*"onboarding-scan-instead"\s*\n\s*commands:\s*\n\s*- runFlow:\s*\n\s*when:\s*\n\s*notVisible:/u
+  );
 });
 
 test("dev entry suppresses LogBox overlay so Maestro can tap bottom controls", () => {

@@ -140,13 +140,43 @@ export function pasteAndConnectPairingTicketCommands(
   homeReadyMarker,
   dismissKeyboardOnboarding = DISMISS_KEYBOARD_ONBOARDING
 ) {
-  // Trailing .? so "Paste a pairing ticket first." (with period) matches —
-  // Maestro textRegex is full-string. Do NOT use \. inside the double-quoted
-  // YAML value (BAD_DQ_ESCAPE → configure-gateway exits in ~3s, 30735481514).
+  // Maestro textRegex is full-string (docs: shorthand = exact). Android merges
+  // the profile h1 into "Who's using this phone?" — bare "Who's using" never
+  // matches (30742508620), so remount fired after a successful pair and died
+  // tapping onboarding-scan-instead on the profile screen. Trailing .? so
+  // "Paste a pairing ticket first." matches. Do NOT use \. inside the
+  // double-quoted YAML value (BAD_DQ_ESCAPE → configure exits ~3s, 30735481514).
   const progressOrError =
-    "Connecting…|Who's using|Enter Centraid|" +
+    "Connecting.?|Who.?s using.*|Enter Centraid|" +
     homeReadyMarker +
     "|Paste a pairing ticket first.?|not a Centraid pairing|expired|Could not reach";
+  const remountBody = [
+    `- tapOn:`,
+    `    id: "onboarding-scan-instead"`,
+    `    retryTapIfNoChange: true`,
+    ...openPastePathCommands()
+      .split("\n")
+      .filter((line) => line.length > 0),
+    `- tapOn:`,
+    `    id: "pairing-code-input"`,
+    `# e2e-lint-allow: unasserted-input — retype after remount; redemption is the check.`,
+    `- inputText: \${MAESTRO_PAIRING_TICKET}`,
+    `- hideKeyboard`,
+    `- waitForAnimationToEnd:`,
+    `    timeout: 2000`,
+    `- scrollUntilVisible:`,
+    `      element:`,
+    `        id: "onboarding-connect"`,
+    `      direction: DOWN`,
+    `      visibilityPercentage: 100`,
+    `- tapOn:`,
+    `    id: "onboarding-connect"`,
+    `    retryTapIfNoChange: true`,
+    `- waitForAnimationToEnd:`,
+    `    timeout: 3000`,
+  ]
+    .map((line) => `            ${line}`)
+    .join("\n");
   return `${openPastePathCommands()}# Focus the pairing TextInput by testID — not the lede text that also
 # contains "Paste the one-line ticket" (empty Connect is a silent no-op).
 - tapOn:
@@ -184,43 +214,25 @@ ${dismissKeyboardOnboarding}- eraseText: 50
 # into a hierarchy that had already left the paste form (Android 30739830232).
 - waitForAnimationToEnd:
     timeout: 3000
-# If still idle, remount the paste field (scan instead → paste) — never
-# eraseText:2000 (Android 30716166878: DEADLINE_EXCEEDED after 120s of
-# char-by-char backspace). Remount gives a clean defaultValue buffer.
+# If still idle on the paste form, remount the field (scan instead → paste) —
+# never eraseText:2000 (Android 30716166878: DEADLINE_EXCEEDED). Gate on
+# onboarding-scan-instead so a successful pair that already left paste (profile
+# / Connecting) cannot run recovery (Android 30742508620).
 - runFlow:
     when:
-      notVisible: "${progressOrError}"
+      visible:
+        id: "onboarding-scan-instead"
     commands:
-      - tapOn:
-          id: "onboarding-scan-instead"
-          retryTapIfNoChange: true
-${openPastePathCommands()
-  .split("\n")
-  .filter((line) => line.length > 0)
-  .map((line) => `      ${line}`)
-  .join("\n")}
-      - tapOn:
-          id: "pairing-code-input"
-# e2e-lint-allow: unasserted-input — retype after remount; redemption is the check.
-      - inputText: \${MAESTRO_PAIRING_TICKET}
-      - hideKeyboard
-      - waitForAnimationToEnd:
-          timeout: 2000
-      - scrollUntilVisible:
-          element:
-            id: "onboarding-connect"
-          direction: DOWN
-          visibilityPercentage: 100
-      - tapOn:
-          id: "onboarding-connect"
-          retryTapIfNoChange: true
-      - waitForAnimationToEnd:
-          timeout: 3000
-# Iroh redemption can take >90s on cold CI. Done heading is split across
-# Text nodes so match Enter Centraid / Who's using / Home. Pairing errors
-# surface here too so a bad ticket fails fast instead of timing out.
+      - runFlow:
+          when:
+            notVisible: "${progressOrError}"
+          commands:
+${remountBody}
+# Iroh redemption can take >90s on cold CI. Profile h1 is one Android node
+# ("Who's using this phone?") — use Who.?s using.* so full-string regex hits.
+# Pairing errors surface here too so a bad ticket fails fast.
 - extendedWaitUntil:
-    visible: "Who's using|Enter Centraid|${homeReadyMarker}|not a Centraid pairing|expired|Could not reach|Paste a pairing ticket first"
+    visible: "Who.?s using.*|Enter Centraid|${homeReadyMarker}|not a Centraid pairing|expired|Could not reach|Paste a pairing ticket first.?"
     timeout: 180000
 `;
 }
@@ -240,7 +252,7 @@ export function completeOnboardingCommands(homeReadyMarker) {
     .join("\n");
   return `- runFlow:
     when:
-      visible: "Who's using"
+      visible: "Who.?s using.*"
     commands:
       - tapOn: "Your name"
 # e2e-lint-allow: unasserted-input — React Native TextInput values are not
