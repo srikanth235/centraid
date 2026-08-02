@@ -259,6 +259,7 @@ bun run check:push
 - `node scripts/mutation/run.mjs --package design` — 100% mutation score (140 mutants, zero survivors)
 - `bun run coverage` — `packages/design/src/**` at 98.17% line coverage (429/437), above the 98% floor
 - `bun run check:push` — all repository push gates pass
+- SonarCloud Autoscan on PR #691 — pass; new-code reliability A with 0 bugs and 1.99% duplication (114 lines, below the 3% gate)
 
 Evidence ledger:
 
@@ -302,6 +303,7 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785678822-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 4262 | 0 | 670976 | 525 | 4787 | 0.1863 | 4219940 | 0 | 187504128 | 488428 | test(design): close mutation gaps in product grammar (#690) |
 | codex-019fc1af-c03-1785680909-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 271851 | 0 | 17108992 | 13280 | 285131 | 5.1561 | 4491791 | 0 | 204613120 | 501708 | test(design): close coverage gap in product grammar (#690) |
 | codex-019fc1af-c03-1785683193-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 307220 | 0 | 19199488 | 24349 | 331569 | 5.9332 | 4799011 | 0 | 223812608 | 526057 | fix(quality): clear Sonar findings in product grammar (#690) -m Remove reliabili |
+| codex-019fc1af-c03-1785684434-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 59434 | 0 | 14515456 | 6965 | 66399 | 3.8819 | 4858445 | 0 | 238328064 | 533022 | docs(receipt): record Sonar verification (#690) -m Capture the final SonarCloud  |
 
 ## File map
 
