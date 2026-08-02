@@ -34,6 +34,8 @@
 
 - [x] F9 codify the role-parity law as a test, and waive `--t-tiny` under it (lane 3)
 
+- [x] F10 kit.css binds 16 of its 20 exact matches (lane 2)
+
 **Crosswalk to the issue checklist (#686).** The issue carries A1–A5, B1–B4, C1–C4, D1–D3, E1–E5, F1–F3 (24 items); all 24 are represented above. `A2` is split into two rows here (the test and the governance directive) because they landed separately. **F4, F5, F6, F7 and F9 exist only in this receipt** — they are follow-on work this PR took on after F1–F3 exposed it, and were never added to the issue body. (F8, lane (1) of the accepted sequence, is recorded in Decisions / What changed / Verification but has no checklist row; not corrected here, to leave another lane's rows alone.) The issue's Status line also still says "15 commits"; the branch is 26.
 
 ## Decisions (orchestrator recommendations, per user directive)
@@ -59,6 +61,8 @@
 - **Chips, badges, pills, controls and chart ticks are a third idiom, not eyebrows.** 37 of the 94 are boxed or self-contained (`.kindBadge`, `.tlStatus`, `.machineryTag`, `.connBadge`, the two `.tab` controls, the SVG `.ringTick`/`.sectorName`, the `.caption` measured-fact strip, the `.stripAxis` chart axis, `.heroDate`'s sibling readouts). Converging a 8.5px pill to 9.5px changes chip geometry, not label rhythm, so they were left alone. They carry their own ~21 shapes and are the obvious next convergence target — but they are not the two rungs this lane agreed to converge.
 - **F9 — the role-parity law is a test, and `--t-tiny` is waived under it rather than fixed (lane 3 of the agreed (1) → (3) → (2) sequence).** The premise was re-derived from `packages/design/src` rather than taken from this receipt or from `docs/decisions.md`, because several earlier figures here had to be corrected. **The premise holds and is narrower than it looked**: of the ten `--t-*` shorthands the two emitters publish between them, **six are shared** (`--t-body`, `--t-body-strong`, `--t-mono`, `--t-small`, `--t-tiny`, `--t-title`) and **exactly one — `--t-tiny` — diverges**, in both family and weight (shell sans-serif/500, blueprint monospace/600). The other five agree on both facets while differing on size and line-height, which is the intended design. `--t-display`, `--t-display-1`, `--t-h2` and `--t-h3` are shell-only and outside the law. **Family is compared by genus, not by property name or stack string** — the emitters legitimately spell one role with different properties (`--font-display` vs `--font-title`, both aliasing sans) and ship different concrete stacks for the same genus (the blueprint layer is sandboxed and loads no fonts), so the test resolves `var()` aliases and compares the generic family the stack ends in. Comparing names or strings would have produced three false positives (`--t-title`, and both sans roles).
 - **F9 — `--t-tiny` was fixed in NEITHER direction, on the consumers, and that is the honest answer.** Both consumer lists were re-derived after lane (1) landed. **The shell list is unchanged by lane (1)**: still **5 sites in 4 files**, still zero eyebrows — `AssistantScreen` `.effortPicker select` and `SettingsProvidersScreen` `.ladderAdd` (native `<select>`s), `DevicesCard` `.renameAction`/`.renameIcon` ("Save"/"Cancel" plus a pencil glyph), `SettingsProvidersScreen` `.ladderMember` (a pill holding an agent title), `SessionStatusStrip` `.telemetry` (whose own text is "Working"/"Ready"; its numeric child `.context` sets `font-family: var(--font-mono)` itself). Mobile still has 7 `t("tiny")` consumers, 5 prose (including `Assistant.selectionError`, an error message) and 2 eyebrows that already hand-patch the family. So the prior F7 conclusion survives lane (1) intact. **What F7 never measured is the other side**: the blueprint's `--t-tiny` has **12 consumers, and 10 are unambiguous eyebrows** — `uppercase` + `letter-spacing: var(--tracking-eyebrow)` — across `photos` (4), `docs` (4), `agenda` (2); the two that are not are a 28px badge glyph and a receipt chip. That makes this a genuine two-sided conflict, not a case of one side being wrong: forcing mono monospaces `<select>` chrome and prose, forcing sans de-monospaces an entire surface's eyebrow idiom. **Picking a winner would have been the wrong move in either direction**, so the divergence sits in `ROLE_PARITY_ALLOWLIST` with the measurement attached, and the test asserts the waiver is still *needed* — the moment the two sides agree, the stale entry fails the suite. The resolution is open decision (b) (name the eyebrow role); lane (1) converged the 94 shell eyebrows but deliberately named nothing, so that vocabulary does not exist yet and `--t-tiny` still cannot align without collateral.
+- **F10 — lane (2) binds by role, not by number, and the four refusals are the point.** The accepted decision (2) says bind `kit.css`'s exact matches to `--t-<key>-size`. Taken as a sweep it is 20 substitutions; taken as 20 decisions it is 16. The rule applied at each site was **"should this rule resize with the surface it renders on?"**, not "does this literal equal a rung?" — because size and line-height are permitted to diverge between the two emitters (the F9 law), a binding is a *decision that the rule should track the surface*, and a literal that was deliberately holding one size across both surfaces is information a substitution would delete. That is the same hazard that twice in this PR deleted a solved contrast decision, in its typographic form. Four sites failed the test: one sans control that matched the **mono** rung by coincidence, one icon glyph inside a fixed circle, one pill whose `svg` is sized in `em` off the very number being replaced, and one hairline badge whose height *is* its line box. Binding those would have manufactured the chip-geometry problem lane (1) explicitly declined.
+- **F10 — "0 shell matches" is a same-unit claim, and it survives with one honest footnote.** Numerically at a 16px root three sites *do* land on a shell rung — `.kit-btn`'s `0.8125rem` is 13px and `.asstStatLabel` / `.kit-ask-chip`'s `0.75rem` is 12px. They were still not converted: #686's own bar is **same unit, not same computed px**, because a `rem`→`px` swap stops tracking a reader who has raised their browser default. Recorded so the next measurement does not "discover" them as a missed opportunity.
 - **F9 — the gate was sabotage-tested in four directions before being trusted.** A gate never seen to fail is not known to work. Each sabotage was applied to `packages/design/src/typography.ts`, run, and reverted by `cp` from a saved copy (md5-verified, never `git checkout`, since sibling agents share this tree). (1) **Weight-only** — `blueprintType.small` 400→600: red on `--t-small`, "the shell emits sans-serif/400, the blueprint layer emits sans-serif/600". (2) **Family-only** — `blueprintType.mono` `mono`→`font-sans`: red on `--t-mono`, "the shell emits monospace/500, the blueprint layer emits sans-serif/500" — this is the one that proves genus resolution actually resolves, since both sides still name a `--font-*`/`--mono` property. (3) **Stale waiver** — `blueprintType.tiny`→`font-sans`/500, i.e. making the waived role *agree*: red on "every waiver is still needed", so the allowlist cannot outlive its justification. (4) **Law widened past what was agreed** — `blueprintType.body.size`→`15px`: red on "size and line-height are explicitly allowed to diverge", which is the test that stops a future edit from quietly promoting size into the law. All four reverted clean; `git status` shows no residue.
 
 ## What changed
@@ -471,6 +475,16 @@
 - **F8 movement cap — 9 sites move more than 0.04em of tracking, 0 move more than 1.5px of size, and none were exempted.** The cap flagged nine tracking reductions, all in the same direction (over-tracked toward the mode) and all taken deliberately: `OnboardingScreen.module.css` `.fieldLabel` and `RecoverScreen.module.css` `.fieldLabel` **0.22em → 0.06em** (the two extreme outliers in the corpus — at 9.5px, 0.22em is nearly a full character of space between letters, and these are form labels sitting directly above inputs); `StartupErrorScreen.module.css` `.detailLabel` **0.16em → 0.06em**; `AutomationTemplatesScreen.module.css` `.catLabel`, `AutomationThreadScreen.module.css` `.dateSep` and `BuilderChatPane.module.css` `.promptStartersLabel` **0.14em → 0.06em**; `AtlasRelationsTab.module.css` `.roLabel` **0.13em → 0.06em**; `RunViewScreen.module.css` `.rsideH` **0.12em → 0.06em**; `AtlasBrowseTab.module.css` `.pickDivider` **0.11em → 0.06em**. Every one is a label whose *only* distinguishing property was tracking chosen by eye; leaving them exempt would preserve exactly the 51-shapes-by-hand condition the lane exists to end. The largest **size** move in the set is **1.5px** (`.detailLabel`, 12px → 10.5px), which is at the cap and not over it; every other move is 0.5px or 1px.
 
 - **F8 — two sites had to trade a token reference for a literal, and that is the +2 in the ratchet.** `SettingsConnectionsScreen.module.css` `.sectionLabel` was `font-size: var(--t-tiny-size)` (11px) and is now `10.5px`: it is a section header and shares its name with `AutomationsOverviewScreen.module.css` `.sectionLabel`, which was already 10.5px — two rules called `.sectionLabel` rendering at two sizes is precisely the drift being removed. `StartupErrorScreen.module.css` `.detailLabel` kept its `font: var(--t-mono)` shorthand (so family, weight and line-height stay tokenised) and gained a `font-size: 10.5px` override — the same pattern `gatewaySwitcher.module.css` and `IdentityHead.module.css` already use for their eyebrows. Both are re-tokenised for free by the follow-up naming PR, which is the argument for doing that PR next rather than widening this one.
+
+- **F10 kit.css binds 16 of its 20 exact matches (lane 2)** — implements the accepted decision (2). `packages/design/kit/kit.css` carried **80** raw `font-size` declarations across 29 distinct values; re-derived, **20 exactly match a blueprint rung on the same unit and 0 match a shell rung on the same unit** (`0.8rem ×9` → `--t-small-size`, `0.72rem ×6` → `--t-mono-size`, `0.6rem ×5` → `--t-tiny-size`; `0.855rem` and `1.15rem` never appear). 16 are now bound; 4 keep their literal. The ratchet falls **80 → 64** in `tests/design-token-css-budget.json`, the only line in that file that moves.
+
+- **F10 — every bound rule is a zero-pixel change in an app pane; all movement is on the shell, and nothing moves more than 1.5px.** `--t-small-size` 12.8px → **13px (+0.2px)** at 9 sites (`.kit-toast-action`, `.kit-chip`, `.kit-seg > button`, `.kit-msg.ai .asstTable`, `.kit-aa-approve`, `.kit-aa-ghost`, `.kit-ask-model-item`, `.kit-ref-tile`, `.kit-small`). `--t-mono-size` 11.52px → **12px (+0.48px)** at 3 sites (`.kit-foot`, `.kit-msg.ai .asstPre`, `.kit-ask-action .aa-note` — all three already set `font-family: var(--mono)` themselves, which is the exact case the size rung was added for). `--t-tiny-size` 9.6px → **11px (+1.4px)** at 4 sites (`.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope`) — the only visible group, listed individually because +14.6% on the chrome's smallest type is a real change to shipped component chrome. It moves the way legibility wants: 9.6px is *below* the smallest size the shell scale names, so those four were rendering off-scale.
+
+- **F10 — the 4 that stay literal, because the literal carried information.** `.kit-ask-model-btn` (`0.72rem`) is `font: inherit`, i.e. a **sans** control — `--t-mono-size` matches its number, not its role, and binding would be naming-by-coincidence. `.kit-ask-applied .ck` (`0.72rem`) is a check **glyph** optically centred in a `1.3rem × 1.3rem` circle. `.kit-ask-msg-att` (`0.72rem`) sizes its `svg` child at `0.85em`, so the **icon geometry derives from this number**. `.kit-ref-flag` (`0.6rem`) is a badge with `0.05rem` (0.8px) vertical padding — its height *is* the line box, so +1.4px is +14% on the box, and it nests inside `.kit-ref-tile`, which this change already resizes. That is the chip/badge geometry class lane (1) declined, applied consistently.
+
+- **F10 — the accessibility cost, and the rung that does not exist.** On the shell a bound rule swaps `rem` for absolute `px`, so it stops scaling with a raised browser root size; accepted because the shell chrome around these components is already absolute px throughout (`font: var(--t-body)` and friends), making kit.css's `rem` the outlier inside it. **No rung was invented.** `--t-display-size` / `--t-display-1-size` / `--t-h2-size` / `--t-h3-size` are **shell-only** (`blueprintType` has no `display` key), so naming one here yields an invalid declaration inside an app pane, dropped whole and silently leaving the inherited size — `.kit-msg.ai .asstStatValue` (`1.5rem`) and `.kit-viewer-nav` (`1.4rem`) therefore have nothing to bind to and stay literal. The kit's real eyebrow band (17 declarations at `0.66 / 0.68 / 0.7 / 0.62 / 0.625rem`) has no rung either; it is the same gap open decision (b) covers, and inventing one now would be a third `--r-lg`. Both are recorded as debt in `docs/decisions.md`, along with the largest near-miss cluster (`0.85rem ×7`: +0.08px on blueprint but +1.4px on the shell). A header comment in `kit.css` warns future authors off the shell-only rungs, since the ratchet's `SHORTHAND_AS_SIZE` check catches `var(--t-body)` but **not** a well-formed shell-only `-size` rung.
+
+- **F10 — two stale counts in `docs/decisions.md` corrected in passing.** The F6 entry said `kit.css` had "eight exact matches" while the entry two sections below said "20"; re-derived, the count is **20**. Both occurrences of "eight" are fixed; no other measurement in those entries was touched.
 
 ### Checklist annotations (moved out of the checklist so the crosswalk matches verbatim)
 
@@ -1463,6 +1477,111 @@ $ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .
 $ bun run format
 Finished in 2851ms on 3402 files using 8 threads.
                                # no rewrites outside this lane's files
+```
+
+### F10 — kit.css size-rung binding (lane 2)
+
+**F10 kit.css binds 16 of its 20 exact matches (lane 2).** The distribution below was re-derived from the file, not quoted. Rungs come from running both emitters, so the shared set is measured rather than assumed.
+
+| value | occurrences | blueprint rung | shell rung | verdict |
+| --- | --- | --- | --- | --- |
+| `0.8rem` | 9 | `--t-small-size` (`0.8rem`) | — (`13px`, different unit) | **all 9 bound** |
+| `0.72rem` | 6 | `--t-mono-size` (`0.72rem`) | — (`12px`) | **3 bound, 3 held** |
+| `0.6rem` | 5 | `--t-tiny-size` (`0.6rem`) | — (`11px`) | **4 bound, 1 held** |
+| `0.855rem` | 0 | `--t-body-size` | — | never used |
+| `1.15rem` | 0 | `--t-title-size` | — | never used |
+| 24 other values | 60 | none | none | left literal |
+
+Rendered delta per bound rule — shell moves, app pane does not:
+
+| rung | shell before (16px root) | shell after | shell delta | blueprint before | blueprint after | blueprint delta |
+| --- | --- | --- | --- | --- | --- | --- |
+| `--t-small-size` | 12.8px | 13px | **+0.2px** | 0.8rem | 0.8rem | **0** |
+| `--t-mono-size` | 11.52px | 12px | **+0.48px** | 0.72rem | 0.72rem | **0** |
+| `--t-tiny-size` | 9.6px | 11px | **+1.4px** | 0.6rem | 0.6rem | **0** |
+
+**No rule moves more than 1.5px on either surface.** The four `--t-tiny-size` sites are the only visible group and are named individually in What changed: `.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope`.
+
+```
+$ bun -e 'import{toCss}from"./src/css.ts";import{toBlueprintCss}from"./src/blueprint.ts";
+  const g=c=>[...c.matchAll(/(--t-[\w-]*-size)\s*:\s*([^;]+);/g)].map(m=>m[1]+" = "+m[2].trim());
+  console.log("SHELL:\n"+g(toCss()).join("\n")+"\n\nBLUEPRINT:\n"+g(toBlueprintCss()).join("\n"))'
+SHELL:                          BLUEPRINT:
+--t-body-size = 15px            --t-body-size = 0.855rem
+--t-display-size = 28px         --t-mono-size = 0.72rem
+--t-mono-size = 12px            --t-small-size = 0.8rem
+--t-small-size = 13px           --t-tiny-size = 0.6rem
+--t-tiny-size = 11px            --t-title-size = 1.15rem
+--t-title-size = 20px
+--t-display-1-size = 40px       # shell-only: naming any of these four in
+--t-h2-size = 22px              # kit.css yields an invalid declaration
+--t-h3-size = 16px              # inside an app pane, dropped silently
+
+$ grep -c "font-size" packages/design/kit/kit.css
+80
+
+$ grep -o "font-size: var(--t-[a-z-]*)" packages/design/kit/kit.css | sort | uniq -c
+   3 font-size: var(--t-mono-size)
+   9 font-size: var(--t-small-size)
+   4 font-size: var(--t-tiny-size)
+
+$ grep -c "font-size: 0.8rem\|font-size: 0.72rem\|font-size: 0.6rem" packages/design/kit/kit.css
+4                              # the 4 exact matches deliberately held as literals
+
+$ bun run lint:design-tokens   # before regenerating the budget
+FAIL — design-token CSS ratchet found 1 mismatch(es):
+  packages/design/kit/kit.css: rawFontSize fell 80 → 64; tighten tests/design-token-css-budget.json
+
+$ node scripts/lint-design-tokens.mjs --write
+ok   design-token-css — budget rewritten: 0 grandfathered hex value(s), 4 literal font stack(s), 866 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text
+
+$ git diff tests/design-token-css-budget.json
+   "packages/design/kit/kit.css": {
+-    "rawFontSize": 80,
++    "rawFontSize": 64,
+     "rawFontWeight": 2,
+     "rawRadius": 12
+   }
+                               # exactly one line; no other file or metric moved
+
+$ bun run lint:design-tokens
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 866 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text, zero regressions
+
+$ bun run --cwd packages/design test
+ Test Files  20 passed (20)
+      Tests  285 passed (285)
+
+$ bun run --cwd packages/client test
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .
+                               # clean, no output, exit 0
+
+$ bun run format
+Finished in 1792ms on 3402 files using 8 threads.
+
+$ bun run format:check
+All matched files use the correct format.
+Finished in 1835ms on 3402 files using 8 threads.
+
+$ git status --short
+ M docs/decisions.md
+ M packages/design/kit/kit.css
+ M receipts/issue-686-design-consistency.md
+ M tests/design-token-css-budget.json
 
 $ git status --porcelain
  M DESIGN.md
@@ -1570,6 +1689,7 @@ exit 0
 | claude-code-ab8b1729-92f-1785647977-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 910 | 2127288 | 211517607 | 367767 | 2495965 | 128.2531 | 2747 | 4069564 | 530857905 | 1089204 |  |
 | claude-code-ab8b1729-92f-1785649140-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 40 | 27219 | 1740864 | 10161 | 37420 | 1.2948 | 2787 | 4096783 | 532598769 | 1099365 |  |
 | claude-code-ab8b1729-92f-1785649242-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 16 | 14180 | 791277 | 3122 | 17318 | 0.5624 | 2803 | 4110963 | 533390046 | 1102487 |  |
+| claude-code-ab8b1729-92f-1785650271-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 22 | 15978 | 1193758 | 8351 | 24351 | 0.9056 | 2825 | 4126941 | 534583804 | 1110838 |  |
 
 ### Steering
 

@@ -27,6 +27,24 @@
      --shadow-md   soft elevation             --accent-soft  ~12% accent tint
 
    Motion: --ease: cubic-bezier(.2,.7,.3,1); standard <=200ms.
+
+   ── TYPE: this sheet renders under TWO token layers (#686) ─────────────────
+   kit.css is served, not bundled, to BOTH the shell (tokens from `toCss()`)
+   and a sandboxed blueprint app pane (tokens from `toBlueprintCss()`). Size
+   and line-height are permitted to diverge between those emitters (the role
+   parity law in docs/decisions.md gates family and weight, not size), so
+   `var(--t-<key>-size)` deliberately resolves to DIFFERENT pixels on the two
+   surfaces — 13px vs 0.8rem for `--t-small-size`, and so on. Binding a rule
+   to a rung is therefore a decision that the rule SHOULD track its surface.
+   Body text, labels and control text should. Icon glyphs, badge boxes whose
+   height IS the line box, and anything paired with `em`-derived geometry
+   should not — those hold one size on purpose and stay literals.
+
+   Only the five rungs BOTH emitters publish are usable here: body, mono,
+   small, tiny, title. `--t-display-size` / `--t-display-1-size` /
+   `--t-h2-size` / `--t-h3-size` are shell-only; naming one here yields an
+   invalid declaration inside an app pane, which is dropped whole and leaves
+   the element at its inherited size, silently.
    ========================================================================== */
 
 /* ---------- App chrome ---------------------------------------------------- */
@@ -279,7 +297,7 @@ kit-reference-strip,
   background: color-mix(in oklab, var(--bg-elev) 14%, transparent);
   color: inherit;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 500;
   border-radius: 0.5rem;
   padding: 0.3rem 0.6rem;
@@ -864,7 +882,7 @@ kit-reference-strip,
   align-items: center;
   gap: 0.4rem;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   padding: 0.3rem 0.85rem;
   min-height: 2.4rem;
   border-radius: 999px;
@@ -922,7 +940,7 @@ kit-reference-strip,
 }
 .kit-seg > button {
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text-soft);
   background: transparent;
@@ -1351,7 +1369,7 @@ kit-reference-strip,
   text-align: center;
   padding: 1.25rem 0 0.5rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 
@@ -1472,7 +1490,7 @@ kit-reference-strip,
 }
 .kit-ask-head .kit-ask-note {
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -1579,7 +1597,7 @@ kit-reference-strip,
 .kit-msg.ai .asstTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 .kit-msg.ai .asstTable th {
   text-align: left;
@@ -1655,7 +1673,7 @@ kit-reference-strip,
 }
 .kit-msg.ai .asstPre {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   background: color-mix(in oklab, var(--_accent) 6%, transparent);
   border: 0.5px solid var(--line);
@@ -1679,7 +1697,7 @@ kit-reference-strip,
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   padding: 3px 7px;
   cursor: pointer;
   opacity: 0;
@@ -1763,7 +1781,7 @@ kit-reference-strip,
   align-items: center;
   gap: 0.35rem;
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--accent-text);
@@ -1808,7 +1826,7 @@ kit-reference-strip,
   background: var(--accent-deep);
   color: var(--text-inv);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1820,7 +1838,7 @@ kit-reference-strip,
   background: var(--bg-elev);
   color: var(--text-soft);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   cursor: pointer;
 }
 /* Busy = the owner's decision is in flight at the vault plane. */
@@ -1833,7 +1851,7 @@ kit-reference-strip,
 /* A refusal or failure the vault reported for this card — shown, not hidden. */
 .kit-ask-action .aa-note {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--accent-text);
   margin-top: 0.5rem;
 }
@@ -2083,7 +2101,7 @@ kit-reference-strip,
   color: var(--text);
   text-align: left;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   cursor: pointer;
   transition: background 0.1s var(--ease);
 }
@@ -2122,7 +2140,7 @@ kit-reference-strip,
 }
 .kit-ask-scope {
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -2586,7 +2604,7 @@ kit-reference-strip,
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-sunken, var(--bg-elev));
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 
 .kit-ref-kind {
@@ -2667,7 +2685,7 @@ kit-reference-strip,
   margin: 0;
 }
 .kit-small {
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 
 /* ---------- Accessibility primitives ---------------------------------------- */

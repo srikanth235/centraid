@@ -150,7 +150,7 @@ Recorded **2026-08-02**, same issue. `--t-<key>-size` now exists on both surface
 - **Per-surface scales, not one scale.** The 494/477/314 split measured every target against the _chrome_ scale. The blueprint layer has its own — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match. Against the scale that actually resolves there, the exact set is 402 + 9, not 494.
 - **Same unit, not same computed px.** `1rem` and `16px` agree only at a 16px root; a reader who has raised their browser's default font size would see the second stop tracking. Only like-for-unit conversions were made (px→px rung in the chrome, rem→rem rung in the blueprints).
 
-**`packages/design/kit` was left alone entirely.** `kit.css` renders under _both_ token layers — the shell `:root` and the rescoped `.centraid-inline-scope` block — so its eight exact matches resolve to two different values, and every one of them would move on one of the two surfaces.
+**`packages/design/kit` was left alone entirely.** `kit.css` renders under _both_ token layers — the shell `:root` and the rescoped `.centraid-inline-scope` block — so its exact matches resolve to two different values, and every one of them would move on one of the two surfaces. (This sentence first said "eight exact matches", contradicting the "20" measured two entries below. Re-derived: the count is **20**, and 16 of them were bound in the follow-up entry at the end of this file.)
 
 **Still open, as recorded debt:** the ~477 near-misses (within 0.6px) and the ~314 genuinely off-scale declarations. Both are visual changes and need per-site judgement, not a sweep. The ratchet total fell 1291 → 880 with no other metric moving, and `rawFontSize` now counts `font-size: var(--t-<key>)` — naming a shorthand where a size belongs — as debt rather than letting it hide inside the `var()` carve-out.
 
@@ -249,7 +249,7 @@ The order matters. Naming a rung against 51 shapes produces vocabulary that fits
 
 That is the right answer on the merits, not just the cheap one: an embedded app pane **should** read at app scale. A component that renders identically in both contexts is the actual bug, and it is what ships today.
 
-**Caveat, stated plainly:** this is a visible change on both surfaces, and the eight exact matches were skipped in #686 for exactly this reason. It needs its own PR.
+**Caveat, stated plainly:** this is a visible change on both surfaces, and the exact matches were skipped in #686 for exactly this reason. It needs its own PR.
 
 ### 3. Should the two emitters' scales diverge? Size yes, role no
 
@@ -283,6 +283,58 @@ Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/iss
 **So `--t-tiny` is the only violation, and it is waived, not fixed.** Both sides were re-derived after lane (1) landed and the earlier reading holds: the shell's five `font: var(--t-tiny)` sites are two native `<select>`s, a Save/Cancel pair plus a pencil glyph, a pill holding an agent title, and the "Working"/"Ready" telemetry strip — **zero** eyebrows, plus five mobile prose consumers including an error message. The blueprint's **twelve** sites are **ten** uppercase + `--tracking-eyebrow` eyebrows at 0.6rem (9.6px), with two chips. Forcing mono monospaces prose and controls; forcing sans de-monospaces an entire surface's eyebrow idiom. Neither side is wrong; the spelling is.
 
 The fix is therefore **not** to pick a winner — it is open decision (b), naming the eyebrow role separately. Lane (1) converged the 94 shell eyebrows onto two rungs but deliberately did not name them, so the vocabulary that would let `--t-tiny` align does not exist yet. Until it does, the divergence sits in `ROLE_PARITY_ALLOWLIST` with this reasoning attached, and the test asserts the entry is still _needed_ — the moment the two sides agree, the stale waiver fails the suite.
+
+## #686 — `kit.css` binds 16 of its 20 exact matches; 4 hold their size on purpose
+
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Implements decision (2) above. This is the lane that actually moves pixels, so the measurement is stated before the change.
+
+### The measured distribution, re-derived
+
+`packages/design/kit/kit.css` carries **80** raw `font-size` declarations across **29** distinct values. Three of the declarations use two `em` values (`0.82em ×2`, `0.95em ×1`), which are relative to the parent and have no absolute size to match against at all.
+
+| relation to a rung                       | declarations |
+| ---------------------------------------- | ------------ |
+| exactly a **blueprint** rung, same unit  | **20**       |
+| exactly a **shell** rung, same unit (px) | **0**        |
+| both                                     | **0**        |
+| neither                                  | 60           |
+
+The 20 are `0.8rem ×9` (`--t-small-size`), `0.72rem ×6` (`--t-mono-size`), `0.6rem ×5` (`--t-tiny-size`). Neither of the two remaining shared rungs is ever hit: `0.855rem` (`--t-body-size`) and `1.15rem` (`--t-title-size`) appear **zero** times. So the sheet was authored against the low half of the app scale.
+
+**"0 shell matches" is a same-unit statement, and stays true on the merits.** Numerically, at a 16px root, three sites do land on a shell rung — `.kit-btn`'s `0.8125rem` is 13px (`--t-small-size`) and `.asstStatLabel` / `.kit-ask-chip`'s `0.75rem` is 12px (`--t-mono-size`). They are still not conversions: #686's own bar is _same unit, not same computed px_, because a `rem`→`px` swap stops tracking a reader who has raised their browser default. Recorded here so the next measurement does not "discover" them.
+
+### What was bound — 16 sites, and what it costs
+
+`--t-<key>-size` resolves to the **blueprint** value the literal already carried, so **every one of the 16 is a zero-pixel change inside an app pane**. All the movement is on the shell:
+
+| rung | was (shell, 16px root) | becomes (shell) | delta | sites |
+| --- | --- | --- | --- | --- |
+| `--t-small-size` | 12.8px | 13px | **+0.2px** | 9 |
+| `--t-mono-size` | 11.52px | 12px | **+0.48px** | 3 of 6 |
+| `--t-tiny-size` | 9.6px | 11px | **+1.4px** | 4 of 5 |
+
+**No rule moves by more than 1.5px on either surface.** The `--t-tiny-size` group is the only visible one, and it moves in the direction legibility wants: 9.6px is _below_ the smallest size the shell scale names, so those four rules were rendering the chrome's smallest type off-scale and under the floor. The four are `.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope` — three mono uppercase eyebrows and one mono overlay button, all auto-sized by padding rather than by a fixed box.
+
+**The honest cost, stated once.** On the shell a bound rule swaps a `rem` for an absolute `px`, so it stops scaling with a raised browser root size. That is a real accessibility trade. It is accepted because the shell chrome around these components is already absolute px throughout (`font: var(--t-body)` and friends) — kit.css rendering in `rem` inside it was the outlier, and a reader who raises their root today gets kit components that grow while their container does not.
+
+### What was deliberately left literal — 4 of the 20
+
+A literal→token substitution is only safe if the literal carried no information. These four carry some:
+
+| site | value | why it stays |
+| --- | --- | --- |
+| `.kit-ask-model-btn` | `0.72rem` | `font: inherit` — a **sans** control. `--t-mono-size` matches its number, not its role. Binding would be naming-by-coincidence: the two agree on the blueprint surface today and would silently drift apart the moment the mono rung is retuned. |
+| `.kit-ask-applied .ck` | `0.72rem` | A check **glyph** centred in a `1.3rem × 1.3rem` circle. Fixed geometry; the size is optical centring, not type. |
+| `.kit-ask-msg-att` | `0.72rem` | Its `svg` child is `width/height: 0.85em` — the **icon geometry is derived from this number**. Binding resizes the icon too. Also sans, so it fails the role test as well. |
+| `.kit-ref-flag` | `0.6rem` | A badge with `0.05rem` (0.8px) vertical padding: the badge height **is** the line box, so +1.4px is +14% on the box, not on a label. It also sits inside `.kit-ref-tile`, which this same change resizes — two stacked changes on one composite. |
+
+That is the chip/badge geometry class lane (1) declined for the same reason, applied consistently here.
+
+### Rungs that do not exist — recorded as debt, not invented
+
+- **No shared rung above `title`.** `--t-display-size`, `--t-display-1-size`, `--t-h2-size` and `--t-h3-size` are **shell-only** — `blueprintType` has no `display` key. Naming one in `kit.css` produces an invalid declaration inside an app pane, dropped whole, leaving the element at its inherited size with nothing thrown and nothing logged. `.kit-msg.ai .asstStatValue` (`1.5rem`) and `.kit-viewer-nav` (`1.4rem`) therefore have no rung to reach for. Warned about in the `kit.css` header; **not** gated by the ratchet, whose `SHORTHAND_AS_SIZE` check catches `var(--t-body)` but not a well-formed shell-only `-size` rung.
+- **Nothing between `tiny` (0.6rem) and `mono` (0.72rem).** 17 declarations cluster at `0.66rem ×6`, `0.68rem ×4`, `0.7rem ×4`, `0.62rem ×2`, `0.625rem ×1` — the kit's real eyebrow band. This is the same gap the 94 shell eyebrows describe from the other side, and the same reason open decision (b) exists. Adding a rung to absorb them before that convergence lands would be a third `--r-lg`.
+- **The largest near-miss cluster is `0.85rem ×7`** (13.6px), 0.08px off `--t-body-size` on the blueprint but **+1.4px** on the shell. It is a near-miss, not an exact match, and #686 deferred the near-miss band as a whole. Quantified here so the next lane does not have to re-derive it.
 
 ## Related docs
 
