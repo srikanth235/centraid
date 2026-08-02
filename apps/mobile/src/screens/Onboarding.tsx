@@ -360,12 +360,10 @@ function ConnectionStep({
             onChange={(event) => {
               rememberCode(event.nativeEvent.text);
             }}
-            // Maestro often commits the full ticket via SET_TEXT; blur after
-            // hideKeyboard is when the native value is reliable in JS.
+            // Maestro often commits the full ticket via SET_TEXT; hideKeyboard
+            // / submitPaste.blur() end editing so nativeEvent.text is reliable
+            // in JS before Connect (onBlur's TargetedEvent has no text field).
             onEndEditing={(event) => {
-              rememberCode(event.nativeEvent.text);
-            }}
-            onBlur={(event) => {
               rememberCode(event.nativeEvent.text);
             }}
             placeholder="Paste the one-line ticket"
