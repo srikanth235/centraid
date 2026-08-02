@@ -97,14 +97,12 @@ function flingYaml(appId, marker, markerKind, surface) {
 ${settle}
 # Arm one sample window. Nothing is drawn while it runs, so the readout can
 # never become part of what it measures.
-- openLink: "centraid://perf-frames?ms=${SAMPLE_WINDOW_MS}"
-# iOS confirms custom-scheme opens with "Open in 'Centraid'?" (30748673657);
-# without dismissing it the FrameProbe listener never arms.
-- runFlow:
-    when:
-      visible: "Open in.*"
-    commands:
-      - tapOn: "Open"
+# Arm one sample window via the DEV testID — openLink triggers an iOS
+# "Open in Centraid?" alert and often never delivers the URL to Linking
+# (30752843689). The arm control lives in FrameProbe (__DEV__ only).
+- tapOn:
+    id: "perf-frame-arm"
+    retryTapIfNoChange: true
 # Prove the arm took BEFORE flinging — a fling against an unarmed sampler
 # produces no report at all, and that failure would surface later and elsewhere.
 - extendedWaitUntil:

@@ -79,6 +79,8 @@ accessibility zero-grey (15 cells).
 
 - **iOS Tally re-tap + perf deep-link alert (30748673657).** native-v0 opened Tally then `retryableTapCommands` re-tapped `Open Tally` under the cover and failed; launcher opens are a single tap. scroll-frames hit iOS "Open in 'Centraid'?" on `centraid://perf-frames` — dismiss Open before asserting `perf-frame-sampling`; `apps/mobile/src/kit/perf/FrameProbe.tsx` also accepts hostname-form deep links.
 
+- **iOS perf arm never reached Linking (30752843689).** native-v0/cold-start green; scroll-frames dismissed the Open-in alert but `perf-frame-sampling` never appeared. FrameProbe now exposes DEV `testID="perf-frame-arm"`; scroll-frames taps that instead of `openLink`.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
