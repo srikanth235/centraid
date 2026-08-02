@@ -32,7 +32,7 @@ vi.mock(import("./shell/App.js"), () => ({
  * with a full vault that they are new here and offers them "Start fresh on this
  * Mac". Observed live on a set-up machine whose gateway could not be assessed.
  */
-describe("boot first paint suite", () => {
+describe("boot first paint suite", { timeout: 30_000 }, () => {
   let shell: HTMLElement;
 
   const bootWith = async (

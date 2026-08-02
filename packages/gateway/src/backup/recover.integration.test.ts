@@ -1,5 +1,8 @@
+// governance: allow-repo-hygiene file-size-limit (#679) one end-to-end recovery suite shares the same encrypted-kit, provider, vault-plane, and residue-cleanup harness; splitting the HTTP erase/recover proof would duplicate its security-critical fixture
 import crypto, { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -17,15 +20,24 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { FsBlobStore, KeyStore, ReplicaIndex } from "@centraid/vault";
 
+import { daemonKeyStore } from "../cli/key-store.js";
 import { daemonLayoutFor } from "../cli/paths.js";
+import { commandRecover } from "../cli/recover-admin.js";
+import { makeVaultRouteHandler } from "../routes/vault-routes.js";
+import { EnrollmentStore } from "../serve/enrollment-store.js";
+import { GatewayDatabase } from "../serve/gateway-db.js";
 import { HealthRegistry } from "../serve/health-registry.js";
+import { runWithVaultContext } from "../serve/vault-context.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import { run } from "../worktree-store/git.js";
 import { WorktreeStore } from "../worktree-store/worktree-store.js";
 import { BackupService } from "./backup-service.js";
 import { recover } from "./recover.js";
+import type { RecoverReport } from "./recover.js";
 import { expectRefusalLeavesNoResidue } from "./recover.test-fixtures.js";
+import { RecoveryKitStateStore } from "./recovery-kit-state.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -270,9 +282,52 @@ describe("backup/recover", () => {
       await service.recoveryKitDocument(),
       KIT_PASSWORD
     );
-    const sourceSealKeyDestroyed = new KeyStore(
-      path.join(vaultRoot, "keys")
-    ).destroy(`${vaultId}.sealkey`);
+    // T1: erase through the product HTTP route before recovering on machine B.
+    // This chains the two formerly separate tests and proves route auth,
+    // recovery-kit confirmation, state cascade, and key destruction together.
+    const gatewayDataDir = await tempDir("recover-a-gateway");
+    const gatewayDatabase = GatewayDatabase.open(gatewayDataDir);
+    cleanups.push(() => gatewayDatabase.close());
+    const enrollments = EnrollmentStore.open(gatewayDatabase);
+    enrollments.enroll({
+      endpointId: "owner-device",
+      vaultId,
+      label: "Owner laptop",
+      role: "admin",
+    });
+    const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
+    await recoveryKit.begin("recover-integration-kit");
+    await recoveryKit.verify("recover-integration-kit");
+    const route = makeVaultRouteHandler(registry, {
+      enrollments,
+      gatewayDatabase,
+      keys: new KeyStore(path.join(vaultRoot, "keys")),
+      recoveryKit,
+    });
+    const routeServer = http.createServer((req, res) => {
+      void runWithVaultContext({ vaultId, deviceKey: "owner-device" }, () =>
+        route(req, res)
+      );
+    });
+    await new Promise<void>((resolve) => {
+      routeServer.listen(0, "127.0.0.1", resolve);
+    });
+    const eraseResponse = await fetch(
+      `http://127.0.0.1:${(routeServer.address() as AddressInfo).port}/centraid/_vault/vaults:erase`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Mara's vault" }),
+      }
+    );
+    expect(eraseResponse.status).toBe(200);
+    await new Promise<void>((resolve) => {
+      routeServer.close(() => resolve());
+    });
+    const sourceSealKeyDestroyed =
+      new KeyStore(path.join(vaultRoot, "keys")).export(
+        `${vaultId}.sealkey`
+      ) === null;
 
     const casProvider = openRemoteBackupProvider({
       baseUrl: server.url,
@@ -312,7 +367,7 @@ describe("backup/recover", () => {
     };
   }
 
-  test("a blank machine recovers a whole vault from nothing but the kit and the api-key", async () => {
+  test("HTTP erase → blank-machine product recovery restores the whole vault from the kit and api-key", async () => {
     const server = await startFakeProviderServer();
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
@@ -321,14 +376,38 @@ describe("backup/recover", () => {
 
     const dataDir = await tempDir("recover-blank");
     const layout = daemonLayoutFor(dataDir);
-    const report = await recover({
-      kitDocument: a.kitDocument,
-      password: KIT_PASSWORD,
-      apiKey: a.apiKey,
-      vaultRoot: layout.vaultDir,
-      dataDir: layout.dataDir,
-      log: silentLogger,
-    });
+    const kitFile = path.join(dataDir, "recovery-kit.json");
+    const passwordFile = path.join(dataDir, "recovery-password.txt");
+    await fs.writeFile(kitFile, JSON.stringify(a.kitDocument));
+    await fs.writeFile(passwordFile, `${KIT_PASSWORD}\n`);
+    const output: string[] = [];
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        output.push(String(chunk));
+        return true;
+      });
+    try {
+      await commandRecover(
+        [
+          "--kit",
+          kitFile,
+          "--password-file",
+          passwordFile,
+          "--api-key",
+          a.apiKey,
+          "--data-dir",
+          dataDir,
+          "--yes",
+        ],
+        (message, code = 1): never => {
+          throw new Error(`recover-admin ${code}: ${message}`);
+        }
+      );
+    } finally {
+      stdout.mockRestore();
+    }
+    const report = JSON.parse(output.at(-1) ?? "{}") as RecoverReport;
 
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
     expect(report.vaultDir).toBe(vaultDir);
@@ -438,13 +517,14 @@ describe("backup/recover", () => {
       true
     );
     expect(report.quarantine).toContain("outbox");
-    const mounted = openVaultRegistry({
-      rootDir: layout.vaultDir,
+    const mountedPlane = openVaultPlane({
+      bootstrap: false,
+      dir: vaultDir,
+      keyStore: daemonKeyStore(layout.keysDir),
       logger: silentLogger,
       enableWalShipper: false,
     });
-    cleanups.push(() => mounted.stop());
-    const mountedPlane = mounted.get(a.vaultId)!;
+    cleanups.push(() => mountedPlane.stop());
     expect(mountedPlane.quarantine).not.toBeNull();
     expect(mountedPlane.quarantine!.outboxParked).toBeGreaterThanOrEqual(1);
     expect(mountedPlane.quarantine!.outboxGrantsRevoked).toBeGreaterThanOrEqual(
@@ -473,7 +553,7 @@ describe("backup/recover", () => {
     expect(recoveredTarget.generation).toBe(a.oldGeneration + 1);
     expect(recoveredTarget.lastSeq).toBe(report.seq);
     expect(report.generation).toBe(a.oldGeneration + 1);
-    expect(new KeyStore(layout.keysDir).export("keyring.key")).not.toBeNull();
+    expect(daemonKeyStore(layout.keysDir).export("keyring.key")).not.toBeNull();
 
     const providerClient = openRemoteBackupProvider({
       baseUrl: a.serverUrl,

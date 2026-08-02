@@ -1,8 +1,22 @@
-import { describe, expect, test } from "vitest";
+import { cp } from "node:fs/promises";
+
+import { describe, expect, onTestFinished, test } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
+  seedYear3Vault,
+  materializeYear3Fixture,
+  year3VaultProfile,
+} from "@centraid/test-kit/year3-vault";
+import {
+  bootstrapVault,
+  openVaultDb,
+  sealAad,
+  sealValue,
+} from "@centraid/vault";
 
-import { createTestVault } from "../helpers/factories.js";
+import { ensureConversationLedger } from "../../packages/app-engine/src/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";
@@ -13,6 +27,8 @@ const NOTE_COUNT = 1_000;
 const EVENT_DAYS = 365 + 366 + 365;
 const SEED_BUDGET_MS = 30_000;
 const READ_BUDGET_MS = 2_000;
+const YEAR3 = year3VaultProfile();
+const YEAR3_SEAL_KEY = Buffer.alloc(32, 0x67);
 
 function id(prefix: string, index: number): string {
   return `${prefix}-${String(index).padStart(5, "0")}`;
@@ -24,26 +40,55 @@ function sha(index: number): string {
 
 describe("large-vault.scale", () => {
   test("10k photos, 5k contacts, three years of events, and 1k notes stay bounded", async () => {
-    const db = await createTestVault();
+    const started = performance.now();
+    const profile = {
+      ...YEAR3,
+      parties: CONTACT_COUNT,
+      photos: PHOTO_COUNT,
+      conversations: 10,
+      turnsPerConversation: 5,
+    };
+    const cacheRoot =
+      process.env.CENTRAID_YEAR3_CACHE_DIR ??
+      (await tempDir("large-vault-year3-cache-"));
+    const materialized = await materializeYear3Fixture(
+      cacheRoot,
+      async (target) => {
+        const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
+        try {
+          bootstrapVault(seeded, { ownerName: "Scale owner" });
+          ensureConversationLedger(seeded.journal);
+          seedYear3Vault(
+            {
+              vault: seeded.vault,
+              journal: seeded.journal,
+              sealCell: (entity, column, rowId, plaintext) =>
+                sealValue(
+                  seeded.sealKey,
+                  sealAad(entity.replace(".", "_"), column, rowId),
+                  plaintext
+                ),
+            },
+            profile
+          );
+        } finally {
+          seeded.close();
+        }
+      },
+      profile
+    );
+    const workingDir = await tempDir("large-vault-year3-working-");
+    await cp(materialized.dir, workingDir, { recursive: true });
+    const db = openVaultDb({ dir: workingDir, sealKey: YEAR3_SEAL_KEY });
+    onTestFinished(() => db.close());
     const owner = db.vault
       .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
       .get() as { owner_party_id: string };
-    const insertParty = db.vault.prepare(
-      `INSERT INTO core_party
-         (party_id, kind, display_name, created_at, updated_at,
-          ontology_version)
-       VALUES (?, 'person', ?, ?, ?, 'v0')`
-    );
     const insertContent = db.vault.prepare(
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, title,
           created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-    const insertAsset = db.vault.prepare(
-      `INSERT INTO media_media_asset
-         (asset_id, content_id, kind, captured_at, favorite)
-       VALUES (?, ?, 'photo', ?, ?)`
     );
     const insertEvent = db.vault.prepare(
       `INSERT INTO core_event
@@ -57,36 +102,13 @@ describe("large-vault.scale", () => {
           created_at, updated_at)
        VALUES (?, ?, ?, ?, 'markdown', ?, ?, ?)`
     );
-    const started = performance.now();
     const now = "2026-07-29T00:00:00.000Z";
+    db.vault
+      .prepare(
+        "UPDATE core_party SET display_name = 'NeedleContact' WHERE party_id = 'year3-party-004321'"
+      )
+      .run();
     db.vault.exec("BEGIN IMMEDIATE");
-    for (let index = 0; index < CONTACT_COUNT; index += 1) {
-      insertParty.run(
-        id("scale-party", index),
-        index === 4_321 ? "NeedleContact" : `Scale person ${index}`,
-        now,
-        now
-      );
-    }
-    for (let index = 0; index < PHOTO_COUNT; index += 1) {
-      const contentId = id("scale-photo-content", index);
-      const at = new Date(Date.UTC(2026, 6, 29) - index * 60_000).toISOString();
-      insertContent.run(
-        contentId,
-        "image/jpeg",
-        `file:///scale/photo-${index}.jpg`,
-        sha(index + 1),
-        256_000 + (index % 100),
-        `Scale photo ${index}`,
-        at
-      );
-      insertAsset.run(
-        id("scale-photo", index),
-        contentId,
-        at,
-        index % 20 === 0 ? 1 : 0
-      );
-    }
     for (let index = 0; index < EVENT_DAYS; index += 1) {
       const at = new Date(
         Date.UTC(2023, 0, 1) + index * 86_400_000
@@ -188,6 +210,7 @@ describe("large-vault.scale", () => {
         { name: "contacts", value: CONTACT_COUNT, unit: "rows" },
         { name: "event days", value: EVENT_DAYS, unit: "rows" },
         { name: "notes", value: NOTE_COUNT, unit: "rows" },
+        { name: "year-3 photos", value: YEAR3.photos, unit: "rows" },
       ],
     });
     expect(

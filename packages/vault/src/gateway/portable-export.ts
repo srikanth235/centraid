@@ -1,5 +1,8 @@
 // Portable vault bundle (issue #630): the canonical JSON-LD restore artifact,
 // human-readable adapters, every external content byte, and one hash manifest.
+// Schema/export audit #679 L2: the sealed enforcement/leak registries are
+// policy metadata only; SEALED_COLUMNS remains exported through the canonical
+// table walk and introduces no new table or adapter omission.
 
 import { createHash } from "node:crypto";
 
@@ -13,14 +16,20 @@ import {
 } from "../ingest/zip.js";
 import type { ZipEntry } from "../ingest/zip.js";
 import { contentText } from "../schema/fts.js";
-import { canonicalJson, exportVault } from "./portability.js";
+import { sealKeyFileFor, writeSealKeyFile } from "../schema/sealed.js";
+import {
+  canonicalJson,
+  exportVault,
+  importVaultExport,
+} from "./portability.js";
+import type { VaultExport } from "./portability.js";
 import type { Identity } from "./types.js";
 
 export interface PortableManifestFile {
   path: string;
   sha256: string;
   bytes: number;
-  kind: "canonical" | "adapter" | "content";
+  kind: "canonical" | "adapter" | "content" | "custody";
 }
 
 export interface PortableManifest {
@@ -318,6 +327,11 @@ export async function exportPortableVault(
       name: "canonical/vault.json",
       data: Buffer.from(canonicalJson(canonical.artifact), "utf8"),
     },
+    // Canonical rows retain sealed ciphertext, so blank-machine portability
+    // requires the exact DEK. The owner-authorized bundle is already a
+    // high-sensitivity artifact; this custody byte-string is manifest-hashed
+    // and never exposes a sentinel plaintext to the export surface.
+    { name: "custody/seal-key.bin", data: Buffer.from(db.sealKey) },
     {
       name: "adapters/calendar.ics",
       data: Buffer.from(exportIcs(db), "utf8"),
@@ -367,9 +381,11 @@ export async function exportPortableVault(
     bytes: file.data.length,
     kind: file.name.startsWith("canonical/")
       ? "canonical"
-      : file.name.startsWith("content/")
-        ? "content"
-        : "adapter",
+      : file.name.startsWith("custody/")
+        ? "custody"
+        : file.name.startsWith("content/")
+          ? "content"
+          : "adapter",
   }));
   const manifest: PortableManifest = {
     format: "centraid-portable-v1",
@@ -437,4 +453,48 @@ export function verifyPortableVault(bytes: Buffer): PortableManifest {
     throw new Error("portable export canonical hash mismatch");
   }
   return manifest;
+}
+
+/** Verified full-bundle import used by the HTTP longevity drill. */
+export function importPortableVault(
+  db: VaultDb,
+  bytes: Buffer,
+  options: { replaceBootstrap?: boolean } = {}
+): { imported: number; blobs: number } {
+  verifyPortableVault(bytes);
+  const entries = readZipEntries(bytes);
+  const canonical = entries.find(
+    (entry) => entry.name === "canonical/vault.json"
+  );
+  if (!canonical) throw new Error("portable export has no canonical artifact");
+  const artifact = JSON.parse(canonical.data.toString("utf8")) as VaultExport;
+  const portableSealKey = entries.find(
+    (entry) => entry.name === "custody/seal-key.bin"
+  )?.data;
+  if (!portableSealKey || portableSealKey.length !== db.sealKey.length)
+    throw new Error("portable export has no valid seal-key custody artifact");
+  const priorSealKey = Buffer.from(db.sealKey);
+  portableSealKey.copy(db.sealKey);
+  if (db.dir !== ":memory:")
+    writeSealKeyFile(sealKeyFileFor(db.dir), db.sealKey, db.keyStore);
+  let result: { imported: number };
+  try {
+    result = importVaultExport(db, artifact, options);
+  } catch (error) {
+    priorSealKey.copy(db.sealKey);
+    if (db.dir !== ":memory:")
+      writeSealKeyFile(sealKeyFileFor(db.dir), db.sealKey, db.keyStore);
+    throw error;
+  }
+  let blobs = 0;
+  for (const entry of entries) {
+    const match = /^content\/(?<sha>[a-f0-9]{64})$/u.exec(entry.name);
+    if (!match?.groups?.sha) continue;
+    const stored = db.blobs.ingestSync(entry.data);
+    if (stored.sha256 !== match.groups.sha) {
+      throw new Error(`portable export blob hash mismatch for ${entry.name}`);
+    }
+    blobs += 1;
+  }
+  return { ...result, blobs };
 }

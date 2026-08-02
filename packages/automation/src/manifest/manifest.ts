@@ -263,6 +263,58 @@ export type Trigger =
   | DataTrigger
   | EventTrigger;
 
+export type AutomationTriggerKind = Trigger["kind"];
+
+/**
+ * Enumerable trigger contract used by validation, consent, health, and ledger
+ * coverage gates. New kinds must declare their deterministic side-effect and
+ * consent posture here before they can enter the wire vocabulary.
+ */
+export const AUTOMATION_TRIGGER_REGISTRY = {
+  cron: {
+    sideEffect: "schedule",
+    consent: "manifest-grant",
+    ledger: true,
+    parse: parseCronTrigger,
+  },
+  webhook: {
+    sideEffect: "external-input",
+    consent: "route-secret",
+    ledger: true,
+    parse: parseWebhookTrigger,
+  },
+  condition: {
+    sideEffect: "vault-read",
+    consent: "manifest-grant",
+    ledger: true,
+    parse: parseConditionTrigger,
+  },
+  data: {
+    sideEffect: "vault-read",
+    consent: "manifest-grant",
+    ledger: true,
+    parse: parseDataTrigger,
+  },
+  event: {
+    sideEffect: "provider-read",
+    consent: "connection-binding",
+    ledger: true,
+    parse: parseEventTrigger,
+  },
+} as const satisfies Record<
+  AutomationTriggerKind,
+  {
+    readonly sideEffect: string;
+    readonly consent: string;
+    readonly ledger: true;
+    readonly parse: (value: Record<string, unknown>, field: string) => Trigger;
+  }
+>;
+
+export const AUTOMATION_TRIGGER_KINDS = Object.freeze(
+  Object.keys(AUTOMATION_TRIGGER_REGISTRY) as AutomationTriggerKind[]
+);
+
 const TRIGGER_CURSOR_DENIED_TABLES = new Set([
   "trigger_ingress",
   "automation_trigger_cursor",
@@ -489,6 +541,236 @@ function isValidWebhookId(id: string): boolean {
   return typeof id === "string" && /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
+function parseCronTrigger(
+  t: Record<string, unknown>,
+  field: string
+): CronTrigger {
+  const expr = requireString(t.expr, `${field}.expr`);
+  if (!isValidCronExpression(expr)) {
+    throw new ManifestError(
+      "invalid_trigger",
+      `manifest.${field}.expr "${expr}" is not a valid 5-field cron expression`,
+      `${field}.expr`
+    );
+  }
+  let tz: string | undefined;
+  if (t.tz !== undefined) {
+    if (typeof t.tz !== "string" || !t.tz.trim()) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.tz must be a non-empty IANA timezone name when set`,
+        `${field}.tz`
+      );
+    }
+    tz = t.tz.trim();
+    if (!isValidIanaTimeZone(tz)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.tz "${tz}" is not a known IANA timezone`,
+        `${field}.tz`
+      );
+    }
+  }
+  return { kind: "cron", expr, ...(tz === undefined ? {} : { tz }) };
+}
+
+function parseWebhookTrigger(
+  t: Record<string, unknown>,
+  field: string
+): WebhookTrigger | PendingWebhookTrigger {
+  // A pending webhook (`{ kind: 'webhook', pending: true }`) the
+  // builder agent declared but cannot provision — accepted here so
+  // the manifest round-trips until the builder mints id + secret.
+  if (t.id === undefined && t.secretHash === undefined) {
+    if (t.pending !== true) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
+        field
+      );
+    }
+    return { kind: "webhook", pending: true };
+  }
+  const id = requireString(t.id, `${field}.id`);
+  if (!isValidWebhookId(id)) {
+    throw new ManifestError(
+      "invalid_trigger",
+      `manifest.${field}.id "${id}" is not a valid webhook route slug`,
+      `${field}.id`
+    );
+  }
+  const secretHash = requireString(t.secretHash, `${field}.secretHash`);
+  return { kind: "webhook", id, secretHash };
+}
+
+function parseConditionTrigger(
+  t: Record<string, unknown>,
+  field: string
+): ConditionTrigger {
+  const entity = requireString(t.entity, `${field}.entity`);
+  if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
+    throw new ManifestError(
+      "invalid_trigger",
+      `manifest.${field}.entity "${entity}" is not a <schema>.<table> entity name`,
+      `${field}.entity`
+    );
+  }
+  rejectDeniedTriggerEntity(entity, `${field}.entity`);
+  let every: string | undefined;
+  if (t.every !== undefined) {
+    every = requireString(t.every, `${field}.every`);
+    if (!isValidCronExpression(every)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+        `${field}.every`
+      );
+    }
+  }
+  let where: ConditionWhereClause[] | undefined;
+  if (t.where !== undefined) {
+    if (!Array.isArray(t.where)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.where must be an array of {column, op, value?} clauses`,
+        `${field}.where`
+      );
+    }
+    where = t.where.map((rawLocal, i) => {
+      const cf = `${field}.where[${i}]`;
+      if (
+        rawLocal === null ||
+        typeof rawLocal !== "object" ||
+        Array.isArray(rawLocal)
+      ) {
+        throw new ManifestError(
+          "invalid_trigger",
+          `manifest.${cf} must be an object`,
+          cf
+        );
+      }
+      const c = rawLocal as Record<string, unknown>;
+      const column = requireString(c.column, `${cf}.column`);
+      if (
+        typeof c.op !== "string" ||
+        !(CONDITION_OPS as readonly string[]).includes(c.op)
+      ) {
+        throw new ManifestError(
+          "invalid_trigger",
+          `manifest.${cf}.op must be one of ${CONDITION_OPS.join(", ")}`,
+          `${cf}.op`
+        );
+      }
+      return {
+        column,
+        op: c.op as ConditionOp,
+        ...(c.value === undefined ? {} : { value: c.value }),
+      } satisfies ConditionWhereClause;
+    });
+  }
+  return {
+    kind: "condition",
+    entity,
+    ...(where ? { where } : {}),
+    ...(every === undefined ? {} : { every }),
+  };
+}
+
+function parseDataTrigger(
+  t: Record<string, unknown>,
+  field: string
+): DataTrigger {
+  if (!Array.isArray(t.entities) || t.entities.length === 0) {
+    throw new ManifestError(
+      "invalid_trigger",
+      `manifest.${field}.entities must be a non-empty array of <schema>.<table> names`,
+      `${field}.entities`
+    );
+  }
+  const entities = t.entities.map((rawLocal, i) => {
+    const ef = `${field}.entities[${i}]`;
+    const entity = requireString(rawLocal, ef);
+    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${ef} "${entity}" is not a <schema>.<table> entity name`,
+        ef
+      );
+    }
+    rejectDeniedTriggerEntity(entity, ef);
+    return entity;
+  });
+  let every: string | undefined;
+  if (t.every !== undefined) {
+    every = requireString(t.every, `${field}.every`);
+    if (!isValidCronExpression(every)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+        `${field}.every`
+      );
+    }
+  }
+  return {
+    kind: "data",
+    entities,
+    ...(every === undefined ? {} : { every }),
+  };
+}
+
+function parseEventTrigger(
+  t: Record<string, unknown>,
+  field: string
+): EventTrigger {
+  const connectorKind = requireString(
+    t.connectorKind,
+    `${field}.connectorKind`
+  );
+  const event = requireString(t.event, `${field}.event`);
+  const supported =
+    EVENT_TRIGGER_CATALOG[connectorKind as keyof typeof EVENT_TRIGGER_CATALOG];
+  if (!supported || !(supported as readonly string[]).includes(event)) {
+    throw new ManifestError(
+      "invalid_trigger",
+      `manifest.${field} has unsupported provider event "${connectorKind}:${event}"`,
+      `${field}.event`
+    );
+  }
+  let every: string | undefined;
+  if (t.every !== undefined) {
+    every = requireString(t.every, `${field}.every`);
+    if (!isValidCronExpression(every)) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+        `${field}.every`
+      );
+    }
+  }
+  let filter: Readonly<Record<string, unknown>> | undefined;
+  if (t.filter !== undefined) {
+    if (
+      t.filter === null ||
+      typeof t.filter !== "object" ||
+      Array.isArray(t.filter)
+    ) {
+      throw new ManifestError(
+        "invalid_trigger",
+        `manifest.${field}.filter must be an object`,
+        `${field}.filter`
+      );
+    }
+    filter = t.filter as Readonly<Record<string, unknown>>;
+  }
+  return {
+    kind: "event",
+    connectorKind,
+    event,
+    ...(filter ? { filter } : {}),
+    ...(every ? { every } : {}),
+  };
+}
+
 function validateOneTrigger(raw: unknown, field: string): Trigger {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new ManifestError(
@@ -498,221 +780,16 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     );
   }
   const t = raw as Record<string, unknown>;
-  if (t.kind === "cron") {
-    const expr = requireString(t.expr, `${field}.expr`);
-    if (!isValidCronExpression(expr)) {
-      throw new ManifestError(
-        "invalid_trigger",
-        `manifest.${field}.expr "${expr}" is not a valid 5-field cron expression`,
-        `${field}.expr`
-      );
-    }
-    let tz: string | undefined;
-    if (t.tz !== undefined) {
-      if (typeof t.tz !== "string" || !t.tz.trim()) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.tz must be a non-empty IANA timezone name when set`,
-          `${field}.tz`
-        );
-      }
-      tz = t.tz.trim();
-      if (!isValidIanaTimeZone(tz)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.tz "${tz}" is not a known IANA timezone`,
-          `${field}.tz`
-        );
-      }
-    }
-    return { kind: "cron", expr, ...(tz === undefined ? {} : { tz }) };
-  }
-  if (t.kind === "webhook") {
-    // A pending webhook (`{ kind: 'webhook', pending: true }`) the
-    // builder agent declared but cannot provision — accepted here so
-    // the manifest round-trips until the builder mints id + secret.
-    if (t.id === undefined && t.secretHash === undefined) {
-      if (t.pending !== true) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
-          field
-        );
-      }
-      return { kind: "webhook", pending: true };
-    }
-    const id = requireString(t.id, `${field}.id`);
-    if (!isValidWebhookId(id)) {
-      throw new ManifestError(
-        "invalid_trigger",
-        `manifest.${field}.id "${id}" is not a valid webhook route slug`,
-        `${field}.id`
-      );
-    }
-    const secretHash = requireString(t.secretHash, `${field}.secretHash`);
-    return { kind: "webhook", id, secretHash };
-  }
-  if (t.kind === "condition") {
-    const entity = requireString(t.entity, `${field}.entity`);
-    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
-      throw new ManifestError(
-        "invalid_trigger",
-        `manifest.${field}.entity "${entity}" is not a <schema>.<table> entity name`,
-        `${field}.entity`
-      );
-    }
-    rejectDeniedTriggerEntity(entity, `${field}.entity`);
-    let every: string | undefined;
-    if (t.every !== undefined) {
-      every = requireString(t.every, `${field}.every`);
-      if (!isValidCronExpression(every)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`
-        );
-      }
-    }
-    let where: ConditionWhereClause[] | undefined;
-    if (t.where !== undefined) {
-      if (!Array.isArray(t.where)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.where must be an array of {column, op, value?} clauses`,
-          `${field}.where`
-        );
-      }
-      where = t.where.map((rawLocal, i) => {
-        const cf = `${field}.where[${i}]`;
-        if (
-          rawLocal === null ||
-          typeof rawLocal !== "object" ||
-          Array.isArray(rawLocal)
-        ) {
-          throw new ManifestError(
-            "invalid_trigger",
-            `manifest.${cf} must be an object`,
-            cf
-          );
-        }
-        const c = rawLocal as Record<string, unknown>;
-        const column = requireString(c.column, `${cf}.column`);
-        if (
-          typeof c.op !== "string" ||
-          !(CONDITION_OPS as readonly string[]).includes(c.op)
-        ) {
-          throw new ManifestError(
-            "invalid_trigger",
-            `manifest.${cf}.op must be one of ${CONDITION_OPS.join(", ")}`,
-            `${cf}.op`
-          );
-        }
-        return {
-          column,
-          op: c.op as ConditionOp,
-          ...(c.value === undefined ? {} : { value: c.value }),
-        } satisfies ConditionWhereClause;
-      });
-    }
-    return {
-      kind: "condition",
-      entity,
-      ...(where ? { where } : {}),
-      ...(every === undefined ? {} : { every }),
-    };
-  }
-  if (t.kind === "data") {
-    if (!Array.isArray(t.entities) || t.entities.length === 0) {
-      throw new ManifestError(
-        "invalid_trigger",
-        `manifest.${field}.entities must be a non-empty array of <schema>.<table> names`,
-        `${field}.entities`
-      );
-    }
-    const entities = t.entities.map((rawLocal, i) => {
-      const ef = `${field}.entities[${i}]`;
-      const entity = requireString(rawLocal, ef);
-      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${ef} "${entity}" is not a <schema>.<table> entity name`,
-          ef
-        );
-      }
-      rejectDeniedTriggerEntity(entity, ef);
-      return entity;
-    });
-    let every: string | undefined;
-    if (t.every !== undefined) {
-      every = requireString(t.every, `${field}.every`);
-      if (!isValidCronExpression(every)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`
-        );
-      }
-    }
-    return {
-      kind: "data",
-      entities,
-      ...(every === undefined ? {} : { every }),
-    };
-  }
-  if (t.kind === "event") {
-    const connectorKind = requireString(
-      t.connectorKind,
-      `${field}.connectorKind`
-    );
-    const event = requireString(t.event, `${field}.event`);
-    const supported =
-      EVENT_TRIGGER_CATALOG[
-        connectorKind as keyof typeof EVENT_TRIGGER_CATALOG
-      ];
-    if (!supported || !(supported as readonly string[]).includes(event)) {
-      throw new ManifestError(
-        "invalid_trigger",
-        `manifest.${field} has unsupported provider event "${connectorKind}:${event}"`,
-        `${field}.event`
-      );
-    }
-    let every: string | undefined;
-    if (t.every !== undefined) {
-      every = requireString(t.every, `${field}.every`);
-      if (!isValidCronExpression(every)) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`
-        );
-      }
-    }
-    let filter: Readonly<Record<string, unknown>> | undefined;
-    if (t.filter !== undefined) {
-      if (
-        t.filter === null ||
-        typeof t.filter !== "object" ||
-        Array.isArray(t.filter)
-      ) {
-        throw new ManifestError(
-          "invalid_trigger",
-          `manifest.${field}.filter must be an object`,
-          `${field}.filter`
-        );
-      }
-      filter = t.filter as Readonly<Record<string, unknown>>;
-    }
-    return {
-      kind: "event",
-      connectorKind,
-      event,
-      ...(filter ? { filter } : {}),
-      ...(every ? { every } : {}),
-    };
-  }
+  const registration =
+    typeof t.kind === "string"
+      ? AUTOMATION_TRIGGER_REGISTRY[
+          t.kind as keyof typeof AUTOMATION_TRIGGER_REGISTRY
+        ]
+      : undefined;
+  if (registration) return registration.parse(t, field);
   throw new ManifestError(
     "invalid_trigger",
-    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition", "data" or "event"`,
+    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected ${AUTOMATION_TRIGGER_KINDS.map((kind) => `"${kind}"`).join(", ")}`,
     `${field}.kind`
   );
 }

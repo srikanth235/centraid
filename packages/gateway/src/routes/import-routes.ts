@@ -15,7 +15,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { writeZipEntries } from "@centraid/vault";
+import { importPortableVault, writeZipEntries } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -126,6 +126,20 @@ export function makeImportRouteHandler(
         if (!filename)
           return sendJson(res, 400, { error: "filename is required" });
         const data = directory?.data ?? decodeImportBody(body, filename);
+        if (filename === "centraid-portable-v1.zip") {
+          if (!Buffer.isBuffer(data))
+            return sendJson(res, 400, {
+              error: "portable import requires base64",
+            });
+          if (body.replaceFreshVault !== true)
+            return sendJson(res, 400, {
+              error: "portable import requires replaceFreshVault: true",
+            });
+          const result = importPortableVault(plane.db, data, {
+            replaceBootstrap: true,
+          });
+          return sendJson(res, 200, { portable: true, ...result });
+        }
         const result = plane.gateway.stageImportFile(owner, {
           filename,
           data,

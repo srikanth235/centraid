@@ -6,8 +6,11 @@ import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
+import { ensureConversationLedger } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { seedYear3Vault } from "@centraid/test-kit/year3-vault";
+import { sealAad, sealValue, verifyPortableVault } from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -27,7 +30,12 @@ describe("import-routes", () => {
     );
   });
 
-  async function fixture(): Promise<{ base: string; plane: VaultPlane }> {
+  async function fixture(): Promise<{
+    base: string;
+    dir: string;
+    plane: VaultPlane;
+    replacePlane: (plane: VaultPlane) => void;
+  }> {
     const dir = await tempDir(`import-routes-${crypto.randomUUID()}-`);
     cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
     const plane = openVaultPlane({
@@ -37,7 +45,8 @@ describe("import-routes", () => {
       ownerName: "Priya",
     });
     cleanups.push(() => plane.stop());
-    const handler = makeImportRouteHandler({ current: () => plane });
+    let currentPlane = plane;
+    const handler = makeImportRouteHandler({ current: () => currentPlane });
     const server = http.createServer((req, res) => {
       void handler(req, res).then((handled) => {
         if (!handled) {
@@ -58,7 +67,11 @@ describe("import-routes", () => {
     const address = server.address() as { port: number };
     return {
       base: `http://127.0.0.1:${address.port}/centraid/_vault/imports`,
+      dir,
       plane,
+      replacePlane: (replacement) => {
+        currentPlane = replacement;
+      },
     };
   }
 
@@ -114,6 +127,115 @@ describe("import-routes", () => {
       status: "published",
       label: "party.ics",
     });
+  });
+
+  test("HTTP export → staged reimport → HTTP re-export preserves the seeded artifact", async () => {
+    const source = await fixture();
+    ensureConversationLedger(source.plane.db.journal);
+    seedYear3Vault(
+      {
+        vault: source.plane.db.vault,
+        journal: source.plane.db.journal,
+        sealCell: (entity, column, rowId, plaintext) =>
+          sealValue(
+            source.plane.db.sealKey,
+            sealAad(entity.replace(".", "_"), column, rowId),
+            plaintext
+          ),
+      },
+      { parties: 7, photos: 31, conversations: 3, turnsPerConversation: 4 }
+    );
+    const staged = (await (
+      await fetch(source.base, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: "party.ics", text: ICS }),
+      })
+    ).json()) as { batchId: string };
+    await fetch(`${source.base}/${staged.batchId}/publish`, { method: "POST" });
+
+    const exportedResponse = await fetch(`${source.base}/export`);
+    expect(exportedResponse.status).toBe(200);
+    expect(exportedResponse.headers.get("cache-control")).toBe("no-store");
+    const exported = Buffer.from(await exportedResponse.arrayBuffer());
+    expect(() => verifyPortableVault(exported)).not.toThrow();
+
+    const target = await fixture();
+    const importResponse = await fetch(target.base, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filename: "centraid-portable-v1.zip",
+        base64: exported.toString("base64"),
+        replaceFreshVault: true,
+      }),
+    });
+    const importText = await importResponse.text();
+    expect(importResponse.status, importText).toBe(200);
+    const imported = JSON.parse(importText) as {
+      portable: boolean;
+      imported: number;
+    };
+    expect(imported.portable).toBe(true);
+    expect(imported.imported).toBeGreaterThan(0);
+
+    target.plane.stop();
+    const reopened = openVaultPlane({
+      bootstrap: false,
+      dir: target.dir,
+      logger: silentLogger,
+      enableWalShipper: false,
+    });
+    cleanups.push(() => reopened.stop());
+    target.replacePlane(reopened);
+
+    const reexportResponse = await fetch(`${target.base}/export`);
+    const reexported = Buffer.from(await reexportResponse.arrayBuffer());
+    expect(reexportResponse.status, reexported.toString("utf8")).toBe(200);
+    expect(() => verifyPortableVault(reexported)).not.toThrow();
+    expect(verifyPortableVault(reexported).canonicalVerifyHash).toBe(
+      verifyPortableVault(exported).canonicalVerifyHash
+    );
+    expect(
+      reopened.db.vault
+        .prepare("SELECT summary FROM core_event ORDER BY summary")
+        .all()
+        .map((row) => row.summary)
+    ).toContain("Housewarming");
+  });
+
+  test("portable replacement refuses a target that already contains user data", async () => {
+    const source = await fixture();
+    const exported = Buffer.from(
+      await (await fetch(`${source.base}/export`)).arrayBuffer()
+    );
+    const target = await fixture();
+    const staged = (await (
+      await fetch(target.base, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: "party.ics", text: ICS }),
+      })
+    ).json()) as { batchId: string };
+    await fetch(`${target.base}/${staged.batchId}/publish`, { method: "POST" });
+    const response = await fetch(target.base, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        filename: "centraid-portable-v1.zip",
+        base64: exported.toString("base64"),
+        replaceFreshVault: true,
+      }),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("contains user data"),
+    });
+    expect(
+      target.plane.db.vault
+        .prepare("SELECT count(*) AS n FROM core_event")
+        .get()
+    ).toMatchObject({ n: 1 });
   });
 
   test("an unroutable file is a clean 400, not a hang", async () => {

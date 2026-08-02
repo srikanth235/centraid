@@ -283,6 +283,7 @@ Android decisions mirror iOS where the artifact exists: Android uses the same fi
 
 [`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON, `coverage/coverage-summary.json`, every Playwright JSON result, agent-e2e evidence, and perf/scale JSON. It emits one self-contained page at `dist/test-report/index.html` with:
 
+- seven collapsed user-facing quality rows above the engineering heatmap. Each row shows one status light, its name, the weakest-link sentence, and `N/M gates`; expanding shows only gate status, name, and owner. Lane, cost, knob governance, and demonstrated-red date remain in the gate tooltip. Grey means no gate exists, never health;
 - the clickable surface × quality-dimension heatmap first;
 - canonical owners, tier, lane, last status, and runtime in the cell inspector;
 - coverage versus floor, per-package wall clock, slowest ten files, and skip counts;
@@ -290,6 +291,14 @@ Android decisions mirror iOS where the artifact exists: Android uses the same fi
 - grey missing or stale evidence instead of an absent lane.
 
 PR CI uploads the report even when coverage fails. Nightly jobs upload surface evidence; the final job merges the latest pairing/relay artifact, reruns the full Vitest coverage suite, then publishes one report after performance and scale run. `bun run test:report:smoke` verifies the generator without requiring prior test artifacts.
+
+The machine-readable qualities layer is `tests/matrix.json#qualities`. `bun run test:matrix` requires exactly seven rows and verifies every gate owner, knob, governance regime, and demonstrated-red date. `bun run lint:quality-knobs` rejects removed gates, widened first-paint query ceilings, and expanded copy/query waivers without `approvedDeviation`.
+
+### Issue #679 lane and fixture decisions
+
+- First-run remains **path-gated on PR and unconditional nightly**. Making desktop, web, and two native device journeys unconditional would exceed the tighten-only PR wall-clock budget; the quality row therefore renders partial when those lanes did not run, never green. Mobile offline writes and reconnect replay are defined product behaviour under the single-gateway topology in [`docs/mobile-offline.md`](docs/mobile-offline.md), so R2 is a testable reliability contract rather than a new product design.
+- `@centraid/test-kit/year3-vault` owns the deterministic seed, multi-year/ledger/sealed/parked profile, and cache key used by quality and scale rigs. Byte-heavy owners materialize their own CAS payloads from that identity; never copy a live SQLite file into a cache. Regenerate by changing the explicit fixture version/seed and rerunning the owning rig, after reading [`docs/traps/wal-checkpoint.md`](docs/traps/wal-checkpoint.md).
+- `bun run test:qualities` is the deterministic PR gate. Timing evidence remains in nightly perf/scale and uses the existing rig-drift and `tests/experience-budgets/` owners rather than a parallel budget file.
 
 ## The test convention
 

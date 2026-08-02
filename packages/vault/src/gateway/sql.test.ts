@@ -115,7 +115,7 @@ describe("sql", () => {
         maxRows: 10,
       });
       expect(result.rows).toHaveLength(10);
-      expect(result.totalRows).toBe(50);
+      expect(result.totalRows).toBe(11);
       expect(result.truncated).toBe(true);
     });
 

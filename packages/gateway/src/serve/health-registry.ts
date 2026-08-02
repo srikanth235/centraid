@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#679) component state, registry enumeration, failure induction, and snapshot aggregation form one health contract whose completeness is audited together
 /*
  * Component-level health for a self-hosted gateway. Uptime says "the
  * process answers"; this says WHICH subsystem stopped working and what
@@ -46,6 +47,60 @@ export interface BackgroundPauseState {
 export const MAX_BACKGROUND_PAUSE_MS = 86_400_000;
 
 const BACKGROUND_PAUSE_COMPONENT = "background-pause";
+
+export interface ExpectedHealthComponent {
+  readonly component: string;
+  readonly owner: string;
+  readonly induction: "probe" | "report-error" | "logger";
+  readonly waiver?: string;
+}
+
+function defineExpectedHealthGroup(
+  owner: string,
+  induction: ExpectedHealthComponent["induction"],
+  components: readonly string[]
+): readonly ExpectedHealthComponent[] {
+  return components.map((component) => ({ component, owner, induction }));
+}
+
+/**
+ * Expected production health surface. The drill iterates this list rather
+ * than whatever happened to register, so a deleted registration is visible.
+ */
+export const EXPECTED_HEALTH_COMPONENTS: readonly ExpectedHealthComponent[] = [
+  ...defineExpectedHealthGroup("build-gateway", "report-error", [
+    "agent-failover",
+    "automation-runs",
+    "automations",
+    "filesystem",
+    "hardware-profile",
+    "instance",
+    "power-posture",
+    "storage-latency",
+  ]),
+  ...defineExpectedHealthGroup("backup-service", "probe", ["backups"]),
+  ...defineExpectedHealthGroup("vault-plane", "report-error", ["blob-sweep"]),
+  ...defineExpectedHealthGroup("build-gateway", "probe", [
+    "broker",
+    "connections",
+    "disk",
+    "enrichment",
+    "event-loop",
+    "scheduler",
+    "storage-limit",
+    "storage-quota",
+    "vault-integrity",
+    "vaults",
+  ]),
+  ...defineExpectedHealthGroup("build-gateway", "logger", [
+    "catalog",
+    "outbox",
+    "pricing",
+  ]),
+  ...defineExpectedHealthGroup("health-registry", "report-error", [
+    "load-shed",
+  ]),
+].toSorted((left, right) => left.component.localeCompare(right.component));
 
 export type ComponentStatus = "ok" | "degraded" | "error";
 
@@ -230,6 +285,10 @@ const DEFAULT_MAX_LOAD_SHED_MS = 5 * 60 * 1_000;
 export class HealthRegistry {
   private readonly components = new Map<string, ComponentState>();
   private readonly probes = new Map<string, HealthProbe>();
+  private readonly registrations = new Map<
+    string,
+    Set<ExpectedHealthComponent["induction"]>
+  >();
   private readonly events: HealthEvent[] = [];
   private readonly maxEvents: number;
   private readonly now: () => number;
@@ -367,19 +426,35 @@ export class HealthRegistry {
   }
 
   reportOk(component: string, detail?: string): void {
+    this.noteRegistration(component, "report-error");
     const state = this.stateFor(component);
     state.status = "ok";
     state.lastOkAt = this.now();
     if (detail !== undefined) state.detail = detail;
   }
 
+  /** Register a push-reported production component before its first failure. */
+  registerPush(component: string): void {
+    this.noteRegistration(component, "report-error");
+    this.stateFor(component);
+  }
+
+  /** Install the push half of the exported expected-components registry. */
+  registerExpectedPushComponents(): void {
+    for (const expected of EXPECTED_HEALTH_COMPONENTS)
+      if (expected.induction === "report-error")
+        this.registerPush(expected.component);
+  }
+
   reportDegraded(component: string, detail: string): void {
+    this.noteRegistration(component, "report-error");
     const state = this.stateFor(component);
     state.status = "degraded";
     state.detail = detail;
   }
 
   reportError(component: string, message: string): void {
+    this.noteRegistration(component, "report-error");
     const state = this.stateFor(component);
     state.status = "error";
     state.lastErrorAt = this.now();
@@ -393,6 +468,7 @@ export class HealthRegistry {
    * registry: `warn` → event only, `error` → event + error status.
    */
   loggerFor(component: string, base: RuntimeLogger): RuntimeLogger {
+    this.noteRegistration(component, "logger");
     return {
       info: (m) => base.info(m),
       warn: (m) => {
@@ -409,8 +485,66 @@ export class HealthRegistry {
 
   /** Snapshot-time check; its result wins the component's status. */
   registerProbe(component: string, probe: HealthProbe): void {
+    this.noteRegistration(component, "probe");
     this.stateFor(component);
     this.probes.set(component, probe);
+  }
+
+  /** Expected production components absent from their declared registration seam. */
+  expectedRegistrationGaps(): ExpectedHealthComponent[] {
+    return EXPECTED_HEALTH_COMPONENTS.filter(
+      ({ component, induction }) =>
+        !this.registrations.get(component)?.has(induction)
+    );
+  }
+
+  /**
+   * Deterministic health-drill seam. Probe components replace the *registered
+   * production probe* for one snapshot; push/logger components drive the same
+   * report path production failures use. Missing registration throws, making
+   * a deleted probe a red gate rather than an invisible omission.
+   */
+  induceExpectedFailureForTest(component: string): () => void {
+    if (process.env.NODE_ENV !== "test")
+      throw new Error("health failure induction is test-only");
+    const expected = EXPECTED_HEALTH_COMPONENTS.find(
+      (entry) => entry.component === component
+    );
+    if (!expected) throw new Error(`unexpected health component: ${component}`);
+    if (!this.registrations.get(component)?.has(expected.induction))
+      throw new Error(
+        `health component ${component} is not registered through ${expected.induction}`
+      );
+    const currentState = this.components.get(component);
+    const priorState = currentState ? { ...currentState } : undefined;
+    const priorProbe = this.probes.get(component);
+    if (expected.induction === "probe" || priorProbe) {
+      if (!priorProbe)
+        throw new Error(
+          `health component ${component} has no production probe`
+        );
+      this.probes.set(component, async () => ({
+        status: "error",
+        detail: "seeded production-probe failure",
+      }));
+    } else {
+      this.reportError(component, "seeded production failure");
+    }
+    return () => {
+      if (priorProbe) this.probes.set(component, priorProbe);
+      else this.probes.delete(component);
+      if (priorState) this.components.set(component, { ...priorState });
+      else this.components.delete(component);
+    };
+  }
+
+  private noteRegistration(
+    component: string,
+    kind: ExpectedHealthComponent["induction"]
+  ): void {
+    const current = this.registrations.get(component) ?? new Set();
+    current.add(kind);
+    this.registrations.set(component, current);
   }
 
   async snapshot(): Promise<HealthSnapshot> {
