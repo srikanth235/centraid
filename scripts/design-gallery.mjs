@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-/* oxlint-disable no-await-in-loop -- captures are intentionally serialized so browser state and baseline files stay deterministic. */
 // Product-grammar screenshot gallery (issue #690, §4.2).
 //
 // `--update` refreshes the committed baselines. Without it the same captures
@@ -144,51 +143,55 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const failures = [];
   try {
-    for (const entry of entries) {
-      const page = await browser.newPage({
-        viewport: entry.viewport,
-        deviceScaleFactor: 1,
-      });
-      if (entry.fixture) {
-        await page.setContent(
-          fixtureHtml({
-            surface: entry.surface,
-            scheme: entry.scheme,
-            width: entry.viewport.width,
-            app: entry.app,
-          })
-        );
-      } else {
-        await page.goto(entry.url, { waitUntil: "domcontentloaded" });
-      }
-      await page.addStyleTag({
-        content:
-          "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }",
-      });
-      await page.waitForTimeout(400);
-      const actualFile = path.join(ACTUAL_DIR, `${entry.id}.png`);
-      const baselineFile = path.join(BASELINE_DIR, `${entry.id}.png`);
-      await page.screenshot({ path: actualFile, fullPage: true });
-      await page.close();
-      if (UPDATE) {
-        await writeFile(baselineFile, await readFile(actualFile));
-        continue;
-      }
-      let expected;
-      try {
-        expected = PNG.sync.read(await readFile(baselineFile));
-      } catch {
-        failures.push(`${entry.id}: missing baseline (run with --update)`);
-        continue;
-      }
-      const actual = PNG.sync.read(await readFile(actualFile));
-      const result = diffPng(expected, actual);
-      if (result.changed > 0.01) {
-        failures.push(
-          `${entry.id}: ${(result.changed * 100).toFixed(2)}% changed, max channel delta ${result.max}`
-        );
-      }
-    }
+    await entries.reduce(
+      (chain, entry) =>
+        chain.then(async () => {
+          const page = await browser.newPage({
+            viewport: entry.viewport,
+            deviceScaleFactor: 1,
+          });
+          if (entry.fixture) {
+            await page.setContent(
+              fixtureHtml({
+                surface: entry.surface,
+                scheme: entry.scheme,
+                width: entry.viewport.width,
+                app: entry.app,
+              })
+            );
+          } else {
+            await page.goto(entry.url, { waitUntil: "domcontentloaded" });
+          }
+          await page.addStyleTag({
+            content:
+              "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }",
+          });
+          await page.waitForTimeout(400);
+          const actualFile = path.join(ACTUAL_DIR, `${entry.id}.png`);
+          const baselineFile = path.join(BASELINE_DIR, `${entry.id}.png`);
+          await page.screenshot({ path: actualFile, fullPage: true });
+          await page.close();
+          if (UPDATE) {
+            await writeFile(baselineFile, await readFile(actualFile));
+            return;
+          }
+          let expected;
+          try {
+            expected = PNG.sync.read(await readFile(baselineFile));
+          } catch {
+            failures.push(`${entry.id}: missing baseline (run with --update)`);
+            return;
+          }
+          const actual = PNG.sync.read(await readFile(actualFile));
+          const result = diffPng(expected, actual);
+          if (result.changed > 0.01) {
+            failures.push(
+              `${entry.id}: ${(result.changed * 100).toFixed(2)}% changed, max channel delta ${result.max}`
+            );
+          }
+        }),
+      Promise.resolve()
+    );
   } finally {
     await browser.close();
   }

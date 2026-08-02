@@ -278,6 +278,7 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785673605-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 3398309 | 0 | 138817280 | 401358 | 3799667 | 49.2205 | 3398309 | 0 | 138817280 | 401358 | feat(design): establish product grammar across surfaces (#690) |
 | codex-019fc1af-c03-1785673788-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 37229 | 0 | 3754752 | 3156 | 40385 | 1.0791 | 3435538 | 0 | 142572032 | 404514 | feat(design): establish product grammar across surfaces (#690) |
 | codex-019fc1af-c03-1785674692-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 146048 | 0 | 6058752 | 22061 | 168109 | 2.2107 | 3581586 | 0 | 148630784 | 426575 | feat(design): establish product grammar across surfaces (#690) |
+| codex-019fc1af-c03-1785675619-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 297237 | 0 | 14227968 | 17744 | 314981 | 4.5662 | 3878823 | 0 | 162858752 | 444319 | fix(gallery): avoid unused lint suppression in capture lane (#690) |
 
 ## File map
 
