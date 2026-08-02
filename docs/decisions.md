@@ -154,6 +154,27 @@ Recorded **2026-08-02**, same issue. `--t-<key>-size` now exists on both surface
 
 **Still open, as recorded debt:** the ~477 near-misses (within 0.6px) and the ~314 genuinely off-scale declarations. Both are visual changes and need per-site judgement, not a sweep. The ratchet total fell 1291 → 880 with no other metric moving, and `rawFontSize` now counts `font-size: var(--t-<key>)` — naming a shorthand where a size belongs — as debt rather than letting it hide inside the `var()` carve-out.
 
+## #686 — one token name, two meanings: the shell and blueprint type scales have diverged
+
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Surfaced while adopting the composable size rungs; **not fixed** — it needs a deliberate call.
+
+`toCss()` and `toBlueprintCss()` both emit `--t-*`, and the contract's rule is that an emitter "may choose values appropriate to its surface, but cannot invent a second spelling for a semantic role." The inverse has happened: the same spelling now carries a **different role** on each surface.
+
+| token | shell | blueprint |
+| --- | --- | --- |
+| `--t-body` | 15px / 22px, sans, 400 | 0.855rem (13.68px) / 1.5, sans, 400 |
+| `--t-small` | 13px / 18px, sans, 400 | 0.8rem (12.8px) / 1.45, sans, 400 |
+| `--t-mono` | 12px / 16px, mono, 500 | 0.72rem (11.52px) / 1.4, mono, 500 |
+| **`--t-tiny`** | 11px / 14px, **sans**, **500** | 0.6rem (9.6px) / 1.4, **mono**, **600** |
+
+Size and line-height differing per surface is defensible — an embedded app pane is not the chrome. `--t-tiny` changing **family and weight** is not: a rule that reads "the eyebrow rung" gets sans-500 in the shell and mono-600 in an app.
+
+This matters because **`kit.css` is served to both surfaces**. Of its 80 hardcoded `font-size` declarations, **20 exactly match a blueprint rung and 0 match a shell rung** — the kit's type was authored against the app scale while rendering on both. Because those values are hardcoded, kit components currently render at app sizes _inside the chrome_, and cannot be tokenised without moving on one surface or the other. That is why the size-rung sweep skipped `kit.css` entirely.
+
+**Options, none taken here.** (a) Reconcile the two scales so a role means one thing, and let only the _values_ differ. (b) Rename the blueprint rungs so the divergence is explicit rather than implied. (c) Declare `kit.css` blueprint-scoped and give the chrome its own component sheet. Each is a real product decision about whether an embedded app should look like the chrome or like itself.
+
+Until then, `DESIGN.md`'s claim that the kit "holds no design decisions of its own" is true of colour, radius and spacing, and **false of type** — 80 sizes live there.
+
 ## Related docs
 
 | Doc | Covers |

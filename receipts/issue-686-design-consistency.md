@@ -409,11 +409,14 @@
   - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/ui/Button.module.css`
   - **Left alone, deliberately** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/kit/kit.css` (all 8 exact matches; dual-surface, see Decisions), the ~477 near-misses within 0.6px, the ~314 genuinely off-scale declarations, and 6 `em`-valued declarations that inherit their base. All remain ratcheted debt. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/apps/mobile/src/kit/theme/tokens.generated.ts` regenerated from the rebuilt design package and is byte-identical: the lowering keeps colors and radii, and a type size is neither.
 
+- **Scale-divergence finding recorded** — `docs/decisions.md` gains "#686 — one token name, two meanings": `--t-tiny` resolves to sans/500 in the shell and mono/600 in the blueprint layer, so the same spelling carries a different semantic role per surface. `packages/design/kit/kit.css` is served to both, and of its 80 hardcoded `font-size` declarations 20 exactly match a blueprint rung and 0 match a shell rung — the kit's type was authored against the app scale while rendering on both. This is why the size-rung sweep skipped `kit.css`.
+
 ## Out of scope
 
 - ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
 - Collapsing `docs`' and `photos`' app-local `--accent-deep-fg` declarations into `--accent-text`. F5 established they are re-derivations of the contract token, but those two apps *declare* the property, so they are not phantoms and not in this gate's class; folding them is a separate visual-equivalence change.
 - ~~Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations.~~ **Partly superseded by F6** — the size rungs exist and the 411 provably-zero-change exact matches are converted. Still out of scope, and still ratcheted debt: the ~477 near-misses (within 0.6px of a rung) and the ~314 genuinely off-scale declarations, both of which are visual changes needing per-site judgement; and `packages/design/kit/kit.css`, which resolves under two token layers at once. Line-height rungs were considered and rejected on the evidence, not deferred (see Decisions).
+- Reconciling the shell and blueprint type scales, or rescoping `kit.css`. Documented with evidence in `docs/decisions.md`; each option is a product decision about whether an embedded app should read as the chrome or as itself.
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
 - Mobile typeface change (recorded as decision, not churned).
 
@@ -1204,6 +1207,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785629006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 18115 | 10873090 | 14431 | 32590 | 5.9108 | 1447 | 1756467 | 209807434 | 583893 | fix(blueprints): resolve the last twelve phantom var() references (#686)Every on |
 | claude-code-ab8b1729-92f-1785630418-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 23241 | 11170342 | 19784 | 43069 | 6.2252 | 1491 | 1779708 | 220977776 | 603677 | docs(design): record that the type scale is under-shaped, not under-adopted (#68 |
 | claude-code-ab8b1729-92f-1785631778-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 32 | 18546 | 8346342 | 12914 | 31492 | 4.6121 | 1523 | 1798254 | 229324118 | 616591 | feat(design): emit composable type size rungs and adopt the exact matches (#686) |
+| claude-code-ab8b1729-92f-1785633145-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 20434 | 13305822 | 18206 | 38690 | 7.2360 | 1573 | 1818688 | 242629940 | 634797 | docs(design): record that the two type scales have diverged in meaning (#686)--t |
 
 ### Steering
 
