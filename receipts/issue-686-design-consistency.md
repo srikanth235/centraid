@@ -52,6 +52,9 @@
 - **The pinned unresolved-`var()` debt is now CLEARED — `UNRESOLVED_VAR_DEBT` is `[]`.** The earlier decision to pin rather than fix rested on "each needs a per-site design call". Doing the same read the F4 shell sweep did — decide by what the rule is doing and the surface it lands on, not by name similarity — showed all twelve had a determinate answer, and none of them needed a product decision. What each phantom turned out to mean: (1) **`--accent-deep-fg`** (7 refs, `tasks/components/*`) — `tasks` copied `docs`' pattern without copying `docs`' declaration. Every one of the seven sites inks TEXT that sits ON an `--accent-soft` tint (marks, chips, the current nav item, a consent glyph); **none fills with `--accent-deep`**, so the F3 `--text-inv` ink rule does not apply here and the `--on-accent` gate is untouched. The role is "the accent read as a foreground", which the contract already spells **`--accent-text`** — emitted as `var(--accent-deep)` on light and, on the dark rung, the *lifted* half. That makes the binding byte-equivalent to what `docs` ships from its app-local declaration, including its hand-rolled dark override, so the app-local token was always a re-derivation of a contract token. (2) **`--r-lg`** (3 refs) — the *shell* radius scale has `lg: 10`, the blueprint contract does not; the blueprint spellings are `--r-sm`/`--r-md`/`--r-card`/`--r-pill`. All three sites are the repo's card idiom verbatim (`1px solid var(--line)` + `var(--bg-elev)` + 14px padding), and every peer card in the same two apps (`tally` `.stat`/`.explist`, `people` `.card`) rounds it with **`--r-card`**; bound to that rather than to the numerically-nearest `--r-md`, because the site is a card, not a control. (3) **`--acc`** — an abbreviation of `--accent` in a `:focus-visible` outline; bound to **`var(--accent)`**, the spelling every other focus ring in the apps uses. (4) **`--t-label`** — the uppercase sidebar section label; the blueprint type ramp has no `label` rung and every peer section label in every app (`photos`, `agenda`, `docs`) is **`--t-tiny`**. (5) **`--bg-l`** — the one that is *not* a typo: it is genuinely emitted by the blueprint **dark** token block (`10%`, `blueprint.ts`), which is why the rule works on screen, but it is absent from the light `:root` block and therefore is not contract vocabulary and cannot be added to the contract without lying about the light rung. Given the **documented default as an explicit fallback** (`calc(var(--bg-l, 10%) + 1%)`) instead — the gate deliberately excludes fallback-bearing references because the author has made the miss explicit, and 10% is the shipped value, so this one is a provable no-op. Four of the five are visible changes by design (the rule was meant to apply and was not applying); each was checked against its peers rather than merely made to resolve.
 - **F6 — the size rungs are spelled `--t-<key>-size`, and the sweep's bar was raised twice against its own estimate.** Three calls, each of which changed the answer. (a) **Naming.** `--t-<key>-size` over `--t-size-<key>`, following `--c-<hue>-text` — this vocabulary already expresses "a facet of a named token" as a *suffix*, and the suffix form keeps a rung sorted next to the shorthand it belongs to in `SHELL_TOKEN_CONTRACT`. One rung per **distinct size**, first key wins: `body` and `bodyStrong` are both 15px, so `--t-body-size` is the only spelling and `--t-body-strong-size` does not exist — two spellings for one value is exactly the drift `contract.ts` exists to forbid. (b) **No line-height rungs, on the evidence.** Of 227 hand-written `line-height` declarations across the three ratchet targets, all but a handful are unitless multipliers (`1.5` ×58, `1.45` ×38, `1.4` ×37) while the chrome scale's line-heights are absolute px; only 5 exactly equal a scale value. A `--t-body-line-height: 22px` would be vocabulary nothing could adopt, so it was not invented. (c) **The recorded 494 exact matches were measured against the wrong scale for one third of the tree.** The blueprint layer has its **own** type scale — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match there. Against the scale that actually resolves per surface the exact set is **402 client + 9 blueprint = 411**, and conversion was further restricted to **like-for-unit** (px→px rung, rem→rem rung): `1rem` and `16px` agree only at a 16px root, so converting one to the other would break for a reader who has raised their browser's default font size. `packages/design/kit` was excluded **entirely** — `kit.css` renders under both token layers (shell `:root` and the rescoped `.centraid-inline-scope` block), so each of its eight exact matches resolves to two different values and every one would move on one surface. The blueprint type scale moved out of `blueprint.ts` into `typography.ts` as `blueprintType` to make any of this derivable: it was six opaque shorthand strings from which no size could be read.
 - **F7 — the shell's `--t-tiny` was tested for realignment to mono and DELIBERATELY LEFT ALONE; the measurement inverts the premise.** The case for changing `type.tiny` from sans/500 to mono looked strong: `DESIGN.md` says "**Mono is the signature.** Metadata, counts, dates, and eyebrows are mono", the blueprint layer's `--t-tiny` is mono/600, and 94 of the 120 `text-transform: uppercase` rules under `packages/client/src` set a mono family in the same block. Re-derived independently, the 94/120 figure is **exact**. The inference from it is not. Two facts kill it. (a) **The 94 mono eyebrows are not `--t-tiny` sites and cannot become them** — their sizes are 9.5px ×36, 10px ×21, 10.5px ×19, 9px ×9, 8.5px ×4, 8px ×1, `--t-tiny-size` ×3, `font: var(--t-mono)` ×1, so **90 of 94 sit below `--t-tiny`'s 11px**. The chrome's eyebrow is a sub-11px mono rung the scale does not name; the 11px rung is a different thing wearing a similar description. Two shell eyebrows opt out of mono explicitly at exactly this size (`chrome.module.css` `.sbSection` pairs `font-family: var(--font-sans)` with `font-size: var(--t-tiny-size)`; `.sbSubLabel` is sans at 10px), so the shell's sans-at-tiny is an authored choice, not an oversight. (b) **Every actual consumer of the shorthand is prose or a control.** `font: var(--t-tiny)` appears at **5 sites in 4 files** (the audit estimated ~6): two native `<select>`s (`AssistantScreen` `.effortPicker select` — runner/effort/workspace pickers; `SettingsProvidersScreen` `.ladderAdd`), one button pair reading "Save"/"Cancel" plus a pencil glyph (`DevicesCard` `.renameAction`/`.renameIcon`), one pill holding an agent's display title (`SettingsProvidersScreen` `.ladderMember`), and one container (`SessionStatusStrip` `.telemetry`) whose own text is "Working"/"Ready" — its numeric readout is the child `.context`, which **already** sets `font-family: var(--font-mono)` itself, so the metadata in that strip was never relying on the rung. None is an eyebrow; none is metadata. Mobile confirms it from the other side: of seven `t("tiny")` consumers, five are prose (`AppHeader.subtitle`, `OptionSheet.rowDetail`, `AttentionLine.chipSub`, `Assistant.statusText`, `Assistant.selectionError` — an error message), and the two that *are* eyebrows already hand-patch the family (`AppLock.eyebrow` → `family.monoBold`, `LockerHome.fieldLabel` → `family.monoMedium`). So the change would improve **zero** of the 94 eyebrows and regress **ten** prose/control sites, putting `<select>` chrome and "Save"/"Cancel" into a monospace face — which `DESIGN.md`'s own "prose is not" clause forbids. **The weight question resolves the same way and refutes the premise that 600 is settled**: the only two eyebrows in the tree that choose a mono weight by hand choose *different* ones (600 and 500), so there is no convergent value; the shell's 500 is right for a quiet control label and the blueprint's 600 is right for a 9.6px eyebrow. That is one role rendered per surface, which the contract permits — not two roles under one name. **The real gap is the inverse of the one recorded**: the shell has an unnamed sub-11px mono eyebrow rung spelled six ways across 94 rules. Naming it is new vocabulary plus a 94-site visual change, so it is recorded as debt in `docs/decisions.md`, not taken here.
+- **The maintainer accepted converge-first, name-second (lane 1 of the agreed (1) → (3) → (2) sequence), 2026-08-02.** The three recommendations recorded in `docs/decisions.md` under "#686 — the three questions this issue left open, and their answers" are decisions now, not proposals. Lane (1) is done here and **names nothing**: the two rungs are left as literals (`9.5px` / `10.5px`, `letter-spacing: 0.06em`), because naming a rung against 51 shapes is the `--r-lg` failure mode this PR already hit twice. The rung spelling is the follow-up PR's job, once there is something real for it to describe.
+- **The eyebrow weight does not converge, and the data says so.** Of the 94 mono-uppercase rules, **63 (67%) declare no `font-weight` at all** — the modal value is *absent*, i.e. "inherit from context". Among the 31 that do declare one, 600 leads 500 by 19–7 (plus 4 taking 500 via `font: var(--t-mono)` and 1 via `font: inherit`). Neither candidate is derivable as dominant in the sense size and tracking are: forcing 600 would thicken 63 inheriting sites plus the 7 at 500, and stripping to the true mode (absent) would visibly thin the 19 at 600. Weight was therefore left untouched at all 94 sites, and the converged set carries 9 shapes rather than 2 for exactly that reason — 2 on the (size, tracking) axes that were converged, multiplied by the weight variants that were not.
+- **Chips, badges, pills, controls and chart ticks are a third idiom, not eyebrows.** 37 of the 94 are boxed or self-contained (`.kindBadge`, `.tlStatus`, `.machineryTag`, `.connBadge`, the two `.tab` controls, the SVG `.ringTick`/`.sectorName`, the `.caption` measured-fact strip, the `.stripAxis` chart axis, `.heroDate`'s sibling readouts). Converging a 8.5px pill to 9.5px changes chip geometry, not label rhythm, so they were left alone. They carry their own ~21 shapes and are the obvious next convergence target — but they are not the two rungs this lane agreed to converge.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -427,6 +430,43 @@
 - **Self-correction recorded** — `docs/decisions.md`'s claim that the shell has "an unnamed sub-11px mono eyebrow rung" was measured and refuted: the 94 mono eyebrow rules carry **51 distinct (size, weight, tracking) shapes**, largest cluster 6. A `--t-eyebrow` shorthand would fit 6% of sites and become a second `--r-lg` — vocabulary that exists because it seemed principled rather than because anything could adopt it. The entry now records that converging 51 ad-hoc decisions is a design pass, not a naming exercise.
 
 - **Recognisability split from legibility in the gate** — `packages/design/src/contrast.test.ts` now asserts the `readsAsRole` hue-and-chroma law in its own tests ("semantic states still read as their role", shell and app surfaces) rather than inside the body-floor tests. The audit flagged that greying `DANGER_BASE` failed under a heading about contrast floors, which named the wrong cause. Verified by sabotage: `#6E6E6E` now fails 2 tests, both named for recognisability, and reverts clean. The split pushed `contrast.test.ts` over the 625-line cap, so the semantic-state helpers (`readsAsRole`, `selfTint`, `SEMANTIC_STATES`, `SELF_TINT`, `RECOGNISABLE_STATE`, `STATE_HUE`, `MIN_STATE_SATURATION`) moved to `packages/design/src/oklab.ts` — extraction, not a waiver.
+
+- **F8 — the 94 mono eyebrows converged to two rungs (lane 1 of the accepted (1) → (3) → (2) sequence).** The distribution was **re-derived from scratch** before anything moved, since three of this PR's earlier figures had to be corrected. The 94/120 split, the size table (`9.5px` ×36, `10px` ×21, `10.5px` ×19, `9px` ×9, `8.5px` ×4, `var(--t-tiny-size)` ×3, `8px` ×1, `font: var(--t-mono)` ×1) and both modal values (size `9.5px`, tracking `0.06em` ×20) all reproduce exactly. **One figure is corrected: the shape count is 54, not 51** — the earlier count collapsed rules that declare no `font-weight` with rules that inherit one through a `font:` shorthand. Each of the 94 was then classified **by intent, from its selector and its JSX call site, not by its current size**: **36 standard eyebrows** (an inline label above or beside content — `.settingsEyebrow`, the two `dt` field labels, `.metricLabel`, `.kpiLabel`, `.heroStatLabel`, the three `.fieldLabel`s, the `th` column heads, `.heroDate` above the hero `<h1>`, `.settingsNavEyebrow` above the nav title) → **9.5px**; **21 section headers** (a structural heading for a region — `.sectionLabel`, `.settingsSectionLabel`, `.settingsDangerLabel`, `.bandTitle`, `.groupTitle`, `.rsideH`, `.catLabel`, `.dateSep`, `.eventsHead`, the picker group heads `.pickPack`/`.pickDivider`, `.settingsNavSection`) → **10.5px**; both at `letter-spacing: 0.06em`. The remaining **37 are neither** and were deliberately not touched — see the Decisions bullet. **83 declarations changed across 31 stylesheets**, and the diff touches **only `font-size` (73 lines) and `letter-spacing` (92 lines)** — no colour, spacing or family declaration moved, which is why the contrast grids cannot have regressed and did not. Files:
+  - `packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasKindsTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/HomeScreen.module.css`
+  - `packages/client/src/react/screens/InsightsScreen.module.css`
+  - `packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `packages/client/src/react/screens/PaletteScreen.module.css`
+  - `packages/client/src/react/screens/RecoverScreen.module.css`
+  - `packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `packages/client/src/react/screens/RunViewScreen.module.css`
+  - `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsProfileScreen.module.css`
+  - `packages/client/src/react/screens/StartupErrorScreen.module.css`
+  - `packages/client/src/react/shell/automationTemplatePreview.module.css`
+  - `packages/client/src/react/shell/routes/AppInfoModal.module.css`
+  - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `packages/client/src/react/shell/templatePreview.module.css`
+  - `packages/client/src/react/shell/webhookReveal.module.css`
+  - `packages/client/src/react/styles/vault.module.css`
+  - `tests/design-token-css-budget.json` — ratchet regenerated; the delta is **`rawFontSize` only, +2** (880 → 882), from the two sites where hitting the rung required replacing a token reference with a literal.
+
+- **F8 movement cap — 9 sites move more than 0.04em of tracking, 0 move more than 1.5px of size, and none were exempted.** The cap flagged nine tracking reductions, all in the same direction (over-tracked toward the mode) and all taken deliberately: `OnboardingScreen.module.css` `.fieldLabel` and `RecoverScreen.module.css` `.fieldLabel` **0.22em → 0.06em** (the two extreme outliers in the corpus — at 9.5px, 0.22em is nearly a full character of space between letters, and these are form labels sitting directly above inputs); `StartupErrorScreen.module.css` `.detailLabel` **0.16em → 0.06em**; `AutomationTemplatesScreen.module.css` `.catLabel`, `AutomationThreadScreen.module.css` `.dateSep` and `BuilderChatPane.module.css` `.promptStartersLabel` **0.14em → 0.06em**; `AtlasRelationsTab.module.css` `.roLabel` **0.13em → 0.06em**; `RunViewScreen.module.css` `.rsideH` **0.12em → 0.06em**; `AtlasBrowseTab.module.css` `.pickDivider` **0.11em → 0.06em**. Every one is a label whose *only* distinguishing property was tracking chosen by eye; leaving them exempt would preserve exactly the 51-shapes-by-hand condition the lane exists to end. The largest **size** move in the set is **1.5px** (`.detailLabel`, 12px → 10.5px), which is at the cap and not over it; every other move is 0.5px or 1px.
+
+- **F8 — two sites had to trade a token reference for a literal, and that is the +2 in the ratchet.** `SettingsConnectionsScreen.module.css` `.sectionLabel` was `font-size: var(--t-tiny-size)` (11px) and is now `10.5px`: it is a section header and shares its name with `AutomationsOverviewScreen.module.css` `.sectionLabel`, which was already 10.5px — two rules called `.sectionLabel` rendering at two sizes is precisely the drift being removed. `StartupErrorScreen.module.css` `.detailLabel` kept its `font: var(--t-mono)` shorthand (so family, weight and line-height stay tokenised) and gained a `font-size: 10.5px` override — the same pattern `gatewaySwitcher.module.css` and `IdentityHead.module.css` already use for their eyebrows. Both are re-tokenised for free by the follow-up naming PR, which is the argument for doing that PR next rather than widening this one.
 
 ### Checklist annotations (moved out of the checklist so the crosswalk matches verbatim)
 
@@ -1240,6 +1280,99 @@ Numbers re-derived and **corrected** are annotated in place above (252 → 16 no
 stylesheets; 26 not 17 of 32 cells below AA; the spacing figure "234" is not reproducible at
 any granularity).
 
+### F8 — mono eyebrow convergence (lane 1), before → after
+
+The shape analysis is a leaf-rule CSS parser over `packages/client/src`: it selects every
+rule carrying `text-transform: uppercase` **and** a mono family in the same block, then keys
+each by `(font-size, font-weight, letter-spacing)`. It was run against the tree before the
+edit and against the tree after, plus against just the 57 rules classified as eyebrow or
+section header.
+
+```
+$ node <shape-analysis> packages/client/src        # BEFORE
+uppercase rules: 120
+  of which mono-in-same-block: 94
+sizes:     9.5px 36 | 10px 21 | 10.5px 19 | 9px 9 | 8.5px 4 | var(--t-tiny-size) 3 | 8px 1 | font:var(--t-mono) 1
+weights:   (none) 63 | 600 19 | 500 7 | font:var(--t-mono) 4 | font:inherit 1
+tracking:  0.06em 20 | 0.05em 15 | 0.04em 15 | 0.1em 14 | 0.08em 9 | …11 more
+distinct (size,weight,tracking) shapes: 54          # recorded as 51 — corrected
+
+$ node <shape-analysis> packages/client/src        # AFTER
+uppercase rules: 120
+  of which mono-in-same-block: 94
+sizes:     9.5px 51 | 10.5px 26 | 9px 9 | 8.5px 4 | var(--t-tiny-size) 2 | 8px 1 | 10px 1
+weights:   (none) 63 | 600 19 | 500 7 | font:var(--t-mono) 4 | font:inherit 1   # UNCHANGED, by decision
+tracking:  0.06em 66 | 0.05em 8 | 0.04em 7 | 0.08em 4 | …8 more (all in the 37 untouched chips)
+distinct (size,weight,tracking) shapes: 30
+   31  9.5px  | (none) | 0.06em      <- the standard eyebrow rung
+   13  10.5px | (none) | 0.06em      <- the section-header rung
+
+$ node <shape-analysis> --subset 57-classified     # the rules this lane actually converged
+BEFORE: 32 distinct shapes   (eyebrow 17, section header 20 — overlapping)
+AFTER :  9 distinct shapes
+  eyebrow (4):        9.5px |(none)|0.06em ×30, |font:var(--t-mono)| ×3, |600| ×2, |500| ×1
+  section head (5):  10.5px |(none)|0.06em ×12, |600| ×5, |500| ×2, |font:inherit| ×1, |font:var(--t-mono)| ×1
+  on the two axes converged (size, tracking): 32 -> 2
+```
+
+**What resisted, and why.** Corpus-wide the count is 54 → 30, not 54 → 2. Two causes, both
+deliberate. (a) **37 of the 94 are chips, badges, controls or chart ticks**, left untouched
+as a different idiom; they contribute ~21 of the surviving 30 shapes. (b) **Weight was not
+converged** — its modal value across the 94 is *absent* (63/94), so there is no dominant
+value to move to that would not visibly thicken 70 sites or thin 19. On the two axes the
+data does support, the classified set collapses to exactly the two intended shapes.
+
+```
+$ cd packages/client && ../../node_modules/.bin/vitest run
+Test Files  215 passed (215)
+Tests  1750 passed (1750)
+
+$ cd packages/design && ../../node_modules/.bin/vitest run
+Test Files  19 passed (19)
+Tests  276 passed (276)
+
+$ cd packages/design && ../../node_modules/.bin/vitest run contrast   # contrast grids, item 6
+Test Files  2 passed (2)      # contrast.test.ts + contrast-shell-palette.test.ts
+Tests  88 passed (88)
+
+$ node scripts/lint-design-tokens.mjs                                  # before regenerating
+FAIL — design-token CSS ratchet found 2 mismatch(es):
+  packages/client/src/react/screens/SettingsConnectionsScreen.module.css: rawFontSize increased 11 → 12
+  packages/client/src/react/screens/StartupErrorScreen.module.css: rawFontSize increased 0 → 1
+
+$ node scripts/lint-design-tokens.mjs --write
+ok   design-token-css — budget rewritten: 0 grandfathered hex value(s), 4 literal font stack(s),
+     882 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text
+
+$ git diff tests/design-token-css-budget.json     # delta is rawFontSize ONLY, +2 (880 -> 882)
+-    "rawFontSize": 11,          # SettingsConnectionsScreen.module.css
++    "rawFontSize": 12,
++  "packages/client/src/react/screens/StartupErrorScreen.module.css": {
++    "rawFontSize": 1
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — …, zero regressions
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run typecheck:affected
+Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .     # clean, no output
+
+$ bun run format
+Finished in 1776ms on 3401 files using 8 threads.                          # no further rewrites
+
+$ git diff -U0 -- packages/client/src | grep -E '^[+-][^+-]' | properties
+  73 font-size
+  92 letter-spacing            # nothing else moved — no colour, spacing, family or weight
+
+$ <media-query override scan over all 98 client stylesheets>
+media scan done                # no @media/@container rule re-sets a converged class's size or tracking
+```
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -1335,6 +1468,7 @@ exit 0
 | claude-code-ab8b1729-92f-1785639907-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 572 | 614886 | 636 | 1210 | 0.3269 | 1827 | 1939164 | 316258620 | 719848 | test(design): recognisability fails under its own name, not the contrast floor ( |
 | claude-code-ab8b1729-92f-1785639957-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 670 | 615458 | 197 | 869 | 0.3169 | 1829 | 1939834 | 316874078 | 720045 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
 | claude-code-ab8b1729-92f-1785640016-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2442 | 2466220 | 1392 | 3842 | 1.2832 | 1837 | 1942276 | 319340298 | 721437 | test(design): recognisability fails under its own name, not the contrast floor ( |
+| claude-code-ab8b1729-92f-1785647977-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 910 | 2127288 | 211517607 | 367767 | 2495965 | 128.2531 | 2747 | 4069564 | 530857905 | 1089204 |  |
 
 ### Steering
 

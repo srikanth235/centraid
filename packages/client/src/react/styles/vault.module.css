@@ -6,7 +6,7 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
 }
 .why {

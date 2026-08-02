@@ -109,8 +109,8 @@
 }
 .settingsNavEyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -123,8 +123,8 @@
 }
 .settingsNavSection {
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 14px 10px 4px;

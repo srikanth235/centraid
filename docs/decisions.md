@@ -227,9 +227,9 @@ What the 94 rules genuinely share is a **family** (`--font-mono`, already tokeni
 
 **Still genuinely open, and unresolved by any of the above:** (b) whether the blueprint rungs should be renamed so the size/line-height divergence is explicit; (c) whether `kit.css` is blueprint-scoped and the chrome gets its own component sheet. Those remain product decisions.
 
-## #686 — recommendations for the three questions this issue leaves open
+## #686 — the three questions this issue left open, and their answers
 
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). These are **recommendations, not decisions** — each changes what ships and wants a human yes. The measurements behind them are in the entries above.
+Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Proposed as recommendations and **accepted as written by the maintainer on 2026-08-02** — all three. They are decisions now, not proposals. Agreed order is **(1) → (3) → (2)**, each its own PR; the measurements behind them are in the entries above.
 
 ### 1. The 94 mono eyebrows: converge to two rungs, then name them
 

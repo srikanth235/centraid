@@ -124,8 +124,8 @@
 }
 .packMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -184,7 +184,7 @@
   margin-top: auto;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -200,7 +200,7 @@
   margin-top: auto;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -251,8 +251,8 @@
 }
 .machineryMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -266,7 +266,7 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 6px 10px;

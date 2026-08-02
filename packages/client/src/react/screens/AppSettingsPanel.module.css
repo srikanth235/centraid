@@ -78,7 +78,7 @@
 }
 .settingsEyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--text-ghost);
   margin-top: 2px;
   letter-spacing: 0.06em;
@@ -188,8 +188,8 @@
 }
 .settingsDangerLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--danger);
   margin-bottom: 8px;
@@ -478,9 +478,9 @@
 }
 .settingsSectionLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
 }
 .settingsRow {

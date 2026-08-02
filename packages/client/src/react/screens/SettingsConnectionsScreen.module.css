@@ -77,7 +77,7 @@
 }
 .sectionLabel {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

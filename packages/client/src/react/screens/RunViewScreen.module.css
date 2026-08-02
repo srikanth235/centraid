@@ -99,7 +99,7 @@
 .logStatL {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-bottom: 8px;
@@ -455,7 +455,7 @@
 .stepLabel {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin: 8px 0 4px;
@@ -537,8 +537,8 @@
 }
 .rsideH {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   padding: 12px 15px 9px;

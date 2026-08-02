@@ -199,8 +199,8 @@ button.rowMain:hover {
 .field dt {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
   text-transform: uppercase;
 }

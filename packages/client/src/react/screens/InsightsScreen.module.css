@@ -102,8 +102,8 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -231,8 +231,8 @@
 }
 .chartStatLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-bottom: 3px;
@@ -367,8 +367,8 @@
 }
 .th {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -551,8 +551,8 @@
 }
 .heroLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -582,8 +582,8 @@
 }
 .heroStatLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }

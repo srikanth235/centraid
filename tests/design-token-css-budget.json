@@ -383,7 +383,7 @@
     "rawRadius": 7
   },
   "packages/client/src/react/screens/SettingsConnectionsScreen.module.css": {
-    "rawFontSize": 11,
+    "rawFontSize": 12,
     "rawRadius": 7
   },
   "packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css": {
@@ -399,6 +399,9 @@
   "packages/client/src/react/screens/SettingsStorageScreen.module.css": {
     "rawFontSize": 7,
     "rawRadius": 1
+  },
+  "packages/client/src/react/screens/StartupErrorScreen.module.css": {
+    "rawFontSize": 1
   },
   "packages/client/src/react/screens/StorageLimitsPanel.module.css": {
     "rawFontSize": 3,

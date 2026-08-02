@@ -68,8 +68,8 @@
 }
 .headMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -306,7 +306,7 @@
 }
 .figureLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -705,8 +705,8 @@
 }
 .resourceDetailsGroupTitle {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -1046,7 +1046,7 @@
 }
 .alertAfterLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1103,7 +1103,7 @@
 }
 .idRow dt {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
