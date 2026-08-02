@@ -5,6 +5,7 @@
 
 import type { VaultDb } from "../db.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { writeReceipt } from "./evidence.js";
@@ -179,7 +180,9 @@ export function importVaultExport(
   let imported = 0;
   db.vault.exec("PRAGMA foreign_keys = OFF");
   db.vault.exec("BEGIN");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     if (existing.n > 0) {
       const physical = new Set(
         listVaultEntities(db.vault)
@@ -221,6 +224,7 @@ export function importVaultExport(
         `import broke referential integrity: ${JSON.stringify(violations.slice(0, 3))}`
       );
     }
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");

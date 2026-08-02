@@ -1,12 +1,23 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { beginReplicaCommit, endReplicaCommit } from "./change-log.js";
+
 export type ReplicaIntentStatus =
   | "queued"
   | "sending"
   | "parked"
   | "executed"
   | "denied"
-  | "failed";
+  | "failed"
+  | "conflict";
+
+export interface ReplicaConflict {
+  shapeId?: string;
+  entity: string;
+  rowId: string;
+  expectedVersion: number;
+  actualVersion: number;
+}
 
 export interface ReplicaIntentOutcome {
   intentId: string;
@@ -17,6 +28,7 @@ export interface ReplicaIntentOutcome {
   status: ReplicaIntentStatus;
   invocationId?: string;
   reason?: string;
+  conflict?: ReplicaConflict;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +43,7 @@ export interface RecordReplicaIntentOutcomeInput {
   status: ReplicaIntentStatus;
   invocationId?: string;
   reason?: string;
+  conflict?: ReplicaConflict;
   now?: Date;
 }
 
@@ -43,11 +56,17 @@ interface IntentRow {
   status: ReplicaIntentStatus;
   invocation_id: string | null;
   reason: string | null;
+  conflict_json: string | null;
   created_at: string;
   updated_at: string;
 }
 
-const TERMINAL = new Set<ReplicaIntentStatus>(["executed", "denied", "failed"]);
+const TERMINAL = new Set<ReplicaIntentStatus>([
+  "executed",
+  "denied",
+  "failed",
+  "conflict",
+]);
 
 function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
   return {
@@ -59,6 +78,9 @@ function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
     status: row.status,
     ...(row.invocation_id ? { invocationId: row.invocation_id } : {}),
     ...(row.reason === null ? {} : { reason: row.reason }),
+    ...(row.conflict_json === null
+      ? {}
+      : { conflict: JSON.parse(row.conflict_json) as ReplicaConflict }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -68,7 +90,7 @@ function rowById(vault: DatabaseSync, intentId: string): IntentRow | undefined {
   return vault
     .prepare(
       `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-              invocation_id, reason, created_at, updated_at
+              invocation_id, reason, conflict_json, created_at, updated_at
          FROM replica_intent_outcome WHERE intent_id = ?`
     )
     .get(intentId) as IntentRow | undefined;
@@ -119,13 +141,14 @@ export function recordReplicaIntentOutcomeInTransaction(
     vault
       .prepare(
         `UPDATE replica_intent_outcome
-            SET status = ?, invocation_id = ?, reason = ?, updated_at = ?
+            SET status = ?, invocation_id = ?, reason = ?, conflict_json = ?, updated_at = ?
           WHERE intent_id = ?`
       )
       .run(
         input.status,
         input.invocationId ?? null,
         input.reason ?? null,
+        input.conflict ? JSON.stringify(input.conflict) : null,
         now,
         input.intentId
       );
@@ -134,8 +157,8 @@ export function recordReplicaIntentOutcomeInTransaction(
       .prepare(
         `INSERT INTO replica_intent_outcome (
            intent_id, device_id, app_id, action, payload_hash, status,
-           invocation_id, reason, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           invocation_id, reason, conflict_json, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.intentId,
@@ -146,6 +169,7 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.status,
         input.invocationId ?? null,
         input.reason ?? null,
+        input.conflict ? JSON.stringify(input.conflict) : null,
         now,
         now
       );
@@ -175,8 +199,11 @@ export function recordReplicaIntentOutcome(
   input: RecordReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome {
   vault.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(vault);
     const outcome = recordReplicaIntentOutcomeInTransaction(vault, input);
+    endReplicaCommit(vault, replicaCommit);
     vault.exec("COMMIT");
     return outcome;
   } catch (error) {
@@ -189,6 +216,7 @@ export interface TransitionReplicaIntentOutcomeInput {
   status: ReplicaIntentStatus;
   invocationId?: string;
   reason?: string;
+  conflict?: ReplicaConflict;
   now?: Date;
 }
 
@@ -213,6 +241,7 @@ export function transitionReplicaIntentOutcomeInTransaction(
     status: update.status,
     ...(update.invocationId ? { invocationId: update.invocationId } : {}),
     ...(update.reason ? { reason: update.reason } : {}),
+    ...(update.conflict ? { conflict: update.conflict } : {}),
     ...(update.now ? { now: update.now } : {}),
   });
 }
@@ -224,12 +253,15 @@ export function transitionReplicaIntentOutcome(
   update: TransitionReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome | undefined {
   vault.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(vault);
     const outcome = transitionReplicaIntentOutcomeInTransaction(
       vault,
       intentId,
       update
     );
+    endReplicaCommit(vault, replicaCommit);
     vault.exec("COMMIT");
     return outcome;
   } catch (error) {
@@ -269,7 +301,7 @@ export function listReplicaIntentOutcomes(
     ? (vault
         .prepare(
           `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-                  invocation_id, reason, created_at, updated_at
+                  invocation_id, reason, conflict_json, created_at, updated_at
              FROM replica_intent_outcome
             WHERE device_id = ? AND status = ? ORDER BY updated_at, intent_id LIMIT ?`
         )
@@ -277,7 +309,7 @@ export function listReplicaIntentOutcomes(
     : (vault
         .prepare(
           `SELECT intent_id, device_id, app_id, action, payload_hash, status,
-                  invocation_id, reason, created_at, updated_at
+             invocation_id, reason, conflict_json, created_at, updated_at
              FROM replica_intent_outcome
             WHERE device_id = ? ORDER BY updated_at, intent_id LIMIT ?`
         )
@@ -291,7 +323,9 @@ export function deleteReplicaIntentOutcomesForDevice(
   deviceId: string
 ): number {
   vault.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(vault);
     // A parked payload is executable authority, not merely presentation
     // state. Remove it while the device -> intent ownership rows still exist,
     // in the same transaction that forgets those rows. Once a device is
@@ -335,6 +369,7 @@ export function deleteReplicaIntentOutcomesForDevice(
         .prepare(`DELETE FROM replica_intent_outcome WHERE device_id = ?`)
         .run(deviceId).changes
     );
+    endReplicaCommit(vault, replicaCommit);
     vault.exec("COMMIT");
     return deleted;
   } catch (error) {

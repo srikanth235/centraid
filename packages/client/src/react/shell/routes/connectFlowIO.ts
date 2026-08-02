@@ -209,5 +209,6 @@ async function commitGateway(
     displayLabel: result.label,
     gatewayId: result.gatewayId,
     vaultId: result.vaultId ?? "",
+    vaultIds: result.vaultIds,
   };
 }

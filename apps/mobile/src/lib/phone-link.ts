@@ -34,6 +34,7 @@ import {
 } from "../../modules/centraid-tunnel";
 import type { TunnelStatus } from "../../modules/centraid-tunnel";
 import { Store } from "../storage";
+import { normalizePairedVaults } from "./phone-link-core";
 import { parsePairingInput } from "./phone-link-parse";
 import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
 import {
@@ -98,7 +99,7 @@ export function getDesktopName(): string {
 export async function pair(
   qrPayloadString: string,
   deviceName: string
-): Promise<{ desktopName: string; deviceId: string }> {
+): Promise<{ desktopName: string; deviceId: string; vaultIds?: string[] }> {
   const parsed = parsePairingInput(qrPayloadString);
   if (!parsed) {
     throw new PhoneLinkError(
@@ -193,17 +194,47 @@ export async function pair(
     result.vaultName || result.gatewayName || parsed.vaultName || "Gateway";
   const deviceId =
     result.enrollmentId || result.gatewayId || result.deviceId || "gateway";
+  const returnedVaults = normalizePairedVaults(result);
+  const returnedVaultIds = returnedVaults.map((vault) => vault.vaultId);
+  const primaryVaultId = returnedVaultIds[0];
+  if (!primaryVaultId) {
+    throw new PhoneLinkError(
+      "pair_failed",
+      "Gateway did not return an enrolled vault."
+    );
+  }
+  const metadata = new Map(
+    returnedVaults.map((vault) => [vault.vaultId, vault] as const)
+  );
   // EndpointId is durable identity. `gw` is only a refreshable dial hint; a
   // relay change updates it in-place because addVaultLink keys on EndpointId.
-  await addVaultLink({
-    gatewayId,
-    desktopName,
-    deviceId,
-    vaultId: result.vaultId ?? "",
-    vaultName: parsed.vaultName,
-    endpointHint: parsed.gw,
-  });
-  return { desktopName, deviceId };
+  // The first grant remains active after all grants are recorded, preserving
+  // the ticket's primary-vault landing behavior.
+  // `addVaultLink` updates one shared registry projection, so these writes
+  // intentionally stay ordered even though the response is a batch.
+  const links = await returnedVaultIds.reduce<Promise<VaultLink[]>>(
+    async (previous, vaultId) => {
+      const prior = await previous;
+      const grant = metadata.get(vaultId);
+      const link = await addVaultLink({
+        gatewayId,
+        desktopName,
+        deviceId: grant?.enrollmentId ?? deviceId,
+        vaultId,
+        ...(grant?.vaultName
+          ? { vaultName: grant.vaultName }
+          : vaultId === primaryVaultId
+            ? { vaultName: parsed.vaultName }
+            : {}),
+        endpointHint: parsed.gw,
+      });
+      return [...prior, link];
+    },
+    Promise.resolve([])
+  );
+  const primaryLink = links[0];
+  if (primaryLink) await setActiveVaultLink(primaryLink.id);
+  return { desktopName, deviceId, vaultIds: returnedVaultIds };
 }
 
 /**

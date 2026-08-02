@@ -34,6 +34,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
 import { projectShareClosure, readShareClosure } from "./closure.js";
@@ -178,7 +179,9 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
   // (b) One transaction, audience vault only.
   const audience = input.audience.vault;
   audience.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(audience);
     const projection = projectShareClosure(
       audience,
       closure,
@@ -204,6 +207,7 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
         input.sharedByMember,
         (input.now ?? Date.now)()
       );
+    endReplicaCommit(audience, replicaCommit);
     audience.exec("COMMIT");
     return {
       itemType: input.itemType,
@@ -235,8 +239,10 @@ export function unshareFromVault(
     return { removed: false, orphanedShas: [] };
   }
   audience.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   let shas: string[];
   try {
+    replicaCommit = beginReplicaCommit(audience);
     const removal = deleteProjectedClosure(
       audience,
       input.itemType,
@@ -248,6 +254,7 @@ export function unshareFromVault(
       )
       .run(input.itemType, input.itemId);
     shas = removal.shas;
+    endReplicaCommit(audience, replicaCommit);
     audience.exec("COMMIT");
   } catch (error) {
     audience.exec("ROLLBACK");
@@ -273,8 +280,10 @@ export function moveOutOfVault(
 ): UnshareFromVaultResult {
   const source = input.source.vault;
   source.exec("BEGIN IMMEDIATE");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   let shas: string[];
   try {
+    replicaCommit = beginReplicaCommit(source);
     const removal = deleteProjectedClosure(
       source,
       input.itemType,
@@ -286,6 +295,7 @@ export function moveOutOfVault(
       )
       .run(input.itemType, input.itemId);
     shas = removal.shas;
+    endReplicaCommit(source, replicaCommit);
     source.exec("COMMIT");
     if (!removal.removed) return { removed: false, orphanedShas: [] };
   } catch (error) {

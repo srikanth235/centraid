@@ -183,6 +183,7 @@ export function applyOptimisticMutations(
         values: { ...row.values },
         oversizedFields: [...row.oversizedFields],
         hasUnavailableFields: row.hasUnavailableFields,
+        ...(row.rowVersion === undefined ? {} : { rowVersion: row.rowVersion }),
       },
     ])
   );
@@ -214,6 +215,9 @@ export function applyOptimisticMutations(
       ),
       hasUnavailableFields:
         current?.hasUnavailableFields ?? schema.hasUnavailableFields === true,
+      ...(current?.rowVersion === undefined
+        ? {}
+        : { rowVersion: current.rowVersion }),
     });
   }
   return [...rows.values()];

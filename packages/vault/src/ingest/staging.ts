@@ -24,6 +24,7 @@ import type { VaultDb } from "../db.js";
 import { pkColumn } from "../gateway/execution.js";
 import type { Identity } from "../gateway/types.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import {
   isSealedValue,
   sealAad,
@@ -293,7 +294,9 @@ export function stageCandidates(
   const now = nowIso();
   let staged: { batchId: string; counts: StageResult["staged"] };
   db.vault.exec("BEGIN");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     staged = stageBatchTx(
       db.vault,
       connectionId,
@@ -302,6 +305,7 @@ export function stageCandidates(
       now,
       db.sealKey
     );
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");
@@ -641,7 +645,9 @@ export function publishBatch(
   const now = nowIso();
   let applied: AppliedBatch;
   db.vault.exec("BEGIN");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     applied = applyBatchTx(
       db.vault,
       batchId,
@@ -650,6 +656,7 @@ export function publishBatch(
       now,
       db.sealKey
     );
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");
@@ -703,7 +710,9 @@ export function discardBatch(
   if (batch.status !== "draft")
     throw new Error(`batch ${batchId} is ${batch.status}, not draft`);
   db.vault.exec("BEGIN");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     db.vault
       .prepare("DELETE FROM sync_import_row WHERE batch_id = ?")
       .run(batchId);
@@ -715,6 +724,7 @@ export function discardBatch(
     // Discard releases the batch's blob holds (issue #296): nothing claimed
     // the staged bytes, so the TTL sweep reclaims them.
     releaseBatchHold(db.vault, batchId);
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");

@@ -1,4 +1,4 @@
-import type { IntentState, ReplicaIntent } from "./types.js";
+import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export type NewStoredIntent = Omit<ReplicaIntent, "createdOrder">;
 
@@ -23,6 +23,8 @@ export interface IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ) => Promise<ReplicaIntent>;
+  /** Terminal outcomes survive removal of the sensitive queued input. */
+  listSettled: (limit?: number) => Promise<IntentOutcome[]>;
   clear: () => Promise<void>;
   close: () => void;
   destroy: () => Promise<void>;

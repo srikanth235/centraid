@@ -146,15 +146,32 @@ async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
     db = new sqlite3.oo1.DB(":memory:", "c");
     mode = "memory";
   }
-  store = new SqliteReplicaStore(db, options.vaultId);
+  store = new SqliteReplicaStore(
+    db,
+    options.vaultId,
+    mode === "memory" ? "memory" : "durable"
+  );
   return status();
 }
 
 function status(): ReplicaStatus {
   if (!mode) throw new ReplicaProtocolError("Replica mode was not initialized");
-  if (purgeOnly) return { mode, cursor: null, schemaEpoch: null };
+  if (purgeOnly)
+    return {
+      mode,
+      cursor: null,
+      schemaEpoch: null,
+      coverage: "partial",
+      durability: mode === "memory" ? "memory" : "durable",
+    };
   const current = requiredStore().status();
-  return { mode, cursor: current.cursor, schemaEpoch: current.schemaEpoch };
+  return {
+    mode,
+    cursor: current.cursor,
+    schemaEpoch: current.schemaEpoch,
+    coverage: current.coverage,
+    durability: current.durability,
+  };
 }
 
 function requiredStore(): SqliteReplicaStore {

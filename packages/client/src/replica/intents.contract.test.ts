@@ -145,4 +145,41 @@ describe(IntentQueue, () => {
       attempts: 2,
     });
   });
+
+  test("retains structured terminal conflicts after scrubbing the queued input", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-conflict",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "edit",
+      input: { title: "offline" },
+    });
+    await queue.claimNext();
+    const conflict = {
+      shapeId: "shape-agenda",
+      entity: "core.event",
+      rowId: "event-1",
+      expectedVersion: 4,
+      actualVersion: 5,
+    };
+    await queue.applyOutcomes([
+      {
+        intentId: "intent-conflict",
+        status: "conflict",
+        reason: "canonical row changed",
+        conflict,
+      },
+    ]);
+
+    await expect(queue.list()).resolves.toStrictEqual([]);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(queue.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-conflict",
+        status: "conflict",
+        conflict,
+      },
+    ]);
+  });
 });

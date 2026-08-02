@@ -279,6 +279,12 @@ export function makeDaemonDevicePlane(input: {
       vaultId: primary.vaultId,
       vaultName: plane.name,
       vaultIds: enrolled.map((row) => row.vaultId),
+      vaults: enrolled.map((row) => ({
+        enrollmentId: row.enrollmentId,
+        vaultId: row.vaultId,
+        vaultName: registry.get(row.vaultId)?.name,
+        role: row.role === "revoked" ? undefined : row.role,
+      })),
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,

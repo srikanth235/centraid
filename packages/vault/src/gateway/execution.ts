@@ -11,6 +11,7 @@ import { promoteStagedBlob } from "../blob/promote.js";
 import { stagedInfoTx } from "../blob/staging.js";
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import {
   finalizeReplicaInvocationCommit,
@@ -687,7 +688,9 @@ export function runContractAndExecute(
   let audit!: ReplicaInvocationAudit;
   let postResults: ReturnType<typeof evaluateConditions> = [];
   const vaultTransaction = beginInvocationTransaction(db.vault);
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     output = handler(ctx);
     // §10 S4: polymorphic refs validated before the transaction may commit.
     validatePolymorphicWrites(db.vault, writes);
@@ -827,6 +830,7 @@ export function runContractAndExecute(
       audit,
       committedAt: ctx.now,
     });
+    endReplicaCommit(db.vault, replicaCommit);
     commitInvocationTransaction(db.vault, vaultTransaction);
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);
   } catch (error) {

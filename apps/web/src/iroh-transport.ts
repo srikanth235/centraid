@@ -143,6 +143,13 @@ export interface IrohPairingResponse {
   gatewayName?: string;
   vaultId?: string;
   vaultName?: string;
+  vaultIds?: string[];
+  vaults?: Array<{
+    vaultId: string;
+    enrollmentId?: string;
+    vaultName?: string;
+    role?: "admin" | "write" | "read";
+  }>;
   version?: string;
 }
 

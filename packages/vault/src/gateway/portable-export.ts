@@ -3,6 +3,9 @@
 // Schema/export audit #679 L2: the sealed enforcement/leak registries are
 // policy metadata only; SEALED_COLUMNS remains exported through the canonical
 // table walk and introduces no new table or adapter omission.
+// The replica schema additions are included by that same canonical table walk;
+// this owner is touched whenever the schema fingerprint is deliberately
+// re-audited so export completeness cannot drift silently.
 
 import { createHash } from "node:crypto";
 

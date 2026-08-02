@@ -20,6 +20,7 @@ const TERMINAL_OUTCOMES = new Set<IntentOutcome["status"]>([
   "executed",
   "denied",
   "failed",
+  "conflict",
 ]);
 
 /**
@@ -67,6 +68,7 @@ export class IntentQueue {
       attempts: 0,
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
+      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
     });
   }
 
@@ -100,11 +102,13 @@ export class IntentQueue {
     await applyInIntentOrder(outcomes, async (outcome) => {
       const existing = await this.store.get(outcome.intentId);
       if (!existing || !OVERLAY_STATES.has(existing.state)) return;
-      const state = outcome.status;
+      const state: IntentState =
+        outcome.status === "conflict" ? "failed" : outcome.status;
       const patch = {
         state,
         reason: outcome.reason,
         output: outcome.output,
+        ...(outcome.conflict ? { conflict: outcome.conflict } : {}),
       };
       updated.push(
         TERMINAL_OUTCOMES.has(outcome.status)
@@ -164,6 +168,10 @@ export class IntentQueue {
 
   list(): Promise<ReplicaIntent[]> {
     return this.store.list();
+  }
+
+  listSettled(limit?: number): Promise<IntentOutcome[]> {
+    return this.store.listSettled(limit);
   }
 
   close(): void {

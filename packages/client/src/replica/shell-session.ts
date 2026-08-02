@@ -41,19 +41,24 @@ import type {
   EnqueueIntentInput,
   IntentOutcome,
   OptimisticMutation,
+  ReplicaBootstrapHeader,
+  ReplicaChangeBatch,
   ReplicaCursor,
+  ReplicaBaseVersion,
   ReplicaDependency,
   ReplicaIdentity,
   ReplicaIntent,
   ReplicaInvalidation,
   ReplicaReadRequest,
   ReplicaReadWireResult,
+  ReplicaSnapshotRow,
   ReplicaSearchRequest,
   ReplicaSearchWireResult,
   ReplicaShape,
   ReplicaStatus,
   ReplicaValue,
 } from "./types.js";
+import { runWindowedBootstrap } from "./windowed-bootstrap.js";
 
 /**
  * Replica teardown mutates shared session and durable-storage ownership, so
@@ -95,6 +100,7 @@ export interface ShellReplicaWriteInput {
   input: ReplicaValue;
   optimistic?: ShellOptimisticMutation[];
   intentId?: string;
+  baseVersions?: ReplicaBaseVersion[];
 }
 
 export type ShellReplicaWriteResult =
@@ -105,6 +111,15 @@ export interface ShellReplicaCoordinator {
   bootstrap: (
     snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>
   ) => Promise<ReplicaCursor>;
+  bootstrapBegin?: (header: ReplicaBootstrapHeader) => Promise<void>;
+  bootstrapPage?: (rows: ReplicaSnapshotRow[]) => Promise<void>;
+  bootstrapPreview?: (cursor: ReplicaCursor) => Promise<void>;
+  bootstrapCommit?: (
+    cursor: ReplicaCursor,
+    header: ReplicaBootstrapHeader,
+    outcomes?: IntentOutcome[]
+  ) => Promise<ReplicaCursor>;
+  applyChanges?: (batch: ReplicaChangeBatch) => Promise<ReplicaCursor>;
   status: () => Promise<ReplicaStatus>;
   catalog: () => Promise<ReplicaShape[]>;
   readWire: (request: ReplicaReadRequest) => Promise<ReplicaReadWireResult>;
@@ -166,6 +181,7 @@ export class ReplicaShellSession {
     | undefined;
   #catalog: ReplicaShape[] = [];
   #bootstrapPromise: Promise<void> | undefined;
+  #bootstrapAbort: AbortController | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #bootstrapRetryAttempt = 0;
   #drainPromise: Promise<void> | undefined;
@@ -204,7 +220,17 @@ export class ReplicaShellSession {
     await this.coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.coordinator.catalog();
-    else await this.bootstrapWhenReachable();
+    // COMPAT(replica-coordinator-v1): added 2026-08-02, drop when floor >= replica-windowed-v1.
+    // Older coordinator implementations did not report coverage. A non-null
+    // cursor from those implementations is the only available proof and must
+    // remain usable; current stores always populate the explicit field.
+    if (
+      status.coverage === "partial" ||
+      (status.cursor === null && status.coverage !== "complete")
+    ) {
+      if (this.#isOnline()) await this.bootstrapWhenReachable();
+      else this.#catalog = await this.coordinator.catalog();
+    }
     void this.flushIntents();
     return this;
   }
@@ -287,6 +313,7 @@ export class ReplicaShellSession {
         input: input.input,
         optimistic,
         dependencies,
+        ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
       });
       this.assertOpen();
       const existingAdmission = admissionResult(intent);
@@ -376,6 +403,7 @@ export class ReplicaShellSession {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#bootstrapAbort?.abort();
     this.rejectAdmissionWaiters(
       new ReplicaProtocolError("Replica session closed")
     );
@@ -398,6 +426,7 @@ export class ReplicaShellSession {
       return;
     }
     this.#closed = true;
+    this.#bootstrapAbort?.abort();
     this.rejectAdmissionWaiters(
       new ReplicaProtocolError("Replica session purged")
     );
@@ -445,26 +474,83 @@ export class ReplicaShellSession {
   }
 
   private async bootstrap(): Promise<void> {
+    const abort = new AbortController();
+    this.#bootstrapAbort = abort;
     try {
-      const snapshot = await fetchReplicaBootstrap(
-        this.gatewayAuth,
-        this.#fetcher
+      const supportsWindowed = Boolean(
+        this.coordinator.bootstrapBegin &&
+        this.coordinator.bootstrapPage &&
+        this.coordinator.bootstrapPreview &&
+        this.coordinator.bootstrapCommit &&
+        this.coordinator.applyChanges
       );
-      const pending = await this.coordinator.pendingIntents();
-      const exactOutcomes = await fetchReplicaIntentOutcomes(
-        this.gatewayAuth,
-        pending.map((intent) => intent.intentId),
-        snapshot.cursor,
-        this.#fetcher
-      );
-      snapshot.outcomes = mergeIntentOutcomes(
-        snapshot.outcomes ?? [],
-        exactOutcomes
-      );
-      await this.coordinator.bootstrap(snapshot);
+      // COMPAT(replica-coordinator-v1): added 2026-08-02, drop when floor >= replica-windowed-v1.
+      if (!supportsWindowed) {
+        const snapshot = await fetchReplicaBootstrap(
+          this.gatewayAuth,
+          this.#fetcher
+        );
+        const pending = await this.coordinator.pendingIntents();
+        const exactOutcomes = await fetchReplicaIntentOutcomes(
+          this.gatewayAuth,
+          pending.map((intent) => intent.intentId),
+          snapshot.cursor,
+          this.#fetcher
+        );
+        snapshot.outcomes = mergeIntentOutcomes(
+          snapshot.outcomes ?? [],
+          exactOutcomes
+        );
+        await this.coordinator.bootstrap(snapshot);
+        this.#hasCursor = true;
+        this.#catalog = await this.coordinator.catalog();
+        for (const outcome of exactOutcomes)
+          this.resolveAdmissionWaiter(outcome.intentId, outcome);
+        this.#bootstrapRetryAttempt = 0;
+        return;
+      }
+      const resolved: IntentOutcome[] = [];
+      await runWindowedBootstrap({
+        gatewayAuth: this.gatewayAuth,
+        target: {
+          bootstrapBegin: this.coordinator.bootstrapBegin!,
+          bootstrapPage: this.coordinator.bootstrapPage!,
+          bootstrapPreview: this.coordinator.bootstrapPreview,
+          bootstrapCommit: this.coordinator.bootstrapCommit!,
+          applyChanges: this.coordinator.applyChanges!,
+        },
+        fetcher: this.#fetcher,
+        signal: abort.signal,
+        reconcileOutcomes: async (cursor) => {
+          const pending = await this.coordinator.pendingIntents();
+          const exact = await fetchReplicaIntentOutcomes(
+            this.gatewayAuth,
+            pending.map((intent) => intent.intentId),
+            cursor,
+            this.#fetcher
+          );
+          resolved.push(...exact);
+          return exact;
+        },
+        pullChanges: async (cursor, signal) => {
+          const shapeIds = (await this.coordinator.catalog()).map(
+            (shape) => shape.shapeId
+          );
+          return fetchReplicaChanges(
+            this.gatewayAuth,
+            cursor,
+            signal,
+            shapeIds,
+            this.#fetcher
+          );
+        },
+        onFirstPage: async () => {
+          this.#catalog = await this.coordinator.catalog();
+        },
+      });
       this.#hasCursor = true;
       this.#catalog = await this.coordinator.catalog();
-      for (const outcome of snapshot.outcomes ?? []) {
+      for (const outcome of resolved) {
         this.resolveAdmissionWaiter(outcome.intentId, outcome);
       }
       this.#bootstrapRetryAttempt = 0;
@@ -472,6 +558,8 @@ export class ReplicaShellSession {
       if (isAuthorizationError(error)) await this.authorizationRevoked();
       else if (isTransientGatewayError(error)) this.scheduleBootstrapRetry();
       else throw error;
+    } finally {
+      if (this.#bootstrapAbort === abort) this.#bootstrapAbort = undefined;
     }
   }
 
@@ -765,7 +853,10 @@ export async function openReplicaShellSession(
       },
     }
   );
-  const rememberStorage = remember && status.mode === "opfs-sahpool";
+  const rememberStorage =
+    remember &&
+    status.mode === "opfs-sahpool" &&
+    status.intentDurability !== "memory";
   if (remember && !rememberStorage) {
     try {
       await unregisterRememberedReplicaIdentity(identity, {
@@ -1248,8 +1339,9 @@ function admissionResult(
   }
   return {
     intentId: intent.intentId,
-    status: intent.state,
+    status: intent.conflict ? "conflict" : intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
     ...(intent.output === undefined ? {} : { output: intent.output }),
+    ...(intent.conflict === undefined ? {} : { conflict: intent.conflict }),
   };
 }

@@ -44,6 +44,7 @@ import type {
 import { discardBatch, publishBatch } from "../ingest/staging.js";
 import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
 import {
@@ -295,6 +296,7 @@ export class Gateway {
     try {
       this.db.vault.exec("BEGIN IMMEDIATE");
       this.db.journal.exec("BEGIN IMMEDIATE");
+      const replicaCommit = beginReplicaCommit(this.db.vault);
       reclaimProvenOrdinaryInvocationCommitsInTransaction(this.db);
       const results = runs.map((run): InvocationBatchResult<T> => {
         try {
@@ -309,6 +311,7 @@ export class Gateway {
           invocationId
         );
       }
+      endReplicaCommit(this.db.vault, replicaCommit);
       this.db.vault.exec("COMMIT");
       this.db.journal.exec("COMMIT");
       // A rejected run may still have crossed the canonical boundary and left
@@ -1323,7 +1326,9 @@ export class Gateway {
     const result = revokeGrantCascade(this.db, owner, grantId, (revoked) => {
       let invocationIds: string[];
       this.db.vault.exec("BEGIN IMMEDIATE");
+      let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
       try {
+        replicaCommit = beginReplicaCommit(this.db.vault);
         const parked = listDurableParkedPayloads(this.db).filter(
           (entry) => entry.grantId === revoked
         );
@@ -1340,6 +1345,7 @@ export class Gateway {
             }
           );
         }
+        endReplicaCommit(this.db.vault, replicaCommit);
         this.db.vault.exec("COMMIT");
       } catch (error) {
         this.db.vault.exec("ROLLBACK");

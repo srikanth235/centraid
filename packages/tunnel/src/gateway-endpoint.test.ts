@@ -87,7 +87,15 @@ function startFakeGateway(
 describe("gateway endpoint", () => {
   const seen: SeenRequest[] = [];
   const enrolled = new Set<string>();
-  const tickets = new Map<string, { secret: string; vaultId: string }>();
+  const tickets = new Map<
+    string,
+    {
+      secret: string;
+      vaultId: string;
+      vaultIds?: string[];
+      vaults?: GatewayPairResponse["vaults"];
+    }
+  >();
   let gateway: { server: http.Server; baseUrl: string };
   let endpoint: GatewayEndpointHandle;
   let device: TunnelClient;
@@ -110,6 +118,8 @@ describe("gateway endpoint", () => {
           gatewayName: "test-vps",
           vaultId: ticket.vaultId,
           vaultName: "Family",
+          ...(ticket.vaultIds ? { vaultIds: ticket.vaultIds } : {}),
+          ...(ticket.vaults ? { vaults: ticket.vaults } : {}),
           version: "0.1.0",
           protocolVersion: 2,
         };
@@ -145,7 +155,25 @@ describe("gateway endpoint", () => {
   });
 
   it("redeems a ticket exactly once and answers the handshake material", async () => {
-    tickets.set("t1", { secret: "s3cret", vaultId: "v-family" });
+    tickets.set("t1", {
+      secret: "s3cret",
+      vaultId: "v-family",
+      vaultIds: ["v-family", "v-shared"],
+      vaults: [
+        {
+          enrollmentId: "enrollment-family",
+          role: "write",
+          vaultId: "v-family",
+          vaultName: "Family",
+        },
+        {
+          enrollmentId: "enrollment-shared",
+          role: "read",
+          vaultId: "v-shared",
+          vaultName: "Shared",
+        },
+      ],
+    });
 
     const wrong = await device.pairGateway(endpoint.ticket(), {
       ticketId: "t1",
@@ -166,6 +194,21 @@ describe("gateway endpoint", () => {
       gatewayId: "gateway-endpoint",
       vaultId: "v-family",
       vaultName: "Family",
+      vaultIds: ["v-family", "v-shared"],
+      vaults: [
+        {
+          enrollmentId: "enrollment-family",
+          role: "write",
+          vaultId: "v-family",
+          vaultName: "Family",
+        },
+        {
+          enrollmentId: "enrollment-shared",
+          role: "read",
+          vaultId: "v-shared",
+          vaultName: "Shared",
+        },
+      ],
       version: "0.1.0",
       protocolVersion: 2,
     });

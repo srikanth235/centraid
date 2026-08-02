@@ -52,6 +52,12 @@ interface StoredEntitySchemaRow {
   columns_json: string;
 }
 
+interface ReplicaSourceState {
+  cursor_epoch: string;
+  cursor_seq: number;
+  coverage: "partial" | "complete";
+}
+
 export interface MountedReplicaScope {
   vaultId: string;
   label: string;
@@ -197,13 +203,15 @@ export class MultiVaultReplicaReader {
       row,
     }));
     if (byScope.length === 0) {
+      const aggregate = this.aggregateState();
       return {
         rows: [],
-        cursor: this.aggregateCursor([]),
+        cursor: aggregate.cursor,
         dependency: {
           shapeId: request.shapeId ?? `${appId}:${purpose}`,
           entity: request.entity,
         },
+        coverage: aggregate.coverage,
       };
     }
     const schema = storedSchema(request.entity, byScope[0]!.row);
@@ -219,13 +227,15 @@ export class MultiVaultReplicaReader {
       },
       []
     );
+    const aggregate = this.aggregateState();
     return {
       rows: evaluated,
-      cursor: this.aggregateCursor(byScope.map(({ row }) => row)),
+      cursor: aggregate.cursor,
       dependency: {
         shapeId: request.shapeId ?? byScope[0]!.row.shape_id,
         entity: request.entity,
       },
+      coverage: aggregate.coverage,
     };
   }
 
@@ -238,6 +248,17 @@ export class MultiVaultReplicaReader {
     request: NativeSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
+    if (this.#scopes.length === 0) {
+      return {
+        rows: [],
+        cursor: { epoch: "mounted", seq: 0 },
+        dependency: {
+          shapeId: request.shapeId ?? `${appId}:${purpose}`,
+          entity: request.entity,
+        },
+        coverage: "partial",
+      };
+    }
     if ((request.where?.length ?? 0) > 0) {
       throw new ReplicaProtocolError(
         "Federated replica search does not accept filters"
@@ -254,9 +275,10 @@ export class MultiVaultReplicaReader {
         parameters.push(match, limit, appId, purpose, request.entity);
         return `SELECT ${scopeIndex} AS scope_index,
                        s.shape_id, s.row_id, r.payload_json, r.oversized_json,
+                       r.server_version,
                        es.primary_key, es.columns_json,
                        es.has_unavailable_fields, m.cursor_epoch,
-                       m.cursor_seq, s.rank AS rank, s.snippet
+                       m.cursor_seq, m.coverage, s.rank AS rank, s.snippet
                   FROM (
                     SELECT shape_id, entity, row_id, rank,
                            snippet(
@@ -304,13 +326,15 @@ export class MultiVaultReplicaReader {
           Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
       )
       .slice(0, limit);
+    const aggregate = this.aggregateState();
     return {
       rows,
-      cursor: this.aggregateCursor(hits.map(({ row }) => row)),
+      cursor: aggregate.cursor,
       dependency: {
         shapeId: request.shapeId ?? `${appId}:${purpose}`,
         entity: request.entity,
       },
+      coverage: aggregate.coverage,
     };
   }
 
@@ -416,14 +440,17 @@ export class MultiVaultReplicaReader {
     entity: string,
     plan: ReplicaReadPlan
   ): Promise<ScopedStoredRow[]> {
+    if (this.#scopes.length === 0) return Promise.resolve([]);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
       .map((scope, scopeIndex) => {
         parameters.push(appId, purpose, entity, ...plan.filterParams);
         const select = `SELECT ${scopeIndex} AS scope_index,
                        r.shape_id, r.row_id, r.payload_json, r.oversized_json,
+                       r.server_version,
                        es.primary_key, es.columns_json,
-                       es.has_unavailable_fields, m.cursor_epoch, m.cursor_seq
+                       es.has_unavailable_fields, m.cursor_epoch, m.cursor_seq,
+                       m.coverage
                   FROM ${scope.alias}.replica_row AS r
                   JOIN ${scope.alias}.replica_entity_schema AS es
                     ON es.shape_id = r.shape_id AND es.entity = r.entity
@@ -451,7 +478,7 @@ export class MultiVaultReplicaReader {
     purpose: string,
     entity: string
   ): Promise<boolean> {
-    const key = `${appId} ${purpose} ${entity}`;
+    const key = `${appId}\u0000${purpose}\u0000${entity}`;
     const cached = this.#contentHashed.get(key);
     if (cached !== undefined) return cached;
     // Every scope revoked: there is no union to build, and the read itself
@@ -512,12 +539,34 @@ export class MultiVaultReplicaReader {
     );
   }
 
-  private aggregateCursor(rows: readonly StoredReplicaRow[]): ReplicaCursor {
-    if (rows.length === 0) return { epoch: "mounted", seq: 0 };
+  private aggregateState(): {
+    cursor: ReplicaCursor;
+    coverage: "partial" | "complete";
+  } {
+    const states = this.sourceStates();
+    if (states.length === 0)
+      return { cursor: { epoch: "mounted", seq: 0 }, coverage: "partial" };
     return {
-      epoch: "mounted",
-      seq: Math.min(...rows.map((row) => row.cursor_seq)),
+      cursor: {
+        epoch: "mounted",
+        seq: Math.min(...states.map((state) => state.cursor_seq)),
+      },
+      coverage: states.every((state) => state.coverage === "complete")
+        ? "complete"
+        : "partial",
     };
+  }
+
+  private sourceStates(): ReplicaSourceState[] {
+    if (this.#scopes.length === 0) return [];
+    return this.#scopes.map(
+      (scope) =>
+        this.#driver.all<ReplicaSourceState>(cursorSql(scope))[0] ?? {
+          cursor_epoch: "uninitialized",
+          cursor_seq: 0,
+          coverage: "partial",
+        }
+    );
   }
 }
 
@@ -533,9 +582,10 @@ function withoutPlacementState(record: PlacementRecord): PlacementIntent {
 }
 
 function cursorSql(scope: AttachedScope): string {
-  return `SELECT cursor_epoch, cursor_seq FROM ${scope.alias}.replica_meta
+  return `SELECT cursor_epoch, cursor_seq, 'complete' AS coverage
+            FROM ${scope.alias}.replica_meta
           UNION ALL
-          SELECT cursor_epoch, cursor_seq
+          SELECT cursor_epoch, cursor_seq, 'partial' AS coverage
             FROM ${scope.alias}.replica_bootstrap_progress
            WHERE cursor_epoch IS NOT NULL
              AND NOT EXISTS (SELECT 1 FROM ${scope.alias}.replica_meta)`;

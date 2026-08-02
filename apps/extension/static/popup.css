@@ -130,10 +130,16 @@ button:hover {
 }
 .status-card {
   display: grid;
-  grid-template-columns: 10px 1fr auto;
+  grid-template-columns: 10px 1fr auto auto;
   align-items: center;
   gap: 10px;
   padding: 12px;
+}
+.status-card select {
+  max-width: 112px;
+  margin: 0;
+  padding: 6px 7px;
+  font: inherit;
 }
 .pulse {
   width: 8px;

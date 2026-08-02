@@ -1,3 +1,10 @@
+export interface CompanionVault {
+  readonly vaultId: string;
+  readonly enrollmentId?: string;
+  readonly vaultName?: string;
+  readonly role?: "admin" | "write" | "read";
+}
+
 export interface PairingState {
   readonly endpointTicket: string;
   readonly endpointId: string;
@@ -6,6 +13,8 @@ export interface PairingState {
   readonly gatewayName?: string;
   readonly vaultId: string;
   readonly vaultName?: string;
+  /** Every vault enrolled by the one-time ticket; `vaultId` is the focus. */
+  readonly vaults: readonly CompanionVault[];
   readonly pairedAt: string;
   readonly relayUrls?: readonly string[];
   readonly grantProfile: readonly CompanionModule[];
@@ -60,6 +69,7 @@ export type CompanionRequest =
       deviceName?: string;
       grants: CompanionModule[];
     }
+  | { type: "select-vault"; vaultId: string }
   | { type: "unpair" }
   | { type: "lock" }
   | { type: "unlock" }

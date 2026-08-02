@@ -71,9 +71,9 @@ const METHOD_CARDS: ReadonlyArray<{
     title: "This Mac",
   },
   {
-    // Vault-first copy: a ticket pairs this device to a VAULT, and the
-    // gateway that hosts it is an implementation detail the owner never has
-    // to name. The method id stays `gateway` — internal, not shown.
+    // Vault-first copy: a ticket pairs this device to one or more VAULTS, and
+    // the gateway that hosts them is an implementation detail the owner never
+    // has to name. The method id stays `gateway` — internal, not shown.
     color: PROFILE_COLORS[3]!,
     desc: "Paste or scan a pairing ticket.",
     icon: "Wifi",

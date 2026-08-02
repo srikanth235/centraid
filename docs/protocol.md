@@ -36,6 +36,23 @@ parse always succeeds  →  capability check  →  feature runs OR single update
 
 Never: parse succeeds → feature code branches into three historical shapes.
 
+### Replica-specific correctness fields
+
+The offline replica extends the additive wire contract with fields that are safe for older readers to ignore and required by newer readers when present:
+
+- `commitId` groups all change rows from one canonical write transaction; servers page through complete groups and expose `hasMore` for bounded catch-up.
+- `rowVersion` is the current-epoch change sequence for a row. Clients apply upserts and deletes monotonically, ignoring stale replay data.
+- `baseVersions` on an intent is an optimistic concurrency precondition. A stale precondition produces a structured `conflict` outcome, not a generic transport failure, and does not dispatch the action.
+- `coverage` distinguishes a readable partial preview from a complete replica; `durability` distinguishes persistent storage from an in-memory fallback. These values are status/result metadata, not permission signals.
+
+The browser outbox migration is additive: it never drops the pending-intent store. Settling an intent atomically records its sanitized outcome and removes the queued input, so conflict details survive a reload without retaining the original payload.
+
+### Pair-ticket multi-vault redemption
+
+A pair ticket is one-time onboarding envelope, not a gateway-wide grant. Its server-side invitation contains an ordered list of explicit `(vault, role)` grants. Redemption creates the corresponding vault-scoped enrollments in one transaction and returns the first grant as the initial active vault. Newer responses additionally carry `vaultIds` and `vaults[]` with per-vault enrollment metadata; readers must default an absent list to the primary vault.
+
+Clients may present one scan/paste flow, but they must retain the resulting vault bindings independently. Revoking or forgetting one vault must not remove the other bindings, replicas, cursors, or outboxes. The gateway remains only the transport/control front door; authorization is evaluated per vault.
+
 ## C2 — `COMPAT(name)` tagging
 
 Every back-compat shim carries a machine-grepable comment:

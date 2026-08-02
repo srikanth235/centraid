@@ -20,6 +20,7 @@ import type {
   OptimisticMutation,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
+  ReplicaBaseVersion,
   ReplicaDigest,
   ReplicaFetcher,
   ReplicaIdFactory,
@@ -64,6 +65,7 @@ export interface NativeWriteInput {
   input: ReplicaValue;
   optimistic?: NativeOptimisticMutation[];
   intentId?: string;
+  baseVersions?: ReplicaBaseVersion[];
 }
 
 export type NativeWriteResult =
@@ -246,7 +248,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     await this.#coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.#coordinator.catalog();
-    else if (this.#isConnected() && (await this.#isNetworkWorkAllowed())) {
+    if (
+      (status.coverage === "partial" ||
+        (status.cursor === null && status.coverage !== "complete")) &&
+      this.#isConnected() &&
+      (await this.#isNetworkWorkAllowed())
+    ) {
       const preview = new Promise<void>((resolve, reject) => {
         this.#previewReady = { resolve, reject };
       });
@@ -356,6 +363,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input,
       optimistic,
       dependencies,
+      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
     } satisfies EnqueueIntentInput);
     const settled = terminalResult(intent);
     if (settled) return settled;
@@ -496,8 +504,22 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const status = await this.#coordinator.status();
     if (!status.cursor) return false;
     const abort = new AbortController();
-    const batch = await this.pullChanges(status.cursor, abort.signal);
-    if (batch) await this.#coordinator.applyChanges(batch);
+    const started = Date.now();
+    let cursor = status.cursor;
+    let batches = 0;
+    while (cursor && batches < 32 && Date.now() - started < 5_000) {
+      // Each request must use the cursor returned by the previous apply;
+      // concurrent pulls would race and make the cursor merge ambiguous.
+      // oxlint-disable-next-line no-await-in-loop
+      const batch = await this.pullChanges(cursor, abort.signal);
+      if (!batch) break;
+      // oxlint-disable-next-line no-await-in-loop
+      const next = await this.#coordinator.applyChanges(batch);
+      batches += 1;
+      const progressed = next.epoch !== cursor.epoch || next.seq > cursor.seq;
+      cursor = next;
+      if (!progressed || !batch.hasMore) break;
+    }
     return true;
   }
 
@@ -842,9 +864,10 @@ function terminalResult(intent: ReplicaIntent): NativeWriteResult | undefined {
   }
   return {
     intentId: intent.intentId,
-    status: intent.state,
+    status: intent.conflict ? "conflict" : intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
     ...(intent.output === undefined ? {} : { output: intent.output }),
+    ...(intent.conflict === undefined ? {} : { conflict: intent.conflict }),
   };
 }
 

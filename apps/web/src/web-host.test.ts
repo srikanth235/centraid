@@ -50,6 +50,21 @@ describe("web-host", () => {
         gatewayName: "Home gateway",
         vaultId: "vault-1",
         vaultName: "Personal",
+        vaultIds: ["vault-1", "vault-2"],
+        vaults: [
+          {
+            enrollmentId: "enrollment-1",
+            role: "write",
+            vaultId: "vault-1",
+            vaultName: "Personal",
+          },
+          {
+            enrollmentId: "enrollment-2",
+            role: "read",
+            vaultId: "vault-2",
+            vaultName: "Family",
+          },
+        ],
       },
     });
 
@@ -59,6 +74,11 @@ describe("web-host", () => {
       ok: true,
       vaultId: "vault-1",
       vaultName: "Personal",
+      vaultIds: ["vault-1", "vault-2"],
+      vaults: [
+        { enrollmentId: "enrollment-1", vaultId: "vault-1" },
+        { enrollmentId: "enrollment-2", vaultId: "vault-2" },
+      ],
     });
     expect(pairGatewayOverIroh).toHaveBeenCalledWith({
       endpointTicket: "endpoint",
@@ -76,6 +96,7 @@ describe("web-host", () => {
       endpointTicket: "endpoint",
       endpointId: "gateway-endpoint",
       vaultId: "vault-1",
+      vaultIds: ["vault-1", "vault-2"],
       label: "Home gateway",
     });
     expect(JSON.stringify(persisted)).not.toContain("secret");

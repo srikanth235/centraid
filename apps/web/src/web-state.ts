@@ -6,6 +6,8 @@ export interface WebConnection {
   /** Stable sovereign gateway EndpointId and connection identity. */
   endpointId?: string;
   vaultId?: string;
+  /** All vaults enrolled by the last ticket redemption; vaultId is the focus. */
+  vaultIds?: string[];
   label: string;
   displayName: string;
   avatarColor: string;

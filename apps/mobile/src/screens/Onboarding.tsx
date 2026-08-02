@@ -48,7 +48,8 @@ import {
 //
 // There is exactly one way in: a pair ticket (issue #603). A gateway founds
 // itself when it first starts, so the phone never creates or restores vaults —
-// it enrolls as a device and lands in the gateway's Shared vault by default.
+// it enrolls as a device and focuses the first vault grant by default. A
+// single ticket may make additional vaults available in the switcher.
 // Once the enrollment is real we collect the person's display name and accent
 // colour (the same fields Settings → You edits), then hand off to the shell.
 

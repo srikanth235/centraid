@@ -41,8 +41,15 @@ export class NativeReplicaStore implements ReplicaStore {
   }
 
   status(): Promise<ReplicaStatus> {
-    const { cursor, schemaEpoch } = this.core.status();
-    return Promise.resolve({ mode: "native", cursor, schemaEpoch });
+    const { cursor, schemaEpoch, coverage, durability } = this.core.status();
+    return Promise.resolve({
+      mode: "native",
+      cursor,
+      schemaEpoch,
+      coverage,
+      durability,
+      intentDurability: durability,
+    });
   }
 
   catalog(): Promise<ReplicaShape[]> {
@@ -87,6 +94,7 @@ export class NativeReplicaStore implements ReplicaStore {
         rows: result.rows.map((row) => guardReplicaRow(row, guard)),
         receiptId: `replica:${result.cursor.epoch}:${result.cursor.seq}`,
         dependency: result.dependency,
+        coverage: result.coverage,
       };
     } catch (error) {
       if (error instanceof OnlineOnlyError) guard.mark(error);
