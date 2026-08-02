@@ -210,7 +210,20 @@ So aligning `type.tiny` to mono would improve **zero** of the 94 mono eyebrows (
 
 **The weight question answers itself the same way**, and also refutes the premise that the blueprint's 600 is the settled reading: the two mobile eyebrows that hand-patch the family disagree with each other — 600 and 500 — so there is no single mono eyebrow weight to converge on. The shell's 500 is the correct weight for what the shell rung actually is (a quiet control label; 600 would make "Save" compete with the row it sits in), and the blueprint's 600 is correct for what _its_ rung is (a 9.6px eyebrow, which needs the extra weight to hold at that size). This is a legitimate per-surface difference of a role's _rendering_, not two roles wearing one name.
 
-**What this leaves.** The genuine gap is the opposite of the one recorded above: the shell has an **unnamed sub-11px mono eyebrow rung**, spelled six different ways across 94 rules (8, 8.5, 9, 9.5, 10, 10.5px). Naming it is new vocabulary and a visual change at 94 sites, so it is recorded here as debt, not taken.
+**What this leaves — and a correction to it.** The first draft of this entry said the shell has an "unnamed sub-11px mono eyebrow rung", implying a single rung waiting to be named. Measuring the 94 rules by _shape_ rather than by size refutes that: they carry **51 distinct (size, weight, tracking) combinations**, and the largest cluster is 6 rules.
+
+| shape                   | rules    |
+| ----------------------- | -------- |
+| 9.5px, tracking 0.1em   | 6        |
+| 9.5px, tracking 0.05em  | 6        |
+| 10px, tracking 0.06em   | 5        |
+| 10.5px, tracking 0.04em | 5        |
+| 10px, tracking 0.1em    | 5        |
+| …46 more shapes         | 1–4 each |
+
+So a `--t-eyebrow` shorthand would fit at most 6 of 94 sites. Adding one would repeat the exact mistake the entry above diagnoses — an all-or-nothing token almost nothing can adopt — and would be a second `--r-lg`: vocabulary that exists because it seemed principled, not because anything could use it.
+
+What the 94 rules genuinely share is a **family** (`--font-mono`, already tokenised) and an **idiom** (uppercase + tracking). Sizes span 8–10.5px and tracking varies continuously from 0.04em to 0.1em. That is not a missing token; it is 51 ad-hoc decisions that need converging before any rung can describe them. Converging them is a design pass with a visual diff at ~94 sites — a real piece of work, and explicitly **not** a naming exercise.
 
 **Still genuinely open, and unresolved by any of the above:** (b) whether the blueprint rungs should be renamed so the size/line-height divergence is explicit; (c) whether `kit.css` is blueprint-scoped and the chrome gets its own component sheet. Those remain product decisions.
 
