@@ -2,7 +2,10 @@
 // scan-first onboarding entry point. Proves the harness loop end-to-end (sim
 // discovery, app-install check, ctx.run, screenshot capture, verdict.md).
 
-import { waitForOnboardingConnectCommands } from "../lib/first-run.mjs";
+import {
+  openPastePathCommands,
+  waitForOnboardingConnectCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("home-loads", async (ctx) => {
@@ -19,19 +22,7 @@ await runFlow("home-loads", async (ctx) => {
     clearState: true
 ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
-# Tap paste by testID — text+role still no-op'd onPress on iOS 30711575336.
-- tapOn:
-    id: "onboarding-paste"
-    retryTapIfNoChange: true
-# Do not assert lede/placeholder text "Paste the one-line ticket" — on iOS the
-# lede is split across Text nodes and the placeholder is not XCUITest-visible
-# (run 30713590856: paste opened, PAIRING CODE + Connect present, text assert
-# still failed for 15s). Prove the paste path via stable testIDs/labels.
-- extendedWaitUntil:
-    visible:
-      id: "pairing-code-input"
-    timeout: 15000
-- assertVisible: "PAIRING CODE"
+${openPastePathCommands()}- assertVisible: "PAIRING CODE"
 - assertVisible:
     id: "onboarding-connect"
 - assertVisible: "Scan the QR code instead"

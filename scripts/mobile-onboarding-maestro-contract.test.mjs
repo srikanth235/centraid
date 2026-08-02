@@ -41,16 +41,15 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
   // Connect wait lives in waitForOnboardingConnectCommands (ANR-safe helper).
   assert.match(firstRun, /Connect your gateway\./u);
   assert.match(flow, /waitForOnboardingConnectCommands/u);
+  assert.match(flow, /openPastePathCommands/u);
   assert.match(flow, /Scan the QR code/u);
   assert.match(flow, /Can't scan\? Paste a code instead/u);
-  assert.match(flow, /id:\s*"onboarding-paste"/u);
-  assert.match(flow, /id:\s*"pairing-code-input"/u);
-  const openPaste = flow.indexOf("onboarding-paste");
-  const pasteField = flow.indexOf("pairing-code-input");
-  assert.ok(openPaste >= 0, "must open the paste path by testID");
-  assert.ok(
-    pasteField > openPaste,
-    "paste field only after opening paste path"
+  assert.match(firstRun, /id:\s*"onboarding-paste"/u);
+  assert.match(firstRun, /id:\s*"pairing-code-input"/u);
+  // Destination-aware retries: keep tapping while paste control stays visible.
+  assert.match(
+    firstRun,
+    /while:\s*\n\s*visible:\s*\n\s*id:\s*"onboarding-paste"/u
   );
   assert.doesNotMatch(
     stripLineComments(flow),
@@ -109,6 +108,19 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
   );
   const firstRun = read(FIRST_RUN);
   assert.match(firstRun, /id:\s*"onboarding-paste"/u);
+  assert.match(firstRun, /openPastePathCommands/u);
+});
+
+test("dev entry suppresses LogBox overlay so Maestro can tap bottom controls", () => {
+  const entry = read("apps/mobile/index.ts");
+  assert.match(entry, /LogBox\.ignoreAllLogs\(true\)/u);
+});
+
+test("Connect submit blurs an empty codeRef before reading Maestro SET_TEXT", () => {
+  const ui = read(ONBOARDING);
+  assert.match(ui, /submitPaste/u);
+  assert.match(ui, /codeInputRef\.current\?\.blur\(\)/u);
+  assert.match(ui, /requestAnimationFrame/u);
 });
 
 test("pairing code field is focused by testID so lede text is not mistaken for the input", () => {

@@ -187,6 +187,7 @@ function ConnectionStep({
   // without a per-keystroke onChangeText. hideKeyboard blurs the field, and
   // onBlur/onEndEditing copy nativeEvent.text into the ref before Connect.
   const codeRef = useRef("");
+  const codeInputRef = useRef<TextInput>(null);
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
@@ -207,6 +208,24 @@ function ConnectionStep({
     codeRef.current = "";
     setError(undefined);
     setShowPaste(false);
+  };
+
+  /**
+   * Submit the pasted ticket. Typed input already fills `codeRef` via
+   * onChangeText. Maestro SET_TEXT can leave only the native field filled —
+   * blur first so onEndEditing/onBlur copy nativeEvent.text, then submit on
+   * the next frame (Android configure-gateway 30716166878).
+   */
+  const submitPaste = (): void => {
+    if (pairing) return;
+    if (codeRef.current.trim()) {
+      submit(codeRef.current);
+      return;
+    }
+    codeInputRef.current?.blur();
+    requestAnimationFrame(() => {
+      submit(codeRef.current);
+    });
   };
 
   /**
@@ -333,6 +352,7 @@ function ConnectionStep({
             // "Paste the one-line ticket printed by …" (run 30707656659: empty
             // submit is silent, so a lede-tap masquerading as field focus
             // burns the full pairing wait with no error).
+            ref={codeInputRef}
             testID="pairing-code-input"
             accessibilityLabel="Paste the one-line ticket"
             defaultValue=""
@@ -381,7 +401,7 @@ function ConnectionStep({
               // never fired submit — ticket stayed on screen for the full wait).
               testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
-              onPress={() => (pairing ? undefined : submit(codeRef.current))}
+              onPress={submitPaste}
             />
             <Pressable
               accessibilityLabel="Scan the QR code instead"

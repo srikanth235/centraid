@@ -94,6 +94,40 @@ ${conditionalRetry}`;
 }
 
 /**
+ * Open the scan-first paste path and wait for the pairing field.
+ *
+ * A single `tapOn` with `retryTapIfNoChange` can COMPLETE on iOS when some
+ * other hierarchy change settles (LogBox / layout) without flipping
+ * `showPaste` (30716166878). Keep tapping while the paste control itself is
+ * still visible, then wait for the field testID.
+ */
+export function openPastePathCommands() {
+  return `# Open paste by testID — text taps can COMPLETE without flipping showPaste
+# on iOS (30711575336) even with accessibilityRole=button.
+- tapOn:
+    id: "onboarding-paste"
+    retryTapIfNoChange: true
+- repeat:
+    times: 6
+    while:
+      visible:
+        id: "onboarding-paste"
+    commands:
+      - tapOn:
+          id: "onboarding-paste"
+          retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 1000
+# Wait for the paste field by testID — lede/placeholder text is not a reliable
+# XCUITest match on iOS (30713590856).
+- extendedWaitUntil:
+    visible:
+      id: "pairing-code-input"
+    timeout: 15000
+`;
+}
+
+/**
  * After onboarding is showing "Connect your gateway.", open paste, enter the
  * MAESTRO_PAIRING_TICKET env, submit Connect, and wait for profile / Done /
  * Home (or a visible pairing error). Extracted from harness.mjs for the
@@ -106,22 +140,14 @@ export function pasteAndConnectPairingTicketCommands(
   homeReadyMarker,
   dismissKeyboardOnboarding = DISMISS_KEYBOARD_ONBOARDING
 ) {
+  // Trailing \\.? so "Paste a pairing ticket first." (with period) matches —
+  // Maestro textRegex is full-string; a bare alternative missed the error and
+  // fell through into eraseText:2000 (30716166878).
   const progressOrError =
     "Connecting…|Who's using|Enter Centraid|" +
     homeReadyMarker +
-    "|Paste a pairing ticket first|not a Centraid pairing|expired|Could not reach";
-  return `# Open paste by testID — text taps can COMPLETE without flipping showPaste
-# on iOS (30711575336) even with accessibilityRole=button.
-- tapOn:
-    id: "onboarding-paste"
-    retryTapIfNoChange: true
-# Wait for the paste field by testID — lede/placeholder text is not a reliable
-# XCUITest match on iOS (30713590856).
-- extendedWaitUntil:
-    visible:
-      id: "pairing-code-input"
-    timeout: 15000
-# Focus the pairing TextInput by testID — not the lede text that also
+    "|Paste a pairing ticket first\\.?|not a Centraid pairing|expired|Could not reach";
+  return `${openPastePathCommands()}# Focus the pairing TextInput by testID — not the lede text that also
 # contains "Paste the one-line ticket" (empty Connect is a silent no-op).
 - tapOn:
     id: "pairing-code-input"
@@ -158,13 +184,11 @@ ${dismissKeyboardOnboarding}- eraseText: 50
       notVisible: "${progressOrError}"
     commands:
       - tapOn: "Scan the QR code instead"
-      - tapOn:
-          id: "onboarding-paste"
-          retryTapIfNoChange: true
-      - extendedWaitUntil:
-          visible:
-            id: "pairing-code-input"
-          timeout: 10000
+${openPastePathCommands()
+  .split("\n")
+  .filter((line) => line.length > 0)
+  .map((line) => `      ${line}`)
+  .join("\n")}
       - tapOn:
           id: "pairing-code-input"
 # e2e-lint-allow: unasserted-input — retype after remount; redemption is the check.
