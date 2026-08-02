@@ -115,6 +115,10 @@ failures, the unimplemented shortcut hint, and extension off-token styling.
 tests, mobile token gate, and `scripts/design-gallery.mjs` make the constitution
 executable and keep the reference states reviewable.
 
+The package-root API exception is file-scoped in `oxlint.config.ts`: the client
+barrel remains the one supported public import surface while `oxc/no-barrel-file`
+stays enforced across the rest of the repository.
+
 Acceptance crosswalk:
 
 - [x] **P0.1 Design-system constitution.** DECIDED — constitution §§1–5: role registry with total `by` maps over `shell|blueprint|native`, Surface-axis scoping with a declared Surface→Profile lowering, five laws, role families, retirements.
@@ -279,11 +283,13 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785673788-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 37229 | 0 | 3754752 | 3156 | 40385 | 1.0791 | 3435538 | 0 | 142572032 | 404514 | feat(design): establish product grammar across surfaces (#690) |
 | codex-019fc1af-c03-1785674692-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 146048 | 0 | 6058752 | 22061 | 168109 | 2.2107 | 3581586 | 0 | 148630784 | 426575 | feat(design): establish product grammar across surfaces (#690) |
 | codex-019fc1af-c03-1785675619-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 297237 | 0 | 14227968 | 17744 | 314981 | 4.5662 | 3878823 | 0 | 162858752 | 444319 | fix(gallery): avoid unused lint suppression in capture lane (#690) |
+| codex-019fc1af-c03-1785677468-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 23225 | 0 | 3147776 | 3690 | 26915 | 0.9004 | 4090220 | 0 | 176470016 | 472057 | fix(lint): scope client package barrel exception (#690) -m governance: allow-too |
 
 ## File map
 
 Changed paths covered by this receipt:
 
+- `oxlint.config.ts`
 - `DESIGN.md`
 - `apps/desktop/src/main/gateway-store-core.ts`
 - `apps/desktop/src/main/settings.ts`
