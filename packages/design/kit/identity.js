@@ -19,15 +19,18 @@ export function identityInitials(name) {
     .filter(Boolean);
   if (parts.length === 0) return "·";
   if (parts.length === 1) return parts[0][0].toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  const last = parts.at(-1);
+  return `${parts[0][0]}${last[0]}`.toUpperCase();
 }
 
 export function identityColor(value) {
   const text = String(value ?? "").trim();
   if (!text) return IDENTITY_COLORS[0];
   let hash = 0;
-  for (const character of text)
-    hash = (hash * 31 + character.codePointAt(0)) | 0;
+  for (const character of text) {
+    const next = Math.trunc(Math.imul(hash, 31) + character.codePointAt(0));
+    hash = next > 0x7fffffff ? next - 0x1_0000_0000 : next;
+  }
   return (
     IDENTITY_COLORS[Math.abs(hash) % IDENTITY_COLORS.length] ??
     IDENTITY_COLORS[0]

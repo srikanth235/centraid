@@ -99,14 +99,12 @@
 }
 
 .icon {
-  align-items: center;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--r-pill);
   color: var(--text-soft);
   display: inline-grid;
   height: var(--target-min, 44px);
-  justify-items: center;
   min-width: var(--target-min, 44px);
   place-items: center;
   width: var(--target-min, 44px);

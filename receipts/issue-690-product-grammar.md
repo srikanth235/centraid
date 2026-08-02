@@ -127,6 +127,10 @@ The shared recipe contract suite now exercises the scoped web CSS lowering as
 well as native lowering. The aggregate design-source coverage is 429/437 lines
 (98.17%), above the enforced 98% floor.
 
+The final quality hardening removes Sonar reliability findings from the shared
+identity lowering and button recipe CSS, and records the intentional role-table
+duplication exclusion in the repository's SonarCloud policy/configuration.
+
 Acceptance crosswalk:
 
 - [x] **P0.1 Design-system constitution.** DECIDED — constitution §§1–5: role registry with total `by` maps over `shell|blueprint|native`, Surface-axis scoping with a declared Surface→Profile lowering, five laws, role families, retirements.
@@ -297,6 +301,7 @@ governance definition, so no steering rows were added.
 | codex-019fc1af-c03-1785678773-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 125458 | 0 | 10363136 | 15846 | 141304 | 3.1421 | 4215678 | 0 | 186833152 | 487903 | test(design): close mutation gaps in product grammar (#690) |
 | codex-019fc1af-c03-1785678822-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 4262 | 0 | 670976 | 525 | 4787 | 0.1863 | 4219940 | 0 | 187504128 | 488428 | test(design): close mutation gaps in product grammar (#690) |
 | codex-019fc1af-c03-1785680909-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 271851 | 0 | 17108992 | 13280 | 285131 | 5.1561 | 4491791 | 0 | 204613120 | 501708 | test(design): close coverage gap in product grammar (#690) |
+| codex-019fc1af-c03-1785683193-1 | codex | 019fc1af-c03e-72f1-9289-5d2e4380532e | #690 | gpt-5.6-luna | 307220 | 0 | 19199488 | 24349 | 331569 | 5.9332 | 4799011 | 0 | 223812608 | 526057 | fix(quality): clear Sonar findings in product grammar (#690) -m Remove reliabili |
 
 ## File map
 
@@ -417,6 +422,7 @@ Changed paths covered by this receipt:
 - `apps/web/src/web.css`
 - `bun.lock`
 - `docs/refactors/product-grammar.md`
+- `docs/sonarcloud.md`
 - `package.json`
 - `packages/app-engine/src/registry/token-purity.test.ts`
 - `packages/app-engine/src/registry/token-purity.ts`
@@ -688,6 +694,7 @@ Changed paths covered by this receipt:
 - `packages/gateway/src/skills/ui-grounding.ts`
 - `packages/gateway/src/validate-app-css.test.ts`
 - `receipts/issue-690-product-grammar.md`
+- `scripts/ci/configure-sonarcloud.mjs`
 - `scripts/design-gallery.mjs`
 - `scripts/docs-site/public/assets/docs.css`
 - `scripts/docs-site/src/content/ontology-style.css`

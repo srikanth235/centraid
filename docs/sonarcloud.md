@@ -57,6 +57,8 @@ Applied to project settings by [`scripts/ci/configure-sonarcloud.mjs`](../script
 
 If a PR only touches excluded paths, Sonar should not invent new-code BUG/VULN ratings from that diff.
 
+The duplication metric also excludes `packages/design/src/roles.ts`: its role registry intentionally repeats the profile-lowering record shape so each role's meaning, contrast obligation, and totality remain reviewable inline. This is a duplication-metric exclusion only; the TypeScript/coverage/mutation gates still exercise the registry.
+
 ### 2. Issue ignore multicriteria (noise rules on _product_ code)
 
 Even inside `packages/` / `apps/`, some rules flood the monorepo without matching our defect model. Full list: `NOISE_RULES` in the configure script. Includes:

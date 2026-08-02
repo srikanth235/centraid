@@ -86,6 +86,9 @@ const CPD_EXCLUSIONS = [
   "**/*fixture*",
   "**/*mock*",
   "**/kit/**",
+  // The normative registry repeats the profile-lowering record shape so each
+  // role's meaning, contrast obligation, and totality stay reviewable inline.
+  "packages/design/src/roles.ts",
   "packages/blueprints/apps/**",
   "scripts/test-report/**",
 ];
