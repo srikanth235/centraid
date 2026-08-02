@@ -5,7 +5,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import OutboxDecisionCard from "../components/OutboxDecisionCard";
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
+import { Text } from "../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {

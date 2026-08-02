@@ -12,6 +12,19 @@ import type {
   PageCapture,
 } from "./types.js";
 
+function syncTheme(): void {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const apply = (): void => {
+    document.documentElement.dataset["theme"] = media.matches
+      ? "dark"
+      : "light";
+  };
+  apply();
+  media.addEventListener("change", apply);
+}
+
+syncTheme();
+
 async function send<T>(message: CompanionRequest): Promise<T> {
   const response = (await chrome.runtime.sendMessage(message)) as
     | PopupEnvelope<T>

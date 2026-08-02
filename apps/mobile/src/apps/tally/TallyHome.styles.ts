@@ -1,0 +1,80 @@
+import { StyleSheet } from "react-native";
+
+import { family, radii } from "../../kit/theme";
+
+export const styles = StyleSheet.create({
+  amount: { fontFamily: family.monoMedium, fontSize: 14 },
+  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  chips: {
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  code: {
+    borderRadius: 9,
+    borderWidth: 1,
+    fontFamily: family.monoMedium,
+    padding: 10,
+    width: 58,
+  },
+  empty: { padding: 28, textAlign: "center" },
+  expense: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    padding: 12,
+  },
+  expenseCopy: { flex: 1 },
+  form: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 8,
+    margin: 12,
+    padding: 12,
+  },
+  groupInput: { borderRadius: 9, borderWidth: 1, minWidth: 100, padding: 8 },
+  header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
+  input: {
+    borderRadius: 9,
+    borderWidth: 1,
+    flex: 1,
+    minWidth: 80,
+    padding: 10,
+  },
+  list: { gap: 8, padding: 12, paddingBottom: 80 },
+  meta: { fontFamily: family.sansRegular, fontSize: 12 },
+  modal: { borderRadius: radii.lg, gap: 12, margin: 24, padding: 18 },
+  modalBackdrop: {
+    backgroundColor: "rgba(0,0,0,.4)",
+    flex: 1,
+    justifyContent: "center",
+  },
+  personName: { fontFamily: family.sansMedium, fontSize: 14 },
+  row: { alignItems: "center", flexDirection: "row", gap: 8 },
+  safe: { flex: 1 },
+  share: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    padding: 10,
+  },
+  save: {
+    borderRadius: 10,
+    marginLeft: "auto",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  template: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 7,
+    minWidth: 210,
+    padding: 11,
+  },
+  templates: { gap: 8, paddingHorizontal: 12, paddingVertical: 4 },
+  title: { fontFamily: family.sansBold, fontSize: 28 },
+});

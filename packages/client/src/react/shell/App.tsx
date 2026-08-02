@@ -329,6 +329,8 @@ export default function App(): JSX.Element {
   // here, and to redirect the builder routes below.
   const builderEnabled = useBuilderEnabled();
   const navRef = useRef<ShellNav | null>(null);
+  const switcherButtonRef = useRef<HTMLButtonElement | null>(null);
+  const switcherActionRef = useRef<(() => void) | null>(null);
   const initialShellRoute = useMemo<ShellRoute>(
     () =>
       new URL(window.location.href).searchParams.has("notifications")
@@ -445,11 +447,7 @@ export default function App(): JSX.Element {
         setSettingsPage((open) => (open === null ? "" : null));
       } else if (meta && e.shiftKey && (e.key === "g" || e.key === "G")) {
         e.preventDefault();
-        document
-          .querySelector<HTMLButtonElement>(
-            'button[aria-label$="Switch vault or gateway."]'
-          )
-          ?.click();
+        switcherActionRef.current?.();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -537,6 +535,7 @@ export default function App(): JSX.Element {
       // The gateway switcher is a body-portalled overlay outside React's tree —
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeGatewaySwitcher();
+      switcherActionRef.current = null;
     };
   }, [refresh]);
 
@@ -803,6 +802,10 @@ export default function App(): JSX.Element {
           updateGatewaySwitcherRows
         ).then(updateGatewaySwitcherRows);
       };
+      switcherActionRef.current = () => {
+        const button = switcherButtonRef.current;
+        if (button) openGatewayPicker(button.getBoundingClientRect());
+      };
       const headSlot = (
         <IdentityHead
           {...(memberScopes.active
@@ -824,6 +827,7 @@ export default function App(): JSX.Element {
           onOpenHousehold={() => nav.navigate({ kind: "household" })}
           onSwitchGateway={openGatewayPicker}
           switcherOpen={gatewaySwitcherOpen}
+          switcherButtonRef={switcherButtonRef}
         />
       );
       // Rows carry their vault only when it is NOT the member's own — a

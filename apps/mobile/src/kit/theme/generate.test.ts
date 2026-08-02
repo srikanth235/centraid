@@ -1,6 +1,13 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { buildTheme, renderTokensModule } from "./generate";
+
+const GENERATED = fileURLToPath(
+  new URL("tokens.generated.ts", import.meta.url)
+);
 
 describe("typed native lowering", () => {
   const theme = buildTheme();
@@ -57,5 +64,11 @@ describe("typed native lowering", () => {
     expect(a).not.toContain("SpaceGrotesk");
     expect(a).not.toContain("parseTokensCss");
     expect(a).toContain("export const accentThemes");
+  });
+
+  it("keeps the checked-in native module fresh", () => {
+    expect(readFileSync(GENERATED, "utf8")).toBe(
+      renderTokensModule(theme, "@centraid/design#toNativeTheme")
+    );
   });
 });

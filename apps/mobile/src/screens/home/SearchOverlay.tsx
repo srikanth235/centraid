@@ -10,17 +10,11 @@
 
 import { BlurView } from "expo-blur";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, t, useTheme } from "../../kit/theme";
 import type { ThemeColors, Scheme } from "../../kit/theme";

@@ -1,152 +1,72 @@
 // Canonical property contracts for the two CSS lowerings.
 //
-// Keep this list derived from the same public tables as the emitters.  The
-// contract test compares it to actual generated output, while role tests
-// ensure semantic properties have a total profile lowering.
+// Semantic names come from the role registry.  The only names kept beside
+// that registry are mechanical scales and host adapters: they do not carry a
+// second color or type vocabulary.  This keeps a new role visible to both
+// emitters and makes a removed role fail the contract test immediately.
 
 import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
+import { ADAPTERS, contractForProfile } from "./roles";
 import { blueprintType, fontStacks, type, typeSizeRungs } from "./typography";
-
-const themePropertyNames = [
-  "--accent",
-  "--accent-deep",
-  "--accent-fill",
-  "--accent-deep-hover",
-  "--accent-light",
-  "--accent-soft",
-  "--accent-text",
-  "--app-identity-text",
-  "--bg",
-  "--bg-app",
-  "--bg-chrome",
-  "--bg-elev",
-  "--bg-hud",
-  "--bg-hover",
-  "--bg-press",
-  "--bg-sel",
-  "--bg-sunken",
-  "--bg-wall",
-  "--danger",
-  "--device-wall",
-  "--glass-film",
-  "--glass-sheen",
-  "--focus-ring",
-  "--focus-ring-color",
-  "--line",
-  "--line-strong",
-  "--line-sel",
-  "--on-accent",
-  "--scrim",
-  "--shadow-lg",
-  "--shadow-md",
-  "--shadow-sm",
-  "--success",
-  "--text",
-  "--text-faint",
-  "--text-ghost",
-  "--text-inv",
-  "--text-disabled",
-  "--text-soft",
-  "--warning",
-];
 
 const paletteNames = Object.keys(palette).flatMap((key) => [
   `--c-${key}`,
   `--c-${key}-text`,
 ]);
+
 const commonScale = [
   ...Object.keys(radii).map((key) => `--r-${key}`),
   ...Object.keys(spacing).map((key) => `--sp-${key}`),
 ];
-const shellType = [
+
+const typeNames = (scale: Record<string, unknown>): string[] => [
   ...Object.keys(fontStacks).map((key) => `--font-${key}`),
-  ...Object.keys(type).map(
+  ...Object.keys(scale).map(
     (key) =>
-      `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
+      `--t-${key.replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>").toLowerCase()}`
   ),
-  ...Object.keys(typeSizeRungs(type)),
 ];
+
+const adapterNames = (profile: "blueprint" | "shell"): string[] =>
+  Object.values(ADAPTERS)
+    .filter((adapter) =>
+      (adapter.profiles as readonly string[]).includes(profile)
+    )
+    // --bg-l is emitted only inside the dark theme block, not on the root
+    // contract tested here. It remains a documented adapter in roles.ts.
+    .filter((adapter) => adapter.css !== "--bg-l")
+    .map((adapter) => adapter.css);
 
 export const SHELL_TOKEN_CONTRACT = [
   ...new Set([
     ...paletteNames,
     ...commonScale,
-    "--accent",
+    ...typeNames(type),
+    ...Object.keys(typeSizeRungs(type)),
+    ...Object.keys(library).map((key) => {
+      const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
+      return `--tile-${suffix}`;
+    }),
+    ...contractForProfile("shell"),
+    ...adapterNames("shell"),
     "--dur-1",
     "--dur-2",
     "--ease",
     "--focus-ring",
     "--o-disabled",
-    "--target-min",
-    ...shellType,
-    ...Object.keys(library).map((key) => {
-      const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
-      return `--tile-${suffix}`;
-    }),
-    ...themePropertyNames,
   ]),
 ].sort();
-
-const blueprintTheme = [
-  "--accent",
-  "--accent-deep",
-  "--accent-fill",
-  "--accent-deep-hover",
-  "--accent-light",
-  "--accent-soft",
-  "--accent-text",
-  "--app-hue",
-  "--app-identity",
-  "--app-identity-text",
-  "--bg",
-  "--bg-elev",
-  "--bg-hover",
-  "--bg-press",
-  "--bg-sel",
-  "--bg-sunken",
-  "--danger",
-  "--dur-1",
-  "--dur-2",
-  "--ease",
-  "--focus-ring",
-  "--focus-ring-color",
-  "--line",
-  "--line-strong",
-  "--line-sel",
-  "--on-accent",
-  "--o-disabled",
-  "--scrim",
-  "--shadow-lg",
-  "--shadow-md",
-  "--shadow-sm",
-  "--success",
-  "--target-min",
-  "--text",
-  "--text-faint",
-  "--text-ghost",
-  "--text-inv",
-  "--text-disabled",
-  "--text-soft",
-  "--warning",
-];
 
 export const BLUEPRINT_TOKEN_CONTRACT = [
   ...new Set([
     ...paletteNames,
     ...commonScale,
-    ...blueprintTheme,
-    ...Object.keys(fontStacks).map((key) => `--font-${key}`),
-    ...Object.keys(blueprintType).map(
-      (key) =>
-        `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
-    ),
+    ...typeNames(blueprintType),
     ...Object.keys(typeSizeRungs(blueprintType)),
+    ...contractForProfile("blueprint"),
+    ...adapterNames("blueprint"),
   ]),
 ].sort();
-
-// Keep the imports above visibly tied to the registered theme set.  The
-// registry is intentionally referenced here so adding a theme cannot make
-// the contract appear complete while its solved palette is untested.

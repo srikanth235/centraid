@@ -1,6 +1,8 @@
 # Product grammar — semantic tokens, recipes, and cross-surface moments
 
-**Issue:** #690 **Status:** complete **Owner session:** codex/issue-690-product-grammar
+**Issue:** #690 **Status:** initial migration complete; review closure in #695 **Owner session:** codex/issue-690-product-grammar
+
+> Review correction: issue #690 established the v0 contract, but its original receipt overstated several enforcement claims. Follow-up issue #695 is the acceptance record for the review closure; this document is not evidence that a gate exists unless the code and tests named below provide it.
 
 ## Goal
 
@@ -10,7 +12,7 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 
 - The change is a pre-release design-contract migration: it changes presentation tokens and component vocabulary, not persisted data, protocol payloads, or vault semantics.
 - CSS and native lowerings are generated from the same typed values. Mobile no longer parses CSS or applies a second runtime override layer; a generated-file test catches drift between `toNativeTheme()` and the checked-in module.
-- The scaffolded blueprint `app.css` is a frozen/generated-file hazard. The migration edits the shared emitter and regenerates scaffold output, then keeps token-purity and scaffold snapshots in the gate loop. A future role rename must update the emitter, scaffold fixture, manifest/build output, and snapshots in one change; hand-editing a single served app would create a silent fork.
+- The scaffolded blueprint `app.css` is a generated artifact. This is a v0 migration: the emitter and scaffold output move together, and stored apps from an older contract are explicitly outside this change rather than being given a compatibility alias layer. A future role rename must update the emitter, scaffold fixture, manifest/build output, and snapshots in one change; hand-editing a single served app would create a silent fork.
 - The role registry is total over shell, blueprint, and native profiles. A role that cannot render is recorded as an explicit `unsupported` value, so missing declarations fail at typecheck/test time rather than becoming transparent UI.
 - The matrix gates are seeded through the repository's demonstrated-red entries in `tests/matrix.json`; product-grammar D1–D7 are now executable gates and the main quality gate remains green.
 - Existing app identity, network, consent, and replica write paths remain the owners of behavior. This work only routes their visible marks, containers, labels, and feedback through shared contracts.
@@ -20,7 +22,7 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 1. Establish the normative `DESIGN.md`, semantic roles, profiles, lowerings, native delta, target-size adapter, and contract tests.
 2. Add the complete recipe registry and CSS recipe emitter; migrate default and action variants across shell, kit, blueprint, and mobile.
 3. Consolidate icons, app/person identity, bytes/relative-time formatting, and mobile theme generation; remove Feather/CSS-parser split paths.
-4. Migrate token consumers and extension chrome; close the named B1–B29 regressions that are in scope for this issue. **Complete.**
+4. Migrate token consumers and extension chrome; close the named B1–B29 regressions that are in scope for this issue. **Initial implementation complete; review closure tracked in #695.**
 5. Record the M1–M20 shared/adapted/local matrix and enumerated reference states; use it to drive visual gallery lanes and seeded quality gates. **Complete.**
 6. Run package and repository gates, update this log and the issue receipt, then publish the branch as the issue PR. **Complete in this branch.**
 
@@ -32,6 +34,7 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 | 2026-08-02 | 3 | — | Mobile CSS-parser path removed; shared icons, app catalog, identity helpers, and formatter helpers added; Feather call sites now use the shared adapter. |
 | 2026-08-02 | 4 | — | Shell/blueprint/mobile/extension token migration complete; B1–B29 are closed, including host-owned appearance, identity/action separation, native pickers, upload/unpair feedback, icon validation, and token hard-zero gates. |
 | 2026-08-02 | 5–6 | — | `tests/design-grammar-matrix.json` enumerates M1–M20, five surface lowerings, and 48 reference states; `scripts/design-gallery.mjs` verifies 22 committed baselines with RGBA diffs, and the focused/repository gates are recorded in the issue receipt. |
+| 2026-08-02 | #695 | — | Review closure adds registry-backed lowerings, native equivalence/freshness checks, real kit-backed gallery lanes, mobile/extension token ratchets, and receipt corrections. |
 
 ## Rejected alternatives
 
@@ -50,4 +53,5 @@ Make the Product Grammar Constitution executable across the shell, compact shell
 - New product features, vault/protocol changes, or persisted-data migrations.
 - Rewriting app-specific content layers such as charts, media artwork, prose rendering, capture confidence logic, or the glass material.
 - Native simulator CI as a required PR lane; the mobile reference states are contract-tested and marked advisory for device capture.
+- Migration or rewrite of stored pre-v0 vault `app.css` artifacts; v0 publishes the new generated contract atomically.
 - Reintroducing retired compatibility aliases (`--brand`, `--bezel*`, CSS parser overrides, per-app theme ownership, or Feather as a glyph source).

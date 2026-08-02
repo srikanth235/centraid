@@ -1,8 +1,9 @@
 import React, { useSyncExternalStore } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { family, radii, useTheme } from "../theme";
+import { family, radii, t, useTheme } from "../theme";
+import { Text } from "./NativeText";
 
 export type ToastTone = "neutral" | "accent" | "danger";
 
@@ -86,7 +87,13 @@ export default function ToastHost(): React.JSX.Element | null {
           ]}
         >
           <View style={[styles.dot, { backgroundColor: accent }]} />
-          <Text style={[styles.message, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.message,
+              t("small"),
+              { color: colors.text, fontFamily: family.sansMedium },
+            ]}
+          >
             {toast.message}
           </Text>
           {toast.action ? (
@@ -99,7 +106,13 @@ export default function ToastHost(): React.JSX.Element | null {
               }}
               style={styles.action}
             >
-              <Text style={[styles.actionText, { color: accent }]}>
+              <Text
+                style={[
+                  styles.actionText,
+                  t("control"),
+                  { color: accent, fontFamily: family.sansBold },
+                ]}
+              >
                 {toast.action.label}
               </Text>
             </Pressable>
@@ -111,7 +124,9 @@ export default function ToastHost(): React.JSX.Element | null {
             onPress={dismissToast}
             style={styles.close}
           >
-            <Text style={[styles.closeText, { color: colors.textFaint }]}>
+            <Text
+              style={[styles.closeText, t("body"), { color: colors.textFaint }]}
+            >
               ×
             </Text>
           </Pressable>
@@ -123,16 +138,14 @@ export default function ToastHost(): React.JSX.Element | null {
 
 const styles = StyleSheet.create({
   action: { marginLeft: 8, paddingVertical: 4 },
-  actionText: { fontFamily: family.sansBold, fontSize: 12 },
+  actionText: {},
   close: { marginLeft: 2, padding: 2 },
-  closeText: { fontFamily: family.sansRegular, fontSize: 19, lineHeight: 19 },
+  closeText: { fontFamily: family.sansRegular },
   dot: { borderRadius: 4, height: 8, width: 8 },
   host: { left: 16, position: "absolute", right: 16 },
   message: {
     flex: 1,
     fontFamily: family.sansMedium,
-    fontSize: 13,
-    lineHeight: 18,
   },
   toast: {
     alignItems: "center",

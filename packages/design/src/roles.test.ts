@@ -47,4 +47,30 @@ describe("product-grammar role registry", () => {
       ).toBe(true);
     }
   });
+
+  test("rejects missing and unexplained profile lowerings", () => {
+    const accent = ROLE_REGISTRY["--accent"];
+    if (!accent) throw new Error("missing --accent test fixture");
+    const originalNative = accent.by.native;
+    try {
+      delete (accent.by as Partial<typeof accent.by>).native;
+      expect(() => assertTotalProfileValues()).toThrow(
+        "--accent has no native lowering"
+      );
+    } finally {
+      accent.by.native = originalNative;
+    }
+
+    const appBackground = ROLE_REGISTRY["--bg-app"];
+    if (!appBackground) throw new Error("missing --bg-app test fixture");
+    const originalReason = appBackground.by.native.reason;
+    try {
+      appBackground.by.native.reason = undefined;
+      expect(() => assertTotalProfileValues()).toThrow(
+        "--bg-app unsupported native lowering has no reason"
+      );
+    } finally {
+      appBackground.by.native.reason = originalReason;
+    }
+  });
 });

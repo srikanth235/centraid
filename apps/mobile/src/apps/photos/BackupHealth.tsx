@@ -8,7 +8,6 @@ import {
   RefreshControl,
   ScrollView,
   Switch,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { formatBytes } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -381,7 +381,7 @@ export default function BackupHealth({
             styles.settings,
             {
               backgroundColor: rules.selectedAlbums.length
-                ? colors.accent
+                ? colors.accentFill
                 : colors.bgSunken,
               borderColor: colors.line,
             },

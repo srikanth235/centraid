@@ -14,13 +14,7 @@
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AppState,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-} from "react-native";
+import { AppState, RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
@@ -28,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { AppMetaResolved } from "@centraid/design";
 
+import { Text } from "../kit/components/NativeText";
 import { family, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { fetchDailyBrief } from "../lib/daily-brief";

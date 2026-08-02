@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { identityColor, tileFinish } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme/resolve";

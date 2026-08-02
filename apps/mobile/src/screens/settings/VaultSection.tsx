@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { palette } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import Button from "../../kit/components/Button";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {

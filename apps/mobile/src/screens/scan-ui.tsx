@@ -1,7 +1,8 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../kit/components/Icon";
+import { Text, TextInput } from "../kit/components/NativeText";
 import { family } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 

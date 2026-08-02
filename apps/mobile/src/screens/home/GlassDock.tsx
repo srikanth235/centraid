@@ -12,13 +12,14 @@
 
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { IconName } from "@centraid/design";
 
 import GlassBar from "../../kit/components/GlassBar";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 

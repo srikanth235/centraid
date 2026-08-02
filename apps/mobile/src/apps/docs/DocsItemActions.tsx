@@ -1,17 +1,10 @@
 import React, { useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {

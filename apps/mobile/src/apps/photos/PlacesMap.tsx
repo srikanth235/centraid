@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { family, useTheme } from "../../kit/theme";

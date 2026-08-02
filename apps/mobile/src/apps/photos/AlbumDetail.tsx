@@ -5,14 +5,13 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -35,7 +34,7 @@ export default function AlbumDetail({
   route,
   navigation,
 }: PhotosScreenProps<"AlbumDetail">): React.JSX.Element {
-  const { colors } = useTheme();
+  const { colors, radii } = useTheme();
   const replica = useReplica();
   const { session } = replica;
   const { refreshing, refreshNow } = useReplicaRefresh();
@@ -318,9 +317,14 @@ export default function AlbumDetail({
           />
           <Pressable
             onPress={() => void rename()}
-            style={[styles.save, { backgroundColor: colors.accent }]}
+            style={[
+              styles.save,
+              { backgroundColor: colors.accentFill, borderRadius: radii.md },
+            ]}
           >
-            <Text style={styles.saveText}>Save</Text>
+            <Text style={[styles.saveText, { color: colors.textInv }]}>
+              Save
+            </Text>
           </Pressable>
         </View>
       </Modal>
@@ -379,7 +383,7 @@ const styles = StyleSheet.create({
   remove: { fontFamily: family.sansBold, fontSize: 13 },
   selectionActions: { alignItems: "center", flexDirection: "row", gap: 14 },
   safe: { flex: 1 },
-  save: { alignItems: "center", borderRadius: 10, marginTop: 12, padding: 12 },
-  saveText: { color: "#fff", fontFamily: family.sansBold, fontSize: 13 },
+  save: { alignItems: "center", marginTop: 12, padding: 12 },
+  saveText: { fontFamily: family.sansBold, fontSize: 13 },
   title: { fontFamily: family.sansBold, fontSize: 18 },
 });

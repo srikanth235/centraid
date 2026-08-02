@@ -7,12 +7,34 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
+import { paletteText } from "./color.js";
 import { spacing } from "./density.js";
+import { toNativeTheme } from "./native.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
+import { RECIPE_NAMES } from "./recipes/index.js";
 import { themes } from "./themes/index.js";
-import { BRAND, EASE } from "./themes/shared.js";
-import { fonts, type, typeKeyToKebab, typeSizeRungs } from "./typography.js";
+import {
+  ACCENT_DEEP,
+  ACCENT_DEEP_DARK,
+  ACCENT_LIGHT,
+  ACCENT_TEXT_LIGHT,
+  BRAND,
+  DANGER,
+  DANGER_DARK,
+  EASE,
+  SUCCESS,
+  SUCCESS_LIGHT,
+  WARNING,
+  WARNING_LIGHT,
+} from "./themes/shared.js";
+import {
+  fonts,
+  NATIVE_DELTA_BY_FAMILY,
+  type,
+  typeKeyToKebab,
+  typeSizeRungs,
+} from "./typography.js";
 
 const DESIGN_MD = fileURLToPath(new URL("../../../DESIGN.md", import.meta.url));
 const source = readFileSync(DESIGN_MD, "utf8");
@@ -35,9 +57,21 @@ function frontMatterValue(key: string): string {
 function hasNestedRole(group: string, role: string): boolean {
   const start = frontMatter.indexOf(`${group}:`);
   const end = frontMatter.indexOf("\n---", start);
-  return new RegExp(`^  ${role}:$`, "mu").test(
+  return new RegExp(`^ {2}${role}:$`, "mu").test(
     frontMatter.slice(start, end < 0 ? undefined : end)
   );
+}
+
+function nestedKeys(group: string): string[] {
+  const start = frontMatter.indexOf(`${group}:`);
+  const rest = frontMatter.slice(start + group.length + 1);
+  const nextGroup = rest.search(/\n(?=[A-Za-z][\w-]*:)/u);
+  const end = nextGroup < 0 ? undefined : start + group.length + 1 + nextGroup;
+  return [
+    ...frontMatter
+      .slice(start, end)
+      .matchAll(/^ {2}["']?(?<key>[\w-]+)["']?:/gmu),
+  ].map((match) => match.groups?.key ?? "");
 }
 
 describe("DESIGN.md front matter", () => {
@@ -60,6 +94,86 @@ describe("DESIGN.md front matter", () => {
       expect(frontMatter).toContain(`  "${key}": "${value}px"`);
     }
     expect(frontMatter).toContain('  pill: "999px"');
+    expect(nestedKeys("rounded")).toStrictEqual(Object.keys(radii));
+    expect(nestedKeys("spacing")).toStrictEqual(
+      Object.keys(spacing).map(String)
+    );
+  });
+
+  test("pins every solved color cell and native surface value", () => {
+    const expected = {
+      brand: BRAND,
+      accent: BRAND,
+      "accent-light": ACCENT_LIGHT,
+      "accent-deep": ACCENT_DEEP,
+      "accent-deep-dark": ACCENT_DEEP_DARK,
+      "accent-text": ACCENT_TEXT_LIGHT,
+      success: SUCCESS_LIGHT,
+      "success-dark": SUCCESS,
+      danger: DANGER,
+      "danger-dark": DANGER_DARK,
+      warning: WARNING_LIGHT,
+      "warning-dark": WARNING,
+    };
+    for (const [key, value] of Object.entries(expected)) {
+      expect(frontMatterValue(key), key).toBe(value);
+    }
+    for (const [key, value] of Object.entries(palette)) {
+      expect(frontMatterValue(`c-${key}`), `c-${key}`).toBe(value);
+      const paletteKey = key as keyof typeof paletteText.light;
+      expect(frontMatterValue(`c-${key}-text`)).toBe(
+        paletteText.light[paletteKey]
+      );
+      expect(frontMatterValue(`c-${key}-text-dark`)).toBe(
+        paletteText.dark[paletteKey]
+      );
+    }
+
+    const light = toNativeTheme("light").colors;
+    const dark = toNativeTheme("dark").colors;
+    for (const [key, value] of Object.entries({
+      "light-bg": light.bg,
+      "light-bg-app": "#FFFFFF",
+      "light-bg-elev": light.bgElev,
+      "light-bg-sunken": light.bgSunken,
+      "light-text": light.text,
+      "light-text-soft": "rgba(20,22,27,0.78)",
+      "light-text-faint": "rgba(20,22,27,0.62)",
+      "light-text-ghost": "rgba(20,22,27,0.48)",
+      "light-text-inv": light.textInv,
+      "light-line": "rgba(20,22,27,0.11)",
+      "light-line-strong": "rgba(20,22,27,0.20)",
+      "dark-bg": dark.bg,
+      "dark-bg-app": "#000000",
+      "dark-bg-elev": dark.bgElev,
+      "dark-bg-sunken": dark.bgSunken,
+      "dark-text": dark.text,
+      "dark-text-soft": "rgba(236,238,242,0.72)",
+      "dark-text-faint": "rgba(236,238,242,0.52)",
+      "dark-text-ghost": "rgba(236,238,242,0.38)",
+      "dark-text-inv": dark.textInv,
+      "dark-line": "rgba(220,230,245,0.08)",
+      "dark-line-strong": "rgba(220,230,245,0.16)",
+    })) {
+      expect(frontMatterValue(key), key).toBe(value);
+    }
+  });
+
+  test("pins typography deltas and every recipe component", () => {
+    for (const [key, style] of Object.entries(type)) {
+      const role = typeKeyToKebab(key);
+      expect(frontMatter).toContain(`  ${role}:`);
+      expect(frontMatter).toContain(`    fontFamily: "${fonts[style.family]}"`);
+      expect(frontMatter).toContain(`    fontSize: "${style.size}px"`);
+      expect(frontMatter).toContain(`    fontWeight: "${style.weight}"`);
+      expect(frontMatter).toContain(`    lineHeight: "${style.lineHeight}px"`);
+      expect(style.nativeDelta).toStrictEqual(
+        NATIVE_DELTA_BY_FAMILY[style.family]
+      );
+    }
+    for (const name of RECIPE_NAMES) {
+      expect(hasNestedRole("components", name), name).toBe(true);
+    }
   });
 
   test("pins every type role and profile-specific support is in the body", () => {
@@ -72,6 +186,8 @@ describe("DESIGN.md front matter", () => {
     }
     expect(body).toContain("Mobile maps those genera to loaded");
     expect(body).toContain("nativeDelta");
+    expect(body).toContain("`--bg-l: 5%`");
+    expect(body).toContain("`--bg-l: 10%`");
   });
 
   test("pins the solved theme values", () => {

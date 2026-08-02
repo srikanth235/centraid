@@ -6,10 +6,11 @@
 // list starts placing rows at the wrong offsets.
 
 import React, { memo } from "react";
-import { Pressable, Text } from "react-native";
+import { Pressable } from "react-native";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
+import { Text } from "../../kit/components/NativeText";
 import type { useTheme } from "../../kit/theme";
 import { styles } from "./PeopleHome.styles";
 

@@ -5,8 +5,9 @@
 // the avatar previews the colour + initials live.
 
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {

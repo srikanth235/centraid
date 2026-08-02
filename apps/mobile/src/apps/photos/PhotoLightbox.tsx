@@ -14,7 +14,6 @@ import {
   Modal,
   Pressable,
   Share,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -23,6 +22,7 @@ import { GestureDetector } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";

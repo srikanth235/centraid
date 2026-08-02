@@ -1,9 +1,10 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { formatBytes } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import type { useTheme } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";

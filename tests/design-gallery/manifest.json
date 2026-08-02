@@ -1,264 +1,287 @@
 {
   "issue": 690,
+  "reviewIssue": 695,
   "generatedBy": "scripts/design-gallery.mjs",
   "entries": [
     {
       "id": "bs-agenda-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "agenda",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-docs-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "docs",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-locker-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "locker",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-notes-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "notes",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-people-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "people",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-photos-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "photos",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-tally-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "tally",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-tasks-light",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "tasks",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bi-light",
       "lane": "BI",
-      "fixture": true,
+      "source": "blueprint-contract+kit-runtime",
       "surface": "BI",
       "scheme": "light",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M9", "M17"]
     },
     {
       "id": "sh-c-light",
       "lane": "SH-c",
-      "fixture": true,
+      "source": "shell-contract+kit-runtime",
       "surface": "SH-c",
       "scheme": "light",
       "viewport": {
         "width": 390,
         "height": 844
-      }
+      },
+      "matrixMoments": ["M2", "M5", "M13"]
     },
     {
       "id": "mo-advisory-light",
       "lane": "MO-advisory",
-      "fixture": true,
+      "source": "native-contract+kit-runtime",
       "surface": "MO",
       "scheme": "light",
       "viewport": {
         "width": 390,
         "height": 844
-      }
+      },
+      "matrixMoments": ["M4", "M8", "M17"]
     },
     {
       "id": "bs-agenda-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "agenda",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-docs-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "docs",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-locker-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "locker",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-notes-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "notes",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-people-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "people",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-photos-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "photos",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-tally-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "tally",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bs-tasks-dark",
       "lane": "BS",
-      "fixture": true,
+      "source": "blueprint-manifest+kit-runtime",
       "surface": "BS",
       "app": "tasks",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M7", "M10"]
     },
     {
       "id": "bi-dark",
       "lane": "BI",
-      "fixture": true,
+      "source": "blueprint-contract+kit-runtime",
       "surface": "BI",
       "scheme": "dark",
       "viewport": {
         "width": 1024,
         "height": 768
-      }
+      },
+      "matrixMoments": ["M4", "M9", "M17"]
     },
     {
       "id": "sh-c-dark",
       "lane": "SH-c",
-      "fixture": true,
+      "source": "shell-contract+kit-runtime",
       "surface": "SH-c",
       "scheme": "dark",
       "viewport": {
         "width": 390,
         "height": 844
-      }
+      },
+      "matrixMoments": ["M2", "M5", "M13"]
     },
     {
       "id": "mo-advisory-dark",
       "lane": "MO-advisory",
-      "fixture": true,
+      "source": "native-contract+kit-runtime",
       "surface": "MO",
       "scheme": "dark",
       "viewport": {
         "width": 390,
         "height": 844
-      }
+      },
+      "matrixMoments": ["M4", "M8", "M17"]
     }
   ]
 }

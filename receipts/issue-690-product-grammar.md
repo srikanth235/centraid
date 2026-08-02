@@ -2,6 +2,18 @@
 
 GitHub issue: [#690](https://github.com/srikanth235/centraid/issues/690)
 
+## Historical correction
+
+This receipt records the initial v0 implementation from PR #691. Its original
+completion ledger overstated the gallery, composed-fixture, registry/codegen,
+focus/reduced-motion, and receipt-audit coverage. Follow-up issue [#695](https://github.com/srikanth235/centraid/issues/695)
+is the authoritative acceptance record for those review gaps.
+
+The v0 decision for frozen pre-v0 vault `app.css` is explicit: no compatibility
+alias layer or stored-app migration is required in this release. Generated
+blueprint output moves atomically with the live kit contract; legacy artifact
+migration is out of scope and is not represented as complete below.
+
 ## Checklist
 
 - [x] **P0.1 Design-system constitution.** DECIDED — constitution §§1–5: role registry with total `by` maps over `shell|blueprint|native`, Surface-axis scoping with a declared Surface→Profile lowering, five laws, role families, retirements.

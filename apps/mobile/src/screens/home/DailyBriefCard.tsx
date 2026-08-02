@@ -1,6 +1,7 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
+import { Text } from "../../kit/components/NativeText";
 import { family, radii, useTheme } from "../../kit/theme";
 import type { DailyBrief } from "../../lib/daily-brief";
 

@@ -14,8 +14,6 @@
 
 import type { TextStyle } from "react-native";
 
-import type { TypeKey } from "@centraid/design";
-
 import { type as nativeType } from "./tokens.generated";
 
 export { spacing, radii } from "@centraid/design";
@@ -60,7 +58,7 @@ const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
 };
 
 export const t = (
-  key: TypeKey
+  key: keyof typeof nativeType
 ): Pick<TextStyle, "fontSize" | "lineHeight" | "fontFamily"> => {
   const def = nativeType[key];
   const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
@@ -72,15 +70,6 @@ export const t = (
     lineHeight: def.lineHeight,
   };
 };
-
-// React Native defaults font scaling on, but the multiplier is otherwise
-// platform-dependent.  The app installs this bounded default at its root so
-// every screen, including lazy screens, follows Dynamic Type without allowing
-// a long label to collapse the interaction geometry.
-export const DYNAMIC_TYPE = {
-  allowFontScaling: true,
-  maxFontSizeMultiplier: 1.35,
-} as const;
 
 // Dark-mode-aware theme API, lowered from the canonical blueprint token source.
 export { useTheme } from "./useTheme";

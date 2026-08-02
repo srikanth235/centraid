@@ -2,15 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -18,6 +10,7 @@ import { OnlineOnlyError } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";

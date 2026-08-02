@@ -3,12 +3,12 @@
 // Anything bigger than `xl` is composed inline (`var(--r-xl)` + a pill on FABs).
 
 export const radii = {
-  lg: 10,
-  md: 6,
-  pill: 999,
-  sm: 4,
-  xl: 14,
   xs: 2,
+  sm: 4,
+  md: 6,
+  lg: 10,
+  xl: 14,
+  pill: 999,
 } as const;
 
 export type RadiusKey = keyof typeof radii;

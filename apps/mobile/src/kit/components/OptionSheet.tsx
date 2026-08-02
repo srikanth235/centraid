@@ -6,12 +6,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
 import { radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
+import { Text } from "./NativeText";
 
 export interface SheetOption {
   id: string;

@@ -4,8 +4,9 @@
 // every section shares one label treatment and rhythm (issue #498).
 
 import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { Text } from "../../kit/components/NativeText";
 import { family, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 

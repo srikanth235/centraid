@@ -1,14 +1,8 @@
 import React, { useMemo, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 
 import Button from "../kit/components/Button";
+import { Text, TextInput } from "../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import type { MobileOutboxRow } from "../lib/gateway";

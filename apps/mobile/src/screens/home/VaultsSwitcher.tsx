@@ -25,7 +25,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,7 +34,12 @@ import type { IconName } from "@centraid/design";
 
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import {
+  motionDuration,
+  useReducedMotion,
+} from "../../kit/hooks/useReducedMotion";
 import { family, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listVaults } from "../../lib/gateway";
@@ -91,6 +95,7 @@ export default function VaultsSwitcher({
   onPairDesktop,
 }: VaultsSwitcherProps): React.JSX.Element {
   const { colors } = useTheme();
+  const reducedMotion = useReducedMotion();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const slide = useAnimatedValue(SHEET_TRAVEL);
@@ -122,13 +127,13 @@ export default function VaultsSwitcher({
     Animated.parallel([
       Animated.timing(slide, {
         toValue: 0,
-        duration: 300,
+        duration: motionDuration(300, reducedMotion),
         easing: Easing.bezier(0.2, 0.8, 0.2, 1),
         useNativeDriver: true,
       }),
       Animated.timing(fade, {
         toValue: 1,
-        duration: 220,
+        duration: motionDuration(220, reducedMotion),
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -173,7 +178,7 @@ export default function VaultsSwitcher({
     return () => {
       cancelled = true;
     };
-  }, [open, slide, fade]);
+  }, [fade, open, reducedMotion, slide]);
 
   const runExclusive = useCallback(
     async (action: () => Promise<unknown>): Promise<void> => {

@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
 // governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -13,6 +13,7 @@ import {
 import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -77,7 +78,7 @@ const PILL_ITEMS: Array<{
 export default function PhotosHome({
   navigation,
 }: PhotosScreenProps<"PhotosHome">): React.JSX.Element {
-  const { colors, scheme } = useTheme();
+  const { colors, radii, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
@@ -433,7 +434,7 @@ export default function PhotosHome({
           <>
             {hero && !selecting ? (
               <Pressable
-                style={styles.heroWrap}
+                style={[styles.heroWrap, { borderRadius: radii.xl }]}
                 onPress={() =>
                   navigation.navigate("PhotoLightbox", { assetId: hero.id })
                 }
@@ -445,19 +446,27 @@ export default function PhotosHome({
                   recyclingKey={hero.id}
                   style={styles.heroImage}
                 />
-                <View style={styles.heroShade} />
+                <View
+                  style={[styles.heroShade, { backgroundColor: colors.scrim }]}
+                />
                 <View
                   style={[
                     styles.memoryPill,
-                    { backgroundColor: "rgba(0,0,0,.32)" },
+                    { backgroundColor: colors.scrim, borderRadius: radii.pill },
                   ]}
                 >
-                  <Icon name="star" size={12} color="#fff" />
-                  <Text style={styles.memoryPillText}>Memory</Text>
+                  <Icon name="star" size={12} color={colors.textInv} />
+                  <Text
+                    style={[styles.memoryPillText, { color: colors.textInv }]}
+                  >
+                    Memory
+                  </Text>
                 </View>
                 <View style={styles.heroCopy}>
-                  <Text style={styles.heroEyebrow}>ON THIS DAY</Text>
-                  <Text style={styles.heroTitle}>
+                  <Text style={[styles.heroEyebrow, { color: colors.textInv }]}>
+                    ON THIS DAY
+                  </Text>
+                  <Text style={[styles.heroTitle, { color: colors.textInv }]}>
                     {yearsAgo > 0
                       ? `${yearsAgo} year${yearsAgo === 1 ? "" : "s"} ago`
                       : "Today"}
@@ -562,8 +571,8 @@ export default function PhotosHome({
                           active && {
                             backgroundColor:
                               scheme === "dark"
-                                ? "rgba(255,255,255,0.13)"
-                                : "#ffffff",
+                                ? colors.bgHover
+                                : colors.bgElev,
                           },
                         ]}
                       >
@@ -587,11 +596,14 @@ export default function PhotosHome({
               onPress={() => navigation.navigate("PhotosLibrary")}
               style={({ pressed }) => [
                 styles.fab,
-                { backgroundColor: colors.text },
+                {
+                  backgroundColor: colors.accentFill,
+                  borderRadius: radii.pill,
+                },
                 pressed && styles.fabPressed,
               ]}
             >
-              <Icon name="plus" size={26} color={colors.bg} />
+              <Icon name="plus" size={26} color={colors.textInv} />
             </Pressable>
           </View>
         </View>
@@ -667,7 +679,6 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", gap: 22 },
   heroCopy: { bottom: 15, left: 16, position: "absolute", right: 16 },
   heroEyebrow: {
-    color: "#fff",
     fontFamily: family.monoMedium,
     fontSize: 11,
     letterSpacing: 1,
@@ -676,17 +687,14 @@ const styles = StyleSheet.create({
   heroImage: { ...StyleSheet.absoluteFill },
   heroShade: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(10,14,24,.28)",
   },
   heroTitle: {
-    color: "#fff",
     fontFamily: family.sansBold,
     fontSize: 21,
     letterSpacing: -0.4,
     marginTop: 6,
   },
   heroWrap: {
-    borderRadius: 16,
     height: 176,
     marginBottom: 4,
     marginHorizontal: 16,
@@ -695,7 +703,6 @@ const styles = StyleSheet.create({
   },
   memoryPill: {
     alignItems: "center",
-    borderRadius: 999,
     flexDirection: "row",
     gap: 6,
     paddingHorizontal: 10,
@@ -705,7 +712,6 @@ const styles = StyleSheet.create({
     top: 11,
   },
   memoryPillText: {
-    color: "#fff",
     fontFamily: family.sansMedium,
     fontSize: 12,
   },
@@ -721,11 +727,9 @@ const styles = StyleSheet.create({
   // Detached primary-action disc, sized like the reference's "+" button.
   fab: {
     alignItems: "center",
-    borderRadius: 28,
     elevation: 8,
     height: 56,
     justifyContent: "center",
-    shadowColor: "#000",
     shadowOffset: { height: 6, width: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

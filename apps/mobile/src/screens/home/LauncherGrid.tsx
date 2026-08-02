@@ -14,7 +14,7 @@
 
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -23,6 +23,7 @@ import Animated, {
 import type { SharedValue } from "react-native-reanimated";
 
 import AppIcon from "../../kit/components/AppIcon";
+import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";

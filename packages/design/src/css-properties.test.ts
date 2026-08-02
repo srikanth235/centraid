@@ -12,6 +12,7 @@ import { BRAND, themes } from "./themes/index.js";
 import {
   blueprintType,
   blueprintTypeShorthand,
+  NATIVE_DELTA_BY_FAMILY,
   nativeTypeStyle,
   type,
   typeSizeRungs,
@@ -79,6 +80,22 @@ describe("generated stylesheet values", () => {
     const rungs = typeSizeRungs(type);
     expect(Object.keys(rungs)).toContain("--t-body-size");
     expect(Object.keys(rungs)).not.toContain("--t-body-strong-size");
+  });
+
+  test("native deltas are derived from the family contract", () => {
+    for (const value of Object.values(type)) {
+      expect(value.nativeDelta).toStrictEqual(
+        NATIVE_DELTA_BY_FAMILY[value.family]
+      );
+      expect(nativeTypeStyle(value)).toStrictEqual({
+        family: value.family,
+        lineHeight:
+          value.lineHeight + NATIVE_DELTA_BY_FAMILY[value.family].lineHeight,
+        nativeDelta: NATIVE_DELTA_BY_FAMILY[value.family],
+        size: value.size + NATIVE_DELTA_BY_FAMILY[value.family].size,
+        weight: value.weight,
+      });
+    }
   });
 
   test("every theme has the same solved roles and the dark anchor is explicit", () => {

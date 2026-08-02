@@ -17,13 +17,7 @@ import { ShareIntentProvider } from "expo-share-intent";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect } from "react";
-import {
-  Pressable,
-  Text as NativeText,
-  TextInput as NativeTextInput,
-  View,
-  useColorScheme,
-} from "react-native";
+import { Pressable, View, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
@@ -34,6 +28,7 @@ import {
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
+import { Text } from "./src/kit/components/NativeText";
 import ToastHost from "./src/kit/components/Toast";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import FrameProbe from "./src/kit/perf/FrameProbe";
@@ -52,7 +47,6 @@ import {
   resolveTheme,
   t,
   useAccent,
-  DYNAMIC_TYPE,
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
@@ -152,20 +146,6 @@ const SettingsScreen = lazyScreen(() => import("./src/screens/Settings"));
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
 });
-
-// Apply the mobile typography adapter once.  This is intentionally a host
-// default rather than a second text scale: all roles still come from
-// @centraid/design, while native accessibility settings may enlarge them.
-type NativeDefaults = { defaultProps?: Record<string, unknown> };
-const textDefaults = NativeText as typeof NativeText & NativeDefaults;
-const textInputDefaults = NativeTextInput as typeof NativeTextInput &
-  NativeDefaults;
-textDefaults.defaultProps = { ...textDefaults.defaultProps, ...DYNAMIC_TYPE };
-textInputDefaults.defaultProps = {
-  ...textInputDefaults.defaultProps,
-  ...DYNAMIC_TYPE,
-};
-const Text = NativeText;
 
 // Surface scheduled notifications even when the app is foregrounded —
 // otherwise the OS swallows them silently, which is confusing for things

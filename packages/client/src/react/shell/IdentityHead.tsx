@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, RefObject } from "react";
 
 import { tileFinish } from "@centraid/design";
 import type { IconName } from "@centraid/design";
@@ -38,6 +38,8 @@ export interface IdentityHeadProps {
   onSwitchGateway?: (anchor: DOMRect) => void;
   /** Whether the gateway popover is open — a styling hook (`data-open`). */
   switcherOpen?: boolean;
+  /** Typed keyboard/action path to the same switcher trigger. */
+  switcherButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 function Avatar({
@@ -87,6 +89,7 @@ export default function IdentityHead({
   onOpenHousehold,
   onSwitchGateway,
   switcherOpen,
+  switcherButtonRef,
 }: IdentityHeadProps): JSX.Element {
   const name = vault?.name ?? "Loading…";
   // The popover anchors to the whole row, so it lines up under the identity it
@@ -94,6 +97,7 @@ export default function IdentityHead({
   return (
     <div className={styles.row} data-open={switcherOpen ? "true" : undefined}>
       <button
+        ref={switcherButtonRef}
         type="button"
         className={styles.head}
         {...(onSwitchGateway

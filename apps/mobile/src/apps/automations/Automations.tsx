@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import {
   SafeAreaView,
@@ -15,6 +15,7 @@ import {
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { spacing, useTheme } from "../../kit/theme";
 import {

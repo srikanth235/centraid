@@ -93,7 +93,7 @@ const makeRecipe = (
   ],
   haptics: Recipe["haptics"] = "none"
 ): Recipe => ({
-  a11y,
+  a11y: a11y.length > 0 ? a11y : ["semantic role"],
   capabilities,
   haptics,
   name,
@@ -124,7 +124,7 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   Banner: makeRecipe("Banner", ["--bg-elev", "--line", "--r-md", "--sp-4"]),
   Button: makeRecipe(
     "Button",
-    ["--target-min", "--r-md", "--sp-3", "--t-control", "--dur-1"],
+    ["--target-min", "--r-md", "--sp-3", "--t-small-strong", "--dur-1"],
     {
       disabled: ["--text-disabled", "--o-disabled", "--dur-1"],
       loading: ["--dur-2"],

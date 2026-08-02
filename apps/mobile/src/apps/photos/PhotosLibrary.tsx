@@ -4,10 +4,11 @@ import type { ListRenderItemInfo } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";

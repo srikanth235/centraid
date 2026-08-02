@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -20,6 +20,7 @@ import type {
 } from "@centraid/client/receipt-capture";
 
 import { recognizeText } from "../../modules/centraid-ocr";
+import { Text } from "../kit/components/NativeText";
 import { showToast } from "../kit/components/Toast";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";

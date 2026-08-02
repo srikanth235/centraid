@@ -14,18 +14,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Modal, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import type { useTheme } from "../../kit/theme";
 import { mergeCandidates } from "./merge-candidates";
 import { styles } from "./PeopleHome.styles";

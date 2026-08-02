@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 
+import { Text } from "../../kit/components/NativeText";
 import { useAppLock } from "../../kit/security/AppLock";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";

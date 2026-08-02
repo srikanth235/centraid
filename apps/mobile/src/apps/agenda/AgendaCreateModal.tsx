@@ -1,18 +1,11 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 
 type TimeSemantics = "zoned" | "floating" | "all-day";

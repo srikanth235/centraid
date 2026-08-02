@@ -1,12 +1,14 @@
 import React, { useMemo } from "react";
-import { Pressable, View, Text, StyleSheet } from "react-native";
+import { Pressable, View, StyleSheet } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
-import type { IconName } from "@centraid/design";
+import { nativeButtonStyle } from "@centraid/design";
+import type { IconName, NativeButtonStyle } from "@centraid/design";
 
-import { radii, spacing, t, useTheme } from "../theme";
+import { spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
+import { Text } from "./NativeText";
 
 export type ButtonVariant =
   | "primary"
@@ -33,24 +35,27 @@ export default function Button({
   style,
 }: ButtonProps): React.JSX.Element {
   const isPrimary = variant === "primary";
-  const isQuiet = variant === "quiet";
   const isDestructive = variant === "destructive";
   const isDestructiveFilled = variant === "destructiveFilled";
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, radii, targetMin } = useTheme();
+  const styles = useMemo(() => {
+    const recipeStyle = nativeButtonStyle(variant, {
+      colors,
+      radii,
+      targetMin,
+    });
+    return makeStyles(colors, recipeStyle);
+  }, [colors, radii, targetMin, variant]);
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
+      hitSlop={{ bottom: 4, left: 4, right: 4, top: 4 }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
-        isPrimary && styles.primary,
-        variant === "secondary" && styles.secondary,
-        isQuiet && styles.quiet,
-        isDestructive && styles.destructive,
-        isDestructiveFilled && styles.destructiveFilled,
+        styles.variant,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
@@ -70,15 +75,14 @@ export default function Button({
                     ? colors.danger
                     : colors.text
             }
-            strokeWidth={isPrimary || isDestructiveFilled ? 2 : 1.75}
           />
         ) : null}
         <Text
           style={[
             styles.label,
-            disabled && styles.labelDisabled,
             (isPrimary || isDestructiveFilled) && styles.labelPrimary,
             isDestructive && styles.labelDestructive,
+            disabled && styles.labelDisabled,
           ]}
         >
           {label}
@@ -88,32 +92,29 @@ export default function Button({
   );
 }
 
-const makeStyles = (colors: ThemeColors) =>
+const makeStyles = (colors: ThemeColors, recipeStyle: NativeButtonStyle) =>
   StyleSheet.create({
     base: {
-      borderRadius: radii.md,
+      borderRadius: recipeStyle.borderRadius,
       borderWidth: 1,
+      minHeight: recipeStyle.minHeight,
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    disabled: { borderColor: colors.lineStrong },
-    destructive: { backgroundColor: colors.bgElev, borderColor: colors.danger },
-    destructiveFilled: {
-      backgroundColor: colors.danger,
-      borderColor: "transparent",
-    },
-    label: { ...t("control"), color: colors.text },
-    labelDestructive: { color: colors.danger },
+    disabled: { borderColor: colors.lineStrong, opacity: 0.45 },
+    label: { ...t("smallStrong"), color: recipeStyle.color },
+    labelDestructive: { color: recipeStyle.color },
     labelDisabled: { color: colors.textDisabled },
     labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
-    primary: { backgroundColor: colors.accentFill, borderColor: "transparent" },
-    quiet: { backgroundColor: "transparent", borderColor: "transparent" },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: spacing[2],
       justifyContent: "center",
     },
-    secondary: { backgroundColor: colors.bgElev, borderColor: colors.line },
+    variant: {
+      backgroundColor: recipeStyle.backgroundColor,
+      borderColor: recipeStyle.borderColor,
+    },
   });
