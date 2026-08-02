@@ -402,6 +402,7 @@ function ConnectionStep({
               onPress={submitPaste}
             />
             <Pressable
+              testID="onboarding-scan-instead"
               accessibilityLabel="Scan the QR code instead"
               accessibilityRole="button"
               onPress={closePaste}

@@ -179,6 +179,11 @@ ${dismissKeyboardOnboarding}- eraseText: 50
 - tapOn:
     id: "onboarding-connect"
     retryTapIfNoChange: true
+# Give React a frame to paint Connecting… / errors before recovery. Without
+# this, remount ran while still on Connect and tapped "Scan the QR code instead"
+# into a hierarchy that had already left the paste form (Android 30739830232).
+- waitForAnimationToEnd:
+    timeout: 3000
 # If still idle, remount the paste field (scan instead → paste) — never
 # eraseText:2000 (Android 30716166878: DEADLINE_EXCEEDED after 120s of
 # char-by-char backspace). Remount gives a clean defaultValue buffer.
@@ -186,7 +191,9 @@ ${dismissKeyboardOnboarding}- eraseText: 50
     when:
       notVisible: "${progressOrError}"
     commands:
-      - tapOn: "Scan the QR code instead"
+      - tapOn:
+          id: "onboarding-scan-instead"
+          retryTapIfNoChange: true
 ${openPastePathCommands()
   .split("\n")
   .filter((line) => line.length > 0)
@@ -207,6 +214,8 @@ ${openPastePathCommands()
       - tapOn:
           id: "onboarding-connect"
           retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 3000
 # Iroh redemption can take >90s on cold CI. Done heading is split across
 # Text nodes so match Enter Centraid / Who's using / Home. Pairing errors
 # surface here too so a bad ticket fails fast instead of timing out.

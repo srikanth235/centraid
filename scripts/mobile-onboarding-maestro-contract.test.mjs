@@ -114,9 +114,12 @@ test("paste secondary control is an accessibility button for XCUITest/Maestro", 
     ui,
     /accessibilityLabel="Scan the QR code instead"[\s\S]{0,80}accessibilityRole="button"/u
   );
+  assert.match(ui, /testID="onboarding-scan-instead"/u);
   const firstRun = read(FIRST_RUN);
   assert.match(firstRun, /id:\s*"onboarding-paste"/u);
   assert.match(firstRun, /openPastePathCommands/u);
+  assert.match(firstRun, /id:\s*"onboarding-scan-instead"/u);
+  assert.match(firstRun, /waitForAnimationToEnd:\s*\n\s*timeout:\s*3000/u);
 });
 
 test("dev entry suppresses LogBox overlay so Maestro can tap bottom controls", () => {
