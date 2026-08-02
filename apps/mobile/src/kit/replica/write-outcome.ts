@@ -1,6 +1,5 @@
-import { Alert } from "react-native";
-
 import type { NativeWriteResult } from "../../lib/replica/native-session";
+import { showToast } from "../components/Toast";
 
 export interface SurfaceWriteOutcomeOptions {
   failureTitle?: string;
@@ -18,6 +17,7 @@ export interface SurfaceWriteOutcomeOptions {
  * result. Executed writes are already visible through their optimistic
  * mutation; every other state needs an explicit affordance.
  *
+ * News uses the app-wide toast; decisions remain with the caller's dialog.
  * Returns whether the caller may continue an optimistic success flow (for
  * example, close a modal, extract `output`, or navigate away).
  */
@@ -29,35 +29,36 @@ export function surfaceWriteOutcome(
   if (result.status === "parked") {
     if (options.onParked) options.onParked();
     else
-      Alert.alert(
-        "Awaiting approval",
-        result.reason ?? "This change is ready for owner approval."
-      );
+      showToast({
+        message: result.reason ?? "This change is ready for owner approval.",
+        tone: "neutral",
+      });
     return false;
   }
   if (result.status === "queued") {
     if (options.onQueued) options.onQueued();
     else
-      Alert.alert(
-        "Saved offline",
-        options.queuedMessage ??
-          "This change will sync automatically when the gateway reconnects."
-      );
+      showToast({
+        message:
+          options.queuedMessage ??
+          "Saved offline — it will sync when the gateway reconnects.",
+        tone: "accent",
+      });
     return true;
   }
   if (result.status === "in-flight") {
     if (options.onInFlight) options.onInFlight();
     else
-      Alert.alert(
-        "Saving",
-        "This change is queued on the gateway. Its final status remains visible in sync status."
-      );
+      showToast({
+        message: "Saving — the final status remains visible in sync status.",
+        tone: "accent",
+      });
     return true;
   }
-  Alert.alert(
-    options.failureTitle ?? "Change not applied",
-    result.reason ?? "The vault rejected this change."
-  );
+  showToast({
+    message: `${options.failureTitle ?? "Change not applied"}: ${result.reason ?? "The vault rejected this change."}`,
+    tone: "danger",
+  });
   return false;
 }
 
@@ -65,10 +66,10 @@ export function surfaceWriteFailure(
   error: unknown,
   failureTitle = "Change failed"
 ): void {
-  Alert.alert(
-    failureTitle,
-    error instanceof Error ? error.message : "Please try again."
-  );
+  showToast({
+    message: `${failureTitle}: ${error instanceof Error ? error.message : "Please try again."}`,
+    tone: "danger",
+  });
 }
 
 /** Extract the executed/queued command output bag when present. */

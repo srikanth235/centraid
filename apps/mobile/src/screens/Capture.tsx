@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
   Pressable,
@@ -16,6 +15,7 @@ import {
 } from "@centraid/client/capture";
 import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
+import Icon from "../kit/components/Icon";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -169,7 +169,7 @@ export default function CaptureScreen({
           accessibilityLabel="Close quick capture"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="x" size={24} color={colors.text} />
+          <Icon name="x" size={24} color={colors.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -329,7 +329,7 @@ export default function CaptureScreen({
               onPress={() => void save()}
               style={[styles.save, { backgroundColor: colors.accent }]}
             >
-              <Text style={[styles.saveText, { color: colors.onAccent }]}>
+              <Text style={[styles.saveText, { color: colors.textInv }]}>
                 {busy ? "Saving…" : `Save ${preview.kind}`}
               </Text>
             </Pressable>
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   saveText: { fontFamily: family.sansBold, fontSize: 15 },
   title: {
     flex: 1,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 21,
     textAlign: "center",
   },

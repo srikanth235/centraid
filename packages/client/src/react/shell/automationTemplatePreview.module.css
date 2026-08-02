@@ -41,7 +41,7 @@
   line-height: 1;
 }
 .auDrawerName {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 600;
   color: var(--text);
@@ -52,7 +52,7 @@
   gap: 6px;
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .auDrawerClose {

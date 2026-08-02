@@ -78,7 +78,7 @@ describe(pushKnobToAppFrame, () => {
       {
         type: "centraid:settings",
         dataAttrs: {},
-        cssVars: { "app-accent": "#f00" },
+        cssVars: { "app-identity": "#f00" },
       },
       origin
     );

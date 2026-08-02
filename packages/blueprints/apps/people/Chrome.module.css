@@ -4,14 +4,13 @@
    People used to fork the whole token set here (its own neutral ramp, type
    scale, radii, shadows and status hues). #686 retired that fork: identity is
    now the two knobs the design language sanctions — `--app-hue` and a palette
-   `--accent` — and every neutral / face / radius / shadow / type shorthand
+   `--app-identity` — and every neutral / face / radius / shadow / type shorthand
    comes from the shell-injected blueprint token layer. Only the app-local
    aliases the reused components/*.module.css read are declared, and each is a
    thin alias over a contract token so it tracks the theme.
 
-   Precedence note: the host sets an inline `--accent: var(--c-teal)` on the app
-   root, so rose is re-established via `--_accent` with a palette fallback (not
-   `var(--accent)`); the per-app `--app-color` swatch knob still wins. The rule
+   Precedence note: the host supplies product action roles; the per-app identity
+   knob owns this app's marks while product actions keep reading `--accent`. The rule
    doubles the class (`.appRoot.appRoot` → 0,2,0) to beat the shell's injected
    `.centraid-inline-scope` block (0,1,0) appended to <head> at runtime. */
 
@@ -23,16 +22,15 @@
   /* Rose identity: the hue knob tints every neutral, the palette entry is the
      structural accent. */
   --app-hue: 345;
-  --accent: var(--c-rose);
-  --_accent: var(--app-color, var(--c-rose));
+  --app-identity: var(--c-rose);
 
   /* App-local aliases the reused component modules read, each an alias over a
      contract token so light/dark ride the shared ramps. */
   --accs: var(--accent-soft);
   --accd: var(--accent-deep);
   --accd-fg: var(--accent-deep);
-  --tk-h: var(--tracking-h);
-  --tk-eye: var(--tracking-eyebrow);
+  --tk-h: -0.01em;
+  --tk-eye: 0.09em;
 }
 
 /* Base reset (app.css global remainder), scoped to the app subtree. */
@@ -44,12 +42,12 @@
   display: none !important;
 }
 .appRoot :focus-visible {
-  outline: 2px solid var(--_accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 /* Avatars are <kit-avatar>; the title face is People's one kit override. */
 .appRoot :global(.kit-avatar) {
-  font-family: var(--font-title);
+  font-family: var(--font-sans);
 }
 /* Add-person modal typography (app.css .kit-modal voice). */
 .appRoot :global(.kit-modal) h2 {
@@ -72,8 +70,8 @@
   --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, var(--text-inv)),
-    var(--accd)
+    color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
+    var(--app-identity)
   );
   --app-brand-font: var(--t-body-strong);
   --app-scrim-background: var(--scrim);
@@ -128,7 +126,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: var(--on-accent);
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -162,7 +160,7 @@
   gap: 2px;
 }
 .sectionLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
@@ -244,7 +242,7 @@
   color: var(--text-faint);
 }
 .search input:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .topbarTools {
@@ -342,9 +340,9 @@
   gap: 10px;
   margin: 0 22px 10px;
   padding: var(--sp-2) 10px var(--sp-2) var(--sp-4);
-  border: 1px solid var(--selb);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r-pill);
-  background: var(--sel);
+  background: var(--accent-soft);
   animation: dRise 0.18s var(--ease);
 }
 .scroll {
@@ -364,7 +362,7 @@
 /* ---------- List ---------- */
 .listwrap {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);

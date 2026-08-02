@@ -30,7 +30,7 @@
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .navCount {
@@ -85,13 +85,13 @@
   margin-bottom: var(--sp-2);
 }
 .storageTop .lbl {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 .storageTop .val {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }

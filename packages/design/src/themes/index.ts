@@ -10,13 +10,14 @@ import { darkTheme, lightTheme } from "./centraid";
 
 export type { Theme } from "./shared";
 export {
+  ACCENT_PALETTE,
   ACCENT_DEEP,
   ACCENT_LIGHT,
   ACCENT_TEXT_LIGHT,
   BRAND,
   EASE,
-  ON_ACCENT,
 } from "./shared";
+export type { AccentKey } from "./shared";
 
 export { darkTheme, lightTheme } from "./centraid";
 

@@ -14,16 +14,23 @@
 
 import type { TextStyle } from "react-native";
 
-import { type as typeTokens } from "@centraid/design";
 import type { TypeKey } from "@centraid/design";
 
+import { type as nativeType } from "./tokens.generated";
+
 export { spacing, radii } from "@centraid/design";
+
+export {
+  getAccent,
+  hydrateAccent,
+  setAccent,
+  subscribeAccent,
+  useAccent,
+} from "./accent";
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
 export const family = {
-  displayBold: "SpaceGrotesk_600SemiBold",
-  displayMedium: "SpaceGrotesk_500Medium",
   monoBold: "JetBrainsMono_600SemiBold",
   monoMedium: "JetBrainsMono_500Medium",
   monoRegular: "JetBrainsMono_400Regular",
@@ -36,10 +43,9 @@ export const family = {
   serifItalic: "PlayfairDisplay_600SemiBold_Italic",
 } as const;
 
-type FamilyKey = "sans" | "display" | "mono";
+type FamilyKey = "sans" | "mono" | "serif";
 
 const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
-  display: { "500": family.displayMedium, "600": family.displayBold },
   mono: {
     "400": family.monoRegular,
     "500": family.monoMedium,
@@ -50,21 +56,31 @@ const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
     "500": family.sansMedium,
     "600": family.sansBold,
   },
+  serif: { "600": family.serif },
 };
 
 export const t = (
   key: TypeKey
 ): Pick<TextStyle, "fontSize" | "lineHeight" | "fontFamily"> => {
-  const def = typeTokens[key];
+  const def = nativeType[key];
   const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
   const fontFamily =
     map[def.weight] ?? map["400"] ?? map["500"] ?? family.sansRegular;
   return {
     fontFamily,
-    fontSize: def.size,
+    fontSize: def.fontSize,
     lineHeight: def.lineHeight,
   };
 };
+
+// React Native defaults font scaling on, but the multiplier is otherwise
+// platform-dependent.  The app installs this bounded default at its root so
+// every screen, including lazy screens, follows Dynamic Type without allowing
+// a long label to collapse the interaction geometry.
+export const DYNAMIC_TYPE = {
+  allowFontScaling: true,
+  maxFontSizeMultiplier: 1.35,
+} as const;
 
 // Dark-mode-aware theme API, lowered from the canonical blueprint token source.
 export { useTheme } from "./useTheme";

@@ -17,6 +17,11 @@
 // and packages/client/src/react/screen-contracts.ts (InsightsSummary).
 
 import {
+  formatBytes as sharedFormatBytes,
+  formatRelativeTime,
+} from "@centraid/design";
+
+import {
   apiHeaders,
   authHeader,
   fetchJson,
@@ -162,10 +167,7 @@ export function formatUsd(n: number): string {
 
 /** RSS/byte size in the largest sensible unit. */
 export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "0 MB";
-  const mb = n / (1024 * 1024);
-  if (mb >= 1024) return `${trim(mb / 1024)} GB`;
-  return `${Math.round(mb)} MB`;
+  return sharedFormatBytes(n);
 }
 
 /** Coarse uptime: "3d 4h", "5h 12m", or "12m". */
@@ -189,14 +191,7 @@ export function formatMs(ms: number): string {
 /** "just now" / "5m ago" / "3h ago" / "2d ago" from an epoch-ms or ISO time. */
 export function relativeTime(when: number | string): string {
   const then = typeof when === "number" ? when : Date.parse(when);
-  if (!Number.isFinite(then)) return "";
-  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (secs < 45) return "just now";
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  return formatRelativeTime(Number.isFinite(then) ? then : undefined);
 }
 
 function trim(n: number): string {

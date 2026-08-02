@@ -80,7 +80,7 @@
   border-color: var(--accent);
 }
 .jumpToBottom:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -124,7 +124,7 @@
   background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .msgActionBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .msgActionBtn.feedbackOn {
@@ -164,7 +164,7 @@
   cursor: default;
 }
 .pagerLabel {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   min-width: 26px;
@@ -248,7 +248,7 @@
 }
 /* Offline hint beside a resend button (issue #420, Wave 6). */
 .offlineHint {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -292,7 +292,7 @@
   margin: 0;
 }
 .toolMeta {
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding-top: 3px;
 }
@@ -396,7 +396,7 @@
 .acItemHint {
   flex: none;
   color: var(--text-ghost);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .acEmpty {
   padding: 8px 10px;
@@ -472,7 +472,7 @@
   background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .attachBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .send {
@@ -499,7 +499,7 @@
   transform: scale(0.94);
 }
 .send:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -515,7 +515,7 @@
   border-radius: var(--r-md);
   background: transparent;
   color: var(--text-faint);
-  font: var(--t-tiny);
+  font: var(--t-control);
   cursor: pointer;
 }
 .effortPicker select:hover {
@@ -523,7 +523,7 @@
   background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .effortPicker select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .srOnly {
@@ -562,7 +562,7 @@
   background: color-mix(in oklab, var(--text) 8%, transparent);
 }
 .modelBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .modelBtn:disabled {
@@ -699,7 +699,7 @@
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .attachRemove:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .attachSpinner {
@@ -722,8 +722,8 @@
   padding: 40px 20px;
 }
 .emptyTitle {
-  font-family: var(--font-display);
-  font-size: var(--t-h2-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
   color: var(--text);
 }
 .emptySub {

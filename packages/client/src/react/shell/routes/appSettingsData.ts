@@ -111,6 +111,7 @@ export async function writeAppKnobValue(
 // data-attr and CSS-var paths. Mirrors camelTailToKebab in app-engine's
 // settings-merge so a live edit lands on the same target a reload will bake.
 function appKnobKebab(key: string): string {
+  if (key === "appColor" || key === "appAccent") return "app-identity";
   const tail = key.startsWith("app") ? key.slice(3) : key;
   return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }

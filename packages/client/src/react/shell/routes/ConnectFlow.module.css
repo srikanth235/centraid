@@ -99,7 +99,7 @@
 }
 .fieldOptional {
   font: var(--t-small);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-weight: 400;
 }

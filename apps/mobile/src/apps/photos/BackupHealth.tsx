@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { File } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import React, { useEffect, useMemo, useState } from "react";
@@ -14,6 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { formatBytes } from "@centraid/design";
+
+import Icon from "../../kit/components/Icon";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -257,7 +259,7 @@ export default function BackupHealth({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>
           Backup health
@@ -280,7 +282,7 @@ export default function BackupHealth({
             },
           ]}
         >
-          <Feather
+          <Icon
             name={pending.length ? "cloud" : "check-circle"}
             size={30}
             color={pending.length ? colors.accent : "#2f9d6a"}
@@ -300,7 +302,7 @@ export default function BackupHealth({
         </View>
         {inCloudSkipped ? (
           <View style={[styles.warning, { borderColor: colors.danger }]}>
-            <Feather name="cloud-off" size={18} color={colors.danger} />
+            <Icon name="cloud-off" size={18} color={colors.danger} />
             <Text style={[styles.warningText, { color: colors.danger }]}>
               {inCloudSkipped}{" "}
               {inCloudSkipped === 1 ? "original is" : "originals are"}{" "}
@@ -386,11 +388,11 @@ export default function BackupHealth({
           ]}
           onPress={() => void backupAlbums()}
         >
-          <Feather
+          <Icon
             name="upload-cloud"
             size={18}
             color={
-              rules.selectedAlbums.length ? colors.onAccent : colors.textFaint
+              rules.selectedAlbums.length ? colors.textInv : colors.textFaint
             }
           />
           <Text
@@ -398,7 +400,7 @@ export default function BackupHealth({
               styles.settingsText,
               {
                 color: rules.selectedAlbums.length
-                  ? colors.onAccent
+                  ? colors.textInv
                   : colors.textFaint,
               },
             ]}
@@ -426,7 +428,7 @@ export default function BackupHealth({
             style={[styles.settings, { borderColor: colors.line }]}
             onPress={() => void Linking.openSettings()}
           >
-            <Feather name="battery-charging" size={18} color={colors.accent} />
+            <Icon name="battery-charging" size={18} color={colors.accent} />
             <Text style={[styles.settingsText, { color: colors.text }]}>
               Review battery optimization
             </Text>
@@ -468,12 +470,6 @@ function Rule({
       />
     </View>
   );
-}
-
-function formatBytes(value: number): string {
-  if (value < 1024 ** 2) return `${Math.ceil(value / 1024)} KB`;
-  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
-  return `${(value / 1024 ** 3).toFixed(1)} GB`;
 }
 
 function formatSyncTime(value: string): string {

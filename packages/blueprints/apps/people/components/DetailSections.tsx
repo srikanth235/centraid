@@ -87,7 +87,7 @@ function DebtsSection({
     debts.length > 0 ? (
       <span
         style={{
-          fontFamily: "var(--mono)",
+          fontFamily: "var(--font-mono)",
           fontSize: "11px",
           textTransform: "none",
           letterSpacing: 0,
@@ -351,9 +351,11 @@ export function Sections({
                 aria-label="Reminder"
                 style={{
                   background: d.reminder_on
-                    ? "color-mix(in oklab, var(--_accent) 12%, transparent)"
+                    ? "color-mix(in oklab, var(--app-identity) 12%, transparent)"
                     : "color-mix(in oklab, var(--text) 5%, transparent)",
-                  color: d.reminder_on ? "var(--_accent)" : "var(--text-faint)",
+                  color: d.reminder_on
+                    ? "var(--app-identity)"
+                    : "var(--text-faint)",
                 }}
                 onClick={() => onToggleReminder(d.date_id)}
               >

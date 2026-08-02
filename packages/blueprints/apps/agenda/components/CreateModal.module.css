@@ -29,7 +29,7 @@
 }
 .createTitle {
   width: 100%;
-  font-family: var(--font-title);
+  font-family: var(--font-sans);
   font-size: 19px;
   font-weight: 600;
   color: var(--text);
@@ -40,7 +40,7 @@
   outline: none;
 }
 .createTitle:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
 }
 .createTimes {
   display: flex;
@@ -75,8 +75,8 @@
   color: var(--text-soft);
 }
 .calChip[aria-pressed="true"] {
-  border-color: var(--selb);
-  background: var(--sel);
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
   color: var(--text);
   font-weight: 600;
 }
@@ -92,7 +92,7 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: var(--sel);
+  background: var(--accent-soft);
   color: var(--text-soft);
   font-size: 9px;
   font-weight: 600;
@@ -117,7 +117,7 @@
   font-family: var(--font-sans);
 }
 .createDesc:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .createModal :global(.kit-modal-foot) {

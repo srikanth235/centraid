@@ -16,11 +16,11 @@
   color: var(--text);
 }
 .input:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .modalLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);

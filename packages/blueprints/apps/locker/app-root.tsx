@@ -89,7 +89,6 @@ function makeState(): AppState {
     reveal: {},
     search: "",
     searchResults: null,
-    dark: document.documentElement.dataset.theme === "dark",
     narrow: false,
     sideOpen: false,
     showList: true,
@@ -647,7 +646,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
             tags={sidebarTags(data)}
             trashCount={state.trashRows.length}
             nav={state.nav}
-            dark={state.dark}
             onNav={(nav) => logic.setNav(nav)}
             onNewItem={openNew}
             onCloseSide={() => {
@@ -655,7 +653,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               bump();
             }}
             onLock={() => lockNow()}
-            onToggleTheme={() => logic.toggleTheme()}
           />
         }
         list={

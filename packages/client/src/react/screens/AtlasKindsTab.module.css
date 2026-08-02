@@ -19,8 +19,8 @@
 }
 .censusSentence {
   margin: 0;
-  font: var(--t-h2);
-  font-family: var(--font-display);
+  font: var(--t-title);
+  font-family: var(--font-sans);
   color: var(--text-soft);
   max-width: 62ch;
 }
@@ -70,7 +70,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .metricOption:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .metricOption:has(:disabled) {
@@ -286,7 +286,7 @@
 .machineryPack {
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .numCol {
   text-align: right;

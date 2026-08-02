@@ -7,7 +7,13 @@ import { describe, expect, test } from "vitest";
 
 import { formatTokenPurityError, scanCssTokenPurity } from "./token-purity.ts";
 
-const CONTRACT = ["--accent", "--line", "--mono", "--scrim", "--shadow-md"];
+const CONTRACT = [
+  "--accent",
+  "--line",
+  "--font-mono",
+  "--scrim",
+  "--shadow-md",
+];
 
 function scan(css: string) {
   return scanCssTokenPurity(css, { contractProps: CONTRACT });
@@ -16,17 +22,17 @@ function scan(css: string) {
 describe("CSS token-purity scanning", () => {
   test("passes a stylesheet built entirely from contract tokens", () => {
     expect(
-      scan(`:root { --app-hue: 222; --accent: var(--c-indigo); }
+      scan(`:root { --app-hue: 222; --app-identity: var(--c-indigo); }
 .row {
   background: var(--bg-elev);
   color: var(--text-soft);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   padding: var(--sp-3);
   font: var(--t-body);
   font-family: var(--font-sans);
 }
-.meta { font-family: var(--mono), inherit; }
+.meta { font-family: var(--font-mono), inherit; }
 .card { --card-gap: var(--sp-2); gap: var(--card-gap); }`)
     ).toStrictEqual([]);
   });
@@ -87,7 +93,7 @@ describe("CSS token-purity scanning", () => {
   test("lets an app declare its two identity knobs and its own names", () => {
     expect(
       scan(
-        ":root { --app-hue: 200; --accent: var(--c-rose); --row-h: var(--sp-6); }"
+        ":root { --app-hue: 200; --app-identity: var(--c-rose); --row-h: var(--sp-6); }"
       )
     ).toStrictEqual([]);
   });

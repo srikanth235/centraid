@@ -41,7 +41,7 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
 > = {
   // Remaining entries after the #686 burn-down (was 28 files / 252 violations).
   // What's left is sanctioned: app-font knobs declaring contract font roles,
-  // per-app identity props (--app-hue / --accent aliases), the photos wall,
+  // per-app identity props (--app-hue / --app-identity), the photos wall,
   // and hsl(var(--app-hue) ...) theater-stage backdrops awaiting a --stage
   // token in packages/design.
   "docs/Chrome.module.css": {
@@ -60,7 +60,7 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     hex: 0,
     functional: 0,
     fontFamily: 0,
-    customProps: ["--font-sans", "--font-title"],
+    customProps: ["--font-sans"],
   },
   "notes/Chrome.module.css": {
     hex: 0,
@@ -72,13 +72,13 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     hex: 0,
     functional: 0,
     fontFamily: 0,
-    customProps: ["--_accent", "--accent", "--app-hue"],
+    customProps: ["--app-hue", "--app-identity"],
   },
   "photos/Chrome.module.css": {
     hex: 0,
     functional: 3,
     fontFamily: 0,
-    customProps: ["--_accent", "--app-hue", "--bg-wall"],
+    customProps: ["--app-hue", "--app-identity", "--bg-wall"],
   },
   "photos/components/Lightbox.module.css": {
     hex: 0,
@@ -102,23 +102,15 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
  * time, so the rule silently did not apply. The twelve that predated #686 were
  * all resolved by reading what each site was actually doing:
  *
- *   * `--accent-deep-fg` (7 refs across `tasks/components/*`) — `tasks` copied
- *     the pattern from `docs` without copying the declaration. Every site inks
- *     text ON a `--accent-soft` tint, never fills with `--accent-deep`, so the
- *     role is "the accent read as a foreground" — which the contract already
- *     spells `--accent-text` (emitted as `var(--accent-deep)`, and lifted, not
- *     deepened, on the dark rung). Bound to `var(--accent-text)`. This is a
- *     different role from the `--accent-deep` FILL policed by the
- *     `--on-accent` gate above, and does not collide with it.
  *   * `--r-lg` (3 refs) — the shell radius scale has `lg`, the blueprint
  *     contract does not. All three sites are the repo's card idiom
  *     (`1px solid var(--line)` + `var(--bg-elev)` + 14px padding), which every
- *     peer in the same two apps rounds with `--r-card`. Bound to that.
+ *     peer in the same two apps rounds with `--r-xl`. Bound to that.
  *   * `--acc` — an abbreviation of `--accent` in a focus ring. Bound to
  *     `var(--accent)`, matching every other `:focus-visible` in the apps.
  *   * `--t-label` — the uppercase sidebar section label. The blueprint type
  *     ramp has no `label` rung; every peer section label in every app is
- *     `--t-tiny`. Bound to that.
+ *     `--t-control`. Bound to that.
  *   * `--bg-l` — genuinely emitted by the blueprint DARK token block (10%) but
  *     absent from the light one, so it is not contract vocabulary. Given the
  *     documented default as an explicit fallback instead.

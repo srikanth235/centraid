@@ -41,6 +41,11 @@ import {
 // live-network controllers (Ask driver, @-mention popover/field) stay as the
 // imperative controllers they always were — see the excluded set in issue #327.
 import { entityKindLabel } from "./elements.js";
+import {
+  formatBytes as sharedFormatBytes,
+  formatRelativeTime,
+} from "./format.js";
+import { kitIcon } from "./icons.js";
 // Shared chat-client core (issue #420) — the same parser/renderer/consent-flow
 // the React shell uses, so the Ask panel renders ref-chips + typed blocks and
 // gains stop/cancel from one canonical source.
@@ -115,6 +120,8 @@ export interface ToastOptions {
   undoLabel?: string;
   onUndo?: () => void;
   duration?: number;
+  /** Feedback tone is explicit; neutral toasts do not vibrate or imply success. */
+  tone?: "affirm" | "change" | "destructive" | "none";
 }
 
 export interface ReadSubscription {
@@ -238,15 +245,19 @@ function ensureToastHost() {
  * Show a transient toast. Options:
  *  - undoLabel/onUndo: renders an action button (e.g. Undo) that runs once.
  *  - duration: ms before auto-dismiss (default 5000; sticky if 0).
+ *  - tone: semantic outcome; only explicit non-neutral tones haptically signal.
  */
 export function toast(
   text: string,
-  { undoLabel, onUndo, duration = 5000 }: ToastOptions = {}
+  { undoLabel, onUndo, duration = 5000, tone = "none" }: ToastOptions = {}
 ): () => void {
-  haptic("success");
+  if (tone === "affirm") haptic("success");
+  else if (tone === "change" || tone === "destructive") haptic("selection");
   const host = ensureToastHost();
   const elLocal = document.createElement("kit-toast");
   elLocal.text = text;
+  if (tone === "destructive") elLocal.tone = "danger";
+  else if (tone === "affirm" || tone === "change") elLocal.tone = "accent";
   let timer = 0;
   const dismiss = () => {
     clearTimeout(timer);
@@ -436,17 +447,8 @@ export function localMonthKey(dateish: string | number | Date): string {
 
 /** "5m" / "3h" / "2d" / "Mar 4" — the notifications-style relative timestamp. */
 export function relTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const mins = Math.round((Date.now() - then) / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (mins < 60 * 24) return `${Math.round(mins / 60)}h`;
-  if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))}d`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  const label = formatRelativeTime(iso);
+  return label === "Recently" ? "" : label;
 }
 
 export function debounce<Args extends unknown[]>(
@@ -818,10 +820,8 @@ export async function stageFileBytes(
 
 /** "812 B" / "24 KB" / "1.3 MB" — `empty` is returned for 0/absent sizes. */
 export function fmtBytes(n: number | null | undefined, empty = ""): string {
-  if (!n || !Number.isFinite(Number(n))) return empty;
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (!n || !Number.isFinite(Number(n)) || n < 0) return empty;
+  return sharedFormatBytes(n);
 }
 
 /**
@@ -1191,44 +1191,17 @@ export async function runBulk(
 
 // ---------- Theme toggle ----------
 
-const SUN_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>';
-const MOON_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
-
-/** Effective theme right now: the explicit data-theme, else the OS scheme. */
-export function isDarkNow(): boolean {
-  const t = document.documentElement.dataset.theme;
-  if (t === "dark") return true;
-  if (t === "light") return false;
-  return (
-    window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches
-  );
-}
-
 /**
- * Wire a header button as the app's light/dark toggle: sets `data-theme`,
- * seeds `--bg-l` on first dark flip (the wall gradient's knob), and keeps a
- * sun/moon icon in the button. `onChange(dark)` runs after each flip.
+ * Theme is a host-owned setting. Blueprint apps receive the resolved profile
+ * through the served document and must not create a second per-app theme
+ * preference. Keep this compatibility hook inert for older app roots while
+ * the visible legacy controls are hidden by the kit stylesheet.
  */
 export function wireThemeToggle(
-  btn: HTMLElement,
-  { onChange }: { onChange?: (dark: boolean) => void } = {}
+  _btn: HTMLElement,
+  _options: { onChange?: (dark: boolean) => void } = {}
 ): () => void {
-  const setIcon = () => {
-    btn.innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
-  };
-  btn.addEventListener("click", () => {
-    const dark = !isDarkNow();
-    const root = document.documentElement;
-    root.dataset.theme = dark ? "dark" : "light";
-    if (dark && !root.style.getPropertyValue("--bg-l"))
-      root.style.setProperty("--bg-l", "10%");
-    setIcon();
-    onChange?.(dark);
-  });
-  setIcon();
-  return setIcon;
+  return () => {};
 }
 
 // ============================================================================
@@ -1265,12 +1238,9 @@ export function wireThemeToggle(
     });
   }
 
-  const HISTORY_ICON =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/></svg>';
-  const CLIP_ICON =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16.9 6.6 9 14.5a2.75 2.75 0 0 0 3.9 3.9l7.4-7.4a4.5 4.5 0 1 0-6.36-6.37L6.5 12.1"/></svg>';
-  const CHEVRON_ICON =
-    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  const HISTORY_ICON = kitIcon("History", 16, 1.75);
+  const CLIP_ICON = kitIcon("Paperclip", 16, 1.75);
+  const CHEVRON_ICON = kitIcon("ChevronDown", 10, 2.5);
 
   /** Default intro copy — shared by the first render and every "New conversation" reset. */
   function introText() {

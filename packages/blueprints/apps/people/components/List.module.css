@@ -25,7 +25,7 @@
   background: var(--bg-sunken);
 }
 .row[data-selected="true"] {
-  background: var(--sel);
+  background: var(--accent-soft);
 }
 .check {
   /* Positioned so it paints (and is hit-tested) above the row's stretched
@@ -71,7 +71,7 @@
   white-space: nowrap;
 }
 .starInd {
-  color: var(--_accent);
+  color: var(--app-identity);
   font-size: 0.85em;
   margin-left: 5px;
 }
@@ -89,7 +89,7 @@
 }
 .cell.last {
   width: 110px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 .cell.status {
@@ -101,7 +101,7 @@
   font-size: 12px;
 }
 .col {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);

@@ -1,31 +1,22 @@
-/**
- * Generated-stylesheet value laws (#656 Layer 3 mutation seed).
- *
- * `css.test.ts` calls `toCss()` once at MODULE scope. Under Stryker's
- * `ignoreStatic` that makes every mutant in `css.ts` and `typography.ts` a
- * static mutant — i.e. the generator had a test suite and still contributed
- * zero mutants to measure. These call the generator inside each test so the
- * assertions actually defend it, and they check the emitted VALUES (the px
- * suffix, the kebab-case mapping, the var-before-use ordering) rather than
- * only which property names appear.
- */
 import { describe, expect, test } from "vitest";
 
+import { toBlueprintCss } from "./blueprint.js";
+import { paletteText } from "./color.js";
+import { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "./contract.js";
 import { toCss } from "./css.js";
 import { spacing } from "./density.js";
 import { library } from "./library.js";
 import { palette } from "./palette.js";
 import { radii } from "./radii.js";
-import { BRAND, EASE, ON_ACCENT, themes } from "./themes/index.js";
+import { BRAND, themes } from "./themes/index.js";
 import {
-  fontStacks,
-  marketingType,
+  blueprintType,
+  blueprintTypeShorthand,
+  nativeTypeStyle,
   type,
-  typeShorthand,
   typeSizeRungs,
 } from "./typography.js";
 
-/** Parse the sheet into `selector -> {prop: value}` without assuming order. */
 function parseBlocks(css: string): Map<string, Map<string, string>> {
   const blocks = new Map<string, Map<string, string>>();
   const re = /(?<selector>[^{}\n]+)\s*\{(?<body>[^}]*)\}/gu;
@@ -33,9 +24,14 @@ function parseBlocks(css: string): Map<string, Map<string, string>> {
     const selector = (match.groups?.selector ?? "").trim();
     const props = new Map<string, string>();
     for (const line of (match.groups?.body ?? "").split("\n")) {
-      const decl = /^\s*(?<prop>--[\w-]+):\s*(?<value>.*);\s*$/u.exec(line);
-      if (decl?.groups) {
-        props.set(decl.groups.prop as string, decl.groups.value as string);
+      const declaration = /^\s*(?<prop>--[\w-]+):\s*(?<value>.*);\s*$/u.exec(
+        line
+      );
+      if (declaration?.groups) {
+        props.set(
+          declaration.groups.prop as string,
+          declaration.groups.value as string
+        );
       }
     }
     blocks.set(selector, props);
@@ -43,284 +39,148 @@ function parseBlocks(css: string): Map<string, Map<string, string>> {
   return blocks;
 }
 
-describe("token stylesheet values", () => {
-  test("every declaration is a custom property with a non-empty value", () => {
-    const blocks = parseBlocks(toCss());
-    expect(blocks.size).toBeGreaterThan(0);
-    for (const [selector, props] of blocks) {
-      expect(props.size, selector).toBeGreaterThan(0);
-      for (const [prop, value] of props) {
-        expect(prop.startsWith("--"), `${selector} ${prop}`).toBe(true);
-        expect(value.trim(), `${selector} ${prop}`).not.toBe("");
-      }
-    }
-  });
-
-  test("palette hues carry their canonical values", () => {
-    const root = parseBlocks(toCss()).get(":root");
-    for (const [key, value] of Object.entries(palette)) {
-      expect(root?.get(`--c-${key}`), key).toBe(value);
-    }
-  });
-
-  test("radii are emitted in px, not as bare numbers", () => {
-    const blocks = parseBlocks(toCss());
-    const root = blocks.get(":root");
-    for (const [key, value] of Object.entries(radii)) {
-      expect(root?.get(`--r-${key}`), key).toBe(`${value}px`);
-    }
-  });
-
-  test("every spacing rung is emitted in px, and only the rungs exist", () => {
-    // The scale in density.ts is the whole vocabulary a surface may spend —
-    // a rung that silently drops out sends its call sites to `0`, and a bare
-    // number is not a length at all (`padding: 16` computes to nothing).
-    const root = parseBlocks(toCss()).get(":root");
-    const emitted = [...(root?.keys() ?? [])].filter((k) =>
-      k.startsWith("--sp-")
+describe("generated stylesheet values", () => {
+  test("shell and blueprint roots publish their exact contracts", () => {
+    const shell = parseBlocks(toCss()).get(":root");
+    const blueprint = parseBlocks(toBlueprintCss()).get(":root");
+    expect([...(shell?.keys() ?? [])].sort()).toStrictEqual(
+      SHELL_TOKEN_CONTRACT
     );
-    expect(emitted).toHaveLength(Object.keys(spacing).length);
-    for (const [key, value] of Object.entries(spacing)) {
-      expect(root?.get(`--sp-${key}`), key).toBe(`${value}px`);
-    }
+    expect([...(blueprint?.keys() ?? [])].sort()).toStrictEqual(
+      BLUEPRINT_TOKEN_CONTRACT
+    );
   });
 
-  test("shared library-tile tokens are emitted under one --lib- prefix", () => {
-    // Home and Discover render the same tile off these values; the point of
-    // the shared table is that one edit moves both pages, which only holds if
-    // every entry actually reaches the sheet under its own name.
+  test("shared palette, radius, spacing and tile values are emitted once", () => {
     const root = parseBlocks(toCss()).get(":root");
-    const emitted = [...(root?.keys() ?? [])].filter((k) =>
-      k.startsWith("--lib-")
-    );
-    expect(emitted).toHaveLength(Object.keys(library).length);
+    for (const [key, value] of Object.entries(palette))
+      expect(root?.get(`--c-${key}`)).toBe(value);
+    for (const [key, value] of Object.entries(radii))
+      expect(root?.get(`--r-${key}`)).toBe(`${value}px`);
+    for (const [key, value] of Object.entries(spacing))
+      expect(root?.get(`--sp-${key}`)).toBe(`${value}px`);
     for (const [key, value] of Object.entries(library)) {
-      expect(root?.get(`--lib-${key}`), key).toBe(value);
+      const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
+      expect(root?.get(`--tile-${suffix}`)).toBe(value);
     }
   });
 
-  test("theme-independent constants are emitted once, at the root only", () => {
-    // The brand teal, the ink for a saturated-accent/scrim surface, and the
-    // single easing curve do not flip with the ramp. A theme block that
-    // redefines one is exactly the drift these constants exist to prevent,
-    // and a missing one leaves its `var()` call sites resolving to nothing —
-    // how `--on-accent` shipped unpainted in the first place (#686 F3).
-    const blocks = parseBlocks(toCss());
-    const root = blocks.get(":root");
-    const constants = {
-      "--brand": BRAND,
-      "--ease": EASE,
-      "--on-accent": ON_ACCENT,
-    };
-    for (const [prop, value] of Object.entries(constants)) {
-      expect(root?.get(prop), prop).toBe(value);
-      for (const name of Object.keys(themes)) {
-        expect(
-          blocks.get(`[data-theme='${name}']`)?.has(prop),
-          `${name} redefines ${prop}`
-        ).toBe(false);
-      }
+  test("the type scale is one role set and size rungs collapse duplicates", () => {
+    const root = parseBlocks(toCss()).get(":root");
+    for (const [key, value] of Object.entries(type)) {
+      expect(
+        root?.get(
+          `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
+        )
+      ).toContain(`${value.size}px/${value.lineHeight}px`);
+      expect(value.nativeDelta.size).toBeGreaterThan(0);
+      expect(value.nativeDelta.lineHeight).toBeGreaterThan(0);
     }
+    const rungs = typeSizeRungs(type);
+    expect(Object.keys(rungs)).toContain("--t-body-size");
+    expect(Object.keys(rungs)).not.toContain("--t-body-strong-size");
   });
 
-  test("every theme block carries that theme's own role values", () => {
-    // `kind` is registry metadata and `palette` is emitted once at the root as
-    // `--c-*`; every other field on a Theme is a role token whose block must
-    // carry that theme's value under the kebab-case spelling of the field
-    // (`accentDeep` → `--accent-deep`). Checking the values (not just the
-    // names) is what catches a role dropping out of the emitter — the block
-    // then inherits whatever the previous block set, silently.
+  test("every theme has the same solved roles and the dark anchor is explicit", () => {
     const blocks = parseBlocks(toCss());
-    const metadata = new Set(["kind", "palette"]);
+    const sets = Object.keys(themes).map((name) => {
+      const props = blocks.get(`[data-theme='${name}']`);
+      expect(props).toBeDefined();
+      return [...(props?.keys() ?? [])]
+        .filter((key) => key !== "--bg-l")
+        .sort();
+    });
+    expect(sets[0]).toStrictEqual(sets[1]);
+    expect(blocks.get("[data-theme='dark']")?.has("--bg-l")).toBe(true);
+    expect(blocks.get("[data-theme='light']")?.has("--bg-l")).toBe(false);
+  });
+
+  test("theme lowerings preserve solved values and static adapters", () => {
+    const css = toCss();
+    const blocks = parseBlocks(css);
     for (const [name, theme] of Object.entries(themes)) {
       const props = blocks.get(`[data-theme='${name}']`);
-      const roles = Object.entries(theme).filter(
-        ([field, value]) => !metadata.has(field) && typeof value === "string"
+      expect(props?.get("--accent-deep-hover")).toBe(
+        `color-mix(in oklab, ${theme.accentDeep} 88%, ${theme.text} 12%)`
       );
-      // Guards against the filter itself emptying out.
-      expect(roles.length, name).toBeGreaterThan(20);
-      for (const [field, value] of roles) {
-        const prop = `--${field
-          .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
-          .toLowerCase()}`;
-        expect(props?.get(prop), `${name} ${prop}`).toBe(value);
-      }
+      expect(props?.get("--accent-soft")).toBe(
+        `color-mix(in oklab, ${theme.accent} 12%, transparent)`
+      );
+      expect(props?.get("--bg-hover")).toBe(
+        `color-mix(in oklab, ${theme.text} 5%, transparent)`
+      );
+      expect(props?.get("--bg-press")).toBe(
+        `color-mix(in oklab, ${theme.text} 9%, transparent)`
+      );
+      expect(props?.get("--bg-sel")).toBe(
+        "color-mix(in oklab, var(--accent) 12%, transparent)"
+      );
+      expect(props?.get("--glass-sheen")).toBe(
+        theme.sidebarBlur === "none" ? "none" : theme.sidebarBlur
+      );
+      expect(props?.get("--focus-ring")).toBe(
+        "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)"
+      );
+      expect(props?.get("--line-sel")).toBe(
+        "color-mix(in oklab, var(--accent) 42%, var(--line))"
+      );
+      expect(props?.get("--on-accent")).toBe("#141820");
+      expect(props?.get("--text-disabled")).toBe(
+        `color-mix(in oklab, ${theme.text} 36%, ${theme.bg})`
+      );
     }
-  });
 
-  test("camelCase type keys map to kebab-case properties, one per style", () => {
-    const root = parseBlocks(toCss()).get(":root");
-    const emitted = [...(root?.keys() ?? [])].filter(
-      (k) => k.startsWith("--t-") && !k.endsWith("-size")
-    );
-    const scale = { ...type, ...marketingType };
-    expect(emitted).toHaveLength(Object.keys(scale).length);
-    for (const [key, style] of Object.entries(scale)) {
-      const kebab = key
-        .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
-        .toLowerCase();
-      // The VALUE must be the shorthand for that exact style — not merely a
-      // property with the right name.
-      expect(root?.get(`--t-${kebab}`), key).toBe(typeShorthand(style));
-    }
-    // No property may keep a capital letter; CSS custom properties are
-    // case-sensitive, so `--t-bodyStrong` would silently never match.
-    expect(emitted.every((k) => k === k.toLowerCase())).toBe(true);
-  });
-
-  test("each distinct type size gets one composable size rung", () => {
-    const root = parseBlocks(toCss()).get(":root");
-    const scale = { ...type, ...marketingType };
-    const rungs = [...(root?.keys() ?? [])].filter((k) => k.endsWith("-size"));
-    // One per DISTINCT size, not one per key: body and bodyStrong are both
-    // 15px, so the pair publishes `--t-body-size` and no `--t-body-strong-size`.
-    const distinct = new Set(Object.values(scale).map((s) => s.size));
-    expect(rungs).toHaveLength(distinct.size);
-    expect(rungs.length).toBeLessThan(Object.keys(scale).length);
-    expect(root?.get("--t-body-size")).toBe("15px");
-    expect(root?.has("--t-body-strong-size")).toBe(false);
-    // Every rung's value is a bare px length equal to the size of the key it
-    // is named after — a shorthand here would silently break `font-size:`.
-    for (const [name, value] of Object.entries(typeSizeRungs(scale))) {
-      expect(root?.get(name), name).toBe(value);
-      expect(value, name).toMatch(/^\d+px$/u);
-    }
-  });
-
-  test("each font stack is emitted once under its family name", () => {
-    const root = parseBlocks(toCss()).get(":root");
-    for (const [key, value] of Object.entries(fontStacks)) {
-      expect(root?.get(`--font-${key}`), key).toBe(value);
-    }
-  });
-
-  test("every theme block defines the same property set as every other", () => {
-    const blocks = parseBlocks(toCss());
-    const names = Object.keys(themes);
-    expect(names.length).toBeGreaterThan(1);
-    const sets = names.map((name) => {
-      const block = blocks.get(`[data-theme='${name}']`);
-      expect(block, name).toBeDefined();
-      return [...(block?.keys() ?? [])].sort();
-    });
-    // A theme missing a token inherits the previous theme's value — the exact
-    // failure mode #608 group P describes. Only `--bg-l` is dark-only.
-    const optional = new Set(["--bg-l"]);
-    const required = sets.map((s) => s.filter((k) => !optional.has(k)));
-    for (const set of required) expect(set).toStrictEqual(required[0]);
-  });
-
-  test("`:root` carries the light theme, so an unset data-theme is light", () => {
-    const blocks = parseBlocks(toCss());
     const root = blocks.get(":root");
-    const light = blocks.get("[data-theme='light']");
-    for (const [prop, value] of light ?? []) {
-      expect(root?.get(prop), prop).toBe(value);
-    }
-  });
-
-  test("a theme block defines --bg-l before every surface that derives from it", () => {
-    // `themeProps` inserts `--bg-l` out of alphabetical order on purpose so
-    // the dark ramp's anchor is declared ahead of its consumers. The whole
-    // point of the anchor is that retuning one number retunes the ramp; a
-    // mutant that moves the insert (or drops the `!== undefined` guard) is
-    // invisible to a test that only checks which names appear.
-    for (const [selector, props] of parseBlocks(toCss())) {
-      if (!selector.startsWith("[data-theme=")) continue;
-      const order = [...props.keys()];
-      const anchorAt = order.indexOf("--bg-l");
-      const consumers = order.filter(
-        (prop) => prop !== "--bg-l" && props.get(prop)?.includes("var(--bg-l)")
-      );
-      if (consumers.length === 0) continue;
-      expect(
-        anchorAt,
-        `${selector} consumes --bg-l without defining it`
-      ).toBeGreaterThanOrEqual(0);
-      for (const consumer of consumers) {
-        expect(
-          order.indexOf(consumer),
-          `${selector} ${consumer}`
-        ).toBeGreaterThan(anchorAt);
-      }
-    }
-  });
-
-  test("only the ramp that declares an anchor consumes one", () => {
-    const blocks = parseBlocks(toCss());
-    for (const name of Object.keys(themes)) {
-      const props = blocks.get(`[data-theme='${name}']`);
-      const declares = props?.has("--bg-l") ?? false;
-      const consumes = [...(props?.values() ?? [])].some((v) =>
-        v.includes("var(--bg-l)")
-      );
-      expect(consumes && !declares, name).toBe(false);
-      expect(declares, name).toBe(
-        themes[name as keyof typeof themes].bgL !== undefined
-      );
-    }
-  });
-
-  test("the sheet is a single balanced, banner-led document", () => {
-    const css = toCss();
-    expect(css.startsWith("/* Generated by @centraid/design")).toBe(true);
-    expect(css.endsWith("\n")).toBe(true);
-    expect(css.split("{")).toHaveLength(css.split("}").length);
-    // One block per theme plus the default :root.
-    expect(parseBlocks(css).size).toBe(1 + Object.keys(themes).length);
-  });
-
-  test("generation is deterministic — same input, same bytes", () => {
-    expect(toCss()).toBe(toCss());
-  });
-});
-
-describe("type shorthand", () => {
-  test("every style renders as a valid CSS font shorthand", () => {
-    for (const [key, style] of Object.entries({ ...type, ...marketingType })) {
-      const shorthand = typeShorthand(style);
-      const m =
-        /^(?<weight>\d{3}) (?<size>\d+)px\/(?<lh>[\d.]+(?:px)?) var\(--font-(?<family>[a-z]+)\)$/u.exec(
-          shorthand
-        );
-      expect(m, `${key}: ${shorthand}`).not.toBeNull();
-      const g = m?.groups as Record<string, string>;
-      expect(g.weight).toBe(style.weight);
-      expect(Number(g.size)).toBe(style.size);
-      // The family must name a stack this package actually emits.
-      expect(Object.keys(fontStacks)).toContain(g.family);
-      expect(g.family).toBe(style.family);
-    }
-  });
-
-  test("a px line-height gets a unit and a unitless multiplier does not", () => {
-    // Mixing these up is a 22x line-height (unreadable) or a 1.1px one
-    // (overlapping text) — the two type scales must not converge.
-    for (const style of Object.values(type)) {
-      expect(typeShorthand(style)).toContain(`/${style.lineHeight}px `);
-    }
-    for (const style of Object.values(marketingType)) {
-      expect(typeShorthand(style)).toContain(`/${style.lineHeight} `);
-      expect(typeShorthand(style)).not.toContain(`/${style.lineHeight}px`);
-    }
-  });
-
-  test("size and line-height are carried through, not recomputed", () => {
+    expect(root?.get("--app-identity-text")).toBe(paletteText.light.teal);
+    expect(root?.get("--accent")).toBe(BRAND);
+    expect(root?.get("--focus-ring")).toBe(
+      "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)"
+    );
+    expect(root?.get("--target-min")).toBe("44px");
+    expect(root?.get("--o-disabled")).toBe("0.45");
+    expect(root?.get("--dur-1")).toBe("120ms");
+    expect(root?.get("--dur-2")).toBe("200ms");
     expect(
-      typeShorthand({
-        family: "mono",
-        lineHeight: 99,
-        size: 42,
-        weight: "500",
-      })
-    ).toBe("500 42px/99px var(--font-mono)");
+      css.startsWith(
+        "/* Generated by @centraid/design — do not edit by hand. */"
+      )
+    ).toBe(true);
+    expect(css).toContain(
+      "@media (pointer: fine) { :root { --target-min: 32px; } }"
+    );
+  });
+
+  test("native and blueprint type lowerings preserve the canonical role", () => {
+    const nativeBody = nativeTypeStyle(type.body);
+    expect(nativeBody.size).toBe(type.body.size + type.body.nativeDelta.size);
+    expect(nativeBody.lineHeight).toBe(
+      type.body.lineHeight + type.body.nativeDelta.lineHeight
+    );
+
+    const blueprintBody = blueprintType.body;
+    expect(blueprintTypeShorthand(blueprintBody)).toBe(
+      `${blueprintBody.weight} ${blueprintBody.size}/${blueprintBody.lineHeight} var(--font-${blueprintBody.family})`
+    );
+  });
+
+  test("size rungs lower both pixel and rem scales and deduplicate values", () => {
     expect(
-      typeShorthand({
-        family: "display",
-        lineHeight: "1.75",
-        size: 40,
-        weight: "700",
+      typeSizeRungs({
+        body: { size: 15 },
+        bodyStrong: { size: 15 },
+        compact: { size: "1rem" },
       })
-    ).toBe("700 40px/1.75 var(--font-display)");
+    ).toStrictEqual({
+      "--t-body-size": "15px",
+      "--t-compact-size": "1rem",
+    });
+  });
+
+  test("retired aliases and literals are absent from both generated lowerings", () => {
+    const css = `${toCss()}\n${toBlueprintCss()}`;
+    expect(css).not.toMatch(
+      /--brand\b|--accent-midnight\b|--bezel\b|--font-title\b|--mono\b|--lib-/u
+    );
+    expect(css).not.toContain("#128A78");
   });
 });

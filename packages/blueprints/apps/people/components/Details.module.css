@@ -38,7 +38,7 @@
   flex-shrink: 0;
 }
 .detailsHead .lbl {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);

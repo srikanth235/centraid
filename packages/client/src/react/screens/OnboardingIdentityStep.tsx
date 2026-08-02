@@ -1,36 +1,16 @@
 import { useEffect, useRef } from "react";
 import type { JSX } from "react";
 
+import { IDENTITY_COLORS, identityInitials } from "@centraid/design";
+
 import { ErrorNote } from "./OnboardingErrorNote.js";
 
 import a11y from "../styles/a11y.module.css";
 import styles from "./OnboardingScreen.module.css";
 
-// Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
-// updateProfileMetadata, which validates #RRGGBB).
-export const AVATAR_PALETTE = [
-  "#5B8DEF",
-  "#7C5CFF",
-  "#E36AD2",
-  "#E5734A",
-  "#E0B53D",
-  "#4FB077",
-  "#3FB5C7",
-  "#B07A4A",
-] as const;
-
-function initials(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return "·";
-  const parts = trimmed.split(/\s+/u).filter((w) => w.length > 0);
-  if (parts.length === 1) {
-    const w = parts[0] ?? "";
-    return (w.charAt(0) + (w.charAt(1) || "")).toUpperCase();
-  }
-  return (
-    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
-  ).toUpperCase();
-}
+// Shared identity fills round-trip through updateProfileMetadata, which
+// validates #RRGGBB. Keep the palette in design, not in each client.
+export const AVATAR_PALETTE = IDENTITY_COLORS;
 
 interface OnboardingIdentityStepProps {
   displayName: string;
@@ -84,7 +64,9 @@ export function OnboardingIdentityStep({
           style={{ background: avatarColor }}
           aria-hidden="true"
         >
-          <span className={styles.initials}>{initials(displayName)}</span>
+          <span className={styles.initials}>
+            {identityInitials(displayName)}
+          </span>
         </span>
       </div>
       <form

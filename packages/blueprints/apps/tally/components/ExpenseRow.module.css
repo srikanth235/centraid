@@ -27,13 +27,13 @@
   text-align: center;
 }
 .exdate .mo {
-  font: var(--t-tiny);
+  font: var(--t-control);
   font-size: 9.5px;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .exdate .dy {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 18px;
   font-weight: 600;
 }
@@ -65,14 +65,14 @@
   flex-shrink: 0;
 }
 .exlabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-faint);
 }
 .examt {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
   margin-top: 2px;

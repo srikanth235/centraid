@@ -1,11 +1,3 @@
-import {
-  convertMinor,
-  first,
-  rateToScaled,
-  resolveSplits,
-  toCents,
-  todayKey,
-} from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit (#408) pre-existing cohesive Tally business-logic module; the TS conversion only adds type annotations to the existing boundary and does not expand its behavior
 // Non-visual business logic: vault IO (write/act/read), navigation, the
 // people directory, and every modal's open/patch/save/close flow (expense,
@@ -20,6 +12,16 @@ import {
 // functions of that object, so a controlled input's `value` prop simply
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
+import { BRAND, identityColor, identityInitials } from "@centraid/design";
+
+import {
+  convertMinor,
+  first,
+  rateToScaled,
+  resolveSplits,
+  toCents,
+  todayKey,
+} from "./format.ts";
 import { debounce, outcomeMessage, toast } from "./kit.ts";
 import type {
   AddFriendModel,
@@ -119,8 +121,8 @@ export function createLogic({
       map.set(dash.me, {
         party_id: dash.me,
         name: "You",
-        color: "#0FA678",
-        initials: "You",
+        color: BRAND,
+        initials: identityInitials("You"),
       });
     return map;
   }
@@ -129,8 +131,8 @@ export function createLogic({
       directory().get(pid) || {
         party_id: pid,
         name: "Someone",
-        color: "#5C677D",
-        initials: "?",
+        color: identityColor(pid),
+        initials: identityInitials("Someone"),
       }
     );
   }
@@ -605,8 +607,8 @@ export function createLogic({
         {
           party_id: dash.me ?? "",
           name: "You",
-          color: "#0FA678",
-          initials: "You",
+          color: BRAND,
+          initials: identityInitials("You"),
           is_me: true,
         },
         f,
@@ -677,7 +679,7 @@ export function createLogic({
     const outcome = await act("create-group", {
       name: ng.name.trim(),
       icon: ng.icon,
-      color: "#0FA678",
+      color: identityColor(ng.name.trim()),
       member_ids: [...ng.members],
     });
     if (!narrate(outcome)) return;

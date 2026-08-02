@@ -94,14 +94,12 @@ describe("kit-inline", () => {
     stop();
   });
 
-  it("wireThemeToggle flips the shell document theme", () => {
+  it("keeps the host-owned theme toggle inert", () => {
     document.documentElement.dataset.theme = "light";
     const btn = document.createElement("button");
     wireThemeToggle(btn);
-    expect(btn.innerHTML).toContain("svg");
-    btn.click();
-    expect(document.documentElement.dataset.theme).toBe("dark");
     btn.click();
     expect(document.documentElement.dataset.theme).toBe("light");
+    expect(btn.innerHTML).toBe("");
   });
 });

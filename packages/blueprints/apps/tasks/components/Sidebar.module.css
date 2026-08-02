@@ -32,7 +32,7 @@
   font-weight: 600;
 }
 .navCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   opacity: 0.6;
 }
@@ -40,7 +40,7 @@
 .projectLabel {
   margin: var(--sp-4) 10px 6px;
   color: var(--text-faint);
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -82,7 +82,7 @@
   margin-bottom: var(--sp-2);
 }
 .progressPct {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }

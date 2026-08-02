@@ -18,7 +18,7 @@
   composes: kit-app-brand-mark from global;
   /* Kit's default mark ink is --text; this mark is an accent gradient, so it
      needs inverse ink to stay legible. */
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 .brandName {
   composes: kit-app-brand-name from global;
@@ -47,7 +47,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: var(--on-accent);
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--sp-3);
@@ -86,7 +86,7 @@
   white-space: nowrap;
 }
 .navItem .ct {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }
@@ -103,7 +103,7 @@
   color: var(--accd-fg);
 }
 .seclabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);

@@ -29,8 +29,8 @@
   --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, var(--text-inv)),
-    var(--accd)
+    color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
+    var(--app-identity)
   );
   --app-brand-font: var(--t-body-strong);
   --app-side-foot-padding: 14px;
@@ -39,7 +39,7 @@
 }
 
 .shell.shell :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -52,7 +52,7 @@
    :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
    that wrapper. */
 :global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--mono);
+  --font-sans: var(--font-mono);
 }
 
 /* ---------- Sidebar shell ---------- */
@@ -92,7 +92,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: var(--on-accent);
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   margin-bottom: 14px;
@@ -112,7 +112,7 @@
   padding: var(--sp-4) var(--sp-2) var(--sp-2);
 }
 .seclabel span {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -186,7 +186,7 @@
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 .title {
   font: var(--t-title);
@@ -232,7 +232,7 @@
   color: var(--text-faint);
 }
 .search input:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .iconbtn {
@@ -278,7 +278,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--_accent);
+  background: var(--app-identity);
   box-shadow: 0 0 0 3px var(--accs);
 }
 .banner strong {
@@ -312,7 +312,7 @@
 }
 /* The title face on kit avatars — the one Tally touch app.css kept global. */
 :global(.kit-avatar) {
-  font-family: var(--font-title);
+  font-family: var(--font-sans);
 }
 
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell.

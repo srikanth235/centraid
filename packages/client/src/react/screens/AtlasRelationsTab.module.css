@@ -57,7 +57,7 @@
   color: var(--text);
 }
 .segBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .segBtn[aria-pressed="true"] {
@@ -83,7 +83,7 @@
   color: var(--text);
 }
 .qChip:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .qChip[aria-pressed="true"] {
@@ -133,7 +133,7 @@
   min-width: 0;
   overflow-x: auto;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
+  border-radius: var(--r-xl, 14px);
   background:
     radial-gradient(
       circle at 50% 46%,
@@ -146,7 +146,7 @@
       var(--bg-sunken) 100%
     );
   box-shadow: inset 0 0 72px -24px
-    color-mix(in oklab, var(--accent-midnight) 32%, transparent);
+    color-mix(in oklab, var(--accent-deep) 32%, transparent);
 }
 .orrery {
   display: block;
@@ -184,7 +184,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: var(--t-h3-size);
+  font-size: var(--t-small-size);
   line-height: 1;
   cursor: pointer;
   transition:
@@ -196,7 +196,7 @@
   border-color: var(--accent);
 }
 .zoomBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -205,7 +205,7 @@
   display: flex;
   flex-direction: column;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
+  border-radius: var(--r-xl, 14px);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -257,11 +257,11 @@
 }
 .crumbSep {
   color: var(--text-ghost);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .crumb {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   background: none;
   border: 0;
   padding: 2px 3px;
@@ -324,7 +324,7 @@
 .dSig {
   margin: 0 0 12px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   word-break: break-all;
   line-height: 1.5;
@@ -355,8 +355,8 @@
   gap: 3px;
 }
 .dFigN {
-  font-family: var(--font-display);
-  font-size: var(--t-h2-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--text);
@@ -469,7 +469,7 @@
 .roFoot {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   line-height: 1.55;
   color: var(--text-faint);
 }
@@ -546,7 +546,7 @@
   gap: 14px 34px;
   padding: 13px 18px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
+  border-radius: var(--r-xl, 14px);
   background: var(--bg-elev);
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -561,7 +561,7 @@
   white-space: nowrap;
 }
 .captionNum {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 17px;
   line-height: 1;
   letter-spacing: 0;
@@ -739,7 +739,7 @@
   stroke-width: 1.4;
 }
 .coreName {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--t-small-size);
   fill: var(--accent);
 }

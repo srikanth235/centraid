@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { app } from "electron";
 
+import { BRAND } from "@centraid/design";
+
 import { clampAlertSeconds } from "./gateway-monitor-core.js";
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from "./gateway-paths.js";
 import {
@@ -337,7 +339,7 @@ async function resolveEffective(
     // `readProfile` thread defaults — these are always populated.
     activeProfileDisplayName:
       resolved.profile.displayName ?? resolved.profile.label,
-    activeProfileAvatarColor: resolved.profile.avatarColor ?? "#5B8DEF",
+    activeProfileAvatarColor: resolved.profile.avatarColor ?? BRAND,
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
     ...(p.builderEnabled === undefined

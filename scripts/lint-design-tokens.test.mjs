@@ -52,7 +52,7 @@ test("analyzeCss clears the composable size rungs but not the shorthands", () =>
   assert.deepEqual(
     analyzeCss(`
       .a { font-size: var(--t-body-size); }
-      .b { font-size: var(--t-display-1-size); }
+      .b { font-size: var(--t-hero-size); }
       .c { font-size: var(--t-mono-size) !important; }
     `),
     clean

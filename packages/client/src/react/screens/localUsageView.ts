@@ -15,12 +15,15 @@
  * ramp in this codebase already designed to be told apart at a glance.
  */
 
+import { formatBytes } from "../../format.js";
 import type {
   LocalComponentId,
   LocalComponentUsageDTO,
   LocalUsageReportDTO,
   StorageLimitsDTO,
 } from "../../gateway-client-local-storage.js";
+
+export { formatBytes } from "../../format.js";
 
 export interface ComponentPresentation {
   label: string;
@@ -205,22 +208,6 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
     over: false,
     warnFraction: null,
   };
-}
-
-/** Bytes for humans. Binary units, one decimal above KB — the same shape the
- *  gateway's own `formatBytes` produces, so a health detail and this page
- *  never disagree by a rounding step. */
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "—";
-  if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(1)} ${units[unit]}`;
 }
 
 /** Parses "12", "12 GB", "500mb" into bytes. `null` for anything unparseable

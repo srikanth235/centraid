@@ -4,6 +4,8 @@
 // no vault IO — every function is a plain projection of its arguments so
 // app.tsx and the components can both call them without a circular import.
 // Same role as tasks/format.ts and notes/format.ts.
+import { identityColor } from "@centraid/design";
+
 import { fmtMoney, localDayKey } from "./kit.ts";
 import type {
   BalLabel,
@@ -58,17 +60,6 @@ export const CAT_LIST = [
   "general",
 ];
 export const GROUP_ICONS = ["🏠", "✈️", "🎲", "🍽️", "🏖️", "🎉", "🏔️", "🚗"];
-export const FRIEND_COLORS = [
-  "#7C5BD9",
-  "#4E68DD",
-  "#E0567A",
-  "#E8923C",
-  "#2EA098",
-  "#3AA6B9",
-  "#57A55A",
-  "#D9536F",
-];
-
 export function cat(c: string | undefined): CatMeta {
   return (c ? CATS[c] : undefined) ?? CATS.general!;
 }
@@ -78,13 +69,10 @@ export function cat(c: string | undefined): CatMeta {
 // same person always renders the same colour; a people_profile hue, when the
 // party is also a CRM contact, takes precedence at the call site.
 export function friendColor(partyId: string | null | undefined): string {
-  const id = String(partyId || "");
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return FRIEND_COLORS[h % FRIEND_COLORS.length]!;
+  return identityColor(String(partyId ?? ""));
 }
 export function tint(color: string | undefined): string {
-  return `color-mix(in oklab, ${color || "#5C677D"} 16%, transparent)`;
+  return `color-mix(in oklab, ${color || identityColor("unknown")} 16%, transparent)`;
 }
 
 // ---------- Formatting (money is minor units end-to-end) ----------

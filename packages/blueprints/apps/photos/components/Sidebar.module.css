@@ -55,7 +55,7 @@
 }
 .brandMark {
   composes: kit-app-brand-mark from global;
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 .brandText {
   composes: kit-app-brand-text from global;
@@ -78,7 +78,7 @@
   border-radius: var(--r-md);
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
@@ -118,7 +118,7 @@
 }
 .navItem[data-active="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .navIcon {
@@ -197,8 +197,8 @@
   margin-top: 2px;
 }
 .newAlbum:hover {
-  color: var(--accent-deep-fg);
-  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
+  color: var(--accent-text);
+  border-color: color-mix(in oklab, var(--app-identity) 45%, var(--line));
 }
 .tagRow {
   display: flex;
@@ -216,14 +216,14 @@
 }
 .storage {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   padding: 10px var(--sp-3);
   background: var(--bg-elev);
 }
 .storageTop {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   margin-bottom: var(--sp-1);
 }

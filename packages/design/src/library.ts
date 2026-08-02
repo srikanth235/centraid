@@ -1,6 +1,6 @@
 // Centraid — shared library-tile tokens.
 // Home and Discover render the same tile on two pages, so every value they
-// share lives here ONCE (emitted by `toCss()` as `--lib-*`). Tweak a tile
+// share lives here ONCE (emitted by `toCss()` as `--tile-*`). Tweak a tile
 // dimension/tone in one place and both pages move together; nothing drifts.
 //
 // `tile-h` is sized to fit the richest tile (a Home automation: glyph +

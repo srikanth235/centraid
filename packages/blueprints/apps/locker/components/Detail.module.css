@@ -54,12 +54,12 @@
 }
 .wtStat {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 15px;
 }
 .wtStat .n {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 28px;
   font-weight: 600;
 }
@@ -86,7 +86,7 @@
   background: var(--bg-sunken);
 }
 .wtBadge {
-  font: var(--t-tiny);
+  font: var(--t-control);
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;

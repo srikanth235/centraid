@@ -37,7 +37,7 @@
 }
 .title {
   margin: 0;
-  font: var(--t-h2);
+  font: var(--t-title);
   color: var(--text);
 }
 .subtitle {
@@ -75,7 +75,7 @@
 }
 .sectionCount {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .filterWrap {
@@ -184,7 +184,7 @@
   top: 0;
   bottom: 0;
   width: 2.5px;
-  border-radius: var(--lib-tile-radius, 12px) 0 0 var(--lib-tile-radius, 12px);
+  border-radius: var(--tile-radius, 12px) 0 0 var(--tile-radius, 12px);
   background: var(--danger);
 }
 .attentionBadge {
@@ -195,7 +195,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
@@ -314,7 +314,7 @@
 .activityOrigin {
   flex: 1;
   min-width: 0;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,8 +354,8 @@
   color: var(--accent);
 }
 .emptyTitle {
-  font: var(--t-h2);
-  font-size: var(--t-h3-size);
+  font: var(--t-title);
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .emptyText {
@@ -471,7 +471,7 @@
   color: var(--danger);
 }
 .errorTitle {
-  font: var(--t-h2);
+  font: var(--t-title);
   font-size: 17px;
   color: var(--text);
 }

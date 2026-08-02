@@ -1,3 +1,5 @@
+import { BRAND } from "@centraid/design";
+
 const PREFIX = "centraid.web.v1.";
 
 export interface WebConnection {
@@ -18,7 +20,7 @@ export interface WebConnection {
 const DEFAULT_CONNECTION: WebConnection = {
   label: "Web gateway",
   displayName: "Centraid",
-  avatarColor: "#6f5bf6",
+  avatarColor: BRAND,
   rememberDevice: false,
 };
 

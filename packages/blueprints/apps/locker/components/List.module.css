@@ -45,7 +45,7 @@
   white-space: nowrap;
 }
 .listCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-faint);
 }
@@ -71,7 +71,7 @@
   outline: none;
 }
 .search input:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   background: var(--bg-elev);
   box-shadow: var(--focus-ring);
 }

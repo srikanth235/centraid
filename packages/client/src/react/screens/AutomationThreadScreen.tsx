@@ -4,6 +4,7 @@ import type { Dispatch, JSX, SetStateAction } from "react";
 
 import type { IconName } from "@centraid/design";
 
+import { formatBytes } from "../../format.js";
 import type {
   AsstModelPickerDTO,
   AsstMsgDTO,
@@ -111,12 +112,6 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
  * told about rather than a spinner that never resolves.
  */
 const WATCH_REJOIN_DELAYS_MS = [500, 1500, 4000, 10_000];
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function withoutId(
   current: ReadonlySet<string>,

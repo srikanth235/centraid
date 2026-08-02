@@ -566,7 +566,7 @@
     "rawFontSize": 1
   },
   "packages/design/kit/kit.css": {
-    "rawFontSize": 64,
+    "rawFontSize": 63,
     "rawFontWeight": 2,
     "rawRadius": 12
   }

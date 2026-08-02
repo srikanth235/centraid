@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
 import type { ListRenderItemInfo } from "@shopify/flash-list";
@@ -8,6 +7,8 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
+import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -290,34 +291,38 @@ export default function PhotosLibrary({
         lines.push(
           `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`
         );
-      Alert.alert(
-        result.changedCount || result.missingCount || result.inCloudCount
-          ? "Freed with exclusions"
-          : "Vault freed",
-        lines.join("\n")
-      );
+      showToast({
+        message: lines.length
+          ? lines.join(" ")
+          : result.changedCount || result.missingCount || result.inCloudCount
+            ? "Vault freed with exclusions."
+            : "Vault freed.",
+        tone: "accent",
+      });
     } catch (error) {
-      Alert.alert(
-        "Free up vault paused",
-        error instanceof Error ? error.message : String(error)
-      );
+      showToast({
+        message: `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`,
+        tone: "danger",
+      });
     } finally {
       setFreeing(false);
     }
   };
   const freeSpace = (): void => {
     if (!pinsHydrated) {
-      Alert.alert(
-        "Checking device pins",
-        "Try again after protected albums finish loading."
-      );
+      showToast({
+        message:
+          "Checking device pins — try again when protected albums finish loading.",
+        tone: "neutral",
+      });
       return;
     }
     if (!freeCandidates.length) {
-      Alert.alert(
-        "Nothing to free",
-        "No verified backups are eligible on this device right now."
-      );
+      showToast({
+        message:
+          "Nothing to free — no verified backups are eligible right now.",
+        tone: "neutral",
+      });
       return;
     }
     Alert.alert(
@@ -360,7 +365,7 @@ export default function PhotosLibrary({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>Library</Text>
         <Pressable
@@ -368,7 +373,7 @@ export default function PhotosLibrary({
           accessibilityRole="button"
           onPress={() => setNewAlbum(true)}
         >
-          <Feather name="plus" size={23} color={colors.accent} />
+          <Icon name="plus" size={23} color={colors.accent} />
         </Pressable>
       </View>
       <ReplicaStatusBar />
@@ -578,7 +583,7 @@ function Row({
   meta,
   colors,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: string;
   title: string;
   meta: string;
   colors: ReturnType<typeof useTheme>["colors"];
@@ -586,13 +591,13 @@ function Row({
   return (
     <View style={[styles.row, { borderBottomColor: colors.line }]}>
       <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-        <Feather name={icon} size={18} color={colors.accent} />
+        <Icon name={icon} size={18} color={colors.accent} />
       </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.rowMeta, { color: colors.textSoft }]}>{meta}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.textFaint} />
+      <Icon name="chevron-right" size={18} color={colors.textFaint} />
     </View>
   );
 }

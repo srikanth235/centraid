@@ -36,12 +36,12 @@
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .navCount {
   flex: none !important;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   opacity: 0.6;
 }
@@ -113,7 +113,7 @@
   color: var(--text-faint);
 }
 .consentLine svg {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 .consentLine span {

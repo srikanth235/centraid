@@ -8,9 +8,9 @@
    these rules via `:global(...)`. */
 
 .col {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 .col.name {
@@ -65,7 +65,7 @@
    over the neighbouring rows. */
 .rowOpen:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--selb);
+  box-shadow: inset 0 0 0 2px var(--line-strong);
 }
 .row:last-child {
   border-bottom: none;
@@ -74,7 +74,7 @@
   background: var(--bg-sunken);
 }
 .row[data-selected="true"] {
-  background: var(--sel);
+  background: var(--accent-soft);
 }
 .badge {
   position: relative;
@@ -96,7 +96,7 @@
   object-fit: cover;
 }
 .badge span {
-  font: var(--t-tiny);
+  font: var(--t-control);
   letter-spacing: 0.04em;
 }
 .rowMain {

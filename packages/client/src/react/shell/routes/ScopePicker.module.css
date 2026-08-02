@@ -41,7 +41,7 @@
   background-repeat: no-repeat;
 }
 .select:focus-visible {
-  outline: 1.5px solid var(--accent);
+  outline: 1.5px solid var(--focus-ring-color);
 }
 
 .fixed {
@@ -89,7 +89,7 @@
 }
 .gateTitle {
   margin: 0;
-  font: var(--t-h3);
+  font: var(--t-small-strong);
   color: var(--text);
 }
 .gateText {

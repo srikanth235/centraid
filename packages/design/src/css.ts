@@ -1,19 +1,18 @@
-// Centraid — CSS generator.
-// `toCss()` walks the typed tokens (themes, densities, palette, radii) and
-// emits the entire `:root` + `[data-theme='dark']` + density-override
-// blocks as a single CSS string. Desktop injects this into a <style> tag
-// at preload time — the only token-related CSS it ships.
+// Shell CSS lowering for the product-grammar registry.
+//
+// This is the only place that turns shared design values into a browser
+// custom-property sheet.  It deliberately emits solved values and adapters;
+// clients do not need a CSS parser or a second semantic vocabulary.
 
 import { paletteText } from "./color";
 import { spacing } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { BRAND, EASE, ON_ACCENT, themes } from "./themes";
+import { EASE, themes } from "./themes";
 import type { Theme, ThemeName } from "./themes";
 import {
   fontStacks,
-  marketingType,
   type,
   typeKeyToKebab,
   typeShorthand,
@@ -22,109 +21,98 @@ import {
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
-  for (const [k, v] of Object.entries(props)) {
-    lines.push(`  ${k}: ${v};`);
+  for (const [key, value] of Object.entries(props)) {
+    lines.push(`  ${key}: ${value};`);
   }
   lines.push("}");
   return lines.join("\n");
 }
 
-function themeProps(t: Theme): Record<string, string> {
+function themeProps(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {
-    "--accent": t.accent,
-    "--accent-deep": t.accentDeep,
-    "--accent-light": t.accentLight,
-    "--accent-midnight": t.accentMidnight,
-    "--accent-text": t.accentText,
-    "--danger": t.danger,
-    "--success": t.success,
-    "--warning": t.warning,
+    "--accent": theme.accent,
+    "--accent-deep": theme.accentDeep,
+    "--accent-fill": theme.accentDeep,
+    "--accent-deep-hover": `color-mix(in oklab, ${theme.accentDeep} 88%, ${theme.text} 12%)`,
+    "--accent-light": theme.accentLight,
+    "--accent-soft": `color-mix(in oklab, ${theme.accent} 12%, transparent)`,
+    "--accent-text": theme.accentText,
+    "--app-identity-text": paletteText[theme.kind].teal,
+    "--bg": theme.bg,
+    "--bg-app": theme.bgApp,
+    "--bg-chrome": theme.sidebarBg,
+    "--bg-elev": theme.bgElev,
+    "--bg-hud": theme.sidebarBg,
+    "--bg-hover": `color-mix(in oklab, ${theme.text} 5%, transparent)`,
+    "--bg-press": `color-mix(in oklab, ${theme.text} 9%, transparent)`,
+    "--bg-sel": "color-mix(in oklab, var(--accent) 12%, transparent)",
+    "--bg-sunken": theme.bgSunken,
+    "--bg-wall": theme.bgWall,
+    "--danger": theme.danger,
+    "--device-wall": theme.deviceWall,
+    "--glass-film": theme.sidebarBg,
+    "--glass-sheen": theme.sidebarBlur,
+    "--focus-ring": "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)",
+    "--focus-ring-color": theme.accent,
+    "--line": theme.line,
+    "--line-strong": theme.lineStrong,
+    "--line-sel": "color-mix(in oklab, var(--accent) 42%, var(--line))",
+    "--on-accent": "#141820",
+    "--scrim": theme.scrim,
+    "--shadow-lg": theme.shadowLg,
+    "--shadow-md": theme.shadowMd,
+    "--shadow-sm": theme.shadowSm,
+    "--success": theme.success,
+    "--text": theme.text,
+    "--text-faint": theme.textFaint,
+    "--text-ghost": theme.textGhost,
+    "--text-inv": theme.textInv,
+    "--text-disabled": `color-mix(in oklab, ${theme.text} 36%, ${theme.bg})`,
+    "--text-soft": theme.textSoft,
+    "--warning": theme.warning,
   };
-  // --bg-l must precede --bg/--bg-elev/--bg-sunken/--bg-app on dark, since
-  // those reference it via var(). Light theme omits it entirely.
-  if (t.bgL !== undefined) out["--bg-l"] = t.bgL;
-  Object.assign(out, {
-    "--bezel": t.bezel,
-    "--bezel-inner": t.bezelInner,
-    "--bg": t.bg,
-    "--bg-app": t.bgApp,
-    "--bg-elev": t.bgElev,
-    "--bg-sunken": t.bgSunken,
-    "--bg-wall": t.bgWall,
-    "--device-wall": t.deviceWall,
-    "--text": t.text,
-    "--text-soft": t.textSoft,
-    "--text-faint": t.textFaint,
-    "--text-ghost": t.textGhost,
-    "--text-inv": t.textInv,
-    "--line": t.line,
-    "--line-strong": t.lineStrong,
-    "--scrim": t.scrim,
-    "--shadow-lg": t.shadowLg,
-    "--shadow-md": t.shadowMd,
-    "--shadow-sm": t.shadowSm,
-    "--sidebar-bg": t.sidebarBg,
-    "--sidebar-blur": t.sidebarBlur,
-    "--sidebar-divider": t.sidebarDivider,
-  });
-  // The palette hues as TEXT. The `--c-*` hues themselves are icon fills and
-  // are theme-independent; this solved rung is not — it deepens on light and
-  // lifts on dark, so it belongs to the theme block rather than the static one.
-  for (const [k, v] of Object.entries(paletteText[t.kind]))
-    out[`--c-${k}-text`] = v;
+  if (theme.bgL !== undefined) out["--bg-l"] = theme.bgL;
+  for (const [key, value] of Object.entries(paletteText[theme.kind])) {
+    out[`--c-${key}-text`] = value;
+  }
   return out;
 }
 
-/**
- * Returns the full token CSS string. Stable order: static (palette, radii,
- * default density) → light theme → dark theme → density overrides.
- */
 export function toCss(): string {
   const staticProps: Record<string, string> = {};
-  // App-icon palette has one canonical `--c-<hue>` spelling.
-  for (const [k, v] of Object.entries(palette)) {
-    staticProps[`--c-${k}`] = v;
-  }
-  for (const [k, v] of Object.entries(radii))
-    staticProps[`--r-${k}`] = `${v}px`;
-  // Fixed spacing scale (density.ts) — the only rungs any surface may use.
-  for (const [k, v] of Object.entries(spacing))
-    staticProps[`--sp-${k}`] = `${v}px`;
-  // The one easing curve — same value the blueprint layer publishes.
+  for (const [key, value] of Object.entries(palette))
+    staticProps[`--c-${key}`] = value;
+  for (const [key, value] of Object.entries(radii))
+    staticProps[`--r-${key}`] = `${value}px`;
+  for (const [key, value] of Object.entries(spacing))
+    staticProps[`--sp-${key}`] = `${value}px`;
+
   staticProps["--ease"] = EASE;
-  // Brand teal — theme-independent, matches the logo / app-icon SVGs.
-  staticProps["--brand"] = BRAND;
-  // Ink for a saturated-accent or scrim surface. Theme-independent for the
-  // same reason `--brand` is: the surfaces it lands on (a photo, a 52% scrim,
-  // an `--accent` badge) are dark in both themes. The ink for `--accent-deep`
-  // is `--text-inv`, which DOES flip — see themes/shared.ts.
-  staticProps["--on-accent"] = ON_ACCENT;
-  // Typography — web font stacks + the semantic type scale as CSS `font`
-  // shorthands (`font: var(--t-title)`). camelCase keys emit kebab-case
-  // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).
-  for (const [k, v] of Object.entries(fontStacks))
-    staticProps[`--font-${k}`] = v;
-  const shellScale = { ...type, ...marketingType };
-  for (const [k, v] of Object.entries(shellScale)) {
-    staticProps[`--t-${typeKeyToKebab(k)}`] = typeShorthand(v);
+  staticProps["--target-min"] = "44px";
+  staticProps["--o-disabled"] = "0.45";
+  staticProps["--dur-1"] = "120ms";
+  staticProps["--dur-2"] = "200ms";
+  for (const [key, value] of Object.entries(fontStacks))
+    staticProps[`--font-${key}`] = value;
+  for (const [key, value] of Object.entries(type)) {
+    staticProps[`--t-${typeKeyToKebab(key)}`] = typeShorthand(value);
   }
-  // …and the SIZE of each rung on its own, for the rules the shorthand cannot
-  // serve (see `typeSizeRungs`). Emitted after the shorthands so a reader sees
-  // the whole scale before its facets; CSS custom properties do not care.
-  Object.assign(staticProps, typeSizeRungs(shellScale));
-  // Shared library-tile tokens (Home + Discover render the same tile).
-  for (const [k, v] of Object.entries(library)) staticProps[`--lib-${k}`] = v;
+  Object.assign(staticProps, typeSizeRungs(type));
+
+  // Library became a tile recipe.  The values stay shared between Home and
+  // Discover, but the semantic namespace no longer suggests a separate UI.
+  for (const [key, value] of Object.entries(library)) {
+    const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
+    staticProps[`--tile-${suffix}`] = value;
+  }
 
   const blocks = [
     "/* Generated by @centraid/design — do not edit by hand. */",
     block(":root", { ...staticProps, ...themeProps(themes.light) }),
+    "@media (pointer: fine) { :root { --target-min: 32px; } }",
   ];
-
-  // One block per registered theme — picker selections write the matching
-  // `data-theme` attribute on <html> and the right block wins.
   for (const name of Object.keys(themes) as ThemeName[]) {
     blocks.push(block(`[data-theme='${name}']`, themeProps(themes[name])));
   }
-
-  return blocks.join("\n\n") + "\n";
+  return `${blocks.join("\n\n")}\n`;
 }

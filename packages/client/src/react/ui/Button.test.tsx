@@ -16,20 +16,23 @@ describe(Button, () => {
     expect(html).toContain('type="button"');
   });
 
-  it("supports solid, soft and ghost variants", () => {
+  it("supports the five recipe variants", () => {
     expect(
-      renderToStaticMarkup(<Button label="x" variant="solid" />)
-    ).toContain('class="btn"');
-    expect(renderToStaticMarkup(<Button label="x" variant="soft" />)).toContain(
-      "soft"
-    );
+      renderToStaticMarkup(<Button label="x" variant="secondary" />)
+    ).toContain("secondary");
     expect(
-      renderToStaticMarkup(<Button label="x" variant="ghost" />)
-    ).toContain("ghost");
+      renderToStaticMarkup(<Button label="x" variant="quiet" />)
+    ).toContain("quiet");
+    expect(
+      renderToStaticMarkup(<Button label="x" variant="destructive" />)
+    ).toContain("destructive");
+    expect(
+      renderToStaticMarkup(<Button label="x" variant="destructiveFilled" />)
+    ).toContain("destructiveFilled");
   });
 
-  it("defaults to the primary variant", () => {
-    expect(renderToStaticMarkup(<Button label="x" />)).toContain("primary");
+  it("defaults to the secondary variant", () => {
+    expect(renderToStaticMarkup(<Button label="x" />)).toContain("secondary");
   });
 
   it("supports the compact and chrome sizes", () => {
@@ -37,7 +40,7 @@ describe(Button, () => {
       "btn sm"
     );
     expect(renderToStaticMarkup(<Button label="x" size="chrome" />)).toContain(
-      "chrome primary"
+      "chrome secondary"
     );
   });
 
@@ -55,7 +58,7 @@ describe(Button, () => {
   it("appends a caller className", () => {
     expect(
       renderToStaticMarkup(<Button label="x" className="wide" />)
-    ).toContain('class="btn primary wide"');
+    ).toContain('class="btn secondary wide"');
   });
 
   it("prefers children over label", () => {

@@ -107,7 +107,6 @@ export interface AppState {
   reveal: Record<string, boolean>;
   search: string;
   searchResults: LockerRow[] | null;
-  dark: boolean;
   narrow: boolean;
   sideOpen: boolean;
   showList: boolean;

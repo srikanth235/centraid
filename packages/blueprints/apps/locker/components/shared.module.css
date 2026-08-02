@@ -32,8 +32,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--on-accent);
-  font: var(--font-title);
+  color: var(--text-inv);
+  font: var(--font-sans);
   font-weight: 600;
   font-size: 15px;
 }
@@ -105,13 +105,13 @@
 .dtile {
   width: 60px;
   height: 60px;
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--on-accent);
-  font: var(--font-title);
+  color: var(--text-inv);
+  font: var(--font-sans);
   font-weight: 600;
   font-size: 24px;
 }
@@ -127,12 +127,12 @@
 }
 .fields {
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
 .dlabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -157,7 +157,7 @@
   margin-top: 13px;
 }
 .flabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);

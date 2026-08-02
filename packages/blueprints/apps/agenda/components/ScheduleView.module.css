@@ -27,17 +27,17 @@
   color: var(--text);
 }
 .schedNum[data-today="true"] {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .schedDow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-faint);
 }
 .schedMy {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9.5px;
   color: var(--text-faint);
 }
@@ -73,7 +73,7 @@
   flex-shrink: 0;
 }
 .schedTime {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-soft);
   width: 7.25rem;

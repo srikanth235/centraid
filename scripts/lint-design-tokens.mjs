@@ -23,6 +23,8 @@ const TARGETS = [
   "packages/client/src",
   "packages/blueprints/apps",
   "packages/design/kit",
+  "apps/web/src",
+  "apps/extension/static",
 ];
 const BUDGET_FILE = path.join(ROOT, "tests/design-token-css-budget.json");
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);

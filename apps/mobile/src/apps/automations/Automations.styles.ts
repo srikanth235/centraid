@@ -4,7 +4,7 @@ import { family, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 // StyleSheet keys stay alphabetized (repo convention). Colour comes from the
-// resolved theme (solar-cream light / dark), so `makeStyles(colors)` is memoized
+// resolved design theme, so `makeStyles(colors)` is memoized
 // per palette by the screen — no hardcoded hex beyond `#fff` on the teal pill,
 // which mirrors the accent-glyph contrast used across the mobile apps.
 export const makeStyles = (colors: ThemeColors) =>

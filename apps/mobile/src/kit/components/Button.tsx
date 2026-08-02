@@ -8,7 +8,12 @@ import { radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 
-export type ButtonVariant = "primary" | "soft" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "quiet"
+  | "destructive"
+  | "destructiveFilled";
 
 export interface ButtonProps {
   label: string;
@@ -22,14 +27,15 @@ export interface ButtonProps {
 export default function Button({
   label,
   onPress,
-  variant = "primary",
+  variant = "secondary",
   icon,
   disabled,
   style,
 }: ButtonProps): React.JSX.Element {
   const isPrimary = variant === "primary";
-  const isSoft = variant === "soft";
-  const isGhost = variant === "ghost";
+  const isQuiet = variant === "quiet";
+  const isDestructive = variant === "destructive";
+  const isDestructiveFilled = variant === "destructiveFilled";
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -41,8 +47,10 @@ export default function Button({
       style={({ pressed }) => [
         styles.base,
         isPrimary && styles.primary,
-        isSoft && styles.soft,
-        isGhost && styles.ghost,
+        variant === "secondary" && styles.secondary,
+        isQuiet && styles.quiet,
+        isDestructive && styles.destructive,
+        isDestructiveFilled && styles.destructiveFilled,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
@@ -53,11 +61,26 @@ export default function Button({
           <Icon
             name={icon}
             size={14}
-            color={isPrimary ? colors.textInv : colors.text}
-            strokeWidth={isPrimary ? 2 : 1.75}
+            color={
+              disabled
+                ? colors.textDisabled
+                : isPrimary || isDestructiveFilled
+                  ? colors.textInv
+                  : isDestructive
+                    ? colors.danger
+                    : colors.text
+            }
+            strokeWidth={isPrimary || isDestructiveFilled ? 2 : 1.75}
           />
         ) : null}
-        <Text style={[styles.label, isPrimary && styles.labelPrimary]}>
+        <Text
+          style={[
+            styles.label,
+            disabled && styles.labelDisabled,
+            (isPrimary || isDestructiveFilled) && styles.labelPrimary,
+            isDestructive && styles.labelDestructive,
+          ]}
+        >
           {label}
         </Text>
       </View>
@@ -73,17 +96,24 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    disabled: { opacity: 0.4 },
-    ghost: { backgroundColor: "transparent", borderColor: "transparent" },
-    label: { ...t("small"), color: colors.text, fontWeight: "500" },
+    disabled: { borderColor: colors.lineStrong },
+    destructive: { backgroundColor: colors.bgElev, borderColor: colors.danger },
+    destructiveFilled: {
+      backgroundColor: colors.danger,
+      borderColor: "transparent",
+    },
+    label: { ...t("control"), color: colors.text },
+    labelDestructive: { color: colors.danger },
+    labelDisabled: { color: colors.textDisabled },
     labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
-    primary: { backgroundColor: colors.text, borderColor: colors.text },
+    primary: { backgroundColor: colors.accentFill, borderColor: "transparent" },
+    quiet: { backgroundColor: "transparent", borderColor: "transparent" },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: spacing[2],
       justifyContent: "center",
     },
-    soft: { backgroundColor: colors.bgElev, borderColor: colors.line },
+    secondary: { backgroundColor: colors.bgElev, borderColor: colors.line },
   });

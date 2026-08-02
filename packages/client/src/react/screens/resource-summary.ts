@@ -3,6 +3,8 @@
 // and L2 "how we sized this" math stay unit-testable, and so ResourceModeCard
 // + ResourceCardDetails stay under the 500-line governance cap.
 
+import { formatBytes } from "../../format.js";
+
 /**
  * The owner resource mode (issue #521). Home for the union so the card, the
  * Compare dialog, and the prefs parser all import one definition — no cycle.
@@ -288,18 +290,6 @@ export function powerPostureLine(power: PowerContextState): string | null {
 // ── Resource receipt (issue #528 Phase C) ───────────────────────────────────
 // Pure formatting + row-building for ResourceReceiptPanel — measured actuals,
 // kept React-free so the byte/duration math stays unit-testable.
-
-/** Adaptive byte count — `512 B`, `8.4 KB`, `120 MB`, `2.3 GB`. */
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "—";
-  if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
-  const gb = mb / 1024;
-  return `${gb.toFixed(1)} GB`;
-}
 
 /** CPU/active time given in seconds — `4.2s`, `37s`, `12 min`, `1.4 h`. */
 export function formatSeconds(seconds: number): string {

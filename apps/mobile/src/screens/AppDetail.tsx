@@ -266,7 +266,7 @@ function ErrorState({
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyMsg}>{message}</Text>
       <View style={styles.emptyAction}>
-        <Button label={actionLabel} onPress={onAction} variant="soft" />
+        <Button label={actionLabel} onPress={onAction} variant="secondary" />
       </View>
     </View>
   );

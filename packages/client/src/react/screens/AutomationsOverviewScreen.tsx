@@ -204,7 +204,7 @@ function HeaderActions({
   return (
     <div className={styles.actions}>
       <Button
-        variant="soft"
+        variant="secondary"
         icon="Bolt"
         label="Browse templates"
         onClick={onBrowseTemplates}
@@ -238,7 +238,7 @@ function SuggestionCard({
         ) : null}
       </div>
       <Button
-        variant="soft"
+        variant="secondary"
         size="sm"
         label="Add"
         onClick={() => onAdd(suggestion.id)}
@@ -296,7 +296,7 @@ function EmptyState({
           onClick={onNewAutomation}
         />
         <Button
-          variant="soft"
+          variant="secondary"
           icon="Bolt"
           label="Browse templates"
           onClick={onBrowseTemplates}

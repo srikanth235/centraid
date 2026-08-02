@@ -37,7 +37,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -63,7 +63,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 10px 4px 9px;

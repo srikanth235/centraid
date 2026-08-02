@@ -53,7 +53,7 @@
   justify-content: center;
   margin: 4px 0 16px;
   color: var(--text-faint);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -130,7 +130,7 @@
 }
 .abProgressFile {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   padding: 1px 6px;
@@ -141,7 +141,7 @@
 }
 .abProgressSub {
   margin-top: 2px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -242,7 +242,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);

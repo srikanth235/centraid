@@ -27,8 +27,8 @@
   justify-content: center;
 }
 .mood[aria-pressed="true"] {
-  border-color: var(--selb);
-  background: var(--sel);
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
 }
 .text {
   width: 100%;

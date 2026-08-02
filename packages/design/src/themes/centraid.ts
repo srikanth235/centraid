@@ -10,7 +10,6 @@ import {
   ACCENT_DEEP,
   ACCENT_DEEP_DARK,
   ACCENT_LIGHT,
-  ACCENT_MIDNIGHT,
   ACCENT_TEXT_LIGHT,
   BRAND,
   DANGER,
@@ -27,15 +26,12 @@ export const lightTheme: Theme = {
   accent: BRAND,
   accentDeep: ACCENT_DEEP,
   accentLight: ACCENT_LIGHT,
-  accentMidnight: ACCENT_MIDNIGHT,
   accentText: ACCENT_TEXT_LIGHT,
   bg: "#FCFCFC",
   bgApp: "#FFFFFF",
   bgElev: "#FFFFFF",
   bgSunken: "#F0F1F3",
   bgWall: "#FCFCFC",
-  bezel: "#14181F",
-  bezelInner: "#1f242d",
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
@@ -83,7 +79,6 @@ export const darkTheme: Theme = {
   // near-black. See `ACCENT_DEEP` in shared.ts.
   accentDeep: ACCENT_DEEP_DARK,
   accentLight: ACCENT_LIGHT,
-  accentMidnight: ACCENT_MIDNIGHT,
   accentText: BRAND,
   // The ramp is neutral greyscale, and that is the only dark ramp there is
   // (#608). A hue/saturation "surface temperature" knob used to sit on top of
@@ -114,8 +109,6 @@ export const darkTheme: Theme = {
   sidebarBg:
     "linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 5%) / 0.92) 0%, " +
     "hsl(0 0% calc(var(--bg-l) + 2%) / 0.92) 100%)",
-  bezel: "#0a0d13",
-  bezelInner: "#14181F",
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), " +

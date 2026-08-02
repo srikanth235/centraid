@@ -34,7 +34,7 @@ export const styles = StyleSheet.create({
     right: 28,
     top: "34%",
   },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
+  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
   empty: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 15 },
   header: {
     alignItems: "center",
@@ -69,5 +69,5 @@ export const styles = StyleSheet.create({
     marginBottom: 4,
     marginTop: 24,
   },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
+  title: { fontFamily: family.sansBold, fontSize: 18 },
 });

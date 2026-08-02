@@ -20,10 +20,10 @@
   border-radius: 18px;
   background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, var(--on-accent, white)),
+    color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
     var(--accd)
   );
-  color: var(--on-accent, white);
+  color: var(--text-inv);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,7 +59,7 @@
 }
 .lockIn:focus-visible {
   outline: none;
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .error {
@@ -79,7 +79,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: var(--on-accent, white);
+  color: var(--text-inv);
   font: var(--t-body-strong);
 }
 .cancelBtn {

@@ -3,7 +3,7 @@
   align-items: center;
   gap: var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 14px;
 }

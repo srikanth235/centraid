@@ -3,6 +3,7 @@
 // ambient globals the React island's tsconfig doesn't carry) — kept as tiny
 // self-contained copies so the React bundle stays decoupled from the vanilla
 // shell. Keep the two in step.
+import { formatRelativeTime } from "@centraid/design";
 
 /** Integration name → app-icon hue. Mirrors INTEGRATION_HUES in
  * app-automations-ui.ts. */
@@ -57,28 +58,5 @@ export function relativeTime(
   iso: string | undefined,
   now: number = Date.now()
 ): string {
-  if (!iso) {
-    return "Recently";
-  }
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) {
-    return "Recently";
-  }
-  const s = Math.max(0, Math.floor((now - t) / 1000));
-  if (s < 60) {
-    return "just now";
-  }
-  const m = Math.floor(s / 60);
-  if (m < 60) {
-    return `${m}m ago`;
-  }
-  const h = Math.floor(m / 60);
-  if (h < 24) {
-    return `${h}h ago`;
-  }
-  const d = Math.floor(h / 24);
-  if (d < 30) {
-    return `${d}d ago`;
-  }
-  return new Date(iso).toLocaleDateString();
+  return formatRelativeTime(iso, now);
 }

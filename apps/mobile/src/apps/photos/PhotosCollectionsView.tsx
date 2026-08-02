@@ -1,55 +1,36 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { palette, tileFinish } from "@centraid/design";
+import { identityColor, tileFinish } from "@centraid/design";
 
+import Icon from "../../kit/components/Icon";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme/resolve";
 import type { PhotosScreenProps } from "../../navigation";
 
-// Collection tints come from the shared 8-hue app palette (#686) rather than
-// hand-picked hexes, so Photos drifts with the design system. The order below
-// alternates warm and cool so neighbouring tiles never read as a run of one
-// family; `tileFinish(_, "solid")` supplies the fill and the glyph ink, which
-// is what keeps white marks legible on every hue in both schemes.
-const TINTS = [
-  palette.teal,
-  palette.rose,
-  palette.indigo,
-  palette.amber,
-  palette.violet,
-  palette.forest,
-  palette.ochre,
-  palette.slate,
-] as const;
-
 /** Ink for anything drawn on a tint (all solid tiles share one glyph color). */
-const ON_TINT = tileFinish(palette.teal, "solid").glyphColor;
+const ON_TINT = tileFinish(
+  identityColor("collection", "brand"),
+  "solid"
+).glyphColor;
 
 const fill = (color: string): string =>
   tileFinish(color, "solid").backgroundColor;
 
-/** FNV-1a — a stable tint per row id, so tiles don't reshuffle on re-sort. */
 function tintFor(key: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return fill(TINTS[h % TINTS.length] ?? TINTS[0]);
+  return fill(identityColor(key));
 }
 
 // Fixed collections read best with a tint chosen for their meaning rather than
 // hashed: people learn the colour of "Favorites" the way they learn its icon.
 const CATEGORIES: Array<{ label: string; color: string }> = [
-  { label: "Documents", color: fill(palette.slate) },
-  { label: "Selfies", color: fill(palette.rose) },
-  { label: "Videos", color: fill(palette.violet) },
-  { label: "Food", color: fill(palette.amber) },
-  { label: "Nature", color: fill(palette.forest) },
-  { label: "Receipts", color: fill(palette.ochre) },
+  { label: "Documents", color: fill(identityColor("Documents", "slate")) },
+  { label: "Selfies", color: fill(identityColor("Selfies", "rose")) },
+  { label: "Videos", color: fill(identityColor("Videos", "violet")) },
+  { label: "Food", color: fill(identityColor("Food", "amber")) },
+  { label: "Nature", color: fill(identityColor("Nature", "forest")) },
+  { label: "Receipts", color: fill(identityColor("Receipts", "ochre")) },
 ];
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
@@ -93,7 +74,7 @@ function CollectionRow({
           {count}
         </Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.textGhost} />
+      <Icon name="chevron-right" size={18} color={colors.textGhost} />
     </Pressable>
   );
 }
@@ -151,8 +132,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color={fill(palette.rose)}
-          icon={<Feather name="heart" size={20} color={ON_TINT} />}
+          color={fill(identityColor("Favorites", "rose"))}
+          icon={<Icon name="heart" size={20} color={ON_TINT} />}
           title="Favorites"
           count="Your starred photos"
           onPress={() =>
@@ -162,8 +143,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color={fill(palette.indigo)}
-          icon={<Feather name="clock" size={20} color={ON_TINT} />}
+          color={fill(identityColor("Recently added", "indigo"))}
+          icon={<Icon name="clock" size={20} color={ON_TINT} />}
           title="Recently added"
           count="Newest first"
           onPress={() => navigation.navigate("PhotosLibrary")}
@@ -171,8 +152,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color={fill(palette.teal)}
-          icon={<Feather name="smartphone" size={20} color={ON_TINT} />}
+          color={fill(identityColor("Screenshots", "teal"))}
+          icon={<Icon name="smartphone" size={20} color={ON_TINT} />}
           title="Screenshots"
           count="Captured on this phone"
           onPress={() => navigation.navigate("PhotosLibrary")}
@@ -180,8 +161,8 @@ export default function PhotosCollectionsView({
         <CollectionRow
           styles={styles}
           colors={colors}
-          color={fill(palette.slate)}
-          icon={<Feather name="archive" size={20} color={ON_TINT} />}
+          color={fill(identityColor("Archive", "slate"))}
+          icon={<Icon name="archive" size={20} color={ON_TINT} />}
           title="Archive"
           count="Hidden from the timeline"
           last
@@ -220,7 +201,7 @@ export default function PhotosCollectionsView({
           accessibilityLabel="Add a person"
         >
           <View style={[styles.avatarAdd, { borderColor: colors.lineStrong }]}>
-            <Feather name="plus" size={20} color={colors.textFaint} />
+            <Icon name="plus" size={20} color={colors.textFaint} />
           </View>
           <Text style={[styles.personName, { color: colors.textFaint }]}>
             Add
@@ -237,7 +218,7 @@ export default function PhotosCollectionsView({
           onPress={() => navigation.navigate("PhotosLibrary")}
           accessibilityLabel="New album"
         >
-          <Feather name="plus" size={14} color={colors.accent} />
+          <Icon name="plus" size={14} color={colors.accent} />
           <Text style={[styles.newAlbumText, { color: colors.accent }]}>
             New album
           </Text>

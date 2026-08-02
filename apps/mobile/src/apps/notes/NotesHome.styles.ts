@@ -77,7 +77,7 @@ export const styles = StyleSheet.create({
     textAlign: "center",
   },
   emptyTitle: {
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 19,
   },
   fill: { flex: 1 },
@@ -90,7 +90,7 @@ export const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1 },
   headerTitle: {
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 28,
     letterSpacing: -0.7,
   },
@@ -126,7 +126,7 @@ export const styles = StyleSheet.create({
   },
   modalTitle: {
     flex: 1,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 20,
   },
   note: {
@@ -178,7 +178,7 @@ export const styles = StyleSheet.create({
   },
   title: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 23,
     paddingBottom: 10,
     paddingTop: 12,

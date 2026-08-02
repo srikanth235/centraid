@@ -1,10 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -19,6 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -213,7 +213,10 @@ export default function DocsHome({
   const pick = async (): Promise<void> => {
     setAddOpen(false);
     if (!session || !gatewayBase) {
-      Alert.alert("Gateway unavailable", "Reconnect before adding a document.");
+      showToast({
+        message: "Gateway unavailable — reconnect before adding a document.",
+        tone: "danger",
+      });
       return;
     }
     const result = await DocumentPicker.getDocumentAsync({
@@ -236,17 +239,15 @@ export default function DocsHome({
     };
     try {
       await uploadNext(0);
-      Alert.alert(
-        "Import started",
-        "Files are in the durable transfer queue. iOS and Android can continue the upload during an OS background sync."
-      );
+      showToast({
+        message: "Import started — files are in the durable transfer queue.",
+        tone: "accent",
+      });
     } catch (error) {
-      Alert.alert(
-        "Import needs attention",
-        error instanceof Error
-          ? error.message
-          : "The durable queue will retry after reconnecting."
-      );
+      showToast({
+        message: `Import needs attention: ${error instanceof Error ? error.message : "The durable queue will retry after reconnecting."}`,
+        tone: "danger",
+      });
     }
   };
   const createFolder = async (): Promise<void> => {
@@ -336,7 +337,7 @@ export default function DocsHome({
             accessibilityLabel="Up to parent folder"
             onPress={() => navigation.goBack()}
           >
-            <Feather name="chevron-left" size={26} color={colors.text} />
+            <Icon name="chevron-left" size={26} color={colors.text} />
           </Pressable>
         ) : (
           // At the root: the shared teal grid = leave Docs for your apps.
@@ -354,13 +355,13 @@ export default function DocsHome({
           accessibilityLabel="Add document or folder"
           onPress={() => setAddOpen(true)}
         >
-          <Feather name="plus" size={24} color={colors.accent} />
+          <Icon name="plus" size={24} color={colors.accent} />
         </Pressable>
       </View>
       <ReplicaStatusBar />
 
       <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-        <Feather name="search" size={17} color={colors.textSoft} />
+        <Icon name="search" size={17} color={colors.textSoft} />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -373,7 +374,7 @@ export default function DocsHome({
             accessibilityLabel="Clear search"
             onPress={() => setQuery("")}
           >
-            <Feather name="x" size={17} color={colors.textSoft} />
+            <Icon name="x" size={17} color={colors.textSoft} />
           </Pressable>
         ) : null}
       </View>
@@ -407,7 +408,7 @@ export default function DocsHome({
                   { backgroundColor: active ? colors.text : colors.bgSunken },
                 ]}
               >
-                <Feather
+                <Icon
                   name={item.icon}
                   size={14}
                   color={active ? colors.bg : colors.textSoft}
@@ -452,7 +453,7 @@ export default function DocsHome({
                 view === mode && { backgroundColor: colors.bgElev },
               ]}
             >
-              <Feather
+              <Icon
                 name={mode === "list" ? "list" : "grid"}
                 size={16}
                 color={view === mode ? colors.text : colors.textFaint}
@@ -494,7 +495,7 @@ export default function DocsHome({
         ListEmptyComponent={
           drive.connection === "unavailable" || drive.error ? null : (
             <View style={styles.emptyWrap}>
-              <Feather
+              <Icon
                 name={filter === "trash" ? "trash-2" : "file-text"}
                 size={32}
                 color={colors.accent}
@@ -543,7 +544,7 @@ export default function DocsHome({
             <View
               style={[styles.addIcon, { backgroundColor: colors.bgSunken }]}
             >
-              <Feather name="upload-cloud" size={20} color={colors.accent} />
+              <Icon name="upload-cloud" size={20} color={colors.accent} />
             </View>
             <View style={styles.addCopy}>
               <Text style={[styles.rowTitle, { color: colors.text }]}>

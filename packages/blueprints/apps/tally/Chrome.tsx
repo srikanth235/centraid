@@ -33,7 +33,6 @@ export interface ChromeProps {
   onSettle: () => void;
   onSearchInput: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  themeButtonRef: (el: HTMLButtonElement | null) => void;
   smartNav: ReactNode;
   groupsNav: ReactNode;
   friendsNav: ReactNode;
@@ -89,8 +88,6 @@ export function Chrome(props: ChromeProps): ReactNode {
   // Callback refs come off `props` first: a ref read from the props object taints
   // every later `props.*` read for the React compiler ("cannot access refs during
   // render"), so they are destructured into plain locals here (#573).
-  const { themeButtonRef } = props;
-
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : "",
@@ -274,12 +271,6 @@ export function Chrome(props: ChromeProps): ReactNode {
                 Settle up
               </button>
             ) : null}
-            <button
-              ref={themeButtonRef}
-              type="button"
-              className={styles.iconbtn}
-              aria-label="Toggle light/dark"
-            />
             <div className={styles.askMount} data-ask-mount />
           </div>
         </div>

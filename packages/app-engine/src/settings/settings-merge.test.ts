@@ -93,8 +93,7 @@ describe(buildSettingsInject, () => {
       { appColor: "#5847e0", appAccent: "#2EA098" },
     ]);
     expect(out.cssVars).toStrictEqual({
-      "app-color": "#5847e0",
-      "app-accent": "#2EA098",
+      "app-identity": "#2EA098",
     });
     expect(out.dataAttrs).toStrictEqual({});
   });

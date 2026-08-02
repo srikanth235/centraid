@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);
@@ -33,14 +33,14 @@
   border-left: 1px solid var(--line);
 }
 .weekDow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
 }
 .weekNum {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
   min-width: 26px;
@@ -53,7 +53,7 @@
 .weekDayHead[data-today="true"] .weekNum {
   background: var(--accent-deep);
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --on-accent (kit.css header contract, #686). */
+     the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
   font-weight: 600;
 }
@@ -64,7 +64,7 @@
   overflow: auto;
 }
 .weekAlldayLabel {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9px;
   color: var(--text-faint);
   padding: 6px var(--sp-1);
@@ -79,12 +79,12 @@
   min-height: 1.4rem;
 }
 .alldayChip {
-  --ev-color: var(--_accent);
+  --ev-color: var(--app-identity);
   font: var(--t-small);
   font-size: 11px;
   line-height: 1.4;
   text-align: left;
-  color: var(--on-accent);
+  color: var(--text-inv);
   background: var(--ev-color);
   border: none;
   border-radius: var(--r-sm);
@@ -107,7 +107,7 @@
   position: absolute;
   right: 6px;
   transform: translateY(-50%);
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9.5px;
   color: var(--text-faint);
   background: var(--bg-elev);
@@ -131,7 +131,7 @@
 /* The column's own click target (#573): a button stretched over the column,
    under the positioned event blocks. Same keyboard ring the month cells use. */
 .weekSlot:focus-visible {
-  outline: 2px solid var(--_accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 .nowLine {
@@ -153,14 +153,14 @@
   background: var(--danger);
 }
 .weekEv {
-  --ev-color: var(--_accent);
+  --ev-color: var(--app-identity);
   position: absolute;
   display: flex;
   flex-direction: column;
   gap: 1px;
   overflow: hidden;
   text-align: left;
-  color: var(--on-accent);
+  color: var(--text-inv);
   background: var(--ev-color);
   border: 1px solid color-mix(in srgb, var(--ev-color) 65%, var(--text));
   border-radius: var(--r-sm);
@@ -181,7 +181,7 @@
   text-overflow: ellipsis;
 }
 .weekEvTime {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9.5px;
   opacity: 0.9;
   white-space: nowrap;

@@ -22,8 +22,8 @@
   font: var(--t-small);
 }
 .version summary strong {
-  color: var(--accent-deep-fg);
-  font: var(--t-tiny);
+  color: var(--accent-text);
+  font: var(--t-control);
 }
 .version pre {
   max-height: 180px;

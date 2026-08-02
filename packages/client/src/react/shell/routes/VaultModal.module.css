@@ -66,7 +66,7 @@
 .profModalTitle {
   margin: 0;
   flex: 1;
-  font: var(--t-h3);
+  font: var(--t-small-strong);
   font-size: 15.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -158,7 +158,7 @@
 }
 .profFieldOptional {
   font: var(--t-small);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-weight: 400;
 }

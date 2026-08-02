@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import React, { useMemo, useState } from "react";
 import {
@@ -11,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -157,19 +158,20 @@ export default function AgendaEvent({
     if (!event) return;
     const permission = await Notifications.requestPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
-        "Notifications disabled",
-        "Enable notifications to receive local event reminders."
-      );
+      showToast({
+        message:
+          "Notifications are disabled — enable them to receive reminders.",
+        tone: "danger",
+      });
       return;
     }
     if (gatewayBase) void registerReplicaPushWake(gatewayBase);
     const date = new Date(Date.parse(event.start) - 15 * 60 * 1000);
     if (date <= new Date()) {
-      Alert.alert(
-        "Too late to schedule",
-        "This reminder time has already passed."
-      );
+      showToast({
+        message: "This reminder time has already passed.",
+        tone: "danger",
+      });
       return;
     }
     await Notifications.scheduleNotificationAsync({
@@ -180,10 +182,11 @@ export default function AgendaEvent({
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
-    Alert.alert(
-      "Reminder set",
-      "This device will notify you 15 minutes before the event."
-    );
+    showToast({
+      message:
+        "Reminder set — this device will notify you 15 minutes before the event.",
+      tone: "accent",
+    });
   };
   if (!event)
     return <View style={[styles.safe, { backgroundColor: colors.bg }]} />;
@@ -194,11 +197,11 @@ export default function AgendaEvent({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Event</Text>
         <Pressable onPress={() => void remind()}>
-          <Feather name="bell" size={21} color={colors.accent} />
+          <Icon name="bell" size={21} color={colors.accent} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -238,11 +241,11 @@ export default function AgendaEvent({
               navigation.navigate("Settings", { screen: "Approvals" })
             }
           >
-            <Feather name="clock" size={17} color={colors.accent} />
+            <Icon name="clock" size={17} color={colors.accent} />
             <Text style={[styles.pendingText, { color: colors.text }]}>
               {pending}
             </Text>
-            <Feather name="chevron-right" size={17} color={colors.textFaint} />
+            <Icon name="chevron-right" size={17} color={colors.textFaint} />
           </Pressable>
         ) : null}
         <Text style={[styles.section, { color: colors.textSoft }]}>GUESTS</Text>
@@ -304,7 +307,7 @@ export default function AgendaEvent({
           accessibilityLabel="Edit every event field"
           onPress={() => setEditOpen(true)}
         >
-          <Feather name="edit-3" size={18} color={colors.accent} />
+          <Icon name="edit-3" size={18} color={colors.accent} />
           <Text style={[styles.actionText, { color: colors.text }]}>
             Edit event
           </Text>
@@ -329,7 +332,7 @@ export default function AgendaEvent({
             )
           }
         >
-          <Feather name="x-circle" size={18} color={colors.danger} />
+          <Icon name="x-circle" size={18} color={colors.danger} />
           <Text style={[styles.actionText, { color: colors.danger }]}>
             Ask to cancel
           </Text>
@@ -427,7 +430,7 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   title: {
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 28,
     letterSpacing: -0.7,
     marginTop: 10,

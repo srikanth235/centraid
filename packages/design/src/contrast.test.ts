@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit — this test is the single cross-emitter contrast matrix for shell, blueprint, kit, and native ink pairings; splitting its coupled floors would weaken the shared regression evidence.
 // WCAG floors for every ramp this package ships, measured against the actual
 // EMITTED CSS rather than against literals copied out of it — a test that
 // re-types the values it is guarding stops tracking them the moment someone
@@ -16,6 +17,7 @@ import { describe, expect, test } from "vitest";
 import { toBlueprintCss } from "./blueprint.js";
 import { contrastRatio, parseColor, rgbToHsl, toHex } from "./color.js";
 import { toCss } from "./css.js";
+import { toNativeTheme } from "./native.js";
 import {
   declarations,
   evalColorMix,
@@ -151,10 +153,9 @@ describe("shell token contrast floors", () => {
       expect(contrastRatio(ink, hover), `${name} hover`).toBeGreaterThanOrEqual(
         contrastRatio(ink, fill)
       );
-      // `--on-accent` is a DIFFERENT role (saturated fills, scrims) and the
-      // shell never emitted it, so five `var(--on-accent)` rules in the client
-      // silently inherited their surroundings.
-      expect(tokens["--on-accent"], `${name} --on-accent`).toBeDefined();
+      // Fills publish their own ink; there is no renderer-side foreground
+      // choice or legacy --text-inv alias.
+      expect(tokens["--accent-fill"], `${name} --accent-fill`).toBeDefined();
     });
 
     test(`${name}: accent and status colours are legible as text`, () => {
@@ -364,7 +365,7 @@ describe("blueprint token contrast floors", () => {
   // ── The filled primary button, across every accent an app can claim ──────
   //
   // `.kit-btn.primary` paints `--accent-deep` under `--text-inv`, and an app
-  // moves `--accent`/`--app-color` to any of the eight palette hues. One fixed
+  // moves `--accent`/`--app-identity` to any of the eight palette hues. One fixed
   // ink cannot serve all of them (amber wants dark ink, violet wants light),
   // and CSS has no shipped way to choose one — so the FILL is solved instead,
   // per theme, and this grid is the proof. Both rungs shipped below AA before
@@ -387,7 +388,7 @@ describe("blueprint token contrast floors", () => {
       test.each(Object.entries(ACCENTS))(`${theme}: %s`, (_name, accentHex) => {
         const scope = {
           "--app-hue": hueOf(accentHex),
-          "--_accent": accentHex,
+          "--app-identity": accentHex,
           ...extra,
         };
         const fill = evalColorMix(
@@ -601,4 +602,37 @@ describe("kit.css honours the ink contract for filled states", () => {
     // is a WCAG 1.4.3 failure on BOTH ramps, which is the exact bug this pins.
     expect(body).not.toMatch(/color:\s*var\(--text\)/u);
   });
+});
+
+describe("native token contrast floors", () => {
+  test.each(["light", "dark"] as const)(
+    "%s lowers concrete semantic pairings",
+    (scheme) => {
+      const { colors } = toNativeTheme(scheme);
+      const surfaces = [colors.bg, colors.bgElev, colors.bgSunken];
+
+      for (const [name, floor] of [
+        ["text", AA_BODY],
+        ["textSoft", AA_BODY],
+        ["textFaint", AA_BODY],
+      ] as const) {
+        for (const surface of surfaces) {
+          expect(
+            contrastRatio(colors[name], surface),
+            `${scheme} ${name} on ${surface}`
+          ).toBeGreaterThanOrEqual(floor);
+        }
+      }
+
+      expect(
+        contrastRatio(colors.textInv, colors.accentDeep)
+      ).toBeGreaterThanOrEqual(AA_BODY);
+      expect(
+        contrastRatio(colors.accentText, colors.bg)
+      ).toBeGreaterThanOrEqual(AA_BODY);
+      for (const value of Object.values(colors)) {
+        expect(value).not.toMatch(/(?:var\(|calc\(|color-mix\()/u);
+      }
+    }
+  );
 });

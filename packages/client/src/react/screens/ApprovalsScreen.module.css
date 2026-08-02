@@ -32,7 +32,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -63,7 +63,7 @@
 }
 .groupHead h2 {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 14px;
   letter-spacing: -0.01em;
@@ -305,7 +305,7 @@ button.rowMain:hover {
 }
 .grantVerb {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .grantTarget {
@@ -315,7 +315,7 @@ button.rowMain:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
 }
 .grantMeta {
   font-family: var(--font-mono);
@@ -424,7 +424,7 @@ button.rowMain:hover {
   margin-right: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 500;
   vertical-align: baseline;
 }
@@ -601,7 +601,7 @@ button.rowMain:hover {
   display: inline-block;
   margin-left: 6px;
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   vertical-align: middle;
@@ -613,7 +613,7 @@ button.rowMain:hover {
 }
 .monoId {
   font-family: var(--font-mono);
-  font-size: var(--t-tiny-size);
+  font-size: var(--t-control-size);
   word-break: break-all;
 }
 .seeAllRow {

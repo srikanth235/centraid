@@ -17,12 +17,12 @@
   margin-bottom: var(--sp-4);
 }
 .captionInput:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
 }
 .infoSectionLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   margin-bottom: var(--sp-2);
 }
@@ -30,7 +30,7 @@
   margin-bottom: var(--sp-2);
 }
 .detailsTaken :global(.kit-input) {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   color: var(--text-soft);
   font-size: 0.78rem;
 }
@@ -51,7 +51,7 @@
   word-break: break-word;
 }
 .custodyOk {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .custodyWarn {
   color: var(--custody-warn);
@@ -110,20 +110,20 @@
   font-size: 12px;
 }
 .albumChip[data-active="true"] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--accent-deep-fg);
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .albumChoice:has(.coverButton) .albumChip {
   border-radius: 999px 0 0 999px;
 }
 .coverButton {
-  border: 1px solid var(--selb);
+  border: 1px solid var(--line-strong);
   border-left: 0;
   border-radius: 0 999px 999px 0;
-  background: var(--sel);
-  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+  color: var(--accent-text);
   font: var(--t-small);
   font-size: 11px;
   padding: 6px var(--sp-2);
@@ -143,8 +143,8 @@
   font-size: 11px;
 }
 .tagChipNew:hover {
-  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
-  color: var(--accent-deep-fg);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 .tagInput {
   border-radius: 999px;
@@ -166,7 +166,7 @@
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: var(--accent-deep-fg);
+  background: var(--accent-fill);
   margin-top: var(--sp-1);
   flex-shrink: 0;
 }
@@ -191,7 +191,7 @@
 .receiptChip {
   font: var(--t-mono);
   font-size: 9.5px;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 var(--sp-1);

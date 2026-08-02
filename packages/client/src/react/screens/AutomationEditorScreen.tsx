@@ -1785,7 +1785,7 @@ export default function AutomationEditorScreen({
                 : "Name required to save"}
             </p>
             <div className={styles.footerActions}>
-              <Button variant="ghost" label="Cancel" onClick={onCancel} />
+              <Button variant="quiet" label="Cancel" onClick={onCancel} />
               <Button
                 variant="primary"
                 label={

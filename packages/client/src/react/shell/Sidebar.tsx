@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive navigation component owns desktop, mobile, and compact variants over one item model
 
+import { identityColor, identityInitials } from "@centraid/design";
+
 import Icon from "../ui/Icon.js";
 import Logo from "../ui/Logo.js";
 import { openMenu } from "./contextMenu.js";
@@ -140,21 +142,6 @@ export interface SidebarProps {
   onWhatsNew?: () => void;
 }
 
-function accountInitials(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/u)
-    .filter((word) => word.length > 0);
-  if (parts.length === 0) return "·";
-  if (parts.length === 1) {
-    const word = parts[0] ?? "";
-    return (word.charAt(0) + (word.charAt(1) || "")).toUpperCase();
-  }
-  return (
-    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
-  ).toUpperCase();
-}
-
 /**
  * The sidebar foot is the account row: who you are, not what you can
  * configure. Settings, pairing, and "What's new" moved into its menu because
@@ -220,10 +207,10 @@ function AccountRow(props: SidebarProps): JSX.Element {
     >
       <span
         className={chrome.sbAccountAvatar}
-        style={{ background: props.accountColor ?? "#5B8DEF" }}
+        style={{ background: props.accountColor ?? identityColor(name) }}
         aria-hidden="true"
       >
-        {accountInitials(name)}
+        {identityInitials(name)}
       </span>
       <span className={chrome.sbAccountName}>{name}</span>
       <span className={chrome.sbMeta}>⌘,</span>

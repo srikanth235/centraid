@@ -242,15 +242,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
   }
 
-  function toggleTheme() {
-    const dark = !state.dark;
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    if (dark && !document.documentElement.style.getPropertyValue("--bg-l"))
-      document.documentElement.style.setProperty("--bg-l", "10%");
-    state.dark = dark;
-    render();
-  }
-
   function toggleReveal(fid: string) {
     // A fresh `state.reveal` object each time so the unmasked value never
     // lingers once the field/item that owned it is gone.
@@ -338,7 +329,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     saveItem,
     selectItem,
     setNav,
-    toggleTheme,
     toggleReveal,
     regen,
     openGenerator,
