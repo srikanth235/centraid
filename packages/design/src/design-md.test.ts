@@ -32,7 +32,7 @@ import { palette } from "./palette.js";
 import { radii } from "./radii.js";
 import { themes } from "./themes/index.js";
 import { BRAND, EASE } from "./themes/shared.js";
-import { fonts, type } from "./typography.js";
+import { fonts, type, typeSizeRungs } from "./typography.js";
 
 const DESIGN_MD = fileURLToPath(new URL("../../../DESIGN.md", import.meta.url));
 const doc = readFileSync(DESIGN_MD, "utf8");
@@ -357,6 +357,27 @@ describe("DESIGN.md body", () => {
       expect(line).toContain(`${style.size} / ${style.lineHeight}`);
       expect(line).toContain(style.weight);
     }
+  });
+
+  test("the composable size rungs are documented with their values", () => {
+    const rungs = typeSizeRungs(type);
+    for (const [name, value] of Object.entries(rungs)) {
+      const line = body
+        .split("\n")
+        .filter((l) => l.includes(`\`${name}\``))
+        .join("\n");
+      expect(line, `${name} missing from DESIGN.md prose`).not.toBe("");
+      expect(line, name).toContain(value);
+    }
+    // The dedupe is the point: a rung the emitters do not publish would send
+    // authors at a name that resolves to nothing, so the prose has to say so
+    // rather than leave the gap unexplained.
+    expect(rungs["--t-body-strong-size"]).toBeUndefined();
+    expect(body).toMatch(/`--t-body-strong-size` does not exist/u);
+    // …and the reason the shorthands cannot cover this case is stated, not
+    // left for the reader to rediscover.
+    expect(body).toMatch(/all-or-nothing/u);
+    expect(body).toMatch(/no line-height rungs/u);
   });
 
   test("the easing curve is quoted verbatim", () => {

@@ -27,7 +27,7 @@
 .title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: var(--t-display-size);
   font-weight: 600;
   letter-spacing: -0.025em;
   color: var(--text);
@@ -35,7 +35,7 @@
 .sub {
   margin: 0;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -72,7 +72,7 @@
   background: none;
   outline: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .searchIn::placeholder {
@@ -92,7 +92,7 @@
   border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-faint);
   cursor: pointer;
@@ -126,7 +126,7 @@
   border-radius: 999px;
   background: var(--bg-elev);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   cursor: pointer;
   transition: border-color 0.14s ease;
@@ -161,7 +161,7 @@
   color: var(--text);
 }
 .emptyText {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   margin-bottom: 6px;
 }
@@ -250,7 +250,7 @@
   letter-spacing: -0.01em;
 }
 .desc {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -268,7 +268,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.01em;
   color: var(--text-faint);
 }

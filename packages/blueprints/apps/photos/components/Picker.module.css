@@ -86,5 +86,5 @@
   margin-right: auto;
   color: var(--text-soft);
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }

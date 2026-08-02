@@ -12,13 +12,13 @@
 
 .loading {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   padding: 24px 4px;
 }
 .gridError {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--danger);
   padding: 12px 14px;
   border: 0.5px solid var(--danger);
@@ -74,7 +74,7 @@
   flex: 1;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
 }
 @media (min-width: 720px) {
@@ -196,7 +196,7 @@
 .pickEmpty {
   padding: 12px 6px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-ghost);
 }
 
@@ -222,7 +222,7 @@
 }
 .mainLogical {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
 }
 .machineryTag {
@@ -497,7 +497,7 @@
 }
 .fkCell {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   cursor: help;
   border-bottom: 1px dotted var(--line-strong);
@@ -536,7 +536,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.03em;
   cursor: pointer;
 }
@@ -590,7 +590,7 @@
 }
 .drawerTable {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
 }
 .fields {
@@ -611,7 +611,7 @@
   align-items: baseline;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
 }
 .reqStar {
@@ -659,7 +659,7 @@
   background: var(--bg-sunken);
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 
 .fkField {
@@ -724,7 +724,7 @@
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
 }
 .drawerFoot {
@@ -797,7 +797,7 @@
 .dialogSummary {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .depList {
@@ -849,7 +849,7 @@
 .depCount {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -861,7 +861,7 @@
   background: color-mix(in oklab, var(--danger) 7%, transparent);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
 }
 .dialogWarn {
@@ -872,7 +872,7 @@
   background: var(--bg-sunken);
   color: var(--text-faint);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
 }
 .dialogFoot {

@@ -40,7 +40,7 @@
 }
 .count {
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   color: color-mix(in oklab, var(--on-accent) 75%, transparent);
   white-space: nowrap;
 }

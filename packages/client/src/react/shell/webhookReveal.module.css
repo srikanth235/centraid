@@ -42,6 +42,6 @@
   border-radius: 8px;
   background: color-mix(in oklab, var(--c-amber) 12%, transparent);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
 }

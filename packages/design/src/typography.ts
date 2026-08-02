@@ -77,3 +77,97 @@ export function typeShorthand(style: TypeStyle | MarketingTypeStyle): string {
       : style.lineHeight;
   return `${style.weight} ${style.size}px/${lh} var(--font-${style.family})`;
 }
+
+/**
+ * Blueprint-surface type scale (#686). The blueprint layer has its OWN scale —
+ * rem-based sizes and unitless line-heights, so an app that is embedded at a
+ * different root size scales with its host — and it is deliberately NOT the
+ * shell's: `--t-small` is 13px in the chrome and 0.8rem here. Both surfaces are
+ * type, so both tables live in this module; `blueprint.ts` used to carry these
+ * six values as opaque shorthand strings, which meant nothing could read a size
+ * off them.
+ *
+ * `family` is the full custom-property name rather than a `FontFamily` role
+ * key, because the blueprint layer publishes `--mono` (not `--font-mono`) and
+ * adds `--font-title`; see `lightProps()` in blueprint.ts.
+ */
+export interface BlueprintTypeStyle {
+  size: `${number}rem`;
+  /** Unitless CSS line-height multiplier, e.g. `'1.5'`. */
+  lineHeight: `${number}`;
+  family: "font-sans" | "font-title" | "mono";
+  weight: "400" | "500" | "600";
+}
+
+export const blueprintType = {
+  body: {
+    family: "font-sans",
+    lineHeight: "1.5",
+    size: "0.855rem",
+    weight: "400",
+  },
+  bodyStrong: {
+    family: "font-sans",
+    lineHeight: "1.4",
+    size: "0.855rem",
+    weight: "600",
+  },
+  mono: { family: "mono", lineHeight: "1.4", size: "0.72rem", weight: "500" },
+  small: {
+    family: "font-sans",
+    lineHeight: "1.45",
+    size: "0.8rem",
+    weight: "400",
+  },
+  tiny: { family: "mono", lineHeight: "1.4", size: "0.6rem", weight: "600" },
+  title: {
+    family: "font-title",
+    lineHeight: "1.2",
+    size: "1.15rem",
+    weight: "600",
+  },
+} as const satisfies Record<string, BlueprintTypeStyle>;
+
+/** CSS `font` shorthand for one blueprint style, e.g. `600 1.15rem/1.2 var(--font-title)`. */
+export function blueprintTypeShorthand(style: BlueprintTypeStyle): string {
+  return `${style.weight} ${style.size}/${style.lineHeight} var(--${style.family})`;
+}
+
+/** camelCase type key → the kebab-case half of its custom-property name. */
+export function typeKeyToKebab(key: string): string {
+  return key
+    .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
+    .toLowerCase();
+}
+
+/**
+ * The composable SIZE rungs (#686).
+ *
+ * `--t-*` are CSS `font` **shorthands**: using one sets family, weight, size
+ * and line-height together, all or nothing. A rule that wants the scale's size
+ * but a different weight — or that must inherit the family from its host — had
+ * no token to reach for and wrote a raw `font-size`. `--t-<key>-size` is that
+ * missing rung, and nothing else: it carries the size and no other facet.
+ *
+ * The suffix spelling follows `--c-<hue>-text`, the other facet-of-a-token in
+ * this vocabulary, and keeps a rung sorted next to the shorthand it belongs to.
+ *
+ * ONE property per distinct size, first key wins: `body` and `bodyStrong` are
+ * both 15px, so the pair publishes `--t-body-size` only. A duplicate property
+ * would be two spellings for one value, which is exactly what the contract in
+ * `contract.ts` exists to forbid.
+ */
+export function typeSizeRungs(
+  scale: Record<string, { size: number | `${number}rem` }>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const [key, style] of Object.entries(scale)) {
+    const value =
+      typeof style.size === "number" ? `${style.size}px` : style.size;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out[`--t-${typeKeyToKebab(key)}-size`] = value;
+  }
+  return out;
+}

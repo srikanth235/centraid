@@ -286,7 +286,7 @@
 .machineryPack {
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .numCol {
   text-align: right;

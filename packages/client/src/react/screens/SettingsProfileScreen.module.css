@@ -69,7 +69,7 @@
 
 .identityName {
   font: var(--t-title);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: break-word;

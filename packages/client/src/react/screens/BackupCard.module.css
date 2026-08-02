@@ -104,7 +104,7 @@
   width: fit-content;
   cursor: pointer;
   color: var(--accent-deep, var(--accent));
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .metricHow p,
 .exitHow {
@@ -137,7 +137,7 @@
 }
 .exitMeteredNote {
   color: var(--c-amber-text);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 
@@ -192,7 +192,7 @@
 }
 
 .loadError {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--danger);
 }
 
@@ -210,7 +210,7 @@
 
 .runError {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }
@@ -237,7 +237,7 @@
   gap: 8px;
 }
 .vaultName {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -256,7 +256,7 @@
   flex-wrap: wrap;
   gap: 12px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .vaultMeta span[data-emphasis="warn"] {
@@ -290,7 +290,7 @@
 .policyGroup h4 {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -309,7 +309,7 @@
 .destinationGrid dd {
   margin: 2px 0 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   overflow-wrap: anywhere;
 }
 .localWarning {
@@ -318,7 +318,7 @@
   border-left: 2px solid var(--c-amber);
   background: color-mix(in srgb, var(--c-amber) 7%, transparent);
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 .policySetting {
@@ -448,7 +448,7 @@
 .inventoryWarning,
 .inventoryEmpty {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.45;
 }
 .inventoryWarning {
@@ -472,7 +472,7 @@
 }
 .inventoryStore strong {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
 }
 .inventoryStore > span,

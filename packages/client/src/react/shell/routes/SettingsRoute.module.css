@@ -117,7 +117,7 @@
 .settingsNavTitle {
   margin-top: 6px;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -145,7 +145,7 @@
   padding: 7px 10px;
   margin-block: 1.5px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text-soft);
   cursor: pointer;

@@ -140,7 +140,7 @@
 }
 
 .foundLead {
-  font-size: 15px;
+  font-size: var(--t-body-size);
   line-height: 1.5;
   color: var(--text);
   margin: 4px 0 6px;
@@ -177,7 +177,7 @@
   resize: vertical;
   padding: 10px 12px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text);
   background: color-mix(in srgb, black 24%, transparent);
@@ -233,7 +233,7 @@
   height: 46px;
   padding: 0 14px;
   font: inherit;
-  font-size: 16px;
+  font-size: var(--t-h3-size);
   font-weight: 500;
   color: var(--text);
   background: color-mix(in srgb, white 4%, transparent);
@@ -334,7 +334,7 @@
 .error {
   margin-top: 12px;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   border-radius: 8px;
   background: color-mix(in srgb, var(--text) 18%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--text) 50%, transparent);
@@ -377,7 +377,7 @@
 }
 .choiceBtnTitle {
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: var(--t-h3-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);

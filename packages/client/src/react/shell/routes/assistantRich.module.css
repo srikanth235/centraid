@@ -66,7 +66,7 @@
 }
 .asstRich code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   background: var(--bg-sunken);
   border-radius: var(--r-sm);
   padding: 1px 4px;
@@ -80,7 +80,7 @@
   border-radius: 999px;
   padding: 0 7px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   cursor: default;
 }
@@ -119,7 +119,7 @@
   border-bottom: 0;
 }
 .asstCaption {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   padding: 6px 2px 0;
 }
@@ -137,12 +137,12 @@
   color: var(--text);
 }
 .asstStatLabel {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   margin-top: 2px;
 }
 .asstStatSub {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
 }
 .asstChart {
@@ -171,7 +171,7 @@
 .asstChartLegend {
   display: flex;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   padding-top: 6px;
 }

@@ -21,7 +21,7 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text-soft);
   text-align: left;

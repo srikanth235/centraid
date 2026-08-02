@@ -59,7 +59,7 @@
   background: var(--accent);
   color: var(--accent-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -101,7 +101,7 @@
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--danger);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -131,7 +131,7 @@
 }
 .parkedCommand {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text);
 }
 .parkedWhen {
@@ -169,7 +169,7 @@
   background: var(--accent);
   color: var(--accent-text);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   cursor: pointer;
 }

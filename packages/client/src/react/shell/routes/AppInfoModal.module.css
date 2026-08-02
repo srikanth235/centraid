@@ -59,7 +59,7 @@
 }
 .automateBtn {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   padding: 5px 10px;
   border-radius: 8px;
   border: 0.5px solid var(--line);

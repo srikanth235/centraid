@@ -139,6 +139,21 @@ Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/iss
 
 **Not done here.** #686 is already 243 files; adding vocabulary plus a 971-site sweep would make the visual diff unreviewable. The ratchet in `scripts/lint-design-tokens.mjs` holds the count meanwhile, and this entry records that the count is a symptom rather than the fault.
 
+### Shipped: the vocabulary, and the exact-match half of the sweep
+
+Recorded **2026-08-02**, same issue. `--t-<key>-size` now exists on both surfaces — one property per **distinct** size, so `body`/`bodyStrong` (both 15px) publish `--t-body-size` and nothing else. `typeSizeRungs()` in `packages/design/src/typography.ts` derives them, `toCss()` and `toBlueprintCss()` emit them, and `contract.ts` derives both contracts from the same call rather than a hand-list. The blueprint type scale moved into `typography.ts` as `blueprintType` in the process — it was six opaque shorthand strings, from which no size could be read.
+
+**No line-height rungs.** The data does not support them and speculative vocabulary is worse than none: of 227 hand-written `line-height` declarations across the three targets, all but a handful are unitless multipliers, while the chrome scale's line-heights are absolute px. A `--t-body-line-height: 22px` would be a rung nothing could adopt.
+
+**411 declarations converted, provably zero visual change** — 402 in `packages/client/src`, 9 in `packages/blueprints/apps`. The bar was tightened twice against the estimate above:
+
+- **Per-surface scales, not one scale.** The 494/477/314 split measured every target against the _chrome_ scale. The blueprint layer has its own — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match. Against the scale that actually resolves there, the exact set is 402 + 9, not 494.
+- **Same unit, not same computed px.** `1rem` and `16px` agree only at a 16px root; a reader who has raised their browser's default font size would see the second stop tracking. Only like-for-unit conversions were made (px→px rung in the chrome, rem→rem rung in the blueprints).
+
+**`packages/design/kit` was left alone entirely.** `kit.css` renders under _both_ token layers — the shell `:root` and the rescoped `.centraid-inline-scope` block — so its eight exact matches resolve to two different values, and every one of them would move on one of the two surfaces.
+
+**Still open, as recorded debt:** the ~477 near-misses (within 0.6px) and the ~314 genuinely off-scale declarations. Both are visual changes and need per-site judgement, not a sweep. The ratchet total fell 1291 → 880 with no other metric moving, and `rawFontSize` now counts `font-size: var(--t-<key>)` — naming a shorthand where a size belongs — as debt rather than letting it hide inside the `var()` carve-out.
+
 ## Related docs
 
 | Doc | Covers |

@@ -84,7 +84,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -131,7 +131,7 @@
 }
 .codeFile {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text);
 }
 .codeTag {
@@ -201,7 +201,7 @@
 }
 .flowSub {
   margin-top: 3px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-faint);
   white-space: pre-wrap;
@@ -257,7 +257,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 9px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .triggerIcon {
@@ -285,7 +285,7 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .nextrun {
@@ -366,7 +366,7 @@
 }
 .triggerKindBtn {
   padding: 6px 11px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   color: var(--text-faint);
   background: var(--bg-sunken);
@@ -415,13 +415,13 @@
 }
 .formHint {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
 .formError {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
@@ -445,7 +445,7 @@
   display: flex;
   gap: 12px;
   padding: 9px 13px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .row + .row {
   border-top: 1px solid var(--line);
@@ -469,7 +469,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   padding: 3px 9px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
@@ -491,7 +491,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 9px 13px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .activityRow + .activityRow {
   border-top: 1px solid var(--line);

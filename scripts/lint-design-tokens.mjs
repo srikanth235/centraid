@@ -81,13 +81,25 @@ const declarations = (css, property) => [
 
 const isTokened = (value) => value.includes("var(--");
 
-/** `--t-*` are `font` **shorthands**, not sizes, so *every* `font-size`
- * declaration with a length is off-contract — `font-size: var(--t-body)`
- * silently drops the whole shorthand. Carve-outs: `inherit` (explicit
- * cascade) and any `var(...)` (a surface-local sizing knob). */
+/** A `--t-<key>` is a `font` **shorthand** — family, weight, size and
+ * line-height at once — so it cannot serve a rule that wants only the size.
+ * `--t-<key>-size` is the composable rung that can (#686, typography.ts), and
+ * it is the sanctioned form here. A length literal is still debt.
+ *
+ * Carve-outs: `inherit` (an explicit cascade decision) and any `var(...)` (the
+ * size rungs plus surface-local sizing knobs).
+ *
+ * Counted DESPITE being a `var()`: `font-size: var(--t-body)`. That names the
+ * shorthand where a size belongs; the declaration is invalid and is dropped
+ * whole, so the element silently keeps its inherited size. Nothing throws and
+ * nothing logs — exactly the failure the `-size` rungs exist to prevent, so it
+ * must not hide inside the `var()` carve-out. */
+const SHORTHAND_AS_SIZE = /var\(\s*--t-(?!.*-size\s*[),])[\w-]+\s*[),]/u;
+
 function countRawFontSize(css) {
   return declarations(css, "font-size").filter((match) => {
     const value = match.groups?.value.trim() ?? "";
+    if (SHORTHAND_AS_SIZE.test(value)) return true;
     return value !== "inherit" && !isTokened(value);
   }).length;
 }

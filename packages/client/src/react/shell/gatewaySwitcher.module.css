@@ -173,7 +173,7 @@
   color: var(--text);
   text-align: left;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   transition:
     background 140ms ease-out,

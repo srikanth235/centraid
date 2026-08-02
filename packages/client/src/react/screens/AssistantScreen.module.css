@@ -164,7 +164,7 @@
   cursor: default;
 }
 .pagerLabel {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   min-width: 26px;
@@ -184,7 +184,7 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   white-space: pre-wrap;
 }
@@ -248,7 +248,7 @@
 }
 /* Offline hint beside a resend button (issue #420, Wave 6). */
 .offlineHint {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -266,7 +266,7 @@
   border: 0.5px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--bg-sunken);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .tools > summary {
@@ -292,7 +292,7 @@
   margin: 0;
 }
 .toolMeta {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
   padding-top: 3px;
 }
@@ -379,7 +379,7 @@
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .acItem[data-active="true"] {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
@@ -396,12 +396,12 @@
 .acItemHint {
   flex: none;
   color: var(--text-ghost);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .acEmpty {
   padding: 8px 10px;
   color: var(--text-ghost);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .composerRow:focus-within {
   border-color: var(--accent);
@@ -723,11 +723,11 @@
 }
 .emptyTitle {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: var(--t-h2-size);
   color: var(--text);
 }
 .emptySub {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .suggest {
@@ -744,7 +744,7 @@
   border-radius: 999px;
   padding: 7px 14px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
 }
 .suggestChip:hover {
@@ -857,7 +857,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
 }
 

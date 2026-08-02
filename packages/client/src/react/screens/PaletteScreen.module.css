@@ -49,7 +49,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.005em;
   padding: 0;
 }
@@ -86,7 +86,7 @@
   font-weight: 600;
 }
 .noResults span {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .group {
   font-family: var(--font-mono);

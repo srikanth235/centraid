@@ -100,7 +100,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   cursor: pointer;
 }
 .retry:hover {
@@ -127,7 +127,7 @@
 }
 .date {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   margin-bottom: 2px;
 }
@@ -135,7 +135,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 16px;
+  font-size: var(--t-h3-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -155,7 +155,7 @@
   padding: 2px 7px;
 }
 .installed {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   color: white;
   background: var(--accent);
@@ -163,7 +163,7 @@
   padding: 2px 7px;
 }
 .pre {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   color: var(--text);
   background: color-mix(in oklab, var(--c-amber) 26%, transparent);
@@ -173,7 +173,7 @@
 
 .emptyNotes {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 
@@ -185,7 +185,7 @@
 }
 .notes h4 {
   margin: 14px 0 6px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

@@ -86,6 +86,13 @@ colors:
   dark-line-strong: "rgba(220,230,245,0.16)"
   dark-scrim: "rgba(0,0,0,0.72)"
 typography:
+  # Each role below also publishes its `fontSize` alone, as the composable rung
+  # `--t-<role>-size` (#686) — `--t-body-size: 15px`, `--t-tiny-size: 11px`, and
+  # so on. Roles that share a size publish ONE rung between them: `body` and
+  # `body-strong` are both 15px, so `--t-body-size` is the only spelling and
+  # there is no `--t-body-strong-size`. The values are the `fontSize` fields
+  # here — the rungs are a facet of these roles, not a second scale, which is
+  # why they are not their own front-matter section.
   display:
     fontFamily: system-ui
     fontSize: 28px
@@ -568,6 +575,20 @@ Blueprint apps express identity by moving **`--app-hue`** (default `171`) — th
 | `--t-tiny`        | 11 / 14            | sans    | 500    |
 
 `display` and `sans` both resolve to `system-ui` today — they are distinct **roles**, so a surface may rebind one without the other; the front matter records the face each role currently carries.
+
+**The shorthands are all-or-nothing; the size rungs exist for the composable case.** Every `--t-*` above is a CSS `font` **shorthand**, so `font: var(--t-small)` sets family, weight, size and line-height together — there is no way to take one facet and leave the rest. A rule that wants the scale's size but a different weight, or that must inherit its family from a host, cannot use the shorthand at all. For exactly that case each distinct size is also published on its own, as `--t-<role>-size`:
+
+| Rung               | Value | Rung             | Value |
+| ------------------ | ----- | ---------------- | ----- |
+| `--t-display-size` | 28px  | `--t-small-size` | 13px  |
+| `--t-title-size`   | 20px  | `--t-mono-size`  | 12px  |
+| `--t-body-size`    | 15px  | `--t-tiny-size`  | 11px  |
+
+A size rung carries the size and nothing else. **One rung per distinct size, not one per role**: `--t-body` and `--t-body-strong` are both 15px, so `--t-body-size` serves both and `--t-body-strong-size` does not exist — a second spelling for one value is the drift `packages/design/src/contract.ts` exists to forbid. There are deliberately **no line-height rungs**: the scale's line-heights are absolute px, while every hand-written `line-height` in the client, the blueprints and the kit but a handful is a unitless multiplier, so a rung would be vocabulary nothing could adopt.
+
+Reach for the shorthand first. `font-size: var(--t-<role>-size)` is for the rules the shorthand cannot serve; `font-size: var(--t-<role>)` is always a bug — the shorthand is invalid there and the browser drops the whole declaration in silence, which `scripts/lint-design-tokens.mjs` counts as debt.
+
+The blueprint surface publishes the same rung names from its own scale (`toBlueprintCss()`), where the sizes are rem-based and differ from the chrome's — `--t-small-size` is 13px in the chrome and 0.8rem in an app. `packages/design/kit` renders under **both** layers, so its stylesheet stays on literals where the two would disagree.
 
 Marketing/hero styles (`--t-display-1` 40, `--t-h2` 22, `--t-h3` 16) are **web-only, outside the chrome**, and are the single place weight 700 appears. They are not part of the chrome token set and so are not in the front matter.
 

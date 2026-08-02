@@ -38,7 +38,7 @@
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   outline: none;
 }
 .searchInput::placeholder {
@@ -113,11 +113,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .treeEmpty {
   padding: 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .workspace {
@@ -297,7 +297,7 @@
   padding: 12px 10px 12px 14px;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.65;
   color: var(--text-ghost);
   will-change: transform;
@@ -318,7 +318,7 @@
   margin: 0;
   padding: 12px 16px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.65;
   white-space: pre;
   tab-size: 2;
@@ -350,7 +350,7 @@
   overflow: auto;
   padding: 8px 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.6;
 }
 .diffRow {

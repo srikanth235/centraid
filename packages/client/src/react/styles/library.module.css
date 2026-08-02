@@ -79,7 +79,7 @@
 }
 .discSegN {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0;
   color: var(--text-ghost);
 }

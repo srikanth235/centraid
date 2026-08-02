@@ -22,6 +22,12 @@ import { spacing } from "./density";
 import { palette } from "./palette";
 import { radii } from "./radii";
 import { EASE } from "./themes/shared";
+import {
+  blueprintType,
+  blueprintTypeShorthand,
+  typeKeyToKebab,
+  typeSizeRungs,
+} from "./typography";
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -152,16 +158,20 @@ function lightProps(): Record<string, string> {
     "--tracking-body": "0",
     "--tracking-h": "-0.01em",
     "--tracking-eyebrow": "0.09em",
-
-    // Type shorthands (font: style weight size/line family) retained from the
-    // original Docs identity layer.
-    "--t-title": "600 1.15rem/1.2 var(--font-title)",
-    "--t-body": "400 0.855rem/1.5 var(--font-sans)",
-    "--t-body-strong": "600 0.855rem/1.4 var(--font-sans)",
-    "--t-small": "400 0.8rem/1.45 var(--font-sans)",
-    "--t-tiny": "600 0.6rem/1.4 var(--mono)",
-    "--t-mono": "500 0.72rem/1.4 var(--mono)",
   });
+
+  // Type shorthands (font: weight size/line family), from the `blueprintType`
+  // table in typography.ts — the values are the ones the original Docs identity
+  // layer carried, now data rather than opaque strings so the size rungs below
+  // can be derived from them instead of re-typed.
+  for (const [key, style] of Object.entries(blueprintType)) {
+    props[`--t-${typeKeyToKebab(key)}`] = blueprintTypeShorthand(style);
+  }
+  // …and the SIZE of each rung on its own (#686). Same names as the shell
+  // publishes, different values — the two scales are separate by design, and an
+  // inline app resolves these from the `.centraid-inline-scope` block, not from
+  // the shell `:root`.
+  Object.assign(props, typeSizeRungs(blueprintType));
 
   // Fixed spacing scale (density.ts) — apps had no spacing token at all, so
   // every gutter was a hardcoded px literal. Same rungs the shell emits.

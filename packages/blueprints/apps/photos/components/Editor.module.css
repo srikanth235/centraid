@@ -60,7 +60,7 @@
   align-items: center;
   gap: 0.35rem;
   color: color-mix(in oklab, var(--on-accent) 75%, transparent);
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
   white-space: nowrap;
 }
 .spacer {

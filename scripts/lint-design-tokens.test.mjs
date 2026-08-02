@@ -48,6 +48,26 @@ test("analyzeCss counts raw font-size but not inherit or a var knob", () => {
   );
 });
 
+test("analyzeCss clears the composable size rungs but not the shorthands", () => {
+  assert.deepEqual(
+    analyzeCss(`
+      .a { font-size: var(--t-body-size); }
+      .b { font-size: var(--t-display-1-size); }
+      .c { font-size: var(--t-mono-size) !important; }
+    `),
+    clean
+  );
+  // `--t-<key>` is a `font` shorthand; as a `font-size` value the declaration
+  // is invalid and dropped whole, so it stays debt even though it is a var().
+  assert.deepEqual(
+    analyzeCss(`
+      .a { font-size: var(--t-body); }
+      .b { font-size: var(--t-small, 13px); }
+    `),
+    { ...clean, rawFontSize: 2 }
+  );
+});
+
 test("analyzeCss counts only off-scale font-weights", () => {
   assert.deepEqual(
     analyzeCss(`

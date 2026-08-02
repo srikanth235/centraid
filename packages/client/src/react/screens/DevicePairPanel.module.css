@@ -12,7 +12,7 @@
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .pairLead {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -34,7 +34,7 @@
   gap: 4px;
 }
 .pairFieldLabel {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .pairSelect,
@@ -174,7 +174,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   line-height: 1.5;
   color: var(--text);
   background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));

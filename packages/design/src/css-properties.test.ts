@@ -22,6 +22,7 @@ import {
   marketingType,
   type,
   typeShorthand,
+  typeSizeRungs,
 } from "./typography.js";
 
 /** Parse the sheet into `selector -> {prop: value}` without assuming order. */
@@ -149,8 +150,8 @@ describe("token stylesheet values", () => {
 
   test("camelCase type keys map to kebab-case properties, one per style", () => {
     const root = parseBlocks(toCss()).get(":root");
-    const emitted = [...(root?.keys() ?? [])].filter((k) =>
-      k.startsWith("--t-")
+    const emitted = [...(root?.keys() ?? [])].filter(
+      (k) => k.startsWith("--t-") && !k.endsWith("-size")
     );
     const scale = { ...type, ...marketingType };
     expect(emitted).toHaveLength(Object.keys(scale).length);
@@ -165,6 +166,25 @@ describe("token stylesheet values", () => {
     // No property may keep a capital letter; CSS custom properties are
     // case-sensitive, so `--t-bodyStrong` would silently never match.
     expect(emitted.every((k) => k === k.toLowerCase())).toBe(true);
+  });
+
+  test("each distinct type size gets one composable size rung", () => {
+    const root = parseBlocks(toCss()).get(":root");
+    const scale = { ...type, ...marketingType };
+    const rungs = [...(root?.keys() ?? [])].filter((k) => k.endsWith("-size"));
+    // One per DISTINCT size, not one per key: body and bodyStrong are both
+    // 15px, so the pair publishes `--t-body-size` and no `--t-body-strong-size`.
+    const distinct = new Set(Object.values(scale).map((s) => s.size));
+    expect(rungs).toHaveLength(distinct.size);
+    expect(rungs.length).toBeLessThan(Object.keys(scale).length);
+    expect(root?.get("--t-body-size")).toBe("15px");
+    expect(root?.has("--t-body-strong-size")).toBe(false);
+    // Every rung's value is a bare px length equal to the size of the key it
+    // is named after — a shorthand here would silently break `font-size:`.
+    for (const [name, value] of Object.entries(typeSizeRungs(scale))) {
+      expect(root?.get(name), name).toBe(value);
+      expect(value, name).toMatch(/^\d+px$/u);
+    }
   });
 
   test("each font stack is emitted once under its family name", () => {

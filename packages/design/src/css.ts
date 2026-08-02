@@ -11,7 +11,14 @@ import { palette } from "./palette";
 import { radii } from "./radii";
 import { BRAND, EASE, ON_ACCENT, themes } from "./themes";
 import type { Theme, ThemeName } from "./themes";
-import { fontStacks, marketingType, type, typeShorthand } from "./typography";
+import {
+  fontStacks,
+  marketingType,
+  type,
+  typeKeyToKebab,
+  typeShorthand,
+  typeSizeRungs,
+} from "./typography";
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -97,12 +104,14 @@ export function toCss(): string {
   // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).
   for (const [k, v] of Object.entries(fontStacks))
     staticProps[`--font-${k}`] = v;
-  for (const [k, v] of Object.entries({ ...type, ...marketingType })) {
-    const kebab = k
-      .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
-      .toLowerCase();
-    staticProps[`--t-${kebab}`] = typeShorthand(v);
+  const shellScale = { ...type, ...marketingType };
+  for (const [k, v] of Object.entries(shellScale)) {
+    staticProps[`--t-${typeKeyToKebab(k)}`] = typeShorthand(v);
   }
+  // …and the SIZE of each rung on its own, for the rules the shorthand cannot
+  // serve (see `typeSizeRungs`). Emitted after the shorthands so a reader sees
+  // the whole scale before its facets; CSS custom properties do not care.
+  Object.assign(staticProps, typeSizeRungs(shellScale));
   // Shared library-tile tokens (Home + Discover render the same tile).
   for (const [k, v] of Object.entries(library)) staticProps[`--lib-${k}`] = v;
 

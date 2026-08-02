@@ -99,7 +99,7 @@
 }
 .fieldOptional {
   font: var(--t-small);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-ghost);
   font-weight: 400;
 }
@@ -178,7 +178,7 @@
    two surfaces cannot drift apart on when the OS dialog is announced. */
 .keychainNote {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -197,7 +197,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   font: var(--t-small);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   color: var(--text-soft);
@@ -258,7 +258,7 @@
   background: transparent;
   color: var(--text);
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   cursor: pointer;
   text-align: left;
   transition:
@@ -322,7 +322,7 @@
 .centerText {
   margin: 0;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .errorBanner {
@@ -342,7 +342,7 @@
   background: transparent;
   border: none;
   font: var(--t-small);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   cursor: pointer;
 }

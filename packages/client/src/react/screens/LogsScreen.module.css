@@ -48,7 +48,7 @@
 }
 .countLabel {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   margin-right: auto;
 }
@@ -70,7 +70,7 @@
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   outline: none;
 }
 .search:focus {
@@ -82,7 +82,7 @@
 
 .exportStatus {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   overflow-wrap: anywhere;
 }
 .exportStatus[data-tone="ok"] {
@@ -169,7 +169,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
   box-shadow: 0 4px 14px var(--scrim);
 }

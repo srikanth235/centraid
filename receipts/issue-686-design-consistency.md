@@ -24,6 +24,7 @@
 - [x] F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)
 - [x] F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)
 - [x] F4 Extend the unresolved-`var()` gate to `packages/client` and fix the 13 phantom tokens it found
+- [x] F6 composable size rungs + the exact-match sweep
 
 ## Decisions (orchestrator recommendations, per user directive)
 
@@ -41,6 +42,7 @@
 - **The client half of the palette-as-text gap, previously deferred, is now closed.** When `--c-<name>-text` landed, the receipt recorded that "`packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole" and moved on. The real count is **39 direct `color:` sites across 25 stylesheets**, plus **five identity/status variables** (`--au-hue`, `--notice-hue`, `--tk-hue`, `--plan-tone`, and the `--log-status` / `--conn-health` / `--diag-health` trio) that launder a raw hue into a `color:` one indirection away — invisible to any grep for `color: var(--c-`. Measured on the **shell's own** emitted surfaces (a different emitter from the one the existing grid uses: `--bg-l: 5%` not 10%, and two extra surfaces `--bg` / `--bg-app`), the fills as ink are **2.04–5.03:1 light / 3.12–8.44:1 dark — 17 of 32 cells below AA**, every hue failing on at least one theme, and amber missing even the **3:1 non-text floor** an icon glyph owes. Three consequences recorded: (a) **the fill stays the fill** — washes, dots, rails, bars and 2px edges keep `--c-<name>`; where one variable did both jobs it was split into a `-hue`/`-ink` pair rather than deepened, because dulling a fill to buy contrast nothing reads is a visual regression, not a fix; (b) **16% is the wash ceiling under a palette ink**, not the 12% the solve targets — at 18% indigo and violet fall to 4.44 / 4.49, so `ApprovalsScreen`'s identity tile came down to 12%, the same normalisation this PR already applied to four state washes; (c) **a highlighting scheme owes a second contract the contrast grids cannot see.** The builder's syntax tokens were tag=rose, attr=violet, str=forest, key=indigo — violet and indigo are only 0.068 apart as fills, and solving both to one floor pulled them to **0.075 light / 0.040 dark**, two token classes the eye reads as one colour. `.tokAttr` moved to amber (0.119 / 0.126). The gate for it is deliberately held at **0.08**, above the 0.035 the `docs` labels take and the 0.06 the semantic states take: at 0.035 the very defect it was written for passes, and a gate that green-lights its own bug is decoration. Proven by sabotage in both directions.
 - **Our own unresolved-`var()` gate had a client-side blind spot, and the stale design-sync vocabulary had already leaked through it.** A2's `resolves every fallback-less var() an app references` (added earlier in this PR) walks `packages/blueprints/apps` and nothing else, so `packages/client` — the larger CSS surface — was never scanned. Scanning it against `SHELL_TOKEN_CONTRACT` plus every `--x:` declared in shell CSS finds **13 unresolvable names across 19 files**, each one a declaration silently dropped at computed-value time. Provenance confirms the suspicion the audit raised: `--ink-1` was **never declared anywhere in repository history** (`git log -S'--ink-1:'` is empty), it is one of the four names `.design-sync/conventions.md` explicitly listed as "tokens that were never emitted" (`--surface`, `--ink-*`, `--warn`, `--d-*`), and #672/#677's mechanical `--ink-*` → `--text-*` rename carried the phantom forward verbatim as `--text-1` — so the stale doc's vocabulary outlived the doc and was re-blessed by a rename that looked like a cleanup. `--warn`/`--ok` were the same story and were caught by #677 itself; `--ink-1` was not, because nothing measured the shell. Three consequences recorded: (a) the gate is now shared machinery (`@centraid/design/css-vars`) with a shell-side twin, so a rename cannot be "unified" into a phantom again; (b) **runtime-provided properties get an allowlist, and the allowlist is itself gated** — an entry must be both *true* (the named TSX actually writes it) and *necessary* (no stylesheet declares it), or it would quietly widen the gate; exactly one property earns an entry (`--profile-accent`), while a dozen other inline-set properties (`--onb-accent`, `--depth`, `--stage-i`, …) all carry CSS defaults and are deliberately left out; (c) the builder's three language dots had been painting **no background at all** since they were authored — `--c-blue` / `--c-orange` / `--c-yellow` are hues this palette has never had — which is the most visible thing in this issue that every other gate walked past.
 - **The pinned unresolved-`var()` debt is now CLEARED — `UNRESOLVED_VAR_DEBT` is `[]`.** The earlier decision to pin rather than fix rested on "each needs a per-site design call". Doing the same read the F4 shell sweep did — decide by what the rule is doing and the surface it lands on, not by name similarity — showed all twelve had a determinate answer, and none of them needed a product decision. What each phantom turned out to mean: (1) **`--accent-deep-fg`** (7 refs, `tasks/components/*`) — `tasks` copied `docs`' pattern without copying `docs`' declaration. Every one of the seven sites inks TEXT that sits ON an `--accent-soft` tint (marks, chips, the current nav item, a consent glyph); **none fills with `--accent-deep`**, so the F3 `--text-inv` ink rule does not apply here and the `--on-accent` gate is untouched. The role is "the accent read as a foreground", which the contract already spells **`--accent-text`** — emitted as `var(--accent-deep)` on light and, on the dark rung, the *lifted* half. That makes the binding byte-equivalent to what `docs` ships from its app-local declaration, including its hand-rolled dark override, so the app-local token was always a re-derivation of a contract token. (2) **`--r-lg`** (3 refs) — the *shell* radius scale has `lg: 10`, the blueprint contract does not; the blueprint spellings are `--r-sm`/`--r-md`/`--r-card`/`--r-pill`. All three sites are the repo's card idiom verbatim (`1px solid var(--line)` + `var(--bg-elev)` + 14px padding), and every peer card in the same two apps (`tally` `.stat`/`.explist`, `people` `.card`) rounds it with **`--r-card`**; bound to that rather than to the numerically-nearest `--r-md`, because the site is a card, not a control. (3) **`--acc`** — an abbreviation of `--accent` in a `:focus-visible` outline; bound to **`var(--accent)`**, the spelling every other focus ring in the apps uses. (4) **`--t-label`** — the uppercase sidebar section label; the blueprint type ramp has no `label` rung and every peer section label in every app (`photos`, `agenda`, `docs`) is **`--t-tiny`**. (5) **`--bg-l`** — the one that is *not* a typo: it is genuinely emitted by the blueprint **dark** token block (`10%`, `blueprint.ts`), which is why the rule works on screen, but it is absent from the light `:root` block and therefore is not contract vocabulary and cannot be added to the contract without lying about the light rung. Given the **documented default as an explicit fallback** (`calc(var(--bg-l, 10%) + 1%)`) instead — the gate deliberately excludes fallback-bearing references because the author has made the miss explicit, and 10% is the shipped value, so this one is a provable no-op. Four of the five are visible changes by design (the rule was meant to apply and was not applying); each was checked against its peers rather than merely made to resolve.
+- **F6 — the size rungs are spelled `--t-<key>-size`, and the sweep's bar was raised twice against its own estimate.** Three calls, each of which changed the answer. (a) **Naming.** `--t-<key>-size` over `--t-size-<key>`, following `--c-<hue>-text` — this vocabulary already expresses "a facet of a named token" as a *suffix*, and the suffix form keeps a rung sorted next to the shorthand it belongs to in `SHELL_TOKEN_CONTRACT`. One rung per **distinct size**, first key wins: `body` and `bodyStrong` are both 15px, so `--t-body-size` is the only spelling and `--t-body-strong-size` does not exist — two spellings for one value is exactly the drift `contract.ts` exists to forbid. (b) **No line-height rungs, on the evidence.** Of 227 hand-written `line-height` declarations across the three ratchet targets, all but a handful are unitless multipliers (`1.5` ×58, `1.45` ×38, `1.4` ×37) while the chrome scale's line-heights are absolute px; only 5 exactly equal a scale value. A `--t-body-line-height: 22px` would be vocabulary nothing could adopt, so it was not invented. (c) **The recorded 494 exact matches were measured against the wrong scale for one third of the tree.** The blueprint layer has its **own** type scale — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match there. Against the scale that actually resolves per surface the exact set is **402 client + 9 blueprint = 411**, and conversion was further restricted to **like-for-unit** (px→px rung, rem→rem rung): `1rem` and `16px` agree only at a 16px root, so converting one to the other would break for a reader who has raised their browser's default font size. `packages/design/kit` was excluded **entirely** — `kit.css` renders under both token layers (shell `:root` and the rescoped `.centraid-inline-scope` block), so each of its eight exact matches resolves to two different values and every one would move on one surface. The blueprint type scale moved out of `blueprint.ts` into `typography.ts` as `blueprintType` to make any of this derivable: it was six opaque shorthand strings from which no size could be read.
 - (running log — appended as work proceeds)
 
 ## What changed
@@ -317,11 +319,101 @@
 
 - **Type-scale finding recorded** — `docs/decisions.md` gains "#686 — the type scale is not under-adopted, it is under-shaped": measurement of all 1,284 raw `font-size` declarations shows 38% are exactly a token size, 37% within 0.6px, and only 24% genuinely off-scale, with 181 rules already setting `font: var(--t-*)` and then overriding `font-size`. The `--t-*` shorthands cannot express size-without-weight, so the ratchet count is a symptom of token shape rather than author indiscipline.
 
+- **F6 composable size rungs + the exact-match sweep.**
+  - **Vocabulary** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/typography.ts`: new `typeSizeRungs()` (one property per **distinct** size, keyed `--t-<key>-size`), `typeKeyToKebab()` (was duplicated in `css.ts` and `contract.ts`), and `blueprintType` + `blueprintTypeShorthand()` — the blueprint type scale, moved here out of the emitter so a size can be read off it. `BlueprintTypeKey` deliberately not exported (knip: no consumer).
+  - **Emitters** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/css.ts` emits the nine shell rungs (`--t-body-size` 15px, `--t-display-size` 28px, `--t-mono-size` 12px, `--t-small-size` 13px, `--t-tiny-size` 11px, `--t-title-size` 20px, `--t-display-1-size` 40px, `--t-h2-size` 22px, `--t-h3-size` 16px); `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/blueprint.ts` derives its six `--t-*` shorthands from `blueprintType` (values byte-identical) and emits the five blueprint rungs (`0.855rem` / `0.72rem` / `0.8rem` / `0.6rem` / `1.15rem`).
+  - **Contract** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/contract.ts`: both `SHELL_TOKEN_CONTRACT` and `BLUEPRINT_TOKEN_CONTRACT` now derive their type names (shorthands *and* rungs) from `typeSizeRungs()` / `Object.keys(blueprintType)` rather than hand-listing; the local `kebab` helper is now the shared one.
+  - **Gates** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/css-properties.test.ts` gains `each distinct type size gets one composable size rung` (asserts the dedupe: `--t-body-size` present, `--t-body-strong-size` absent, every rung a bare `px`); `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/src/design-md.test.ts` gains `the composable size rungs are documented with their values` so the DESIGN.md table cannot rot.
+  - **Ratchet** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/scripts/lint-design-tokens.mjs`: `countRawFontSize` documents the rungs as the sanctioned form and now counts `font-size: var(--t-<key>)` — a `font` shorthand where a size belongs, which the browser drops whole in silence — as debt instead of letting it hide inside the `var()` carve-out. Cases added to `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/scripts/lint-design-tokens.test.mjs`. Budget regenerated via `--write`: `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/tests/design-token-css-budget.json`, `rawFontSize` 1291 → 880 (−411), every other metric unmoved.
+  - **Docs** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/DESIGN.md` front matter records the rung spelling under `typography:` (as a comment: the design.md schema warns on any unrecognised top-level token map, and the values *are* the `fontSize` fields already there), and the Typography section gains the rung table plus the plain statement that the shorthands are all-or-nothing and why there are no line-height rungs. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/docs/decisions.md` gains "Shipped: the vocabulary, and the exact-match half of the sweep". `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/CSS-CONVENTIONS.md` points authors at the rungs and warns off `font-size: var(--t-<role>)`.
+  - **The sweep — 411 declarations across 80 stylesheets, 402 in `packages/client/src` and 9 in `packages/blueprints/apps`.** Every one is an exact, same-unit match for a rung on the surface that stylesheet actually resolves against; the resolved-value multiset is unchanged (proof under Verification). By rung: 155× `12px`→`--t-mono-size`, 128× `11px`→`--t-tiny-size`, 89× `13px`→`--t-small-size`, 16× `15px`→`--t-body-size`, 6× `16px`→`--t-h3-size`, 6× `0.8rem`→`--t-small-size`, 3× `22px`→`--t-h2-size`, 3× `0.72rem`→`--t-mono-size`, 2× `20px`→`--t-title-size`, 2× `28px`→`--t-display-size`, 1× `40px`→`--t-display-1-size`. Files:
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/agenda/Chrome.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/docs/components/shared.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/photos/components/Duplicates.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/photos/components/Editor.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/photos/components/Picker.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/photos/components/Slideshow.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/tasks/components/Capture.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/blueprints/apps/tasks/components/Detail.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AssistantScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AtlasKindsTab.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AtlasScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AutomationCompilePane.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AutomationEditorScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/BackupCard.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/DevicePairPanel.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/DevicesCard.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/GatewayScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/HomeScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/HouseholdScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/ImportScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/InsightsScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/LocalFootprintCard.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/LogsScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/PaletteScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/PhoneScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/RecoverScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/ResourceDialogs.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/RunViewScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsProfileScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsProvidersScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/SettingsStorageScreen.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/StorageLimitsPanel.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/WhatsNewModal.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/screens/settings-controls.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/CaptureOverlay.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/automationTemplatePreview.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/chrome.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/contextMenu.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/gatewaySwitcher.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/AppInfoModal.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/AppViewRoute.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/ConnectFlow.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/HandshakeLadder.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/RunsPane.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/VaultModal.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/assistantRich.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderCloud.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderCode.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderHistory.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderPreview.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/routes/builder/BuilderShell.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/templatePreview.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/shell/webhookReveal.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/automation.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/chatMessage.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/controls.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/library.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/linkBtn.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/seg.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/select.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/toast.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/toolGroup.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/styles/vault.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/ui/AppCard.module.css`
+  - `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/client/src/react/ui/Button.module.css`
+  - **Left alone, deliberately** — `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/packages/design/kit/kit.css` (all 8 exact matches; dual-surface, see Decisions), the ~477 near-misses within 0.6px, the ~314 genuinely off-scale declarations, and 6 `em`-valued declarations that inherit their base. All remain ratcheted debt. `/Users/srikanth/gitspace/centraid/.claude/worktrees/centraid-design-strategy-323767/apps/mobile/src/kit/theme/tokens.generated.ts` regenerated from the rebuilt design package and is byte-identical: the lowering keeps colors and radii, and a type size is neither.
+
 ## Out of scope
 
 - ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
 - Collapsing `docs`' and `photos`' app-local `--accent-deep-fg` declarations into `--accent-text`. F5 established they are re-derivations of the contract token, but those two apps *declare* the property, so they are not phantoms and not in this gate's class; folding them is a separate visual-equivalence change.
-- Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations. The measurement and the recommendation are recorded in `docs/decisions.md`; the change is a contract addition plus a large mechanical diff, and belongs in its own reviewable PR.
+- ~~Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations.~~ **Partly superseded by F6** — the size rungs exist and the 411 provably-zero-change exact matches are converted. Still out of scope, and still ratcheted debt: the ~477 near-misses (within 0.6px of a rung) and the ~314 genuinely off-scale declarations, both of which are visual changes needing per-site judgement; and `packages/design/kit/kit.css`, which resolves under two token layers at once. Line-height rungs were considered and rejected on the evidence, not deferred (see Decisions).
 - Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
 - Mobile typeface change (recorded as decision, not churned).
 
@@ -910,6 +1002,143 @@ $ ../../node_modules/.bin/vitest run src/token-purity.test.ts
 $ cp "$SCRATCH/board.bak" apps/tasks/components/Board.module.css   # IDENTICAL
 ```
 
+F6 (composable size rungs + exact-match sweep):
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  19 passed (19)
+      Tests  272 passed (272)
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 880 raw
+font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0
+palette-hue-as-text, zero regressions
+$ node --test scripts/lint-design-tokens.test.mjs
+# pass 9   # fail 0
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+$ bun run lint:design-md
+"errors": 0, "warnings": 0, "infos": 1
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+$ bun run lint            # oxlint --deny-warnings, silent = clean
+$ bun run knip            # 0 unused files/exports/types/deps
+$ bun run format && bun run format:check
+All matched files use the correct format.
+$ cd apps/mobile && bun run generate:theme
+Wrote apps/mobile/src/kit/theme/tokens.generated.ts from @centraid/design#toBlueprintCss
+$ git status --short apps/mobile   # byte-identical, nothing to commit
+```
+
+**Emitter diff — nothing moved but the new rungs.** Both stylesheets were rendered from
+the pristine `packages/design/src` and from the working tree and compared:
+
+```
+$ diff <(grep -v -- '--t-.*-size' after/shell.css) before/shell.css
+SHELL: identical apart from new size rungs
+$ diff <(grep -v -- '--t-.*-size' after/bp.css | sort) <(sort before/bp.css)
+BLUEPRINT: same declaration multiset (only --t-* source order changed; none
+references another --t-*)
+$ grep -c 'var(--t-' after/bp.css
+0
+```
+
+The blueprint `--t-*` declarations move to alphabetical order because they are now
+generated from `blueprintType`. Inert: no `--t-*` value references another `--t-*`
+(the `grep -c` above is the check), so declaration order inside the block cannot
+change what any of them resolves to.
+
+**Zero-change proof — the resolved multiset, not an assertion.** For BOTH trees
+(pristine copy vs working tree) every `font-size` declaration in all three ratchet
+targets is resolved to a concrete value, following `var(--t-*-size)` through the
+*generated* stylesheet for that surface, and compared per file, per line. Files under
+`packages/design/kit` render under both token layers, so each of their declarations is
+resolved twice — once against the shell rungs, once against the blueprint rungs — and
+both resolutions must be unchanged:
+
+```
+$ node prove.mjs "$PWD"
+files compared: 155
+resolved font-size observations: 1372
+files whose resolved multiset changed: 0
+exit=0
+```
+
+Red-capable, proven by sabotage and reverted with `cp` (never `git checkout` — the tree
+carries uncommitted work):
+
+```
+$ perl -0pi -e 's/var\(--t-tiny-size\)/var(--t-small-size)/' \
+    packages/client/src/react/screens/AppSettingsPanel.module.css
+$ node prove.mjs "$PWD"
+DIFF packages/client/src/react/screens/AppSettingsPanel.module.css
+  before: … |346:shell=11px| …
+  after:  … |346:shell=13px| …
+files whose resolved multiset changed: 1
+exit=1
+$ cp "$SCRATCH/sabotage.bak" packages/client/src/react/screens/AppSettingsPanel.module.css
+files whose resolved multiset changed: 0
+```
+
+**Budget delta — exactly the conversion count, and nothing else.** Regenerated with
+`node scripts/lint-design-tokens.mjs --write`, then differenced against the pristine
+budget:
+
+```
+rawHex                   0 ->     0  delta 0
+literalFontFamily        4 ->     4  delta 0
+rawFontSize           1291 ->   880  delta -411
+rawFontWeight            9 ->     9  delta 0
+rawRadius              287 ->   287  delta 0
+paletteHueAsText         0 ->     0  delta 0
+budget entries changed: 80
+non-rawFontSize metric changes: none
+entries added: 0 removed: 6
+```
+
+−411 = the 411 conversions. The six removed entries are files whose only recorded
+metric was `rawFontSize` and whose count reached 0 (`…/photos/components/Editor.module.css`,
+`…/shell/contextMenu.module.css`, `…/styles/linkBtn.module.css`, `…/styles/select.module.css`,
+`…/styles/toast.module.css`, `…/ui/Button.module.css` — 3 there, 1 each elsewhere); the
+scanner only records non-zero metrics, so their disappearance *is* the decrease.
+
+**The new ratchet rule is red-capable.** `font-size: var(--t-<key>)` — a `font`
+shorthand where a size belongs — is now counted as debt rather than hidden by the
+`var()` carve-out. There are zero such sites today, so the budget did not move; proven
+by sabotage on a real file and reverted with `cp`:
+
+```
+$ perl -0pi -e 's/font-size: var\(--t-small-size\)/font-size: var(--t-small)/' \
+    packages/client/src/react/ui/Button.module.css
+$ node scripts/lint-design-tokens.mjs
+FAIL — design-token CSS ratchet found 1 mismatch(es):
+  packages/client/src/react/ui/Button.module.css: rawFontSize increased 0 → 1
+exit=1
+$ cp "$SCRATCH/sab2.bak" packages/client/src/react/ui/Button.module.css
+ok   design-token-css — … zero regressions   # restored, exit=0
+```
+
+**Line-height rungs were rejected on measurement, not omitted.** Across the three
+targets there are 227 hand-written `line-height` declarations; the top values are
+`1.5` ×58, `1.45` ×38, `1.4` ×37, `1` ×22, `1.55` ×18 — unitless multipliers — while
+the chrome scale's line-heights are absolute px (`22px`, `26px`, `34px`, …). Exactly
+one declaration in the whole set is a px length. A `--t-body-line-height: 22px` rung
+would have essentially no adopters.
+
+**Surfaces confirmed to resolve the new names at runtime.** Every consumer builds its
+token block from the emitters rather than a hand-copied literal — `apps/web/src/main.ts`
+and `apps/desktop/src/main/preload-core.ts` both call `tokens.toCss()`, and
+`packages/client/src/react/shell/routes/InlineAppRoute.tsx` rescopes `toBlueprintCss()`
+onto the inline app root — so there is no surface where a rung could be referenced but
+undeclared. The two unresolved-`var()` gates (client against `SHELL_TOKEN_CONTRACT`,
+blueprints against `BLUEPRINT_TOKEN_CONTRACT`) are the mechanical check for that, and
+both are green above.
+
 ## Steering
 
 Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
@@ -974,6 +1203,7 @@ Audited by a fresh-context Haiku sub-agent against the session transcript: no st
 | claude-code-ab8b1729-92f-1785627287-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 48 | 28404 | 11502137 | 18202 | 46654 | 6.3839 | 1403 | 1738352 | 198934344 | 569462 | fix(client): resolve phantom token references the stale doc left behind (#686)-- |
 | claude-code-ab8b1729-92f-1785629006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 18115 | 10873090 | 14431 | 32590 | 5.9108 | 1447 | 1756467 | 209807434 | 583893 | fix(blueprints): resolve the last twelve phantom var() references (#686)Every on |
 | claude-code-ab8b1729-92f-1785630418-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 23241 | 11170342 | 19784 | 43069 | 6.2252 | 1491 | 1779708 | 220977776 | 603677 | docs(design): record that the type scale is under-shaped, not under-adopted (#68 |
+| claude-code-ab8b1729-92f-1785631778-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 32 | 18546 | 8346342 | 12914 | 31492 | 4.6121 | 1523 | 1798254 | 229324118 | 616591 | feat(design): emit composable type size rungs and adopt the exact matches (#686) |
 
 ### Steering
 

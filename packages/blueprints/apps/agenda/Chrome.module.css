@@ -40,7 +40,7 @@
   color: var(--text-soft);
 }
 .root :global(.small) {
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 .root :global(mark) {
   background: var(--accent-soft);
@@ -311,7 +311,7 @@
 :global(.ag-day-pop-time) {
   flex-shrink: 0;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 :global(.ag-day-pop-text) {

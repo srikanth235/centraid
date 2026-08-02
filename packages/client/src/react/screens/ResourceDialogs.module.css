@@ -75,7 +75,7 @@
 }
 .sub {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -134,7 +134,7 @@
   display: grid;
   grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr));
   column-gap: 2px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .cmpHeadCell {
   padding: 0 2px 4px;
@@ -165,7 +165,7 @@
   outline-offset: 2px;
 }
 .cmpName {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   color: var(--text-soft);
   letter-spacing: -0.01em;
@@ -210,7 +210,7 @@
   padding: 9px 4px;
   border-top: 0.5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
@@ -239,10 +239,10 @@
 @media (max-width: 520px) {
   .cmp {
     grid-template-columns: 1fr repeat(4, minmax(46px, 1fr));
-    font-size: 11px;
+    font-size: var(--t-tiny-size);
   }
   .cmpCell,
   .cmpName {
-    font-size: 11px;
+    font-size: var(--t-tiny-size);
   }
 }

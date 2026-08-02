@@ -117,7 +117,7 @@
 }
 .bandEmpty {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-ghost);
   padding: 10px 12px;
   border: 0.5px dashed var(--line);
@@ -180,7 +180,7 @@
 }
 .stepLabel {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--text);
   overflow: hidden;
@@ -212,7 +212,7 @@
 }
 
 .history {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .history summary {
@@ -235,7 +235,7 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   text-align: left;
   padding: 5px 8px;
@@ -313,7 +313,7 @@
   background: transparent;
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   padding: 4px 9px;
   border-radius: var(--r-md);
@@ -333,7 +333,7 @@
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   cursor: pointer;
   padding: 4px 6px;
@@ -366,7 +366,7 @@
 .artifactEmpty {
   margin: 0;
   padding: 14px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-ghost);
 }
 

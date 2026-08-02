@@ -46,7 +46,7 @@
   background: transparent;
   color: var(--text);
   font: var(--t-body);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   line-height: 1.45;
 }
 .composerInput::placeholder {
@@ -75,7 +75,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   font: var(--t-small);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   background: color-mix(in srgb, var(--text) 3%, transparent);
 }
@@ -356,7 +356,7 @@
   color: var(--text);
 }
 .shelfEmptySub {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
   max-width: 360px;

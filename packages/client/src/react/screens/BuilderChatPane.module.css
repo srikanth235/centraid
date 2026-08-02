@@ -35,7 +35,7 @@
   background: var(--bg-elev);
 }
 .chatpaneHeadTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -53,7 +53,7 @@
   justify-content: center;
   margin: 4px 0 16px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -130,7 +130,7 @@
 }
 .abProgressFile {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   padding: 1px 6px;
@@ -141,7 +141,7 @@
 }
 .abProgressSub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -242,7 +242,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -413,7 +413,7 @@
   background: transparent;
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   cursor: pointer;
 }

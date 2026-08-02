@@ -55,7 +55,7 @@
    smaller than kit-seg's default sans buttons. */
 .captureSeg > button {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--t-mono-size);
   min-height: 1.9rem;
   padding: 0.25rem 0.6rem;
 }

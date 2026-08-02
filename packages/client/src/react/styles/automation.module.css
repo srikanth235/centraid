@@ -56,7 +56,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
@@ -80,13 +80,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   margin-bottom: 11px;
 }
 .auCrumb button {
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   background: none;
   border: none;
@@ -177,7 +177,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .auTrigbadgeIc {
@@ -186,7 +186,7 @@
 }
 .auTrigbadge[data-mono="true"] {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   letter-spacing: 0.02em;
 }
 .auActions {
@@ -203,7 +203,7 @@
   border-radius: 8px;
   border: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -298,7 +298,7 @@
 .auOvLast {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
   white-space: nowrap;
 }
@@ -365,7 +365,7 @@
   gap: 1px;
 }
 .auOvRunName {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -373,7 +373,7 @@
   text-overflow: ellipsis;
 }
 .auOvRunSum {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;

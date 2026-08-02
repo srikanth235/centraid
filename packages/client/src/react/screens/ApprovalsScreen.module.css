@@ -41,7 +41,7 @@
 .subtitle {
   margin: 0;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -150,7 +150,7 @@ button.rowMain:hover {
   white-space: nowrap;
 }
 .rowSub {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -206,7 +206,7 @@ button.rowMain:hover {
 }
 .field dd {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
@@ -305,7 +305,7 @@ button.rowMain:hover {
 }
 .grantVerb {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .grantTarget {
@@ -315,7 +315,7 @@ button.rowMain:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 .grantMeta {
   font-family: var(--font-mono);
@@ -424,7 +424,7 @@ button.rowMain:hover {
   margin-right: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 500;
   vertical-align: baseline;
 }
@@ -484,7 +484,7 @@ button.rowMain:hover {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -601,7 +601,7 @@ button.rowMain:hover {
   display: inline-block;
   margin-left: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 600;
   color: var(--text-faint);
   vertical-align: middle;
@@ -613,7 +613,7 @@ button.rowMain:hover {
 }
 .monoId {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   word-break: break-all;
 }
 .seeAllRow {

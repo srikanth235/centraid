@@ -13,7 +13,7 @@
   border: 0;
   border-radius: var(--r-md);
   padding: 10px 16px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   letter-spacing: 0.01em;
   background: var(--text);
@@ -36,7 +36,7 @@
   gap: 6px;
   height: 26px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   border-radius: var(--r-md);
   border: none;
   cursor: pointer;
@@ -76,7 +76,7 @@
 /* Small standard button (was `.tiny-btn`). */
 .sm {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 
 /* Standalone 36px icon-only square (was `.btn-icon`). */

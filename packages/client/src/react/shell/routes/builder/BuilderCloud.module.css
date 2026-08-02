@@ -19,7 +19,7 @@
   background: transparent;
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   display: flex;
   align-items: center;
@@ -61,21 +61,21 @@
 }
 .stageHead h2 {
   margin: 0 0 4px 0;
-  font-size: 20px;
+  font-size: var(--t-title-size);
   font-weight: 600;
   color: var(--text);
 }
 .stageHead p {
   margin: 0;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .refreshBtn {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   padding: 6px 12px;
 }
 .refreshBtn svg {
@@ -87,7 +87,7 @@
   border: 1px dashed var(--line);
   border-radius: 12px;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   text-align: center;
 }
 .emptyQuiet {
@@ -98,7 +98,7 @@
   background: var(--bg-sunken);
   padding: 1px 6px;
   border-radius: var(--r-sm);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .statGrid {
   margin-top: 24px;
@@ -123,7 +123,7 @@
 }
 .statValue.statMono {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
 }
 .statValue.statMuted {
@@ -135,7 +135,7 @@
 }
 .statSub {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-faint);
 }
 .logs {
@@ -151,7 +151,7 @@
 }
 .logsChip {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -175,7 +175,7 @@
   border: 1px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   outline: none;
 }
 .logsList {
@@ -192,7 +192,7 @@
   align-items: baseline;
   gap: 8px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-family: var(--font-mono);
   border-bottom: 1px solid var(--line);
 }
@@ -261,7 +261,7 @@
 .automationName {
   font-weight: 600;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .automationCron {
   font-family: var(--font-mono);
@@ -276,7 +276,7 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 .automationToggleText {
@@ -294,7 +294,7 @@
   gap: 6px;
 }
 .automationMetaItem {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   color: var(--text-soft);
   padding: 2px 6px;
   border-radius: var(--r-sm);
@@ -468,7 +468,7 @@
 }
 .heroUrl {
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -553,7 +553,7 @@
   min-width: 0;
 }
 .feedTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -599,7 +599,7 @@
   box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
 }
 .statValue.statMid {
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;

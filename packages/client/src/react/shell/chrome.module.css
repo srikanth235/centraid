@@ -348,7 +348,7 @@
   background: transparent;
   border-radius: var(--r-md);
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -382,7 +382,7 @@
   flex: 0 0 auto;
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
 }
 
 .notificationsUnreadDot {
@@ -441,7 +441,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
 }
 .sbSection {
@@ -452,7 +452,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 500;
   color: var(--text-ghost);
   text-transform: uppercase;
@@ -511,7 +511,7 @@
   cursor: pointer;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -577,14 +577,14 @@
   gap: 1px;
 }
 .sbUpdateTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sbUpdateVersion {
-  font-size: 11px;
+  font-size: var(--t-tiny-size);
   font-family: var(--font-mono);
   color: var(--text-ghost);
 }
@@ -709,7 +709,7 @@
   background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
   border-bottom: 0.5px solid color-mix(in srgb, var(--danger) 40%, var(--line));
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .connectionBanner button {
   border: none;
