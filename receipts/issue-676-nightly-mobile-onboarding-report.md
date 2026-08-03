@@ -154,6 +154,14 @@ accessibility zero-grey (15 cells).
   loop now keeps only that command. The Home assertion and all 20 samples stay
   intact while removing the redundant termination race.
 
+- **Make the iOS Settings journey destination-aware.** Run 30834561267 reached
+  the final Settings journey after opening all other native covers, but the
+  generic source-based retry tapped `Open vault menu` again while the drawer
+  was already presented; XCTest then left the drawer open and failed the step.
+  `native-v0-resilience.mjs` now retries each Settings tap only while its
+  destination marker is absent, so the underlying Home hierarchy cannot trigger
+  a duplicate tap.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -307,3 +315,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785773946-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3216 | 0 | 227840 | 348 | 3564 | 0.0702 | 9242901 | 0 | 338631168 | 559858 | fix(ios): move frame probe below status bar (#676) |
 | codex-019fc399-ba8-1785775718-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 174999 | 0 | 12891648 | 20776 | 195775 | 3.9720 | 9417900 | 0 | 351522816 | 580634 | fix(ios): make frame probe target hittable (#676) |
 | codex-019fc399-ba8-1785776135-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 70287 | 0 | 3353088 | 6381 | 76668 | 1.1097 | 9488187 | 0 | 354875904 | 587015 | fix(ios): avoid duplicate volume relaunch termination (#676) |
+| codex-019fc399-ba8-1785779028-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 628288 | 0 | 20321536 | 36482 | 664770 | 7.1983 | 10116475 | 0 | 375197440 | 623497 | fix(ios): make Settings retry destination-aware (#676) |

@@ -1,4 +1,3 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
@@ -14,6 +13,26 @@ function openLauncherTileCommands(open) {
   return `- tapOn:
     text: "${open}"
     retryTapIfNoChange: true`;
+}
+
+/**
+ * Retry a tap only while its destination is absent. The generic retry helper
+ * watches the source control, which remains in iOS's underlying Home hierarchy
+ * after a modal drawer/cover opens and can therefore tap the old coordinate a
+ * second time (run 30834561267).
+ */
+function tapUntilVisibleCommands(selector, destination) {
+  return `- tapOn:
+    text: "${selector}"
+    retryTapIfNoChange: true
+- repeat:
+    times: 2
+    while:
+      notVisible: "${destination}"
+    commands:
+      - tapOn:
+          text: "${selector}"
+          retryTapIfNoChange: true`;
 }
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
@@ -84,14 +103,14 @@ const SURFACES = [
   {
     marker: "APPEARANCE",
     openCommands: [
-      retryableTapCommands("Open vault menu"),
+      tapUntilVisibleCommands("Open vault menu", "GO TO"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      retryableTapCommands(".*Settings", "GO TO"),
+      tapUntilVisibleCommands(".*Settings", "APPEARANCE"),
     ].join("\n"),
     name: "settings",
   },
