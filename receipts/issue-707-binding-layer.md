@@ -532,6 +532,18 @@ Changed files:
 - `tests/design-gallery/baselines/sh-c-dark.png`
 - `tests/design-gallery/baselines/sh-c-light.png`
 
+Phase 8: running the desktop app found that the branch had shipped it broken. `packages/design/src/fonts.ts` carried both `toFontFaceCss()` and `FONTS_DIR` in one module, so importing the emitter pulled `node:path` into `apps/desktop/dist/preload.cjs`. Electron's preload runs in the sandboxed renderer, where `require("node:path")` does not resolve, so the preload failed to load and took the whole app with it — no design tokens, no icons, no IPC bridge (`CentraidTokens.cssText missing`, `Cannot read properties of undefined (reading 'onGatewayChanged')`). The seam is now split where it actually divides: `font-faces.ts` holds the browser-safe half (file list, subset ranges, the `@font-face` emitter — all pure string work), `fonts.ts` keeps the filesystem half, and a test asserts the browser-safe module contains no `node:` import, `require(`, or `__dirname`, because nothing in the type layer prevents the two being remerged. Verified by relaunching `bun run dev:desktop`: renderer errors 5 → 0.
+
+Changed files:
+
+- `apps/desktop/scripts/copy-fonts.mjs`
+- `apps/desktop/src/preload.ts`
+- `apps/web/vite.config.ts`
+- `packages/design/package.json`
+- `packages/design/src/font-faces.ts` (new)
+- `packages/design/src/fonts.test.ts`
+- `packages/design/src/fonts.ts`
+
 ## User impact
 
 Every surface changes appearance. Teal is gone from the product: colour now

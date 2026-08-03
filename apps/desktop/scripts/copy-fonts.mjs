@@ -20,7 +20,8 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { FONT_FILES, fontFilePath } from "@centraid/design/fonts";
+import { FONT_FILES } from "@centraid/design/font-faces";
+import { fontFilePath } from "@centraid/design/fonts";
 
 const root = path.dirname(import.meta.dirname);
 const outDir = path.join(root, "dist/renderer/fonts");

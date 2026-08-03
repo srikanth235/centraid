@@ -8,14 +8,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  FONT_FILES,
-  FONT_SUBSET_RANGE,
-  FONTS_DIR,
-  fontFilePath,
-  fontSourceFile,
-  toFontFaceCss,
-} from "./fonts.js";
+import { FONT_FILES, FONT_SUBSET_RANGE, toFontFaceCss } from "./font-faces.js";
+import { FONTS_DIR, fontFilePath, fontSourceFile } from "./fonts.js";
 import { fonts } from "./typography.js";
 
 describe("bundled font seam", () => {
@@ -67,5 +61,22 @@ describe("bundled font seam", () => {
     expect(css).not.toMatch(/https?:\/\//u);
     expect(css).toContain(FONT_SUBSET_RANGE.latin);
     expect(css).toContain(FONT_SUBSET_RANGE["latin-ext"]);
+  });
+
+  // Electron's preload runs in the SANDBOXED renderer, where `node:path` does
+  // not resolve. When `toFontFaceCss` shared a module with `FONTS_DIR`, the
+  // desktop preload pulled `require("node:path")` into its bundle, failed to
+  // load, and took the entire app down — no tokens, no icons, no IPC bridge
+  // (issue #707). Nothing in the type layer prevents that regression; the file
+  // boundary is the only thing that does, so it is asserted here.
+  it("the browser-safe font module reaches for no node builtin", () => {
+    const source = readFileSync(
+      path.join(import.meta.dirname, "font-faces.ts"),
+      "utf8"
+    );
+    const code = source.replaceAll(/\/\/.*$/gmu, "");
+    expect(code).not.toMatch(/\bfrom\s+["']node:/u);
+    expect(code).not.toMatch(/\brequire\s*\(/u);
+    expect(code).not.toMatch(/\b__dirname\b/u);
   });
 });

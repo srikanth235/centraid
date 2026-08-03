@@ -32,6 +32,11 @@
       "types": "./dist/fonts.d.ts",
       "default": "./dist/fonts.js"
     },
+    "./font-faces": {
+      "types": "./dist/font-faces.d.ts",
+      "react-native": "./src/font-faces.ts",
+      "default": "./dist/font-faces.js"
+    },
     "./color": {
       "types": "./dist/color.d.ts",
       "react-native": "./src/color.ts",

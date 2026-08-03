@@ -5,11 +5,8 @@ import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 
-import {
-  FONT_FILES,
-  fontFilePath,
-  toFontFaceCss,
-} from "@centraid/design/fonts";
+import { FONT_FILES, toFontFaceCss } from "@centraid/design/font-faces";
+import { fontFilePath } from "@centraid/design/fonts";
 
 import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
 
