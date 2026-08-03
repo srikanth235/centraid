@@ -23,6 +23,7 @@ accessibility zero-grey (15 cells).
 - [x] Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch
 - [x] Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy
 - [x] Grant iOS Photos permission before the frame-probe journey
+- [x] Keep the iOS frame-probe sampling marker visible to Maestro while sampling
 
 ## What changed
 
@@ -123,6 +124,13 @@ accessibility zero-grey (15 cells).
   `04-fling-photos` therefore could not see its search marker. The flow now
   waits for that sheet when present and grants access conditionally before
   asserting the Photos hierarchy.
+
+- **Keep the iOS frame-probe sampling marker visible to Maestro while sampling.** Final run 30805802852
+  passed the Photos permission and search-marker checks but could not observe
+  `perf-frame-sampling` after `perf-frame-arm`; the probe's `opacity: 0.01`
+  made the native accessibility node eligible to be classified as hidden. The
+  sampling-only marker now uses a fully opaque transparent view, preserving the
+  invisible measurement overlay while keeping its XCTest/Maestro bounds visible.
 
 - **Invalidate native tunnel connections after post-open stream failures
   (30769334446).** `openBi()` can succeed briefly after the peer has stopped
@@ -250,3 +258,6 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785747159-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 900425 | 0 | 35073536 | 35299 | 935724 | 11.5489 | 5721201 | 0 | 201722112 | 350841 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
 | codex-019fc399-ba8-1785747207-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8238 | 0 | 303360 | 703 | 8941 | 0.1070 | 5729439 | 0 | 202025472 | 351544 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
 | codex-019fc399-ba8-1785752421-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 434849 | 0 | 22054400 | 32584 | 467433 | 7.0895 | 6164288 | 0 | 224079872 | 384128 | fix(mobile-e2e): grant iOS Photos permission for frame probe (#676) |
+| codex-019fc399-ba8-1785759343-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 515212 | 0 | 33238528 | 45353 | 560565 | 10.2780 | 6679500 | 0 | 257318400 | 429481 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785759384-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 2674 | 0 | 413184 | 605 | 3279 | 0.1191 | 6682174 | 0 | 257731584 | 430086 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785759430-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1835 | 0 | 416256 | 235 | 2070 | 0.1122 | 6684009 | 0 | 258147840 | 430321 | fix(ios): keep frame probe visible (#676) |
