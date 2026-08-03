@@ -102,12 +102,9 @@ ${settle}
 - tapOn:
     id: "perf-frame-arm"
     retryTapIfNoChange: true
-# Prove the arm took BEFORE flinging — a fling against an unarmed sampler
-# produces no report at all, and that failure would surface later and elsewhere.
-- extendedWaitUntil:
-    visible:
-      id: "perf-frame-sampling"
-    timeout: 15000
+# The sampling marker is intentionally transient: the six-second window can
+# finish before XCTest observes it. The report assertion below is the durable
+# proof that the arm took; an unarmed sampler cannot publish one.
 - repeat:
     times: ${FLINGS}
     commands:
