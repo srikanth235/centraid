@@ -5,7 +5,7 @@
   "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is a core.document wrapper around a sha256-deduped canonical content item (issue #352): identity is separate from bytes, so text documents edit in place and any document's content can be replaced, each change a walkable version in its history. Folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the same wrapper, so a photo favorited in Photos shows in Starred here. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.3.0",
   "iconKey": "Folder",
-  "colorKey": "slate",
+  "colorKey": "teal",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",

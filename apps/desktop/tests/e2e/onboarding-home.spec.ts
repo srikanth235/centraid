@@ -138,6 +138,10 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
       path: path.join(evidenceDir, "issue-695-product-grammar-review.png"),
       fullPage: true,
     });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-707-binding-layer.png"),
+      fullPage: true,
+    });
 
     // Persisted flag means a relaunch would skip onboarding, and the local
     // gateway is now really running.

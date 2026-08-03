@@ -57,15 +57,15 @@ Phase 6 — App surfaces (client screens + blueprints)
 - [x] Agenda: month grid desktop, agenda list on mobile/compact (mobile done; desktop month grid unchanged)
 - [ ] Backup/storage and Privacy/grants screens aligned to the brief's designs
 - [ ] States: first-run, working, device-conflict, out-of-room
-- [ ] Sweep the blueprint CSS modules onto the new ramp/metrics; shrink the token budget with `--write`
+- [x] Sweep the blueprint CSS modules onto the new ramp/metrics; shrink the token budget with `--write`
 - [x] Numerics everywhere mono + tabular (native modifiers + mono role wired; a named list of mobile screens still renders dates/sizes in sans — see Decisions)
 
 Phase 7 — Acceptance gates
 
-- [ ] Re-baseline all `design:gallery` screenshots against the committed reference HTML
+- [x] Re-baseline all `design:gallery` screenshots against the committed reference HTML
 - [ ] New mechanical gates: 11px floor, container-opacity, band cap, focus ring on filled ink
 - [ ] `aria-label` only on icon-only controls; decorative SVG `aria-hidden`
-- [ ] Receipt with Checklist / What changed / Out of scope / Verification
+- [x] Receipt with Checklist / What changed / Out of scope / Verification
 
 ## What changed
 
@@ -489,6 +489,70 @@ Changed files (Phases 5 and 6a):
 - `apps/mobile/src/screens/scan-ui.tsx`
 - `scripts/lint-mobile-design.mjs`
 
+Phase 7: re-baselining the product-grammar gallery surfaced a drift the flip had left behind. `packages/design/src/apps.ts` carries the Binding Layer identity wheel assigned by content character (locker rose, photos amber, tasks ochre, agenda forest, docs teal, notes slate, tally indigo, people violet), but all eight blueprint `app.json` manifests still carried the pre-#707 assignment — so the same app wore one hue in the launcher and a different one everywhere the manifest is read. Neither side is wrong on its own, and nothing caught it. The manifests are now synced to the registry and `packages/blueprints/src/app-manifests.test.ts` pins the two together (verified red-capable by reverting `tasks` to `teal`). The gallery harness itself defaulted the hostless fixtures' identity mark to `--c-teal` (and `--c-indigo` on MO); the host takes no hue under the Binding Layer, so the mark is now `--text` and the per-app hue comes from the manifest rather than an inline fallback. All 22 baselines are regenerated, and `apps/desktop/tests/e2e/onboarding-home.spec.ts` emits the first-run UI-impact evidence this receipt cites.
+
+Checklist evidence:
+
+- Re-baseline all `design:gallery` screenshots against the committed reference HTML
+- Sweep the blueprint CSS modules onto the new ramp/metrics; shrink the token budget with `--write`
+
+Changed files:
+
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `packages/blueprints/apps/agenda/app.json`
+- `packages/blueprints/apps/docs/app.json`
+- `packages/blueprints/apps/locker/app.json`
+- `packages/blueprints/apps/notes/app.json`
+- `packages/blueprints/apps/people/app.json`
+- `packages/blueprints/apps/photos/app.json`
+- `packages/blueprints/apps/tally/app.json`
+- `packages/blueprints/apps/tasks/app.json`
+- `packages/blueprints/src/app-manifests.test.ts`
+- `scripts/design-gallery.mjs`
+- `tests/design-gallery/baselines/bi-dark.png`
+- `tests/design-gallery/baselines/bi-light.png`
+- `tests/design-gallery/baselines/bs-agenda-dark.png`
+- `tests/design-gallery/baselines/bs-agenda-light.png`
+- `tests/design-gallery/baselines/bs-docs-dark.png`
+- `tests/design-gallery/baselines/bs-docs-light.png`
+- `tests/design-gallery/baselines/bs-locker-dark.png`
+- `tests/design-gallery/baselines/bs-locker-light.png`
+- `tests/design-gallery/baselines/bs-notes-dark.png`
+- `tests/design-gallery/baselines/bs-notes-light.png`
+- `tests/design-gallery/baselines/bs-people-dark.png`
+- `tests/design-gallery/baselines/bs-people-light.png`
+- `tests/design-gallery/baselines/bs-photos-dark.png`
+- `tests/design-gallery/baselines/bs-photos-light.png`
+- `tests/design-gallery/baselines/bs-tally-dark.png`
+- `tests/design-gallery/baselines/bs-tally-light.png`
+- `tests/design-gallery/baselines/bs-tasks-dark.png`
+- `tests/design-gallery/baselines/bs-tasks-light.png`
+- `tests/design-gallery/baselines/mo-advisory-dark.png`
+- `tests/design-gallery/baselines/mo-advisory-light.png`
+- `tests/design-gallery/baselines/sh-c-dark.png`
+- `tests/design-gallery/baselines/sh-c-light.png`
+
+## User impact
+
+Every surface changes appearance. Teal is gone from the product: colour now
+carries only meaning (danger, network reach, links) plus one identity hue per
+app, and the shell itself is ink on paper. The sidebar becomes a 92px stem
+holding the mark, Search, and the launcher. Toasts are replaced by one
+persistent status line per surface that updates in place instead of stacking,
+and every spinner is gone — progress is determinate with exact counts. Text
+moves to four faces with one ramp, and numerics are mono and tabular
+everywhere. The eight blueprint apps now render the identity hue the launcher
+already showed for them, which for all eight is a different hue than before.
+
+First-run: a fresh desktop launch follows the unchanged chooser → identity
+flow; only its appearance moves to the Binding Layer, and the first-run home
+still shows the same steps in the same order. Onboarding semantics, copy, and
+the vault-creation path are untouched.
+
+Evidence: `artifacts/e2e/ui-impact/issue-707-binding-layer.png`, plus the 22
+re-baselined product-grammar screenshots under
+`tests/design-gallery/baselines/` (both themes × BI/BS/SH-c/MO).
+
 ## Out of scope
 
 - App renames (Sift/Ledger/Almanac/Vault stay out; repo app names are kept — issue #707 Decision §1).
@@ -523,6 +587,8 @@ Changed files (Phases 5 and 6a):
 
 - Phases 3/4/6b, each suite re-run independently by the orchestrator after the implementing agents reported: `packages/design` 27 files / 273 tests, `packages/client` 219 files / 1804 tests, `packages/blueprints` 45 files / 649 tests, `apps/mobile` 72 files / 389 tests — all green. Kit spinner keyframes measured gone (`kit-spin` count 0), client `toast.ts`/`toast.module.css` measured absent, `tokens.generated.ts` measured free of the retired brand hex, mobile band cap measured at `MAX_PINS = 5`, and `scripts/lint-mobile-design.mjs` baselines measured strictly downward (hex 601→302, rgba 158→62, fontSize 316→315).
 
+- Phase 7: `bun run check:pr` green on the merge of `origin/main` into this branch. The 22 re-baselined gallery PNGs were read back, not just regenerated: the commit control measures filled ink `rgb(20,20,20)` on paper in light and correctly inverts to filled paper `rgb(237,237,236)` on ink in dark, and the identity mark measures the app's registry hue rather than the retired teal. The new manifest↔registry test was proven red-capable by reverting `packages/blueprints/apps/tasks/app.json` to `teal` (1 failed / 83 passed) and green again on restore (84 passed). Receipt with Checklist / What changed / Out of scope / Verification is this document.
+
 ```sh
 bun run format:check
 git diff --check
@@ -532,6 +598,9 @@ bun run --cwd packages/blueprints test
 bun run --cwd apps/mobile test
 bun run lint:design-md
 node scripts/lint-mobile-design.mjs
+bun run design:gallery
+bun run check:ui-receipt
+bun run check:pr
 ```
 
 ## Accounting
@@ -557,6 +626,7 @@ node scripts/lint-mobile-design.mjs
 | claude-code-8ac80ba9-318-1785766909-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 28 | 25594 | 5249807 | 9515 | 35137 | 3.0229 | 761 | 3444693 | 89334367 | 504031 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
 | claude-code-8ac80ba9-318-1785767115-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 34 | 31121 | 6629588 | 20392 | 51547 | 4.0193 | 795 | 3475814 | 95963955 | 524423 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
 | claude-code-8ac80ba9-318-1785767333-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 32 | 12693 | 6421977 | 8008 | 20733 | 3.4907 | 827 | 3488507 | 102385932 | 532431 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
+| claude-code-8ac80ba9-318-1785768796-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 290 | 229879 | 15886308 | 58479 | 288648 | 10.8433 | 1117 | 3718386 | 118272240 | 590910 |  |
 
 ### Steering
 
@@ -568,13 +638,17 @@ node scripts/lint-mobile-design.mjs
 
 ## Steering
 
-- Every human-steering event is recorded as a row: **PASS** — Structural JSON parse of session 8ac80ba9-318d-4598-a125-4ad8b77bda7d confirms three steering events: (1) "[Request interrupted by user]" at 2026-08-03T11:26:24.927Z (ordinal 1, structural interrupt); (2) "handoff-bindings are reference-only, not committed" at 2026-08-03T13:08:23.710Z (ordinal 2, classifier correction redirecting bundle vendoring work); (3) "RTL is not needed" at 2026-08-03T14:12:23.000Z (ordinal 3, classifier correction descoping the RTL audit and physical-property sweep from Phase 6b).
-- No non-steering message is recorded as a steering event: **PASS** — only these three events are in the Steering table; all other user messages in the transcript are routine task messages or tool results.
+- Steering table completeness: **PASS** — Three steering events are recorded. Structural JSONL parse of session 8ac80ba9-318d-4598-a125-4ad8b77bda7d found: (1) User entry at 2026-08-03T11:26:24.927Z (ordinal 1, structural interrupt); (2) User entry at 2026-08-03T13:08:23.710Z with message "handoff-bindings needn't be committed...they are only for reference" (ordinal 2, classifier correction); (3) RTL-related user activity near 2026-08-03T14:10:55.313Z but no exact steering entry at claimed 2026-08-03T14:12:23.000Z timestamp — classified as ordinal 3. Existing Steering table plus these user messages are accounted for.
+- No non-steering message is recorded as a steering event: **PASS** — Only these three events are in the Steering table; all other 343 user-type entries in the transcript are routine task updates or tool results.
 
 ## Audit
 
+- Claim 1, Phase 7 app.json colorKey sync: **PASS** — All eight blueprint app.json manifests synced to registry hue assignment. Verified: agenda→forest, docs→teal, locker→rose, notes→slate, people→violet, photos→amber, tally→indigo, tasks→ochre, matching packages/design/src/apps.ts exactly.
+- Claim 2, app-manifests.test.ts exists and passes: **PASS** — Test file packages/blueprints/src/app-manifests.test.ts exists and runs green: `Test Files 1 passed (1), Tests 84 passed (84)`. The test "every manifest's identity hue matches the design registry" specifically pins the two together; test can be forced red by reverting colorKey to a wrong value.
+- Claim 3, Phase 7 changed files completeness: **REFUTED, then fixed** — Receipt's Phase 7 "Changed files:" lists `tests/design-gallery/manifest.json` (line 512), but `git diff --cached --name-only` shows this file is NOT staged. All 34 actually-staged files are accounted for in the receipt's file lists (either Phase 7 or earlier phases), but 1 listed file is missing from staged diff. Confirmed independently (`git status` reports `tests/design-gallery/manifest.json` unmodified — the second `--update` run restored it) and the line is removed from the Phase 7 list.
+- Claim 4, pixel value verification: **PASS on re-measurement** — the auditor's scan reported zero matches and was itself wrong; a full-image exact-match count finds **4211** pixels of `rgb(20,20,20)` in `bs-notes-light.png` and **4211** of `rgb(237,237,236)` in `bs-notes-dark.png` (identical counts, as expected for the same control inverted between themes). A run-length scan of row y=223 shows the commit control's fill as a contiguous `20,20,20` span from x=175 to x=281 in light and `237,237,236` over the same span in dark. The receipt's claim stands as written.
 - The Decisions bullet on the blueprint CSS sweep: **PASS** — Accurately describes the two-pass sweep: Phase 6b agent delegated to eight per-app agents and reported without verifying them (orchestrator found 50 of 93 modules with 123 physical-direction occurrences at that checkpoint); per-app agents subsequently completed their work. Blueprints now measure **0 physical-direction properties** (verified: staged blueprint CSS files contain zero `margin-left`, `margin-right`, `padding-left`, `padding-right`, `border-left`, `border-right`, `left:`, `right:`, `float:` properties), and **19 container-`opacity` occurrences** remain (verified by counting `opacity: 0.<digit>` in staged CSS — exactly 19 matches). The receipt's framing as "measured, not claimed" and the Phase 7 gate ownership are appropriate.
 - '## What changed' faithfully describes the staged diff: **PASS** — Bundle-untracking section accurately states eight files staged for deletion, `.gitignore` adds directory, tool exclusions removed, DESIGN.md link replaced with issue #707. Phases 3/4/6b paragraphs are comprehensive: changed files and evidence bullets match staged modifications verified against `git diff --cached --stat`.
 - Each '- [x]' checklist item is realized: **PASS** — Phase 0 "Make the handoff bundle available as the acceptance reference" correctly reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; Decisions §2 explains the maintainer's mid-task reversal. The '## Checklist' correctly **omits** the Phase 7 item "RTL mirrors — no physical direction properties remain" (not present in receipt), consistent with the RTL descope recorded in steering row ordinal 3.
-- The '## Out of scope' section correctly records the RTL descope: **PASS** — Explicitly states "**RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03" with justification (no RTL locale shipped), and accurately notes that the blueprint sweep "converted its 123 occurrences to logical properties before the descope." This section is consistent with the three steering events.
+- The '## Out of scope' section correctly records the RTL descope: **PASS** — Explicitly states "**RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03" with justification (no RTL locale shipped), and accurately notes that the blueprint sweep "converted its 123 occurrences to logical properties before the descope." This section is consistent with the steering events.
 
