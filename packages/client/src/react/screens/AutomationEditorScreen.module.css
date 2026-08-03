@@ -453,7 +453,7 @@
 }
 .connAccountHealth {
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   white-space: nowrap;
 }
 .connAccountHealth[data-health="ok"] {
@@ -723,7 +723,7 @@
 }
 .mentionOption code {
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 /* Entity-KIND picker (data/condition trigger inputs) — reuses the @-mention
    popover surface. The input needs a positioned wrapper for the popover to
@@ -795,7 +795,7 @@
   color: var(--accent);
 }
 .addTrigger button:disabled {
-  opacity: 0.35;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 /* Lives inside `.triggerEmptyCard`, which already draws the boundary. The
@@ -830,7 +830,7 @@
 }
 .triggerIndex {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .triggerSelect {
@@ -944,7 +944,7 @@
    was four near-identical copies (.subFieldLabel / .cronPreviewLbl /
    .connGroupLbl / .grantsLbl) differing only by 0.5px and 0.01em. */
 .microLabel {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--text-ghost);
@@ -1073,7 +1073,7 @@
   background: var(--bg-sunken);
 }
 .regenBtn:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 
@@ -1213,8 +1213,9 @@
   border-radius: 8px;
   background: var(--bg-elev);
 }
-.grantRow[data-revoked="true"] {
-  opacity: 0.55;
+.grantRow[data-revoked="true"] .grantVerb,
+.grantRow[data-revoked="true"] .grantTarget {
+  color: var(--text-disabled);
 }
 .grantVerb {
   font-family: var(--font-mono);
@@ -1235,7 +1236,7 @@
 }
 .grantRevoked {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;

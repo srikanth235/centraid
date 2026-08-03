@@ -42,7 +42,7 @@
 }
 .asstDel {
   text-decoration: line-through;
-  opacity: 0.75;
+  color: var(--text-faint);
 }
 
 /* Syntax-highlighting tokens are literal class names inside the code <pre>
@@ -85,7 +85,7 @@
   cursor: default;
 }
 .asstRef[data-state="missing"] {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   text-decoration: line-through;
 }
 .asstBlock {
@@ -103,7 +103,7 @@
 }
 .asstTable th {
   text-align: left;
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -162,7 +162,7 @@
 .asstChartX {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding-top: 4px;
   gap: 4px;
@@ -189,7 +189,7 @@
   background: var(--bg-elev);
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   padding: 3px 7px;
   cursor: pointer;
   opacity: 0;

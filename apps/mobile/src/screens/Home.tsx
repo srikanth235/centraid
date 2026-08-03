@@ -53,6 +53,7 @@ import GreetingHeader from "./home/GreetingHeader";
 import HomeBand from "./home/HomeBand";
 import LauncherGrid from "./home/LauncherGrid";
 import SearchOverlay from "./home/SearchOverlay";
+import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultDrawer from "./home/VaultDrawer";
 import VaultsSwitcher from "./home/VaultsSwitcher";
 
@@ -257,6 +258,10 @@ export default function HomeScreen({
 
   const remoteApps = state.kind === "ready" ? state.apps : NO_APPS;
   const items = useMemo(() => buildLauncherItems(remoteApps), [remoteApps]);
+  // The springboard is content now (issue #708 A): each first-party tile reads
+  // its own app's replica shape. This is independent of the gateway load above
+  // — the tiles fill offline, and a sleeping gateway costs the grid nothing.
+  const tiles = useSpringboardTiles();
   const automations = state.kind === "ready" ? state.automations : 0;
 
   const connection: ConnectionState =
@@ -407,7 +412,14 @@ export default function HomeScreen({
           >
             YOUR APPS
           </Text>
-          <LauncherGrid items={items} onOpen={openItem} />
+          <LauncherGrid
+            items={items}
+            tiles={tiles}
+            onOpen={openItem}
+            // The same overlay the header's search control opens — Home's
+            // "Search everything" is a third door, not a second search.
+            onSearch={() => setSearchOpen(true)}
+          />
         </ScrollView>
 
         <HomeBand

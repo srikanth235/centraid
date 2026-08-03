@@ -37,7 +37,7 @@
 }
 .mapping {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   flex: 1;
   min-width: 120px;
 }

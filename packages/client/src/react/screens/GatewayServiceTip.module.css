@@ -94,7 +94,7 @@
 
 .primary:disabled,
 .dismiss:disabled {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
   cursor: not-allowed;
 }
 
@@ -146,7 +146,7 @@
   color: var(--text);
 }
 .quiet:disabled {
-  opacity: 0.5;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 

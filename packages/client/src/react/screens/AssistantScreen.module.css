@@ -132,7 +132,7 @@
 }
 .msgTime {
   margin-left: 4px;
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
 }
@@ -160,7 +160,7 @@
   background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .pagerBtn:disabled {
-  opacity: 0.35;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .pagerLabel {
@@ -385,8 +385,11 @@
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
 .acItem[data-disabled="true"] {
-  opacity: 0.45;
   cursor: default;
+}
+.acItem[data-disabled="true"] .acItemTitle,
+.acItem[data-disabled="true"] .acItemHint {
+  color: var(--text-disabled);
 }
 .acItemTitle {
   overflow: hidden;
@@ -566,7 +569,7 @@
   outline-offset: 1px;
 }
 .modelBtn:disabled {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .modelBtnLabel {
@@ -629,7 +632,7 @@
 .modelItemHint {
   flex: none;
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -640,11 +643,8 @@
   margin: 4px 2px;
   background: var(--line);
 }
-@media (prefers-reduced-motion: reduce) {
-  .modelMenu {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.modelMenu`'s entrance animation. */
 
 /* Staged (not-yet-sent) attachment chips, above the input row. */
 .attachRow {
@@ -677,7 +677,7 @@
 }
 .attachSize {
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   flex: none;
 }
 .attachChip[data-state="error"] .attachSize {
@@ -804,15 +804,12 @@
   border-left: 1.5px solid var(--line);
   margin-left: 2px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .thinking[data-streaming="true"] .thinkingDot {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.thinkingDot`'s pulse. */
 
 /* ── Per-turn usage/cost (issue #420, Wave 2) ───────────────────────────── */
 .msgUsage {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
   cursor: default;

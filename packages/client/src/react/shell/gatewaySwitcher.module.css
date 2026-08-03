@@ -1,11 +1,13 @@
-/* Sidebar vault switcher popover (issues #599, #608, #665). One flat list of
-   vaults across every registered gateway — the Gateways section moved to
-   Settings → Gateways. Body-portalled by gatewaySwitcher.ts, same mechanics as
-   contextMenu.module.css (the sidebar column clips `overflow: hidden`).
+/* Sidebar vault switcher popover (issues #599, #608, #665, #707). One flat
+   list of vaults across every registered gateway — the Gateways section
+   moved to Settings → Gateways. Body-portalled by gatewaySwitcher.ts, same
+   mechanics as contextMenu.module.css (the sidebar column clips
+   `overflow: hidden`).
 
-   Radii, ink ramp, and the 140ms ease-out micro-transitions match the trigger
-   in IdentityHead.module.css, so the popover reads as the row unfolding rather
-   than a second surface with its own opinions. */
+   Radii, ink ramp, and the `--dur-1`/`--ease` micro-transitions match the
+   trigger in IdentityHead.module.css, so the popover reads as the row
+   unfolding rather than a second surface with its own opinions. Logical
+   properties throughout (inline/block), matching chrome.module.css. */
 
 @keyframes gsPop {
   from {
@@ -27,28 +29,29 @@
 .pop {
   position: fixed;
   z-index: 1101;
-  width: 276px;
-  max-width: calc(100vw - 16px);
-  max-height: min(70vh, 560px);
+  inline-size: 276px;
+  max-inline-size: calc(100vw - var(--sp-4));
+  max-block-size: min(70vh, 560px);
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--sp-1);
   border-radius: var(--r-xl);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   box-shadow: var(--shadow-lg);
-  animation: gsPop 140ms cubic-bezier(0.2, 0.7, 0.3, 1.4);
+  animation: gsPop var(--dur-1) var(--ease-entry);
 }
 
 /* Section label. Same mono/uppercase/0.06em treatment as the trigger's gateway
    eyebrow — one eyebrow style across the pair, not two near-misses. */
 .eyebrow {
   font: var(--t-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   line-height: 1.25;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
-  padding: 6px 9px 5px;
+  padding-block: var(--sp-1) 5px;
+  padding-inline: 9px;
 }
 .list {
   display: flex;
@@ -60,23 +63,24 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  width: 100%;
-  padding: 7px 7px 7px 8px;
+  inline-size: 100%;
+  padding-block: 7px;
+  padding-inline: 8px 7px;
   border: none;
   border-radius: var(--r-lg);
   cursor: pointer;
   background: transparent;
-  text-align: left;
+  text-align: start;
   transition:
-    background 140ms ease-out,
-    box-shadow 140ms ease-out;
+    background var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
 }
 .row:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  background: var(--bg-hover);
 }
 .row:focus-visible {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--bg-hover);
+  box-shadow: var(--focus-ring);
   outline: none;
 }
 .row[data-active="true"] {
@@ -87,10 +91,16 @@
 }
 /* An unreachable gateway's vaults, and the stand-in row for a gateway with
    nothing to list yet: present (so the vault does not silently vanish) but
-   visibly not a thing to click. */
+   visibly not a thing to click. A disabled row recolours its leaves —
+   container opacity composites every descendant and invalidates the
+   contrast each token was solved for (matches IdentityHead.module.css's
+   `.head:disabled` treatment). */
 .row[data-selectable="false"] {
   cursor: default;
-  opacity: 0.55;
+}
+.row[data-selectable="false"] .name,
+.row[data-selectable="false"] .sub {
+  color: var(--text-disabled);
 }
 .row[data-selectable="false"]:hover {
   background: transparent;
@@ -99,11 +109,11 @@
 /* The status rail: reachability at a glance, without a second line of copy. */
 .rail {
   flex-shrink: 0;
-  width: 3px;
+  inline-size: 3px;
   align-self: stretch;
   border-radius: 999px;
   background: var(--text-ghost);
-  transition: background 140ms ease-out;
+  transition: background var(--dur-1) var(--ease);
 }
 .rail[data-status="ready"] {
   background: var(--success);
@@ -114,7 +124,7 @@
 
 .text {
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
   display: flex;
   flex-direction: column;
 }
@@ -131,9 +141,9 @@
 }
 .sub {
   display: block;
-  margin-top: 1px;
+  margin-block-start: 1px;
   font: var(--t-small);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   line-height: 1.3;
   color: var(--text-faint);
   overflow: hidden;
@@ -145,8 +155,8 @@
    optical column and the check does not shove them sideways. */
 .check {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  inline-size: 18px;
+  block-size: 18px;
   display: grid;
   place-items: center;
   color: var(--accent);
@@ -156,35 +166,36 @@
 }
 
 .divider {
-  height: 0.5px;
-  margin: 6px 8px;
+  block-size: 0.5px;
+  margin-block: var(--sp-1);
+  margin-inline: 8px;
   background: var(--line);
 }
 .action {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 8px;
+  gap: var(--sp-2);
+  inline-size: 100%;
+  padding: var(--sp-2);
   border: none;
   border-radius: var(--r-lg);
   cursor: pointer;
   background: transparent;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   font: var(--t-body);
   font-size: var(--t-small-size);
   font-weight: 500;
   transition:
-    background 140ms ease-out,
-    box-shadow 140ms ease-out;
+    background var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
 }
 .action:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  background: var(--bg-hover);
 }
 .action:focus-visible {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--bg-hover);
+  box-shadow: var(--focus-ring);
   outline: none;
 }
 .action svg {

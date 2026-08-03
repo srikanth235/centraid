@@ -71,7 +71,7 @@
 }
 .groupCount {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
   padding: 1px 6px;
@@ -167,7 +167,7 @@ button.rowMain:hover {
 }
 .rowMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   flex: none;
 }
@@ -199,7 +199,7 @@ button.rowMain:hover {
 .field dt {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   color: var(--text-ghost);
   text-transform: uppercase;
@@ -319,7 +319,7 @@ button.rowMain:hover {
 }
 .grantMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   flex: none;
 }
@@ -447,7 +447,7 @@ button.rowMain:hover {
 }
 .streakOverflow {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .streakBars {
@@ -571,7 +571,7 @@ button.rowMain:hover {
 .decisionBadge {
   display: inline-block;
   margin-left: 8px;
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -620,4 +620,146 @@ button.rowMain:hover {
   display: flex;
   justify-content: center;
   margin-top: 10px;
+}
+
+/* ── Privacy: the store-centric grants ledger (issue #708 A2) ───────────── */
+.privacyLead {
+  margin: 0 0 18px;
+  max-width: 56ch;
+  font-size: var(--t-small-size);
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+.storeSection {
+  padding-bottom: 4px;
+}
+.storeSection + .storeSection {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 0.5px solid var(--line);
+}
+.storeSectionTitle {
+  margin: 0 0 2px;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+/* The count slot: "N app(s)" when populated, "reachable by nothing" when
+   not — the strongest privacy claim on the screen, so it earns the same
+   position and weight as the positive count rather than reading as an
+   afterthought (issue #708 A2). */
+.storeCount {
+  margin: 0 0 8px;
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
+}
+.storeHolderList {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-xl);
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.storeHolderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--line);
+}
+.storeHolderRow:last-child {
+  border-bottom: none;
+}
+.storeHolderLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.storeHolderRow[data-revoked] .storeHolderLabel {
+  color: var(--text-faint);
+}
+.storeHolderMode {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.storeHolderMode[data-struck] {
+  color: var(--text-ghost);
+  text-decoration: line-through;
+}
+.storeHolderSwitch {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  cursor: pointer;
+  flex: none;
+}
+.storeHolderSwitch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+.storeHolderSwitchTrack {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--success);
+  transition: background 0.16s ease;
+}
+.storeHolderSwitchTrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  transition: transform 0.16s ease;
+}
+.storeHolderSwitch input:not(:checked) + .storeHolderSwitchTrack {
+  background: var(--text-ghost);
+}
+.storeHolderSwitch input:not(:checked) + .storeHolderSwitchTrack::after {
+  transform: translateX(-16px);
+}
+
+.networkFooter {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 0.5px solid var(--line);
+}
+.networkList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+.networkRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.networkRow dt {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.networkRow dd {
+  margin: 0;
+  font-size: var(--t-mono-size);
+  line-height: 1.5;
+  color: var(--text-faint);
 }

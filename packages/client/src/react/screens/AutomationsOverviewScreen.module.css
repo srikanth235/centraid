@@ -67,7 +67,7 @@
 }
 .sectionLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -206,7 +206,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--danger);
@@ -218,7 +218,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--c-amber-text);
@@ -249,7 +249,7 @@
 }
 .activityGroupLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -322,7 +322,7 @@
 }
 .activityWhen {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .activityEmpty {
@@ -420,7 +420,7 @@
 }
 .suggestTrigger {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -453,12 +453,8 @@
 .skelRow:nth-child(4) {
   animation-delay: 0.36s;
 }
-@media (prefers-reduced-motion: reduce) {
-  .skelHead,
-  .skelRow {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.skelHead`/`.skelRow`'s shimmer. */
 .error {
   display: flex;
   flex-direction: column;

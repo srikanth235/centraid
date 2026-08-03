@@ -4,18 +4,18 @@ import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
 
-import { formatCurrencyMinor } from "../../capture.js";
 import { INTEGRATION_HUES } from "../format.js";
 import type {
   AuStatusKind,
   HomeAppItemDTO,
   HomeAutoItemDTO,
   HomeBridgeProps,
-  HomeDailyBriefDTO,
   HomeMenuAnchor,
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Icon, KindBadge, StatusPill } from "../ui/index.js";
+import HomeSpringboard from "./HomeSpringboard.js";
+import type { HomeSpringboardProps } from "./HomeSpringboard.js";
 
 import au from "../styles/automation.module.css";
 import controlsCss from "../styles/controls.module.css";
@@ -37,6 +37,7 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
 function MicGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={13}
       height={13}
       viewBox="0 0 24 24"
@@ -60,6 +61,7 @@ function GridGlyph({
 }): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -79,6 +81,7 @@ function GridGlyph({
 function RowsGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={15}
       height={15}
       viewBox="0 0 24 24"
@@ -91,70 +94,6 @@ function RowsGlyph(): JSX.Element {
       <rect x="3.5" y="4.5" width="17" height="6" rx="1.5" />
       <rect x="3.5" y="13.5" width="17" height="6" rx="1.5" />
     </svg>
-  );
-}
-
-function DailyBriefCard({
-  brief,
-  onOpenApp,
-}: {
-  brief: HomeDailyBriefDTO;
-  onOpenApp: (id: string) => void;
-}): JSX.Element {
-  // Shared formatter tolerates empty/invalid codes so a misrouted brief
-  // mock cannot take down the whole Home shell.
-  const balance = formatCurrencyMinor(brief.balanceMinor, brief.currency);
-  const facts = [
-    {
-      id: "agenda",
-      label: "Events",
-      value: String(brief.events.length),
-      detail: brief.events[0]?.title ?? "Nothing scheduled",
-    },
-    {
-      id: "tasks",
-      label: "Due tasks",
-      value: String(brief.tasks.length),
-      detail: brief.tasks[0]?.title ?? "You’re caught up",
-    },
-    {
-      id: "photos",
-      label: "New photos",
-      value: String(brief.newPhotos),
-      detail:
-        brief.newPhotos === 1 ? "Photo added today" : "Photos added today",
-    },
-    {
-      id: "tally",
-      label: "Household balance",
-      value: balance,
-      detail: brief.balanceMinor === 0 ? "All settled" : "Net position",
-    },
-  ];
-  return (
-    <section className={styles.brief} aria-labelledby="daily-brief-title">
-      <div className={styles.briefHead}>
-        <div>
-          <div className={styles.briefEyebrow}>Today</div>
-          <h2 id="daily-brief-title">Daily brief</h2>
-        </div>
-        <span className={styles.briefDate}>{brief.date}</span>
-      </div>
-      <div className={styles.briefGrid}>
-        {facts.map((fact) => (
-          <button
-            key={fact.id}
-            type="button"
-            className={styles.briefFact}
-            onClick={() => onOpenApp(fact.id)}
-          >
-            <span className={styles.briefFactLabel}>{fact.label}</span>
-            <strong>{fact.value}</strong>
-            <span className={styles.briefFactDetail}>{fact.detail}</span>
-          </button>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -408,13 +347,21 @@ function EmptyState({
   );
 }
 
+/** `springboard` is the Tier-1 content grid (issue #708). It replaced the
+ *  daily-brief card outright: the brief's four facts are now the agenda, tasks,
+ *  photos and tally TILES, so keeping the card would have said each of them
+ *  twice on one screen. */
+export type HomeScreenProps = HomeBridgeProps & {
+  springboard?: HomeSpringboardProps;
+};
+
 /**
- * Home screen, ported to React (issue #325, Phase 3). Composer hero (→ builder)
- * + the unified library shelf (segmented kind filter, Tiles/Rows toggle, one
- * mixed grid of app + automation cards, empty states, "needs attention" badge).
- * The shell derives the card DTOs + owns the context/more menus and the
- * gateway I/O through the callbacks; React renders. Tiles are composed from
- * the shared AppCard module + StatusPill/KindBadge primitives.
+ * Home screen, ported to React (issue #325, Phase 3). The springboard of
+ * content tiles (issue #708) leads; below it the composer hero (→ builder) and
+ * the unified library shelf (segmented kind filter, Tiles/Rows toggle, one
+ * mixed grid of app + automation cards, empty states, "needs attention"
+ * badge). The shell derives the card DTOs + owns the context/more menus and
+ * the gateway I/O through the callbacks; React renders.
  */
 export default function HomeScreen({
   builderEnabled,
@@ -422,7 +369,7 @@ export default function HomeScreen({
   dateLabel,
   appItems,
   automationItems,
-  dailyBrief,
+  springboard,
   counts,
   attention,
   onBuild,
@@ -432,7 +379,7 @@ export default function HomeScreen({
   onOpenAutomation,
   onAutomationMenu,
   onBrowseTemplates,
-}: HomeBridgeProps): JSX.Element {
+}: HomeScreenProps): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [kind, setKind] = useState<"all" | "app" | "automation">("all");
   const [layout, setLayout] = useState<"tiles" | "rows">("tiles");
@@ -466,6 +413,14 @@ export default function HomeScreen({
 
   return (
     <div className={styles.day1Scroll}>
+      {/* The springboard leads (issue #708). Home's job is to show you your
+          own content, not a shelf of icons — the library shelf further down is
+          where "which apps do I have" lives. */}
+      {springboard ? (
+        <section className={styles.hsec}>
+          <HomeSpringboard {...springboard} />
+        </section>
+      ) : null}
       {/* The composer hero is the primary "build a new app" entry point — hidden
           with the builder (issue #434, Phase 3). The library shelf below (which
           lists installed apps + automations) is the release-facing surface. */}
@@ -545,10 +500,6 @@ export default function HomeScreen({
             </div>
           </div>
         </div>
-      ) : null}
-
-      {dailyBrief ? (
-        <DailyBriefCard brief={dailyBrief} onOpenApp={onOpenApp} />
       ) : null}
 
       {/* .hsec is the whole section envelope; the homeLib* children carry the

@@ -29,9 +29,9 @@ import styles from "./BuilderCode.module.css";
 // ~110-113). Small enough to inline; emitted as HTML strings for the
 // tree's chevron/folder spans.
 const ChevronIcon = (size = 12): string =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+  `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
 const FolderIcon = (size = 14): string =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
 
 // Module-scoped span classes for the syntax highlighter — keeps tokenize()'s
 // emitted HTML inside this module's scope instead of global `tok-*` names.
@@ -686,7 +686,13 @@ export default function BuilderCode({
               setMenuOpen((v) => !v);
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <circle cx="5" cy="12" r="1.7" />
               <circle cx="12" cy="12" r="1.7" />
               <circle cx="19" cy="12" r="1.7" />

@@ -17,7 +17,7 @@ import buttonCss from "../ui/Button.module.css";
 // activates the native button click (desktop e2e 3.5d delete-via-Enter).
 
 const X_SVG =
-  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
 export interface ConfirmOpts {
   title: string;

@@ -95,7 +95,7 @@
   align-items: center;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.22em;
   color: color-mix(in srgb, var(--text) 80%, transparent);
@@ -221,7 +221,7 @@
 }
 .fieldLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

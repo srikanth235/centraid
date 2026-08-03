@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
+import type { LocalUsageReportDTO } from "../../../gateway-client-local-storage.js";
 import {
   deleteApp,
   deleteAutomation,
@@ -26,6 +27,7 @@ import type {
 import AppInfoModal from "./AppInfoModal.js";
 import { collectAutomationRuns } from "./automationsData.js";
 import type { AutomationFeedEntry } from "./automationsData.js";
+import { HOME_CONFLICTS, homeOutOfRoom } from "./homeConditions.js";
 import {
   attentionCount,
   buildHomeAppItems,
@@ -33,6 +35,8 @@ import {
   heroDateLabel,
   HERO_SUGGESTIONS,
 } from "./homeData.js";
+import { buildHomeTiles, isFirstRun } from "./homeTiles.js";
+import type { HomeTileContent } from "./homeTiles.js";
 import { loadAppTemplates } from "./templatesData.js";
 
 import styles from "./HomeRoute.module.css";
@@ -69,8 +73,14 @@ export interface HomeRouteProps {
 // (Share = the 116-line sheet; Rename reaches into card DOM in vanilla — both
 // deferred, see notes).
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
-  const { navigate, enterBuilder, showToast, confirm, builderEnabled } =
-    useShellActions();
+  const {
+    navigate,
+    enterBuilder,
+    showToast,
+    confirm,
+    builderEnabled,
+    openCommandPalette,
+  } = useShellActions();
   const {
     userApps,
     drafts,
@@ -111,6 +121,36 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       bundledIds: new Set(appTemplates.map((t) => t.id)),
       dailyBrief,
     };
+  });
+
+  // The springboard's content is its OWN cached query (issue #708). Keeping it
+  // out of `home:feed` is deliberate: the tiles fan out across eight replica
+  // reads and a disk-budget probe, and the library shelf below must not wait
+  // on any of them to paint. Both revalidate behind their last known answer.
+  //
+  // Everything here is imported lazily for the reason `blob-auth.ts`
+  // documents — the authed gateway client touches `window.CentraidApi` at
+  // module load, so an eager import drags the whole transport into Home's
+  // chunk.
+  const brief =
+    feed.state.status === "ready" ? feed.state.data.dailyBrief : undefined;
+  const springboardFeed = useCachedQuery("home:springboard", async () => {
+    const [tileContent, localUsage] = await Promise.all([
+      import("./homeTileContent.js")
+        .then(async (mod) =>
+          mod.loadHomeTileContent({
+            brief,
+            reader: await mod.homeTileReader(),
+          })
+        )
+        .catch((): HomeTileContent => ({})),
+      // Never a refresh — that forces a walk of the whole blob CAS, which is
+      // an explicit owner action, not something Home does on every visit.
+      import("../../../gateway-client-local-storage.js")
+        .then((mod) => mod.getLocalStorageUsage())
+        .catch((): LocalUsageReportDTO | undefined => undefined),
+    ]);
+    return { localUsage, tileContent };
   });
 
   const bundledIds: ReadonlySet<string> =
@@ -350,6 +390,37 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   });
   const automationItems = buildHomeAutoItems(rows, entries, isStarred);
 
+  // The springboard (issue #708). Its tiles are the FIRST-PARTY apps this
+  // vault actually has — an app is a tile only once it is installed, because
+  // Home shows what you own and Discover is where you get more.
+  const ready =
+    springboardFeed.state.status === "ready"
+      ? springboardFeed.state.data
+      : undefined;
+  const settled = ready !== undefined;
+  const tiles = buildHomeTiles({
+    content: ready?.tileContent ?? {},
+    installedIds: apps.map((app) => gatewayAppId(app)),
+  });
+  const outOfRoom = homeOutOfRoom(ready?.localUsage, () =>
+    navigate({ kind: "storage" })
+  );
+  const springboard = {
+    conflicts: HOME_CONFLICTS,
+    // First run means NO CONTENT, and only a settled read can say that. While
+    // the reads are in flight the springboard shows static skeletons, which is
+    // a different sentence: "still looking", not "there is nothing".
+    firstRun: settled && isFirstRun(tiles),
+    loading: !settled,
+    onOpen: (id: string) => navigate({ kind: "app", id }),
+    // Home's "Search everything" is the third entry point onto the ONE palette
+    // (⌘K and the stem's Search control are the other two), so it reuses the
+    // shell action rather than opening a search of its own.
+    onSearch: openCommandPalette,
+    tiles,
+    ...(outOfRoom ? { outOfRoom } : {}),
+  };
+
   return (
     <PageScroll flush>
       {vaultIdentity || onOpenAllApps || onOpenSettings ? (
@@ -385,9 +456,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         dateLabel={heroDateLabel()}
         appItems={appItems}
         automationItems={automationItems}
-        dailyBrief={
-          feed.state.status === "ready" ? feed.state.data.dailyBrief : undefined
-        }
+        springboard={springboard}
         counts={{
           all: apps.length + rows.length,
           apps: apps.length,

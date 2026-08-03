@@ -82,7 +82,7 @@
   color: var(--text);
 }
 .menuTrigger:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .menu {
@@ -108,11 +108,8 @@
     transform: translateY(-4px) scale(0.97);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .menu {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.menu`'s entrance animation. */
 .menuItem {
   display: flex;
   align-items: center;
@@ -177,7 +174,7 @@
 }
 .chipNext {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding-left: 7px;
   border-left: 0.5px solid var(--line);
@@ -208,7 +205,7 @@
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .chipIconBtn:disabled {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 
@@ -253,11 +250,8 @@
 .planIc[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .planIc[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.planIc`'s spin. */
 .planBody {
   flex: 1;
   min-width: 0;
@@ -301,7 +295,12 @@
   border-color: var(--line);
   border-left: 3px solid var(--line-strong);
   background: var(--bg-elev);
-  opacity: 0.8;
+}
+.consentCard[data-status]:not([data-status="pending"]) .consentIc {
+  color: var(--text-faint);
+}
+.consentCard[data-status]:not([data-status="pending"]) .consentTitle {
+  color: var(--text-faint);
 }
 .consentIc {
   flex: none;
@@ -327,7 +326,7 @@
 }
 .consentMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .consentCheck {
@@ -341,7 +340,7 @@
 }
 .consentDecided {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);
@@ -407,7 +406,7 @@
 .grantMeta {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -433,7 +432,7 @@
   position: relative;
   padding: 16px 0 8px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -502,11 +501,8 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .node[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.node`'s spin. */
 
 .turnHead {
   display: flex;
@@ -600,7 +596,7 @@
   align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .turnDetails {
@@ -641,11 +637,8 @@
   border-top-color: var(--au-hue, var(--accent));
   animation: auNodeSpin 0.7s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .turnSpinner {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.turnSpinner`'s spin. */
 
 .turnError {
   display: flex;
@@ -848,6 +841,6 @@
   filter: brightness(1.08);
 }
 .composerSend:disabled {
-  opacity: 0.45;
+  opacity: var(--o-disabled);
   cursor: default;
 }

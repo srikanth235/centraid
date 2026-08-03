@@ -144,7 +144,10 @@ function Tab({
         </View>
       )}
       <Text
-        style={[styles.label, !tab.installed && { color: colors.textFaint }]}
+        // ink2 (`textSoft`) is the floor for a navigation label — an
+        // uninstalled tab recedes to it, never past it into ink3. The band is
+        // the one surface a reader must be able to scan without looking.
+        style={[styles.label, !tab.installed && { color: colors.textSoft }]}
         numberOfLines={1}
       >
         {tab.name}

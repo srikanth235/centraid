@@ -85,7 +85,7 @@
 }
 .composerKbd {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   letter-spacing: 0;
   padding: 2px 7px;
@@ -109,7 +109,7 @@
   display: block;
 }
 .composerSend[disabled] {
-  opacity: 0.4;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .composerSend:hover:not([disabled]) {
@@ -130,7 +130,7 @@
 }
 .heroDate {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -144,82 +144,6 @@
 }
 .heroComposerWrap .heroSuggestions {
   margin-top: 0;
-}
-.brief {
-  width: min(880px, calc(100% - 48px));
-  margin: 32px auto 0;
-  padding: 20px;
-  border: 0.5px solid var(--line);
-  border-radius: 18px;
-  background: var(--bg-elev);
-  box-sizing: border-box;
-}
-.briefHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  margin-bottom: 14px;
-}
-.briefHead h2 {
-  margin: 2px 0 0;
-  color: var(--text);
-  font: var(--t-title);
-}
-.briefEyebrow,
-.briefDate {
-  color: var(--text-faint);
-  font: var(--t-small);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.briefGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-.briefFact {
-  min-width: 0;
-  padding: 14px;
-  text-align: left;
-  border: 0;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  color: var(--text);
-  cursor: pointer;
-}
-.briefFact:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.briefFact:focus-visible {
-  outline: 2px solid var(--focus-ring-color);
-  outline-offset: 2px;
-}
-.briefFact strong,
-.briefFactLabel,
-.briefFactDetail {
-  display: block;
-}
-.briefFact strong {
-  margin: 7px 0 4px;
-  font: var(--t-title);
-}
-.briefFactLabel,
-.briefFactDetail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: var(--t-small);
-}
-.briefFactLabel {
-  color: var(--text-soft);
-}
-.briefFactDetail {
-  color: var(--text-faint);
-}
-@media (max-width: 760px) {
-  .briefGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 .hsec {
   width: 100%;

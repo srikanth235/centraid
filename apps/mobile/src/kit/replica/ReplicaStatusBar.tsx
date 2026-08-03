@@ -10,8 +10,15 @@ import {
 
 import { formatRelativeTime } from "@centraid/design";
 
+import {
+  STORAGE_FULL_ACTION_LABEL,
+  STORAGE_FULL_CAUSE,
+  STORAGE_FULL_CONSEQUENCE,
+} from "../../lib/replica/replica-storage-error";
+import { clearPinnedThumbnailPacks } from "../../lib/replica/thumbnail-pack";
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
+import OutOfRoom from "../components/OutOfRoom";
 import { family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";
@@ -27,6 +34,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     reachability = "device-offline",
     bootstrapProgress = [],
     refresh,
+    storageFull,
   } = useReplica();
   const [open, setOpen] = useState(false);
   // One AppState-gated ticker serves every mounted status bar; see
@@ -97,6 +105,26 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             count: bootstrapProgress.length,
             suffix: " sources: recent items ready; older history syncing",
           };
+
+  // `out of room` pre-empts the normal status row: the reachability/bootstrap
+  // language above ("Offline", "Syncing…") is about network state, not disk
+  // state, and would be a second, contradicting explanation for the same
+  // paused sync.
+  if (storageFull) {
+    return (
+      <View style={styles.outOfRoomWrap}>
+        <OutOfRoom
+          cause={STORAGE_FULL_CAUSE}
+          consequence={STORAGE_FULL_CONSEQUENCE}
+          actionLabel={STORAGE_FULL_ACTION_LABEL}
+          onAction={() => {
+            clearPinnedThumbnailPacks();
+            void refresh?.();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <>
@@ -310,6 +338,7 @@ const styles = StyleSheet.create({
   cardCopy: { flex: 1 },
   cardMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   cardTitle: { fontFamily: family.sansMedium, fontSize: 14 },
+  outOfRoomWrap: { padding: 14 },
   bootstrap: {
     alignItems: "center",
     flexDirection: "row",
@@ -350,7 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  pendingText: { fontFamily: family.sansMedium, fontSize: 10 },
+  pendingText: { fontFamily: family.sansMedium, fontSize: 13 },
   reason: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 6 },
   refresh: {
     alignItems: "center",
@@ -358,7 +387,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 7,
   },
-  refreshText: { fontFamily: family.sansMedium, fontSize: 10 },
+  refreshText: { fontFamily: family.sansMedium, fontSize: 13 },
   sheet: { flex: 1 },
   sheetHeader: {
     alignItems: "center",
@@ -366,7 +395,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 18,
   },
-  source: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 4 },
+  source: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 4 },
   subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   title: { fontFamily: family.sansMedium, fontSize: 22 },
   wrap: {

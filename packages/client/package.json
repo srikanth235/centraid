@@ -10,6 +10,7 @@
     "./replica/native": "./src/replica/native.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
     "./capture": "./src/capture.ts",
+    "./home-copy": "./src/home-copy.ts",
     "./receipt-capture": "./src/receipt-capture.ts",
     "./version-handshake": "./src/version-handshake.ts",
     "./video-frame": "./src/video-frame.ts",

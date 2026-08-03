@@ -6,7 +6,11 @@ import { describe, expect, it } from "vitest";
 
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
 import type { BackupStatusDTO } from "./BackupCard.js";
-import { aggregateUsage, computeStorageMetrics } from "./backupMetrics.js";
+import {
+  aggregateUsage,
+  computeStorageMetrics,
+  deriveLossSummary,
+} from "./backupMetrics.js";
 
 describe(aggregateUsage, () => {
   it("returns null for empty / missing connections", () => {
@@ -114,5 +118,114 @@ describe(computeStorageMetrics, () => {
     expect(missing.freshness.tMs).toBeNull();
     expect(missing.freshness.clocks.lastSuccessfulVerificationAt).toBeNull();
     expect(missing.cost.bytesStored).toBe(1);
+  });
+});
+
+describe(deriveLossSummary, () => {
+  const now = Date.parse("2026-07-25T12:00:00.000Z");
+
+  it("is unconfigured when nothing has ever backed up", () => {
+    const status = { configured: false, vaults: [] } as BackupStatusDTO;
+    const metrics = computeStorageMetrics(status, null, now);
+    expect(deriveLossSummary(status, metrics)).toStrictEqual({
+      tone: "unconfigured",
+      exposedMs: null,
+      pendingBytes: 0,
+      pendingCount: 0,
+    });
+  });
+
+  it("is unknown when a freshness clock has never fired", () => {
+    const status = {
+      configured: true,
+      vaults: [
+        {
+          vaultId: "v1",
+          lastBackupAt: "2026-07-25T10:00:00.000Z",
+          lastVerifyAt: undefined,
+          lastWalDrainAt: "2026-07-25T11:00:00.000Z",
+          pendingOffsite: { count: 0, bytes: 0 },
+        },
+      ],
+    } as BackupStatusDTO;
+    const metrics = computeStorageMetrics(status, null, now);
+    const summary = deriveLossSummary(status, metrics);
+    expect(summary.tone).toBe("unknown");
+    expect(summary.exposedMs).toBeNull();
+  });
+
+  it("is safe when every clock is within cadence and nothing is pending offsite", () => {
+    const status = {
+      configured: true,
+      vaults: [
+        {
+          vaultId: "v1",
+          lastBackupAt: "2026-07-25T11:59:00.000Z",
+          lastVerifyAt: "2026-07-25T11:59:00.000Z",
+          lastWalDrainAt: "2026-07-25T11:59:30.000Z",
+          pendingOffsite: { count: 0, bytes: 0 },
+          policy: {
+            rpoSeconds: 60,
+            snapshotIntervalHours: 24,
+            verifyEveryDays: 7,
+          },
+        },
+      ],
+    } as BackupStatusDTO;
+    const metrics = computeStorageMetrics(status, null, now);
+    const summary = deriveLossSummary(status, metrics);
+    expect(summary.tone).toBe("safe");
+    expect(summary.pendingBytes).toBe(0);
+  });
+
+  it("is exposed when bytes are pending offsite even inside the cadence window", () => {
+    const status = {
+      configured: true,
+      vaults: [
+        {
+          vaultId: "v1",
+          lastBackupAt: "2026-07-25T11:59:00.000Z",
+          lastVerifyAt: "2026-07-25T11:59:00.000Z",
+          lastWalDrainAt: "2026-07-25T11:59:30.000Z",
+          pendingOffsite: { count: 3, bytes: 4096 },
+          policy: {
+            rpoSeconds: 60,
+            snapshotIntervalHours: 24,
+            verifyEveryDays: 7,
+          },
+        },
+      ],
+    } as BackupStatusDTO;
+    const metrics = computeStorageMetrics(status, null, now);
+    const summary = deriveLossSummary(status, metrics);
+    expect(summary.tone).toBe("exposed");
+    expect(summary.pendingBytes).toBe(4096);
+    expect(summary.pendingCount).toBe(3);
+  });
+
+  it("is exposed once the worst clock is past its declared cadence", () => {
+    const status = {
+      configured: true,
+      vaults: [
+        {
+          vaultId: "v1",
+          lastBackupAt: "2026-07-01T12:00:00.000Z",
+          lastVerifyAt: "2026-07-01T12:00:00.000Z",
+          lastWalDrainAt: "2026-07-01T12:00:00.000Z",
+          pendingOffsite: { count: 0, bytes: 0 },
+          policy: {
+            rpoSeconds: 60,
+            snapshotIntervalHours: 24,
+            verifyEveryDays: 7,
+          },
+        },
+      ],
+    } as BackupStatusDTO;
+    const metrics = computeStorageMetrics(status, null, now);
+    const summary = deriveLossSummary(status, metrics);
+    expect(summary.tone).toBe("exposed");
+    expect(summary.exposedMs).toBe(
+      now - Date.parse("2026-07-01T12:00:00.000Z")
+    );
   });
 });

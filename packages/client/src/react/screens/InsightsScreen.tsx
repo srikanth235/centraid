@@ -32,6 +32,7 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
     <div className={styles.chartPlot}>
       <div className={styles.chartSvgWrap}>
         <svg
+          aria-hidden="true"
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className={styles.chartSvg}

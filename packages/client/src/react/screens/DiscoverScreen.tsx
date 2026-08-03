@@ -50,6 +50,7 @@ function GridGlyph({
 }): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -70,6 +71,7 @@ function GridGlyph({
 function RowsGlyph({ size = 15 }: { size?: number }): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 24 24"

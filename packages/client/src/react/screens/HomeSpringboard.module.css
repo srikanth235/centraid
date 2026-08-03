@@ -1,0 +1,458 @@
+/* The Home springboard (issue #708, section A).
+
+   The tile is the one place in the product where a piece of every app is on
+   screen at once, so the INVARIANT header is what has to be identical — mark,
+   name, count — and the body is what has to differ. The rules below are
+   therefore split exactly that way: header rules are shared, body rules are
+   per-app and are allowed to be as unlike each other as the content is. */
+
+/* Four columns, and rows that are minmax(<n>px, auto) rather than a fixed
+   height: at 150%+ text scale the row grows instead of slicing the tile's own
+   body. Every clamp inside a body is a line-clamp for the same reason — a
+   clipped baseline reads as a rendering bug. */
+.springboard {
+  display: grid;
+  gap: var(--sp-3);
+  grid-auto-rows: minmax(136px, auto);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Size classes: small 1×1, medium 2×1, large 2×2. The class follows the app's
+   BODY — a mosaic needs area, prose needs measure, a figure or a chip needs
+   neither — which is what stops a springboard of content reading as a launcher
+   of identical rectangles. */
+.tile[data-size="medium"] {
+  grid-column: span 2;
+}
+
+.tile[data-size="large"] {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+/* Compact form factor: two columns, and large flattens to 2×1 — a 2×2 across
+   half the screen is a tile you scroll past rather than read. */
+@media (max-width: 720px) {
+  .springboard {
+    grid-auto-rows: minmax(152px, auto);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tile[data-size="large"] {
+    grid-row: span 1;
+  }
+}
+
+.tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  /* The body takes whatever the row gives it above its own floor, so a tile
+     that spans two rows fills them instead of leaving a gap under itself. */
+  grid-template-rows: auto minmax(120px, 1fr);
+  overflow: hidden;
+  padding: 0;
+  text-align: start;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.tile:hover {
+  border-color: var(--line-strong);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* ── the invariant header ─────────────────────────────────────────────── */
+
+.head {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* The identity mark. The ONLY place the tile spends the app's hue — never on
+   a control, and the radius is the 26% identity rule, set inline by
+   `iconChipRadius()` rather than guessed here. */
+.mark {
+  block-size: 30px;
+  color: var(--text-inv);
+  display: grid;
+  flex: 0 0 auto;
+  inline-size: 30px;
+  place-items: center;
+}
+
+.name {
+  color: var(--text);
+  flex: 1 1 auto;
+  font: var(--t-small-strong);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Numerics are mono and tabular in every app, without exception. */
+.count {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+/* ── photos: imagery, bleeding to the tile edge ───────────────────────── */
+
+.mosaic {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  /* The one body with no padding at all: the photo grid disappears behind the
+     imagery, which is the whole character of the app. */
+  margin: 0;
+  min-block-size: 0;
+  padding: 0;
+  position: relative;
+}
+
+.mosaicCell {
+  background: var(--bg-sunken);
+  block-size: 100%;
+  inline-size: 100%;
+  min-block-size: 60px;
+  object-fit: cover;
+}
+
+.mosaicMore {
+  background: var(--bg-hud);
+  border-radius: var(--r-sm);
+  color: var(--text-inv);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  inset-block-end: var(--sp-2);
+  inset-inline-end: var(--sp-2);
+  padding: 2px var(--sp-2);
+  position: absolute;
+}
+
+/* ── docs + notes: the reading register ───────────────────────────────── */
+
+.readingTitle {
+  color: var(--text);
+  font: var(--t-body-strong);
+  margin: 0 0 var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading {
+  color: var(--text-soft);
+  display: -webkit-box;
+  /* Serif, because a document and a note are prose and the tile should read
+     like the app does. Line-clamped, never clipped. */
+  font: var(--t-reading);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+}
+
+.readingStamp {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-2);
+}
+
+/* ── agenda: next event, after-line pinned to the bottom ──────────────── */
+
+.eventTime {
+  color: var(--text-soft);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.eventTitle {
+  color: var(--text);
+  display: -webkit-box;
+  font: var(--t-title);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  margin: var(--sp-1) 0 0;
+  overflow: hidden;
+}
+
+/* The after-line sits on the tile's bottom edge whatever the event above it
+   does — that fixed baseline is the structure that makes an agenda tile
+   recognisable across a grid of eight. */
+.afterLine {
+  border-block-start: 1px solid var(--line);
+  color: var(--text-faint);
+  font: var(--t-small);
+  margin-block-start: auto;
+  overflow: hidden;
+  padding-block-start: var(--sp-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── people: overlapping face circles ─────────────────────────────────── */
+
+.faces {
+  align-items: center;
+  display: flex;
+  padding-block-start: var(--sp-1);
+}
+
+.face {
+  align-items: center;
+  background: var(--bg-sunken);
+  block-size: 38px;
+  border: 2px solid var(--bg-elev);
+  border-radius: var(--r-pill);
+  color: var(--text-soft);
+  display: flex;
+  font: var(--t-small-strong);
+  inline-size: 38px;
+  justify-content: center;
+}
+
+.face + .face {
+  /* Logical, so the stack mirrors under RTL along with everything else. */
+  margin-inline-start: -12px;
+}
+
+.facesMore {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin-inline-start: var(--sp-2);
+}
+
+/* ── tasks: checkbox rows ─────────────────────────────────────────────── */
+
+.taskRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-1) 0 0;
+}
+
+.taskRow {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  font: var(--t-small);
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.taskBox {
+  block-size: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  flex: 0 0 auto;
+  inline-size: 14px;
+}
+
+.taskRow[data-done="true"] .taskBox {
+  background: var(--text-soft);
+  border-color: var(--text-soft);
+}
+
+.taskText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskRow[data-done="true"] .taskText {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+/* ── tally: one large figure in the numeric register ──────────────────── */
+
+.figure {
+  color: var(--text);
+  /* The display rung, in the numeric face: a balance is the one number on
+     Home big enough to read across a room, and it is still a ramp size. */
+  font-family: var(--font-mono);
+  font-size: var(--t-display-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  line-height: 36px;
+  margin-block-start: var(--sp-2);
+}
+
+.figureCaption {
+  color: var(--text-faint);
+  font: var(--t-small);
+}
+
+/* ── locker: a state chip ─────────────────────────────────────────────── */
+
+.chip {
+  align-self: flex-start;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  font: var(--t-control);
+  margin-block-start: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.chip[data-tone="warn"] {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* ── the designed empty body ──────────────────────────────────────────── */
+
+.emptyBody {
+  align-items: center;
+  /* DASHED, so "nothing here yet" is legible as a placeholder rather than as
+     a tile that failed to load. */
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+  display: flex;
+  flex: 1 1 auto;
+  font: var(--t-small);
+  padding: var(--sp-3);
+  text-wrap: balance;
+}
+
+/* ── first run: one instruction, not eight apologies ──────────────────── */
+
+.firstRun {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+}
+
+.firstRunTitle {
+  color: var(--text);
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.firstRunBody {
+  color: var(--text-soft);
+  font: var(--t-reading);
+  margin: 0;
+  max-inline-size: 62ch;
+}
+
+.firstRunSteps {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+}
+
+.firstRunStep {
+  align-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  display: flex;
+  font: var(--t-small);
+  gap: var(--sp-2);
+  min-block-size: var(--h-row);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.firstRunMark {
+  block-size: 22px;
+  color: var(--text-inv);
+  display: grid;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  place-items: center;
+}
+
+/* ── "Search everything" — Home's door onto the ⌘K palette ────────────── */
+
+/* A BOUNDED control, not bare text: an action needs an edge, and mobile has no
+   hover to make a bare word look like one. It opens the same palette ⌘K and the
+   stem's Search control open — three entry points, one search. */
+.searchEverything {
+  align-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  cursor: pointer;
+  display: flex;
+  font: var(--t-control);
+  gap: var(--sp-2);
+  inline-size: 100%;
+  margin-block-end: var(--sp-3);
+  min-block-size: var(--h-control);
+  padding: 0 var(--sp-3);
+  text-align: start;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.searchEverything:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.searchEverything:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.searchIcon {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.searchKbd {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  margin-inline-start: auto;
+}
+
+/* ── the vault-level conditions band ──────────────────────────────────── */
+
+.conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-block-end: var(--sp-5);
+}
+
+.section {
+  margin-block-end: var(--sp-5);
+}

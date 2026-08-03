@@ -129,7 +129,7 @@
   flex-shrink: 0;
   align-self: flex-start;
   font: var(--t-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;

@@ -102,7 +102,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -163,7 +163,7 @@
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .bar {
@@ -215,7 +215,7 @@
 }
 .panelMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   color: var(--text-ghost);
 }
@@ -231,7 +231,7 @@
 }
 .chartStatLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -248,7 +248,7 @@
 }
 .chartStatSub {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   margin-top: 2px;
 }
@@ -270,7 +270,7 @@
   top: -2px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-elev);
   padding: 1px 5px;
@@ -282,7 +282,7 @@
   justify-content: space-between;
   margin-top: 8px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -367,7 +367,7 @@
 }
 .th {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -411,7 +411,7 @@
 .tag {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--c-amber-text);
@@ -498,7 +498,7 @@
   background: var(--bg-sunken);
 }
 .actAgo {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .actBody {
@@ -582,7 +582,7 @@
 }
 .heroStatLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);

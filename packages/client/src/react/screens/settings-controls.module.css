@@ -48,5 +48,5 @@
   font-family: var(--font-mono);
 }
 .input:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
 }

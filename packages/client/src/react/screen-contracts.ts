@@ -253,13 +253,37 @@ export interface PaletteRowDTO {
   variant: "action" | "app" | "chat";
   /** For `variant: 'app'` — the gradient tile paint. */
   tile?: PaletteTileDTO;
+  /**
+   * MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+   * short lowercase noun for what the row IS (`doc`, `person`, `event`,
+   * `conversation`), rendered ahead of the title. Unset for rows that are
+   * not a vault object (apps, nav destinations, the create row).
+   */
+  kind?: string;
+  /**
+   * NUMERIC register — tabular mono, a date/size/count. Distinct from `sub`,
+   * which stays free UI-register text.
+   */
   meta?: string;
   kbd?: string;
   accent?: boolean;
   run: () => void;
 }
+export interface PaletteGroupIconDTO {
+  /** Pre-rendered icon SVG markup — the owning app's glyph. */
+  html: string;
+  /** Identity hue as a CSS value, e.g. `var(--c-teal)`. Omitted = no tint. */
+  hue?: string;
+}
 export interface PaletteGroupDTO {
   group: string;
+  /**
+   * Group marker (Binding Layer row anatomy, issue #708 §A point 2) — set
+   * when every row in the group is a vault object owned by one app/surface
+   * (entity search, Conversations, Recents); omitted for navigational
+   * groups (Apps, Go to, Create) that stay plain text.
+   */
+  icon?: PaletteGroupIconDTO;
   items: PaletteRowDTO[];
 }
 export interface PaletteBridgeProps {
@@ -271,6 +295,12 @@ export interface PaletteBridgeProps {
    * async data (templates) arrives so `buildGroups` re-runs.
    */
   onReady?: (refresh: () => void) => void;
+  /**
+   * Example queries for the pre-query empty state (issue #708 §A) — seeded
+   * from what the vault actually contains, not static copy. Read only while
+   * the query field is empty; a click fills the field with the chip's text.
+   */
+  suggestions?: () => string[];
 }
 
 // ── Phone settings pane ─────────────────────────────────────────────────────
@@ -1153,14 +1183,6 @@ export interface HomeAutoItemDTO {
   footOk: boolean;
   starred: boolean;
 }
-export interface HomeDailyBriefDTO {
-  date: string;
-  events: Array<{ id: string; title: string; at: string }>;
-  tasks: Array<{ id: string; title: string; dueAt: string }>;
-  newPhotos: number;
-  balanceMinor: number;
-  currency: string;
-}
 export interface HomeBridgeProps {
   /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
    *  "What should we build?" composer hero + its suggestions don't render and
@@ -1170,7 +1192,6 @@ export interface HomeBridgeProps {
   dateLabel: string;
   appItems: HomeAppItemDTO[];
   automationItems: HomeAutoItemDTO[];
-  dailyBrief?: HomeDailyBriefDTO;
   counts: { all: number; apps: number; automations: number };
   attention: number;
   onBuild: (prompt: string) => void;

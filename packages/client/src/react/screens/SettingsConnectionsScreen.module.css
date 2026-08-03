@@ -77,7 +77,7 @@
 }
 .sectionLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -201,7 +201,7 @@
 .tileBadge {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -304,7 +304,7 @@
 .tileBadgeMuted {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -365,7 +365,7 @@
 .healthLabel {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -618,7 +618,7 @@
 }
 .scopeOption small {
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .scopeOption[data-disabled="true"] {
   color: var(--text-ghost);

@@ -56,7 +56,7 @@
 .trigger,
 .duration {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   color: color-mix(in oklab, var(--text) 50%, transparent);
 }

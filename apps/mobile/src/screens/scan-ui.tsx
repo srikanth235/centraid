@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   lineCard: { borderRadius: 14, borderWidth: 1, gap: 9, padding: 12 },
   lineKind: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 13,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 150, textAlignVertical: "top" },

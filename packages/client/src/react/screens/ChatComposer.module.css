@@ -40,7 +40,7 @@
 }
 
 .input:disabled {
-  opacity: 0.55;
+  color: var(--text-disabled);
 }
 
 .send {
@@ -57,7 +57,7 @@
 }
 
 .send:disabled {
-  opacity: 0.4;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 

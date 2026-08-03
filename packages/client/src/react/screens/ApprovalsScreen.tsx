@@ -8,6 +8,8 @@ import Button from "../ui/Button.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import KindBadge from "../ui/KindBadge.js";
+import { NETWORK_CALLS } from "./networkCalls.js";
+import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
 import emptyCss from "../styles/pageEmpty.module.css";
 import styles from "./ApprovalsScreen.module.css";
@@ -160,6 +162,15 @@ export interface ApprovalsScreenProps {
   parked: readonly ApprovalsParkedRowDTO[];
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
+  /**
+   * The store-centric ledger (issue #708 A2) — "who can see my photos?"
+   * rather than "what does this app do?". Every declared store is present,
+   * even with zero holders (the caller renders that as "reachable by
+   * nothing"). Pure reshape of the same `vaultApps()`/`listAgents()` grants
+   * data `grants` above draws from a different angle of — see
+   * `privacyStores.ts`.
+   */
+  storeGrants: readonly StoreGroup[];
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
   /**
@@ -183,6 +194,9 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
+  /** Revoke one store-ledger holder's grant — the switch strikes the row
+   *  through locally rather than removing it (issue #708 A2). */
+  onRevokeStoreGrant: (holder: StoreHolderDTO) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
   onOpenNotice?: (notice: NoticeRowDTO) => void;
@@ -621,6 +635,138 @@ function GrantRow({
   );
 }
 
+// ── Privacy ledger, by store (issue #708 A2) ────────────────────────────
+// "Who can see my photos?" instead of "what does this app do?" — one
+// section per store, holders listed underneath. A held-then-revoked holder
+// stays in the list with its mode struck through: the switch is a toggle,
+// not a delete, so the history of who once had access stays legible.
+
+function StoreHolderRow({
+  holder,
+  revoked,
+  busy,
+  onToggle,
+}: {
+  holder: StoreHolderDTO;
+  revoked: boolean;
+  busy: boolean;
+  onToggle: (nextChecked: boolean) => void;
+}): JSX.Element {
+  return (
+    <div className={styles.storeHolderRow} data-revoked={revoked || undefined}>
+      {holder.holderKind === "agent" ? (
+        <KindBadge kind="automation">Automation</KindBadge>
+      ) : (
+        <KindBadge kind="app">App</KindBadge>
+      )}
+      <span className={styles.storeHolderLabel}>{holder.holderLabel}</span>
+      <span
+        className={styles.storeHolderMode}
+        data-struck={revoked || undefined}
+      >
+        {holder.mode}
+      </span>
+      <label className={styles.storeHolderSwitch}>
+        <input
+          type="checkbox"
+          checked={!revoked}
+          disabled={busy}
+          aria-label={`${holder.mode} access to ${holder.holderLabel}`}
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+        <span className={styles.storeHolderSwitchTrack} aria-hidden="true" />
+      </label>
+    </div>
+  );
+}
+
+/** `${storeId}:${grantId}` — a grant is only unique to a store when both are
+ *  present, since the same underlying grant can span several stores'
+ *  scopes and each store's row needs its own independent revoked state. */
+export function revokedHolderKey(storeId: string, grantId: string): string {
+  return `${storeId}:${grantId}`;
+}
+
+/**
+ * Re-attach any revoked-this-session snapshot whose grant is no longer in
+ * the live group (the revoke call deleted it server-side) — pure so it's
+ * unit-testable independent of the screen's rendering.
+ */
+export function mergeRevokedHolders(
+  group: StoreGroup,
+  revoked: ReadonlyMap<string, StoreHolderDTO>
+): StoreGroup {
+  const liveIds = new Set(group.holders.map((h) => h.grantId));
+  const reattached: StoreHolderDTO[] = [];
+  for (const [key, holder] of revoked) {
+    if (key !== revokedHolderKey(group.storeId, holder.grantId)) continue;
+    if (liveIds.has(holder.grantId)) continue;
+    reattached.push(holder);
+  }
+  return { ...group, holders: [...group.holders, ...reattached] };
+}
+
+function StoreSection({
+  group,
+  revokedIds,
+  storeId,
+  busyId,
+  onRevoke,
+}: {
+  group: StoreGroup;
+  revokedIds: ReadonlyMap<string, StoreHolderDTO>;
+  storeId: string;
+  busyId: string | null;
+  onRevoke: (holder: StoreHolderDTO) => void;
+}): JSX.Element {
+  const count = group.holders.length;
+  return (
+    <section className={styles.storeSection} data-testid="privacy-store">
+      <h3 className={styles.storeSectionTitle}>{group.label}</h3>
+      <p className={styles.storeCount}>
+        {count > 0
+          ? `${count} app${count === 1 ? "" : "s"}`
+          : "reachable by nothing"}
+      </p>
+      {count > 0 ? (
+        <div className={styles.storeHolderList}>
+          {group.holders.map((holder) => (
+            <StoreHolderRow
+              key={`${holder.holderKind}-${holder.holderId}-${storeId}`}
+              holder={holder}
+              revoked={revokedIds.has(
+                revokedHolderKey(storeId, holder.grantId)
+              )}
+              busy={busyId === holder.grantId}
+              onToggle={(nextChecked) => {
+                if (!nextChecked) onRevoke(holder);
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function PrivacyNetworkFooter(): JSX.Element {
+  return (
+    <footer className={styles.networkFooter}>
+      <h3 className={styles.storeSectionTitle}>
+        Every network call this product makes
+      </h3>
+      <dl className={styles.networkList}>
+        {NETWORK_CALLS.map((call) => (
+          <div key={call.label} className={styles.networkRow}>
+            <dt>{call.label}</dt>
+            <dd>{call.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </footer>
+  );
+}
+
 /** Decision → icon + accent class for Recent activity (issue #552). */
 function activityDecisionVisual(decision: string): {
   icon: "CheckCircle" | "X" | "Clock";
@@ -1050,6 +1196,7 @@ export default function ApprovalsScreen(
     parked,
     scopeRequests,
     grants,
+    storeGrants,
     activity,
     notices = [],
     activityTruncated = false,
@@ -1060,6 +1207,7 @@ export default function ApprovalsScreen(
     onConfirmParked,
     onDecideScopeRequest,
     onRevokeGrant,
+    onRevokeStoreGrant,
     onReadNotice = () => undefined,
     onArchiveNotice = () => undefined,
     onOpenNotice = () => undefined,
@@ -1071,10 +1219,19 @@ export default function ApprovalsScreen(
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
   const [notificationsFilter, setNotificationsFilter] = useState<
-    "needs" | "automations" | "agents" | "apps" | "archived"
+    "needs" | "automations" | "agents" | "apps" | "privacy" | "archived"
   >("needs");
   const [focusedOutbox, setFocusedOutbox] = useState<string | null>(null);
   const [seenFocusNonce, setSeenFocusNonce] = useState<number | null>(null);
+  // Snapshots of grants the owner has switched off THIS session, keyed by
+  // grantId. The revoke API call deletes the grant row outright, so the next
+  // fetch would simply drop it from `storeGrants` — keeping a copy of the row
+  // as it looked at the moment of revoke is what lets it stay visible with
+  // its mode struck through instead of vanishing (issue #708 A2: "the
+  // history of the grant stays legible").
+  const [revokedStoreHolders, setRevokedStoreHolders] = useState<
+    ReadonlyMap<string, StoreHolderDTO>
+  >(new Map());
 
   // Honor a deep link from an outbox notice (#647 D10). Adjusting state while
   // rendering (React's documented "derived from props" escape) rather than in
@@ -1105,24 +1262,28 @@ export default function ApprovalsScreen(
     (notice) => notice.archivedAt !== null
   );
   const filteredNotices =
-    notificationsFilter === "archived"
-      ? archivedNotices
-      : notificationsFilter === "needs"
-        ? // "Needs me" means "requires my attention": an info-severity notice
-          // (a gateway recovering, an FYI) is news, not a demand — it stays
-          // reachable under its source-type chip and in Archived, but doesn't
-          // sit in the default view as an unread obligation (#665). Warning
-          // and high keep their place.
-          activeNotices.filter((notice) => notice.severity !== "info")
-        : activeNotices.filter(
-            (notice) =>
-              notice.sourceType ===
-              (notificationsFilter === "automations"
-                ? "automation"
-                : notificationsFilter === "agents"
-                  ? "agent"
-                  : "app")
-          );
+    notificationsFilter === "privacy"
+      ? // Privacy is the store ledger, not a notice filter — it renders its
+        // own section below instead of the shared notices list.
+        []
+      : notificationsFilter === "archived"
+        ? archivedNotices
+        : notificationsFilter === "needs"
+          ? // "Needs me" means "requires my attention": an info-severity notice
+            // (a gateway recovering, an FYI) is news, not a demand — it stays
+            // reachable under its source-type chip and in Archived, but doesn't
+            // sit in the default view as an unread obligation (#665). Warning
+            // and high keep their place.
+            activeNotices.filter((notice) => notice.severity !== "info")
+          : activeNotices.filter(
+              (notice) =>
+                notice.sourceType ===
+                (notificationsFilter === "automations"
+                  ? "automation"
+                  : notificationsFilter === "agents"
+                    ? "agent"
+                    : "app")
+            );
   const totalCount =
     outbox.length + needsAuth.length + parked.length + scopeRequests.length;
   // Open decisions are pinned at the top under EVERY chip (Archived
@@ -1165,6 +1326,7 @@ export default function ApprovalsScreen(
             ["automations", "Automations"],
             ["agents", "Agents"],
             ["apps", "Apps"],
+            ["privacy", "Privacy"],
             ["archived", "Archived"],
           ] as const
         ).map(([value, label]) => (
@@ -1273,13 +1435,43 @@ export default function ApprovalsScreen(
                 ))}
               </div>
             </section>
-          ) : notificationsFilter === "needs" ? null : (
+          ) : notificationsFilter === "needs" ||
+            notificationsFilter === "privacy" ? null : (
             // A notice-filtering chip with no matches says only that: the
             // pinned decisions above are still waiting.
             <NotificationsEmpty text="No notices here." />
           )}
         </div>
       )}
+
+      {notificationsFilter === "privacy" ? (
+        <div className={styles.groups} data-testid="privacy-ledger">
+          <p className={styles.privacyLead}>
+            Everything an app can reach, and nothing it cannot. Revoking takes
+            effect at once — the app keeps no copy of what it read.
+          </p>
+          {storeGrants.map((group) => (
+            <StoreSection
+              key={group.storeId}
+              group={mergeRevokedHolders(group, revokedStoreHolders)}
+              revokedIds={revokedStoreHolders}
+              storeId={group.storeId}
+              busyId={busyId}
+              onRevoke={(holder) => {
+                setRevokedStoreHolders(
+                  (previous) =>
+                    new Map([
+                      ...previous,
+                      [revokedHolderKey(group.storeId, holder.grantId), holder],
+                    ])
+                );
+                onRevokeStoreGrant(holder);
+              }}
+            />
+          ))}
+          <PrivacyNetworkFooter />
+        </div>
+      ) : null}
 
       {notificationsFilter === "archived" ? (
         <section className={styles.grantsSection}>

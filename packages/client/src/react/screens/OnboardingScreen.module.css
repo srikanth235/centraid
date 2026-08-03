@@ -110,7 +110,7 @@
   align-items: center;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.22em;
   color: color-mix(in srgb, var(--text) 80%, transparent);
@@ -231,7 +231,7 @@
 }
 .fieldLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -336,7 +336,7 @@
 }
 .importChoice small {
   color: color-mix(in srgb, currentColor 65%, transparent);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   line-height: 1.35;
 }
 .importPicker {
@@ -390,7 +390,7 @@
   transform: translateY(0);
 }
 .cta:disabled {
-  opacity: 0.42;
+  opacity: var(--o-disabled);
   cursor: not-allowed;
   filter: grayscale(0.25);
 }
@@ -469,7 +469,7 @@
   color: var(--text);
 }
 .backBtn:disabled {
-  opacity: 0.5;
+  color: var(--text-disabled);
   cursor: default;
 }
 
@@ -500,6 +500,11 @@
   height: 8px;
   border-radius: 50%;
   background: var(--onb-accent);
+  /* Base (non-animated) opacity — masked by the pulse below while it runs,
+     but it's what shows once the global `prefers-reduced-motion` rule
+     collapses the animation to a single instant: a steady, dimmed dot
+     instead of the pulse's full-opacity peak. */
+  opacity: 0.8;
   animation: onbWorkingPulse 1.4s ease-in-out infinite;
 }
 @keyframes onbWorkingPulse {
@@ -513,12 +518,9 @@
     transform: scale(1.15);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .workingDot {
-    animation: none;
-    opacity: 0.8;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule. `.workingDot`'s reduced-motion look (steady, dimmed) is its
+   own base `opacity: 0.8` above, not a per-component override. */
 
 /* Hosts the shared ConnectFlow wizard (kit-token styled — the switcher's
    Add-gateway modal uses it unwrapped too). `data-theme="dark"` on this

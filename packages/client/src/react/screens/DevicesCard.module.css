@@ -105,7 +105,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-size: 10px;
+  font-size: var(--t-control-size);
 }
 .groupEmpty {
   margin: 0 0 0 42px;
@@ -142,7 +142,7 @@
   flex-wrap: wrap;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .tombstones li span[data-quiet="true"] {
   color: color-mix(in srgb, var(--text-faint) 72%, transparent);
@@ -235,7 +235,7 @@
 .currentChip,
 .transportChip {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   border-radius: 999px;
@@ -292,7 +292,7 @@
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent-deep, var(--accent));
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
 }
 .grantProfile span:first-child {
   color: var(--text-faint);
@@ -316,7 +316,7 @@
 .computeToggle small {
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
 }
 .computeCaps {
   display: flex;
@@ -329,12 +329,12 @@
   background: color-mix(in srgb, var(--success) 9%, transparent);
   color: var(--success);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
 }
 
 .rowError {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }
@@ -389,11 +389,8 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .spin {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.spin`. */
 
 /* Narrow CARD (not narrow window): let the action drop below the row body
    instead of crushing the name and meta lines. `.rowAction` is `flex: none`,

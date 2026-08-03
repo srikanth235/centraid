@@ -166,6 +166,12 @@ function AppRow({
   const label = entry.installed
     ? `Open ${entry.name}`
     : `${entry.name}, on your desktop — tap to pair`;
+  // Recede at the LEAF, never the container: an uninstalled entry's icon and
+  // name step down to the theme's faint tokens directly, instead of wrapping
+  // the row in an opacity-faded View. Container opacity composites every
+  // descendant and silently invalidates token-level contrast — the Binding
+  // Layer invariant this row used to violate (issue #708).
+  const recede = !entry.installed;
   return (
     <Pressable
       accessibilityRole="button"
@@ -173,36 +179,47 @@ function AppRow({
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View style={!entry.installed && styles.dimmed}>
-        {finish ? (
-          <View
-            style={[
-              styles.chip,
-              {
-                backgroundColor: finish.backgroundColor,
-                borderRadius: iconChipRadius(ROW_ICON),
-              },
-            ]}
-          >
-            <Icon
-              name={entry.icon}
-              size={16}
-              color={finish.markColor}
-              strokeWidth={1.8}
-            />
-          </View>
-        ) : (
-          <View style={styles.chip}>
-            <Icon
-              name={entry.icon}
-              size={18}
-              color={colors.textSoft}
-              strokeWidth={1.7}
-            />
-          </View>
-        )}
-      </View>
-      <Text style={styles.rowLabel} numberOfLines={1}>
+      {finish ? (
+        <View
+          style={[
+            styles.chip,
+            {
+              backgroundColor: recede ? colors.bgElev : finish.backgroundColor,
+              borderRadius: iconChipRadius(ROW_ICON),
+            },
+          ]}
+        >
+          <Icon
+            name={entry.icon}
+            size={16}
+            color={recede ? colors.textFaint : finish.markColor}
+            strokeWidth={1.8}
+          />
+        </View>
+      ) : (
+        <View style={styles.chip}>
+          <Icon
+            name={entry.icon}
+            size={18}
+            color={recede ? colors.textFaint : colors.textSoft}
+            strokeWidth={1.7}
+          />
+        </View>
+      )}
+      {/* Pinned reads full-weight ink; unpinned is a neutral chip with a
+          LIGHTER name — never a dimmed one (brief, Tier 2: All apps). Mirrors
+          the desktop idiom of lifting --text-soft to --text on pin
+          (packages/client/src/react/shell/chrome.module.css:687-699), with a
+          weight bump standing in for --t-small-strong. An uninstalled entry's
+          recede state wins over both, since it can't be pinned. */}
+      <Text
+        style={[
+          styles.rowLabel,
+          pinned && styles.rowLabelPinned,
+          recede && styles.rowLabelRecede,
+        ]}
+        numberOfLines={1}
+      >
         {entry.name}
       </Text>
       <Switch
@@ -225,7 +242,6 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: ROW_ICON,
     },
-    dimmed: { opacity: 0.45 },
     empty: { ...t("small"), color: colors.textSoft, paddingVertical: 20 },
     field: {
       alignItems: "center",
@@ -250,7 +266,12 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: metrics.row,
       paddingHorizontal: 20,
     },
-    rowLabel: { ...t("body"), color: colors.text, flex: 1 },
+    // Unpinned reads as a neutral chip with a lighter name — never a dimmed
+    // one. Pinning lifts the leaf colour token to full ink; it never fades a
+    // container.
+    rowLabel: { ...t("body"), color: colors.textSoft, flex: 1 },
+    rowLabelPinned: { ...t("bodyStrong"), color: colors.text },
+    rowLabelRecede: { ...t("body"), color: colors.textFaint },
     rowPressed: { backgroundColor: colors.bgHover },
     scrim: { backgroundColor: colors.scrim, flex: 1 },
     sheet: {

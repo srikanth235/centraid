@@ -98,7 +98,7 @@
 }
 .logStatL {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -136,7 +136,7 @@
 }
 .logTime {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding-top: 2px;
   text-align: right;
@@ -165,11 +165,8 @@
 .logGlyph[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .logGlyph[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.logGlyph`'s spin. */
 .logGlyph[data-status="trigger"] {
   color: var(--text-faint);
 }
@@ -183,7 +180,7 @@
   background: var(--bg-sunken);
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     background 0.14s ease,
@@ -235,11 +232,8 @@
   animation: cd-spin 0.9s linear infinite;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
 }
-@media (prefers-reduced-motion: reduce) {
-  .tlDot[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.tlDot`'s spin. */
 .tlLine {
   flex: 1;
   width: 2px;
@@ -318,7 +312,7 @@
 }
 .tlKind {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -329,7 +323,7 @@
 .tlMeta {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
 }
@@ -377,11 +371,8 @@
   background: var(--accent);
   animation: cd-pulse 1s steps(2, start) infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .tlCaret {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.tlCaret`'s animation. */
 .tlCardTrigger {
   padding: 12px 14px;
 }
@@ -399,7 +390,7 @@
 }
 .tlTrigHead time {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .tlFinalBody {
@@ -454,7 +445,7 @@
 }
 .stepLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -537,7 +528,7 @@
 }
 .rsideH {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);

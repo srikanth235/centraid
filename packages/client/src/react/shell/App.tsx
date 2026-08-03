@@ -29,6 +29,11 @@ import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
 import AllAppsSheet from "./AllAppsSheet.js";
 import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
+import {
+  commitAvailabilityFor,
+  CommitAvailabilityProvider,
+  OFFLINE_COMMIT_REASON,
+} from "./commitAvailability.js";
 import { openConfirm } from "./confirm.js";
 import { openMenu } from "./contextMenu.js";
 import type { ShellMenuAnchor } from "./contextMenu.js";
@@ -71,8 +76,12 @@ import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
 import PairDeviceModal from "./routes/PairDeviceModal.js";
 import { createPaletteConversationSearch } from "./routes/paletteConversationSearch.js";
-import { buildPaletteGroups } from "./routes/paletteData.js";
+import {
+  buildPaletteGroups,
+  buildPaletteSuggestions,
+} from "./routes/paletteData.js";
 import { createPaletteEntitySearch } from "./routes/paletteEntitySearch.js";
+import { createPaletteRecents } from "./routes/paletteRecents.js";
 import { loadSelfProfile } from "./routes/profileData.js";
 import RenameGatewayModal from "./routes/RenameGatewayModal.js";
 import RunViewRoute from "./routes/RunViewRoute.js";
@@ -372,6 +381,7 @@ export default function App(): JSX.Element {
     []
   );
   const paletteEntitySearch = useMemo(() => createPaletteEntitySearch(), []);
+  const paletteRecents = useMemo(() => createPaletteRecents(), []);
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
   // The host-plumbing acts (issue #382) — "Test connection…", "Rename…",
   // "Remove" (Gateway → Components → Connections since #665) and the switcher's
@@ -918,7 +928,7 @@ export default function App(): JSX.Element {
       <StatusLine
         ambient={ambientStatus}
         offline={gatewayStatus === "down"}
-        offlineReason="Offline · changes stay on this device and commits are disabled until the gateway is back"
+        offlineReason={OFFLINE_COMMIT_REASON}
         offlineAction={{
           label: "Check gateway",
           run: () => navRef.current?.navigate({ kind: "gateway" }),
@@ -1217,13 +1227,18 @@ export default function App(): JSX.Element {
     setPaletteOpen(false);
     paletteConversationSearch.reset();
     paletteEntitySearch.reset();
+    paletteRecents.reset();
     // The refresh() belongs to the palette instance that is going away.
     paletteConversationSearch.setOnResults(null);
     paletteEntitySearch.setOnResults(null);
-  }, [paletteConversationSearch, paletteEntitySearch]);
+    paletteRecents.setOnResults(null);
+  }, [paletteConversationSearch, paletteEntitySearch, paletteRecents]);
 
   return (
-    <>
+    // The offline verdict travels once, from here, and the shared commit
+    // control reads it (issue #708, C7). It wraps the modals and sheets too —
+    // a dialog's Save is as much a commit as a route's is.
+    <CommitAvailabilityProvider value={commitAvailabilityFor(gatewayStatus)}>
       <ShellApp
         initialRoute={initialShellRoute}
         renderStem={renderStem}
@@ -1267,6 +1282,7 @@ export default function App(): JSX.Element {
           onReady={(refreshLocal) => {
             paletteConversationSearch.setOnResults(refreshLocal);
             paletteEntitySearch.setOnResults(refreshLocal);
+            paletteRecents.setOnResults(refreshLocal);
           }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {
@@ -1283,6 +1299,23 @@ export default function App(): JSX.Element {
               onClose: closePalette,
               conversationSearch: paletteConversationSearch,
               entitySearch: paletteEntitySearch,
+              recents: paletteRecents,
+            })
+          }
+          suggestions={() =>
+            buildPaletteSuggestions({
+              userApps,
+              drafts: builderEnabled ? drafts : NO_DRAFTS,
+              builderEnabled,
+              tileVariant: prefs.tileVariant,
+              navigate: (route) => navRef.current?.navigate(route),
+              enterBuilder: (initialPrompt) =>
+                navRef.current?.navigate({
+                  kind: "builder",
+                  ...(initialPrompt ? { initialPrompt } : {}),
+                }),
+              onClose: closePalette,
+              recents: paletteRecents,
             })
           }
         />
@@ -1327,7 +1360,7 @@ export default function App(): JSX.Element {
           }}
         />
       ) : null}
-    </>
+    </CommitAvailabilityProvider>
   );
 }
 

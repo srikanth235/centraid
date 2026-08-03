@@ -92,7 +92,7 @@
 }
 .fieldLabel {
   font: var(--t-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -157,13 +157,9 @@
   overflow-wrap: anywhere;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .avatar,
-  .avatarRing,
-  .swatch {
-    transition: none;
-  }
-  .swatch:hover {
-    transform: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.avatar`/`.avatarRing`/`.swatch`'s
+   transitions — including `.swatch:hover`'s lift, which collapses to instant
+   rather than removed (the brief's grammar: "Duration → 0, opacity only";
+   suppressing the hover transform outright, as this block used to, is not
+   the same thing and doesn't belong here). */

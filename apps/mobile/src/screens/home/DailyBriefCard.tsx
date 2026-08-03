@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     padding: 16,
   },
-  eyebrow: { fontFamily: family.monoMedium, fontSize: 10, letterSpacing: 1 },
+  eyebrow: { fontFamily: family.monoMedium, fontSize: 12.5, letterSpacing: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: { paddingVertical: 5, width: "50%" },
   value: { fontFamily: family.sansMedium, fontSize: 19 },

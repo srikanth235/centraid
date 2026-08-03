@@ -1,12 +1,22 @@
+import { apps as APP_CATALOG } from "@centraid/design";
+
 import type {
   AppearancePrefs,
   ShellRoute,
 } from "../../../app-shell-context.js";
-import type { PaletteGroupDTO, PaletteRowDTO } from "../../screen-contracts.js";
+import type {
+  PaletteGroupDTO,
+  PaletteGroupIconDTO,
+  PaletteRowDTO,
+} from "../../screen-contracts.js";
 import { iconSvg } from "../iconSvg.js";
 import { LAUNCHER_DESTINATIONS } from "../launcherModel.js";
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
-import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
+import type {
+  PaletteEntityHit,
+  PaletteEntitySearch,
+} from "./paletteEntitySearch.js";
+import type { PaletteRecents } from "./paletteRecents.js";
 
 // The ⌘K command palette's data driver — the React successor to the vanilla
 // app-palette.ts `buildGroups`. Given the current query it returns grouped
@@ -46,6 +56,64 @@ export interface PaletteDeps {
   conversationSearch?: PaletteConversationSearch;
   /** FTS5 results across the eight bundled blueprint entity types. */
   entitySearch?: PaletteEntitySearch;
+  /**
+   * Recently opened/edited vault objects + the suggestion chips derived from
+   * them — the pre-query empty state (issue #708 §A). Optional so callers
+   * without a live replica session still work, same convention as the other
+   * two search sources.
+   */
+  recents?: PaletteRecents;
+}
+
+/** The owning app's icon + identity hue for a group header (issue #708 §A
+ *  point 2 — "icon as group marker"). Looked up from the shared app catalog
+ *  rather than `deps.userApps` so a group renders correctly even before the
+ *  bundled app has been added to the member's home screen. */
+function appGroupIcon(appId: string): PaletteGroupIconDTO | undefined {
+  const app = APP_CATALOG.find((a) => a.id === appId);
+  if (!app) return undefined;
+  return { html: iconSvg(app.iconKey), hue: `var(--c-${app.colorKey})` };
+}
+
+/** Conversations aren't owned by a blueprint app — they're the Assistant
+ *  surface's own object kind — so its group marker comes from the launcher
+ *  destination instead of the app catalog. */
+function assistantGroupIcon(): PaletteGroupIconDTO | undefined {
+  const assistant = LAUNCHER_DESTINATIONS.find((d) => d.id === "assistant");
+  if (!assistant) return undefined;
+  return {
+    html: iconSvg(assistant.icon),
+    ...(assistant.colorKey ? { hue: `var(--c-${assistant.colorKey})` } : {}),
+  };
+}
+
+/**
+ * One vault-object row from an entity hit (issue #708 §A) — shared between
+ * the query-time entity-search groups and the empty-state Recents group so
+ * the two present identically.
+ *
+ * KNOWN SEAM: `run` still opens the owning app (`{kind:"app", id: appId}`),
+ * not the specific object. `ShellRoute`'s `app` variant carries only the
+ * app's id — there is currently no field, postMessage type, or app-manifest
+ * convention to hand a record id into a running blueprint app (no
+ * `openRecordId` on the route, no `centraid:open-entity` message, no
+ * "detail route" in app.json). Opening the app is the closest available
+ * action until that plumbing exists; faking a deeper deep-link here would
+ * misrepresent what actually happens on click.
+ */
+function entityRow(hit: PaletteEntityHit, deps: PaletteDeps): PaletteRowDTO {
+  return {
+    variant: "action",
+    label: hit.label,
+    ...(hit.snippet ? { sub: hit.snippet } : {}),
+    kind: hit.kind,
+    ...(hit.meta ? { meta: hit.meta } : {}),
+    iconHtml: iconSvg("Search"),
+    run: () => {
+      deps.onClose();
+      deps.navigate({ kind: "app", id: hit.appId });
+    },
+  };
 }
 
 /** Flatten an FTS `snippet()` string to plain palette-sub text (drop `⟦`/`⟧`). */
@@ -63,6 +131,24 @@ export function buildPaletteGroups(
 ): PaletteGroupDTO[] {
   const q = query.trim().toLowerCase();
   const groups: PaletteGroupDTO[] = [];
+
+  // Recents (issue #708 §A): the pre-query empty state. Objects, not apps —
+  // rows are the member's own recently opened/edited items, grouped by their
+  // owning app exactly like a live entity-search hit would be.
+  if (!q && deps.recents) {
+    deps.recents.ensure();
+    const hits = deps.recents.items();
+    if (hits.length > 0) {
+      groups.push({
+        // Recents mixes objects from every app, so — unlike the entity-search
+        // and Conversations groups below — there is no single owning app to
+        // tint the marker with; the clock glyph stays neutral (no hue).
+        group: "Recents",
+        icon: { html: iconSvg("Clock") },
+        items: hits.slice(0, 8).map((hit) => entityRow(hit, deps)),
+      });
+    }
+  }
 
   const allApps: AppMetaResolvedType[] = [...deps.userApps, ...deps.drafts];
   const appMatches = allApps.filter(
@@ -104,10 +190,12 @@ export function buildPaletteGroups(
     if (hits.length > 0) {
       groups.push({
         group: "Conversations",
+        icon: assistantGroupIcon(),
         items: hits.slice(0, 6).map(
           (h): PaletteRowDTO => ({
             variant: "chat",
             label: h.title || "New conversation",
+            kind: "conversation",
             ...(h.snippet ? { sub: snippetToText(h.snippet) } : {}),
             iconHtml: iconSvg("Sparkle"),
             run: () => {
@@ -120,31 +208,23 @@ export function buildPaletteGroups(
     }
   }
 
+  // Entity search (issue #420 Wave 3, extended #708 §A): vault OBJECTS —
+  // never "open app X" — grouped by their owning app, one group per app id
+  // so the header carries that app's own icon + identity hue.
   if (q && deps.entitySearch) {
     deps.entitySearch.ensure(query);
     const hits = deps.entitySearch.results(query);
     const byApp = new Map<string, typeof hits>();
     for (const hit of hits) {
-      const rows = byApp.get(hit.appLabel) ?? [];
+      const rows = byApp.get(hit.appId) ?? [];
       rows.push(hit);
-      byApp.set(hit.appLabel, rows);
+      byApp.set(hit.appId, rows);
     }
-    for (const [appLabel, rows] of byApp) {
+    for (const [appId, rows] of byApp) {
       groups.push({
-        group: appLabel,
-        items: rows.slice(0, 6).map(
-          (hit): PaletteRowDTO => ({
-            variant: "action",
-            label: hit.label,
-            sub: hit.snippet || hit.entity,
-            meta: hit.appLabel,
-            iconHtml: iconSvg("Search"),
-            run: () => {
-              deps.onClose();
-              deps.navigate({ kind: "app", id: hit.appId });
-            },
-          })
-        ),
+        group: rows[0]?.appLabel ?? appId,
+        icon: appGroupIcon(appId),
+        items: rows.slice(0, 6).map((hit) => entityRow(hit, deps)),
       });
     }
   }
@@ -191,4 +271,16 @@ export function buildPaletteGroups(
   }
 
   return groups;
+}
+
+/**
+ * Suggestion chips for the empty state (issue #708 §A) — the palette calls
+ * this only while the query field is empty. A thin wrapper over
+ * `deps.recents` so `App.tsx` can pass it as `PaletteBridgeProps.suggestions`
+ * without reaching into the recents source's shape itself.
+ */
+export function buildPaletteSuggestions(deps: PaletteDeps): string[] {
+  if (!deps.recents) return [];
+  deps.recents.ensure();
+  return deps.recents.suggestions();
 }

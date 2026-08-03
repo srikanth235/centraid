@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import type { CentraidGatewayDevice } from "../../gateway-client-devices.js";
 import type { GatewayHomeDiscoveryDTO } from "../../gateway-client.js";
 import type { UsageInput } from "../../storage-metrics.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import BackupCopyCards from "./BackupCopyCards.js";
+import BackupDeviceList from "./BackupDeviceList.js";
 import BackupHealthMetrics, { ClockLine } from "./BackupHealthMetrics.js";
 import BackupInventoryPanel from "./BackupInventoryPanel.js";
 import type {
   BackupReconciliationDTO,
   ProviderPolicyStatusDTO,
 } from "./BackupInventoryPanel.js";
-import { computeStorageMetrics } from "./backupMetrics.js";
+import BackupLossSummary from "./BackupLossSummary.js";
+import { computeStorageMetrics, deriveLossSummary } from "./backupMetrics.js";
 import BackupPolicyPanel from "./BackupPolicyPanel.js";
 import type {
   BackupDestinationDTO,
@@ -98,6 +102,16 @@ export interface BackupCardProps {
   }) => Promise<{ confirmedAt: number }>;
   /** Optional setup destination for hosts that expose backup configuration. */
   onOpenSettings?: () => void;
+  /** The paired-device roster (issue #708 A2's device list) — absent only
+   *  when a caller has no device plane to offer (older embed). */
+  loadDevices?: () => Promise<CentraidGatewayDevice[]>;
+  /**
+   * Restore from an offsite copy. Absent today on every host — restore is
+   * still a gateway-side/CLI recovery act (docs/recovery/backup-restore.md),
+   * not a wired client action — so the control renders disabled with that
+   * reason rather than being hidden (issue #708 A2: never buried).
+   */
+  onRestore?: () => void;
 }
 
 /** Regular refresh cadence — matches useGatewayHealth's poll order of
@@ -197,6 +211,8 @@ export default function BackupCard({
   onExportRecoveryKit,
   onConfirmRecoveryKit,
   onOpenSettings,
+  loadDevices,
+  onRestore,
 }: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
   const [usage, setUsage] = useState<UsageInput | null>(null);
@@ -301,6 +317,11 @@ export default function BackupCard({
     (status?.configured ?? false) ||
     (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
+  // The headline the whole screen leads with (issue #708 A2) — computed from
+  // the SAME `metrics` every other readout on this surface reads, so it can
+  // never disagree with the five-metric health block below it.
+  const lossSummary =
+    status && metrics ? deriveLossSummary(status, metrics) : null;
 
   return (
     <section className={cx(gwStyles.panel, styles.card)}>
@@ -335,7 +356,19 @@ export default function BackupCard({
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
         ) : hasBackups ? (
           <>
+            {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
+
             <BackupHealthMetrics metrics={metrics} now={now} />
+
+            {loadDevices ? (
+              <BackupDeviceList now={now} loadDevices={loadDevices} />
+            ) : null}
+
+            <BackupCopyCards
+              status={status}
+              metrics={metrics}
+              onRestore={onRestore}
+            />
 
             <RecoveryKitGate
               configured={status.configured}
@@ -436,6 +469,7 @@ export default function BackupCard({
           </>
         ) : (
           <>
+            {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
             <p className={styles.notConfigured}>
               Your data isn’t backed up offsite yet. Until backup custody is
               configured on this gateway, databases, code, and attachments live

@@ -1,0 +1,203 @@
+/* The Binding Layer's designed states (issue #708, section A).
+   No spinner, no toast, no overlay: every one of these is an inline block the
+   surface around it keeps working behind. */
+
+/* ── working ──────────────────────────────────────────────────────────── */
+
+.working {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  inline-size: 100%;
+}
+
+.workingHead {
+  align-items: baseline;
+  display: flex;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+
+.workingLabel {
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+
+/* Exact counts. A local operation knows its own size, so it says so. */
+.workingCounts {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.workingTrack {
+  background: var(--bg-sunken);
+  block-size: 4px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.workingFill {
+  background: var(--text-soft);
+  block-size: 100%;
+  border-radius: var(--r-pill);
+  /* A ratio, not a width: the track owns its length. */
+  inline-size: calc(var(--working-progress, 0) * 100%);
+  transition: inline-size var(--dur-1) var(--ease);
+}
+
+/* Static skeletons — never a shimmer. The product can describe the work. */
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-2);
+}
+
+.skeleton {
+  background: var(--bg-sunken);
+  block-size: 12px;
+  border-radius: var(--r-sm);
+}
+
+.skeleton:nth-child(2n) {
+  inline-size: 72%;
+}
+
+.skeleton:nth-child(3n) {
+  inline-size: 54%;
+}
+
+/* ── two devices disagree ─────────────────────────────────────────────── */
+
+.disagree {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+}
+
+.disagreeTitle {
+  color: var(--text);
+  font: var(--t-title);
+  margin: 0;
+}
+
+.disagreeSub {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+}
+
+/* BOTH versions, side by side and equally weighted. Neither is "the good one". */
+.versions {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.version {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+
+.versionHead {
+  align-items: baseline;
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+
+.versionDevice {
+  color: var(--text);
+  font: var(--t-small-strong);
+}
+
+.versionAt {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.versionBody {
+  color: var(--text-soft);
+  display: -webkit-box;
+  font: var(--t-body);
+  /* Line-clamped, never clipped: a sliced baseline reads as a bug. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+/* Three equal-weight options: same recipe, same order, no default. Nothing
+   here is styled as destructive, because none of them destroys anything the
+   reader has not been shown. */
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* ── out of room ──────────────────────────────────────────────────────── */
+
+.outOfRoom {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+}
+
+.outOfRoomCause {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+}
+
+/* THE line that matters. It is the largest thing in the block on purpose:
+   "you are at 98%" is a fact, "new photos will stop syncing" is the news. */
+.outOfRoomConsequence {
+  color: var(--text);
+  font: var(--t-title);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.outOfRoomMeter {
+  background: var(--bg-sunken);
+  block-size: 4px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.outOfRoomFill {
+  background: var(--warning);
+  block-size: 100%;
+  border-radius: var(--r-pill);
+  inline-size: calc(var(--room-used, 0) * 100%);
+}
+
+.outOfRoomFill[data-over="true"] {
+  background: var(--danger);
+}
+
+.outOfRoomFigures {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+/* One action. A wall of remedies is a way of not choosing. */
+.outOfRoomAction {
+  align-self: flex-start;
+  margin-block-start: var(--sp-2);
+}

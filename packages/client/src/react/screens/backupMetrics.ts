@@ -52,6 +52,74 @@ function vaultCadenceMs(vault: BackupVaultStatusDTO): number {
   );
 }
 
+/**
+ * "If this device died right now, what would I lose?" (issue #708 A2 — the
+ * Backup screen leads with loss, not exposure). Derived from the same
+ * `computeStorageMetrics` output every other part of this surface reads, so
+ * the loss line and the freshness metric can never disagree with each other.
+ *
+ * `tone` drives the headline; the caller formats `exposedMs`/`pendingBytes`
+ * with `formatDuration`/`formatBytes` (kept out of this module so it stays
+ * numbers-in, numbers-out like the rest of `storage-metrics.ts`).
+ */
+export interface LossSummary {
+  tone: "unconfigured" | "unknown" | "safe" | "exposed";
+  /** Age of the worst freshness clock; `null` when unconfigured/unknown. */
+  exposedMs: number | null;
+  /** Bytes staged for offsite but not yet sent, summed across vaults. */
+  pendingBytes: number;
+  pendingCount: number;
+}
+
+export function deriveLossSummary(
+  status: BackupStatusDTO,
+  metrics: StorageMetrics
+): LossSummary {
+  const configured =
+    status.configured || status.vaults.some((v) => v.lastBackupAt);
+  const pendingBytes = status.vaults.reduce(
+    (sum, v) => sum + (v.pendingOffsite?.bytes ?? 0),
+    0
+  );
+  const pendingCount = status.vaults.reduce(
+    (sum, v) => sum + (v.pendingOffsite?.count ?? 0),
+    0
+  );
+  if (!configured) {
+    return {
+      tone: "unconfigured",
+      exposedMs: null,
+      pendingBytes,
+      pendingCount,
+    };
+  }
+  // Pending offsite bytes are a KNOWN loss (data that hasn't left this
+  // machine yet), even though a nonzero pending count also blanks the
+  // outbox-drain clock and would otherwise read as "unknown" below — the
+  // one fact we do have is more useful than folding it into "can't tell."
+  if (pendingBytes > 0) {
+    return {
+      tone: "exposed",
+      exposedMs: metrics.freshness.ageMs,
+      pendingBytes,
+      pendingCount,
+    };
+  }
+  if (
+    metrics.freshness.status === "unknown" ||
+    metrics.freshness.ageMs === null
+  ) {
+    return { tone: "unknown", exposedMs: null, pendingBytes, pendingCount };
+  }
+  const { ageMs, declaredCadenceMs } = metrics.freshness;
+  return {
+    tone: ageMs <= declaredCadenceMs ? "safe" : "exposed",
+    exposedMs: ageMs,
+    pendingBytes,
+    pendingCount,
+  };
+}
+
 /** Sum provider-reported usage across every home connection into the aggregate
  *  per-store shape the cost metric reads. `null` before the first poll. */
 export function aggregateUsage(

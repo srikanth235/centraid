@@ -550,7 +550,7 @@ const makeStyles = (colors: ThemeColors) =>
     activePillText: {
       color: "#fff",
       fontFamily: family.monoMedium,
-      fontSize: 9,
+      fontSize: 12.5,
       letterSpacing: 1,
     },
     activeSub: { ...t("small"), color: colors.textFaint, marginTop: 3 },

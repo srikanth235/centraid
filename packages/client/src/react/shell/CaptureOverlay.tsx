@@ -33,7 +33,6 @@ export function CaptureLauncher({
     <button
       type="button"
       className={styles.launcher}
-      aria-label="Quick capture"
       title="Quick capture (C)"
       onClick={onOpen}
     >
