@@ -70,8 +70,19 @@ async function probeOnlineCapabilities(
       new URL("/centraid/_gateway/info", baseUrl).toString(),
       { headers: authHeader() }
     );
-  } catch {
+  } catch (error) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn(
+        "[mobile-compat] gateway-info probe failed",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
     throw new MobileGatewayCompatibilityError("reconnect");
+  }
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log(
+      `[mobile-compat] gateway-info probe returned HTTP ${response.status}`
+    );
   }
   if (!response.ok) {
     await AsyncStorage.removeItem(key);

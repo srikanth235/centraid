@@ -576,6 +576,14 @@ jobs:
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
           script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      - name: Dump mobile gateway request log
+        if: always()
+        run: |
+          if [ -f /tmp/centraid-mobile-gateway.log ]; then
+            tail -n 2000 /tmp/centraid-mobile-gateway.log
+          else
+            echo "mobile gateway log was not created"
+          fi
       # Bank the apk even if a later flow failed — the artifact is the product of
       # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
       # Guarded on the build having actually produced an apk, so a cache-hit run
