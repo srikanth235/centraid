@@ -460,7 +460,7 @@ Do not hardcode colours, font stacks, spacing, radii, icon dictionaries, or fore
 - [packages/design/src/recipes/index.ts](packages/design/src/recipes/index.ts) — the recipe inventory
 - [packages/design/src/contract.ts](packages/design/src/contract.ts) — emitted property contracts
 - [packages/design/src/fonts.ts](packages/design/src/fonts.ts) — the four bundled faces and the `@font-face` emitter
-- [docs/design/handoff-binding-layer/README.md](docs/design/handoff-binding-layer/README.md) — the Binding Layer brief this constitution implements
+- [issue #707](https://github.com/srikanth235/centraid/issues/707) — the Binding Layer brief this constitution implements, quoted in full in the issue; the design-agent prototypes are reference-only and are not kept in the repo
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
 - [docs/refactors/product-grammar.md](docs/refactors/product-grammar.md) — migration safety argument and progress log
 - `bun run lint:design-md` — official design.md validation

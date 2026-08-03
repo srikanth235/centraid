@@ -8,7 +8,7 @@ Mirrors the Action items of issue #707.
 
 Phase 0 — Assets + matrix
 
-- [x] Commit the handoff bundle to `docs/design/handoff-binding-layer/` (8 files; verify against the SHA-256 manifest in Appendix A)
+- [x] Make the handoff bundle available as the acceptance reference (superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)
 - [x] Update `tests/design-grammar-matrix.json` where invariants change (M7 notification→status line is the largest; check M8 loading, M12 offline, M19 progress)
 - [x] Record the brief↔repo role-name mapping and the hue table (Decision §1/§4) as the working reference
 
@@ -72,9 +72,11 @@ Phase 7 — Acceptance gates
 
 Phase 0: the design-agent handoff bundle (five `.dc.html` design references, `README.md`, and the generated prototype runtime `support.js`/`doc-page.js`) is vendored byte-for-byte at `docs/design/handoff-binding-layer/`, matching the SHA-256 manifest in issue #707 Appendix A except for a one-line governance file-size waiver prepended to the two generated `.js` runtime files. `oxfmt.config.ts` and `oxlint.config.ts` exclude the bundle so the design tool's output is never reformatted or linted as repo source.
 
+Superseded by a later commit in this branch: the bundle is **reference-only and is not kept in the repo**. `docs/design/handoff-binding-layer/` is untracked and git-ignored, the oxfmt/oxlint exclusions for it are removed, and DESIGN.md now cites issue #707 (which quotes the brief in full) instead of the vendored path. The eight files below appear in this branch's history as add-then-remove.
+
 Checklist evidence:
 
-- Commit the handoff bundle to `docs/design/handoff-binding-layer/` (8 files; verify against the SHA-256 manifest in Appendix A)
+- Make the handoff bundle available as the acceptance reference (superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)
 
 Changed files:
 
@@ -155,6 +157,8 @@ Changed files (Phases 1+2):
 - `packages/design/src/oklab.test.ts` (new)
 - `packages/design/src/color-accent.test.ts` (deleted)
 
+Bundle-untracking commit: `.gitignore`, `DESIGN.md`, `oxfmt.config.ts`, `oxlint.config.ts`, `packages/design/src/design-md.test.ts`, `receipts/issue-707-binding-layer.md`, and the removal of the eight `docs/design/handoff-binding-layer/*` files listed above.
+
 ## Out of scope
 
 - App renames (Sift/Ledger/Almanac/Vault stay out; repo app names are kept — issue #707 Decision §1).
@@ -165,8 +169,8 @@ Changed files (Phases 1+2):
 ## Decisions
 
 - Keep repo app names and role names; adopt the brief's values and semantics (issue #707 Decisions §1–§4, settled 2026-08-03).
-- Vendor the prototype runtime with governance file-size waivers rather than zipping it, so the acceptance reference stays browsable in-repo; the two waiver headers are the only bytes that differ from the design agent's bundle.
-- Exclude the bundle from oxfmt/oxlint: the files are the design tool's generated output with an external owner, matching the existing generator-owned exclusions.
+- **The handoff bundle is reference-only and is not committed** (maintainer decision, mid-implementation). The prototypes are a design-time artifact, not a repo asset: they are ~420 KB of generated prototype runtime with an external owner, they would need permanent governance waivers to stay, and the normative content — the full brief text — is already quoted verbatim in issue #707, which is the durable reference. `docs/design/handoff-binding-layer/` is git-ignored so a local copy stays browsable without ever entering the tree; the earlier vendoring commit stands in branch history as add-then-remove.
+- With the bundle untracked, its oxfmt/oxlint exclusions and the DESIGN.md link to the vendored path are removed; DESIGN.md and `design-md.test.ts` now cite issue #707 instead.
 - Light `ink3` ships as `#6C6C69`, not the brief's `#70706D`: the brief validates against `surf` only, but against the deeper `mat` tone (which an app may declare) `#70706D` measures 4.32:1 — a real WCAG 1.4.3 failure. The shipped value clears 4.58 on mat. Documented in `themes/shared.ts` and DESIGN.md.
 - `line`↔`lineS` mapping inverted relative to naive reading: the repo's `--line` was already the weaker hairline rung, so brief `lineS`→`--line` and brief `line`→`--line-strong`.
 - Hairline/wash roles carried a false `floor: 3` that no test had ever measured (true before this change); the number is removed in favour of the real obligation ("never the only signal"), and `--text-disabled` now cites the WCAG inactive-control exemption. Honesty corrections, not loosenings.
@@ -202,21 +206,25 @@ bun run lint:design-md
 | claude-code-8ac80ba9-318-1785761594-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-fable-5 | 2 | 3330 | 246951 | 432 | 3764 | 0.3102 | 357 | 1616713 | 29208495 | 287785 | feat(design): flip token layer to Binding Layer ink system (#707)Replaces the te |
 | claude-code-8ac80ba9-318-1785761644-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-fable-5 | 2 | 500 | 250281 | 231 | 733 | 0.2681 | 359 | 1617213 | 29458776 | 288016 | feat(design): flip token layer to Binding Layer ink system (#707)Co-Authored-By: |
 | claude-code-8ac80ba9-318-1785761714-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-fable-5 | 8 | 14163 | 1007194 | 5905 | 20076 | 1.4796 | 367 | 1631376 | 30465970 | 293921 | feat(design): flip token layer to Binding Layer ink system (#707)Replaces the te |
+| claude-code-8ac80ba9-318-1785762927-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 90 | 732176 | 10644498 | 79606 | 811872 | 11.8889 | 457 | 2363552 | 41110468 | 373527 | docs(design): keep the handoff bundle out of the repo (#707)The design-agent pro |
+| claude-code-8ac80ba9-318-1785762989-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 2 | 418 | 258198 | 190 | 610 | 0.1365 | 459 | 2363970 | 41368666 | 373717 | docs(design): keep the handoff bundle out of the repo (#707)governance: allow-to |
+| claude-code-8ac80ba9-318-1785763061-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 6 | 3633 | 777385 | 1214 | 4853 | 0.4418 | 465 | 2367603 | 42146051 | 374931 | docs(design): keep the handoff bundle out of the repo (#707)The design-agent pro |
 
 ### Steering
 
 | steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | steer-8ac80ba9-1785756384-1 | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | interrupt | structural |  | pending | 1 | 2026-08-03T11:26:24.927Z |
+| steer-8ac80ba9-1785760103-2 | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | correction | classifier | handoff-bindings are reference-only, not committed | pending | 2 | 2026-08-03T13:08:23.710Z |
 
 ## Steering
 
-- Every human-steering event is recorded as a row: **PASS** — Structural JSON parse confirms one user message "[Request interrupted...]" at 2026-08-03T11:26:24.927Z; grep false positives were assistant tool_use payloads quoting the phrase, not user events.
-- No non-steering message is recorded as a steering event: **PASS** — only the interrupt is in the Steering table; no extraneous entries.
+- Every human-steering event is recorded as a row: **PASS** — Structural JSON parse of session 8ac80ba9-318d-4598-a125-4ad8b77bda7d confirms two user steering events: (1) "[Request interrupted by user]" at 2026-08-03T11:26:24.927Z (ordinal 1), (2) "handoff-bindings needn't be committed...they are only for reference" at 2026-08-03T13:08:23.710Z (ordinal 2, a mid-task correction redirecting the bundle vendoring work already done in commit 68351e3f).
+- No non-steering message is recorded as a steering event: **PASS** — only these two events are in the Steering table; 137 other user messages in the transcript are routine task messages or tool results, not corrections.
 
 ## Audit
 
-- '## What changed' faithfully describes the diff: **PASS** — receipt accurately describes Phases 1+2 implementation: ink values #141414/#EDEDEC, --net and --link roles in roles.ts, oklchToHex gamut mapping in oklab.ts, 7-role type ramp with --t-reading in typography.ts, 10 woff2 fonts vendored, DESIGN.md rewritten around five invariants + freedom table + role mapping, design-md.test.ts locked, design-grammar-matrix.json M7/M8/M12/M19 updated, color-accent.test.ts deleted. All 27 test files (270 tests) pass.
-- Each '- [x]' item in '## Checklist' is realized in the diff: **PASS** — Phase 1/2 items all realized: themes ink values, --net/--link roles, OKLCH→hex resolution, reading register, fonts vendored, DESIGN.md five invariants + mapping table, design-md.test.ts green, matrix language, tests recomputed. Two '- [ ]' items intentionally deferred with parenthetical status notes (fonts CSP/host-wiring Phase 3–4, tokens.generated regeneration Phase 5).
-- The '## Checklist' mirrors the issue's checklist: **PASS** — 38 items across 7 phases match issue #707 Action items exactly (P0: 3, P1: 8, P2: 2, P3: 4, P4: 7, P5: 3, P6: 7, P7: 4).
+- '## What changed' faithfully describes the staged diff: **PASS** — The "Bundle-untracking commit" paragraph accurately states the eight files are staged for deletion, `.gitignore` adds the directory, `oxfmt.config.ts` and `oxlint.config.ts` remove their exclusions, `DESIGN.md` replaces the vendored README link with issue #707, and `design-md.test.ts` updates its expect() assertion to cite the issue instead. The "Superseded" paragraph correctly explains: untracked + git-ignored, tool exclusions removed, DESIGN.md now cites issue #707 (which quotes the brief in full).
+- Each '- [x]' checklist item is realized: **PASS** — Phase 0 item "Make the handoff bundle available as the acceptance reference" reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; the receipt's Decisions section (§2) explains the maintainer's mid-task reversal and justifies it (prototypes are design-time artifacts, external-owner generated code, require permanent waivers, brief is durable in issue #707). The receipt prose fully supports this divergence from the issue's original Phase-0 wording.
+- The '## Checklist' mirrors issue #707's Action items (divergence explained): **PASS** — The receipt's 38-item checklist spans all 7 phases; issue #707's Phase-0 original text still reads "Commit the handoff bundle" (issue edit is deferred to the orchestrator), but the receipt correctly diverges per the Decisions section's mid-implementation maintainer direction and explains the reversal in both the Superseded paragraph and Decisions §2 with full justification.
 

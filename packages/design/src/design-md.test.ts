@@ -371,6 +371,6 @@ describe("DESIGN.md body", () => {
     expect(body).toContain("google-labs-code/design.md");
     expect(body).toContain("bun run lint:design-md");
     expect(body).toContain("bun run check:pr");
-    expect(body).toContain("docs/design/handoff-binding-layer/README.md");
+    expect(body).toContain("centraid/issues/707");
   });
 });
