@@ -31,7 +31,10 @@ await runFlow("mobile-volume-proof", async (ctx) => {
 - repeat:
     times: ${ITERATIONS}
     commands:
-      - stopApp
+      # Maestro's launchApp already terminates the target before relaunching.
+      # Keeping a separate stopApp here issued two terminate requests per
+      # sample; on iOS that left the dev client on its splash and stopped before
+      # XCTest could snapshot it (run 30831790904).
       - launchApp
       - extendedWaitUntil:
           visible:

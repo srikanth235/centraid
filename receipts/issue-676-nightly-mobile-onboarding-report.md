@@ -146,6 +146,14 @@ accessibility zero-grey (15 cells).
   budget so simulator scheduling does not turn a valid slow launch into a red
   volume cell.
 
+- **Avoid duplicate iOS volume termination.** Run 30831790904 stopped the app
+  during the eighth `mobile-volume-proof` sample immediately after the flow's
+  explicit `stopApp` plus `launchApp` pair; the screenshot was the dev-client
+  splash and XCTest reported that the app was no longer running. Maestro's
+  `launchApp` already terminates the target before relaunching, so the volume
+  loop now keeps only that command. The Home assertion and all 20 samples stay
+  intact while removing the redundant termination race.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -298,3 +306,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785773903-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 693014 | 0 | 18749696 | 29371 | 722385 | 6.8605 | 9239685 | 0 | 338403328 | 559510 | fix(ios): move frame probe below status bar (#676) |
 | codex-019fc399-ba8-1785773946-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3216 | 0 | 227840 | 348 | 3564 | 0.0702 | 9242901 | 0 | 338631168 | 559858 | fix(ios): move frame probe below status bar (#676) |
 | codex-019fc399-ba8-1785775718-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 174999 | 0 | 12891648 | 20776 | 195775 | 3.9720 | 9417900 | 0 | 351522816 | 580634 | fix(ios): make frame probe target hittable (#676) |
+| codex-019fc399-ba8-1785776135-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 70287 | 0 | 3353088 | 6381 | 76668 | 1.1097 | 9488187 | 0 | 354875904 | 587015 | fix(ios): avoid duplicate volume relaunch termination (#676) |
