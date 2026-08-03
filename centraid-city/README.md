@@ -11,6 +11,8 @@ bun run --cwd centraid-city dev
 
 Then open the Vite URL (normally http://127.0.0.1:5173/). For a production-like static bundle, run `bun run --cwd centraid-city build` and serve `dist/`. The browser app makes no runtime network requests; three.js and its typings are installed from `centraid-city/package.json` and bundled by Vite.
 
+The hosted site build uses `bun run --cwd centraid-city build:site` and publishes the bundle at `https://centraid.dev/city/`.
+
 ## Camera
 
 Map conventions, not model-viewer ones: **left-drag pans** (grab the ground and move it), **Shift/Ctrl/Cmd + left-drag orbits**, right-drag orbits, middle-drag pans, wheel zooms. Click a building or plate to open the inspector; "Reset view" returns home.
