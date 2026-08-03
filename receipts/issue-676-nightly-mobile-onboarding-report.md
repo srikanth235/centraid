@@ -25,6 +25,7 @@ accessibility zero-grey (15 cells).
 - [x] Grant iOS Photos permission before the frame-probe journey
 - [x] Keep the iOS frame-probe sampling marker visible to Maestro while sampling
 - [x] Fan iOS journeys out to isolated parallel suite runners from one cached app build
+- [x] Wait for the lazy Settings destination without retrying its closed drawer row
 
 ## What changed
 
@@ -194,6 +195,14 @@ accessibility zero-grey (15 cells).
   flow now retries that exact fresh-launch smoke once on iOS with a new Maestro
   session; Android remains single-attempt.
 
+- **Wait for the lazy Settings destination without retrying its closed drawer row.**
+  Run 30856367776 opened the
+  Settings route successfully but still showed React's blank lazy-import
+  fallback when the old source-based retry searched for the drawer's Settings
+  row after the drawer had closed. `native-v0-resilience.mjs` now taps that row
+  once and gives the durable `APPEARANCE` marker a bounded 45-second wait;
+  Android remains untouched at runtime.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -356,3 +365,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785789999-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 332454 | 0 | 15333376 | 19830 | 352284 | 4.9619 | 12188726 | 0 | 464502272 | 726887 | fix(ios): surface copied frame reports in Maestro logs (#676) |
 | codex-019fc399-ba8-1785791743-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 164567 | 0 | 16529408 | 16318 | 180885 | 4.7885 | 12355733 | 0 | 481406720 | 743707 | fix(ios): escape Maestro report expression (#676) |
 | codex-019fc399-ba8-1785793807-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 113012 | 0 | 22895616 | 16005 | 129017 | 6.2465 | 12468745 | 0 | 504302336 | 759712 | fix(ios): avoid transient frame marker assertion (#676) |
+| codex-019fc399-ba8-1785796576-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 259636 | 0 | 17554176 | 24158 | 283794 | 5.4000 | 12728381 | 0 | 521856512 | 783870 | fix(ios): wait for lazy Settings route (#676) |
+| codex-019fc399-ba8-1785796611-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7954 | 0 | 665344 | 658 | 8612 | 0.1961 | 12736335 | 0 | 522521856 | 784528 | fix(ios): wait for lazy Settings route (#676) |

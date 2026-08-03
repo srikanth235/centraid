@@ -59,6 +59,18 @@ function tapUntilVisibleCommands(selector, destination) {
           retryTapIfNoChange: true`;
 }
 
+/**
+ * Open a row whose source disappears with the drawer. Once the route is
+ * requested, retrying the source can only search a closed modal; wait for the
+ * destination instead (iOS lazy Settings import can show the blank fallback
+ * while the screen module evaluates).
+ */
+function openSettingsCommands() {
+  return `- tapOn:
+    text: ".*Settings"
+    retryTapIfNoChange: true`;
+}
+
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
 // covers opened from Home's launcher tiles; Settings is opened from the vault
@@ -140,9 +152,10 @@ const SURFACES = [
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      tapUntilVisibleCommands(".*Settings", "APPEARANCE"),
+      openSettingsCommands(),
     ].join("\n"),
     name: "settings",
+    markerTimeoutMs: 45_000,
   },
 ];
 
