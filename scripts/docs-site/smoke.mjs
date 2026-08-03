@@ -18,6 +18,7 @@ const { join, posix } = path;
 
 const repoRoot = join(import.meta.dirname, "..", "..");
 const outDir = join(repoRoot, "dist", "docs-site");
+const siteDir = join(repoRoot, "dist", "site");
 const homeIndex = join(
   repoRoot,
   "scripts",
@@ -55,6 +56,15 @@ const fail = (msg) => {
 async function exists(rel) {
   try {
     await access(join(outDir, rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function siteExists(rel) {
+  try {
+    await access(join(siteDir, rel));
     return true;
   } catch {
     return false;
@@ -222,6 +232,25 @@ if (
   )
 ) {
   fail("home-site index.html: docs links must use clean /docs/<route>/ URLs");
+}
+
+const siteHomeIndex = "index.html";
+if (await siteExists(siteHomeIndex)) {
+  const siteHomeHtml = await readFile(join(siteDir, siteHomeIndex), "utf8");
+  if (!/<a\b[^>]*href="city\/"[^>]*>city<\/a>/u.test(siteHomeHtml)) {
+    fail("assembled site: homepage is missing the city navigation tab");
+  }
+  if (await siteExists("city/index.html")) {
+    const cityHtml = await readFile(
+      join(siteDir, "city", "index.html"),
+      "utf8"
+    );
+    if (!/<script\b[^>]*src="\/city\/assets\/[^" ]+\.js"/u.test(cityHtml)) {
+      fail("assembled site: city assets are not rooted under /city/");
+    }
+  } else {
+    fail("assembled site: missing /city/ index");
+  }
 }
 
 if (failures) {

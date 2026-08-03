@@ -33,7 +33,7 @@
     "dev:mobile": "turbo run dev --filter=@centraid/mobile",
     "dev:web": "turbo run dev --filter=@centraid/web",
     "docs:build": "node scripts/docs-site/build.mjs",
-    "docs:bundle": "DOCS_SITE_BASE_PATH=/docs node scripts/docs-site/build.mjs && node scripts/docs-site/assemble.mjs",
+    "docs:bundle": "DOCS_SITE_BASE_PATH=/docs node scripts/docs-site/build.mjs && bun install --cwd centraid-city --frozen-lockfile && bun run --cwd centraid-city build:site && node scripts/docs-site/assemble.mjs",
     "docs:serve": "python3 -m http.server 4173 --bind 127.0.0.1 -d dist/docs-site",
     "docs:smoke": "node scripts/docs-site/smoke.mjs",
     "format": "oxfmt -c oxfmt.config.ts --disable-nested-config --write .",
