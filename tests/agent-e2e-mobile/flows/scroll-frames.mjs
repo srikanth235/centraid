@@ -6,7 +6,7 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
-import { runFlow } from "../lib/harness.mjs";
+import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 /**
  * Frame-drop probe for the Photos grid and the People directory
@@ -172,6 +172,25 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
     "fling-photos"
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);
+
+  // Photos and People are full-screen covers. The Home launcher remains
+  // underneath Photos in the iOS hierarchy, so trying to tap Open People
+  // immediately targets an unreachable Home tile (30838452759). Dismiss the
+  // cover through its published HomeKey and prove the launcher is active
+  // before opening the next surface.
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+- tapOn:
+    text: "Back to your apps"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "Open People"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+`,
+    "return-home"
+  );
 
   // ---- People directory ----------------------------------------------------
   const peopleStartedAt = Date.now();

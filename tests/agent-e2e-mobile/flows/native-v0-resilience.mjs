@@ -16,6 +16,30 @@ function openLauncherTileCommands(open) {
 }
 
 /**
+ * One destination-aware fallback for the iOS tile tap. The Tasks tile stayed
+ * on Home in run 30838452759 even though Maestro reported the tap completed;
+ * wait for the cover transition before retrying so a successful first tap is
+ * never duplicated underneath a presented cover.
+ */
+function retryLauncherTileCommands(open, destination) {
+  return `- tapOn:
+    text: "${open}"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd:
+    timeout: 3000
+- repeat:
+    times: 2
+    while:
+      notVisible: "${destination}"
+    commands:
+      - tapOn:
+          text: "${open}"
+          retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 3000`;
+}
+
+/**
  * Retry a tap only while its destination is absent. The generic retry helper
  * watches the source control, which remains in iOS's underlying Home hierarchy
  * after a modal drawer/cover opens and can therefore tap the old coordinate a
@@ -64,8 +88,14 @@ const SURFACES = [
   },
   { marker: "Create event", open: "Open Agenda", name: "agenda" },
   {
-    marker: "New task title",
-    open: "Open Tasks",
+    // The task TextInput's accessibility label was absent in the failed iOS
+    // hierarchy even though the cover had been requested. The stable subtitle
+    // proves the Tasks cover rendered without relying on input-field exposure.
+    marker: "Inbox, projects and offline repeat rules",
+    openCommands: retryLauncherTileCommands(
+      "Open Tasks",
+      "Inbox, projects and offline repeat rules"
+    ),
     name: "tasks",
   },
   {

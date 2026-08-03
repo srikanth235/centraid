@@ -162,6 +162,19 @@ accessibility zero-grey (15 cells).
   destination marker is absent, so the underlying Home hierarchy cannot trigger
   a duplicate tap.
 
+- **Return to Home before the second iOS frame surface.** Run 30838452759
+  completed the Photos frame sample, then tried to tap `Open People` while the
+  Photos full-screen cover was still presented; the Home launcher tile was not
+  reachable and the scroll cell failed. `scroll-frames.mjs` now taps Photos'
+  published `Back to your apps` HomeKey and waits for `Open People` before
+  starting the People sample.
+
+- **Make the Tasks smoke destination-aware.** The same run showed Maestro
+  reporting `Open Tasks` as completed while the failure screenshot remained on
+  Home. `native-v0-resilience.mjs` gives that tile a transition-aware fallback
+  retry and asserts the stable Tasks subtitle instead of depending on the
+  intermittently absent iOS TextInput accessibility label.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -316,3 +329,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785775718-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 174999 | 0 | 12891648 | 20776 | 195775 | 3.9720 | 9417900 | 0 | 351522816 | 580634 | fix(ios): make frame probe target hittable (#676) |
 | codex-019fc399-ba8-1785776135-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 70287 | 0 | 3353088 | 6381 | 76668 | 1.1097 | 9488187 | 0 | 354875904 | 587015 | fix(ios): avoid duplicate volume relaunch termination (#676) |
 | codex-019fc399-ba8-1785779028-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 628288 | 0 | 20321536 | 36482 | 664770 | 7.1983 | 10116475 | 0 | 375197440 | 623497 | fix(ios): make Settings retry destination-aware (#676) |
+| codex-019fc399-ba8-1785782499-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 801520 | 0 | 33503488 | 42414 | 843934 | 11.0159 | 10917995 | 0 | 408700928 | 665911 | fix(ios): retry Tasks cover transition (#676) |
