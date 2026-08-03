@@ -182,6 +182,12 @@ accessibility zero-grey (15 cells).
   with a fresh one-time ticket and cleared app state; Android remains on its
   prior single-attempt path.
 
+- **Accept an empty iOS People fixture.** Run 30845040631 completed the Photos
+  sample, returned Home, and opened People, but the CI gateway seeded no
+  contacts; `people-directory-row-0` therefore could not be a valid arrival
+  marker. `scroll-frames.mjs` now waits on the always-rendered People subtitle
+  and retains `people rows observed` as an honest zero lower bound.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -339,3 +345,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785782499-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 801520 | 0 | 33503488 | 42414 | 843934 | 11.0159 | 10917995 | 0 | 408700928 | 665911 | fix(ios): retry Tasks cover transition (#676) |
 | codex-019fc399-ba8-1785783971-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 229480 | 0 | 6862848 | 14396 | 243876 | 2.5054 | 11147475 | 0 | 415563776 | 680307 | fix(ios): retry transient mobile pairing (#676) |
 | codex-019fc399-ba8-1785784233-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 64884 | 0 | 1684736 | 1535 | 66419 | 0.6064 | 11212359 | 0 | 417248512 | 681842 | fix(ios): retry transient mobile pairing (#676) |
+| codex-019fc399-ba8-1785786280-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 315639 | 0 | 15962880 | 12871 | 328510 | 4.9729 | 11527998 | 0 | 433211392 | 694713 | fix(ios): handle empty People frame fixture (#676) |

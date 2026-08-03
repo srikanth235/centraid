@@ -75,10 +75,10 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 // (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
 // tab label, which the tab bar draws on every screen.
 const PHOTOS_MARKER = "Search photos and moments";
-// People's list handle (apps/mobile/src/apps/people/PeopleHome.tsx). Positional
-// row ids exist whatever the fixture seeded, and `people-directory-row-0` is
-// People-specific so it cannot pass on another screen.
-const PEOPLE_ROW_ZERO = "people-directory-row-0";
+// The People cover subtitle (apps/mobile/src/apps/people/PeopleHome.tsx). The
+// CI gateway may seed an empty directory, so a positional row id is not a
+// valid arrival marker; the observed-row metric remains an honest lower bound.
+const PEOPLE_MARKER = "Normalized contacts and duplicate-safe merges";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -204,7 +204,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
     "open-people"
   );
   await ctx.run(
-    flingYaml(ctx.state.appId, PEOPLE_ROW_ZERO, "id", "people"),
+    flingYaml(ctx.state.appId, PEOPLE_MARKER, "text", "people"),
     "fling-people"
   );
   const people = await readFrameEvidence(ctx.state.runDir, peopleStartedAt);
