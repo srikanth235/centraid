@@ -112,9 +112,10 @@ function LauncherTile({
         style={({ pressed }) => (pressed ? styles.tilePressed : undefined)}
       >
         <Animated.View style={[styles.tileInner, animStyle]}>
-          <View style={installed ? undefined : styles.dimmed}>
-            <AppIcon name={meta.iconKey} color={meta.color} />
-          </View>
+          {/* Not-yet-installed recedes via the icon's own mono treatment
+              rather than container opacity — see AppIcon's `muted` prop —
+              so the label beside it keeps its own token-level contrast. */}
+          <AppIcon name={meta.iconKey} color={meta.color} muted={!installed} />
           <Text
             style={[styles.tileLabel, !installed && styles.tileLabelDim]}
             numberOfLines={1}
@@ -129,8 +130,6 @@ function LauncherTile({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Uninstalled apps recede — present but clearly "not here yet".
-    dimmed: { opacity: 0.38 },
     grid: {
       flexDirection: "row",
       flexWrap: "wrap",

@@ -5,7 +5,7 @@ import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -75,11 +75,9 @@ export default function DocsItemActions({
     optimistic: NativeOptimisticMutation[] = []
   ): Promise<void> => {
     if (!session || !sourceVaultId || !writable) {
-      showToast({
-        message:
-          "Read-only item — choose the writable copy in its source vault.",
-        tone: "danger",
-      });
+      postStatus(
+        "Read-only item — choose the writable copy in its source vault."
+      );
       return;
     }
     try {
@@ -430,5 +428,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
   },
-  title: { fontFamily: family.sansBold, fontSize: 19, marginBottom: 4 },
+  title: { fontFamily: family.sansMedium, fontSize: 19, marginBottom: 4 },
 });

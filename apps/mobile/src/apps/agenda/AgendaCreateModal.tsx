@@ -358,13 +358,13 @@ const styles = StyleSheet.create({
   },
   dateText: { fontFamily: family.sansRegular, fontSize: 14 },
   label: {
-    fontFamily: family.monoBold,
+    fontFamily: family.monoMedium,
     fontSize: 10,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   safe: { flex: 1 },
-  save: { fontFamily: family.sansBold, fontSize: 14 },
-  title: { fontFamily: family.sansBold, fontSize: 15 },
+  save: { fontFamily: family.sansMedium, fontSize: 14 },
+  title: { fontFamily: family.sansMedium, fontSize: 15 },
 });

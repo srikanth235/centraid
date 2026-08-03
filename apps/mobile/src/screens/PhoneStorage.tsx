@@ -223,14 +223,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 14,
   },
-  buttonText: { fontFamily: family.sansBold, fontSize: 13 },
+  buttonText: { fontFamily: family.sansMedium, fontSize: 13 },
   card: { borderRadius: radii.lg, borderWidth: 1, gap: 10, padding: 16 },
   cardHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  cardTitle: { fontFamily: family.sansBold, fontSize: 17 },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: 17 },
   explainer: {
     alignItems: "flex-start",
     borderRadius: radii.md,
@@ -260,6 +260,6 @@ const styles = StyleSheet.create({
   lineValue: { fontFamily: family.sansMedium, fontSize: 12 },
   safe: { flex: 1 },
   subtitle: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 2 },
-  title: { fontFamily: family.sansBold, fontSize: 23 },
-  total: { fontFamily: family.sansBold, fontSize: 14 },
+  title: { fontFamily: family.sansMedium, fontSize: 23 },
+  total: { fontFamily: family.sansMedium, fontSize: 14 },
 });

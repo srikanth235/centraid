@@ -13,7 +13,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 30,
       letterSpacing: -0.4,
     },
@@ -42,7 +42,7 @@ export const makeStyles = (colors: ThemeColors) =>
     heroDot: { borderRadius: 7, height: 14, width: 14 },
     heroStatus: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 20,
       letterSpacing: -0.2,
     },
@@ -74,7 +74,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     chipValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 16,
       marginTop: 3,
     },
@@ -140,7 +140,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     kpiValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 24,
       letterSpacing: -0.5,
       marginTop: 8,
@@ -198,7 +198,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     chartStatValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 16,
       marginTop: 2,
     },

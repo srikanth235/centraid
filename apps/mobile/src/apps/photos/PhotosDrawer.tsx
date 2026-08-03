@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
-  avatarText: { color: "#fff", fontFamily: family.sansBold, fontSize: 15 },
+  avatarText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 15 },
   divider: { height: 0.5, marginHorizontal: 14, marginVertical: 8 },
   footerItem: {
     alignItems: "center",
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  onText: { fontFamily: family.sansBold, fontSize: 10 },
+  onText: { fontFamily: family.sansMedium, fontSize: 10 },
   panel: {
     borderRightWidth: 0.5,
     flex: 0,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   profileMeta: { flex: 1, minWidth: 0 },
-  profileName: { fontFamily: family.sansBold, fontSize: 15 },
+  profileName: { fontFamily: family.sansMedium, fontSize: 15 },
   profileSub: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 1 },
   root: { flex: 1, flexDirection: "row" },
   row: {
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
     marginTop: 4,
   },
-  storageAction: { fontFamily: family.sansBold, fontSize: 15 },
+  storageAction: { fontFamily: family.sansMedium, fontSize: 15 },
   storageActions: { flexDirection: "row", gap: 18 },
   storageCard: { borderRadius: 12, marginBottom: 12, padding: 13 },
   storageFill: { borderRadius: 4, height: "100%", width: "6%" },
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     gap: 9,
     marginBottom: 11,
   },
-  storageText: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
+  storageText: { flex: 1, fontFamily: family.sansMedium, fontSize: 15 },
   storageTrack: {
     borderRadius: 4,
     height: 7,
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   switchMeta: { flex: 1, minWidth: 0 },
-  switchName: { fontFamily: family.sansBold, fontSize: 15 },
+  switchName: { fontFamily: family.sansMedium, fontSize: 15 },
   switchPill: {
     alignItems: "center",
     borderRadius: 999,
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  switchPillText: { fontFamily: family.sansBold, fontSize: 12 },
+  switchPillText: { fontFamily: family.sansMedium, fontSize: 12 },
   switchVault: {
     alignItems: "center",
     borderRadius: 12,

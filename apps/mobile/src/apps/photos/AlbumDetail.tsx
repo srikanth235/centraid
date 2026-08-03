@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 18 },
   backdrop: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
   copy: { flex: 1, marginLeft: 10 },
-  coverAction: { fontFamily: family.sansBold, fontSize: 13 },
+  coverAction: { fontFamily: family.sansMedium, fontSize: 13 },
   empty: { alignItems: "center", flex: 1, justifyContent: "center" },
   dialog: {
     borderRadius: 16,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     right: 28,
     top: "34%",
   },
-  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
+  dialogTitle: { fontFamily: family.sansMedium, fontSize: 19 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -380,10 +380,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   keepTitle: { fontFamily: family.sansMedium, fontSize: 13 },
-  remove: { fontFamily: family.sansBold, fontSize: 13 },
+  remove: { fontFamily: family.sansMedium, fontSize: 13 },
   selectionActions: { alignItems: "center", flexDirection: "row", gap: 14 },
   safe: { flex: 1 },
   save: { alignItems: "center", marginTop: 12, padding: 12 },
-  saveText: { fontFamily: family.sansBold, fontSize: 13 },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
+  saveText: { fontFamily: family.sansMedium, fontSize: 13 },
+  title: { fontFamily: family.sansMedium, fontSize: 18 },
 });

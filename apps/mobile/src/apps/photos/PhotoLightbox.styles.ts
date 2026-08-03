@@ -38,7 +38,7 @@ export const styles = StyleSheet.create({
   },
   liveText: {
     color: "#fff",
-    fontFamily: family.monoBold,
+    fontFamily: family.monoMedium,
     fontSize: 10,
     letterSpacing: 1,
   },
@@ -81,7 +81,7 @@ export const styles = StyleSheet.create({
     width: 42,
   },
   sheetTitle: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 19,
     marginBottom: 10,
   },

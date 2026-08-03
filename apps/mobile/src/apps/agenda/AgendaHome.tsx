@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -15,7 +15,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
@@ -23,14 +23,17 @@ import { styles } from "./AgendaHome.styles";
 import type { AgendaEventModel } from "./recurrence";
 import { useAgenda } from "./useAgenda";
 
-type ViewMode = "month" | "week" | "agenda";
-type AgendaRow =
-  | { kind: "day"; key: string; date: Date }
-  | { kind: "event"; key: string; event: AgendaEventModel };
-const startOfMonth = (date: Date): Date =>
-  new Date(date.getFullYear(), date.getMonth(), 1);
-const endOfMonth = (date: Date): Date =>
-  new Date(date.getFullYear(), date.getMonth() + 1, 1);
+// Mobile has no month grid — a 7-column grid at 390px gives 42px cells, well
+// under the 44px tap-target floor, and the Binding Layer reference reserves
+// the month grid for desktop (`isCalMonth: sc==='cal' && !mob`) while mobile
+// always renders the agenda list (`isCalAgenda: sc==='cal' && mob`). "Week"
+// is a single horizontal strip (7 cells in a row, not a 2-D grid) and stays.
+type ViewMode = "week" | "agenda";
+interface AgendaDay {
+  key: string;
+  date: Date;
+  events: AgendaEventModel[];
+}
 const startOfWeek = (date: Date): Date => {
   const next = new Date(date);
   next.setDate(next.getDate() - next.getDay());
@@ -42,12 +45,10 @@ const addDays = (date: Date, days: number): Date => {
   next.setDate(next.getDate() + days);
   return next;
 };
-// Day headers key on the day string and events on their instance key, so the
-// two arms of AgendaRow can never collide.
-const agendaRowKey = (row: AgendaRow): string => row.key;
+const agendaDayKey = (row: AgendaDay): string => row.key;
 // One shared identity for the "nothing to list" case: a fresh `[]` per render
 // would make FlatList re-diff a list it already knows is empty.
-const NO_ROWS: AgendaRow[] = [];
+const NO_DAYS: AgendaDay[] = [];
 
 export default function AgendaHome({
   navigation,
@@ -63,14 +64,12 @@ export default function AgendaHome({
   const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
   const range = useMemo(
     () =>
-      mode === "month"
-        ? ([startOfMonth(cursor), endOfMonth(cursor)] as const)
-        : mode === "week"
-          ? ([startOfWeek(cursor), addDays(startOfWeek(cursor), 7)] as const)
-          : ([
-              new Date(new Date().setHours(0, 0, 0, 0)),
-              addDays(new Date(), 120),
-            ] as const),
+      mode === "week"
+        ? ([startOfWeek(cursor), addDays(startOfWeek(cursor), 7)] as const)
+        : ([
+            new Date(new Date().setHours(0, 0, 0, 0)),
+            addDays(new Date(), 120),
+          ] as const),
     [cursor, mode]
   );
   const agenda = useAgenda(range[0], range[1]);
@@ -85,28 +84,28 @@ export default function AgendaHome({
           event.description?.toLowerCase().includes(needle))
     );
   }, [agenda.events, hiddenCalendars, query]);
-  const agendaRows = useMemo<AgendaRow[]>(() => {
-    const rows: AgendaRow[] = [];
-    let previous = "";
+  // One row per DAY, each carrying its own events — the 34px date column is
+  // the row's identity, not a separate header interleaved with event rows.
+  const agendaDays = useMemo<AgendaDay[]>(() => {
+    const days: AgendaDay[] = [];
+    let current: AgendaDay | undefined;
     for (const event of visibleEvents) {
       const date = new Date(event.start);
-      const day = date.toDateString();
-      if (day !== previous) {
-        previous = day;
-        rows.push({ kind: "day", key: `day:${day}`, date });
+      const key = date.toDateString();
+      if (current?.key !== key) {
+        current = { key, date, events: [] };
+        days.push(current);
       }
-      rows.push({ kind: "event", key: event.instanceKey, event });
+      current.events.push(event);
     }
-    return rows;
+    return days;
   }, [visibleEvents]);
 
   const create = async (input: AgendaCreateInput): Promise<boolean> => {
     if (!session || !calendarId) {
-      showToast({
-        message:
-          "Calendar unavailable — sync a calendar before creating an event.",
-        tone: "danger",
-      });
+      postStatus(
+        "Calendar unavailable — sync a calendar before creating an event."
+      );
       return false;
     }
     const rowId = `optimistic-${Date.now()}`;
@@ -155,8 +154,7 @@ export default function AgendaHome({
   };
   const move = (direction: number): void => {
     const next = new Date(cursor);
-    if (mode === "month") next.setMonth(next.getMonth() + direction);
-    else next.setDate(next.getDate() + direction * 7);
+    next.setDate(next.getDate() + direction * 7);
     setCursor(next);
   };
   const goToday = (): void => {
@@ -173,15 +171,12 @@ export default function AgendaHome({
     [navigation]
   );
   const renderRow = useCallback(
-    ({ item }: ListRenderItemInfo<AgendaRow>): React.JSX.Element =>
-      item.kind === "day" ? (
-        <DayHeaderRow date={item.date} colors={colors} />
-      ) : (
-        <EventRow event={item.event} colors={colors} onOpen={openEvent} />
-      ),
+    ({ item }: ListRenderItemInfo<AgendaDay>): React.JSX.Element => (
+      <AgendaDayRow day={item} colors={colors} onOpen={openEvent} />
+    ),
     [colors, openEvent]
   );
-  const listData = agenda.connection === "unavailable" ? NO_ROWS : agendaRows;
+  const listData = agenda.connection === "unavailable" ? NO_DAYS : agendaDays;
   const toggleCalendar = (id: string): void => {
     void Haptics.selectionAsync();
     setHiddenCalendars((current) => {
@@ -192,8 +187,9 @@ export default function AgendaHome({
     });
   };
   return (
+    // Agenda's declared surface tone is "cool" (freedom table, DESIGN.md).
     <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
+      style={[styles.safe, { backgroundColor: colors.toneCool }]}
       edges={["top"]}
     >
       <View style={styles.header}>
@@ -242,7 +238,7 @@ export default function AgendaHome({
         </View>
       ) : null}
       <View style={[styles.segment, { backgroundColor: colors.bgSunken }]}>
-        {(["month", "week", "agenda"] as ViewMode[]).map((item) => (
+        {(["week", "agenda"] as ViewMode[]).map((item) => (
           <Pressable
             key={item}
             onPress={() => setMode(item)}
@@ -257,9 +253,7 @@ export default function AgendaHome({
                 { color: item === mode ? colors.text : colors.textSoft },
               ]}
             >
-              {item === "agenda"
-                ? "Schedule"
-                : item[0]!.toUpperCase() + item.slice(1)}
+              {item === "agenda" ? "Schedule" : "Week"}
             </Text>
           </Pressable>
         ))}
@@ -280,14 +274,9 @@ export default function AgendaHome({
           </Pressable>
         </View>
         <Text style={[styles.rangeTitle, { color: colors.text }]}>
-          {mode === "month"
-            ? new Intl.DateTimeFormat(undefined, {
-                month: "long",
-                year: "numeric",
-              }).format(cursor)
-            : mode === "week"
-              ? `${range[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-              : "Upcoming"}
+          {mode === "week"
+            ? `${range[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+            : "Upcoming"}
         </Text>
       </View>
       {agenda.calendars.length ? (
@@ -310,16 +299,25 @@ export default function AgendaHome({
                 onPress={() => toggleCalendar(id)}
                 style={[
                   styles.calendarChip,
-                  {
-                    backgroundColor: colors.bgSunken,
-                    opacity: shown ? 1 : 0.5,
-                  },
+                  { backgroundColor: colors.bgSunken },
                 ]}
               >
+                {/* Hidden state lives on the leaf tokens (dot + label), never
+                    on the container as opacity — opacity composites every
+                    descendant and would silently invalidate the label's own
+                    contrast. */}
                 <View
-                  style={[styles.calendarDot, { backgroundColor: swatch }]}
+                  style={[
+                    styles.calendarDot,
+                    { backgroundColor: shown ? swatch : colors.textFaint },
+                  ]}
                 />
-                <Text style={[styles.calendarText, { color: colors.textSoft }]}>
+                <Text
+                  style={[
+                    styles.calendarText,
+                    { color: shown ? colors.textSoft : colors.textFaint },
+                  ]}
+                >
                   {String(calendar.name ?? "Calendar")}
                 </Text>
                 {shown ? (
@@ -330,25 +328,19 @@ export default function AgendaHome({
           })}
         </ScrollView>
       ) : null}
-      {mode === "month" ? (
-        <MonthGrid
-          cursor={cursor}
-          events={visibleEvents}
-          onDay={setCursor}
-          colors={colors}
-        />
-      ) : mode === "week" ? (
+      {mode === "week" ? (
         <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
         data={listData}
-        keyExtractor={agendaRowKey}
+        keyExtractor={agendaDayKey}
         contentContainerStyle={styles.list}
-        // Day headers (45pt) and event rows (72pt) interleave, so no fixed
-        // itemHeight exists and getItemLayout would mis-place every cell.
-        // Agenda mode spans 120 days: 8 rows fills the ~520pt of screen left
-        // below the header/segment/nav chrome, and ±3 viewports of retained
-        // cells is enough to absorb a fast flick without holding the year.
+        // Each row is one day, which can hold any number of events, so no
+        // fixed itemHeight exists and getItemLayout would mis-place every
+        // cell. Agenda mode spans 120 days: 8 rows fills the ~520pt of screen
+        // left below the header/segment/nav chrome, and ±3 viewports of
+        // retained cells is enough to absorb a fast flick without holding
+        // the year.
         initialNumToRender={8}
         maxToRenderPerBatch={8}
         windowSize={7}
@@ -391,126 +383,77 @@ export default function AgendaHome({
   );
 }
 
-const DayHeaderRow = memo(
+// A row is one day: a 34px date column (day-of-month in the numeric mono
+// register, day-of-week below it) beside a stacked column of that day's
+// events. This mirrors the Binding Layer reference's mobile agenda contract
+// (`isCalAgenda`, `dateColCss`, `d.events`) — never the desktop month grid.
+const AgendaDayRow = memo(
   ({
-    date,
-    colors,
-  }: {
-    date: Date;
-    colors: ReturnType<typeof useTheme>["colors"];
-  }): React.JSX.Element => (
-    <View style={styles.dayHeader}>
-      <Text style={[styles.dayHeaderTitle, { color: colors.text }]}>
-        {new Intl.DateTimeFormat(undefined, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }).format(date)}
-      </Text>
-    </View>
-  )
-);
-DayHeaderRow.displayName = "DayHeaderRow";
-
-// `onOpen` takes the event rather than a pre-bound closure so the caller can
-// hand every row the same stable callback — a per-row arrow would defeat memo.
-const EventRow = memo(
-  ({
-    event,
+    day,
     colors,
     onOpen,
   }: {
-    event: AgendaEventModel;
+    day: AgendaDay;
     colors: ReturnType<typeof useTheme>["colors"];
     onOpen: (event: AgendaEventModel) => void;
-  }): React.JSX.Element => (
-    <Pressable
-      onPress={() => onOpen(event)}
-      style={[styles.event, { borderBottomColor: colors.line }]}
-    >
-      <View style={styles.time}>
-        <Text style={[styles.timeText, { color: colors.text }]}>
-          {new Intl.DateTimeFormat(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(new Date(event.start))}
-        </Text>
-        <Text style={[styles.dayText, { color: colors.textSoft }]}>
-          –{" "}
-          {new Intl.DateTimeFormat(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(new Date(event.end))}
-        </Text>
-      </View>
-      <View style={[styles.eventLine, { backgroundColor: colors.accent }]} />
-      <View style={styles.eventCopy}>
-        <Text style={[styles.eventTitle, { color: colors.text }]}>
-          {event.summary}
-        </Text>
-        <Text style={[styles.eventMeta, { color: colors.textSoft }]}>
-          {event.timezone ?? "Local time"}
-          {event.isRecurrenceInstance ? " · repeating" : ""}
-        </Text>
-      </View>
-      <Icon name="chevron-right" size={18} color={colors.textFaint} />
-    </Pressable>
-  )
-);
-EventRow.displayName = "EventRow";
-
-function MonthGrid({
-  cursor,
-  events,
-  onDay,
-  colors,
-}: {
-  cursor: Date;
-  events: AgendaEventModel[];
-  onDay: (day: Date) => void;
-  colors: ReturnType<typeof useTheme>["colors"];
-}): React.JSX.Element {
-  const start = startOfMonth(cursor);
-  const first = addDays(start, -start.getDay());
-  return (
-    <View style={styles.month}>
-      {Array.from({ length: 42 }, (_, index) => addDays(first, index)).map(
-        (day) => {
-          const count = events.filter(
-            (event) =>
-              new Date(event.start).toDateString() === day.toDateString()
-          ).length;
-          return (
+  }): React.JSX.Element => {
+    const isToday = day.date.toDateString() === new Date().toDateString();
+    return (
+      <View style={[styles.dayRow, { borderTopColor: colors.line }]}>
+        <View
+          style={[
+            styles.dateCol,
+            isToday && { backgroundColor: colors.bgElev },
+          ]}
+        >
+          <Text
+            style={[
+              t("mono"),
+              styles.dateNum,
+              { color: isToday ? colors.text : colors.textSoft },
+            ]}
+          >
+            {day.date.getDate()}
+          </Text>
+          <Text style={[t("eyebrow"), { color: colors.textSoft }]}>
+            {new Intl.DateTimeFormat(undefined, { weekday: "short" })
+              .format(day.date)
+              .slice(0, 3)}
+          </Text>
+        </View>
+        <View style={styles.eventsCol}>
+          {day.events.map((event) => (
+            // Title ABOVE time, per the invariant — the title gets full
+            // width instead of sharing the row with a time column.
             <Pressable
-              key={day.toISOString()}
-              onPress={() => onDay(day)}
-              style={styles.day}
+              key={event.instanceKey}
+              onPress={() => onOpen(event)}
+              style={[styles.eventCard, { borderStartColor: colors.accent }]}
             >
-              <Text
-                style={[
-                  styles.dayNumber,
-                  {
-                    color:
-                      day.getMonth() === cursor.getMonth()
-                        ? colors.text
-                        : colors.textFaint,
-                  },
-                ]}
-              >
-                {day.getDate()}
+              <Text style={[styles.eventTitle, { color: colors.text }]}>
+                {event.summary}
               </Text>
-              {count ? (
-                <View
-                  style={[styles.dot, { backgroundColor: colors.accent }]}
-                />
-              ) : null}
+              <Text>
+                <Text style={[t("mono"), { color: colors.textSoft }]}>
+                  {new Intl.DateTimeFormat(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  }).format(new Date(event.start))}
+                </Text>
+                <Text style={[t("small"), { color: colors.textSoft }]}>
+                  {event.timezone ? ` · ${event.timezone}` : ""}
+                  {event.isRecurrenceInstance ? " · repeating" : ""}
+                </Text>
+              </Text>
             </Pressable>
-          );
-        }
-      )}
-    </View>
-  );
-}
+          ))}
+        </View>
+      </View>
+    );
+  }
+);
+AgendaDayRow.displayName = "AgendaDayRow";
+
 function WeekStrip({
   start,
   events,
@@ -532,15 +475,19 @@ function WeekStrip({
             key={day.toISOString()}
             style={[styles.weekDay, { backgroundColor: colors.bgSunken }]}
           >
-            <Text style={[styles.weekName, { color: colors.textSoft }]}>
-              {new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
-                day
-              )}
+            <Text style={[t("eyebrow"), { color: colors.textSoft }]}>
+              {new Intl.DateTimeFormat(undefined, { weekday: "short" })
+                .format(day)
+                .slice(0, 3)}
             </Text>
-            <Text style={[styles.weekNumber, { color: colors.text }]}>
+            <Text
+              style={[t("mono"), styles.weekNumber, { color: colors.text }]}
+            >
               {day.getDate()}
             </Text>
-            <Text style={[styles.weekCount, { color: colors.accent }]}>
+            <Text
+              style={[t("mono"), styles.weekCount, { color: colors.accent }]}
+            >
               {
                 events.filter(
                   (event) =>

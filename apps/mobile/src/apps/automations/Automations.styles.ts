@@ -109,7 +109,11 @@ export const makeStyles = (colors: ThemeColors) =>
       fontSize: 10,
       textTransform: "uppercase",
     },
-    title: { color: colors.text, fontFamily: family.serif, fontSize: 28 },
+    title: {
+      color: colors.text,
+      fontFamily: family.displayRegular,
+      fontSize: 28,
+    },
     togglePill: {
       alignItems: "center",
       borderRadius: 999,
@@ -118,5 +122,5 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingVertical: 6,
     },
-    toggleText: { fontFamily: family.sansBold, fontSize: 11 },
+    toggleText: { fontFamily: family.sansMedium, fontSize: 11 },
   });

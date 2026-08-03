@@ -3,19 +3,16 @@ import { Pressable, View, StyleSheet } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
 import { nativeButtonStyle } from "@centraid/design";
-import type { IconName, NativeButtonStyle } from "@centraid/design";
+import type {
+  ButtonVariant,
+  IconName,
+  NativeButtonStyle,
+} from "@centraid/design";
 
 import { spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
-
-export type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "quiet"
-  | "destructive"
-  | "destructiveFilled";
 
 export interface ButtonProps {
   label: string;
@@ -36,7 +33,6 @@ export default function Button({
 }: ButtonProps): React.JSX.Element {
   const isPrimary = variant === "primary";
   const isDestructive = variant === "destructive";
-  const isDestructiveFilled = variant === "destructiveFilled";
   const { colors, radii, targetMin } = useTheme();
   const styles = useMemo(() => {
     const recipeStyle = nativeButtonStyle(variant, {
@@ -69,7 +65,7 @@ export default function Button({
             color={
               disabled
                 ? colors.textDisabled
-                : isPrimary || isDestructiveFilled
+                : isPrimary
                   ? colors.textInv
                   : isDestructive
                     ? colors.danger
@@ -80,7 +76,7 @@ export default function Button({
         <Text
           style={[
             styles.label,
-            (isPrimary || isDestructiveFilled) && styles.labelPrimary,
+            isPrimary && styles.labelPrimary,
             isDestructive && styles.labelDestructive,
             disabled && styles.labelDisabled,
           ]}

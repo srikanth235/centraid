@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   AppState,
   FlatList,
   Pressable,
@@ -22,7 +21,7 @@ import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet"
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import { appQuery, resolveAppMeta } from "../../lib/gateway";
 import type { LockerScreenProps } from "../../navigation";
 import {
@@ -422,8 +421,20 @@ export default function LockerHome({
   const content = (() => {
     switch (screen.kind) {
       case "loading":
+        // The credential check + item list read are local and typically
+        // sub-frame; when they aren't, a static line reads honestly without
+        // claiming to know a duration this operation doesn't expose.
         return (
-          <ActivityIndicator color={colors.textFaint} style={styles.center} />
+          <View
+            style={[
+              styles.center,
+              { alignItems: "center", justifyContent: "center" },
+            ]}
+          >
+            <Text style={[t("small"), { color: colors.textFaint }]}>
+              Opening Locker…
+            </Text>
+          </View>
         );
       case "offline":
         return (

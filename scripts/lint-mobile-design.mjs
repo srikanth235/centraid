@@ -16,9 +16,9 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo"]);
 // explicit review of the shared token contract instead of silently expanding
 // the exception surface.
 export const MOBILE_DESIGN_BASELINE = Object.freeze({
-  hex: 601,
-  rgba: 158,
-  fontSize: 316,
+  hex: 302,
+  rgba: 62,
+  fontSize: 315,
 });
 
 const FORBIDDEN = [
@@ -95,7 +95,7 @@ export function scanMobileDesign(root = ROOT) {
     "lineSel",
     "focusRingColor",
     "textDisabled",
-    'export const durations = {"one":120,"two":200}',
+    'export const durations = {"one":140,"two":280}',
   ]) {
     if (!generatedSource.includes(required))
       findings.push(`${path.relative(root, generated)}: missing ${required}`);

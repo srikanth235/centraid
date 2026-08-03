@@ -1,35 +1,37 @@
 // Deterministic native code generation from @centraid/design's typed lowering.
 // There is intentionally no CSS parser or runtime resolver in this module.
 
-import { ACCENT_PALETTE, toNativeTheme } from "@centraid/design";
-import type { AccentKey, NativeTheme } from "@centraid/design";
+import { toNativeTheme } from "@centraid/design";
+import type { NativeTheme } from "@centraid/design";
 
+// Direct sub-path exports (see App.tsx's import comment) fix each face's
+// weight to its own RN font-family name. The Binding Layer's four faces:
+// Instrument Sans (body/UI), Instrument Serif (display), Source Serif 4
+// (reading), DM Mono (numeric).
 const FONT_ROLES = {
+  display: {
+    regular: "InstrumentSerif_400Regular",
+  },
   mono: {
-    medium: "JetBrainsMono_500Medium",
-    regular: "JetBrainsMono_400Regular",
-    semibold: "JetBrainsMono_600SemiBold",
+    medium: "DMMono_500Medium",
+    regular: "DMMono_400Regular",
   },
   sans: {
-    medium: "Geist_500Medium",
-    regular: "Geist_400Regular",
-    semibold: "Geist_600SemiBold",
+    medium: "InstrumentSans_500Medium",
+    regular: "InstrumentSans_400Regular",
   },
   serif: {
-    semibold: "PlayfairDisplay_600SemiBold",
-    semiboldItalic: "PlayfairDisplay_600SemiBold_Italic",
+    regular: "SourceSerif4_400Regular",
   },
 } as const;
 
 export interface GeneratedTheme {
-  accentThemes: Record<
-    AccentKey,
-    { light: Record<string, string>; dark: Record<string, string> }
-  >;
   light: Record<string, string>;
   dark: Record<string, string>;
   radii: Record<string, number>;
   spacing: Record<string, number>;
+  metrics: Record<string, number>;
+  density: NativeTheme["density"];
   fonts: typeof FONT_ROLES;
   type: NativeTheme["type"];
   targetMin: NativeTheme["targetMin"];
@@ -45,21 +47,13 @@ function colorRecord(theme: NativeTheme): Record<string, string> {
 export function buildTheme(): GeneratedTheme {
   const light = toNativeTheme("light");
   const dark = toNativeTheme("dark");
-  const accentThemes = Object.fromEntries(
-    Object.keys(ACCENT_PALETTE).map((accentKey) => [
-      accentKey,
-      {
-        dark: colorRecord(toNativeTheme("dark", accentKey as AccentKey)),
-        light: colorRecord(toNativeTheme("light", accentKey as AccentKey)),
-      },
-    ])
-  ) as GeneratedTheme["accentThemes"];
   return {
-    accentThemes,
     dark: colorRecord(dark),
+    density: light.density,
     durations: light.durations,
     fonts: FONT_ROLES,
     light: colorRecord(light),
+    metrics: { ...light.metrics },
     radii: { ...light.radii },
     spacing: { ...light.spacing },
     targetMin: light.targetMin,
@@ -102,14 +96,50 @@ function renderNested<
     .join("\n");
 }
 
+/**
+ * `letterSpacing` on the typed lowering is a CSS em string (e.g. `"-0.01em"`)
+ * because `packages/design/src/native.ts` is deliberately unit-agnostic — it
+ * carries the SAME tracking value shell and blueprint publish as a CSS custom
+ * property. React Native's `TextStyle.letterSpacing` has no em unit; it is a
+ * plain point number. This is the one native-only conversion: em × the role's
+ * own (already phone-adjusted) fontSize, rounded to 2dp so the generated
+ * source stays readable.
+ */
+function emToPoints(em: string, size: number): number {
+  const fraction = Number(em.replace(/em$/u, ""));
+  return Math.round(fraction * size * 100) / 100;
+}
+
 function renderType(type: NativeTheme["type"], indent: string): string {
   return sortedEntries(
     type as Record<string, NativeTheme["type"][keyof NativeTheme["type"]]>
   )
-    .map(
-      ([key, value]) =>
-        `${indent}${key}: { family: ${stringLiteral(value.family)}, fontSize: ${value.fontSize}, lineHeight: ${value.lineHeight}, weight: ${stringLiteral(value.weight)} },`
-    )
+    .map(([key, value]) => {
+      const fields = [
+        `family: ${stringLiteral(value.family)}`,
+        `fontSize: ${value.fontSize}`,
+        `lineHeight: ${value.lineHeight}`,
+        `weight: ${stringLiteral(value.weight)}`,
+      ];
+      // Tracking: only the display and micro-caps rungs carry one (§ typography.ts).
+      if (value.letterSpacing !== undefined) {
+        fields.push(
+          `letterSpacing: ${emToPoints(value.letterSpacing, value.fontSize)}`
+        );
+      }
+      // `text-transform: uppercase` on the one role that is always small caps.
+      if (value.textTransform !== undefined) {
+        fields.push(`textTransform: ${stringLiteral(value.textTransform)}`);
+      }
+      // RN has no `font-variant-numeric`; the equivalent is the `fontVariant`
+      // array prop. "Numerics are mono and tabular in every app, without
+      // exception" is only true on native if this travels with the role
+      // rather than being left for a consumer to remember.
+      if (value.variantNumeric !== undefined) {
+        fields.push(`fontVariant: ['${value.variantNumeric}']`);
+      }
+      return `${indent}${key}: { ${fields.join(", ")} },`;
+    })
     .join("\n");
 }
 
@@ -132,8 +162,6 @@ export const darkPalette = {
 ${renderRecord(theme.dark, "  ")}
 } as const;
 
-export const accentThemes = ${JSON.stringify(theme.accentThemes, null, 2)} as const;
-
 export const radii = {
 ${renderRecord(theme.radii, "  ")}
 } as const;
@@ -141,6 +169,12 @@ ${renderRecord(theme.radii, "  ")}
 export const spacing = {
 ${renderRecord(theme.spacing, "  ")}
 } as const;
+
+export const metrics = {
+${renderRecord(theme.metrics, "  ")}
+} as const;
+
+export const density = ${JSON.stringify(theme.density, null, 2)} as const;
 
 export const fonts = {
 ${renderNested(theme.fonts as unknown as Record<string, Record<string, string>>, "  ")}

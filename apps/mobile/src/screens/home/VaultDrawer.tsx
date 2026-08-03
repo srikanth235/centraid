@@ -262,7 +262,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 42,
     },
-    avatarText: { color: "#fff", fontFamily: family.sansBold, fontSize: 15 },
+    avatarText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 15 },
     badge: {
       alignItems: "center",
       borderRadius: 10,
@@ -271,7 +271,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 5,
       paddingVertical: 1,
     },
-    badgeText: { color: "#fff", fontFamily: family.sansBold, fontSize: 11 },
+    badgeText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 11 },
     divider: {
       height: StyleSheet.hairlineWidth,
       marginHorizontal: 2,
@@ -287,7 +287,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 6,
     },
     headerMeta: { flex: 1, minWidth: 0 },
-    headerName: { fontFamily: family.serif, fontSize: 20, letterSpacing: -0.2 },
+    headerName: {
+      fontFamily: family.displayRegular,
+      fontSize: 20,
+      letterSpacing: -0.2,
+    },
     headerSub: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 2 },
     panel: {
       borderRightWidth: 0.5,

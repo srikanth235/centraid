@@ -1,8 +1,8 @@
-// The universal-search overlay (issue #498, Slice B change #6). Dock Search
-// raises this as a full-screen frosted sheet — local component state, not a nav
-// route, so it's cheap to open and dismiss. It autofocuses an input, filters the
-// eight-app grid live, and hints that deeper search (photos, docs, people)
-// arrives with the gateway.
+// The full-screen search overlay (issue #498, Slice B change #6; issue #707
+// Phase 5 — "Search everything" from Home's header). Local component state,
+// not a nav route, so it's cheap to open and dismiss. It autofocuses an
+// input, filters the eight-app grid live, and hints that deeper search
+// (photos, docs, people) arrives with the gateway.
 //
 // Tapping the scrim dismisses: the blurred background sits under a full-screen
 // Pressable, and the content layer is `box-none`, so a tap on empty space falls
@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { family, t, useTheme } from "../../kit/theme";
+import { family, metrics, t, useTheme } from "../../kit/theme";
 import type { ThemeColors, Scheme } from "../../kit/theme";
 import { BLUEPRINT_SEARCH_TARGETS, searchBlueprints } from "./blueprint-search";
 import type { BlueprintSearchHit } from "./blueprint-search";
@@ -298,7 +298,8 @@ const makeStyles = (colors: ThemeColors) =>
       borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       gap: 10,
-      minHeight: 58,
+      // The row-height token, not a bespoke number — issue #707 Phase 5.
+      minHeight: metrics.row,
     },
     field: {
       alignItems: "center",

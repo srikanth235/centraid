@@ -17,20 +17,24 @@ describe("theme resolution", () => {
     expect(resolveTheme("light").colors).toBe(resolveTheme("light").colors);
   });
 
-  it("carries the shared spacing, radii, type and hit-target contract", () => {
+  it("carries the shared spacing, radii, metrics, density and hit-target contract", () => {
     const theme = resolveTheme("light");
     expect(theme.spacing["4"]).toBe(16);
-    expect(theme.radii.md).toBe(6);
-    expect(theme.type.body.fontSize).toBe(17);
+    expect(theme.radii.md).toBe(7);
+    expect(theme.metrics.row).toBe(44);
+    expect(theme.metrics.control).toBe(34);
+    expect(theme.density.compact.row).toBe(38);
     expect(theme.targetMin.coarse).toBe(48);
     expect(theme.targetMin.fine).toBe(32);
   });
 
-  it("applies the owner's product accent to native action roles", () => {
-    const violet = resolveTheme("light", "violet");
-    expect(violet.colors.accent).toBe("#7C5BD9");
-    expect(violet.colors.accent).not.toBe(lightPalette.accent);
-    expect(resolveTheme("dark", "ochre").colors.accent).toBe("#B47B3F");
+  it("spends no hue — the accent is ink, same on both themes' action role", () => {
+    expect(resolveTheme("light").colors.accent).toBe(
+      resolveTheme("light").colors.text
+    );
+    expect(resolveTheme("dark").colors.accent).toBe(
+      resolveTheme("dark").colors.text
+    );
   });
 });
 
@@ -42,13 +46,12 @@ describe("navigation theme lowering", () => {
     expect(navThemeFor("light").colors.text).toBe(lightPalette.text);
   });
 
-  it("maps navigation weights onto the loaded sans family", () => {
-    expect(navThemes.light.fonts.regular.fontFamily).toBe("Geist_400Regular");
-    expect(navThemes.dark.fonts.bold.fontFamily).toBe("Geist_600SemiBold");
-  });
-
-  it("uses the selected product accent for navigation actions", () => {
-    expect(navThemeFor("light", "rose").colors.primary).toBe("#E55772");
-    expect(navThemeFor("light", "rose").colors.notification).toBe("#E55772");
+  it("maps navigation weights onto the loaded sans family — no bold rung", () => {
+    expect(navThemes.light.fonts.regular.fontFamily).toBe(
+      "InstrumentSans_400Regular"
+    );
+    expect(navThemes.dark.fonts.bold.fontFamily).toBe(
+      "InstrumentSans_500Medium"
+    );
   });
 });

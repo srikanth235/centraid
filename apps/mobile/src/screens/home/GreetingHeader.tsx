@@ -1,15 +1,25 @@
 // The editorial greeting header at the top of the springboard Home (issue #498,
-// Slice B). A time-of-day salutation set upright in the Playfair serif, the
-// profile name in its italic and tinted with the profile colour, next to a round
-// identity avatar that opens the Vault drawer.
+// Slice B; fonts flipped to the Binding Layer in issue #707 Phase 5). A
+// time-of-day salutation set upright in Instrument Serif, the profile name in
+// its italic and tinted with the profile colour, next to a round identity
+// avatar that opens the Vault drawer.
 //
 // The avatar is the drawer handle: tapping it (or the left-edge swipe Home owns)
 // opens the Vault menu. It carries the profile colour + initial so identity and
 // the "switch vault" affordance read as one thing.
+//
+// Search and Capture (issue #707 Phase 5) live here now: the band that used to
+// carry them (GlassDock) is capped at apps-plus-More by the Binding Layer's
+// invariant 1, so these two cross-app actions moved to the one other reachable
+// spot on Home's fixed chrome. Both are plain ink icon buttons — bounded
+// controls, not bare text — with no fill, since Home's one filled-ink element
+// belongs to whichever control most wants primacy on a given screen (none,
+// today), not to a header action.
 
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -20,12 +30,16 @@ export interface GreetingHeaderProps {
   // Raw hex profile colour (see lib/profile). Tints the name + the avatar.
   color: string;
   onOpenMenu: () => void;
+  onSearch: () => void;
+  onCapture: () => void;
 }
 
 export default function GreetingHeader({
   name,
   color,
   onOpenMenu,
+  onSearch,
+  onCapture,
 }: GreetingHeaderProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -42,6 +56,29 @@ export default function GreetingHeader({
           {display}
         </Text>
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Search everything"
+        onPress={onSearch}
+        hitSlop={10}
+        style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+      >
+        <Icon
+          name="Search"
+          size={19}
+          color={colors.textSoft}
+          strokeWidth={1.8}
+        />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Quick add"
+        onPress={onCapture}
+        hitSlop={10}
+        style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+      >
+        <Icon name="Plus" size={20} color={colors.textSoft} strokeWidth={1.8} />
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open vault menu"
@@ -72,18 +109,25 @@ const makeStyles = (colors: ThemeColors) =>
     },
     avatarInitial: {
       color: "#fff",
-      fontFamily: family.sansBold,
+      fontFamily: family.sansMedium,
       fontSize: 17,
     },
     greeting: { flex: 1, paddingRight: 12 },
     hello: {
       color: colors.textSoft,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 15,
       letterSpacing: 0.2,
     },
+    iconButton: {
+      alignItems: "center",
+      height: 34,
+      justifyContent: "center",
+      marginRight: 6,
+      width: 34,
+    },
     name: {
-      fontFamily: family.serifItalic,
+      fontFamily: family.displayItalic,
       fontSize: 28,
       letterSpacing: -0.3,
       marginTop: 1,

@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
   },
-  fallbackAction: { fontFamily: family.sansBold, fontSize: 12, marginTop: 5 },
+  fallbackAction: { fontFamily: family.sansMedium, fontSize: 12, marginTop: 5 },
   fallbackText: {
     fontFamily: family.sansRegular,
     fontSize: 12,

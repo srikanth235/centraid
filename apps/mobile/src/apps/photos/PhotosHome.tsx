@@ -14,7 +14,7 @@ import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -165,11 +165,9 @@ export default function PhotosHome({
 
   const backupSelection = async (): Promise<void> => {
     if (!session || !gatewayBase) {
-      showToast({
-        message:
-          "Desktop unavailable — pair or reconnect a gateway before backup.",
-        tone: "danger",
-      });
+      postStatus(
+        "Desktop unavailable — pair or reconnect a gateway before backup."
+      );
       return;
     }
     const selected = timeline.assets.filter(
@@ -238,20 +236,18 @@ export default function PhotosHome({
       // Anything still in iCloud stays selected so a retry is one tap.
       setSelection(inCloud);
       if (inCloud.size) {
-        showToast({
-          message: `${inCloud.size} selected item${inCloud.size === 1 ? " is" : "s are"} ${IN_CLOUD_MESSAGE}; still selected for retry.`,
-          tone: "danger",
-        });
+        postStatus(
+          `${inCloud.size} selected item${inCloud.size === 1 ? " is" : "s are"} ${IN_CLOUD_MESSAGE}; still selected for retry.`
+        );
       } else {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
       }
     } catch (error) {
-      showToast({
-        message: `Backup paused: ${error instanceof Error ? error.message : String(error)}`,
-        tone: "danger",
-      });
+      postStatus(
+        `Backup paused: ${error instanceof Error ? error.message : String(error)}`
+      );
     } finally {
       setBackingUp(false);
       setUploadProgress(undefined);
@@ -337,8 +333,11 @@ export default function PhotosHome({
   const selecting = selection.size > 0;
 
   return (
+    // Photos' declared surface tone is "mat" (freedom table, DESIGN.md) —
+    // only the page moves; every other role/control still reads its colour
+    // from the shared ramp.
     <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
+      style={[styles.safe, { backgroundColor: colors.toneMat }]}
       edges={["top"]}
     >
       {selecting ? (
@@ -668,7 +667,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 28,
   },
-  emptyTitle: { fontFamily: family.sansBold, fontSize: 21, marginTop: 18 },
+  emptyTitle: { fontFamily: family.sansMedium, fontSize: 21, marginTop: 18 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -689,7 +688,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
   },
   heroTitle: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 21,
     letterSpacing: -0.4,
     marginTop: 6,
@@ -779,7 +778,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 6,
   },
-  selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
+  selectionTitle: { fontFamily: family.sansMedium, fontSize: 15 },
   uploadFill: { borderRadius: 999, height: "100%" },
   uploadProgress: { gap: 5, paddingHorizontal: 18, paddingVertical: 8 },
   uploadProgressText: { fontFamily: family.monoRegular, fontSize: 11 },
@@ -799,5 +798,5 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   timelineMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
-  timelineTitle: { fontFamily: family.sansBold, fontSize: 17 },
+  timelineTitle: { fontFamily: family.sansMedium, fontSize: 17 },
 });

@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -152,20 +152,15 @@ export default function AgendaEvent({
     if (!event) return;
     const permission = await Notifications.requestPermissionsAsync();
     if (!permission.granted) {
-      showToast({
-        message:
-          "Notifications are disabled — enable them to receive reminders.",
-        tone: "danger",
-      });
+      postStatus(
+        "Notifications are disabled — enable them to receive reminders."
+      );
       return;
     }
     if (gatewayBase) void registerReplicaPushWake(gatewayBase);
     const date = new Date(Date.parse(event.start) - 15 * 60 * 1000);
     if (date <= new Date()) {
-      showToast({
-        message: "This reminder time has already passed.",
-        tone: "danger",
-      });
+      postStatus("This reminder time has already passed.");
       return;
     }
     await Notifications.scheduleNotificationAsync({
@@ -176,11 +171,9 @@ export default function AgendaEvent({
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
-    showToast({
-      message:
-        "Reminder set — this device will notify you 15 minutes before the event.",
-      tone: "accent",
-    });
+    postStatus(
+      "Reminder set — this device will notify you 15 minutes before the event."
+    );
   };
   if (!event)
     return <View style={[styles.safe, { backgroundColor: colors.bg }]} />;
@@ -365,9 +358,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 36,
   },
-  avatarText: { fontFamily: family.sansBold, fontSize: 14 },
+  avatarText: { fontFamily: family.sansMedium, fontSize: 14 },
   content: { padding: 22, paddingBottom: 60 },
-  date: { fontFamily: family.monoBold, fontSize: 10, letterSpacing: 1 },
+  date: { fontFamily: family.monoMedium, fontSize: 10, letterSpacing: 1 },
   description: {
     fontFamily: family.sansRegular,
     fontSize: 14,
@@ -395,7 +388,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 14,
   },
-  headerTitle: { fontFamily: family.sansBold, fontSize: 15 },
+  headerTitle: { fontFamily: family.sansMedium, fontSize: 15 },
   pending: {
     alignItems: "center",
     borderRadius: 12,
@@ -417,14 +410,14 @@ const styles = StyleSheet.create({
   rsvpText: { fontFamily: family.sansMedium, fontSize: 12 },
   safe: { flex: 1 },
   section: {
-    fontFamily: family.monoBold,
+    fontFamily: family.monoMedium,
     fontSize: 10,
     letterSpacing: 1,
     marginBottom: 6,
     marginTop: 30,
   },
   title: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 28,
     letterSpacing: -0.7,
     marginTop: 10,

@@ -1,6 +1,8 @@
-// The springboard Home launcher (issue #498, Slice B). A thin composition over
-// the pieces in ./home: the editorial greeting, the attention-first status line,
-// the always-eight-apps grid, the floating glass dock, and the search overlay.
+// The springboard Home launcher (issue #498, Slice B; band + fonts flipped to
+// the Binding Layer in issue #707 Phase 5). A thin composition over the
+// pieces in ./home: the editorial greeting, the attention-first status line,
+// the always-eight-apps grid, the bottom navigation band, and the search
+// overlay.
 //
 // Home owns only the data load and the navigation wiring; every visual block is
 // its own component so this file stays a readable assembly (and under the
@@ -39,13 +41,16 @@ import {
 import { getProfileColor, getProfileName } from "../lib/profile";
 import { subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
+import AllAppsSheet from "./home/AllAppsSheet";
 import AttentionLine from "./home/AttentionLine";
 import type { ConnectionState } from "./home/AttentionLine";
+import { ASSISTANT_ID, buildAllEntries, buildBandTabs } from "./home/band";
+import { hydratePins, togglePin, usePins } from "./home/band-pins";
 import { NATIVE_APP_IDS, buildLauncherItems } from "./home/catalog";
 import type { LauncherItem } from "./home/catalog";
 import DailyBriefCard from "./home/DailyBriefCard";
-import GlassDock from "./home/GlassDock";
 import GreetingHeader from "./home/GreetingHeader";
+import HomeBand from "./home/HomeBand";
 import LauncherGrid from "./home/LauncherGrid";
 import SearchOverlay from "./home/SearchOverlay";
 import VaultDrawer from "./home/VaultDrawer";
@@ -179,6 +184,8 @@ export default function HomeScreen({
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [vaultsOpen, setVaultsOpen] = useState(false);
+  const [allAppsOpen, setAllAppsOpen] = useState(false);
+  const pins = usePins();
   const [profile, setProfile] = useState(() => ({
     name: getProfileName(),
     color: getProfileColor(),
@@ -186,6 +193,11 @@ export default function HomeScreen({
 
   useEffect(() => {
     void loadHome(setState, setApprovals);
+  }, []);
+  // The band's pin list is user data (issue #707 Decision, State section) —
+  // hydrate it once at mount, same as the profile/appearance prefs in App.tsx.
+  useEffect(() => {
+    void hydratePins();
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -303,6 +315,25 @@ export default function HomeScreen({
     [openItem]
   );
 
+  // The band and the All-apps sheet both address entries by id (Assistant
+  // included, which — unlike every other entry — has no LauncherItem/route of
+  // its own), so this is the one place that resolves an id back to a
+  // navigation action for both.
+  const openId = useCallback(
+    (id: string): void => {
+      if (id === ASSISTANT_ID) {
+        navigation.navigate("Assistant");
+        return;
+      }
+      const item = items.find((candidate) => candidate.meta.id === id);
+      if (item) openItem(item);
+    },
+    [items, navigation, openItem]
+  );
+
+  const bandTabs = useMemo(() => buildBandTabs(pins, items), [pins, items]);
+  const allEntries = useMemo(() => buildAllEntries(items), [items]);
+
   const openSettings = useCallback(
     () => navigation.navigate("Settings", { screen: "Settings" }),
     [navigation]
@@ -323,6 +354,8 @@ export default function HomeScreen({
           name={profile.name}
           color={profile.color}
           onOpenMenu={openMenu}
+          onSearch={() => setSearchOpen(true)}
+          onCapture={() => navigation.navigate("Capture")}
         />
 
         <ScrollView
@@ -377,10 +410,10 @@ export default function HomeScreen({
           <LauncherGrid items={items} onOpen={openItem} />
         </ScrollView>
 
-        <GlassDock
-          onSearch={() => setSearchOpen(true)}
-          onAssistant={() => navigation.navigate("Assistant")}
-          onCapture={() => navigation.navigate("Capture")}
+        <HomeBand
+          tabs={bandTabs}
+          onOpen={openId}
+          onMore={() => setAllAppsOpen(true)}
         />
 
         {searchOpen ? (
@@ -390,6 +423,15 @@ export default function HomeScreen({
             onClose={() => setSearchOpen(false)}
           />
         ) : null}
+
+        <AllAppsSheet
+          visible={allAppsOpen}
+          entries={allEntries}
+          pinnedIds={pins}
+          onOpen={openId}
+          onTogglePin={togglePin}
+          onClose={() => setAllAppsOpen(false)}
+        />
 
         <VaultDrawer
           open={menuOpen}
@@ -422,9 +464,9 @@ export default function HomeScreen({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Bottom padding clears the floating dock so the last app row stays tappable.
+    // Bottom padding clears the flush band so the last app row stays tappable.
     content: {
-      paddingBottom: 140,
+      paddingBottom: 24,
       paddingHorizontal: H_PADDING,
       paddingTop: 6,
     },

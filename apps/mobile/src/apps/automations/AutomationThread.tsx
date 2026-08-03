@@ -10,7 +10,7 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
@@ -57,10 +57,9 @@ export default function AutomationThread(props: {
     void runAutomation(props.automationRef)
       .then(load)
       .catch((error: unknown) =>
-        showToast({
-          message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-          tone: "danger",
-        })
+        postStatus(
+          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
+        )
       )
       .finally(() => setRunning(false));
   };
@@ -187,7 +186,7 @@ const makeStyles = (colors: ThemeColors) =>
     subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

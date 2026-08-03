@@ -490,7 +490,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     barSpacer: { width: 36 },
     body: {
-      paddingBottom: spacing[7],
+      paddingBottom: spacing[6],
       paddingHorizontal: spacing[5],
       paddingTop: spacing[4],
     },
@@ -505,7 +505,7 @@ const makeStyles = (colors: ThemeColors) =>
     fieldLabelSpaced: { marginTop: spacing[4] },
     help: { ...t("small"), color: colors.textFaint, marginBottom: spacing[3] },
     helpMono: {
-      fontFamily: "JetBrainsMono_400Regular",
+      fontFamily: family.monoRegular,
       color: colors.textSoft,
     },
     input: {
@@ -562,7 +562,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

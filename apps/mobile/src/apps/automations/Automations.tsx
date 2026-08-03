@@ -16,7 +16,7 @@ import {
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { spacing, useTheme } from "../../kit/theme";
 import {
   cloneAutomationTemplate,
@@ -76,16 +76,12 @@ function AutomationsList({
       void cloneAutomationTemplate(template.id)
         .then(async () => {
           await refresh();
-          showToast({
-            message: `${template.name} is ready to use.`,
-            tone: "accent",
-          });
+          postStatus(`${template.name} is ready to use.`);
         })
         .catch((error: unknown) => {
-          showToast({
-            message: `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`
+          );
         })
         .finally(() => setInstalling(null));
     },
@@ -315,10 +311,9 @@ const AutomationCard = memo(
         })
         .catch((error: unknown) => {
           if (mounted.current) setRun("idle");
-          showToast({
-            message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
+          );
         });
     }, [run, row.ref]);
 
@@ -327,10 +322,9 @@ const AutomationCard = memo(
       setBusyToggle(true);
       void toggle(row.ref, !row.enabled)
         .catch((error: unknown) => {
-          showToast({
-            message: `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`
+          );
         })
         .finally(() => {
           if (mounted.current) setBusyToggle(false);

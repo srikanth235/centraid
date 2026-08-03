@@ -7,13 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  ActivityIndicator,
-  AppState,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -126,12 +120,11 @@ export function AppLockProvider({
     [enabled]
   );
 
-  if (!hydrated)
-    return (
-      <SafeAreaView style={styles.screen}>
-        <ActivityIndicator color={colors.textFaint} />
-      </SafeAreaView>
-    );
+  // The AsyncStorage read behind `hydrated` resolves sub-frame in the common
+  // case (see App.tsx's own note on the lazy-screen Suspense fallback for the
+  // same reasoning): a blank themed fill never registers as more than the one
+  // flash a spinner would have been, and it costs no motion.
+  if (!hydrated) return <SafeAreaView style={styles.screen} />;
   if (enabled && !unlocked)
     return (
       <SafeAreaView style={styles.screen}>
@@ -153,11 +146,13 @@ export function AppLockProvider({
             onPress={() => void unlock()}
             style={styles.button}
           >
-            {authenticating ? (
-              <ActivityIndicator color={colors.textInv} />
-            ) : (
-              <Text style={styles.buttonText}>Unlock</Text>
-            )}
+            {/* No spinning glyph: the OS owns the actual biometric prompt, so
+                this button can only say "something is in flight" — a label
+                change plus the disabled state already say that without
+                motion. */}
+            <Text style={styles.buttonText}>
+              {authenticating ? "Authenticating…" : "Unlock"}
+            </Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -183,7 +178,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     buttonText: {
       color: colors.textInv,
-      fontFamily: family.sansBold,
+      fontFamily: family.sansMedium,
       fontSize: 15,
     },
     card: {
@@ -198,10 +193,8 @@ const makeStyles = (colors: ThemeColors) =>
     copy: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     eyebrow: {
-      ...t("control"),
+      ...t("eyebrow"),
       color: colors.textFaint,
-      fontFamily: family.monoBold,
-      letterSpacing: 1.2,
     },
     screen: {
       alignItems: "center",

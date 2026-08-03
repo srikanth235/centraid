@@ -21,7 +21,7 @@ import type {
 
 import { recognizeText } from "../../modules/centraid-ocr";
 import { Text } from "../kit/components/NativeText";
-import { showToast } from "../kit/components/Toast";
+import { postStatus } from "../kit/components/status-line";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -315,14 +315,12 @@ export default function ScanScreen({
           line_items: lineItems,
         });
       }
-      showToast({
-        message:
-          destination === "tally"
-            ? "Receipt published to Tally."
-            : `Scan saved to ${destination}.`,
-        tone: "accent",
-        action: { label: "Done", onPress: () => navigation.goBack() },
-      });
+      postStatus(
+        destination === "tally"
+          ? "Receipt published to Tally."
+          : `Scan saved to ${destination}.`,
+        { action: { label: "Done", run: () => navigation.goBack() } }
+      );
     } catch (error) {
       surfaceWriteFailure(error, "Scan not saved");
     } finally {

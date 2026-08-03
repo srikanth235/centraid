@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -13,7 +12,7 @@ import { formatRelativeTime } from "@centraid/design";
 
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
-import { family, radii, useTheme } from "../theme";
+import { family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";
 
@@ -73,14 +72,31 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       ]
     );
   };
-  const bootstrapLabel =
+  // `pages` and the source count are real numerics — mono and tabular, per
+  // the ramp's "numerics are mono and tabular in every app, without
+  // exception" — so the sentence is split around the number rather than
+  // interpolated into one plain string.
+  const bootstrap:
+    | { prefix: string; count?: number; suffix: string }
+    | undefined =
     bootstrapProgress.length === 0
       ? undefined
       : bootstrapProgress.length === 1
         ? bootstrapProgress[0]!.phase === "first-page"
-          ? `${bootstrapProgress[0]!.vaultLabel}: recent items ready; older history syncing`
-          : `${bootstrapProgress[0]!.vaultLabel}: ${bootstrapProgress[0]!.pages} pages ready; older history syncing`
-        : `${bootstrapProgress.length} sources: recent items ready; older history syncing`;
+          ? {
+              prefix: `${bootstrapProgress[0]!.vaultLabel}: `,
+              suffix: "recent items ready; older history syncing",
+            }
+          : {
+              prefix: `${bootstrapProgress[0]!.vaultLabel}: `,
+              count: bootstrapProgress[0]!.pages,
+              suffix: " pages ready; older history syncing",
+            }
+        : {
+            prefix: "",
+            count: bootstrapProgress.length,
+            suffix: " sources: recent items ready; older history syncing",
+          };
 
   return (
     <>
@@ -93,9 +109,9 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           onPress={refreshReplica}
           style={styles.refresh}
         >
-          {reachability === "syncing" ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : null}
+          {/* No spinning glyph while syncing — the label above already says
+              "Syncing recent changes…", and the bootstrap line below carries
+              the one exact count this operation actually has. */}
           <Text style={[styles.refreshText, { color: colors.accent }]}>
             {action}
           </Text>
@@ -109,16 +125,25 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           style={[styles.pending, { backgroundColor: colors.bgSunken }]}
         >
           <Text style={[styles.pendingText, { color: colors.text }]}>
-            Pending changes {pending.length}
+            Pending changes{" "}
+            <Text style={[t("mono"), { color: colors.text }]}>
+              {pending.length.toLocaleString()}
+            </Text>
           </Text>
           <Icon name="chevron-right" size={14} color={colors.textFaint} />
         </Pressable>
       </View>
-      {bootstrapLabel ? (
+      {bootstrap ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
           <Icon name="download-cloud" size={13} color={colors.accent} />
           <Text style={[styles.bootstrapText, { color: colors.textSoft }]}>
-            {bootstrapLabel}
+            {bootstrap.prefix}
+            {bootstrap.count === undefined ? null : (
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {bootstrap.count.toLocaleString()}
+              </Text>
+            )}
+            {bootstrap.suffix}
           </Text>
         </View>
       ) : null}
@@ -273,7 +298,7 @@ function humanStatus(status: string): string {
 }
 
 const styles = StyleSheet.create({
-  action: { fontFamily: family.sansBold, fontSize: 12 },
+  action: { fontFamily: family.sansMedium, fontSize: 12 },
   card: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -284,7 +309,7 @@ const styles = StyleSheet.create({
   },
   cardCopy: { flex: 1 },
   cardMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  cardTitle: { fontFamily: family.sansBold, fontSize: 14 },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: 14 },
   bootstrap: {
     alignItems: "center",
     flexDirection: "row",
@@ -325,7 +350,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  pendingText: { fontFamily: family.sansBold, fontSize: 10 },
+  pendingText: { fontFamily: family.sansMedium, fontSize: 10 },
   reason: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 6 },
   refresh: {
     alignItems: "center",
@@ -333,7 +358,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 7,
   },
-  refreshText: { fontFamily: family.sansBold, fontSize: 10 },
+  refreshText: { fontFamily: family.sansMedium, fontSize: 10 },
   sheet: { flex: 1 },
   sheetHeader: {
     alignItems: "center",
@@ -343,7 +368,7 @@ const styles = StyleSheet.create({
   },
   source: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 4 },
   subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  title: { fontFamily: family.sansBold, fontSize: 22 },
+  title: { fontFamily: family.sansMedium, fontSize: 22 },
   wrap: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,

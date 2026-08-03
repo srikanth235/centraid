@@ -301,7 +301,7 @@ const makeStyles = (
     },
     albumMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 1 },
     albumTile: { aspectRatio: 1, borderRadius: 14 },
-    albumTitle: { fontFamily: family.sansBold, fontSize: 14, marginTop: 9 },
+    albumTitle: { fontFamily: family.sansMedium, fontSize: 14, marginTop: 9 },
     avatar: { borderRadius: 33, height: 66, width: 66 },
     avatarAdd: {
       alignItems: "center",
@@ -327,7 +327,7 @@ const makeStyles = (
     },
     categoryLabel: {
       color: ON_TINT,
-      fontFamily: family.sansBold,
+      fontFamily: family.sansMedium,
       fontSize: 12,
       margin: 9,
     },
@@ -371,5 +371,5 @@ const makeStyles = (
       paddingHorizontal: 16,
       paddingTop: 24,
     },
-    sectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
+    sectionTitle: { fontFamily: family.sansMedium, fontSize: 15 },
   });

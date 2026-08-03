@@ -158,7 +158,7 @@ export default function PhotoStateView({
 }
 
 const styles = StyleSheet.create({
-  action: { fontFamily: family.sansBold, fontSize: 13 },
+  action: { fontFamily: family.sansMedium, fontSize: 13 },
   copy: { flex: 1, marginLeft: 10 },
   empty: { alignItems: "center", flex: 1, justifyContent: "center" },
   header: {
@@ -169,5 +169,5 @@ const styles = StyleSheet.create({
   },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   safe: { flex: 1 },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
+  title: { fontFamily: family.sansMedium, fontSize: 18 },
 });

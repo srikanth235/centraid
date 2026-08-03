@@ -49,7 +49,7 @@ describe("profile", () => {
       expect(isOnboarded()).toBe(true);
     });
 
-    it("defaults profile color to brand teal", () => {
+    it("defaults profile color to the ink brand mark", () => {
       expect(getProfileColor()).toBe(BRAND);
       setProfileColor("#112233");
       expect(getProfileColor()).toBe("#112233");

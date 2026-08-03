@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useReplica } from "../replica/ReplicaProvider";
 import { family, radii, useTheme } from "../theme";
 import { Text } from "./NativeText";
-import { showToast } from "./Toast";
+import { postStatus } from "./status-line";
 
 export default function AudiencePlacementSheet({
   visible,
@@ -38,18 +38,15 @@ export default function AudiencePlacementSheet({
         targetVaultId,
       });
       onClose();
-      showToast({
-        message:
-          result.status === "executed"
-            ? `${noun} shared — the audience copy and access receipt are saved.`
-            : `${noun} share queued — it will sync when the gateway reconnects.`,
-        tone: result.status === "executed" ? "accent" : "neutral",
-      });
+      postStatus(
+        result.status === "executed"
+          ? `${noun} shared — the audience copy and access receipt are saved.`
+          : `${noun} share queued — it will sync when the gateway reconnects.`
+      );
     } catch (error) {
-      showToast({
-        message: `Could not share: ${error instanceof Error ? error.message : String(error)}`,
-        tone: "danger",
-      });
+      postStatus(
+        `Could not share: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   };
   return (
@@ -117,7 +114,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 8,
   },
-  title: { fontFamily: family.sansBold, fontSize: 25 },
+  title: { fontFamily: family.sansMedium, fontSize: 25 },
   copy: { marginTop: 5, maxWidth: 300, lineHeight: 20 },
   row: {
     minHeight: 58,

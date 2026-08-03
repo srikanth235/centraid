@@ -345,10 +345,10 @@ const styles = StyleSheet.create({
   },
   safe: { flex: 1 },
   section: {
-    fontFamily: family.monoBold,
+    fontFamily: family.monoMedium,
     fontSize: 10,
     letterSpacing: 1,
     marginTop: 18,
   },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
+  title: { fontFamily: family.sansMedium, fontSize: 18 },
 });

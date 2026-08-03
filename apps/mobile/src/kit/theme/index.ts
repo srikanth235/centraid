@@ -17,50 +17,60 @@ import type { TextStyle } from "react-native";
 import { type as nativeType } from "./tokens.generated";
 
 export { spacing, radii } from "@centraid/design";
-
-export {
-  getAccent,
-  hydrateAccent,
-  setAccent,
-  subscribeAccent,
-  useAccent,
-} from "./accent";
+export { density, metrics } from "./tokens.generated";
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
+//
+// The Binding Layer's ramp carries exactly four faces and two weights (400 /
+// 500): Instrument Sans for body/UI text, Instrument Serif for the display
+// role, Source Serif 4 for the reading register, and DM Mono for the numeric
+// register. There is no bold/semibold rung any more — a caller that used to
+// reach for `sansBold` now reaches for `sansMedium`, the heaviest weight the
+// ramp has.
 export const family = {
-  monoBold: "JetBrainsMono_600SemiBold",
-  monoMedium: "JetBrainsMono_500Medium",
-  monoRegular: "JetBrainsMono_400Regular",
-  sansBold: "Geist_600SemiBold",
-  sansMedium: "Geist_500Medium",
-  sansRegular: "Geist_400Regular",
-  // Playfair Display — the editorial serif used for the home greeting
-  // (upright for the salutation, italic for the name). Loaded in App.tsx.
-  serif: "PlayfairDisplay_600SemiBold",
-  serifItalic: "PlayfairDisplay_600SemiBold_Italic",
+  displayItalic: "InstrumentSerif_400Regular_Italic",
+  displayRegular: "InstrumentSerif_400Regular",
+  monoMedium: "DMMono_500Medium",
+  monoRegular: "DMMono_400Regular",
+  sansMedium: "InstrumentSans_500Medium",
+  sansRegular: "InstrumentSans_400Regular",
+  serifRegular: "SourceSerif4_400Regular",
 } as const;
 
-type FamilyKey = "sans" | "mono" | "serif";
+type FamilyKey = "display" | "sans" | "mono" | "serif";
 
 const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
+  display: { "400": family.displayRegular },
   mono: {
     "400": family.monoRegular,
     "500": family.monoMedium,
-    "600": family.monoBold,
   },
   sans: {
     "400": family.sansRegular,
     "500": family.sansMedium,
-    "600": family.sansBold,
   },
-  serif: { "600": family.serif },
+  serif: { "400": family.serifRegular },
 };
+
+type NativeTypeValue = (typeof nativeType)[keyof typeof nativeType];
 
 export const t = (
   key: keyof typeof nativeType
-): Pick<TextStyle, "fontSize" | "lineHeight" | "fontFamily"> => {
-  const def = nativeType[key];
+): Pick<
+  TextStyle,
+  | "fontSize"
+  | "lineHeight"
+  | "fontFamily"
+  | "letterSpacing"
+  | "textTransform"
+  | "fontVariant"
+> => {
+  const def = nativeType[key] as NativeTypeValue & {
+    letterSpacing?: number;
+    textTransform?: "uppercase";
+    fontVariant?: TextStyle["fontVariant"];
+  };
   const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
   const fontFamily =
     map[def.weight] ?? map["400"] ?? map["500"] ?? family.sansRegular;
@@ -68,6 +78,21 @@ export const t = (
     fontFamily,
     fontSize: def.fontSize,
     lineHeight: def.lineHeight,
+    // Tracking, caps and tabular figures are part of the ROLE, not decoration
+    // a caller adds on top (see generate.ts#renderType) — a role that carries
+    // one of these on the typed lowering must carry it here too, or "numerics
+    // are mono and tabular in every app, without exception" silently stops
+    // being true the moment a screen calls `t("mono")` instead of hand-rolling
+    // the style.
+    ...(def.letterSpacing === undefined
+      ? {}
+      : { letterSpacing: def.letterSpacing }),
+    ...(def.textTransform === undefined
+      ? {}
+      : { textTransform: def.textTransform }),
+    ...(def.fontVariant === undefined
+      ? {}
+      : { fontVariant: def.fontVariant as TextStyle["fontVariant"] }),
   };
 };
 

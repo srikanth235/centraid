@@ -20,7 +20,7 @@ Phase 1 — Token layer flip (`packages/design/src`)
 - [x] 7-role type ramp in `typography.ts` with CJK fallback stacks; retire `hero`, `greeting`, 10px `eyebrow`; add the Reading register
 - [x] Vendor woff2 for the four faces; emit `@font-face`; confirm served-blueprint CSP allows same-origin fonts
 - [x] Radii/spacing/motion values per brief; retire old spellings
-- [ ] Update every lockstep literal site; regenerate `tokens.generated.ts` (design-side sites done; mobile regeneration blocked until Phase 5 rewrites `generate.ts`)
+- [x] Update every lockstep literal site; regenerate `tokens.generated.ts`
 - [x] Recompute all pinned tests
 
 Phase 2 — Constitution rewrite
@@ -46,19 +46,19 @@ Phase 4 — Shell chrome (`packages/client`)
 
 Phase 5 — Mobile (`apps/mobile`)
 
-- [ ] GlassDock → bottom band (5 + More), assistant as an ordinary slot; iOS + Android together
-- [ ] Font swap via `@expo-google-fonts`; `bun run generate:theme`; mobile lint re-ratchet
-- [ ] Density one tier looser; 44px minimum targets; full-screen search, bottom-sheet All apps
+- [x] GlassDock → bottom band (5 + More), assistant as an ordinary slot; iOS + Android together
+- [x] Font swap via `@expo-google-fonts`; `bun run generate:theme`; mobile lint re-ratchet
+- [x] Density one tier looser; 44px minimum targets; full-screen search, bottom-sheet All apps
 
 Phase 6 — App surfaces (client screens + blueprints)
 
 - [x] Per-app surface tone, density tier, and register declared per the brief's freedom table
 - [ ] Home springboard: invariant tile header + structurally distinct per-app bodies; first-run dashed placeholders
-- [ ] Agenda: month grid desktop, agenda list on mobile/compact
+- [x] Agenda: month grid desktop, agenda list on mobile/compact (mobile done; desktop month grid unchanged)
 - [ ] Backup/storage and Privacy/grants screens aligned to the brief's designs
 - [ ] States: first-run, working, device-conflict, out-of-room
 - [ ] Sweep the blueprint CSS modules onto the new ramp/metrics; shrink the token budget with `--write`
-- [ ] Numerics everywhere mono + tabular
+- [x] Numerics everywhere mono + tabular (native modifiers + mono role wired; a named list of mobile screens still renders dates/sizes in sans — see Decisions)
 
 Phase 7 — Acceptance gates
 
@@ -387,6 +387,108 @@ Changed files (Phases 3, 4, 6b):
 - `packages/blueprints/apps/tally/components/Sidebar.module.css`
 - `packages/blueprints/apps/tasks/components/shared.module.css`
 
+Phases 5 and 6a (mobile): the floating GlassDock is replaced by a bottom band capped at five pinned apps plus More, with the assistant demoted to an ordinary ink slot per Decision 3 — no raised centre button, no teal. Tabs are at least 44pt, icons sit in tinted chips whose radius and tint are computed in TypeScript from the shared helpers, and pin state persists through the existing AsyncStorage-backed store. The typeface set moves to Instrument Sans, Instrument Serif, Source Serif 4 and DM Mono via `@expo-google-fonts`, retiring Geist, Playfair Display and JetBrains Mono; the multi-accent machinery collapses to the single ink solve and `tokens.generated.ts` is regenerated idempotently.
+
+The screen sweep then carried the ramp's modifiers into native — `renderType` and the `t()` helper now emit letterSpacing, textTransform and tabular figures, which had been dropped on the floor, and the mono role went from zero call sites to carrying counts, dates and times. Toasts are gone: a native status-line store and host mirror the web contract and absorb all 34 former toast call sites, and all four ActivityIndicator spinners are replaced by labels, exact counts, or a status-line message. The agenda month grid is deleted on mobile in favour of the reference's agenda list — a 34px date column with the event title above its time. Photos, docs, agenda and assistant declare their surface tones. Container-opacity state was replaced with leaf colour tokens in the band, launcher, scan button and agenda chips. `scripts/lint-mobile-design.mjs` baselines ratchet down (hex literals 601 to 302, rgba 158 to 62, font sizes 316 to 315).
+
+Known deviations, both flagged rather than silent: the band drops the brief's 2px hue selection bar, because mobile apps are full-screen covers pushed from Home rather than sibling tabs, so no persistent selected-tab state exists to mark — tap feedback is a pressed dip, and adopting a tab navigator would have restructured all nine app screens and lost swipe-to-dismiss. And the native status line renders nothing when quiet instead of holding a standing ambient sentence, because mobile has no per-route ambient-text plumbing.
+
+Checklist evidence (Phase 5 and 6a items completed this commit):
+
+- GlassDock → bottom band (5 + More), assistant as an ordinary slot; iOS + Android together
+- Font swap via `@expo-google-fonts`; `bun run generate:theme`; mobile lint re-ratchet
+- Density one tier looser; 44px minimum targets; full-screen search, bottom-sheet All apps
+- Update every lockstep literal site; regenerate `tokens.generated.ts`
+- Agenda: month grid desktop, agenda list on mobile/compact (mobile done; desktop month grid unchanged)
+- Numerics everywhere mono + tabular (native modifiers + mono role wired; a named list of mobile screens still renders dates/sizes in sans — see Decisions)
+
+Changed files (Phases 5 and 6a):
+
+- `apps/mobile/App.tsx`
+- `apps/mobile/package.json`
+- `apps/mobile/src/apps/agenda/AgendaCreateModal.tsx`
+- `apps/mobile/src/apps/agenda/AgendaEvent.tsx`
+- `apps/mobile/src/apps/agenda/AgendaEventEditor.tsx`
+- `apps/mobile/src/apps/agenda/AgendaHome.styles.ts`
+- `apps/mobile/src/apps/agenda/AgendaHome.tsx`
+- `apps/mobile/src/apps/assistant/Assistant.styles.ts`
+- `apps/mobile/src/apps/automations/AutomationThread.tsx`
+- `apps/mobile/src/apps/automations/Automations.styles.ts`
+- `apps/mobile/src/apps/automations/Automations.tsx`
+- `apps/mobile/src/apps/docs/DocsHome.styles.ts`
+- `apps/mobile/src/apps/docs/DocsHome.tsx`
+- `apps/mobile/src/apps/docs/DocsItemActions.tsx`
+- `apps/mobile/src/apps/docs/DocumentViewer.tsx`
+- `apps/mobile/src/apps/insights/GatewayAlerts.tsx`
+- `apps/mobile/src/apps/insights/Insights.styles.ts`
+- `apps/mobile/src/apps/locker/LockerHome.tsx`
+- `apps/mobile/src/apps/notes/NotesHome.styles.ts`
+- `apps/mobile/src/apps/notes/NotesHome.tsx`
+- `apps/mobile/src/apps/people/PeopleHome.styles.ts`
+- `apps/mobile/src/apps/people/PeopleHome.tsx`
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/BackupHealth.styles.ts`
+- `apps/mobile/src/apps/photos/DuplicateReview.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.styles.ts`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+- `apps/mobile/src/apps/photos/PhotoTimeline.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx`
+- `apps/mobile/src/apps/photos/PhotosDrawer.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.tsx`
+- `apps/mobile/src/apps/photos/PhotosLibrary.styles.ts`
+- `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
+- `apps/mobile/src/apps/photos/PhotosSearch.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/tally/TallyHome.styles.ts`
+- `apps/mobile/src/apps/tasks/TasksHome.tsx`
+- `apps/mobile/src/kit/components/AppIcon.tsx`
+- `apps/mobile/src/kit/components/AudiencePlacementSheet.tsx`
+- `apps/mobile/src/kit/components/Button.tsx`
+- `apps/mobile/src/kit/components/StatusLine.tsx` (new)
+- `apps/mobile/src/kit/components/Toast.tsx` (deleted)
+- `apps/mobile/src/kit/components/status-line.ts` (new)
+- `apps/mobile/src/kit/hooks/ShareIntentIngest.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStateCard.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStatusBar.tsx`
+- `apps/mobile/src/kit/replica/write-outcome.test.ts`
+- `apps/mobile/src/kit/replica/write-outcome.ts`
+- `apps/mobile/src/kit/security/AppLock.tsx`
+- `apps/mobile/src/kit/theme/accent.ts` (deleted)
+- `apps/mobile/src/kit/theme/generate.test.ts`
+- `apps/mobile/src/kit/theme/generate.ts`
+- `apps/mobile/src/kit/theme/index.ts`
+- `apps/mobile/src/kit/theme/resolve.test.ts`
+- `apps/mobile/src/kit/theme/resolve.ts`
+- `apps/mobile/src/kit/theme/tokens.generated.ts`
+- `apps/mobile/src/kit/theme/useTheme.ts`
+- `apps/mobile/src/lib/profile.test.ts`
+- `apps/mobile/src/lib/profile.ts`
+- `apps/mobile/src/screens/AppDetail.tsx`
+- `apps/mobile/src/screens/Capture.tsx`
+- `apps/mobile/src/screens/Home.tsx`
+- `apps/mobile/src/screens/PhoneStorage.tsx`
+- `apps/mobile/src/screens/Scan.tsx`
+- `apps/mobile/src/screens/Settings.tsx`
+- `apps/mobile/src/screens/home/AllAppsSheet.tsx` (new)
+- `apps/mobile/src/screens/home/AttentionLine.tsx`
+- `apps/mobile/src/screens/home/DailyBriefCard.tsx`
+- `apps/mobile/src/screens/home/GlassDock.tsx` (deleted)
+- `apps/mobile/src/screens/home/GreetingHeader.tsx`
+- `apps/mobile/src/screens/home/HomeBand.tsx` (new)
+- `apps/mobile/src/screens/home/LauncherGrid.tsx`
+- `apps/mobile/src/screens/home/SearchOverlay.tsx`
+- `apps/mobile/src/screens/home/VaultDrawer.tsx`
+- `apps/mobile/src/screens/home/VaultsSwitcher.tsx`
+- `apps/mobile/src/screens/home/band-pins.test.ts` (new)
+- `apps/mobile/src/screens/home/band-pins.ts` (new)
+- `apps/mobile/src/screens/home/band.test.ts` (new)
+- `apps/mobile/src/screens/home/band.ts` (new)
+- `apps/mobile/src/screens/onboarding-styles.ts`
+- `apps/mobile/src/screens/scan-ui.tsx`
+- `scripts/lint-mobile-design.mjs`
+
 ## Out of scope
 
 - App renames (Sift/Ledger/Almanac/Vault stay out; repo app names are kept — issue #707 Decision §1).
@@ -406,6 +508,9 @@ Changed files (Phases 3, 4, 6b):
 - The blueprint CSS sweep landed in two passes and is now **measured, not claimed**: the Phase 6b agent delegated the 93-file sweep to eight per-app agents and reported without verifying them, so the orchestrator measured the tree directly — 50 of 93 modules still carried physical direction properties (123 occurrences) at that point. The per-app agents subsequently completed their work; blueprints now measure **0 physical-direction properties**, and every app declares its tone, density and register. What remains is **19 container-`opacity` occurrences** across blueprint CSS, each judged by its agent as leaf-level de-emphasis or hover-reveal visibility rather than container state; the Phase 7 container-opacity gate owns confirming that case by case.
 - The mobile band drops the brief's 2px hue selection bar: mobile apps are full-screen covers pushed from Home rather than sibling tabs, so there is no persistent selected-tab state to mark; tap feedback is a pressed dip instead. Adopting a tab navigator would have restructured all nine app screens and lost swipe-to-dismiss.
 - The identity wheel cannot carry the builder's syntax scheme: on a one-chroma 8-slot ring, adjacent hues sit 0.043 apart in Oklab and a hue's dark text rung equals its fill, so eight mutually distinguishable members is arithmetically impossible. Syntax inks use the widest 4-hue subset (rose/ochre/forest/indigo, tightest pair 0.082) and the language dots give up hue entirely — a file kind is not an app identity, and shell chrome spends no hue.
+- Mobile numerics are wired but not swept everywhere: the type modifiers now reach native and the mono role carries agenda dates/times, replica counts and status-line progress, but `PhoneStorage.tsx`, `DocsLibraryItems.tsx`, `BackupHealth.tsx`, `Insights.tsx`, `AutomationThread.tsx`, `GatewayAlerts.tsx` and `TallyRecurringTemplates.tsx` still render dates and byte sizes in the sans register. Named here rather than left implied.
+- Mobile density tokens exist with zero consumers: no mobile screen reads them, so "one tier looser" is declared but not yet applied to row heights and padding.
+- The mobile Home springboard is still a plain icon launcher: the brief's rich per-app tile bodies (photo mosaic, document excerpt, next event, face circles, checkboxes, ledger figure, state chip) and the first-run dashed placeholders are not built on mobile. This is the largest single piece of the brief still outstanding.
 - Palette keys survive with re-slotted OKLCH hues (rose 0, amber 28, ochre 70, forest 150, teal 210, slate 255, indigo 290, violet 320); apps remap per the issue's hue table. Spacing rung 7 (48px) retired (3 consumers, fixed in later phases). `--bg-l` retired because warm-tinted dark tones cannot be expressed by a one-knob greyscale calc ramp.
 
 ## Verification
@@ -449,6 +554,9 @@ node scripts/lint-mobile-design.mjs
 | claude-code-8ac80ba9-318-1785763061-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 6 | 3633 | 777385 | 1214 | 4853 | 0.4418 | 465 | 2367603 | 42146051 | 374931 | docs(design): keep the handoff bundle out of the repo (#707)The design-agent pro |
 | claude-code-8ac80ba9-318-1785765544-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 146 | 946315 | 20554914 | 80667 | 1027128 | 18.2093 | 611 | 3313918 | 62700965 | 455598 | feat(design): rebuild shell chrome and control vocabulary on the stem (#707)Reti |
 | claude-code-8ac80ba9-318-1785766549-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 122 | 105181 | 21383595 | 38918 | 144221 | 12.3227 | 733 | 3419099 | 84084560 | 494516 | feat(design): rebuild shell chrome and control vocabulary on the stem (#707)Reti |
+| claude-code-8ac80ba9-318-1785766909-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 28 | 25594 | 5249807 | 9515 | 35137 | 3.0229 | 761 | 3444693 | 89334367 | 504031 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
+| claude-code-8ac80ba9-318-1785767115-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 34 | 31121 | 6629588 | 20392 | 51547 | 4.0193 | 795 | 3475814 | 95963955 | 524423 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
+| claude-code-8ac80ba9-318-1785767333-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 32 | 12693 | 6421977 | 8008 | 20733 | 3.4907 | 827 | 3488507 | 102385932 | 532431 | feat(mobile): land the Binding Layer band and status line (#707)Replaces the flo |
 
 ### Steering
 

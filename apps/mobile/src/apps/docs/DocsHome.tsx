@@ -11,7 +11,7 @@ import { OnlineOnlyError } from "@centraid/client/replica/native";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -206,10 +206,7 @@ export default function DocsHome({
   const pick = async (): Promise<void> => {
     setAddOpen(false);
     if (!session || !gatewayBase) {
-      showToast({
-        message: "Gateway unavailable — reconnect before adding a document.",
-        tone: "danger",
-      });
+      postStatus("Gateway unavailable — reconnect before adding a document.");
       return;
     }
     const result = await DocumentPicker.getDocumentAsync({
@@ -232,15 +229,11 @@ export default function DocsHome({
     };
     try {
       await uploadNext(0);
-      showToast({
-        message: "Import started — files are in the durable transfer queue.",
-        tone: "accent",
-      });
+      postStatus("Import started — files are in the durable transfer queue.");
     } catch (error) {
-      showToast({
-        message: `Import needs attention: ${error instanceof Error ? error.message : "The durable queue will retry after reconnecting."}`,
-        tone: "danger",
-      });
+      postStatus(
+        `Import needs attention: ${error instanceof Error ? error.message : "The durable queue will retry after reconnecting."}`
+      );
     }
   };
   const createFolder = async (): Promise<void> => {
@@ -319,8 +312,9 @@ export default function DocsHome({
   const listData = drive.connection === "unavailable" ? NO_ITEMS : items;
 
   return (
+    // Docs' declared surface tone is "paper" (freedom table, DESIGN.md).
     <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
+      style={[styles.safe, { backgroundColor: colors.tonePaper }]}
       edges={["top"]}
     >
       <View style={styles.header}>
