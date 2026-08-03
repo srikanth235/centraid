@@ -108,7 +108,7 @@ export default function FrameProbe(): React.JSX.Element | null {
         // Keep this node hit-testable. iOS XCTest omits accessibility nodes
         // under `pointerEvents="none"`, even when they have a testID.
         pointerEvents="auto"
-        style={[styles.marker, styles.samplingMarker]}
+        style={styles.marker}
       />
     );
   }
@@ -141,8 +141,13 @@ export default function FrameProbe(): React.JSX.Element | null {
 
 const styles = StyleSheet.create({
   marker: {
+    backgroundColor: "transparent",
     height: 12,
-    opacity: 0.01,
+    // Keep the DEV arm physically hit-testable on iOS. The previous 0.01
+    // opacity exposed the node to XCTest but let the tap complete without
+    // delivering Pressable.onPress (run 30831790904). Transparency keeps the
+    // probe visually inert without making the native target low-opacity.
+    opacity: 1,
     position: "absolute",
     right: 4,
     // Keep Maestro's tap target below the iOS status bar. At top: 52 the
@@ -152,14 +157,6 @@ const styles = StyleSheet.create({
     top: 72,
     width: 12,
     zIndex: 9999,
-  },
-  // Keep the sampling node fully opaque at the native view level. iOS
-  // accessibility visibility can classify very-low-opacity nodes as hidden,
-  // even when they have an accessibility label and testID. The transparent
-  // view remains visually inert while its bounds stay observable to Maestro.
-  samplingMarker: {
-    backgroundColor: "transparent",
-    opacity: 1,
   },
   readout: {
     backgroundColor: "#000",
