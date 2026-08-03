@@ -17,7 +17,7 @@ Every chapter page shares `public/assets/docs.css` / `public/assets/docs.js` (pa
 
 ```sh
 bun run docs:build   # Astro build → dist/docs-site
-bun run docs:smoke   # required files exist + every internal link resolves
+bun run docs:smoke   # docs checks; also checks dist/site when it exists
 bun run docs:serve   # http.server on 127.0.0.1:4173
 ```
 
@@ -25,7 +25,7 @@ bun run docs:serve   # http.server on 127.0.0.1:4173
 
 Deployment lives in **Cloudflare's Git integration** (Workers Builds), not in GitHub Actions. Connect the repo in the Cloudflare dashboard with:
 
-- **Build command:** `bun run docs:bundle` — builds with `DOCS_SITE_BASE_PATH=/docs`, assembles one tree (home at root, docs under `/docs/`), and writes a root `_headers` into `./dist/site`.
+- **Build command:** `bun run docs:bundle` — builds with `DOCS_SITE_BASE_PATH=/docs`, builds the `@centraid/city` package for `/city/`, assembles one tree (home at root, docs under `/docs/`, City under `/city/`), and writes a root `_headers` into `./dist/site`.
 - **Deploy command:** `wrangler deploy` — reads the repo-root `wrangler.json` (assets-only: `assets.directory = ./dist/site`, no Worker script).
 
 `centraid.dev/` serves the home; `centraid.dev/docs/` the docs. The custom domain is bound to the Worker in the Cloudflare dashboard (or via a `routes` entry in `wrangler.json`). No GitHub secrets are needed — Cloudflare holds the credentials.

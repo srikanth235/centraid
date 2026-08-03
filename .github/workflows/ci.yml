@@ -113,6 +113,7 @@ jobs:
               - 'docs/**'
               - 'scripts/docs-site/**'
               - 'scripts/home-site/**'
+              - 'centraid-city/**'
             iroh-wasm:
               - 'apps/web/iroh-wasm/**'
               - 'apps/web/scripts/build-iroh-wasm.sh'
