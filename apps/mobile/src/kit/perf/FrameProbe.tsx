@@ -105,15 +105,22 @@ export default function FrameProbe(): React.JSX.Element | null {
         testID={FRAME_PROBE_SAMPLING_ID}
         accessible
         accessibilityLabel={FRAME_PROBE_SAMPLING_ID}
-        pointerEvents="none"
+        // Keep this node hit-testable. iOS XCTest omits accessibility nodes
+        // under `pointerEvents="none"`, even when they have a testID.
+        pointerEvents="auto"
         style={styles.marker}
       />
     );
   }
   if (report) {
     return (
-      <View pointerEvents="none" style={styles.readout}>
-        <Text testID={FRAME_PROBE_REPORT_ID} style={styles.text}>
+      <View style={styles.readout}>
+        <Text
+          accessible
+          accessibilityLabel={report}
+          testID={FRAME_PROBE_REPORT_ID}
+          style={styles.text}
+        >
           {report}
         </Text>
       </View>
