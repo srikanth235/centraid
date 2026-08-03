@@ -13,14 +13,13 @@
   margin: var(--sp-3) 0 0;
   padding: var(--sp-2) 0 6px;
   font: var(--t-body-strong);
-  font-size: 16px;
   letter-spacing: -0.01em;
   background: color-mix(in oklab, var(--bg) 92%, transparent);
   backdrop-filter: blur(6px);
 }
 .dayLabel {
   font: var(--t-mono);
-  font-size: 11px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin: 6px 0 6px 2px;
 }
@@ -43,8 +42,8 @@
   background: var(--bg-sunken);
   flex: 0 0 auto;
   transition:
-    transform 0.16s var(--ease),
-    border-radius 0.16s var(--ease);
+    transform var(--dur-1) var(--ease),
+    border-radius var(--dur-1) var(--ease);
 }
 .tile.selected {
   border-radius: var(--ph-tile-r-sel);
@@ -95,7 +94,7 @@
     color-mix(in oklab, var(--scrim) 39%, transparent)
   );
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--dur-1) var(--ease);
 }
 @media (hover: hover) {
   .tile:hover .tileScrim {
@@ -108,7 +107,7 @@
 .tileCheck {
   position: absolute;
   top: 7px;
-  left: 7px;
+  inset-inline-start: 7px;
   width: 22px;
   height: 22px;
   border-radius: 999px;
@@ -120,7 +119,7 @@
   box-shadow: 0 1px 3px color-mix(in oklab, var(--scrim) 62%, transparent);
   padding: 0;
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--dur-1) var(--ease);
   z-index: 2;
 }
 @media (hover: hover) {
@@ -143,7 +142,7 @@
    translucent fill rather than a flat token background. */
 .tileScope {
   position: absolute;
-  left: 7px;
+  inset-inline-start: 7px;
   bottom: 7px;
   max-width: calc(100% - 14px);
   overflow: hidden;
@@ -152,7 +151,7 @@
   padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
   font: var(--t-small);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--accent-text);
   background: color-mix(in oklab, var(--accent-soft) 88%, transparent);
@@ -164,7 +163,7 @@
 .tileHeart {
   position: absolute;
   top: 6px;
-  right: 6px;
+  inset-inline-end: 6px;
   width: 26px;
   height: 26px;
   display: flex;
@@ -178,7 +177,7 @@
     0 1px 2px color-mix(in oklab, var(--scrim) 69%, transparent)
   );
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--dur-1) var(--ease);
   z-index: 2;
 }
 @media (hover: hover) {
@@ -193,20 +192,20 @@
 .tileRemove {
   position: absolute;
   top: 6px;
-  right: 36px;
+  inset-inline-end: 36px;
   width: 22px;
   height: 22px;
   border-radius: 999px;
   border: none;
   background: color-mix(in oklab, var(--scrim) 56%, transparent);
   color: var(--text-inv);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity var(--dur-1) var(--ease);
   z-index: 2;
 }
 @media (hover: hover) {
@@ -217,8 +216,8 @@
 }
 .tileTrashBar {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   bottom: 0;
   display: flex;
   align-items: center;
@@ -230,7 +229,8 @@
 }
 .tilePurge {
   font: var(--t-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
+  font-variant-numeric: var(--t-mono-numeric);
   color: color-mix(in oklab, var(--text-inv) 90%, transparent);
 }
 .tileRestore {
@@ -238,7 +238,7 @@
   background: color-mix(in oklab, var(--text-inv) 12%, transparent);
   color: var(--text-inv);
   font: var(--t-small);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   padding: var(--sp-1) var(--sp-2);
   border-radius: 999px;
 }

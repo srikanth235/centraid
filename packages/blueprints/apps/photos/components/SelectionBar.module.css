@@ -5,8 +5,8 @@
    keep the specificity that beat kit.css. */
 
 .count {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -16,7 +16,7 @@
 :global(.kit-popover).albumMenu {
   position: absolute;
   bottom: calc(100% + 0.5rem);
-  left: 50%;
+  inset-inline-start: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -41,7 +41,7 @@
   border-radius: 50%;
   background: transparent;
   color: var(--text-soft);
-  font-size: 1.2rem;
+  font-size: var(--t-title-size);
   line-height: 1;
 }
 .close:hover {

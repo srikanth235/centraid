@@ -235,12 +235,10 @@ components:
     textColor: "{colors.light-text}"
     rounded: "{rounded.lg}"
     padding: "{spacing.5}"
-  Toast:
-    backgroundColor: "{colors.light-bg-elev}"
-    textColor: "{colors.light-text}"
+  StatusLine:
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text-soft}"
     typography: "{typography.mono}"
-    rounded: "{rounded.md}"
-    padding: "{spacing.2}"
   Banner:
     backgroundColor: "{colors.light-bg}"
     textColor: "{colors.light-text}"
@@ -430,11 +428,11 @@ Geometry is an instrument, not a pillow: content is square, a control is 7px, a 
 
 ## Components
 
-The recipe inventory is the contract: Button, IconButton, TextField, Search, Surface, ListRow, Chip, Badge, Segmented, Dialog, Sheet, Toast, Banner, Empty, Loading, Error, AppTile, AppHeader, Nav, Switch, Checkbox, Select, DateTimeField, Tooltip, Progress, and Avatar. Each recipe declares rest plus supported hover/pressed/focus/disabled/loading/invalid/selected/open states, capability (`web`, `blueprint`, `native`), and accessibility obligations. Segmented absorbs tabs; ListRow absorbs grip/reorder.
+The recipe inventory is the contract: Button, IconButton, TextField, Search, Surface, ListRow, Chip, Badge, Segmented, Dialog, Sheet, StatusLine, Banner, Empty, Loading, Error, AppTile, AppHeader, Nav, Switch, Checkbox, Select, DateTimeField, Tooltip, Progress, and Avatar. Each recipe declares rest plus supported hover/pressed/focus/disabled/loading/invalid/selected/open states, capability (`web`, `blueprint`, `native`), and accessibility obligations. Segmented absorbs tabs; ListRow absorbs grip/reorder.
 
 Button variants are `primary`, `secondary`, `quiet`, and `destructive`. `primary` is the ink fill with `--text-inv` on it, and there is at most one per view. `secondary` is the default raised action. `quiet` has no fill. `destructive` is OUTLINED in `--net` — a filled destructive button is not part of this grammar, and the `destructiveFilled` variant is retired as the kit re-skin removes its last renderer. All controls use `--h-control` and `--target-min`, a visible 2px focus ring at a 2px offset, and the recipe's duration. Haptics are a native moment channel, not a visual state. DateTimeField uses the native picker on mobile; Tooltip is supplemental and unsupported on native.
 
-`Toast` is retired as a notification container: state belongs on the status line, in the numeric register, updating in place. `Loading` is determinate-only with static skeletons — a shimmer is attention-seeking about work the product can simply describe.
+`StatusLine` is the one feedback channel: a single persistent line docked to the bottom of the frame, in the numeric register with a small neutral dot, updated in place — no stacking, no floating overlay, no auto-dismiss animation, and at most one inline text action. The toast container it replaces is retired outright, not aliased. `Loading` is determinate-only with static skeletons — a shimmer is attention-seeking about work the product can simply describe.
 
 The three renderers are generated from the same recipe table: the kit renderer emits scoped CSS, the shell renderer emits the shared recipe CSS, and native composes typed recipe states. Kit primitives are recipe-derived; content remains app-owned. Inline apps scope under `:where(.centraid-inline-scope)` and served apps use the same recipe output. Freshness, CSS↔native, and scoped≡served tests are required.
 

@@ -14,7 +14,7 @@ import { custodyMeta, exifRows, toLocalInputValue } from "../format.ts";
 // 500-line cap), not a behavior change.
 // CSS split: own bits in LightboxInfo.module.css; `.ph-faces` (faces.ts's
 // imperative host) + `lightbox-note`/`kit-*` stay global strings.
-import { armConfirm, toast } from "../kit.ts";
+import { armConfirm, statusLine } from "../kit.ts";
 // Every command on this panel edits the OPEN asset, so each is addressed at
 // the scope that asset is shown from (issue #599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are only
@@ -240,7 +240,7 @@ export function LightboxInfo({
                           asset.scope_id
                         );
                         if (narrate(outcome, noteRef.current)) {
-                          toast(
+                          statusLine(
                             `Cover updated for ${album.title ?? "the album"}.`
                           );
                           await refresh();
@@ -352,7 +352,7 @@ export function LightboxInfo({
           );
           if (narrate(outcome, noteRef.current)) {
             onClose();
-            toast("Moved to trash — it leaves every album it was in.", {
+            statusLine("Moved to trash — it leaves every album it was in.", {
               undoLabel: "Undo",
               onUndo: () =>
                 restoreAsset(asset.asset_id, refresh, {

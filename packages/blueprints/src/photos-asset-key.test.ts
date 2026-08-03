@@ -93,14 +93,14 @@ for (const file of COPIED)
   copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
 
 // The kit surface these two modules actually touch. `format.ts` wants three
-// formatting helpers; `selection-actions.ts` wants `toast`.
+// formatting helpers; `selection-actions.ts` wants `statusLine`.
 writeFileSync(
   path.join(dir, "kit.ts"),
   `export const BLOB_ROUTE = '/centraid/_vault/blobs';
 export const fmtBytes = (n: number): string => String(n);
 export const localDayKey = (at: string | Date): string =>
   (at instanceof Date ? at.toISOString() : String(at)).slice(0, 10);
-export const toast = (): void => undefined;
+export const statusLine = (): void => undefined;
 `
 );
 // The command boundary, recording instead of dispatching. Every assertion below

@@ -8,7 +8,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 60px;
+  padding-block-start: 60px;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(6px) saturate(140%);
   -webkit-backdrop-filter: blur(6px) saturate(140%);
@@ -34,7 +34,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px 18px;
-  border-bottom: 0.5px solid var(--line);
+  border-block-end: 0.5px solid var(--line);
 }
 .searchIcon {
   display: inline-flex;
@@ -103,16 +103,16 @@
   width: 100%;
   padding: 10px 18px;
   border: none;
-  border-left: 2px solid transparent;
+  border-inline-start: 2px solid transparent;
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font: inherit;
   color: inherit;
 }
 .row[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-left-color: var(--accent);
+  border-inline-start-color: var(--accent);
 }
 .rowIcon {
   flex: 0 0 auto;
@@ -155,7 +155,7 @@
   font-weight: 400;
 }
 .rowSub {
-  margin-top: 2px;
+  margin-block-start: 2px;
   font-size: 11.5px;
   color: var(--text-faint);
   white-space: nowrap;
@@ -189,7 +189,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-top: 0.5px solid var(--line);
+  border-block-start: 0.5px solid var(--line);
   font-size: 11.5px;
   color: var(--text-faint);
 }
@@ -204,4 +204,27 @@
   border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   border: 0.5px solid var(--line);
+}
+
+/* Compact: cross-app search is FULL SCREEN on a phone (#707, per-surface
+   behaviour). A 640px dialog floating inside a 390px viewport is a desktop
+   overlay wearing a phone's clothes — the search field is the whole task
+   there, so it takes the whole screen and keeps a 44px dismiss target. */
+@media (max-width: 720px) {
+  .backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+  .root {
+    inline-size: 100%;
+    max-inline-size: none;
+    max-block-size: none;
+    block-size: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .inputrow {
+    min-block-size: var(--h-row);
+  }
 }

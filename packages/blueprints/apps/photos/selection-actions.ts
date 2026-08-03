@@ -3,7 +3,7 @@
 // `setBarBusy` and `exitSelectMode` are the only app.tsx-owned pieces these
 // need, passed in per call the same way assets-actions.ts's helpers are.
 import { parseAssetKey, scopeOfKey } from "./asset-key.ts";
-import { toast } from "./kit.ts";
+import { statusLine } from "./kit.ts";
 import { act, narrate, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
@@ -66,12 +66,12 @@ export async function runBatchDelete(
   if (failed > 0) parts.push(`${failed} failed`);
   const summary = parts.join(" · ") || "Nothing to do";
   if (ok > 0) {
-    toast(summary, {
+    statusLine(summary, {
       undoLabel: "Undo",
       onUndo: () => runBatchRestore(trashedKeys, { refresh }),
     });
   } else {
-    toast(summary);
+    statusLine(summary);
   }
   if (lastBad) narrate(lastBad);
 }
@@ -110,7 +110,7 @@ export async function runBatchRestore(
   if (ok > 0) parts.push(`Restored ${ok} ${ok === 1 ? "item" : "items"}`);
   if (queued > 0) parts.push(`${queued} saved offline`);
   if (bad > 0) parts.push(`${bad} not restored`);
-  toast(parts.join(" · ") || "Nothing to restore");
+  statusLine(parts.join(" · ") || "Nothing to restore");
   if (lastBad) narrate(lastBad);
 }
 
@@ -156,5 +156,5 @@ export async function runBatchAddToAlbum(
   if (parked > 0) parts.push(`${parked} awaiting approval`);
   if (queued > 0) parts.push(`${queued} saved offline`);
   if (skipped > 0) parts.push(`${skipped} already there`);
-  toast(parts.join(" · ") || "Nothing to add");
+  statusLine(parts.join(" · ") || "Nothing to add");
 }

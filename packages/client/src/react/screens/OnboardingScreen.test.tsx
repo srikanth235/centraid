@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { IDENTITY_COLORS } from "@centraid/design";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type * as TypeImport_bmsl46 from "../../gateway-client.js";
@@ -172,7 +173,10 @@ describe("OnboardingScreen scenarios", () => {
       const el = mount({ path: "fresh", onComplete: onCompleteMock() });
       await flush(4);
       expect(el.textContent).toContain("Make yourself");
-      expect(el.querySelectorAll(".swatch")).toHaveLength(8);
+      // One swatch per identity fill — ink first, then the hue wheel.
+      expect(el.querySelectorAll(".swatch")).toHaveLength(
+        IDENTITY_COLORS.length
+      );
       const cta = el.querySelector(".cta") as HTMLButtonElement;
       expect(cta.disabled).toBe(true);
       typeName(el.querySelector(".input") as HTMLInputElement, "Ada Lovelace");
@@ -284,7 +288,7 @@ describe("OnboardingScreen scenarios", () => {
       click(el.querySelector(".cta"));
       await flush(4);
       expect(onComplete).toHaveBeenCalledWith({
-        avatarColor: "#E55772",
+        avatarColor: IDENTITY_COLORS[2],
         displayName: "Grace",
         gatewayId: "local",
         memberId: "mem_1",

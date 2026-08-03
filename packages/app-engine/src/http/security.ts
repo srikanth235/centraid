@@ -70,7 +70,7 @@ export const SHARED_ASSET_FILES = new Set([
   "kit-line-chart.js",
   "kit-bar-chart.js",
   "kit-skeleton.js",
-  "kit-toast.js",
+  "kit-status-line.js",
   "kit-mention-chip.js",
   "kit-reference-strip.js",
   "edge-upload.js",
@@ -172,7 +172,12 @@ export function staticSecurityHeaders(
     : "'self'";
   return {
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
+    // `font-src` falls back to `default-src 'self'` when omitted, so the
+    // vendored Binding Layer `.woff2` faces (packages/design/fonts, served
+    // same-origin once FONTS_DIR is wired into this server) already load —
+    // but the directive is named explicitly so a later `default-src`
+    // tightening can never silently take fonts down with it (#707 Phase 3).
+    "Content-Security-Policy": `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
     "Referrer-Policy": "no-referrer",
   };
 }

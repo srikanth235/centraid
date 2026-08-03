@@ -1,13 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { darkTheme } from "@centraid/design";
-
-import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import {
   applyPrefsToDocument,
   DEFAULT_PREFS,
   pickAppearance,
-  resolveBgL,
   resolveThemeMode,
   toRemoteShape,
 } from "./appearance.js";
@@ -32,24 +28,21 @@ describe("appearance prefs", () => {
       cards: "elevated",
       // Retired in #608 — a gateway still holding one must not resurrect it.
       surfaceTemp: "warm",
+      // Retired in #707: the shell spends no hue, so an accent a previous
+      // build stored is read as noise rather than resurrected as a pref.
       accentKey: "rose",
+      bgL: 22,
       bogus: "nope",
     });
     expect(got).toStrictEqual({
       theme: "dark",
       themeMode: "dark",
       cardVariant: "elevated",
-      accent: "rose",
     });
   });
 
   it("rejects invalid union values", () => {
-    expect(
-      pickAppearance({
-        cards: "shiny",
-        accentKey: "chartreuse",
-      })
-    ).toStrictEqual({});
+    expect(pickAppearance({ cards: "shiny" })).toStrictEqual({});
   });
 
   it("drops a stored theme naming a preset this build no longer registers", () => {
@@ -70,20 +63,6 @@ describe("appearance prefs", () => {
     stubScheme(false);
     expect(resolveThemeMode("system")).toBe("dark");
     expect(resolveThemeMode("light")).toBe("light");
-  });
-
-  it("falls back to the legacy `accent` key when `accentKey` is absent", () => {
-    expect(pickAppearance({ accent: "teal" })).toStrictEqual({
-      accent: "teal",
-    });
-  });
-
-  it("emits both the accent key and its resolved swatches to the wire", () => {
-    const wire = toRemoteShape({ accent: "violet" });
-    expect(wire.accentKey).toBe("violet");
-    expect(wire.accent).toBe(ACCENT_PALETTE.violet.accent);
-    expect(wire.accentLight).toBe(ACCENT_PALETTE.violet.light);
-    expect(wire.accentDeep).toBe(ACCENT_PALETTE.violet.deep);
   });
 
   it("maps cardVariant → cards on the wire", () => {
@@ -114,59 +93,29 @@ describe("appearance prefs", () => {
     expect(html.dataset.surfaceTemp).toBeUndefined();
   });
 
-  describe("theme values are the floor", () => {
+  describe("the theme block is the only colour authority", () => {
     // #608 P — inline styles on <html> outrank every [data-theme='…'] block,
     // so writing the pref layer's accent and lightness unconditionally meant a
-    // theme's own values could never render.
-    it("writes no inline accent or lightness without an explicit override", () => {
+    // theme's own values could never render. #707 removed both overrides
+    // outright: applying prefs may not touch a single custom property.
+    it("writes no inline colour of any kind", () => {
+      applyPrefsToDocument({ ...DEFAULT_PREFS, theme: "light" });
       applyPrefsToDocument(DEFAULT_PREFS);
       const s = document.documentElement.style;
-      expect(s.getPropertyValue("--accent")).toBe("");
-      expect(s.getPropertyValue("--accent-light")).toBe("");
-      expect(s.getPropertyValue("--accent-deep")).toBe("");
-      expect(s.getPropertyValue("--accent-text")).toBe("");
-      expect(s.getPropertyValue("--bg-l")).toBe("");
-    });
-
-    it("writes them once the owner picks, and clears them when they unpick", () => {
-      applyPrefsToDocument({ ...DEFAULT_PREFS, accent: "ochre", bgL: 5 });
-      const s = document.documentElement.style;
-      expect(s.getPropertyValue("--accent")).toBe(ACCENT_PALETTE.ochre.accent);
-      expect(s.getPropertyValue("--bg-l")).toBe("5%");
-      // The text rung has to move with the accent, or a picked accent gives
-      // ochre buttons and teal links. Dark takes the accent itself, which is
-      // already legible on near-black…
-      expect(s.getPropertyValue("--accent-text")).toBe(
-        ACCENT_PALETTE.ochre.accent
-      );
-      // …and light takes the deepened shade, which clears AA on near-white.
-      applyPrefsToDocument({
-        ...DEFAULT_PREFS,
-        accent: "ochre",
-        theme: "light",
-      });
-      expect(s.getPropertyValue("--accent-text")).toBe(
-        ACCENT_PALETTE.ochre.text
-      );
-      // Clearing matters as much as setting: a stale inline value would keep
-      // outranking the theme block forever.
-      applyPrefsToDocument(DEFAULT_PREFS);
-      expect(s.getPropertyValue("--accent")).toBe("");
-      expect(s.getPropertyValue("--accent-text")).toBe("");
-      expect(s.getPropertyValue("--bg-l")).toBe("");
-    });
-
-    it("resolves the lightness anchor from the theme unless overridden", () => {
-      // The ramp runs at what darkTheme declares. The anchor is the shipped
-      // near-black, and it lives in the theme now rather than in a pref
-      // default that outranked the theme inline.
-      expect(darkTheme.bgL).toBe("5%");
-      expect(resolveBgL(DEFAULT_PREFS)).toBe(5);
-      expect(resolveBgL({ ...DEFAULT_PREFS, bgL: 22 })).toBe(22);
-      // Light themes declare no anchor; the blueprint dark default stands in.
-      expect(
-        resolveBgL({ ...DEFAULT_PREFS, theme: "light", themeMode: "light" })
-      ).toBe(10);
+      for (const prop of [
+        "--accent",
+        "--accent-light",
+        "--accent-deep",
+        "--accent-text",
+        "--accent-fill",
+        "--accent-soft",
+        "--bg-sel",
+        "--line-sel",
+        "--focus-ring-color",
+        "--bg-l",
+      ])
+        expect(s.getPropertyValue(prop), prop).toBe("");
+      expect(s).toHaveLength(0);
     });
   });
 });

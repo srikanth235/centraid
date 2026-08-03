@@ -56,7 +56,7 @@ export function Chrome(props: ChromeProps): ReactNode {
     .join(" ");
 
   return (
-    <div className={frameClass}>
+    <div className={frameClass} data-tone="neutral" data-density="compact">
       <div
         className={styles.lockable}
         inert={props.locked ? true : undefined}

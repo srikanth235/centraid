@@ -14,10 +14,10 @@ import type { HomeMenuAnchor } from "../../screen-contracts.js";
 import HomeScreen from "../../screens/HomeScreen.js";
 import { useShellActions } from "../actions.js";
 import { openMenu } from "../contextMenu.js";
+import type { ShellMenuAnchor } from "../contextMenu.js";
 import PageScroll from "../PageScroll.js";
 import { openPrompt } from "../prompt.js";
 import { useCachedQuery } from "../queryCache.js";
-import type { ShellMenuAnchor } from "../Sidebar.js";
 import { PageSkeleton } from "../status.js";
 import type {
   ShellAppsController,
@@ -35,6 +35,8 @@ import {
 } from "./homeData.js";
 import { loadAppTemplates } from "./templatesData.js";
 
+import styles from "./HomeRoute.module.css";
+
 export interface HomeRouteProps {
   userApps: readonly UserAppMeta[];
   drafts: readonly DraftAppMeta[];
@@ -43,6 +45,20 @@ export interface HomeRouteProps {
   toggleStar: (id: string) => void;
   /** Optimistic edit + commit + reconcile over the shell's app lists (#659). */
   mutateApps: ShellAppsController["mutateApps"];
+  /**
+   * The vault identity + switcher control (#707 Decision §2). It was the
+   * sidebar's head row; the stem carries the launcher and nothing else, so it
+   * stands here — Home is where you choose what to look at next, which is when
+   * "which vault am I in" is the live question. The App root owns the switcher
+   * wiring and renders the same control into the app bar, so there is one
+   * switcher rather than two that can disagree.
+   */
+  vaultIdentity?: JSX.Element;
+  /** Settings is an overlay, reached from Home and from All apps — it stopped
+   *  being a launcher-shaped destination when the account row retired. */
+  onOpenSettings?: () => void;
+  /** The searchable sheet of every destination, pinned or not. */
+  onOpenAllApps?: () => void;
 }
 
 // React-owned Home — the landing screen. Replaces the vanilla renderHomeAsync
@@ -55,8 +71,17 @@ export interface HomeRouteProps {
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const { navigate, enterBuilder, showToast, confirm, builderEnabled } =
     useShellActions();
-  const { userApps, drafts, tileVariant, isStarred, toggleStar, mutateApps } =
-    props;
+  const {
+    userApps,
+    drafts,
+    tileVariant,
+    isStarred,
+    toggleStar,
+    mutateApps,
+    vaultIdentity,
+    onOpenSettings,
+    onOpenAllApps,
+  } = props;
   // The app whose "App info" sheet is open (its live grants + Uninstall).
   const [infoApp, setInfoApp] = useState<AppMetaResolvedType | null>(null);
 
@@ -327,6 +352,33 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
 
   return (
     <PageScroll flush>
+      {vaultIdentity || onOpenAllApps || onOpenSettings ? (
+        <div className={styles.identityBar}>
+          {vaultIdentity ? (
+            <div className={styles.identityVault}>{vaultIdentity}</div>
+          ) : null}
+          <div className={styles.identityActions}>
+            {onOpenAllApps ? (
+              <button
+                className={styles.identityAction}
+                type="button"
+                onClick={onOpenAllApps}
+              >
+                All apps
+              </button>
+            ) : null}
+            {onOpenSettings ? (
+              <button
+                className={styles.identityAction}
+                type="button"
+                onClick={onOpenSettings}
+              >
+                Settings
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <HomeScreen
         builderEnabled={builderEnabled}
         suggestions={[...HERO_SUGGESTIONS]}

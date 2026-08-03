@@ -19,7 +19,7 @@ import type { CodeLang, TokenClasses } from "../../../../format.js";
 import { readAppFiles, writeAppFile } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { iconSvg } from "../../iconSvg.js";
-import { showToast } from "../../toast.js";
+import { postStatus } from "../../statusChannel.js";
 
 import atomsCss from "../../../styles/atoms.module.css";
 import buttonCss from "../../../ui/Button.module.css";
@@ -324,9 +324,9 @@ export default function BuilderCode({
           if (!cur) return prev;
           return { ...prev, [p]: { ...cur, original: cur.current } };
         });
-        showToast(`Saved ${basename(p)}`);
+        postStatus(`Saved ${basename(p)}`);
       } catch (error) {
-        showToast(
+        postStatus(
           `Save failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
@@ -493,7 +493,6 @@ export default function BuilderCode({
           </button>
         );
       }
-      const lang = languageHint(node.path);
       const buf = buffers[node.path];
       const isDirty = !!buf && buf.current !== buf.original;
       return (
@@ -511,7 +510,7 @@ export default function BuilderCode({
           }}
         >
           <span className={styles.treeChevronSpacer} />
-          <span className={styles.treeLangDot} data-lang={lang} />
+          <span className={styles.treeLangDot} />
           <span className={styles.treeName}>{node.name}</span>
           {isDirty ? <span className={styles.treeDirty} /> : null}
         </button>
@@ -609,7 +608,7 @@ export default function BuilderCode({
               data-active={String(activePath === p)}
               data-dirty={String(dirty)}
             >
-              <span className={styles.tabDot} data-lang={languageHint(p)} />
+              <span className={styles.tabDot} />
               <button
                 type="button"
                 className={styles.tabLabel}

@@ -74,7 +74,12 @@ export function Chrome(props: ChromeProps): ReactNode {
     .join(" ");
 
   return (
-    <div className={shellClass} id="shell">
+    <div
+      className={shellClass}
+      id="shell"
+      data-tone="paper"
+      data-density="comfortable"
+    >
       <aside className={styles.side} aria-label="Notes navigation">
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">

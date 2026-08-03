@@ -4,7 +4,6 @@ import type { JSX, ReactNode } from "react";
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
 import { useShellActions } from "../actions.js";
-import { resolveBgL } from "../appearance.js";
 import { iconSvg } from "../iconSvg.js";
 import { openPrompt } from "../prompt.js";
 import type { ShellNav } from "../ShellApp.js";
@@ -33,18 +32,20 @@ export interface AppViewRouteProps {
   app: AppMetaResolvedType;
   appId: string;
   nav: ShellNav;
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** The frame's one status line — full-bleed hosts mount their own frame,
+   *  so they are handed the same node rather than inheriting it. */
+  statusLine?: ReactNode;
   prefs: AppearancePrefs;
-  onToggleSidebar: () => void;
 }
 
 export default function AppViewRoute({
   app,
   appId,
   nav,
-  renderSidebar,
+  renderStem,
+  statusLine,
   prefs,
-  onToggleSidebar,
 }: AppViewRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
@@ -206,9 +207,8 @@ export default function AppViewRoute({
 
   return (
     <ShellFrame
-      sidebarOpen={prefs.sidebarOpen}
-      onToggleSidebar={onToggleSidebar}
-      sidebar={renderSidebar(nav)}
+      stem={renderStem(nav)}
+      statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}
@@ -228,7 +228,6 @@ export default function AppViewRoute({
               appId={appId}
               accentColor={app.color}
               theme={prefs.theme}
-              bgL={resolveBgL(prefs)}
             />
           </div>
         </div>

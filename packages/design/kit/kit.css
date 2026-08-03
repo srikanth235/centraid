@@ -242,146 +242,114 @@ kit-meter,
 kit-line-chart,
 kit-bar-chart,
 kit-skeleton,
-kit-toast,
+kit-status-line,
 kit-mention-chip,
 kit-reference-strip,
 [data-kit-host] {
   display: contents;
 }
 
-/* ---------- Toasts -------------------------------------------------------- */
-/* Bottom-center. Solid (never blurred) — a toast has a job to do. Rises in on
-   a short spring-free curve; a leading dot carries tone. */
+/* ---------- Status line ---------------------------------------------------- */
+/* ONE persistent line docked to the bottom of the frame — never a floating
+   overlay, never stacked. It is mounted once and updated IN PLACE: a message
+   swap is a `--dur-1` step, not a slide-in/slide-out entry animation. A long
+   local operation shows a DETERMINATE bar with exact counts — never a
+   spinner, because a local-first product always knows how long. The message
+   sits in the numeric/mono register beside a small neutral dot; at most one
+   inline text action is allowed, and it is a bounded control, not bare
+   underlined text. */
 
-.kit-toasts {
+.kit-status-line {
   position: fixed;
-  left: 50%;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 80;
-  width: min(27rem, calc(100vw - 2rem));
-  pointer-events: none;
-}
-
-.kit-toast {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.6rem 0.7rem 0.6rem 0.85rem;
-  border-radius: var(--r-md);
-  background: var(--text);
-  color: var(--bg-elev);
-  font-size: 0.85rem;
-  line-height: 1.35;
-  letter-spacing: 0.005em;
-  box-shadow:
-    var(--shadow-md),
-    0 0 0 0.5px var(--scrim);
-  pointer-events: auto;
-  animation: kit-toast-in 0.22s var(--ease) both;
+  gap: 0.55rem;
+  min-height: var(--h-control);
+  padding: 0 var(--sp-4);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  transition: color var(--dur-1) var(--ease);
 }
 
-/* A small tone dot before the label. Neutral by default; apps may set
-   data-tone="accent|danger" for confirmations / failures. */
-.kit-toast::before {
-  content: "";
+/* A small neutral dot — never toned. Colour is not how a status line
+   distinguishes affirm/change/destructive; the message text carries that. */
+.kit-status-line-dot {
   flex: none;
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: 50%;
-  background: color-mix(in oklab, var(--bg-elev) 55%, transparent);
-}
-.kit-toast[data-tone="accent"]::before {
-  background: var(--accent);
-}
-.kit-toast[data-tone="danger"]::before {
-  background: var(--danger);
+  background: var(--text-faint);
 }
 
-.kit-toast span {
+.kit-status-line-text {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.kit-toast-action {
+/* The determinate bar: track then fill, with exact counts in the text next
+   to it — never a spinner. */
+.kit-status-line-track {
+  flex: none;
+  width: 4.5rem;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.kit-status-line-fill {
+  height: 100%;
+  background: var(--text);
+  border-radius: inherit;
+  transition: width var(--dur-1) var(--ease);
+}
+
+/* The one inline text action a status line may carry: full ink, a hover
+   ground, and a trailing arrow — hover alone is nothing on a phone. */
+.kit-status-line-action {
+  flex: none;
   border: none;
-  background: color-mix(in oklab, var(--bg-elev) 14%, transparent);
-  color: inherit;
+  background: transparent;
+  color: var(--text);
   font: inherit;
-  font-size: var(--t-small-size);
-  font-weight: 500;
-  border-radius: 0.5rem;
-  padding: 0.3rem 0.6rem;
-  min-height: 2rem;
+  font-variant-numeric: inherit;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--r-sm);
   cursor: pointer;
   transition: background var(--dur-1) var(--ease);
 }
-.kit-toast-action:hover,
-.kit-toast-action:focus-visible {
-  background: color-mix(in oklab, var(--bg-elev) 24%, transparent);
+.kit-status-line-action:hover,
+.kit-status-line-action:focus-visible {
+  background: var(--bg-hover);
   outline: none;
 }
-
-.kit-toast-close {
-  border: none;
-  background: none;
-  color: inherit;
-  opacity: 0.65;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 0.4rem;
-  width: 1.75rem;
-  height: 1.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
+.kit-status-line-action:focus-visible {
+  box-shadow: var(--focus-ring);
 }
-.kit-toast-close:hover,
-.kit-toast-close:focus-visible {
-  opacity: 1;
-  outline: none;
-}
-
-@keyframes kit-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.75rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.kit-status-line-action::after {
+  content: "→";
+  margin-inline-start: 0.35em;
 }
 
 /* ---------- Loading skeletons -------------------------------------------- */
-/* A calm left-to-right sweep over a recessed base — not a flash. Compose
-   width with inline style or the modifier classes below. */
+/* Static, recessed placeholders — a shimmer is attention-seeking about work
+   the product can simply describe on the status line instead. Compose width
+   with inline style or the modifier classes below. */
 
 .kit-skeleton {
   height: 1rem;
   border-radius: 0.5rem;
   background: var(--bg-sunken);
-  position: relative;
-  overflow: hidden;
-}
-
-.kit-skeleton::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklab, var(--text) 6%, transparent) 50%,
-    transparent 100%
-  );
-  transform: translateX(-100%);
-  animation: kit-sweep 1.4s var(--ease) infinite;
 }
 
 /* Convenience shapes used by list/detail loaders. */
@@ -403,26 +371,6 @@ kit-reference-strip,
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-}
-
-@keyframes kit-sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .kit-skeleton::after {
-    animation: none;
-    opacity: 0.5;
-    transform: none;
-  }
-  .kit-toast {
-    animation: none;
-  }
 }
 
 /* ---------- Parked / pending (a write awaiting owner approval) ------------ */
@@ -468,24 +416,11 @@ kit-reference-strip,
 }
 .kit-pending-chip::before {
   content: "";
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: 50%;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  animation: kit-spin 1.6s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .kit-pending-chip::before {
-    animation: none;
-    border-right-color: currentColor;
-    opacity: 0.6;
-  }
-}
-@keyframes kit-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  background: var(--text-faint);
+  flex: none;
 }
 
 /* ---------- Letter / photo avatars --------------------------------------- */
@@ -670,7 +605,7 @@ kit-reference-strip,
   color: var(--text);
   font: var(--t-small-strong);
   padding: var(--sp-2) var(--sp-4);
-  min-height: var(--target-min);
+  min-height: max(var(--h-control, 34px), var(--target-min));
   cursor: pointer;
   text-decoration: none; /* anchors-as-buttons (e.g. a download link) */
   -webkit-tap-highlight-color: transparent;
@@ -679,9 +614,7 @@ kit-reference-strip,
     border-color var(--dur-1) var(--ease),
     background var(--dur-1) var(--ease);
 }
-.kit-btn:hover:not(:disabled):not(.primary):not(.destructive):not(
-    .destructive-filled
-  ):not(.destructiveFilled):not([data-variant="destructiveFilled"]) {
+.kit-btn:hover:not(:disabled):not(.primary):not(.destructive) {
   background: var(--bg-hover, var(--bg-sunken, var(--bg-elev)));
   border-color: var(--line-strong);
   color: var(--text);
@@ -738,35 +671,15 @@ kit-reference-strip,
 .kit-btn.primary:active {
   transform: scale(0.98);
 }
+/* Destructive is OUTLINED, never filled — "arm to confirm" only deepens the
+   existing outline/ink pair, it never introduces a danger fill. A filled
+   destructive button (the recipe's retired "filled" variant and its
+   `.primary.danger` composition) is not part of this grammar: nothing
+   alarming is ever a large filled surface. */
 .kit-btn.danger:hover,
 .kit-btn.danger[data-kit-armed] {
   border-color: var(--danger);
   color: var(--danger);
-}
-/* The filled destructive confirm is a FILL carrying ink, exactly like
-   `.kit-btn.primary` above, so it takes the same pair: the theme's inverse
-   ink, not `--text`. `--text` is the SAME-side ink — near-black on the light
-   ramp, near-white on the dark one — and `--danger` sits mid-lightness in
-   both, so that pairing measured 3.81:1 light / 4.09:1 dark, under the body
-   floor on both ramps at the button's 13px. `--text-inv` flips with the theme
-   the way the fill's solve does, so both halves land at 5.1:1 / 5.7:1. */
-.kit-btn.primary.danger,
-.kit-btn.primary.danger[data-kit-armed] {
-  background: var(--danger);
-  border-color: transparent;
-  color: var(--text-inv);
-}
-.kit-btn.destructive-filled,
-.kit-btn[data-variant="destructiveFilled"] {
-  background: var(--danger);
-  border-color: transparent;
-  color: var(--text-inv);
-}
-.kit-btn.destructive-filled:hover:not(:disabled),
-.kit-btn.destructiveFilled:hover:not(:disabled),
-.kit-btn[data-variant="destructiveFilled"]:hover:not(:disabled) {
-  background: var(--danger);
-  color: var(--text-inv);
 }
 
 /* ---------- Icon buttons ----------------------------------------------------
@@ -1595,28 +1508,26 @@ kit-reference-strip,
   max-width: 85%;
   padding: 0.55rem 0.8rem;
   border-radius: var(--r-lg);
-  font-size: var(--t-body-size);
-  line-height: var(--t-body-line);
+  font: var(--t-body);
   white-space: pre-wrap;
 }
 .kit-ask-q {
   align-self: flex-end;
   background: var(--accent-deep);
   color: var(--text-inv);
-  border-bottom-right-radius: var(--r-xs2);
+  border-bottom-right-radius: var(--r-sm);
 }
 .kit-ask-a {
   align-self: flex-start;
   background: var(--bg-sunken);
   color: var(--text);
-  border-bottom-left-radius: var(--r-xs2);
+  border-bottom-left-radius: var(--r-sm);
 }
 .kit-ask-err,
 .kit-ask-note {
   align-self: center;
   color: var(--text-soft);
-  font-size: var(--t-small-size);
-  line-height: var(--t-small-line);
+  font: var(--t-small);
   text-align: center;
 }
 .kit-ask-err {
@@ -1873,18 +1784,11 @@ kit-reference-strip,
 }
 .kit-ask-action .aa-label::before {
   content: "";
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: 50%;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  animation: kit-spin 1.6s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-action .aa-label::before {
-    animation: none;
-    border-right-color: currentColor;
-  }
+  background: currentColor;
+  flex: none;
 }
 .kit-ask-action .aa-title {
   font-size: 0.92rem;
@@ -2077,23 +1981,6 @@ kit-reference-strip,
   cursor: wait;
   opacity: 0.85;
 }
-/* Busy send-button state — a small spinner swapped in for the arrow glyph
-   (see kit.ts `setBusy`), the same recipe as `.kit-ask-action .aa-label::before`. */
-.kit-ask-send-spin {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-radius: 50%;
-  border: 1.5px solid var(--scrim);
-  border-right-color: transparent;
-  animation: kit-spin 0.8s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-send-spin {
-    animation: none;
-    border-right-color: var(--scrim);
-  }
-}
-
 /* Inline model picker (subsystem `ask`) — a quiet text control, not a
    boxed button, so it reads as metadata about the composer rather than a
    competing action. Mirrors the desktop Assistant composer's picker. */
@@ -2550,18 +2437,11 @@ kit-reference-strip,
   flex: none;
 }
 .kit-ask-pending-spin {
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: 50%;
-  border: 1.5px solid var(--text-faint);
-  border-right-color: transparent;
-  animation: kit-spin 0.9s linear infinite;
+  background: var(--text-faint);
   flex: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-pending-spin {
-    animation: none;
-  }
 }
 
 /* Drag-drop target state on the whole panel. */

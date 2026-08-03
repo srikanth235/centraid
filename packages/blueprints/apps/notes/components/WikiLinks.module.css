@@ -6,10 +6,8 @@
 
 .wrap h3 {
   color: var(--text-soft);
-  font: 600 11px/1.3 var(--font-sans);
-  letter-spacing: 0.08em;
+  font: var(--t-eyebrow);
   margin: 10px 0 var(--sp-2);
-  text-transform: uppercase;
 }
 
 .chips {
@@ -24,14 +22,14 @@
   border-radius: 999px;
   display: inline-flex;
   flex-direction: column;
-  font: 500 12px/1.25 var(--font-sans);
+  font: var(--t-control);
   padding: 7px 10px;
 }
 
 .chip small,
 .powerbox small {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--t-control-size);
 }
 
 .broken {
@@ -49,7 +47,7 @@
 .powerbox {
   background: var(--bg-sunken);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   display: grid;
   gap: 5px;
   margin-top: 10px;
@@ -59,11 +57,11 @@
 .powerbox button {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--text);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   padding: var(--sp-2);
-  text-align: left;
+  text-align: start;
 }

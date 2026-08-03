@@ -7,12 +7,12 @@
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--bg-elev);
   transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
 }
 .card:hover {
   border-color: var(--line-strong);
@@ -56,8 +56,7 @@
 }
 .thumbLines {
   position: absolute;
-  left: 12px;
-  right: 12px;
+  inset-inline: 12px;
   bottom: 12px;
   display: flex;
   flex-direction: column;
@@ -65,7 +64,9 @@
 }
 .thumbLines > i {
   height: 4px;
-  border-radius: 2px;
+  /* Decorative mock content inside the thumbnail, not a UI chip — content/
+     media stays square. */
+  border-radius: var(--r-xs);
   display: block;
 }
 .cardSelect {
@@ -73,19 +74,19 @@
   /* Above the .cardOpen overlay. */
   z-index: 1;
   top: 9px;
-  left: 9px;
+  inset-inline-start: 9px;
   width: 22px;
   height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
   backdrop-filter: blur(4px);
   padding: 0;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-1) var(--ease);
 }
 .card:hover .cardSelect,
 .card[data-selected="true"] .cardSelect {

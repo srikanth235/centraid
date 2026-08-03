@@ -1,12 +1,7 @@
-// Shared renderer types — appearance prefs, the accent palette, the route
-// union, and the template/app metadata the React shell (react/shell/*) renders
-// against. Once the seam between the vanilla app.ts shell and its route modules;
-// after the full-React flip (#325) app.ts is gone and this is just the types +
-// the ACCENT_PALETTE the appearance code shares.
-import type { AccentKey } from "@centraid/design";
-
-export { ACCENT_PALETTE } from "@centraid/design";
-export type { AccentKey } from "@centraid/design";
+// Shared renderer types — appearance prefs, the route union, and the
+// template/app metadata the React shell (react/shell/*) renders against. Once
+// the seam between the vanilla app.ts shell and its route modules; after the
+// full-React flip (#325) app.ts is gone and this is just the types.
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
@@ -23,11 +18,12 @@ export type GatewayProfile = Awaited<
 /**
  * The renderer's appearance prefs.
  *
- * `bgL` and `accent` are OVERRIDES, not values (#608 group P). They are
- * applied as inline styles on `<html>`, which outrank every
- * `[data-theme='…']` block, so writing them unconditionally means a theme's
- * own accent and lightness anchor can never render. Absent = the active
- * theme's declaration wins.
+ * The Binding Layer retired both per-owner colour overrides (#707): the shell
+ * spends no hue, so there is no accent to pick, and the dark ramp is a set of
+ * literal surface tones rather than one `--bg-l` lightness anchor to slide.
+ * `sidebarOpen` went with them: the stem never scrolls away and never changes
+ * width, so there is no open state to remember. What is left is what an owner
+ * can still meaningfully choose — light/dark, card treatment, tile finish.
  */
 export interface AppearancePrefs {
   /** The owner's pick. `system` re-resolves on OS appearance changes. */
@@ -35,11 +31,6 @@ export interface AppearancePrefs {
   /** The resolved theme actually applied — `themeMode` unless it is `system`. */
   theme: ThemeName;
   tileVariant: TileVariant;
-  sidebarOpen: boolean;
-  /** Dark ramp lightness override, in percent. Absent = the theme's `bgL`. */
-  bgL?: number;
-  /** Accent override. Absent = the accent the active theme declares. */
-  accent?: AccentKey;
   cardVariant: CardVariant;
 }
 
@@ -56,14 +47,14 @@ export type ShellRoute =
   // SettingsRoute.tsx validates it against its known page ids itself.
   | { kind: "settings"; page?: string }
   // `conversationId` omitted = a fresh, not-yet-created conversation (the
-  // composer creates one lazily on first send); set = the sidebar's Chats
-  // list or a resumed session. See AssistantRoute.tsx.
+  // composer creates one lazily on first send); set = the assistant surface's
+  // own conversation ledger or a resumed session. See AssistantRoute.tsx.
   | { kind: "assistant"; conversationId?: string }
   | { kind: "insights" }
   | { kind: "discover" }
   | { kind: "starred" }
   | { kind: "automations" }
-  // Vault data-source connections (Gmail, GitHub, …) — primary sidebar
+  // Vault data-source connections (Gmail, GitHub, …) — a launcher
   // destination; previously Settings → Account → Connections.
   | { kind: "connectors" }
   | { kind: "approvals" }
@@ -73,16 +64,16 @@ export type ShellRoute =
     }
   // The people side of this installation (issue #599, Decision 14): the member
   // roster, the devices acting for each person, and every vault this member can
-  // reach. Sits under the sidebar's Operations section beside Gateway — which
-  // it took People & devices from, leaving Gateway purely about runtime health.
+  // reach. A launcher destination beside Gateway — which it took People &
+  // devices from, leaving Gateway purely about runtime health.
   | { kind: "household" }
   // Local disk footprint by component, the owner's disk budget, and the
   // offsite snapshot custody that used to be the whole page (issue #544 —
-  // this was `backups`). Sits under the sidebar's Operations section beside
-  // Gateway; Settings → Storage provider owns the connection itself.
+  // this was `backups`). A launcher destination beside Gateway; Settings →
+  // Storage provider owns the connection itself.
   | { kind: "storage" }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
-  // schema (issue #441 Part B). Sits under the sidebar's Operations section.
+  // schema (issue #441 Part B). A launcher destination.
   | { kind: "atlas" }
   | { kind: "templates" }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
@@ -114,7 +105,7 @@ export type ShellRoute =
   // (overview "New automation", thread's "Edit") open the chat cold.
   | { automationId: string; kind: "automation-builder"; seedMessage?: string };
 
-// Compact summary of the active gateway, fed into the sidebar head row.
+// Compact summary of the active gateway, fed into the vault identity control.
 export interface GatewaySummary {
   activeId: string;
   activeKind: "local" | "remote";

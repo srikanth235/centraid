@@ -14,7 +14,7 @@ import BuilderTargetGate from "./BuilderTargetGate.js";
 // React-owned builder route — the full-bleed conversational app/automation
 // builder (issue #325, R5-B). Replaces the vanilla `window.openBuilder`
 // subsystem: BuilderShell renders inside the shell's ShellFrame (chrome +
-// sidebar) and owns the SSE turn stream, the right-pane tabs (preview / code /
+// stem) and owns the SSE turn stream, the right-pane tabs (preview / code /
 // cloud, or automation config / flow / runs / code), and version history — all
 // real React. This route just maps the shell route + userApps into the
 // builder's inputs (home-pin + meta-change callbacks). Handles both `builder`
@@ -27,9 +27,11 @@ export interface BuilderRouteProps {
   nav: ShellNav;
   userApps: readonly UserAppMeta[];
   setUserApps: (next: UserAppMeta[]) => void;
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** The frame's one status line — full-bleed hosts mount their own frame,
+   *  so they are handed the same node rather than inheriting it. */
+  statusLine?: ReactNode;
   prefs: AppearancePrefs;
-  onToggleSidebar: () => void;
 }
 
 export default function BuilderRoute({
@@ -37,9 +39,9 @@ export default function BuilderRoute({
   nav,
   userApps,
   setUserApps,
-  renderSidebar,
+  renderStem,
+  statusLine,
   prefs,
-  onToggleSidebar,
 }: BuilderRouteProps): JSX.Element {
   const { showToast } = useShellActions();
   // Where a NEW app lands (issue #599, Decision 14). The builder creates its
@@ -136,9 +138,9 @@ export default function BuilderRoute({
           : `app:${route.appContext?.id ?? "new"}`
       }
       nav={nav}
-      renderSidebar={renderSidebar}
+      renderStem={renderStem}
+      statusLine={statusLine}
       prefs={prefs}
-      onToggleSidebar={onToggleSidebar}
       appKind={automation ? "automation" : "app"}
       showToast={showToast}
       onAddToHome={onAddToHome}

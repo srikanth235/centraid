@@ -31,7 +31,7 @@
   inset: 0;
   z-index: 44;
   background: color-mix(in oklab, var(--scrim) 39%, transparent);
-  animation: fade 0.2s ease;
+  animation: fade var(--dur-2) var(--ease-entry);
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
   cursor: default;
@@ -39,16 +39,16 @@
 .details {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   width: min(360px, 92vw);
   z-index: 45;
   background: var(--bg-elev);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  animation: slideR 0.24s var(--ease);
+  animation: slideR var(--dur-2) var(--ease-entry);
 }
 .detailsHead {
   display: flex;
@@ -73,7 +73,7 @@
 .hero {
   position: relative;
   height: 132px;
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   display: flex;
   align-items: center;
   justify-content: center;

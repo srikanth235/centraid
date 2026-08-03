@@ -19,6 +19,14 @@ export interface SettingsDeviceScreenProps {
    *  switch can never show a state the device is not in. */
   onOfflineCopy: (next: boolean) => Promise<boolean>;
   onForget: () => void;
+  /** Pair a phone. It hung off the sidebar's account menu until #707 retired
+   *  that column; pairing is an act about THIS device, which is this page. */
+  onPairDevice?: () => void;
+  /** The release-notes dialog, same reasoning. */
+  onWhatsNew?: () => void;
+  /** Drop this device's pairing and return to onboarding. Distinct from
+   *  `onForget`, which is the local-only purge below. */
+  onLogOut?: () => void;
 }
 
 /**
@@ -35,6 +43,9 @@ export default function SettingsDeviceScreen({
   offlineCopy,
   onOfflineCopy,
   onForget,
+  onPairDevice,
+  onWhatsNew,
+  onLogOut,
 }: SettingsDeviceScreenProps): JSX.Element {
   // Once the user has flipped the switch, THEIR answer is the truth on screen:
   // the `offlineCopy` prop is a one-shot read from mount (`loadThisDeviceData`)
@@ -79,6 +90,47 @@ export default function SettingsDeviceScreen({
           </span>
         </label>
       </div>
+
+      {onPairDevice || onWhatsNew ? (
+        <div className={drawerGroupCss.group}>
+          <div className={drawerGroupCss.groupLabel}>This account</div>
+          <div className={drawerGroupCss.groupBody}>
+            {onPairDevice ? (
+              <button
+                type="button"
+                className={controlsCss.chip}
+                onClick={onPairDevice}
+              >
+                <Icon name="Phone" size={12} />
+                Pair a phone
+              </button>
+            ) : null}
+            {onWhatsNew ? (
+              <button
+                type="button"
+                className={controlsCss.chip}
+                onClick={onWhatsNew}
+              >
+                <Icon name="Gift" size={12} />
+                What&apos;s new
+              </button>
+            ) : null}
+            {onLogOut ? (
+              <button
+                type="button"
+                className={cx(
+                  controlsCss.chip,
+                  vaultModalStyles.profModalDelete
+                )}
+                onClick={onLogOut}
+              >
+                <Icon name="ArrowRight" size={12} />
+                Log out
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {gatewayLabel ? (
         <div className={drawerGroupCss.group}>

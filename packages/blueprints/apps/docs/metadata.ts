@@ -7,7 +7,7 @@
 // hygiene — versions.ts/popovers.ts's exact factory pattern: closes over
 // app.tsx's own `data`/`refresh` plus logic.ts's own `act`/`narrate`
 // (passed in, never re-implemented).
-import { toast } from "./kit.ts";
+import { statusLine } from "./kit.ts";
 import type { ActivityEvent, DriveDoc } from "./types.ts";
 
 interface ActivityResult {
@@ -33,7 +33,7 @@ export function createMetadata({ refresh, act, narrate }: MetadataDeps) {
       label: trimmed,
     });
     if (narrate(outcome)) {
-      toast(`Tagged “${trimmed}” · receipted.`);
+      statusLine(`Tagged “${trimmed}” · receipted.`);
       await refresh();
     }
   }
@@ -41,7 +41,7 @@ export function createMetadata({ refresh, act, narrate }: MetadataDeps) {
   async function removeTag(_doc: DriveDoc, tagId: string) {
     const outcome = await act("untag", { tag_id: tagId });
     if (narrate(outcome)) {
-      toast("Tag removed · receipted.");
+      statusLine("Tag removed · receipted.");
       await refresh();
     }
   }

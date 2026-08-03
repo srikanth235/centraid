@@ -8,7 +8,7 @@ import { checkStats, deriveTitle, previewText } from "./format.ts";
 // the same factory shape tasks/logic.js uses. The pure derivations
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
-import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import type {
   AppData,
   AppState,
@@ -30,7 +30,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   // Executed clears the banner and tells the caller to refresh; parked is
-  // narrated by the caller (toast + the calm accent-rail/pending-chip
+  // narrated by the caller (statusLine + the calm accent-rail/pending-chip
   // treatment, not the banner — a designed calm state, not an error);
   // failed/denied surface the plain-language reason, translating a known
   // predicate through `friendly` when the caller supplies one.
@@ -114,7 +114,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const executed = narrate(outcome, friendly);
     if (outcome?.status === "parked") {
       markPending(action, input, outcome);
-      toast("Sent to the owner for confirmation.");
+      statusLine("Sent to the owner for confirmation.");
     }
     if (executed || outcome?.status === "denied") await refresh();
     else render();
@@ -268,7 +268,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const outcome = await write("create-note", input);
     if (outcome?.status === "executed") {
       const newId = outcome.output?.note_id;
-      toast("Note created · receipt", {
+      statusLine("Note created · receipt", {
         undoLabel: newId ? "Undo" : undefined,
         onUndo: newId
           ? () => void write("delete-note", { note_id: newId })
@@ -287,7 +287,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       pinned: nextPinned,
     });
     if (outcome?.status === "executed")
-      toast(nextPinned ? "Pinned · receipt" : "Unpinned · receipt");
+      statusLine(nextPinned ? "Pinned · receipt" : "Unpinned · receipt");
     return outcome;
   }
 
@@ -299,7 +299,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     if (notebookId) input.notebook_id = notebookId;
     const outcome = await write("move-note", input);
     if (outcome?.status === "executed")
-      toast(notebookId ? "Moved · receipt" : "Unfiled · receipt");
+      statusLine(notebookId ? "Moved · receipt" : "Unfiled · receipt");
     return outcome;
   }
 
@@ -307,7 +307,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const outcome = await write("delete-note", { note_id: note.note_id });
     if (outcome?.status === "executed") {
       if (state.editorId === note.note_id) state.editorId = null;
-      toast(`Moved “${String(note.title ?? "").slice(0, 40)}” to trash`, {
+      statusLine(`Moved “${String(note.title ?? "").slice(0, 40)}” to trash`, {
         undoLabel: "Undo",
         onUndo: () => void restoreNote(note.note_id),
         duration: 10_000,
@@ -322,7 +322,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const outcome = await write("restore-note", { note_id: noteId });
     if (outcome?.status === "executed") {
       if (state.nav.kind === "trash") state.nav = { kind: "all" };
-      toast("Note restored · receipt");
+      statusLine("Note restored · receipt");
       render();
     }
     return outcome;
@@ -339,7 +339,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     if (outcome?.status === "executed") {
       const note = findNote(noteId);
       if (note) delete note.body;
-      toast("Earlier version restored · receipt");
+      statusLine("Earlier version restored · receipt");
       await openEditor(noteId);
     }
     return outcome;
@@ -381,7 +381,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         notebookId: String(outcome.output?.notebook_id ?? ""),
       };
       state.creatingNotebook = false;
-      toast("Notebook created · receipt");
+      statusLine("Notebook created · receipt");
       render();
     }
     return outcome;
@@ -398,7 +398,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     );
     if (outcome?.status === "executed") {
       state.editingNotebookId = null;
-      toast("Notebook renamed · receipt");
+      statusLine("Notebook renamed · receipt");
       render();
     }
     return outcome;
@@ -421,7 +421,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         state.nav = { kind: "all" };
         render();
       }
-      toast(
+      statusLine(
         `Notebook deleted — ${unfiled} ${unfiled === 1 ? "note" : "notes"} unfiled`
       );
     }

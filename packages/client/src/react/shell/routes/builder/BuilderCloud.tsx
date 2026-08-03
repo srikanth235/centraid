@@ -15,8 +15,8 @@ import {
 } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { iconSvg } from "../../iconSvg.js";
+import { postStatus } from "../../statusChannel.js";
 
-import toastCss from "../../../styles/toast.module.css";
 import buttonCss from "../../../ui/Button.module.css";
 import styles from "./BuilderCloud.module.css";
 
@@ -113,22 +113,6 @@ function formatPreviewUrl(src: string): string {
   } catch {
     return src;
   }
-}
-
-// Ephemeral confirmation toast — mirrors the vanilla builder's `showToast`
-// (a `toastCss.toast` appended to <body>, auto-removed after 2.4s).
-function showToast(text: string): void {
-  const existing = toastCss.toast
-    ? document.body.querySelector(`.${toastCss.toast}`)
-    : null;
-  if (existing) existing.remove();
-  const toast = document.createElement("div");
-  toast.className = toastCss.toast ?? "";
-  toast.innerHTML = `${iconSvg("Check", 13, 2.5)} <span></span>`;
-  const span = toast.querySelector("span");
-  if (span) span.textContent = text;
-  document.body.append(toast);
-  setTimeout(() => toast.remove(), 2400);
 }
 
 // Poll the turn ledger until a turn finishes — turn-now fires in the background,
@@ -536,8 +520,8 @@ function Overview({
   const copyUrl = (url: string, msg: string): void => {
     void navigator.clipboard
       .writeText(url)
-      .then(() => showToast(msg))
-      .catch(() => showToast("Copy failed"));
+      .then(() => postStatus(msg))
+      .catch(() => postStatus("Copy failed"));
   };
 
   const heroBtn = (

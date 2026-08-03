@@ -17,7 +17,6 @@
 }
 .createHeading {
   font: var(--t-body-strong);
-  font-size: 15px;
 }
 .createBody {
   padding: 18px 20px;
@@ -29,8 +28,7 @@
 }
 .createTitle {
   width: 100%;
-  font-family: var(--font-sans);
-  font-size: 19px;
+  font: var(--t-title);
   font-weight: 600;
   color: var(--text);
   background: none;
@@ -71,7 +69,6 @@
   border-radius: 999px;
   background: var(--bg-elev);
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-soft);
 }
 .calChip[aria-pressed="true"] {
@@ -105,8 +102,7 @@
 .createDesc {
   width: 100%;
   min-height: 64px;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-small);
   color: var(--text-soft);
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -114,7 +110,6 @@
   padding: 10px var(--sp-3);
   outline: none;
   resize: none;
-  font-family: var(--font-sans);
 }
 .createDesc:focus {
   border-color: var(--line-strong);

@@ -12,12 +12,12 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  animation: fade 0.25s ease;
+  animation: fade var(--dur-2) var(--ease-entry);
 }
 .lockMark {
   width: 66px;
   height: 66px;
-  border-radius: 18px;
+  border-radius: var(--r-xl);
   background: linear-gradient(
     160deg,
     color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
@@ -30,7 +30,6 @@
 }
 .lockTitle {
   font: var(--t-title);
-  font-size: 22px;
 }
 .heading {
   text-align: center;
@@ -54,7 +53,6 @@
   border-radius: var(--r-md);
   background: var(--bg-elev);
   font: var(--t-body);
-  font-size: 15px;
   letter-spacing: 0.2em;
 }
 .lockIn:focus-visible {

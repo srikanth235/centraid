@@ -21,11 +21,11 @@
 }
 .col.size {
   width: 70px;
-  text-align: right;
+  text-align: end;
 }
 .col.added {
   width: 88px;
-  text-align: right;
+  text-align: end;
 }
 .col.end {
   width: 40px;
@@ -41,7 +41,7 @@
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   padding: 0;
 }
@@ -51,14 +51,16 @@
 }
 
 .row {
-  /* Containing block for the .rowOpen overlay button. */
+  /* Containing block for the .rowOpen overlay button. Vertical rhythm reads
+     off the density tier (docs is comfortable) rather than a hardcoded
+     pixel pad. */
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 10px 14px;
+  padding: var(--density-pad) 14px;
   border-bottom: 1px solid var(--line);
-  transition: background 0.1s;
+  transition: background var(--dur-1) var(--ease);
 }
 /* The whole-row "open details" target: a transparent `kit-stretch-btn` laid
    under every control on the row. Its ring is drawn inset so it never bleeds
@@ -81,13 +83,14 @@
   /* Above the .rowOpen overlay. */
   z-index: 1;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: var(--h-control);
+  height: var(--h-control);
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 8px;
+  /* Holds a thumbnail image or kind glyph — content/media, stays square. */
+  border-radius: var(--r-xs);
   overflow: hidden;
 }
 .badge img {
@@ -115,7 +118,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+  text-align: start;
   max-width: 100%;
 }
 .rowMeta {
@@ -137,7 +140,7 @@
 .cell.size {
   width: 70px;
   font: var(--t-mono);
-  text-align: right;
+  text-align: end;
 }
 .cell.added {
   width: 88px;

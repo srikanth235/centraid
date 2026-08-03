@@ -10,11 +10,11 @@
   padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line);
   width: 100%;
-  border-left: none;
-  border-right: none;
+  border-inline-start: none;
+  border-inline-end: none;
   border-top: none;
   background: none;
-  text-align: left;
+  text-align: start;
 }
 .balRow:last-child {
   border-bottom: none;
@@ -28,22 +28,20 @@
 }
 .balName {
   display: block;
-  font: var(--t-body);
-  font-size: 14px;
-  font-weight: 500;
+  font: var(--t-body-strong);
 }
 .balSub {
   display: block;
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-faint);
   margin-top: 1px;
 }
 .balAmt {
-  font: var(--font-sans);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   font-size: 15px;
   font-weight: 600;
-  text-align: right;
+  text-align: end;
   flex-shrink: 0;
 }
 
@@ -66,7 +64,8 @@
   color: var(--text-faint);
 }
 .stat .v {
-  font: var(--font-sans);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   font-size: 26px;
   font-weight: 600;
   margin-top: var(--sp-2);
@@ -109,7 +108,7 @@
   border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: var(--sp-4);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .gcard:hover {
@@ -128,13 +127,13 @@
 }
 .gcardMem {
   font: var(--t-mono);
-  font-size: 10px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: 1px;
 }
 .gcardBal {
-  font: var(--t-small);
-  font-size: 13px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .trashRow {
   display: flex;

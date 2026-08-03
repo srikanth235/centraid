@@ -120,13 +120,13 @@
   color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
-  transition: filter 0.14s var(--ease);
+  transition: filter var(--dur-1) var(--ease);
 }
 .new span {
-  text-align: left;
+  text-align: start;
 }
 .newChev {
-  margin-left: auto;
+  margin-inline-start: auto;
   opacity: 0.85;
 }
 .new:hover {
@@ -138,15 +138,15 @@
 .newMenu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   z-index: 40;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
   padding: var(--sp-1);
-  animation: kit-rise 0.16s var(--ease);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
 }
 
 .nav {
@@ -171,7 +171,7 @@
 }
 .storage {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   padding: var(--sp-3) var(--sp-3);
   background: var(--bg-elev);
 }
@@ -246,12 +246,18 @@
   flex-wrap: wrap;
   flex-shrink: 0;
 }
+/* Docs' declared register is reading (DESIGN.md #1): the active view's name
+   reads as a document/section title — display serif — with its item-count
+   line as a ruled byline underneath, a hairline rule off --line rather than
+   a plain margin gap. */
 .toolbarTitle {
   min-width: 0;
+  padding-block-end: var(--sp-2);
+  border-block-end: 1px solid var(--line);
 }
 .title {
-  font: var(--t-title);
-  letter-spacing: -0.01em;
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
 }
 .sub {
   font: var(--t-small);
@@ -259,7 +265,7 @@
   margin-top: 1px;
 }
 .toolbarTools {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -287,7 +293,7 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--r-pill);
   background: var(--accent-soft);
-  animation: kit-rise 0.18s var(--ease);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
 }
 
 /* Scroll region */
@@ -357,24 +363,20 @@
   composes: kit-app-side-open from global;
 }
 .shell.isNarrow.sideOpen .scrim {
-  animation: kit-fade 0.2s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .toolbar {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
+  padding-inline: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: var(--sp-4);
-  margin-right: var(--sp-4);
+  margin-inline: var(--sp-4);
 }
 .shell.isNarrow .bulk {
-  margin-left: var(--sp-4);
-  margin-right: var(--sp-4);
+  margin-inline: var(--sp-4);
 }
 .shell.isNarrow .scroll {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
+  padding-inline: var(--sp-4);
 }
 .shell.isNarrow .grid {
   grid-template-columns: repeat(2, 1fr);

@@ -248,17 +248,24 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    test(`${name}: the filled destructive button carries its ink`, () => {
-      // `.kit-btn.primary.danger` — a `--danger` FILL under `--text-inv`, the
-      // same contract `.kit-btn.primary` has. It inked with `--text` until
-      // this gate existed, which is the SAME-side ink and measured 3.81:1 on
-      // light / 4.09:1 on dark at the button's 13px.
-      const fill = resolve(tokens["--danger"] ?? "", scope);
-      const ink = resolve(tokens["--text-inv"] ?? "", scope);
+    // The filled destructive button (`.kit-btn.primary.danger`, née the
+    // `destructiveFilled` variant) is retired with the Binding Layer flip —
+    // destructive is OUTLINED in `--net`/`--danger`, never a fill, so there
+    // is no danger-under-`--text-inv` fill pairing left to pin here. See
+    // "keeps the ink contract for filled states" below for the StatusLine
+    // fill/track pairing that replaces this coverage.
+
+    test(`${name}: the status line's determinate fill carries its ink`, () => {
+      // `.kit-status-line-fill` paints `--text` — the SAME ink `--text-soft`
+      // (the line's own foreground) is already validated against — on
+      // `--bg-elev` (`.kit-status-line-track`), never a hue: a long local
+      // operation is reported in the ink ramp, not a tone.
+      const fill = resolve(tokens["--text"] ?? "", scope);
+      const track = resolve(tokens["--bg-elev"] ?? "", scope);
       expect(
-        contrastRatio(ink, fill),
-        `${name} .kit-btn.primary.danger`
-      ).toBeGreaterThanOrEqual(AA_BODY);
+        contrastRatio(fill, track),
+        `${name} .kit-status-line-fill on .kit-status-line-track`
+      ).toBeGreaterThanOrEqual(AA_LARGE);
     });
   });
 });
@@ -347,16 +354,16 @@ describe("blueprint token contrast floors", () => {
       }
     });
 
-    test(`${name}: the filled destructive button carries its ink`, () => {
-      // `.kit-btn.primary.danger` again — kit.css is shared, so the app ramp
-      // has to satisfy the same pairing with ITS `--danger` and `--text-inv`.
+    // The filled destructive button is retired (see the shell grid above) —
+    // kit.css is shared, so nothing app-surface-specific to pin here either.
+
+    test(`${name}: the status line's determinate fill carries its ink on the app surface`, () => {
+      const fill = resolve(tokens["--text"] ?? "", scope);
+      const track = resolve(tokens["--bg-elev"] ?? "", scope);
       expect(
-        contrastRatio(
-          resolve(tokens["--text-inv"] ?? "", scope),
-          resolve(tokens["--danger"] ?? "", scope)
-        ),
-        `blueprint ${name} .kit-btn.primary.danger`
-      ).toBeGreaterThanOrEqual(AA_BODY);
+        contrastRatio(fill, track),
+        `blueprint ${name} .kit-status-line-fill on .kit-status-line-track`
+      ).toBeGreaterThanOrEqual(AA_LARGE);
     });
 
     test(`${name}: the app-surface text ramp stays ordered`, () => {
@@ -564,9 +571,13 @@ describe("blueprint token contrast floors", () => {
 // ── The kit rules the grids above assume ───────────────────────────────────
 //
 // The token grids prove the PAIRINGS are legible; they cannot see which
-// pairing a stylesheet actually writes. `.kit-btn.primary.danger` inked a
-// `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
+// pairing a stylesheet actually writes. `.kit-btn.primary.danger` used to ink
+// a `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
 // light / 4.09:1 on dark, so the value grid passed while the button did not.
+// The filled destructive button is retired outright with the Binding Layer
+// flip (destructive is OUTLINED in `--net`/`--danger`, never a fill), so this
+// describe now pins that retirement plus the StatusLine determinate fill that
+// replaces it as the model of "report state in the ink ramp, not a hue".
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
     path.resolve(import.meta.dirname, "../kit/kit.css"),
@@ -581,13 +592,16 @@ describe("kit.css honours the ink contract for filled states", () => {
     return css.slice(open + 1, css.indexOf("}", open));
   }
 
-  test("the filled destructive button carries --text-inv, not --text", () => {
-    const body = ruleBody(".kit-btn.primary.danger,");
-    expect(body).toContain("background: var(--danger)");
-    expect(body).toContain("color: var(--text-inv)");
-    // `--text` is the SAME-side ink in both themes; on a mid-lightness red it
-    // is a WCAG 1.4.3 failure on BOTH ramps, which is the exact bug this pins.
-    expect(body).not.toMatch(/color:\s*var\(--text\)/u);
+  test("retires the filled destructive button — no danger fill remains", () => {
+    expect(css).not.toContain(".kit-btn.primary.danger");
+    expect(css).not.toContain("destructiveFilled");
+  });
+
+  test("the status line's determinate fill is ink, never a hue", () => {
+    const body = ruleBody(".kit-status-line-fill {");
+    expect(body).toContain("background: var(--text)");
+    expect(body).not.toMatch(/background:\s*var\(--danger\)/u);
+    expect(body).not.toMatch(/background:\s*var\(--accent/u);
   });
 });
 

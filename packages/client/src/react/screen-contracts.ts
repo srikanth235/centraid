@@ -942,15 +942,14 @@ export interface AutomationThreadBridgeProps {
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
 /** Appearance is the one visual-treatment page: theme and card
- *  surface. Layout was folded into it (#608). The accent swatches and the
- *  app-tile treatment picker were cut but keep their prefs; the dark ramp's
- *  surface temperature was removed outright, so dark has exactly one ramp —
- *  parity with light, which never had a temperature.
+ *  surface. Layout was folded into it (#608). The app-tile treatment picker
+ *  was cut but keeps its pref; the dark ramp's surface temperature was removed
+ *  outright, so dark has exactly one ramp — parity with light, which never had
+ *  a temperature.
  *
- *  `sidebarOpen` is deliberately absent: the sidebar has a toggle in the
- *  chrome itself, so a settings switch for it was a second control for the
- *  same state, one of them always stale-looking. The pref still exists and
- *  the chrome toggle still writes it. */
+ *  The accent swatches went the same way in #608 and their PREF went in #707:
+ *  the shell spends no hue at all now, so there is no accent to store. Neither
+ *  is `sidebarOpen` — the stem never hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
   cardVariant: "flat" | "outlined" | "elevated";
@@ -1264,9 +1263,10 @@ export interface RunViewBridgeProps {
 // and the rich-answer renderer; it pushes a snapshot to React on each change.
 // Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
 // React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
-// The conversation LIST + selection now live in the shell sidebar (App.tsx +
-// Sidebar.tsx) — AssistantScreen renders a single, full-width conversation
-// only, so there's no `threads`/`onSelectThread`/`onDeleteThread` here.
+// The conversation LIST + selection live in the assistant SURFACE since #707
+// (AssistantRoute + AssistantConversations) — AssistantScreen still renders a
+// single conversation only, so there's no `threads`/`onSelectThread`/
+// `onDeleteThread` here.
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;

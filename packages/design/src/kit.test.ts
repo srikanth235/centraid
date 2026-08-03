@@ -25,12 +25,26 @@ describe("design kit seam", () => {
     expect(KIT_CSS).not.toContain('button[aria-label="Theme"]');
   });
 
-  it("keeps generic hover from repainting destructive fills", () => {
-    expect(KIT_CSS).toMatch(/\.kit-btn:hover[^{]*:not\(\.destructiveFilled\)/u);
-    expect(KIT_CSS).toContain(
-      '.kit-btn[data-variant="destructiveFilled"]:hover:not(:disabled)'
+  it("keeps generic hover from repainting the primary and destructive variants", () => {
+    expect(KIT_CSS).toMatch(
+      /\.kit-btn:hover[^{]*:not\(\.primary\):not\(\.destructive\)/u
     );
     expect(KIT_CSS).toContain("@media (prefers-reduced-motion: reduce)");
     expect(KIT_CSS).toContain(".kit-btn:focus-visible");
+  });
+
+  it("retires the destructiveFilled variant — destructive is outlined, never filled", () => {
+    expect(KIT_CSS).not.toContain("destructiveFilled");
+    expect(KIT_CSS).not.toContain(".kit-btn.primary.danger");
+  });
+
+  it("replaces the toast stack with one persistent status line", () => {
+    expect(KIT_CSS).not.toContain(".kit-toasts");
+    expect(KIT_CSS).not.toMatch(/\.kit-toast\b/u);
+    expect(KIT_CSS).toContain(".kit-status-line {");
+    expect(KIT_CSS).toContain(".kit-status-line-track");
+    expect(KIT_CSS).toContain(".kit-status-line-fill");
+    // Loading is determinate-only with static skeletons — no shimmer sweep.
+    expect(KIT_CSS).not.toContain("kit-sweep");
   });
 });

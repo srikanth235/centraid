@@ -6,7 +6,7 @@ import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // the same factory shape tasks/notes/agenda's logic.ts use. The pure
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import { genPassword } from "./totp.ts";
 import type {
   AppData,
@@ -82,7 +82,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       item_id: sel.item_id,
     });
     if (!narrate(outcome)) return;
-    toast(sel.favorite ? "Star removed · receipted." : "Starred · receipted.");
+    statusLine(
+      sel.favorite ? "Star removed · receipted." : "Starred · receipted."
+    );
     if (state.detail && state.detail.item_id === sel.item_id) {
       state.detail = { ...state.detail, favorite: !sel.favorite };
     }
@@ -92,7 +94,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function trashItem(sel: { item_id: string }) {
     const outcome = await act("trash-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast("Moved to trash · receipted.", {
+    statusLine("Moved to trash · receipted.", {
       undoLabel: "Undo",
       onUndo: async () => {
         const back = await act("restore-item", { item_id: sel.item_id });
@@ -108,7 +110,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function restoreItem(sel: { item_id: string }) {
     const outcome = await act("restore-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast("Restored · receipted.");
+    statusLine("Restored · receipted.");
     state.selectedId = null;
     state.detail = null;
     state.showList = true;
@@ -118,7 +120,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function purgeItem(sel: { item_id: string }) {
     const outcome = await act("purge-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast("Deleted forever · receipted.");
+    statusLine("Deleted forever · receipted.");
     state.selectedId = null;
     state.detail = null;
     state.showList = true;
@@ -173,7 +175,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       mode === "edit"
         ? (id ?? null)
         : ((outcome?.output?.item_id as string | undefined) ?? null);
-    toast(mode === "edit" ? "Saved · receipted." : "Item saved · receipted.");
+    statusLine(
+      mode === "edit" ? "Saved · receipted." : "Item saved · receipted."
+    );
     await refresh();
     // Do not retain or immediately re-fetch the secret-bearing detail. Opening
     // the saved item is a fresh per-item user-presence gesture (#630).
@@ -401,26 +405,26 @@ export function copy(text: string, label?: string, secret?: boolean) {
   // writeText returns a promise — a sync try/catch never sees its rejection
   // (it surfaced as an unhandled NotAllowedError pageerror: the shell's app
   // iframe carries no clipboard-write permissions policy, see
-  // apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx). Toast
-  // success only once the write actually lands; otherwise say so instead of
-  // claiming a copy that never happened.
-  const okToast = () =>
-    toast(
+  // apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx). Update the
+  // status line only once the write actually lands; otherwise say so instead
+  // of claiming a copy that never happened.
+  const okStatus = () =>
+    statusLine(
       (label || "Copied") +
         " copied" +
         (secret ? " · clears in " + CLIP_CLEAR_S + "s" : "")
     );
   if (!navigator.clipboard || !navigator.clipboard.writeText) {
-    toast("Copy is unavailable here.");
+    statusLine("Copy is unavailable here.");
     return;
   }
   navigator.clipboard
     .writeText(text)
     .then(() => {
       if (secret) scheduleClipboardClear(text);
-      okToast();
+      okStatus();
     })
-    .catch(() => toast("Copy is unavailable here."));
+    .catch(() => statusLine("Copy is unavailable here."));
 }
 
 // ---------- Pure derivations (no closure — components may call directly) ----------

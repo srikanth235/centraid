@@ -18,7 +18,7 @@ Phase 1 — Token layer flip (`packages/design/src`)
 - [x] New roles in `roles.ts`: `--net`, `--link`, surface tones, density tiers, component metrics; retire accent-hue roles
 - [x] 12-slot OKLCH app palette replacing the 8 named hex hues; resolve to hex at build time
 - [x] 7-role type ramp in `typography.ts` with CJK fallback stacks; retire `hero`, `greeting`, 10px `eyebrow`; add the Reading register
-- [ ] Vendor woff2 for the four faces; emit `@font-face`; confirm served-blueprint CSP allows same-origin fonts (fonts vendored + emitter done; host wiring and CSP confirmation pending in Phases 3–4)
+- [x] Vendor woff2 for the four faces; emit `@font-face`; confirm served-blueprint CSP allows same-origin fonts
 - [x] Radii/spacing/motion values per brief; retire old spellings
 - [ ] Update every lockstep literal site; regenerate `tokens.generated.ts` (design-side sites done; mobile regeneration blocked until Phase 5 rewrites `generate.ts`)
 - [x] Recompute all pinned tests
@@ -30,20 +30,19 @@ Phase 2 — Constitution rewrite
 
 Phase 3 — Control vocabulary (recipes + kit)
 
-- [ ] Recipe table: retire `destructiveFilled` and `Toast`; add `StatusLine`; `Loading` becomes determinate-only
-- [ ] Re-skin `kit.css` and `emitRecipeCss()`; retire `kit-toast` usage in blueprints
-- [ ] Text actions rule (ink step + hover ground + trailing arrow); one hue reserved for links/selection/focus ring
-- [ ] Update `scripts/accessibility-contract.test.mjs` for the status line
+- [x] Recipe table: retire `destructiveFilled` and `Toast`; add `StatusLine`; `Loading` becomes determinate-only
+- [x] Re-skin `kit.css` and `emitRecipeCss()`; retire `kit-toast` usage in blueprints
+- [x] Text actions rule (ink step + hover ground + trailing arrow); one hue reserved for links/selection/focus ring
+- [x] Update `scripts/accessibility-contract.test.mjs` for the status line
 
 Phase 4 — Shell chrome (`packages/client`)
 
-- [ ] `ShellFrame`/`Sidebar`/`navModel` → stem + per-app app bar + persistent status line
-- [ ] Redistribute per Decision §2
-- [ ] All-apps sheet: searchable 44px rows, pin switch
-- [ ] Cross-app search: ⌘K + stem Search control
-- [ ] RTL audit: logical properties only; physical-direction check in `lint:design-tokens`
-- [ ] Focus ring 2px via custom property; offline banner + disabled commits with inline reason
-- [ ] Compact ≤720px becomes the mobile-band composition
+- [x] `ShellFrame`/`Sidebar`/`navModel` → stem + per-app app bar + persistent status line
+- [x] Redistribute per Decision §2
+- [x] All-apps sheet: searchable 44px rows, pin switch
+- [x] Cross-app search: ⌘K + stem Search control
+- [x] Focus ring 2px via custom property; offline banner + disabled commits with inline reason
+- [x] Compact ≤720px becomes the mobile-band composition
 
 Phase 5 — Mobile (`apps/mobile`)
 
@@ -53,7 +52,7 @@ Phase 5 — Mobile (`apps/mobile`)
 
 Phase 6 — App surfaces (client screens + blueprints)
 
-- [ ] Per-app surface tone, density tier, and register declared per the brief's freedom table
+- [x] Per-app surface tone, density tier, and register declared per the brief's freedom table
 - [ ] Home springboard: invariant tile header + structurally distinct per-app bodies; first-run dashed placeholders
 - [ ] Agenda: month grid desktop, agenda list on mobile/compact
 - [ ] Backup/storage and Privacy/grants screens aligned to the brief's designs
@@ -64,7 +63,7 @@ Phase 6 — App surfaces (client screens + blueprints)
 Phase 7 — Acceptance gates
 
 - [ ] Re-baseline all `design:gallery` screenshots against the committed reference HTML
-- [ ] New mechanical gates: 11px floor, container-opacity, logical-properties, band cap, focus ring on filled ink
+- [ ] New mechanical gates: 11px floor, container-opacity, band cap, focus ring on filled ink
 - [ ] `aria-label` only on icon-only controls; decorative SVG `aria-hidden`
 - [ ] Receipt with Checklist / What changed / Out of scope / Verification
 
@@ -159,12 +158,242 @@ Changed files (Phases 1+2):
 
 Bundle-untracking commit: `.gitignore`, `DESIGN.md`, `oxfmt.config.ts`, `oxlint.config.ts`, `packages/design/src/design-md.test.ts`, `receipts/issue-707-binding-layer.md`, and the removal of the eight `docs/design/handoff-binding-layer/*` files listed above.
 
+Phases 3, 4 and 6b (control vocabulary, shell chrome, blueprint surfaces): the recipe inventory retires `Toast` and the `destructiveFilled` button variant and adds `StatusLine` — one persistent line at the bottom of the frame in the numeric register with a neutral dot, a determinate bar with exact counts, and at most one inline text action carrying the ink step plus a trailing arrow. The kit re-skins onto the new metrics, drops the skeleton shimmer and every `kit-spin` spinner (four instances, including two dead rules), and fixes three long-broken variable references (`--t-body-line`, `--t-small-line`, `--r-xs2`); `kit-toast.js` becomes `kit-status-line.js` and the served-asset list and blueprint CSP (`font-src 'self'`) follow. The shared React shell replaces the three-zone sidebar with a 92px stem holding only the product mark, a Search control and the pinned-app launcher: `launcherModel.ts` is now the single source of destinations for the stem, the All-apps sheet and the command palette, pins persist through the client `Store`, and the sidebar's other zones are redistributed — the recents ledger into the assistant surface, vault identity into the app bar and Home, gateway alarm and update pill onto the status line, account behind Settings. `toast.ts`/`undoToast.ts` are deleted in favour of `statusChannel.ts` + `StatusLine.tsx`, with `showToast` kept as a name over `postStatus` so ~40 call sites did not churn; the approvals badge count and unread dot become an ambient status sentence. The ten vendored woff2 files are served same-origin by both desktop and web. Blueprint apps declare their tone, density and register on the app shell root (`data-tone`/`data-density`): photos mat/compact, docs and notes paper/comfortable/reading, agenda cool/dense/scanning, people neutral/comfortable, tasks/locker/tally neutral/compact/scanning; the retired `--sp-7` references are gone and the token budget is re-recorded strictly downward.
+
+Checklist evidence (Phase 3, 4 and 6b items completed this commit):
+
+- Recipe table: retire `destructiveFilled` and `Toast`; add `StatusLine`; `Loading` becomes determinate-only
+- Re-skin `kit.css` and `emitRecipeCss()`; retire `kit-toast` usage in blueprints
+- Text actions rule (ink step + hover ground + trailing arrow); one hue reserved for links/selection/focus ring
+- Update `scripts/accessibility-contract.test.mjs` for the status line
+- Vendor woff2 for the four faces; emit `@font-face`; confirm served-blueprint CSP allows same-origin fonts
+- `ShellFrame`/`Sidebar`/`navModel` → stem + per-app app bar + persistent status line
+- Redistribute per Decision §2
+- All-apps sheet: searchable 44px rows, pin switch
+- Cross-app search: ⌘K + stem Search control
+- Focus ring 2px via custom property; offline banner + disabled commits with inline reason
+- Compact ≤720px becomes the mobile-band composition
+- Per-app surface tone, density tier, and register declared per the brief's freedom table
+
+Changed files (Phases 3, 4, 6b):
+
+- `DESIGN.md`
+- `apps/desktop/package.json`
+- `apps/desktop/scripts/copy-fonts.mjs` (new)
+- `apps/desktop/src/main/preload-core.test.ts`
+- `apps/desktop/src/main/preload-core.ts`
+- `apps/desktop/src/preload.ts`
+- `apps/web/public/_headers`
+- `apps/web/src/client-globals.d.ts`
+- `apps/web/src/main.ts`
+- `apps/web/vite.config.ts`
+- `bun.lock`
+- `packages/app-engine/src/http/security.ts`
+- `packages/blueprints/apps/_shared/AudiencePlacement.module.css`
+- `packages/blueprints/apps/agenda/Chrome.tsx`
+- `packages/blueprints/apps/agenda/logic.ts`
+- `packages/blueprints/apps/docs/Chrome.tsx`
+- `packages/blueprints/apps/docs/logic.ts`
+- `packages/blueprints/apps/docs/metadata.ts`
+- `packages/blueprints/apps/docs/versions.ts`
+- `packages/blueprints/apps/locker/Chrome.tsx`
+- `packages/blueprints/apps/locker/logic.ts`
+- `packages/blueprints/apps/notes/Chrome.module.css`
+- `packages/blueprints/apps/notes/Chrome.tsx`
+- `packages/blueprints/apps/notes/logic.ts`
+- `packages/blueprints/apps/people/Chrome.module.css`
+- `packages/blueprints/apps/people/Chrome.tsx`
+- `packages/blueprints/apps/people/components/AddPersonModal.module.css`
+- `packages/blueprints/apps/people/logic.ts`
+- `packages/blueprints/apps/photos/Chrome.module.css`
+- `packages/blueprints/apps/photos/Chrome.tsx`
+- `packages/blueprints/apps/photos/albums-actions.ts`
+- `packages/blueprints/apps/photos/assets-actions.ts`
+- `packages/blueprints/apps/photos/components/Editor.tsx`
+- `packages/blueprints/apps/photos/components/Lightbox.tsx`
+- `packages/blueprints/apps/photos/components/LightboxInfo.tsx`
+- `packages/blueprints/apps/photos/duplicates-actions.ts`
+- `packages/blueprints/apps/photos/picker-actions.ts`
+- `packages/blueprints/apps/photos/selection-actions.ts`
+- `packages/blueprints/apps/photos/upload.ts`
+- `packages/blueprints/apps/tally/Chrome.tsx`
+- `packages/blueprints/apps/tally/logic.ts`
+- `packages/blueprints/apps/tasks/Chrome.module.css`
+- `packages/blueprints/apps/tasks/Chrome.tsx`
+- `packages/blueprints/apps/tasks/components/Board.module.css`
+- `packages/blueprints/apps/tasks/components/Capture.module.css`
+- `packages/blueprints/apps/tasks/logic.ts`
+- `packages/blueprints/src/photos-asset-key.test.ts`
+- `packages/client/src/app-shell-context.ts`
+- `packages/client/src/react/CSS-CONVENTIONS.md`
+- `packages/client/src/react/screen-contracts.ts`
+- `packages/client/src/react/screens/DiscoverScreen.module.css`
+- `packages/client/src/react/screens/HomeScreen.module.css`
+- `packages/client/src/react/screens/InsightsScreen.module.css`
+- `packages/client/src/react/screens/OnboardingScreen.test.tsx`
+- `packages/client/src/react/screens/PaletteScreen.module.css`
+- `packages/client/src/react/screens/SettingsDeviceScreen.tsx`
+- `packages/client/src/react/shell/AllAppsSheet.tsx` (new)
+- `packages/client/src/react/shell/App.test.tsx`
+- `packages/client/src/react/shell/App.tsx`
+- `packages/client/src/react/shell/IdentityHead.module.css`
+- `packages/client/src/react/shell/IdentityHead.tsx`
+- `packages/client/src/react/shell/ShellApp.test.tsx`
+- `packages/client/src/react/shell/ShellApp.tsx`
+- `packages/client/src/react/shell/ShellFrame.test.tsx`
+- `packages/client/src/react/shell/ShellFrame.tsx`
+- `packages/client/src/react/shell/Sidebar.test.tsx` (deleted)
+- `packages/client/src/react/shell/Sidebar.tsx` (deleted)
+- `packages/client/src/react/shell/StatusLine.test.tsx` (new)
+- `packages/client/src/react/shell/StatusLine.tsx` (new)
+- `packages/client/src/react/shell/Stem.test.tsx` (new)
+- `packages/client/src/react/shell/Stem.tsx` (new)
+- `packages/client/src/react/shell/actions.tsx`
+- `packages/client/src/react/shell/appearance.test.ts`
+- `packages/client/src/react/shell/appearance.ts`
+- `packages/client/src/react/shell/chrome.module.css`
+- `packages/client/src/react/shell/contextMenu.ts`
+- `packages/client/src/react/shell/gatewaySwitcher.module.css`
+- `packages/client/src/react/shell/glyphs.tsx`
+- `packages/client/src/react/shell/launcherModel.test.ts` (new)
+- `packages/client/src/react/shell/launcherModel.ts` (new)
+- `packages/client/src/react/shell/navModel.ts` (deleted)
+- `packages/client/src/react/shell/routes/AppFrame.test.tsx`
+- `packages/client/src/react/shell/routes/AppFrame.tsx`
+- `packages/client/src/react/shell/routes/AppViewRoute.tsx`
+- `packages/client/src/react/shell/routes/AssistantConversations.module.css` (new)
+- `packages/client/src/react/shell/routes/AssistantConversations.test.tsx` (new)
+- `packages/client/src/react/shell/routes/AssistantConversations.tsx` (new)
+- `packages/client/src/react/shell/routes/AssistantRoute.tsx`
+- `packages/client/src/react/shell/routes/BuilderRoute.tsx`
+- `packages/client/src/react/shell/routes/HomeRoute.module.css` (new)
+- `packages/client/src/react/shell/routes/HomeRoute.tsx`
+- `packages/client/src/react/shell/routes/InlineAppRoute.test.tsx`
+- `packages/client/src/react/shell/routes/InlineAppRoute.tsx`
+- `packages/client/src/react/shell/routes/RunsPane.tsx`
+- `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+- `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+- `packages/client/src/react/shell/routes/StarredRoute.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderCloud.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`
+- `packages/client/src/react/shell/routes/builder/BuilderCode.tokens.test.ts`
+- `packages/client/src/react/shell/routes/builder/BuilderCode.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderPreview.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderShell.tsx`
+- `packages/client/src/react/shell/routes/paletteData.ts`
+- `packages/client/src/react/shell/statusChannel.test.ts` (new)
+- `packages/client/src/react/shell/statusChannel.ts` (new)
+- `packages/client/src/react/shell/toast.test.ts` (deleted)
+- `packages/client/src/react/shell/toast.ts` (deleted)
+- `packages/client/src/react/shell/undoToast.ts` (deleted)
+- `packages/client/src/react/shell/useAppearance.test.tsx`
+- `packages/client/src/react/shell/usePins.test.tsx` (new)
+- `packages/client/src/react/shell/usePins.ts` (new)
+- `packages/client/src/react/styles/toast.module.css` (deleted)
+- `packages/client/src/react/ui/Logo.test.tsx`
+- `packages/client/src/react/ui/Logo.tsx`
+- `packages/client/src/theme-vars.ts`
+- `packages/design/kit/elements.js`
+- `packages/design/kit/kit-status-line.js` (new)
+- `packages/design/kit/kit-toast.js` (deleted)
+- `packages/design/kit/kit.css`
+- `packages/design/kit/kit.ts`
+- `packages/design/src/contrast.test.ts`
+- `packages/design/src/kit-smoke.test.ts`
+- `packages/design/src/kit.test.ts`
+- `packages/design/src/kit.ts`
+- `packages/design/src/recipes/css.ts`
+- `packages/design/src/recipes/index.ts`
+- `packages/design/src/recipes/native.ts`
+- `packages/design/src/recipes/recipes.test.ts`
+- `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+- `packages/gateway/src/skills/ui-grounding.ts`
+- `scripts/accessibility-contract.test.mjs`
+- `tests/design-token-css-budget.json`
+
+- `packages/blueprints/apps/agenda/Chrome.module.css`
+- `packages/blueprints/apps/docs/Chrome.module.css`
+- `packages/blueprints/apps/docs/components/Activity.module.css`
+- `packages/blueprints/apps/docs/components/Editor.module.css`
+- `packages/blueprints/apps/docs/components/NewMenu.module.css`
+- `packages/blueprints/apps/docs/components/shared.module.css`
+- `packages/blueprints/apps/people/components/BulkBar.module.css`
+- `packages/blueprints/apps/people/components/DetailSections.module.css`
+- `packages/blueprints/apps/people/components/Details.module.css`
+- `packages/blueprints/apps/people/components/Grid.module.css`
+- `packages/blueprints/apps/tally/Chrome.module.css`
+- `packages/blueprints/apps/tally/components/Activity.module.css`
+- `packages/blueprints/apps/tally/components/Dashboard.module.css`
+- `packages/blueprints/apps/tally/components/shared.module.css`
+- `packages/blueprints/apps/tasks/components/Detail.module.css`
+- `packages/blueprints/apps/tasks/components/Row.module.css`
+- `packages/blueprints/apps/tasks/components/Sidebar.module.css`
+
+- `packages/blueprints/apps/agenda/components/CreateModal.module.css`
+- `packages/blueprints/apps/agenda/components/EventDrawer.module.css`
+- `packages/blueprints/apps/agenda/components/EventEditor.module.css`
+- `packages/blueprints/apps/agenda/components/HeaderBar.module.css`
+- `packages/blueprints/apps/agenda/components/MonthView.module.css`
+- `packages/blueprints/apps/agenda/components/ScheduleView.module.css`
+- `packages/blueprints/apps/agenda/components/Sidebar.module.css`
+- `packages/blueprints/apps/agenda/components/WeekView.module.css`
+- `packages/blueprints/apps/docs/components/BulkBar.module.css`
+- `packages/blueprints/apps/docs/components/Details.module.css`
+- `packages/blueprints/apps/docs/components/Grid.module.css`
+- `packages/blueprints/apps/docs/components/History.module.css`
+- `packages/blueprints/apps/docs/components/List.module.css`
+- `packages/blueprints/apps/docs/components/QuickLook.module.css`
+- `packages/blueprints/apps/docs/components/Sidebar.module.css`
+- `packages/blueprints/apps/locker/Chrome.module.css`
+- `packages/blueprints/apps/locker/components/Detail.module.css`
+- `packages/blueprints/apps/locker/components/EditModal.module.css`
+- `packages/blueprints/apps/locker/components/Generator.module.css`
+- `packages/blueprints/apps/locker/components/ItemFields.module.css`
+- `packages/blueprints/apps/locker/components/List.module.css`
+- `packages/blueprints/apps/locker/components/LockScreen.module.css`
+- `packages/blueprints/apps/locker/components/Sidebar.module.css`
+- `packages/blueprints/apps/locker/components/shared.module.css`
+- `packages/blueprints/apps/notes/components/Card.module.css`
+- `packages/blueprints/apps/notes/components/Editor.module.css`
+- `packages/blueprints/apps/notes/components/History.module.css`
+- `packages/blueprints/apps/notes/components/QuickAdd.module.css`
+- `packages/blueprints/apps/notes/components/Sidebar.module.css`
+- `packages/blueprints/apps/notes/components/Toolbar.module.css`
+- `packages/blueprints/apps/notes/components/Wall.module.css`
+- `packages/blueprints/apps/notes/components/WikiLinks.module.css`
+- `packages/blueprints/apps/notes/components/shared.module.css`
+- `packages/blueprints/apps/people/components/Journal.module.css`
+- `packages/blueprints/apps/people/components/List.module.css`
+- `packages/blueprints/apps/people/components/NewMenu.module.css`
+- `packages/blueprints/apps/people/components/Sidebar.module.css`
+- `packages/blueprints/apps/people/components/shared.module.css`
+- `packages/blueprints/apps/photos/components/AlbumGrid.module.css`
+- `packages/blueprints/apps/photos/components/Duplicates.module.css`
+- `packages/blueprints/apps/photos/components/Enrichment.module.css`
+- `packages/blueprints/apps/photos/components/Lightbox.module.css`
+- `packages/blueprints/apps/photos/components/LightboxInfo.module.css`
+- `packages/blueprints/apps/photos/components/Memories.module.css`
+- `packages/blueprints/apps/photos/components/Picker.module.css`
+- `packages/blueprints/apps/photos/components/SelectionBar.module.css`
+- `packages/blueprints/apps/photos/components/Sidebar.module.css`
+- `packages/blueprints/apps/photos/components/Slideshow.module.css`
+- `packages/blueprints/apps/photos/components/Timeline.module.css`
+- `packages/blueprints/apps/photos/components/Toolbar.module.css`
+- `packages/blueprints/apps/photos/components/shared.module.css`
+- `packages/blueprints/apps/tally/components/ExpenseModal.module.css`
+- `packages/blueprints/apps/tally/components/ExpenseRow.module.css`
+- `packages/blueprints/apps/tally/components/History.module.css`
+- `packages/blueprints/apps/tally/components/Ledger.module.css`
+- `packages/blueprints/apps/tally/components/Sidebar.module.css`
+- `packages/blueprints/apps/tasks/components/shared.module.css`
+
 ## Out of scope
 
 - App renames (Sift/Ledger/Almanac/Vault stay out; repo app names are kept — issue #707 Decision §1).
 - The assistant's full design and cross-store consent surface; multi-window/split panes (flagged "not yet designed" in the brief).
 - Marketing assets; brand teal may persist there outside the token system.
 - Backward compatibility or alias layers (pre-v0).
+- **RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03. The brief makes the stem's "same distance from the reading edge" promise depend on logical CSS properties, but Centraid ships no RTL locale, so the audit, the repo-wide physical-property conversion, and the planned `lint:design-tokens` physical-direction gate are all dropped. The blueprint sweep converted its 123 occurrences to logical properties before the descope and those stay (they are equivalent and cost nothing); `packages/client` keeps its 187 physical-direction declarations.
 
 ## Decisions
 
@@ -174,6 +403,9 @@ Bundle-untracking commit: `.gitignore`, `DESIGN.md`, `oxfmt.config.ts`, `oxlint.
 - Light `ink3` ships as `#6C6C69`, not the brief's `#70706D`: the brief validates against `surf` only, but against the deeper `mat` tone (which an app may declare) `#70706D` measures 4.32:1 — a real WCAG 1.4.3 failure. The shipped value clears 4.58 on mat. Documented in `themes/shared.ts` and DESIGN.md.
 - `line`↔`lineS` mapping inverted relative to naive reading: the repo's `--line` was already the weaker hairline rung, so brief `lineS`→`--line` and brief `line`→`--line-strong`.
 - Hairline/wash roles carried a false `floor: 3` that no test had ever measured (true before this change); the number is removed in favour of the real obligation ("never the only signal"), and `--text-disabled` now cites the WCAG inactive-control exemption. Honesty corrections, not loosenings.
+- The blueprint CSS sweep landed in two passes and is now **measured, not claimed**: the Phase 6b agent delegated the 93-file sweep to eight per-app agents and reported without verifying them, so the orchestrator measured the tree directly — 50 of 93 modules still carried physical direction properties (123 occurrences) at that point. The per-app agents subsequently completed their work; blueprints now measure **0 physical-direction properties**, and every app declares its tone, density and register. What remains is **19 container-`opacity` occurrences** across blueprint CSS, each judged by its agent as leaf-level de-emphasis or hover-reveal visibility rather than container state; the Phase 7 container-opacity gate owns confirming that case by case.
+- The mobile band drops the brief's 2px hue selection bar: mobile apps are full-screen covers pushed from Home rather than sibling tabs, so there is no persistent selected-tab state to mark; tap feedback is a pressed dip instead. Adopting a tab navigator would have restructured all nine app screens and lost swipe-to-dismiss.
+- The identity wheel cannot carry the builder's syntax scheme: on a one-chroma 8-slot ring, adjacent hues sit 0.043 apart in Oklab and a hue's dark text rung equals its fill, so eight mutually distinguishable members is arithmetically impossible. Syntax inks use the widest 4-hue subset (rose/ochre/forest/indigo, tightest pair 0.082) and the language dots give up hue entirely — a file kind is not an app identity, and shell chrome spends no hue.
 - Palette keys survive with re-slotted OKLCH hues (rose 0, amber 28, ochre 70, forest 150, teal 210, slate 255, indigo 290, violet 320); apps remap per the issue's hue table. Spacing rung 7 (48px) retired (3 consumers, fixed in later phases). `--bg-l` retired because warm-tinted dark tones cannot be expressed by a one-knob greyscale calc ramp.
 
 ## Verification
@@ -184,11 +416,17 @@ Bundle-untracking commit: `.gitignore`, `DESIGN.md`, `oxfmt.config.ts`, `oxlint.
 - `packages/design`: 27 test files / 270 tests pass (re-run independently by the orchestrator after the implementing agent reported green); emitted CSS spot-checked for `--accent: #141414`, `--net`, `--w-stem: 92px`, `--dur-2: 280ms`, `tabular-nums`, tone tokens, reduced-motion, and zero `#3EC8B4`.
 - Known, intentional downstream breakage for later phases: `@centraid/client` build (4 errors: retired `ACCENT_PALETTE`/`AccentKey`/`bgL`), `packages/blueprints` token-purity (2 × `--sp-7`), `apps/mobile` theme freshness (regeneration blocked on `generate.ts` rewrite in Phase 5).
 
+- Phases 3/4/6b, each suite re-run independently by the orchestrator after the implementing agents reported: `packages/design` 27 files / 273 tests, `packages/client` 219 files / 1804 tests, `packages/blueprints` 45 files / 649 tests, `apps/mobile` 72 files / 389 tests — all green. Kit spinner keyframes measured gone (`kit-spin` count 0), client `toast.ts`/`toast.module.css` measured absent, `tokens.generated.ts` measured free of the retired brand hex, mobile band cap measured at `MAX_PINS = 5`, and `scripts/lint-mobile-design.mjs` baselines measured strictly downward (hex 601→302, rgba 158→62, fontSize 316→315).
+
 ```sh
 bun run format:check
 git diff --check
 bun run --cwd packages/design test
+bun run --cwd packages/client test
+bun run --cwd packages/blueprints test
+bun run --cwd apps/mobile test
 bun run lint:design-md
+node scripts/lint-mobile-design.mjs
 ```
 
 ## Accounting
@@ -209,6 +447,8 @@ bun run lint:design-md
 | claude-code-8ac80ba9-318-1785762927-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 90 | 732176 | 10644498 | 79606 | 811872 | 11.8889 | 457 | 2363552 | 41110468 | 373527 | docs(design): keep the handoff bundle out of the repo (#707)The design-agent pro |
 | claude-code-8ac80ba9-318-1785762989-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 2 | 418 | 258198 | 190 | 610 | 0.1365 | 459 | 2363970 | 41368666 | 373717 | docs(design): keep the handoff bundle out of the repo (#707)governance: allow-to |
 | claude-code-8ac80ba9-318-1785763061-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 6 | 3633 | 777385 | 1214 | 4853 | 0.4418 | 465 | 2367603 | 42146051 | 374931 | docs(design): keep the handoff bundle out of the repo (#707)The design-agent pro |
+| claude-code-8ac80ba9-318-1785765544-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 146 | 946315 | 20554914 | 80667 | 1027128 | 18.2093 | 611 | 3313918 | 62700965 | 455598 | feat(design): rebuild shell chrome and control vocabulary on the stem (#707)Reti |
+| claude-code-8ac80ba9-318-1785766549-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | claude-opus-5 | 122 | 105181 | 21383595 | 38918 | 144221 | 12.3227 | 733 | 3419099 | 84084560 | 494516 | feat(design): rebuild shell chrome and control vocabulary on the stem (#707)Reti |
 
 ### Steering
 
@@ -216,15 +456,17 @@ bun run lint:design-md
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | steer-8ac80ba9-1785756384-1 | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | interrupt | structural |  | pending | 1 | 2026-08-03T11:26:24.927Z |
 | steer-8ac80ba9-1785760103-2 | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | correction | classifier | handoff-bindings are reference-only, not committed | pending | 2 | 2026-08-03T13:08:23.710Z |
+| steer-8ac80ba9-1785766343-3 | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #707 | correction | classifier | RTL is not needed | pending | 3 | 2026-08-03T14:12:23.000Z |
 
 ## Steering
 
-- Every human-steering event is recorded as a row: **PASS** — Structural JSON parse of session 8ac80ba9-318d-4598-a125-4ad8b77bda7d confirms two user steering events: (1) "[Request interrupted by user]" at 2026-08-03T11:26:24.927Z (ordinal 1), (2) "handoff-bindings needn't be committed...they are only for reference" at 2026-08-03T13:08:23.710Z (ordinal 2, a mid-task correction redirecting the bundle vendoring work already done in commit 68351e3f).
-- No non-steering message is recorded as a steering event: **PASS** — only these two events are in the Steering table; 137 other user messages in the transcript are routine task messages or tool results, not corrections.
+- Every human-steering event is recorded as a row: **PASS** — Structural JSON parse of session 8ac80ba9-318d-4598-a125-4ad8b77bda7d confirms three steering events: (1) "[Request interrupted by user]" at 2026-08-03T11:26:24.927Z (ordinal 1, structural interrupt); (2) "handoff-bindings are reference-only, not committed" at 2026-08-03T13:08:23.710Z (ordinal 2, classifier correction redirecting bundle vendoring work); (3) "RTL is not needed" at 2026-08-03T14:12:23.000Z (ordinal 3, classifier correction descoping the RTL audit and physical-property sweep from Phase 6b).
+- No non-steering message is recorded as a steering event: **PASS** — only these three events are in the Steering table; all other user messages in the transcript are routine task messages or tool results.
 
 ## Audit
 
-- '## What changed' faithfully describes the staged diff: **PASS** — The "Bundle-untracking commit" paragraph accurately states the eight files are staged for deletion, `.gitignore` adds the directory, `oxfmt.config.ts` and `oxlint.config.ts` remove their exclusions, `DESIGN.md` replaces the vendored README link with issue #707, and `design-md.test.ts` updates its expect() assertion to cite the issue instead. The "Superseded" paragraph correctly explains: untracked + git-ignored, tool exclusions removed, DESIGN.md now cites issue #707 (which quotes the brief in full).
-- Each '- [x]' checklist item is realized: **PASS** — Phase 0 item "Make the handoff bundle available as the acceptance reference" reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; the receipt's Decisions section (§2) explains the maintainer's mid-task reversal and justifies it (prototypes are design-time artifacts, external-owner generated code, require permanent waivers, brief is durable in issue #707). The receipt prose fully supports this divergence from the issue's original Phase-0 wording.
-- The '## Checklist' mirrors issue #707's Action items (divergence explained): **PASS** — The receipt's 38-item checklist spans all 7 phases; issue #707's Phase-0 original text still reads "Commit the handoff bundle" (issue edit is deferred to the orchestrator), but the receipt correctly diverges per the Decisions section's mid-implementation maintainer direction and explains the reversal in both the Superseded paragraph and Decisions §2 with full justification.
+- The Decisions bullet on the blueprint CSS sweep: **PASS** — Accurately describes the two-pass sweep: Phase 6b agent delegated to eight per-app agents and reported without verifying them (orchestrator found 50 of 93 modules with 123 physical-direction occurrences at that checkpoint); per-app agents subsequently completed their work. Blueprints now measure **0 physical-direction properties** (verified: staged blueprint CSS files contain zero `margin-left`, `margin-right`, `padding-left`, `padding-right`, `border-left`, `border-right`, `left:`, `right:`, `float:` properties), and **19 container-`opacity` occurrences** remain (verified by counting `opacity: 0.<digit>` in staged CSS — exactly 19 matches). The receipt's framing as "measured, not claimed" and the Phase 7 gate ownership are appropriate.
+- '## What changed' faithfully describes the staged diff: **PASS** — Bundle-untracking section accurately states eight files staged for deletion, `.gitignore` adds directory, tool exclusions removed, DESIGN.md link replaced with issue #707. Phases 3/4/6b paragraphs are comprehensive: changed files and evidence bullets match staged modifications verified against `git diff --cached --stat`.
+- Each '- [x]' checklist item is realized: **PASS** — Phase 0 "Make the handoff bundle available as the acceptance reference" correctly reads "(superseded: the bundle is reference-only and is deliberately NOT committed — see Decisions)"; Decisions §2 explains the maintainer's mid-task reversal. The '## Checklist' correctly **omits** the Phase 7 item "RTL mirrors — no physical direction properties remain" (not present in receipt), consistent with the RTL descope recorded in steering row ordinal 3.
+- The '## Out of scope' section correctly records the RTL descope: **PASS** — Explicitly states "**RTL / bidirectional layout** — descoped by the maintainer on 2026-08-03" with justification (no RTL locale shipped), and accurately notes that the blueprint sweep "converted its 123 occurrences to logical properties before the descope." This section is consistent with the three steering events.
 

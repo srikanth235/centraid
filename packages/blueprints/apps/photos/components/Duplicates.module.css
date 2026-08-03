@@ -28,9 +28,10 @@
   border-radius: var(--r-xl);
 }
 .count {
-  margin-right: auto;
-  font-family: var(--font-mono);
+  margin-inline-end: auto;
+  font: var(--t-mono);
   font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
 .cluster {
@@ -40,7 +41,7 @@
 }
 .clusterLabel {
   margin: 0;
-  font-family: var(--font-mono);
+  font: var(--t-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -84,13 +85,13 @@
 .tile input[type="checkbox"] {
   position: absolute;
   top: 0.35rem;
-  left: 0.35rem;
+  inset-inline-start: 0.35rem;
   width: 1.1rem;
   height: 1.1rem;
 }
 .tileMeta {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
   text-align: center;
 }

@@ -16,9 +16,10 @@
 }
 .hero h1 {
   margin: 0;
-  font: var(--t-hero);
-  font-size: 44px;
-  letter-spacing: -0.03em;
+  /* The display role IS the product's largest voice now (#707): one ramp,
+     seven roles, no bespoke hero size above it. */
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
   color: var(--text);
   text-wrap: balance;
 }

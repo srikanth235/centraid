@@ -1,260 +1,87 @@
 {
-  "packages/blueprints/apps/agenda/Chrome.module.css": {
-    "rawFontSize": 4,
-    "rawRadius": 3
-  },
   "packages/blueprints/apps/agenda/components/CreateModal.module.css": {
-    "rawFontSize": 5
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/agenda/components/EventDrawer.module.css": {
-    "rawFontSize": 9,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/agenda/components/EventEditor.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/agenda/components/HeaderBar.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/agenda/components/MonthView.module.css": {
-    "rawFontSize": 4
+    "rawFontSize": 3
   },
   "packages/blueprints/apps/agenda/components/ScheduleView.module.css": {
-    "rawFontSize": 5
-  },
-  "packages/blueprints/apps/agenda/components/Sidebar.module.css": {
-    "rawFontSize": 5,
-    "rawRadius": 1
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/agenda/components/WeekView.module.css": {
-    "rawFontSize": 7
+    "rawFontSize": 4
   },
   "packages/blueprints/apps/docs/Chrome.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 2
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/docs/components/Activity.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 1
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/docs/components/BulkBar.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/docs/components/Details.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/docs/components/Editor.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/docs/components/Grid.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 3
-  },
-  "packages/blueprints/apps/docs/components/History.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 5
-  },
-  "packages/blueprints/apps/docs/components/List.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 2
-  },
-  "packages/blueprints/apps/docs/components/NewMenu.module.css": {
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/docs/components/QuickLook.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 7
-  },
-  "packages/blueprints/apps/docs/components/Sidebar.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 2
-  },
-  "packages/blueprints/apps/docs/components/shared.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/Chrome.module.css": {
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/components/Detail.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/components/EditModal.module.css": {
     "rawFontSize": 1
   },
-  "packages/blueprints/apps/locker/components/Generator.module.css": {
+  "packages/blueprints/apps/docs/components/Grid.module.css": {
+    "rawFontSize": 3
+  },
+  "packages/blueprints/apps/docs/components/History.module.css": {
+    "rawFontSize": 1
+  },
+  "packages/blueprints/apps/docs/components/List.module.css": {
+    "rawFontSize": 2
+  },
+  "packages/blueprints/apps/docs/components/QuickLook.module.css": {
+    "rawFontSize": 1
+  },
+  "packages/blueprints/apps/docs/components/Sidebar.module.css": {
+    "rawFontSize": 1
+  },
+  "packages/blueprints/apps/docs/components/shared.module.css": {
+    "rawFontSize": 3
+  },
+  "packages/blueprints/apps/locker/components/Detail.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/locker/components/ItemFields.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/components/List.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/components/LockScreen.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/locker/components/Sidebar.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 2
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/locker/components/shared.module.css": {
-    "rawFontSize": 5
-  },
-  "packages/blueprints/apps/notes/components/Card.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
+    "rawFontSize": 1
   },
   "packages/blueprints/apps/notes/components/Editor.module.css": {
-    "rawFontSize": 9,
-    "rawRadius": 3
-  },
-  "packages/blueprints/apps/notes/components/QuickAdd.module.css": {
     "rawFontSize": 1
-  },
-  "packages/blueprints/apps/notes/components/Sidebar.module.css": {
-    "rawFontSize": 4,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/notes/components/WikiLinks.module.css": {
-    "rawFontSize": 1,
-    "rawRadius": 2
-  },
-  "packages/blueprints/apps/notes/components/shared.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/people/Chrome.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 3
-  },
-  "packages/blueprints/apps/people/components/AddPersonModal.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/people/components/BulkBar.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/people/components/DetailSections.module.css": {
-    "rawFontSize": 5
-  },
-  "packages/blueprints/apps/people/components/Details.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/people/components/Grid.module.css": {
-    "rawFontSize": 3
   },
   "packages/blueprints/apps/people/components/Journal.module.css": {
-    "rawFontSize": 5,
-    "rawRadius": 2
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/people/components/List.module.css": {
-    "rawFontSize": 6
-  },
-  "packages/blueprints/apps/people/components/NewMenu.module.css": {
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/people/components/Sidebar.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/people/components/shared.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/photos/Chrome.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 2
-  },
-  "packages/blueprints/apps/photos/components/AlbumGrid.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/photos/components/Duplicates.module.css": {
     "rawFontSize": 1
-  },
-  "packages/blueprints/apps/photos/components/Lightbox.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 4
-  },
-  "packages/blueprints/apps/photos/components/LightboxInfo.module.css": {
-    "rawFontSize": 11,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/photos/components/Memories.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/photos/components/Picker.module.css": {
-    "rawFontSize": 1,
-    "rawFontWeight": 1
-  },
-  "packages/blueprints/apps/photos/components/SelectionBar.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/photos/components/Sidebar.module.css": {
-    "rawFontSize": 5,
-    "rawRadius": 1
   },
   "packages/blueprints/apps/photos/components/Slideshow.module.css": {
     "rawFontSize": 1
   },
-  "packages/blueprints/apps/photos/components/Timeline.module.css": {
-    "rawFontSize": 6
-  },
   "packages/blueprints/apps/tally/Chrome.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
+    "rawFontSize": 6
   },
   "packages/blueprints/apps/tally/components/Activity.module.css": {
-    "rawFontSize": 3
-  },
-  "packages/blueprints/apps/tally/components/Dashboard.module.css": {
-    "rawFontSize": 8
-  },
-  "packages/blueprints/apps/tally/components/ExpenseModal.module.css": {
-    "rawFontSize": 4,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/tally/components/ExpenseRow.module.css": {
-    "rawFontSize": 6
-  },
-  "packages/blueprints/apps/tally/components/Ledger.module.css": {
     "rawFontSize": 1
   },
-  "packages/blueprints/apps/tally/components/Sidebar.module.css": {
+  "packages/blueprints/apps/tally/components/Dashboard.module.css": {
+    "rawFontSize": 4
+  },
+  "packages/blueprints/apps/tally/components/ExpenseRow.module.css": {
     "rawFontSize": 2
   },
   "packages/blueprints/apps/tally/components/shared.module.css": {
-    "rawFontSize": 4,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/tasks/components/Board.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/tasks/components/Capture.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/tasks/components/Detail.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/tasks/components/Row.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
-  },
-  "packages/blueprints/apps/tasks/components/Sidebar.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 2
-  },
-  "packages/blueprints/apps/tasks/components/shared.module.css": {
-    "rawFontSize": 3,
-    "rawRadius": 1
+    "rawFontSize": 4
   },
   "packages/client/src/react/screens/AppSettingsPanel.module.css": {
     "rawFontSize": 12,
@@ -325,7 +152,7 @@
     "rawRadius": 1
   },
   "packages/client/src/react/screens/DiscoverScreen.module.css": {
-    "rawFontSize": 7
+    "rawFontSize": 6
   },
   "packages/client/src/react/screens/GatewayScreen.module.css": {
     "rawFontSize": 41,
@@ -333,7 +160,7 @@
     "rawRadius": 1
   },
   "packages/client/src/react/screens/HomeScreen.module.css": {
-    "rawFontSize": 7,
+    "rawFontSize": 6,
     "rawRadius": 5
   },
   "packages/client/src/react/screens/HouseholdScreen.module.css": {
@@ -344,8 +171,8 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/InsightsScreen.module.css": {
-    "rawFontSize": 26,
-    "rawFontWeight": 2,
+    "rawFontSize": 25,
+    "rawFontWeight": 1,
     "rawRadius": 10
   },
   "packages/client/src/react/screens/LocalFootprintCard.module.css": {
@@ -420,10 +247,6 @@
     "rawFontSize": 1,
     "rawRadius": 2
   },
-  "packages/client/src/react/shell/IdentityHead.module.css": {
-    "rawFontSize": 2,
-    "rawRadius": 1
-  },
   "packages/client/src/react/shell/PageScroll.module.css": {
     "rawFontSize": 2
   },
@@ -432,8 +255,7 @@
     "rawRadius": 1
   },
   "packages/client/src/react/shell/chrome.module.css": {
-    "rawFontSize": 8,
-    "rawRadius": 3
+    "rawFontSize": 1
   },
   "packages/client/src/react/shell/gatewaySwitcher.module.css": {
     "rawFontSize": 3
@@ -566,7 +388,7 @@
     "rawFontSize": 1
   },
   "packages/design/kit/kit.css": {
-    "rawFontSize": 63,
+    "rawFontSize": 61,
     "rawFontWeight": 2,
     "rawRadius": 12
   }

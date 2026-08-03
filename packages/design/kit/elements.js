@@ -15,6 +15,6 @@ export { KitMeter } from "./kit-meter.js";
 export { KitLineChart } from "./kit-line-chart.js";
 export { KitBarChart } from "./kit-bar-chart.js";
 export { KitSkeleton } from "./kit-skeleton.js";
-export { KitToast } from "./kit-toast.js";
+export { KitStatusLine } from "./kit-status-line.js";
 export { KitMentionChip } from "./kit-mention-chip.js";
 export { KitReferenceStrip } from "./kit-reference-strip.js";

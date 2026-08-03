@@ -22,7 +22,7 @@ import {
   toCents,
   todayKey,
 } from "./format.ts";
-import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import type {
   AddFriendModel,
   ExpenseModel,
@@ -405,7 +405,7 @@ export function createLogic({
         original_start: anchorStart,
       });
       if (!narrate(materialized)) return;
-      toast(
+      statusLine(
         `${String(template?.output?.preview ?? "Recurring expense")} · first occurrence recorded`
       );
       closeExpense();
@@ -422,7 +422,7 @@ export function createLogic({
       });
       if (!narrate(outcome)) return;
       armExpenseUndo(outcome, "Expense updated.");
-      toast("Expense updated · receipted.");
+      statusLine("Expense updated · receipted.");
       closeExpense();
       await refreshAll();
       return;
@@ -447,7 +447,7 @@ export function createLogic({
     });
     if (outcome?.status === "executed") {
       notice("");
-      toast("Expense added · receipted.");
+      statusLine("Expense added · receipted.");
       return;
     }
     if (outcome?.status === "parked") {
@@ -466,7 +466,7 @@ export function createLogic({
     const outcome = await act("delete-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
     armExpenseUndo(outcome, "Expense moved to Trash.");
-    toast("Expense deleted · receipted.");
+    statusLine("Expense deleted · receipted.");
     closeAllModals();
     // closeAllModals() only nulls the state — every other caller follows it
     // with its own renderModals(), and render()/refreshAll() never touch
@@ -500,14 +500,14 @@ export function createLogic({
     state.expenseUndo = null;
     closeAllModals();
     renderModals();
-    toast("Expense change undone · receipted.");
+    statusLine("Expense change undone · receipted.");
     await refreshAll();
   }
 
   async function restoreExpense(expenseId: string) {
     const outcome = await act("restore-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
-    toast("Expense restored · receipted.");
+    statusLine("Expense restored · receipted.");
     await refreshAll();
   }
 
@@ -520,7 +520,7 @@ export function createLogic({
       original_start: originalStart,
     });
     if (!narrate(outcome)) return;
-    toast(
+    statusLine(
       outcome?.output?.status === "existing"
         ? "Occurrence was already recorded."
         : "Recurring expense recorded · receipt"
@@ -543,7 +543,7 @@ export function createLogic({
       ...(override ? { override } : {}),
     });
     if (!narrate(outcome)) return;
-    toast(`Recurring ${scope} updated · receipt`);
+    statusLine(`Recurring ${scope} updated · receipt`);
     await refreshAll();
   }
 
@@ -555,7 +555,7 @@ export function createLogic({
       name,
     });
     if (!narrate(outcome)) return;
-    toast("Group renamed · receipted.");
+    statusLine("Group renamed · receipted.");
     await refreshAll();
   }
 
@@ -565,7 +565,7 @@ export function createLogic({
       party_id: partyId,
     });
     if (!narrate(outcome)) return;
-    toast("Member added · receipted.");
+    statusLine("Member added · receipted.");
     await refreshAll();
   }
 
@@ -575,14 +575,14 @@ export function createLogic({
       party_id: partyId,
     });
     if (!narrate(outcome)) return;
-    toast("Member removed · receipted.");
+    statusLine("Member removed · receipted.");
     await refreshAll();
   }
 
   async function deleteGroup(groupId: string) {
     const outcome = await act("delete-group", { group_id: groupId });
     if (!narrate(outcome)) return;
-    toast("Group deleted · receipted.");
+    statusLine("Group deleted · receipted.");
     setNav({ view: "dashboard", groupId: null, search: "" });
     await refreshAll();
   }
@@ -647,7 +647,7 @@ export function createLogic({
     if (st.groupId) input.group_id = st.groupId;
     const outcome = await act("settle-up", input);
     if (!narrate(outcome)) return;
-    toast("Payment recorded · receipted.");
+    statusLine("Payment recorded · receipted.");
     closeSettle();
     await refreshAll();
   }
@@ -684,7 +684,7 @@ export function createLogic({
     });
     if (!narrate(outcome)) return;
     const gid = outcome?.output?.group_id as string | undefined;
-    toast("Group created · receipted.");
+    statusLine("Group created · receipted.");
     closeNewGroup();
     await refreshAll();
     if (gid) setNav({ view: "group", groupId: gid, search: "" });
@@ -713,7 +713,7 @@ export function createLogic({
     if (!af.name.trim()) return;
     const outcome = await act("add-friend", { name: af.name.trim() });
     if (!narrate(outcome)) return;
-    toast("Friend added · receipted.");
+    statusLine("Friend added · receipted.");
     closeAddFriend();
     await refreshAll();
   }

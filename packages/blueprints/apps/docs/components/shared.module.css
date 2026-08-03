@@ -15,7 +15,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
-  margin-left: var(--sp-1);
+  margin-inline-start: var(--sp-1);
   vertical-align: middle;
 }
 .custodyDot.custodyOk {
@@ -41,7 +41,7 @@
 .snippet mark {
   background: var(--accent-soft);
   color: var(--accent-text);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0 1px;
 }
 
@@ -49,7 +49,7 @@
 .starInd {
   color: var(--app-identity);
   font-size: 0.85em;
-  margin-left: var(--sp-1);
+  margin-inline-start: var(--sp-1);
 }
 
 /* The play badge over a video thumbnail (Grid card, List row `.small`, Details
@@ -62,12 +62,12 @@
   place-items: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   /* Darkens the thumbnail behind it — the scrim token, dialled down. */
   background: color-mix(in oklab, var(--scrim) 81%, transparent);
   color: var(--text-inv);
   font-size: var(--t-small-size);
-  padding-left: 2px;
+  padding-inline-start: 2px;
   pointer-events: none;
 }
 .mediaPlay.small {

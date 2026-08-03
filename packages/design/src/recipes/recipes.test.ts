@@ -31,7 +31,6 @@ describe("revision 3 recipe registry", () => {
       "secondary",
       "quiet",
       "destructive",
-      "destructiveFilled",
     ]);
     expect(new Set(BUTTON_VARIANTS).size).toBe(BUTTON_VARIANTS.length);
   });
@@ -69,11 +68,11 @@ describe("revision 3 recipe registry", () => {
     const css = emitRecipeCss(".centraid-inline-scope");
 
     expect(css).toContain(
-      ".centraid-inline-scope .kit-btn { min-height: var(--target-min, 44px);"
+      ".centraid-inline-scope .kit-btn { min-height: max(var(--h-control, 34px), var(--target-min, 44px));"
     );
-    expect(css).toContain(
-      '.centraid-inline-scope .kit-btn[data-variant="destructiveFilled"]'
-    );
+    expect(css).not.toContain("destructiveFilled");
+    expect(css).toContain(".centraid-inline-scope .kit-status-line {");
+    expect(css).toContain(".centraid-inline-scope .kit-status-line-fill {");
     expect(css.endsWith("\n")).toBe(true);
   });
 

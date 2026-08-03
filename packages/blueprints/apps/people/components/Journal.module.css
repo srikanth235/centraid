@@ -5,7 +5,7 @@
 
 .compose {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: var(--sp-4);
 }
@@ -17,7 +17,7 @@
 .mood {
   width: 44px;
   height: 44px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--line);
   background: none;
   font-size: 22px;
@@ -36,9 +36,7 @@
   resize: none;
   outline: none;
   background: none;
-  font: var(--t-body);
-  font-size: 14.5px;
-  line-height: 1.55;
+  font: var(--t-reading);
   color: var(--text);
 }
 .entry {
@@ -51,7 +49,7 @@
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   font-size: 20px;
@@ -61,13 +59,10 @@
 }
 .entry .dt {
   font: var(--t-mono);
-  font-size: 10.5px;
   color: var(--text-faint);
 }
 .entry p {
   margin: var(--sp-1) 0 0;
-  font: var(--t-body);
-  font-size: 14px;
-  line-height: 1.55;
+  font: var(--t-reading);
   color: var(--text);
 }

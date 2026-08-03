@@ -192,13 +192,6 @@
   flex: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pop {
-    animation: none;
-  }
-  .row,
-  .action,
-  .rail {
-    transition: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE global
+   rule (#707, invariant 5), which zeroes every animation and transition
+   duration. A per-component copy is a second place the policy can drift. */

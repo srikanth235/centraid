@@ -10,7 +10,7 @@
 .input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text);
   font: var(--t-small);
@@ -44,8 +44,7 @@
   font: var(--t-small);
 }
 .field > span {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-control);
   color: var(--text-faint);
 }
 .scope {

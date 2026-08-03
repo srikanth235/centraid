@@ -14,7 +14,7 @@
 }
 .bar {
   position: absolute;
-  left: 50%;
+  inset-inline-start: 50%;
   bottom: max(1.25rem, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
@@ -39,8 +39,9 @@
   background: color-mix(in oklab, var(--text-inv) 12%, transparent);
 }
 .count {
-  font-family: var(--font-mono);
+  font: var(--t-mono);
   font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
   color: color-mix(in oklab, var(--text-inv) 75%, transparent);
   white-space: nowrap;
 }

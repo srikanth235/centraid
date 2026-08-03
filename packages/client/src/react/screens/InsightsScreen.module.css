@@ -550,18 +550,18 @@
   min-width: 0;
 }
 .heroLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .heroValue {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: var(--t-hero-size);
+  /* A single large figure is a NUMERIC, so it takes the mono register at the
+     display rung rather than a bold sans one-off (#707). */
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  font-size: var(--t-display-size);
   line-height: 1;
-  letter-spacing: -0.02em;
   color: var(--text);
 }
 .heroHonesty {

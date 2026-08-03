@@ -17,7 +17,7 @@ export const RECIPE_NAMES = [
   "Segmented",
   "Dialog",
   "Sheet",
-  "Toast",
+  "StatusLine",
   "Banner",
   "Empty",
   "Loading",
@@ -51,7 +51,6 @@ export const BUTTON_VARIANTS = [
   "secondary",
   "quiet",
   "destructive",
-  "destructiveFilled",
 ] as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
@@ -226,6 +225,31 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
     ["focus is contained", "labelled sheet", "safe-area padding"],
     ["web", "blueprint", "native"]
   ),
+  StatusLine: makeRecipe(
+    "StatusLine",
+    [
+      "--bg",
+      "--line",
+      "--h-control",
+      "--t-mono",
+      "--t-mono-numeric",
+      "--text-soft",
+      "--text-faint",
+    ],
+    {
+      // The determinate bar for a long local operation: track then fill,
+      // never a spinner. A state change (message swap, bar width) is the
+      // one-line update-in-place transition, not an entry animation.
+      loading: ["--bg-elev", "--text", "--dur-1", "--ease"],
+    },
+    [
+      "role=status",
+      "aria-live=polite",
+      "one persistent line; no stacking, no auto-dismiss animation",
+      "inline action is a labelled control with a visible focus ring, never bare text",
+    ],
+    ["web", "blueprint", "native"]
+  ),
   Surface: makeRecipe("Surface", ["--bg-elev", "--r-lg", "--line", "--sp-4"]),
   Switch: makeRecipe(
     "Switch",
@@ -241,14 +265,6 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
     { invalid: ["--danger", "--dur-1"] },
     ["label and error are associated", "multiline grows without losing focus"],
     ["web", "blueprint", "native"]
-  ),
-  Toast: makeRecipe(
-    "Toast",
-    ["--bg-elev", "--r-md", "--shadow-md", "--sp-4"],
-    {},
-    ["status/live-region tone is explicit"],
-    ["web", "blueprint", "native"],
-    "affirm"
   ),
   Tooltip: makeRecipe(
     "Tooltip",

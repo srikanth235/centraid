@@ -13,10 +13,9 @@
 }
 .rangeLabel {
   font: var(--t-title);
-  font-size: 18px;
   letter-spacing: -0.01em;
   min-width: 0;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .viewSeg {
   flex-shrink: 0;

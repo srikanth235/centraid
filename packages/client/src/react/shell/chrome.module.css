@@ -1,689 +1,249 @@
-/* Window chrome — the `.window` grid (sidebar column + main column), the
-   split titlebar (tlSide / tlMain), toolbar icon buttons w/ tooltip + ⌘-kbd
-   chip, and the sidebar item family. ShellFrame.tsx and Sidebar.tsx are
-   densely cross-combinated (e.g. collapsing the sidebar hides tlSide and
-   reveals the main-pane traffic-light spacer), so the whole family lives in
-   this ONE module — both components import it, keeping every combinator
-   inside a single scope. Screens never reach into these classes; they get
-   chrome affordances via the exported TbBtn component and ShellFrame slots. */
+/* Window chrome — the Binding Layer frame (issue #707).
+
+   One module for the whole chrome family, because the family is densely
+   cross-combinated and every combinator has to stay in one scope:
+
+     .window      the frame grid — stem column + main column
+     .stem        invariant 1: the 92px launcher band (bottom band on compact)
+     .appBar      the per-app bar: title (display face) + meta (numeric) + nav
+     .main        content
+     .statusLine  invariant 5: the ONE persistent feedback line
+     .sheet*      the All-apps sheet (desktop dialog / compact bottom sheet)
+
+   EVERY positional property here is LOGICAL — `inset-inline`, `padding-inline`,
+   `border-inline-start`, `margin-inline-start`, `text-align: start`. The stem's
+   promise is "always the same distance from the READING edge", not "from the
+   left", so the whole frame mirrors under RTL with no second rule. A physical
+   direction property in this file is a bug.
+
+   Motion is `--dur-1`/`--dur-2` with `--ease`/`--ease-entry` and nothing else:
+   no scale-on-hover, no bounce. `prefers-reduced-motion` is honoured in ONE
+   global rule from the token layer, so no component here declares its own.
+
+   Screens never reach into these classes; they get chrome affordances via the
+   exported `TbBtn` component and `ShellFrame`'s slots. */
 
 .window {
   position: relative;
   flex: 1;
-  /* Without min-height: 0 the flex parent (#root) lets the window grow to
-     its content's min-content height when the main column's content is tall
-     — defeating the inner main-scroll overflow. */
+  /* Without min-height: 0 the flex parent (#root) lets the window grow to its
+     content's min-content height, defeating the inner scroll regions. */
   min-height: 0;
   background: var(--bg);
-  overflow: visible;
   display: grid;
-  grid-template-columns: var(--sidebar-w, 260px) 1fr;
-  /* Codex-style chrome: no dedicated 44px top row. Each pane absorbs its
-     own chrome into its first flex child (tlSide is the first child of
-     .sidebar, tlMain is the first child of .main). */
+  grid-template-columns: var(--w-stem) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: "side main";
-  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  grid-template-areas: "stem main";
 }
-.window[data-sidebar="closed"] {
-  --sidebar-w: 0px;
-}
-
-/* Title-bar halves. Each lives INSIDE its pane (sidebar / main) as that
-   pane's first row. The whole strip is draggable; interactive bits opt
-   back out. */
-.tlSide,
-.tlMain {
-  -webkit-app-region: drag;
-  user-select: none;
-  overflow: visible;
-}
-.tlSide {
-  flex: 0 0 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 10px;
-  position: relative;
-  z-index: 3;
-}
-.tlMain {
-  flex: 0 0 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 4px;
-  min-width: 0;
-  position: relative;
-  z-index: 4;
-  border-bottom: 0.5px solid var(--line-strong);
-}
-/* Grid layout — used by the Builder so the chrome row's two cells line up
-   with the columns of the builder body below it. Col 1 spans the chat-pane
-   width (matches its minmax), col 2 spans the right-pane (1fr). The cells
-   own their own horizontal padding instead of tlMain, so col 1's right
-   edge meets col 2's left edge with no padding gutter. */
-.tlMain[data-layout="grid"] {
-  display: grid;
-  grid-template-columns: minmax(360px, 420px) 1fr;
-  padding: 0;
-  gap: 0;
-  /* Same easing as the builder body so the chrome cells animate in
-     lockstep with the panes below when the chat-pane collapses. */
-  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.tlNav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 14px;
-  min-width: 0;
-}
-/* Chat-pane toggle pinned to the right edge of the nav cell — sits at
-   the chat-pane / canvas boundary, mirroring the affordance pattern of
-   the workspace-sidebar toggle (which lives at the left edge of the
-   sidebar). One toggle per panel, each at its panel's edge. */
-.tlNav .chatToggleWrap {
-  margin-left: auto;
-}
-.tlContext {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 14px;
-  min-width: 0;
+/* Compact: the same stem element becomes the bottom band, so the IA can never
+   drift between the two form factors — there is one component, one item model,
+   and one stylesheet. */
+.window[data-compact="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main"
+    "stem";
 }
 
-/* Reserve space for the real macOS traffic lights (Electron paints them
-   at x=16, y=16 because titleBarStyle is "hiddenInset"). The spacer is
-   wider than the native control cluster so the first toolbar icon has the
-   same calm breathing room as Codex's chrome. */
-.tlSide .spacer {
-  width: 64px;
-  height: 1px;
-  flex: 0 0 auto;
-  display: inline-block;
+/* ── Invariant 1 · the stem ─────────────────────────────────────────────── */
+
+.stem {
+  grid-area: stem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-block: var(--sp-5) var(--sp-3);
+  /* The seam between the stem and the app. The stem is never themed by an
+     app, so this hairline is the only thing it declares about the surface
+     beside it. */
+  border-inline-end: 1px solid var(--line);
+  background: var(--bg);
 }
-/* When the sidebar collapses, keep tlSide taking its 44px slot — using
-   `visibility: hidden` instead of `display: none` so the sidebar inner
-   ("New app", "Search", etc.) doesn't slide up into the tlSide slot
-   during the 240ms width animation. The parent sidebar is 0 wide +
-   overflow:hidden once collapsed, so tlSide isn't visible regardless. */
-.window[data-sidebar="closed"] .tlSide {
-  visibility: hidden;
-}
-.window[data-sidebar="closed"] .tlMain .spacer {
-  display: inline-block;
-}
-.tlMain .spacer {
-  display: none;
-  width: 64px;
-  height: 1px;
-  flex: 0 0 auto;
-}
-.tlMain button,
-.tlSide button,
-.tlMain .tbBtnWrap,
-.tlSide .tbBtnWrap,
-/* App-name contenteditable inside the builder chrome must accept
-   clicks (otherwise the surrounding tlMain drag region eats them). */
-.tlMain [contenteditable] {
-  -webkit-app-region: no-drag;
+.stem[data-compact="true"] {
+  flex-direction: row;
+  align-items: stretch;
+  padding-block: 0 var(--sp-2);
+  padding-inline: var(--sp-1);
+  border-inline-end: 0;
+  border-block-start: 1px solid var(--line);
 }
 
-/* Toolbar icon button + tooltip + ⌘-kbd chip.
-   Buttons are 26×26 to match the design's chrome scale. With
-   align-items:center on the 44px titlebar and the macOS traffic-light
-   cluster also centring at y=22, icons and traffic-lights sit on the
-   same horizontal line. */
-.tbBtnWrap {
-  position: relative;
-  display: inline-flex;
-}
-.tlSide .tbBtnWrap,
-.tlMain .tbBtnWrap {
-  transform: translateY(2px);
-}
-.tbBtn {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-md);
-  border: none;
-  background: transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-  display: inline-flex;
+.stemMark {
+  display: flex;
   align-items: center;
   justify-content: center;
-  transition:
-    background 140ms,
-    color 140ms,
-    opacity 140ms;
-}
-.tbBtn svg {
-  display: block;
-}
-.tbBtn:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-.tbBtn[disabled],
-.tbBtn[aria-disabled="true"] {
-  opacity: 0.35;
-  cursor: default;
-  pointer-events: none;
-}
-/* Active toggle state — e.g. the builder titlebar's History button when
-   the chat pane is showing version history. */
-.tbBtn[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* The mark is INK. The shell spends no hue. */
   color: var(--accent);
+  margin-block-end: var(--sp-5);
 }
-/* Popover anchor state — `data-open` is set while an anchored panel is
-   mounted so the button stays visually "pressed". */
-.tbBtn[data-open="true"] {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-.tooltip {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
+
+/* The Search control is ALWAYS rendered, on every host. An installed PWA
+   cannot claim ⌘K — the browser has it — so the control is the guarantee and
+   the hint is the extra. */
+.stemSearch {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  color: var(--text);
-  border: 0.5px solid var(--line);
+  gap: 3px;
+  inline-size: 100%;
+  padding-block: 0 var(--sp-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.stemSearchGlyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--h-segmented);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
-  font-size: 11.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms 80ms;
-  z-index: 50;
-  box-shadow: var(--shadow-md);
-}
-.tbBtnWrap:hover .tooltip {
-  opacity: 1;
-}
-/* Titlebar nav cluster sits flush against the traffic-lights / left edge,
-   so centering a tooltip on a button there overflows left and gets
-   clipped. Anchor those tooltips to the button's left edge instead so
-   they grow rightward into the wide-open titlebar space. Covers both
-   the grid layout (.tlNav) and the flat layout (direct children of
-   .tlMain — the Home titlebar uses the latter). */
-.tlNav .tbBtnWrap .tooltip,
-.tlMain > .tbBtnWrap .tooltip {
-  left: 0;
-  transform: none;
-}
-.tooltip .kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  margin-left: 2px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: var(--r-sm);
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-small-strong);
   color: var(--text-soft);
+  transition:
+    color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.stemSearch:hover .stemSearchGlyph {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+.stemSearchKbd {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
 
-/* Sidebar column */
-.sidebar {
-  grid-area: side;
-  overflow: hidden;
-  position: relative;
-  background: var(--bg-chrome);
-  backdrop-filter: var(--glass-sheen, none);
-  -webkit-backdrop-filter: var(--glass-sheen, none);
-  border-right: var(--line);
+.launchList {
   display: flex;
   flex-direction: column;
-}
-.sidebarInner {
-  width: var(--sidebar-content-w, 260px);
-  display: flex;
-  flex-direction: column;
-  /* tlSide sits above us in the .sidebar flex column, so claim the
-     remaining space via flex: 1. The column itself never scrolls — its
-     middle zone does (see .sbScroll), which is what keeps the account row
-     pinned to the bottom edge. */
-  flex: 1;
-  min-height: 0;
-  padding: 6px 8px 8px;
-  overflow: hidden;
-}
-.window[data-sidebar="closed"] .sidebar {
-  border-right: none;
-}
-
-/* The sidebar's three zones (issue #667). Head and foot are fixed; the
-   middle scrolls, so Recents grows into whatever height the nav groups
-   didn't take and the account row never drifts off-screen. */
-.sbColumn {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-.sbScroll {
-  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* Hide the scrollbar until the pointer is over the column: a permanent
-     track on a 260px rail reads as clutter next to 13px rows. */
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 160ms;
+  /* The desktop stem scrolls instead of capping, so a member who pins ten
+     destinations keeps all ten. */
+  scrollbar-width: none;
 }
-.sbColumn:hover .sbScroll {
-  scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent;
+.launchList::-webkit-scrollbar {
+  inline-size: 0;
 }
-.sbScroll::-webkit-scrollbar {
-  width: 6px;
+.stem[data-compact="true"] .launchList {
+  flex-direction: row;
+  flex: 1;
+  overflow: visible;
 }
-.sbScroll::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-}
-.sbColumn:hover .sbScroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 20%, transparent);
-}
-/* The leading group carries no section label, so it needs its own top
-   breathing room to sit off the identity head. */
-.sbGroup:first-child {
-  margin-top: 4px;
-}
-.sbFoot {
-  flex: 0 0 auto;
+
+.launchItem {
   display: flex;
   flex-direction: column;
-  /* Pad for the iOS home indicator when the drawer runs to the screen edge;
-     resolves to 0 everywhere else. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Gateway alarm — the ONLY thing the gateway shows in the sidebar, and only
-   when it is down. Danger-tinted so it reads as an alarm rather than a nav
-   row, and it is the way into the Gateway page while the daemon is out. */
-.sbAlarm {
-  display: flex;
   align-items: center;
-  gap: 9px;
-  width: 100%;
-  margin-block: 4px;
-  padding: 7px 9px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  border-radius: 8px;
-  /* The wash stays at or under the 12% `--danger` is solved against, so the
-     rest and hover states both keep the label's measured ratio. */
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  color: var(--danger);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms;
-}
-.sbAlarm:hover {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-.sbAlarm[disabled] {
-  cursor: default;
-}
-
-/* Sidebar items */
-.sbItem {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 6px 9px;
-  margin-block: 1.5px;
-  border: none;
+  gap: var(--sp-1);
+  inline-size: 100%;
+  /* 44px floor, always: below it a tab stops being a tap target, which is why
+     the compact band is capped at five plus More rather than shrinking. */
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2) 9px;
   background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.stem[data-compact="true"] .launchItem {
+  flex: 1;
+  min-inline-size: 0;
+  inline-size: auto;
+  padding-block: 7px 3px;
+}
+.launchItem:hover {
+  background: var(--bg-hover);
+}
+.launchItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-md);
+}
+
+/* The chip's container styling is CONSTANT — same tint, same radius, selected
+   or not, following the iOS convention. Selection is the label weight plus the
+   2px bar below. `--chip-hue` and `--chip-tint` are written per item by
+   Stem.tsx; the tint share comes from the design package's ICON_CHIP_TINT so
+   the shell, the blueprint surface and the phone composite the same chip. */
+.launchChip {
+  inline-size: 30px;
+  block-size: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
+    var(--bg)
+  );
+  color: var(--chip-hue, var(--text-soft));
+}
+.launchMoreChip {
+  inline-size: 30px;
+  block-size: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
   color: var(--text-soft);
-  font-size: var(--t-small-size);
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background 100ms,
-    color 100ms;
 }
-.sbItem:hover {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text);
-}
-.sbItem[aria-current="true"],
-.sbItem[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.sbItem[data-disabled="true"] {
-  opacity: 0.45;
-  cursor: default;
-  pointer-events: none;
-}
-.sbItem .sbLabel {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sbItem .sbMeta,
-.sbAccount .sbMeta {
-  flex: 0 0 auto;
-  color: var(--text-ghost);
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-}
-
-.notificationsUnreadDot {
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  flex: none;
-}
-
-/* The sidebar foot: who you are, with Settings and Log out behind it. Sits a
-   little heavier than a nav item — it is a person, not a destination — and
-   gets a hairline separator so it reads as the end of the column. */
-.sbAccount {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 8px 9px;
-  border: 0;
-  border-top: 0.5px solid var(--line);
-  border-radius: 0 0 var(--r-md) var(--r-md);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.sbAccount:hover,
-.sbAccount[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-.sbAccount:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.sbAccountAvatar {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  color: var(--text-inv);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.sbAccountName {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--t-small-size);
-  font-weight: 600;
-}
-.sbSection {
-  margin-top: 14px;
-  margin-bottom: 4px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 500;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbSection .sbSectionActions {
-  margin-left: auto;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 100ms;
-}
-.sbSection:hover .sbSectionActions {
-  opacity: 1;
-}
-.sbSectionBtn {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.sbSectionBtn:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-
-/* Conversation grouping (issue #420): a lightweight sub-label under the Chats
-   header for the "Pinned"/"Recent" split, and the collapsible "Archived"
-   toggle at the bottom of the list. */
-.sbSubLabel {
-  margin: 6px 0 2px;
-  padding: 0 12px;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbArchivedToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 5px 12px;
-  border: none;
-  background: transparent;
-  color: var(--text-ghost);
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbSeeAll {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin: 2px 0 4px;
-  padding: 6px 10px 6px 32px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-faint);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: left;
-}
-.sbSeeAll:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-.sbArchivedToggle:hover {
+/* A navigation label is never tertiary text: `--text-soft` is its floor. */
+.launchLabel {
+  font: var(--t-control);
   color: var(--text-soft);
-}
-
-/* Relaunch-to-update pill — pinned above Settings when the main process
-   sees a newer build on disk. A raised card (vs the flat sbItem rows) so
-   the one action that restarts the app reads as distinct from navigation. */
-.sbUpdate {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-block: 6px 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--bg-elev);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
-  transition:
-    background 100ms,
-    box-shadow 100ms;
-}
-.sbUpdate:hover {
-  background: color-mix(in srgb, var(--text) 4%, var(--bg-elev));
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 10%, transparent);
-}
-.sbUpdate > svg:last-child {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-}
-.sbUpdateBody {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.sbUpdateTitle {
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  white-space: nowrap;
+  max-inline-size: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease);
 }
-.sbUpdateVersion {
-  font-size: var(--t-control-size);
-  font-family: var(--font-mono);
-  color: var(--text-ghost);
+.launchItem[data-active="true"] .launchLabel {
+  font: var(--t-small-strong);
+  color: var(--text);
 }
-
-/* Small icon tile rendered inline in sidebar app rows. Matches the
-   home-grid tile look in miniature so the sidebar tells the user
-   which apps they own at a glance. */
-.sbAppIcon {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  color: var(--text-inv);
-  box-shadow: inset 0 0 0 0.5px var(--scrim);
-}
-.sbAppIcon svg {
-  width: 11px;
-  height: 11px;
-}
-
-/* Accent-tinted sidebar row — the "Build new" entry point. */
-.sbItem[data-accent="true"] {
-  color: var(--accent);
-}
-.sbItem[data-accent="true"]:hover {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-/* App row — the row itself is a slim button, so the wrap is the
-   positioning context and the hover-revealed `•••` action sits flush
-   with the row's right edge, vertically centred to the row's baseline. */
-.sbAppRow {
-  position: relative;
-  display: block;
-}
-.rowMore {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* Buttons inherit a non-zero line-height from `font: inherit`, which
-     adds half-leading above and below the inline content box. Even with
-     flex centering, that half-leading visually biases the icon upward
-     in narrow buttons. Zeroing line-height (and padding/border) here
-     guarantees the SVG's bounding box is the only thing flex centers
-     against. */
-  line-height: 0;
-  padding: 0;
-  border: 0;
+.launchBar {
+  inline-size: 16px;
+  block-size: 2px;
+  border-radius: var(--r-pill);
+  margin-block-start: 1px;
   background: transparent;
-  /* Muted resting tone — sidebar rows already carry a status dot at the
-     same edge, so the action reads as a supporting glyph until hover. */
-  color: var(--text-ghost);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  opacity: 0;
-  z-index: 3;
-  transition:
-    opacity 140ms ease,
-    background 120ms,
-    color 120ms;
 }
-.rowMore svg {
-  display: block;
-}
-.sbAppRow:hover .rowMore,
-.sbAppRow:focus-within .rowMore,
-.rowMore:focus-visible,
-.rowMore[data-open="true"] {
-  opacity: 1;
-}
-.rowMore:hover {
-  background: color-mix(in oklab, var(--text) 12%, transparent);
-  color: var(--text);
-}
-.rowMore:active {
-  background: color-mix(in oklab, var(--text) 18%, transparent);
-}
-/* When the action is open, the row's own hover state would compete with
-   the `•••` background; nudge the row back to its resting tone so focus
-   reads as "this menu owns the moment". */
-.sbAppRow:has(.rowMore[data-open="true"]) .sbItem {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-  color: var(--text);
+.launchItem[data-active="true"] .launchBar {
+  background: var(--chip-hue, var(--text-soft));
 }
 
-/* Main area — shares the wall surface with the titlebar (inside .main)
-   so the chrome and the content below visually flow as one surface. The
-   only structural separator is the vertical sidebar/main divider.
-   `--bg-wall` is a gradient in dark mode and a flat near-white in light
-   mode (see packages/design themes). */
+/* The way into every unpinned destination, standing rather than hidden behind
+   a gesture. On compact this is the band's "More" instead. */
+.stemAllApps {
+  flex: none;
+  margin-block-start: var(--sp-2);
+  padding-block: var(--sp-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: var(--t-control);
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+.stemAllApps:hover {
+  color: var(--text);
+}
+.stemAllApps:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-md);
+}
+
+/* ── The main column ────────────────────────────────────────────────────── */
+
 .main {
   grid-area: main;
   position: relative;
@@ -691,146 +251,320 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-wall);
+  background: var(--bg);
 }
 
-.connectionBanner {
+/* The per-app bar. It carries the app's identity and the app's own actions —
+   it is the one place in the frame an app speaks — plus history, which is
+   frame business. */
+.appBar {
+  -webkit-app-region: drag;
+  user-select: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+  padding-inline: var(--sp-4);
+  padding-block: var(--sp-2);
+  position: relative;
+  z-index: 4;
+  overflow: visible;
+}
+/* Grid layout — the Builder lines the bar's two cells up with the columns of
+   the body below it. The cells own their own inline padding so col 1's
+   trailing edge meets col 2's leading edge with no gutter. */
+.appBar[data-layout="grid"] {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr;
+  padding-inline: 0;
+  gap: 0;
+}
+.tlNav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-inline: var(--sp-4);
+  min-inline-size: 0;
+}
+/* One toggle per panel, at that panel's edge. */
+.tlNav .chatToggleWrap {
+  margin-inline-start: auto;
+}
+.tlContext {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-inline-end: var(--sp-4);
+  min-inline-size: 0;
+}
+.flex {
+  flex: 1;
+}
+
+.appIdentity {
+  min-inline-size: 0;
+  margin-inline-start: var(--sp-3);
+  text-align: start;
+}
+/* The display face on every app title — the one signature that carries the
+   product across surfaces that otherwise look nothing alike. */
+.appTitle {
+  margin: 0;
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Numerics are mono and tabular in every app, without exception. */
+.appMeta {
+  margin-block-start: 5px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+}
+
+/* Reserve space for the real macOS traffic lights (Electron paints them at
+   x=16, y=16 under titleBarStyle "hiddenInset"). */
+.spacer {
+  inline-size: 64px;
+  block-size: 1px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.window[data-compact="true"] .spacer {
+  /* No traffic lights on a touch host — reclaim the reservation. */
+  display: none;
+}
+.appBar button,
+.appBar .tbBtnWrap,
+/* The app-name contenteditable inside the builder bar must accept clicks
+   (otherwise the surrounding drag region eats them). */
+.appBar [contenteditable] {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Toolbar icon button + tooltip + ⌘-kbd chip ─────────────────────────── */
+
+.tbBtnWrap {
+  position: relative;
+  display: inline-flex;
+}
+.tbBtn {
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: var(--r-md);
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.tbBtn svg {
+  display: block;
+}
+.tbBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tbBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* A disabled control recolours its own leaf. Container `opacity` composites
+   every descendant and silently invalidates token-level contrast. */
+.tbBtn[disabled],
+.tbBtn[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+  pointer-events: none;
+}
+.tbBtn[data-active="true"],
+.tbBtn[data-open="true"] {
+  background: var(--bg-press);
+  color: var(--text);
+}
+.tooltip {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: var(--sp-2);
+  padding-block: var(--sp-1);
+  background: var(--bg-hud);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  font: var(--t-control);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+  z-index: 60;
+}
+.tbBtnWrap:hover .tooltip,
+.tbBtnWrap:focus-within .tooltip {
+  opacity: 1;
+}
+.kbd {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+
+/* ── Invariant 5 · the status line ──────────────────────────────────────── */
+
+/* One persistent line at the bottom of the frame, in the numeric register,
+   with a small neutral dot. It updates IN PLACE: there is no toast, no
+   spinner, no badge count and no red dot anywhere in this shell, so this line
+   is the whole feedback channel. Mirrors the design package's StatusLine
+   recipe token-for-token. */
+.statusLine {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-4);
+  border-block-start: 1px solid var(--line);
+  background: var(--bg);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+/* Offline is a BORDERED banner state. `--net` means "leaves the device" and
+   the system allows it as a border or a 2px rule, never as a fill — nothing
+   alarming is ever a large coloured surface. */
+.statusLine[data-offline="true"] {
+  border-block-start: 2px solid var(--net);
+  color: var(--text);
+}
+.statusDot {
+  inline-size: 5px;
+  block-size: 5px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+}
+.statusLine[data-offline="true"] .statusDot {
+  background: var(--net);
+}
+.statusText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Determinate, always: a local-first product knows the size of its own work,
+   and a spinner is the one thing it can never honestly say. */
+.statusBar {
+  flex: none;
+  inline-size: 120px;
+  block-size: 3px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  position: relative;
+  overflow: hidden;
+}
+.statusBar::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: calc(var(--status-progress, 0) * 100%);
+  background: var(--text);
+  border-radius: inherit;
+  transition: inline-size var(--dur-1) var(--ease);
+}
+.statusCounts {
+  flex: none;
+  color: var(--text-faint);
+}
+/* An action on the line is a bounded control, not bare text. */
+.statusAction {
+  margin-inline-start: auto;
+  flex: none;
+  block-size: var(--h-segmented);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: var(--t-control);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.statusAction:hover {
+  background: var(--bg-hover);
+}
+.statusAction:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.statusLine[data-offline="true"] .statusAction {
+  border-color: var(--net);
+}
+
+/* ── Tier 2 · the All-apps sheet ────────────────────────────────────────── */
+
+.sheetOverlay {
   position: fixed;
-  z-index: 190;
-  top: 44px;
-  left: var(--sidebar-w, 260px);
-  right: 0;
-  min-height: 34px;
+  inset: 0;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 7px 14px;
-  background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
-  border-bottom: 0.5px solid color-mix(in srgb, var(--danger) 40%, var(--line));
-  color: var(--text);
-  font-size: var(--t-mono-size);
+  padding: var(--sp-6);
 }
-.connectionBanner button {
-  border: none;
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: var(--danger);
-  color: var(--bg);
+.sheetOverlay[data-compact="true"] {
+  align-items: flex-end;
+  padding: 0;
+}
+.sheetScrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--scrim);
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
 }
-.window[data-sidebar="closed"] .connectionBanner {
-  left: 0;
+.sheetPanel {
+  position: relative;
+  inline-size: 520px;
+  max-inline-size: 100%;
+  max-block-size: 620px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: sheetIn var(--dur-2) var(--ease-entry);
 }
-/* ── Compact form factor ──────────────────────────────────────────────────
-   Below this width the sidebar stops being a column the layout makes room
-   for and becomes an overlay drawer: the main pane keeps the full viewport,
-   the rail slides in over it, and a scrim takes the dismiss tap. The DESKTOP
-   contract is unchanged above the breakpoint — this is one media block, not
-   a second component, so the IA can never drift between the two.
-
-   720px matches the compact form-factor signal in docs/platform-gating.md.
-   It is a layout threshold only — never a trust or capability boundary. */
-@media (max-width: 720px) {
-  .window {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "main";
-  }
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 200;
-    width: min(300px, 86vw);
-    /* The drawer floats over page content, so it cannot borrow the wall's
-       translucency the way a docked rail can. */
-    background: var(--bg-elev);
-    box-shadow: var(--shadow-md);
-    transform: translateX(-101%);
-    transition: transform 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
-    /* The rail is a dialog here: keep it out of the tab order while closed. */
-    visibility: hidden;
-  }
-  .window[data-sidebar="open"] .sidebar {
-    transform: none;
-    visibility: visible;
-  }
-  /* The docked rail's divider is the seam between two panes; the drawer's
-     own shadow does that job, and the border would read as a stray hairline
-     against whatever it overlays. */
-  .window[data-sidebar="open"] .sidebar,
-  .window[data-sidebar="closed"] .sidebar {
-    border-right: none;
-  }
-  .sidebarInner {
-    --sidebar-content-w: 100%;
-  }
-  /* No macOS traffic lights on a touch host — reclaim both reservations. */
-  .tlSide .spacer,
-  .window[data-sidebar="closed"] .tlMain .spacer {
-    display: none;
-  }
-  /* tlSide is hidden-not-removed on desktop so the rail doesn't jump during
-     the width animation. The drawer animates on transform instead, so the
-     row simply comes back when it's open. */
-  .window[data-sidebar="open"] .tlSide {
-    visibility: visible;
-  }
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 199;
-    border: 0;
-    padding: 0;
-    background: color-mix(in srgb, var(--text) 34%, transparent);
-    backdrop-filter: blur(1px);
-    -webkit-backdrop-filter: blur(1px);
-    opacity: 1;
-    animation: scrimIn 200ms ease;
-    cursor: pointer;
-  }
-  /* Touch targets. 13px rows at 6px padding are a pointer-era size; on a
-     phone every row in this column has to clear ~44px. */
-  .sbItem,
-  .sbAlarm {
-    padding: 11px 10px;
-    font-size: 14px;
-  }
-  .sbAccount {
-    padding: 12px 10px;
-  }
-  .sbSeeAll {
-    padding: 11px 10px 11px 34px;
-  }
-  .sbArchivedToggle {
-    padding: 10px 12px;
-  }
-  /* The ••• is hover-revealed, and there is no hover on touch. */
-  .rowMore {
-    opacity: 1;
-    width: 32px;
-    height: 32px;
-    color: var(--text-ghost);
-  }
-  .connectionBanner {
-    left: 0;
-  }
+.sheetOverlay[data-compact="true"] .sheetPanel {
+  inline-size: 100%;
+  max-block-size: 86%;
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
-
-/* The scrim is compact-only; outside the media query it must not exist at
-   all, or a stray render would blanket the desktop window. */
-.scrim {
-  display: none;
-}
-@media (max-width: 720px) {
-  .scrim {
-    display: block;
-  }
-}
-@keyframes scrimIn {
+@keyframes sheetIn {
   from {
     opacity: 0;
   }
@@ -838,30 +572,207 @@
     opacity: 1;
   }
 }
-
-/* Coarse pointers get the touch sizing regardless of width — a tablet in
-   landscape is wider than the breakpoint but still has no hover. */
-@media (pointer: coarse) {
-  .sbItem,
-  .sbAlarm {
-    padding: 10px 10px;
-  }
-  .rowMore {
-    opacity: 1;
-  }
+.sheetHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-inline: var(--sp-5);
+  padding-block: var(--sp-5) var(--sp-3);
+}
+.sheetTitle {
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+.sheetClose {
+  inline-size: var(--h-control);
+  block-size: var(--h-control);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.sheetClose:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.sheetClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetField {
+  flex: none;
+  padding-inline: var(--sp-5);
+  padding-block-end: var(--sp-3);
+}
+.sheetField input {
+  inline-size: 100%;
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: var(--t-small);
+}
+.sheetField input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetList {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: var(--sp-5);
+  padding-block-end: var(--sp-5);
+}
+.sheetEmpty {
+  margin: 0;
+  padding-block: var(--sp-6);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  border-block-start: 1px solid var(--line);
+}
+.sheetRowOpen {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  border-radius: var(--r-md);
+}
+.sheetRowOpen:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetRowChip {
+  inline-size: 28px;
+  block-size: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
+    var(--bg-elev)
+  );
+  color: var(--chip-hue, var(--text-soft));
+}
+/* Unpinned reads as a LIGHTER name, never a dimmed one — the recessive state
+   is a colour token on the leaf, because container opacity composites every
+   descendant and invalidates the contrast the token was solved for. */
+.sheetRowName {
+  min-inline-size: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease);
+}
+.sheetRowOpen[data-pinned="true"] .sheetRowName {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.sheetRowFixed {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+.sheetSwitch {
+  flex: none;
+  inline-size: 38px;
+  block-size: 22px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.sheetSwitch[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sheetSwitch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetSwitchKnob {
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: var(--r-pill);
+  background: var(--text-soft);
+  transition:
+    background var(--dur-1) var(--ease),
+    margin-inline-start var(--dur-1) var(--ease);
+}
+.sheetSwitch[aria-checked="true"] .sheetSwitchKnob {
+  margin-inline-start: 16px;
+  background: var(--on-accent);
+}
+.sheetFoot {
+  flex: none;
+  margin: 0;
+  padding-inline: var(--sp-5);
+  padding-block: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
 
-.syncIndicator {
-  position: fixed;
-  z-index: 80;
-  right: 14px;
-  bottom: 12px;
-  padding: 4px 9px;
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  color: var(--text-faint);
-  box-shadow: var(--shadow-sm);
-  font-size: 10px;
-  pointer-events: none;
+/* ── Compact form factor ─────────────────────────────────────────────────
+   720px matches the compact form-factor signal in docs/platform-gating.md and
+   the `COMPACT_MAX_WIDTH` constant in useCompactLayout.ts. It is a LAYOUT
+   threshold only — never a trust or capability boundary. The stem's own
+   compact behaviour is driven by `[data-compact]` above (React owns the
+   signal); this block carries the parts CSS has to answer on its own. */
+@media (max-width: 720px) {
+  .appBar {
+    padding-inline: var(--sp-4);
+  }
+  .appTitle {
+    /* The display rung steps down on a phone, per the ramp's mobile column. */
+    font-size: 26px;
+  }
+  .statusLine {
+    padding-inline: var(--sp-4);
+  }
+  .sheetOverlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .sheetPanel {
+    inline-size: 100%;
+    max-block-size: 86%;
+  }
 }

@@ -15,7 +15,7 @@ import {
   isPendingOffsite,
   outcomeMessage,
   runBulk as runBulkBase,
-  toast,
+  statusLine,
 } from "./kit.ts";
 import { createMetadata } from "./metadata.ts";
 import { createPopovers } from "./popovers.ts";
@@ -220,7 +220,7 @@ export function createLogic({
     const outcome = await act("trash", { document_id: doc.document_id });
     if (!narrate(outcome)) return;
     if (state.detailsId === doc.document_id) state.detailsId = null;
-    toast(`Moved to trash · receipted.`, {
+    statusLine(`Moved to trash · receipted.`, {
       undoLabel: "Undo",
       onUndo: async () => {
         const back = await act("restore", { document_id: doc.document_id });
@@ -233,7 +233,7 @@ export function createLogic({
   async function restoreDoc(doc: DriveDoc) {
     const outcome = await act("restore", { document_id: doc.document_id });
     if (narrate(outcome)) {
-      toast("Restored to its folder · receipted.");
+      statusLine("Restored to its folder · receipted.");
       await refresh();
     }
   }
@@ -246,7 +246,9 @@ export function createLogic({
       document_id: doc.document_id,
     });
     if (narrate(outcome)) {
-      toast(doc.starred ? "Star removed · receipted." : "Starred · receipted.");
+      statusLine(
+        doc.starred ? "Star removed · receipted." : "Starred · receipted."
+      );
       await refresh();
     }
   }
@@ -263,7 +265,7 @@ export function createLogic({
     if (ids.length === 1) {
       const outcome = await act("move", input(ids[0]!));
       if (!narrate(outcome)) return;
-      toast(`Moved to ${name} · receipted.`);
+      statusLine(`Moved to ${name} · receipted.`);
       clearSelection();
       await refresh();
       return;
@@ -285,7 +287,7 @@ export function createLogic({
       title: trimmed,
     });
     if (narrate(outcome)) {
-      toast("Renamed · receipted.");
+      statusLine("Renamed · receipted.");
       await refresh();
     }
   }
@@ -342,7 +344,7 @@ export function createLogic({
     const outcome = await act("create-folder", { name });
     if (narrate(outcome)) {
       state.creatingFolder = false;
-      toast(`Folder “${name}” created · receipted.`);
+      statusLine(`Folder “${name}” created · receipted.`);
       await refresh();
     } else {
       render();
@@ -352,7 +354,7 @@ export function createLogic({
     const outcome = await act("rename-folder", { folder_id: folderId, name });
     if (narrate(outcome)) {
       state.renamingFolderId = null;
-      toast("Folder renamed · receipted.");
+      statusLine("Folder renamed · receipted.");
       await refresh();
     } else {
       render();
@@ -366,7 +368,7 @@ export function createLogic({
         state.nav.folderId === folder.folder_id
       )
         state.nav = { kind: "all" };
-      toast("Folder deleted · receipted.");
+      statusLine("Folder deleted · receipted.");
       await refresh();
     }
   }
@@ -444,7 +446,7 @@ export function createLogic({
       if (parked > 0) parts.push(`${parked} waiting for approval.`);
       if (pendingOffsite > 0)
         parts.push(`${pendingOffsite} attached locally · pending offsite.`);
-      toast(parts.join(" "));
+      statusLine(parts.join(" "));
     }
     await refresh();
   }

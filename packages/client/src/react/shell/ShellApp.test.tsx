@@ -37,14 +37,14 @@ describe("shell/ShellApp", () => {
       </button>
     </div>
   );
-  const sidebarFor = (): React.ReactNode => <div data-testid="sb">SB</div>;
+  const stemFor = (): React.ReactNode => <div data-testid="stem">STEM</div>;
 
   describe(ShellApp, () => {
     it("opens on the initial route inside the chrome frame", () => {
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
       );
@@ -52,14 +52,14 @@ describe("shell/ShellApp", () => {
       expect(
         el.querySelector<HTMLElement>('[data-testid="screen"]')?.dataset.kind
       ).toBe("home");
-      expect(el.querySelector('[data-testid="sb"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="stem"]')).not.toBeNull();
     });
 
     it("navigates on dispatch and enables Back", () => {
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
       );
@@ -83,40 +83,27 @@ describe("shell/ShellApp", () => {
       const el = render(
         <ShellApp
           initialRoute={{ kind: "app", id: "todos" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
       );
       expect(el.querySelector(".window")).toBeNull();
-      expect(el.querySelector('[data-testid="sb"]')).toBeNull();
+      expect(el.querySelector('[data-testid="stem"]')).toBeNull();
       expect(
         el.querySelector<HTMLElement>('[data-testid="screen"]')?.dataset.kind
       ).toBe("app");
     });
 
-    it("respects a controlled sidebarOpen prop", () => {
-      let open = true;
+    it("mounts the one status line inside the frame", () => {
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
-          sidebarOpen={open}
-          onSidebarOpenChange={(v) => {
-            open = v;
-          }}
+          statusLine={<div data-testid="status">Synced</div>}
         />
       );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
-      );
-      const toggle = el.querySelector(
-        '.tlSide [aria-label="Hide sidebar"]'
-      ) as HTMLButtonElement;
-      act(() => toggle.click());
-      // Controlled: the parent got the new value but didn't re-render, so the DOM
-      // stays until the parent flips the prop — proves ShellApp deferred to it.
-      expect(open).toBe(false);
+      expect(el.querySelector('[data-testid="status"]')).not.toBeNull();
     });
 
     const fullBleedRoutes: ShellRoute[] = [
@@ -128,7 +115,7 @@ describe("shell/ShellApp", () => {
       const el = render(
         <ShellApp
           initialRoute={r}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
       );
@@ -136,10 +123,11 @@ describe("shell/ShellApp", () => {
     });
   });
 
-  // Compact form factor (#667): the same sidebar, mounted as an overlay
-  // drawer. What changes is BEHAVIOUR — a scrim exists, navigating dismisses,
-  // and toggling must not write the desktop preference.
-  describe("compact drawer", () => {
+  // Compact form factor (#707, invariant 1): the SAME stem element, mounted as
+  // the bottom band. What the old three-zone sidebar needed here — an open
+  // state, a scrim, a dismiss-on-navigate rule, and a rule about not writing
+  // the desktop preference — is all gone, because the stem never hides.
+  describe("compact band", () => {
     function goCompact(): void {
       vi.stubGlobal("matchMedia", (query: string) => ({
         matches: true,
@@ -150,133 +138,65 @@ describe("shell/ShellApp", () => {
     }
     afterEach(() => vi.unstubAllGlobals());
 
-    it("starts closed regardless of the docked preference, and opens on toggle", () => {
+    it("keeps the stem mounted and marks the frame compact", () => {
       goCompact();
-      // sidebarOpen=true is the DESKTOP pref; a phone must not open holding a
-      // drawer over the page.
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
-          sidebarOpen
         />
       );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.compact).toBe(
+        "true"
+      );
+      expect(el.querySelector('[data-testid="stem"]')).not.toBeNull();
+    });
+
+    it("mounts no scrim over the page — the band is not an overlay", () => {
+      goCompact();
+      const el = render(
+        <ShellApp
+          initialRoute={{ kind: "home" }}
+          renderStem={stemFor}
+          renderScreen={screenFor}
+        />
       );
       expect(el.querySelector(".scrim")).toBeNull();
-      act(() =>
-        el
-          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
-          ?.click()
-      );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
-      );
-      expect(el.querySelector(".scrim")).not.toBeNull();
+      expect(el.querySelector('[aria-label="Close navigation"]')).toBeNull();
     });
 
-    it("never writes the docked preference — a dismiss is not a collapse", () => {
-      goCompact();
-      const changes: boolean[] = [];
-      const el = render(
-        <ShellApp
-          initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
-          renderScreen={screenFor}
-          sidebarOpen
-          onSidebarOpenChange={(open) => changes.push(open)}
-        />
-      );
-      act(() =>
-        el
-          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
-          ?.click()
-      );
-      act(() =>
-        el
-          .querySelector<HTMLButtonElement>('[aria-label="Close navigation"]')
-          ?.click()
-      );
-      expect(changes).toStrictEqual([]);
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
-      );
-    });
-
-    it("dismisses itself when the member picks a destination", () => {
+    it("survives navigation — nothing dismisses the band", () => {
       goCompact();
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
-      );
-      act(() =>
-        el
-          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
-          ?.click()
-      );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
       );
       act(() =>
         el
           .querySelector<HTMLButtonElement>('[data-testid="go-insights"]')
           ?.click()
       );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
-      );
+      expect(
+        el.querySelector<HTMLElement>('[data-testid="screen"]')?.dataset.kind
+      ).toBe("insights");
+      expect(el.querySelector('[data-testid="stem"]')).not.toBeNull();
     });
 
-    it("dismisses on a row that opens an overlay instead of navigating", () => {
-      goCompact();
-      // Search opens the ⌘K palette and stays on the same route, so the
-      // route-keyed dismissal cannot see it — the rail would sit over the
-      // palette it just opened.
+    it("keeps the frame uncompact above the breakpoint", () => {
       const el = render(
         <ShellApp
           initialRoute={{ kind: "home" }}
-          renderSidebar={() => (
-            <button type="button" className="sbItem" data-testid="search">
-              Search
-            </button>
-          )}
+          renderStem={stemFor}
           renderScreen={screenFor}
         />
       );
-      act(() =>
-        el
-          .querySelector<HTMLButtonElement>('[aria-label="Show sidebar"]')
-          ?.click()
-      );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
-      );
-      act(() =>
-        el.querySelector<HTMLButtonElement>('[data-testid="search"]')?.click()
-      );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
-      );
-    });
-
-    it("mounts no scrim when the rail is docked", () => {
-      const el = render(
-        <ShellApp
-          initialRoute={{ kind: "home" }}
-          renderSidebar={sidebarFor}
-          renderScreen={screenFor}
-          sidebarOpen
-        />
-      );
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
-      );
-      expect(el.querySelector(".scrim")).toBeNull();
+      expect(
+        el.querySelector<HTMLElement>(".window")?.dataset.compact
+      ).toBeUndefined();
     });
   });
 });

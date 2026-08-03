@@ -14,7 +14,7 @@ import type { PointerEvent } from "react";
 // CURRENT rotated frame, so it always lines up with what's on screen.
 // CSS split: own bits in Editor.module.css; `lightbox-note` (bare, no rule)
 // and `kit-*` classes stay global strings.
-import { isPendingOffsite, stageFileBytes, toast } from "../kit.ts";
+import { isPendingOffsite, stageFileBytes, statusLine } from "../kit.ts";
 import { act, narrate } from "../outcomes.ts";
 import type { Asset } from "../types.ts";
 
@@ -178,7 +178,7 @@ export function EditorView({
       if (!narrate(outcome, noteRef.current)) return;
       if (alsoTrash)
         await act("delete-asset", { asset_id: asset.asset_id }, scope);
-      toast(
+      statusLine(
         isPendingOffsite(staged)
           ? "Saved locally as a new photo · pending offsite."
           : "Saved as a new photo — the original is untouched."

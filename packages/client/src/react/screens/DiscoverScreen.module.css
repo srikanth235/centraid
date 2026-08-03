@@ -20,9 +20,8 @@
 }
 .headText h1 {
   margin: 8px 0 0;
-  font: var(--t-hero);
-  font-size: 34px;
-  letter-spacing: -0.03em;
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
   color: var(--text);
 }
 .headText p {

@@ -16,7 +16,7 @@
   gap: var(--sp-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
-  transition: background 0.1s;
+  transition: background var(--dur-1) var(--ease);
 }
 .row:last-child {
   border-bottom: none;
@@ -52,8 +52,7 @@
   cursor: pointer;
 }
 .rowTitle {
-  font: var(--t-body-strong);
-  font-size: 14px;
+  font: var(--t-small-strong);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -63,7 +62,6 @@
 }
 .rowRole {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-faint);
   margin-top: 1px;
   overflow: hidden;
@@ -73,7 +71,7 @@
 .starInd {
   color: var(--app-identity);
   font-size: 0.85em;
-  margin-left: 5px;
+  margin-inline-start: 5px;
 }
 .cell {
   color: var(--text-faint);
@@ -85,12 +83,11 @@
 .cell.list {
   width: 120px;
   font: var(--t-small);
-  font-size: 12px;
 }
 .cell.last {
   width: 110px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .cell.status {
   width: 104px;
@@ -98,7 +95,6 @@
   align-items: center;
   gap: 6px;
   font: var(--t-small);
-  font-size: 12px;
 }
 .col {
   font: var(--t-control);

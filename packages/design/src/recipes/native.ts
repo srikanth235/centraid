@@ -59,14 +59,6 @@ export function nativeButtonStyle(
         minHeight: targetMin.coarse,
         borderRadius: radii.md,
       };
-    case "destructiveFilled":
-      return {
-        backgroundColor: colors.danger,
-        borderColor: "transparent",
-        color: colors.textInv,
-        minHeight: targetMin.coarse,
-        borderRadius: radii.md,
-      };
     case "destructive":
       return {
         backgroundColor: "transparent",

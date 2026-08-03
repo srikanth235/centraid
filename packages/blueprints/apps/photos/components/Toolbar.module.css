@@ -32,7 +32,7 @@
   margin-top: 6px;
 }
 .toolbarActions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: var(--sp-2);

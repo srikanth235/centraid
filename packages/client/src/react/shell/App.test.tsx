@@ -156,55 +156,85 @@ describe("App suite", () => {
   }
 
   describe("App root", () => {
-    it("renders the chrome frame with primary nav, opening on Home", async () => {
+    it("renders the frame with the stem launcher, opening on Home", async () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
       expect(el.textContent).toContain("Todos");
-      expect(el.textContent).toContain("Automations");
-      expect(el.textContent).toContain("Connectors");
-      // Discover left the rail for the ⌘K palette (#667).
-      expect(el.textContent).not.toContain("Discover");
-      expect(el.textContent).not.toMatch(/Apps ·/u);
-      expect(el.textContent).not.toContain("Starred");
-      const activeHome = el.querySelector('[data-active="true"]');
+      // The stem holds the mark, Search, and the PINNED destinations only.
+      const stem = el.querySelector(".stem")!;
+      expect(stem.textContent).toContain("Search");
+      expect(stem.textContent).toContain("Home");
+      expect(stem.textContent).toContain("Automations");
+      // Unpinned destinations are not on the stem — they live in All apps and
+      // in the ⌘K palette, which is exactly what lets the stem stay short.
+      expect(stem.textContent).not.toContain("Connectors");
+      expect(stem.textContent).not.toContain("Starred");
+      const activeHome = stem.querySelector('[data-active="true"]');
       expect(activeHome?.textContent).toContain("Home");
     });
 
-    it("navigates to Analytics via the sidebar and highlights it", async () => {
+    it("reaches an unpinned destination through the All-apps sheet", async () => {
       const el = await mount();
-      // Labelled "Analytics" since #667; the route + highlight key are still
-      // `insights`, which is exactly the separation the rename relies on.
-      const insightsBtn = [...el.querySelectorAll(".sbItem")].find(
-        (b) => b.textContent?.trim() === "Analytics"
-      ) as HTMLButtonElement;
       await act(async () => {
-        insightsBtn.click();
+        el.querySelectorAll<HTMLButtonElement>(".stemAllApps").forEach((b) =>
+          b.click()
+        );
       });
-      const active = el.querySelector('[data-active="true"]');
-      expect(active?.textContent).toContain("Analytics");
-      // Analytics route mounts its own dashboard (a main-scroll body) once loaded.
+      const sheet = document.querySelector('[aria-label="All apps"]')!;
+      expect(sheet).not.toBeNull();
+      // Every destination is listed, pinned or not.
+      expect(sheet.textContent).toContain("Connectors");
+      expect(sheet.textContent).toContain("Starred");
+      const analytics = [
+        ...sheet.querySelectorAll<HTMLButtonElement>(".sheetRowOpen"),
+      ].find((b) => b.textContent?.trim() === "Analytics")!;
+      await act(async () => {
+        analytics.click();
+      });
+      // Analytics route mounts its own dashboard (a main-scroll body). The
+      // stem shows no highlight, which is the honest reading: an UNPINNED
+      // destination is not on the launcher, and pretending otherwise would
+      // make the stem's contents depend on where you happen to be.
+      expect(el.querySelector('.stem [data-active="true"]')).toBeNull();
       await act(async () => {
         await Promise.resolve();
       });
       expect(el.querySelector(".mainScroll")).not.toBeNull();
     });
 
-    it("navigates to Automations via the sidebar (above Pages)", async () => {
+    it("navigates to a pinned destination from the stem and highlights it", async () => {
       const el = await mount();
-      const autoBtn = [...el.querySelectorAll(".sbItem")].find((b) =>
-        b.textContent?.includes("Automations")
-      ) as HTMLButtonElement;
+      const autoBtn = [
+        ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
+      ].find((b) => b.textContent?.includes("Automations"))!;
       await act(async () => {
         autoBtn.click();
       });
-      const active = el.querySelector('[data-active="true"]');
+      const active = el.querySelector('.stem [data-active="true"]');
       expect(active?.textContent).toContain("Automations");
+    });
+
+    it("pins an unpinned destination onto the stem, and persists it", async () => {
+      const el = await mount();
+      await act(async () => {
+        el.querySelector<HTMLButtonElement>(".stemAllApps")?.click();
+      });
+      const pin = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Pin Connectors to the launcher"]'
+      )!;
+      expect(pin.getAttribute("aria-checked")).toBe("false");
+      await act(async () => {
+        pin.click();
+      });
+      expect(el.querySelector(".stem")?.textContent).toContain("Connectors");
+      // Pins are user data, so they survive the session.
+      expect(store.get("launcher.pins")).toMatchObject({ connectors: true });
     });
 
     it("hides every builder entry point by default (#434 builder off)", async () => {
       const el = await mount();
-      // No "Build new" in the sidebar and no composer hero on Home.
-      expect(el.textContent).not.toContain("Build new");
+      // No builder pencil in the app bar and no composer hero on Home.
+      expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       expect(el.querySelector(".composerInput")).toBeNull();
       // The ⌘K palette lists the app but no "Build a new app…" create row.
       await act(async () => {
@@ -230,7 +260,7 @@ describe("App suite", () => {
       expect(el.querySelector('[aria-label="Command palette"]')).not.toBeNull();
     });
 
-    it("keeps an actionable offline banner visible across the shell", async () => {
+    it("reports offline on the one status line, with the reason inline", async () => {
       (
         globalThis as unknown as {
           CentraidApi: Record<string, unknown>;
@@ -242,9 +272,13 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      const banner = el.querySelector("output");
-      expect(banner?.textContent).toContain("Offline");
-      expect(banner?.textContent).toContain("Check gateway");
+      // No toast, no floating pill: one persistent line at the foot of the
+      // frame, in the bordered offline state, saying why commits are disabled.
+      const line = el.querySelector<HTMLElement>(".statusLine")!;
+      expect(line.dataset.offline).toBe("true");
+      expect(line.textContent).toContain("Offline");
+      expect(line.textContent).toContain("commits are disabled");
+      expect(line.textContent).toContain("Check gateway");
     });
 
     it("reveals builder entry points when builderEnabled is set (#434 builder on)", async () => {
@@ -258,7 +292,7 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(el.textContent).toContain("Build new");
+      expect(el.querySelector('[aria-label="New app"]')).not.toBeNull();
       expect(el.querySelector(".composerInput")).not.toBeNull();
       await act(async () => {
         document.dispatchEvent(
@@ -269,21 +303,17 @@ describe("App suite", () => {
       expect(dialog?.textContent).toContain("Build a new app…");
     });
 
-    it("binds the sidebar toggle to the appearance pref", async () => {
+    it("gives the frame no way to hide its own navigation", async () => {
+      // #707 invariant 1: the stem never scrolls away and never changes width,
+      // so the collapse toggle, the persisted open state, and the drawer are
+      // all gone rather than merely defaulted on.
       const el = await mount();
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
+      expect(el.querySelector(".stem")).not.toBeNull();
+      expect(el.querySelector('[aria-label="Hide sidebar"]')).toBeNull();
+      expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
+      expect(Object.keys(store.get("appearance.v2") ?? {})).not.toContain(
+        "sidebarOpen"
       );
-      const toggle = el.querySelector(
-        '.tlSide [aria-label="Hide sidebar"]'
-      ) as HTMLButtonElement;
-      await act(async () => {
-        toggle.click();
-      });
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
-      );
-      expect(store.get("appearance.v2")).toMatchObject({ sidebarOpen: false });
     });
 
     it("switches the active vault through the sidebar switcher", async () => {

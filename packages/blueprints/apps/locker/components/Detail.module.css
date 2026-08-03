@@ -37,7 +37,7 @@
 .emptyDetail .ic {
   width: 60px;
   height: 60px;
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   background: var(--bg-sunken);
   display: flex;
   align-items: center;
@@ -59,13 +59,13 @@
   padding: 15px;
 }
 .wtStat .n {
-  font: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 28px;
   font-weight: 600;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .wtStat .k {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-soft);
   margin-top: 3px;
 }
@@ -76,18 +76,17 @@
   padding: 11px 14px;
   border-bottom: 1px solid var(--line);
   width: 100%;
-  border-left: none;
-  border-right: none;
+  border-inline-start: none;
+  border-inline-end: none;
   border-top: none;
   background: none;
-  text-align: left;
+  text-align: start;
 }
 .wtItem:hover {
   background: var(--bg-sunken);
 }
 .wtBadge {
   font: var(--t-control);
-  font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 3px var(--sp-2);

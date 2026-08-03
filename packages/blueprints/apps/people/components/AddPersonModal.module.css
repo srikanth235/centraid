@@ -12,7 +12,6 @@
   background: var(--bg);
   outline: none;
   font: var(--t-body);
-  font-size: 15px;
   color: var(--text);
 }
 .input:focus {

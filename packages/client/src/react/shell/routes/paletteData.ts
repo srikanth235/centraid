@@ -4,6 +4,7 @@ import type {
 } from "../../../app-shell-context.js";
 import type { PaletteGroupDTO, PaletteRowDTO } from "../../screen-contracts.js";
 import { iconSvg } from "../iconSvg.js";
+import { LAUNCHER_DESTINATIONS } from "../launcherModel.js";
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
 import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 
@@ -13,25 +14,18 @@ import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 // `run` closure the palette invokes on Enter/click. Kept pure + deps-injected
 // so it is unit-testable without a live shell.
 
-// Labels here must match the sidebar's (navModel.ts) — the palette is the
-// keyboard route to the same destinations, and a member who reads "Devices"
-// in the rail will type "devices" here (#667). Destinations the sidebar
-// dropped (Discover, Gateway, Storage) stay listed: the palette is the
-// complete index, which is exactly what lets the rail stay short.
-const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] = [
-  { label: "Home", icon: "Home", route: { kind: "home" } },
-  { label: "Assistant", icon: "Sparkle", route: { kind: "assistant" } },
-  { label: "Notifications", icon: "Bell", route: { kind: "approvals" } },
-  { label: "Automations", icon: "Bolt", route: { kind: "automations" } },
-  { label: "Connectors", icon: "Plug", route: { kind: "connectors" } },
-  { label: "Devices", icon: "Monitor", route: { kind: "household" } },
-  { label: "Data", icon: "Folder", route: { kind: "atlas" } },
-  { label: "Analytics", icon: "Activity", route: { kind: "insights" } },
-  { label: "Discover", icon: "Compass", route: { kind: "discover" } },
-  { label: "Gateway", icon: "Cellular", route: { kind: "gateway" } },
-  { label: "Storage", icon: "Save", route: { kind: "storage" } },
-  { label: "Settings", icon: "Settings", route: { kind: "settings" } },
-];
+// The palette's destinations ARE the launcher's, read from the one model
+// rather than restated here (#707). The palette is the keyboard route to the
+// same places and the complete index of them — including the ones nobody has
+// pinned — so two lists that could disagree about a label or drop a
+// destination outright is exactly the failure to design out. A member who
+// reads "Devices" on the stem types "devices" here and gets the same row.
+const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] =
+  LAUNCHER_DESTINATIONS.map((destination) => ({
+    icon: destination.icon,
+    label: destination.label,
+    route: destination.route,
+  }));
 
 export interface PaletteDeps {
   userApps: readonly UserAppMeta[];

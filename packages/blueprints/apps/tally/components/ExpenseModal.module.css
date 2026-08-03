@@ -32,36 +32,34 @@
 }
 .splitname {
   flex: 1;
-  font: var(--t-body);
-  font-size: 13.5px;
+  font: var(--t-small);
 }
 .splitin {
   width: 92px;
   padding: 6px 9px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
   outline: none;
   font: var(--t-mono);
-  font-size: 12px;
-  text-align: right;
+  font-variant-numeric: var(--t-mono-numeric);
+  text-align: end;
 }
 .splitin:focus {
   border-color: var(--line-strong);
 }
 .splitshare {
   width: 78px;
-  text-align: right;
+  text-align: end;
   font: var(--t-mono);
-  font-size: 12px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
 .splitsum {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-faint);
   margin-top: var(--sp-2);
-  text-align: right;
+  text-align: end;
 }
 .splitsum.bad {
   color: var(--neg);

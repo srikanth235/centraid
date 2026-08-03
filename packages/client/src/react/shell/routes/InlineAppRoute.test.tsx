@@ -134,7 +134,7 @@ const nav: ShellNav = {
   canGoForward: false,
   route: { kind: "app", id: "tasks" },
 };
-const prefs = { sidebarOpen: true, theme: "dark", bgL: 5 } as never;
+const prefs = { sidebarOpen: true, theme: "dark" } as never;
 
 // A distinct appId per test — InlineAppRoute keys its module-level descriptor
 // cache on (appId, attempt), so reusing an id would serve a prior test's chunk.
@@ -148,9 +148,8 @@ function routeEl(
       appId={appId}
       loader={loader}
       nav={nav}
-      renderSidebar={() => null}
+      renderStem={() => null}
       prefs={prefs}
-      onToggleSidebar={() => {}}
     />
   );
 }

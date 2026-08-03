@@ -264,11 +264,21 @@ export function createCentraidApi(bridge: PreloadBridge) {
  * package's frozen-by-convention exports through the bridge, and `toCss()` is
  * evaluated once here (it is pure and stable for the lifetime of the build,
  * and the renderer's `theme-vars.ts` injects the string into a <style> tag).
+ *
+ * `fontFaceCss` is `@centraid/design/fonts`' `toFontFaceCss()` output, already
+ * pointed at wherever THIS host serves the vendored `.woff2` files. It is
+ * concatenated AHEAD of the token CSS rather than shipped as a second field:
+ * `theme-vars.ts` prepends `cssText` as one <style> before anything resolves
+ * `--font-sans`, and a face declared after the first `var()` lookup would let
+ * the shell paint one frame in the UA default. One string, one injection.
  */
-export function createCentraidTokens(tokens: typeof DesignTokens) {
+export function createCentraidTokens(
+  tokens: typeof DesignTokens,
+  fontFaceCss: string
+) {
   return {
     apps: [...tokens.apps],
-    cssText: tokens.toCss(),
+    cssText: `${fontFaceCss}\n${tokens.toCss()}`,
     fonts: tokens.fonts,
     icons: tokens.icons,
     palette: tokens.palette,

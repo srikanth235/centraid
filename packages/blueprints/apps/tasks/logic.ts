@@ -16,7 +16,7 @@ import {
 // defines — the same factory shape docs/logic.ts and nav.ts use. The pure
 // derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import type {
   AppState,
   BoardData,
@@ -44,7 +44,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   // Executed clears the banner and tells the caller to refresh; parked is
-  // narrated by the caller (toast + per-row pending chip, not the banner —
+  // narrated by the caller (statusLine + per-row pending chip, not the banner —
   // this is a designed calm state, not an error); failed/denied surface the
   // plain-language reason in the banner.
   function narrate(outcome: VaultOutcome | undefined): boolean {
@@ -129,7 +129,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     }
     if (outcome?.status === "parked") {
       markPending(action, input, outcome);
-      toast("Sent to the owner for confirmation.");
+      statusLine("Sent to the owner for confirmation.");
     }
     if (executed || outcome?.status === "denied") await refresh();
     else render();
@@ -192,7 +192,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       // There is no delete_task command in the manifest — the closest honest
       // "undo" for a freshly captured task is cancelling it (files it into
       // the logbook rather than erasing it, same as every other cancel).
-      toast("Task added · receipt", {
+      statusLine("Task added · receipt", {
         undoLabel: newId ? "Undo" : undefined,
         onUndo: newId
           ? () => {
@@ -216,7 +216,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     });
     if (outcome?.status === "executed") {
       logActivity(parentTaskId, `Added subtask "${raw}"`, outcome);
-      toast("Subtask added · receipt");
+      statusLine("Subtask added · receipt");
     }
     return outcome;
   }
@@ -230,7 +230,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       name: clean,
       sort_order: data.projects.length,
     });
-    if (outcome?.status === "executed") toast("Project created · receipt");
+    if (outcome?.status === "executed") statusLine("Project created · receipt");
     return outcome?.status === "executed";
   }
 
@@ -246,7 +246,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       sort_order: data.sections.filter((row) => row.project_id === projectId)
         .length,
     });
-    if (outcome?.status === "executed") toast("Section created · receipt");
+    if (outcome?.status === "executed") statusLine("Section created · receipt");
     return outcome?.status === "executed";
   }
 
@@ -303,7 +303,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         outcome
       );
       if (nextStatus === "completed") {
-        toast(`Completed “${task.title}”`, {
+        statusLine(`Completed “${task.title}”`, {
           undoLabel: "Undo",
           onUndo: () => {
             void write("set-status", {
@@ -317,7 +317,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     }
     if (outcome?.status === "parked") {
       markPending("set-status", { task_id: task.task_id }, outcome);
-      toast("Sent to the owner for confirmation.");
+      statusLine("Sent to the owner for confirmation.");
       render();
       return false;
     }
@@ -334,7 +334,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     });
     if (outcome?.status === "executed") {
       logActivity(task.task_id, "Cancelled", outcome);
-      toast(`Cancelled “${task.title}”`, {
+      statusLine(`Cancelled “${task.title}”`, {
         undoLabel: "Undo",
         onUndo: () => {
           void write("set-status", {
@@ -376,7 +376,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         activityText ?? toastText.replace(/\s*·\s*receipt$/u, ""),
         outcome
       );
-      toast(toastText);
+      statusLine(toastText);
     }
     return outcome;
   }

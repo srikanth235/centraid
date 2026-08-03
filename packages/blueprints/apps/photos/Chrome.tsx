@@ -111,7 +111,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
     .filter(Boolean)
     .join(" ");
   return (
-    <div className={shellClass}>
+    <div className={shellClass} data-tone="mat" data-density="compact">
       {/* Sidebar host — the SidebarView Fragment (scrim + <aside>) renders here.
           `display:contents` lets the <aside> be a real flex child while the
           host id survives for app.tsx's `$('sidebarMount').hidden` toggle. */}

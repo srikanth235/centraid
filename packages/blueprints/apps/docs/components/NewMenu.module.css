@@ -9,10 +9,10 @@
   padding: var(--sp-2) var(--sp-3);
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--text);
   font: var(--t-body);
-  text-align: left;
+  text-align: start;
 }
 .menuItem:hover {
   background: var(--bg-sunken);

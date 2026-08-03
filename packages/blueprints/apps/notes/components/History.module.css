@@ -21,6 +21,10 @@
   color: var(--text-soft);
   font: var(--t-small);
 }
+.version summary span {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
 .version summary strong {
   color: var(--accent-text);
   font: var(--t-control);

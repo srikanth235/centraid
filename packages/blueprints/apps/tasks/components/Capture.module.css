@@ -10,7 +10,7 @@
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   margin-bottom: 26px;
-  transition: border-color 0.15s var(--ease);
+  transition: border-color var(--dur-1) var(--ease);
 }
 .capture:focus-within {
   border-color: color-mix(
@@ -36,7 +36,6 @@
   flex: 1;
   min-width: 0;
   font: var(--t-body-strong);
-  font-size: 15px;
   color: var(--text);
   background: none;
   border: none;
@@ -70,9 +69,9 @@
   margin: 0 2px;
 }
 .nlHint {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  margin-inline-start: auto;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--accent-text);
 }
 
@@ -85,6 +84,6 @@
     order: -1;
   }
   .captureAdd {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 }

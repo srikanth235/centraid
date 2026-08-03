@@ -8,9 +8,7 @@
 
 /* Metadata eyebrow label (Capture When/Flag, Detail sections, Sidebar Today). */
 .eyebrowLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
   color: var(--text-faint);
 }
 
@@ -23,11 +21,13 @@
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  padding: 9px 10px;
-  margin: 0 -10px;
+  min-height: var(--density-row);
+  padding: 9px var(--density-pad);
+  margin-block: 0;
+  margin-inline: calc(var(--density-pad) * -1);
   border-radius: var(--r-md);
   cursor: pointer;
-  transition: background 0.12s var(--ease);
+  transition: background var(--dur-1) var(--ease);
 }
 .row:hover {
   background: var(--bg-elev);
@@ -36,7 +36,7 @@
    .kit-pending / .kit-pending-chip do the work; this is only row-shape
    integration. */
 .row:global(.kit-pending) {
-  padding-left: 10px;
+  padding-inline-start: var(--density-pad);
 }
 
 .rowMain {
@@ -50,8 +50,7 @@
   gap: 7px;
 }
 .rowTitle {
-  font: var(--t-body);
-  font-size: 14px;
+  font: var(--t-small);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -64,16 +63,15 @@
 .rowTitle mark {
   background: var(--accent-soft);
   color: var(--accent-text);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0 1px;
 }
 
 .due {
   flex-shrink: 0;
   align-self: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .due.overdue {
@@ -96,9 +94,9 @@
   padding: 0;
   cursor: pointer;
   transition:
-    background 0.15s var(--ease),
-    border-color 0.15s var(--ease),
-    transform 0.08s var(--ease);
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
 }
 .circle::after {
   content: "";
@@ -136,7 +134,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  font-size: 12px;
+  font-size: var(--t-control-size);
   color: var(--accent-text);
   background: var(--accent-soft);
   border-radius: 999px;

@@ -8,7 +8,7 @@
 // asset is shown from (issue #599) — never to the chip selection. Favoriting a
 // photo in a shared audience edits it there; the member's own library has no
 // copy of it to edit.
-import { toast } from "./kit.ts";
+import { statusLine } from "./kit.ts";
 import { act, narrate } from "./outcomes.ts";
 import type { Asset } from "./types.ts";
 
@@ -25,7 +25,7 @@ export async function toggleFavorite(
   if (narrate(outcome, noteEl)) await refresh();
 }
 
-// Restore one trashed asset; shared by the trash tile, the delete-toast
+// Restore one trashed asset; shared by the trash tile, the delete-statusLine
 // Undo, and the batch Undo-all. Album membership does not come back.
 export async function restoreAsset(
   assetId: string,
@@ -34,7 +34,7 @@ export async function restoreAsset(
 ): Promise<boolean> {
   const outcome = await act("restore", { asset_id: assetId }, scope);
   if (!narrate(outcome)) return false;
-  if (!quiet) toast("Photo restored to your library.");
+  if (!quiet) statusLine("Photo restored to your library.");
   await refresh();
   return true;
 }

@@ -85,13 +85,15 @@ function mountBuilderHistory(
 
 export interface BuilderShellProps extends UseBuilderInput {
   nav: ShellNav;
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** The frame's one status line — full-bleed hosts mount their own frame,
+   *  so they are handed the same node rather than inheriting it. */
+  statusLine?: ReactNode;
   prefs: AppearancePrefs;
-  onToggleSidebar: () => void;
 }
 
 export default function BuilderShell(props: BuilderShellProps): JSX.Element {
-  const { nav, renderSidebar, prefs, onToggleSidebar, ...builderInput } = props;
+  const { nav, renderStem, statusLine, ...builderInput } = props;
   const { showToast } = useShellActions();
   const vm = useBuilder(builderInput);
 
@@ -377,9 +379,8 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
 
   return (
     <ShellFrame
-      sidebarOpen={prefs.sidebarOpen}
-      onToggleSidebar={onToggleSidebar}
-      sidebar={renderSidebar(nav)}
+      stem={renderStem(nav)}
+      statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

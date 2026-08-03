@@ -26,7 +26,6 @@
 }
 .fieldV {
   font: var(--t-body);
-  font-size: 14px;
   margin-top: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -34,8 +33,9 @@
 }
 .fieldV.mono {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   letter-spacing: 0.02em;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .fieldV a {
   color: var(--accd-fg);
@@ -47,7 +47,7 @@
   flex-shrink: 0;
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--text-faint);
   display: flex;
   align-items: center;
@@ -58,7 +58,7 @@
   color: var(--text);
 }
 .dheadTools {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   gap: 6px;
 }
@@ -87,7 +87,6 @@
   border-radius: var(--r-xl);
   background: var(--bg-elev);
   font: var(--t-body);
-  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
   margin-top: 14px;
@@ -100,17 +99,16 @@
 }
 .tag {
   padding: var(--sp-1) 11px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-sunken);
   color: var(--text-soft);
   font: var(--t-small);
-  font-size: 12px;
 }
 .meta {
   font: var(--t-mono);
-  font-size: 10.5px;
   color: var(--text-faint);
   margin-top: 20px;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 
 /* TOTP */
@@ -125,6 +123,7 @@
   letter-spacing: 0.14em;
   color: var(--accd-fg);
   font-weight: 600;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .ring {
   width: 26px;
@@ -135,5 +134,5 @@
 /* Layout-only: pushes a foot's delete button to the far left (kit-btn danger
    carries the visual). */
 .del {
-  margin-right: auto;
+  margin-inline-end: auto;
 }

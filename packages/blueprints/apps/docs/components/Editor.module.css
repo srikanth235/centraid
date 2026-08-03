@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   background: color-mix(in oklab, var(--text) 30%, var(--scrim));
-  animation: kit-fade 0.2s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
 .editor {
   /* Paints above the sibling `.kit-modal-scrim` dismiss button. */
@@ -23,7 +23,7 @@
   flex-direction: column;
   background: var(--bg);
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -42,14 +42,20 @@
   white-space: nowrap;
 }
 .editorSave {
-  margin-left: auto;
+  margin-inline-start: auto;
   font: var(--t-mono);
   color: var(--text-faint);
   flex-shrink: 0;
 }
+/* Reading register (DESIGN.md #1): the body copy column is capped at the
+   34em reading measure and centered, rather than stretching full-bleed to
+   the dialog's own width. */
 .editorBody {
   flex: 1;
   min-height: 0;
+  max-inline-size: 34em;
+  margin-inline: auto;
+  width: 100%;
   padding: var(--sp-4) 20px 20px;
 }
 .editorStatus {

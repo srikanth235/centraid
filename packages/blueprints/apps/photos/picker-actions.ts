@@ -1,7 +1,7 @@
 // The album picker's "Add" submit — mutates the progress button directly
 // (the same `btn.textContent = …` progress-mutation pattern as upload.ts and
 // selection-actions.ts) and hands `refresh`/`closePicker` back to app.tsx.
-import { toast } from "./kit.ts";
+import { statusLine } from "./kit.ts";
 import { act, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
@@ -49,5 +49,5 @@ export async function submitPicker(
   if (parked > 0) parts.push(`${parked} awaiting approval`);
   if (queued > 0) parts.push(`${queued} saved offline`);
   if (skipped > 0) parts.push(`${skipped} already there`);
-  toast(parts.join(" · ") || "Nothing to add");
+  statusLine(parts.join(" · ") || "Nothing to add");
 }

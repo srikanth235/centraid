@@ -15,7 +15,7 @@
   justify-content: flex-end;
   background: var(--scrim);
   backdrop-filter: blur(2px);
-  animation: kit-fade 0.18s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
 .drawer {
   /* Above the backdrop's `kit-modal-scrim` close button (#573). */
@@ -25,9 +25,9 @@
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  border-left: 1px solid var(--line-strong);
+  border-inline-start: 1px solid var(--line-strong);
   box-shadow: var(--shadow-lg);
-  animation: ag-slide-r 0.24s var(--ease);
+  animation: ag-slide-r var(--dur-2) var(--ease-entry);
   overflow: auto;
 }
 @keyframes ag-slide-r {
@@ -57,14 +57,13 @@
 .drawerTitle {
   margin: 0;
   font: var(--t-title);
-  font-size: 20px;
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
 .drawerRange {
   margin: var(--sp-1) 0 0;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
 .drawerMeta {
@@ -81,8 +80,7 @@
   color: var(--text-soft);
 }
 .badge {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-control);
   border-radius: var(--r-sm);
   padding: 2px var(--sp-2);
   color: var(--accent-text);
@@ -104,7 +102,6 @@
 .drawerDesc {
   margin: 0 0 var(--sp-4);
   font: var(--t-body);
-  font-size: 13.5px;
   line-height: 1.6;
   color: var(--text-soft);
   white-space: pre-wrap;
@@ -126,8 +123,7 @@
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-control);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -137,8 +133,7 @@
 .guestName {
   flex: 1;
   min-width: 0;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-small);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -166,8 +161,7 @@
 }
 .guestStat {
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-control);
   border-radius: var(--r-sm);
   padding: 2px 7px;
   color: var(--text-faint);
@@ -213,14 +207,14 @@
 .activityDate {
   font-family: var(--font-mono);
   font-size: 10px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .receiptChip {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font: var(--t-control);
   color: var(--accent-text);
   border: 1px solid var(--accent-soft);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
 }
 .drawerAttach {
@@ -242,7 +236,7 @@
   gap: 6px;
 }
 .drawer:global(.kit-pending) {
-  border-left: 3px solid var(--app-identity);
+  border-inline-start: 3px solid var(--app-identity);
 }
 
 /* Narrow (phone): the shell's global .is-narrow state stretches the drawer

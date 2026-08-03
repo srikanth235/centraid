@@ -1,57 +1,75 @@
-/* Sidebar identity row (issue #599, Decision 14). A rounded tile icon, the
-   gateway eyebrow over the active vault name, and a native-select stepper at
-   the right edge. The WHOLE row is the switcher — the stepper is decoration
-   inside that one button, not a separate 26px hit area (var(--text)). */
+/* The vault identity control (issue #599 Decision 14; relocated in #707).
+
+   It was the sidebar's head row. The stem holds the launcher and nothing else,
+   so the identity moved to where it is actually consulted: the app bar, beside
+   what you are looking at, and Home, where you choose what to look at next. It
+   is the same component in both places — one control, one switcher.
+
+   Logical properties throughout, so it mirrors under RTL with the rest of the
+   frame. No `prefers-reduced-motion` block: the token layer honours it in one
+   global rule. No transform on hover or open — scale-on-hover is banned. */
 
 .row {
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
   flex: 1;
-  min-width: 0;
-  padding: 7px 7px 7px 8px;
-  border: none;
-  border-radius: var(--r-lg);
+  min-inline-size: 0;
+  block-size: var(--h-control);
+  padding-inline: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition:
-    background 140ms ease-out,
-    box-shadow 140ms ease-out;
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
 }
-.head:hover,
+.head:hover {
+  background: var(--bg-hover);
+  border-color: var(--line);
+}
 .head:focus-visible {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
   outline: none;
-}
-.head:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: var(--focus-ring);
 }
 .row[data-open="true"] .head {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
+  background: var(--bg-press);
+  border-color: var(--line);
 }
-.head:active:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-}
+/* A disabled control recolours its leaves — container opacity composites every
+   descendant and invalidates the contrast each token was solved for. */
 .head:disabled {
   cursor: default;
-  opacity: 0.7;
+}
+.head:disabled .name,
+.head:disabled .eyebrow {
+  color: var(--text-disabled);
 }
 
+/* The identity chip: the vault's own hue at the system tint, in the 26%
+   rounded square every app mark wears. No gradient, no gloss, no shadow — the
+   metaphor is a tinted paper label, not a glass button. */
 .avatar {
-  width: 30px;
-  height: 30px;
+  inline-size: 24px;
+  block-size: 24px;
   flex-shrink: 0;
-  border-radius: 9px;
+  border-radius: var(--chip-radius, var(--r-sm));
   display: grid;
   place-items: center;
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
+    var(--bg)
+  );
+  color: var(--chip-hue, var(--text-soft));
 }
 .avatar svg {
   display: block;
@@ -59,55 +77,40 @@
 
 .text {
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
 }
 /* The quiet context line ABOVE the selection — the gateway this client is
-   talking to, in the member's words ("This Mac"). */
+   talking to, in the member's words ("This Mac"). 11px is the floor. */
 .eyebrow {
   display: block;
-  font: var(--t-mono);
-  font-size: 9.5px;
-  line-height: 1.25;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: color 140ms ease-out;
+  transition: color var(--dur-1) var(--ease);
 }
 .name {
   display: block;
-  margin-top: 1px;
-  font: var(--t-title);
-  font-weight: 600;
-  font-size: 13.5px;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  font: var(--t-small-strong);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.head:hover .eyebrow,
-.head:focus-visible .eyebrow,
-.row[data-open="true"] .eyebrow {
-  color: var(--text-faint);
-}
 
-/* ⌃ over ⌄ — the stepper a native select wears. Two 11px chevrons pulled
-   together so they read as one glyph rather than two icons. */
+/* ⌃ over ⌄ — the stepper a native select wears. Two chevrons pulled together
+   so they read as one glyph rather than two icons. */
 .stepper {
   flex-shrink: 0;
-  width: 18px;
+  inline-size: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
-  color: var(--text-ghost);
-  transition:
-    color 140ms ease-out,
-    transform 140ms ease-out;
+  color: var(--text-faint);
+  transition: color var(--dur-1) var(--ease);
 }
 .stepper svg {
   display: block;
@@ -115,24 +118,10 @@
 .stepUp {
   display: block;
   transform: rotate(180deg);
-  margin-bottom: -3px;
+  margin-block-end: -3px;
 }
 .head:hover .stepper,
 .head:focus-visible .stepper,
 .row[data-open="true"] .stepper {
   color: var(--text-soft);
-}
-.row[data-open="true"] .stepper {
-  transform: scale(1.06);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .head,
-  .eyebrow,
-  .stepper {
-    transition: none;
-  }
-  .row[data-open="true"] .stepper {
-    transform: none;
-  }
 }
