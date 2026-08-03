@@ -150,6 +150,20 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 - tapOn:
     text: "Open Photos"
     retryTapIfNoChange: true
+# A clean iOS simulator can present the Photos privacy sheet after the cover
+# opens. It sits above the Photos hierarchy, so grant access before waiting on
+# the search marker; the conditional is a no-op once the simulator remembers it.
+- extendedWaitUntil:
+    visible: "Allow Full Access"
+    timeout: 5000
+    optional: true
+- runFlow:
+    when:
+      visible: "Allow Full Access"
+    commands:
+      - tapOn:
+          text: "Allow Full Access"
+          retryTapIfNoChange: true
 `,
     "open-photos"
   );

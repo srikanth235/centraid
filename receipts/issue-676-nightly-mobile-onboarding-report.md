@@ -22,6 +22,7 @@ accessibility zero-grey (15 cells).
 - [x] Record mobile compatibility probe and gateway request outcomes for CI diagnosis
 - [x] Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch
 - [x] Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy
+- [x] Grant iOS Photos permission before the frame-probe journey
 
 ## What changed
 
@@ -115,6 +116,13 @@ accessibility zero-grey (15 cells).
   the state change because the transparent sampling/report overlays used
   `pointerEvents="none"`. They now remain hit-testable and explicitly
   accessible while retaining their small, non-interfering overlay bounds.
+
+- **Grant iOS Photos permission before the frame-probe journey.** Run
+  30799303895 reached and tapped `Open Photos`, but a clean simulator displayed
+  the system `Allow Full Access` Photo Library sheet above the Photos cover;
+  `04-fling-photos` therefore could not see its search marker. The flow now
+  waits for that sheet when present and grants access conditionally before
+  asserting the Photos hierarchy.
 
 - **Invalidate native tunnel connections after post-open stream failures
   (30769334446).** `openBi()` can succeed briefly after the peer has stopped
@@ -241,3 +249,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785739324-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 388341 | 0 | 11571456 | 26398 | 414739 | 4.2597 | 4820776 | 0 | 166648576 | 315542 | fix(android): bind mobile proxy to IPv4 loopback (#676) |
 | codex-019fc399-ba8-1785747159-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 900425 | 0 | 35073536 | 35299 | 935724 | 11.5489 | 5721201 | 0 | 201722112 | 350841 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
 | codex-019fc399-ba8-1785747207-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8238 | 0 | 303360 | 703 | 8941 | 0.1070 | 5729439 | 0 | 202025472 | 351544 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
+| codex-019fc399-ba8-1785752421-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 434849 | 0 | 22054400 | 32584 | 467433 | 7.0895 | 6164288 | 0 | 224079872 | 384128 | fix(mobile-e2e): grant iOS Photos permission for frame probe (#676) |
