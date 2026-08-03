@@ -124,7 +124,7 @@ ${settle}
     timeout: ${SAMPLE_WINDOW_MS + 15_000}
 - copyTextFrom:
     id: "perf-frame-report"
-- evalScript: ${console.log("centraid-frame-report " + maestro.copiedText)}
+- evalScript: \${console.log("centraid-frame-report " + maestro.copiedText)}
 - takeScreenshot: frame-report-${surface}
 `;
 }
