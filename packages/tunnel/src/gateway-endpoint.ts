@@ -42,6 +42,7 @@ import {
   readBody,
   readHeaderFrame,
   sanitizeHeaders,
+  tunnelRequestHasBody,
   TUNNEL_AUTH_MODE_HEADER,
   TUNNEL_AUTH_WEB_SESSION,
   TUNNEL_ALPN,
@@ -365,18 +366,22 @@ class GatewayEndpoint {
           bodyFailed ? "bad_request" : "upstream_unreachable"
         ).finally(resolve);
       });
-      void readBody(
-        recv,
-        async (chunk) => {
-          if (!request.write(chunk)) await once(request, "drain");
-        },
-        MAX_REQUEST_BODY_BYTES
-      )
-        .then(() => request.end())
-        .catch(() => {
-          bodyFailed = true;
-          request.destroy();
-        });
+      if (tunnelRequestHasBody(header)) {
+        void readBody(
+          recv,
+          async (chunk) => {
+            if (!request.write(chunk)) await once(request, "drain");
+          },
+          MAX_REQUEST_BODY_BYTES
+        )
+          .then(() => request.end())
+          .catch(() => {
+            bodyFailed = true;
+            request.destroy();
+          });
+      } else {
+        request.end();
+      }
     });
   }
 

@@ -18,6 +18,7 @@ accessibility zero-grey (15 cells).
 - [x] Keep the frame probe inside full-screen native-stack covers
 - [x] Invalidate native tunnel connections after post-open stream failures
 - [x] Save the Android emulator snapshot before functional journeys run
+- [x] Forward bodyless tunnel metadata requests without waiting for native half-close
 
 ## What changed
 
@@ -122,6 +123,18 @@ accessibility zero-grey (15 cells).
   snapshot before the functional suite starts, so later retries pay only the
   app/flow costs.
 
+- **Forward bodyless tunnel metadata requests without waiting for native half-close.** The compatibility probe
+  is a bodyless `GET /_gateway/info`, but the JavaScript gateway forwarders and
+  Rust data-plane relay previously waited for request-stream FIN before sending
+  it upstream. `packages/tunnel/src/protocol.ts` now classifies request bodies
+  from method and `Content-Length`; `packages/tunnel/src/desktop-tunnel.ts`,
+  `packages/tunnel/src/gateway-endpoint.ts`, and
+  `packages/tunnel/data-plane/src/iroh_relay.rs` forward bodyless requests
+  immediately while retaining bounded streaming for real request bodies.
+  `packages/tunnel/src/wire-properties.test.ts` locks the classification down.
+  This removes the Android/iOS dependency on native half-close behavior that
+  turned a healthy pairing into repeated reconnect walls.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
@@ -154,6 +167,10 @@ bun run lint:e2e-flows
 bun run --cwd apps/mobile lint
 bun run --cwd apps/mobile test -- src/lib/phone-link.test.ts src/lib/replica/mobile-gateway-compatibility.integration.test.ts src/lib/replica/mobile-gateway-compatibility.test.ts
 bun run --cwd apps/mobile ci:native-state --write
+bun run --cwd packages/tunnel test
+bun run --cwd packages/tunnel lint:data-plane
+bun run turbo run typecheck --filter=@centraid/tunnel --filter=@centraid/gateway --filter=@centraid/mobile
+git diff --check
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
 ```
 
@@ -192,3 +209,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785724872-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8300 | 0 | 1128448 | 1520 | 9820 | 0.3257 | 2475221 | 0 | 82508544 | 172442 | fix(ci): harden mobile e2e recovery and caches (#676) |
 | codex-019fc399-ba8-1785724985-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5142 | 0 | 574464 | 1814 | 6956 | 0.1837 | 2480363 | 0 | 83083008 | 174256 | fix(ci): harden mobile e2e recovery and caches (#676) |
 | codex-019fc399-ba8-1785725113-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4052 | 0 | 586752 | 329 | 4381 | 0.1618 | 2484415 | 0 | 83669760 | 174585 | fix(ci): harden mobile e2e recovery and caches (#676) -m governance: allow-toolc |
+| codex-019fc399-ba8-1785730379-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 747313 | 0 | 39760896 | 57949 | 805262 | 12.6777 | 3231728 | 0 | 123430656 | 232534 | fix(tunnel): forward bodyless metadata requests (#676) |
+| codex-019fc399-ba8-1785730473-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6056 | 0 | 342784 | 1685 | 7741 | 0.1261 | 3237784 | 0 | 123773440 | 234219 | fix(tunnel): forward bodyless metadata requests (#676) |

@@ -70,6 +70,37 @@ export interface TunnelResponseHeader {
   headers: HeaderMap;
 }
 
+/**
+ * Whether the request side of a tunnel stream has bytes to drain.
+ *
+ * A body-less request still has a FIN in the wire protocol, but waiting for
+ * that FIN before forwarding GET/HEAD-style requests makes the metadata probe
+ * depend on every native binding's half-close behavior. The request headers
+ * are authoritative when they carry Content-Length; otherwise the methods
+ * that cannot carry a useful body are safe to forward immediately.
+ */
+export function tunnelRequestHasBody(
+  request: Pick<TunnelRequestHeader, "method"> & {
+    headers?: HeaderMap;
+  }
+): boolean {
+  const contentLength = Object.entries(request.headers ?? {}).find(
+    ([name]) => name.toLowerCase() === "content-length"
+  )?.[1];
+  if (contentLength !== undefined) {
+    const values = Array.isArray(contentLength)
+      ? contentLength
+      : [contentLength];
+    return values.some((value) => {
+      const parsed = Math.trunc(Number(value));
+      return !Number.isFinite(parsed) || parsed !== 0;
+    });
+  }
+  return !new Set(["GET", "HEAD", "OPTIONS", "TRACE"]).has(
+    request.method.toUpperCase()
+  );
+}
+
 export interface PairRequest {
   /** One-time pairing code from the QR payload. */
   code: string;

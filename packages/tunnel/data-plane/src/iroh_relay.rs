@@ -162,48 +162,46 @@ async fn serve_stream(
         RELAY_PROOF_HEADER,
         reqwest::header::HeaderValue::from_str(&config.control_secret)?,
     );
-    let (body_tx, body_rx) = mpsc::channel::<std::io::Result<Bytes>>(4);
-    tokio::spawn(async move {
-        let mut total = 0_usize;
-        let mut buffer = vec![0_u8; 64 * 1024];
-        loop {
-            match recv.read(&mut buffer).await {
-                Ok(None) => break,
-                Ok(Some(read)) => {
-                    total += read;
-                    if total > MAX_REQUEST_BODY_BYTES {
+    let mut outbound = client.request(method, url).headers(headers);
+    if tunnel_request_has_body(&header) {
+        let (body_tx, body_rx) = mpsc::channel::<std::io::Result<Bytes>>(4);
+        tokio::spawn(async move {
+            let mut total = 0_usize;
+            let mut buffer = vec![0_u8; 64 * 1024];
+            loop {
+                match recv.read(&mut buffer).await {
+                    Ok(None) => break,
+                    Ok(Some(read)) => {
+                        total += read;
+                        if total > MAX_REQUEST_BODY_BYTES {
+                            let _ = body_tx
+                                .send(Err(std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    "tunnel body exceeds limit",
+                                )))
+                                .await;
+                            break;
+                        }
+                        if body_tx
+                            .send(Ok(Bytes::copy_from_slice(&buffer[..read])))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
                         let _ = body_tx
-                            .send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "tunnel body exceeds limit",
-                            )))
+                            .send(Err(std::io::Error::other(error.to_string())))
                             .await;
                         break;
                     }
-                    if body_tx
-                        .send(Ok(Bytes::copy_from_slice(&buffer[..read])))
-                        .await
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-                Err(error) => {
-                    let _ = body_tx
-                        .send(Err(std::io::Error::other(error.to_string())))
-                        .await;
-                    break;
                 }
             }
-        }
-    });
-    let response = client
-        .request(method, url)
-        .headers(headers)
-        .body(reqwest::Body::wrap_stream(ReceiverStream::new(body_rx)))
-        .send()
-        .await
-        .context("forward tunneled request")?;
+        });
+        outbound = outbound.body(reqwest::Body::wrap_stream(ReceiverStream::new(body_rx)));
+    }
+    let response = outbound.send().await.context("forward tunneled request")?;
     write_header(
         &mut send,
         &TunnelResponseHeader {
@@ -218,6 +216,34 @@ async fn serve_stream(
     }
     send.finish()?;
     Ok(())
+}
+
+fn tunnel_request_has_body(header: &TunnelRequestHeader) -> bool {
+    let content_length = header
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .map(|(_, value)| value);
+    if let Some(value) = content_length {
+        return match value {
+            WireHeaderValue::One(value) => value
+                .trim()
+                .parse::<u64>()
+                .map(|length| length > 0)
+                .unwrap_or(true),
+            WireHeaderValue::Many(values) => values.iter().any(|value| {
+                value
+                    .trim()
+                    .parse::<u64>()
+                    .map(|length| length > 0)
+                    .unwrap_or(true)
+            }),
+        };
+    }
+    !matches!(
+        header.method.to_ascii_uppercase().as_str(),
+        "GET" | "HEAD" | "OPTIONS" | "TRACE"
+    )
 }
 
 async fn serve_connection(
