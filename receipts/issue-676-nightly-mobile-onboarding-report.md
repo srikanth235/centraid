@@ -131,8 +131,10 @@ accessibility zero-grey (15 cells).
   `perf-frame-sampling` after `perf-frame-arm`. The follow-up artifact from run
   30813118964 showed the arm node still present at `[386,4][398,16]` after the
   tap: its bounds overlapped the iOS status bar, so XCTest tapped system chrome
-  and never called `onPress`. The marker now sits below the status bar while the
-  sampling-only node remains fully opaque with a transparent background.
+  and never called `onPress`. Run 30827282637 confirmed that top `52` still put
+  the tap center in status chrome (`[386,52][398,64]`); the marker now sits at
+  top `72`, below the bar and the first app row, while the sampling-only node
+  remains fully opaque with a transparent background.
 
 - **Use the measured iOS launch budget for volume proof.** The rerun of
   `mobile-volume-proof` reached its twentieth relaunch with the old 30s
@@ -290,3 +292,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785770274-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20328 | 0 | 739328 | 646 | 20974 | 0.2453 | 8524988 | 0 | 318884096 | 527026 | ci(mobile-e2e): parallelize iOS suites (#676) |
 | codex-019fc399-ba8-1785770401-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 15763 | 0 | 514560 | 2397 | 18160 | 0.2040 | 8540751 | 0 | 319398656 | 529423 | ci(mobile-e2e): parallelize iOS suites (#676) |
 | codex-019fc399-ba8-1785770482-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5920 | 0 | 254976 | 716 | 6636 | 0.0893 | 8546671 | 0 | 319653632 | 530139 | ci(mobile-e2e): parallelize iOS suites (#676) -m governance: allow-toolchain-con |
+| codex-019fc399-ba8-1785773903-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 693014 | 0 | 18749696 | 29371 | 722385 | 6.8605 | 9239685 | 0 | 338403328 | 559510 | fix(ios): move frame probe below status bar (#676) |
+| codex-019fc399-ba8-1785773946-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3216 | 0 | 227840 | 348 | 3564 | 0.0702 | 9242901 | 0 | 338631168 | 559858 | fix(ios): move frame probe below status bar (#676) |

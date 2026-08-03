@@ -145,10 +145,11 @@ const styles = StyleSheet.create({
     opacity: 0.01,
     position: "absolute",
     right: 4,
-    // Keep Maestro's tap target below the iOS status bar. At top: 4 the
-    // hierarchy exposed the Pressable, but XCTest tapped the system status
-    // area and onPress never armed the sampler (run 30813118964).
-    top: 52,
+    // Keep Maestro's tap target below the iOS status bar. At top: 52 the
+    // hierarchy still exposed [386,52][398,64], whose center was system
+    // status chrome, so XCTest tapped the status area and onPress never armed
+    // the sampler (run 30827282637). The first app content row begins at y=68.
+    top: 72,
     width: 12,
     zIndex: 9999,
   },
