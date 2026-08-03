@@ -3,18 +3,22 @@ import { BRAND } from "./themes";
 
 export type IdentityPaletteKey = keyof typeof palette | "brand";
 
-/** Canonical identity fills for people, vaults, and app marks. The first
- * colour is the product default; every renderer consumes this same ordered
- * palette instead of inventing a local list or hash. */
+/** Canonical identity fills for people, vaults, and app marks — the identity
+ * hue wheel, in wheel order. The first colour is the product default, which in
+ * the Binding Layer is INK: an identity nobody has chosen a hue for renders in
+ * the same ink as everything else, rather than borrowing an app's colour.
+ * Every renderer consumes this same ordered list instead of inventing a local
+ * palette or hash. */
 export const IDENTITY_COLORS = [
   BRAND,
-  palette.indigo,
   palette.rose,
-  palette.violet,
   palette.amber,
-  palette.forest,
   palette.ochre,
+  palette.forest,
+  palette.teal,
   palette.slate,
+  palette.indigo,
+  palette.violet,
 ] as const;
 
 /** Stable two-letter identity initials shared by every runtime. */

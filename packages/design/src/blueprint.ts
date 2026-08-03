@@ -1,21 +1,37 @@
 // Blueprint CSS lowering.
 //
-// Blueprint apps share the same role names as the shell.  App identity is an
-// explicit `--app-identity` value; it never shadows the product accent used
-// for actions and selection.  The only blueprint adaptation is host-relative
-// type units and the app-neutral surface ramp.
+// Blueprint apps share the same role NAMES and now the same VALUES as the
+// shell: the Binding Layer has one ink ramp and one paper, and an app surface
+// that quietly re-tuned its own greys was the mechanism by which "one product"
+// stopped being true. The two remaining blueprint adaptations are real ones —
+// host-relative type units (rem, so 200% OS text scale works), and the fact
+// that an app owns an identity hue while the shell owns none.
+//
+// The surface ramp used to be parameterised by `--app-hue`, so every app's
+// neutrals leaned toward its own identity. That is retired: `--app-hue` is now
+// only the app's slot on the OKLCH identity wheel, and the neutrals are the
+// system's literal paper.
 
-import { paletteText, semanticShade } from "./color";
-import { spacing } from "./density";
-import { palette } from "./palette";
+import { DENSITY_TIERS, spacing } from "./density";
+import { paletteFor, paletteText } from "./palette";
 import { radii } from "./radii";
 import { emitRecipeCss } from "./recipes/css";
-import { ACCENT_TEXT_LIGHT, BRAND, EASE } from "./themes";
+import {
+  darkTheme,
+  EASE,
+  EASE_ENTRY,
+  lightTheme,
+  SURFACE_TONE_NAMES,
+  SURFACE_TONES,
+} from "./themes";
+import type { Theme } from "./themes";
 import {
   blueprintType,
   blueprintTypeShorthand,
   fontStacks,
+  type,
   typeKeyToKebab,
+  typeModifiers,
   typeSizeRungs,
 } from "./typography";
 
@@ -28,55 +44,77 @@ function block(selector: string, props: Record<string, string>): string {
   return lines.join("\n");
 }
 
-function lightProps(): Record<string, string> {
+/** The role cells that flip with the theme — identical in shape for both, so
+ *  a role can never exist on one ramp and not the other. */
+function themeProps(theme: Theme): Record<string, string> {
   const props: Record<string, string> = {
-    "--accent": BRAND,
-    "--accent-deep": "#22776B",
-    "--accent-fill": "#22776B",
-    "--accent-deep-hover": "#1D685E",
-    "--accent-light": "#62D6C6",
-    "--accent-soft": "rgba(62,200,180,.12)",
-    "--accent-text": "#0F7A6C",
-    "--app-hue": "171",
-    "--app-identity": BRAND,
-    "--app-identity-text": ACCENT_TEXT_LIGHT,
-    "--bg": "hsl(var(--app-hue) 20% 98%)",
-    "--bg-elev": "#FFFFFF",
+    "--accent": theme.accent,
+    "--accent-deep": theme.accentDeep,
+    "--accent-fill": theme.accentDeep,
+    "--accent-deep-hover": theme.accentHover,
+    "--accent-light": theme.accentLight,
+    "--accent-soft": "color-mix(in oklab, var(--accent) 8%, transparent)",
+    "--accent-text": theme.accentText,
+    "--app-identity": "var(--text)",
+    "--app-identity-text": "var(--text)",
+    "--bg": theme.bg,
+    "--bg-elev": theme.bgElev,
     "--bg-hover": "color-mix(in oklab, var(--text) 5%, transparent)",
     "--bg-press": "color-mix(in oklab, var(--text) 9%, transparent)",
-    "--bg-sel": "color-mix(in oklab, var(--accent) 12%, transparent)",
-    "--bg-sunken": "hsl(var(--app-hue) 20% 95.5%)",
-    "--danger": semanticShade("#c8382f", "blueprintLight"),
-    "--ease": EASE,
-    "--focus-ring": "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)",
-    "--focus-ring-color": BRAND,
-    "--line": "hsl(var(--app-hue) 19% 13% / .095)",
-    "--line-strong": "hsl(var(--app-hue) 19% 13% / .165)",
-    "--line-sel": "color-mix(in oklab, var(--accent) 42%, var(--line))",
-    "--on-accent": "#141820",
-    "--o-disabled": "0.45",
-    "--scrim": "hsl(var(--app-hue) 22% 8% / .48)",
-    "--shadow-lg": "0 26px 60px -24px hsl(var(--app-hue) 30% 9% / .39)",
-    "--shadow-md": "0 10px 26px -14px hsl(var(--app-hue) 30% 9% / .27)",
-    "--shadow-sm": "0 1px 2px hsl(var(--app-hue) 30% 9% / .12)",
-    "--success": semanticShade("#2f7d4f", "blueprintLight"),
-    "--target-min": "44px",
-    "--text": "hsl(var(--app-hue) 22% 12%)",
-    "--text-faint": "hsl(var(--app-hue) 8% 42%)",
-    "--text-ghost": "hsl(var(--app-hue) 8% 52%)",
-    "--text-inv": "#FFFFFF",
-    "--text-disabled": "hsl(var(--app-hue) 8% 58%)",
-    "--text-soft": "hsl(var(--app-hue) 9% 36%)",
-    "--warning": semanticShade("#9a6b1f", "blueprintLight"),
-    "--dur-1": "120ms",
-    "--dur-2": "200ms",
+    "--bg-sel": "color-mix(in oklab, var(--link) 12%, transparent)",
+    "--bg-sunken": theme.bgSunken,
+    "--danger": theme.danger,
+    "--focus-ring": "0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring-color)",
+    "--focus-ring-color": theme.ring,
+    "--line": theme.line,
+    "--line-strong": theme.lineStrong,
+    "--line-sel": "color-mix(in oklab, var(--link) 42%, var(--line))",
+    "--link": theme.link,
+    "--net": theme.net,
+    "--on-accent": "#FDFDFC",
+    "--scrim": theme.scrim,
+    "--shadow-lg": theme.shadowLg,
+    "--shadow-md": theme.shadowMd,
+    "--shadow-sm": theme.shadowSm,
+    "--success": theme.success,
+    "--text": theme.text,
+    "--text-faint": theme.textFaint,
+    "--text-ghost": theme.textGhost,
+    "--text-inv": theme.textInv,
+    "--text-disabled": theme.textDisabled,
+    "--text-soft": theme.textSoft,
+    "--warning": theme.warning,
   };
-  for (const [name, value] of Object.entries(palette)) {
+  for (const tone of SURFACE_TONE_NAMES) {
+    props[`--bg-tone-${tone}`] = SURFACE_TONES[tone][theme.kind];
+  }
+  for (const [name, value] of Object.entries(paletteFor(theme.kind))) {
     props[`--c-${name}`] = value;
   }
-  for (const [name, value] of Object.entries(paletteText.light)) {
+  for (const [name, value] of Object.entries(paletteText[theme.kind])) {
     props[`--c-${name}-text`] = value;
   }
+  return props;
+}
+
+function lightProps(): Record<string, string> {
+  const props: Record<string, string> = {
+    // Hue 0 is the wheel origin an app inherits when it declares none; the
+    // shipped neutrals no longer read it, so leaving it unset costs nothing.
+    "--app-hue": "0",
+    "--dur-1": "140ms",
+    "--dur-2": "280ms",
+    "--ease": EASE,
+    "--ease-entry": EASE_ENTRY,
+    "--h-control": "34px",
+    "--h-row": "44px",
+    "--h-segmented": "28px",
+    "--density-row": `${DENSITY_TIERS.comfortable.row}px`,
+    "--density-pad": `${DENSITY_TIERS.comfortable.pad}px`,
+    "--o-disabled": "0.45",
+    "--target-min": "44px",
+    ...themeProps(lightTheme),
+  };
   for (const [key, value] of Object.entries(radii)) {
     props[`--r-${key}`] = `${value}px`;
   }
@@ -89,48 +127,26 @@ function lightProps(): Record<string, string> {
   for (const [key, value] of Object.entries(blueprintType)) {
     props[`--t-${typeKeyToKebab(key)}`] = blueprintTypeShorthand(value);
   }
-  Object.assign(props, typeSizeRungs(blueprintType));
-  return props;
-}
-
-function darkProps(): Record<string, string> {
-  const props: Record<string, string> = {
-    "--accent-deep": "#34B7A4",
-    "--accent-fill": "#34B7A4",
-    "--accent-deep-hover": "#4BC3B2",
-    "--accent-text": "#3EC8B4",
-    "--app-identity-text": BRAND,
-    "--bg": "hsl(0 0% var(--bg-l))",
-    "--bg-elev": "hsl(0 0% calc(var(--bg-l) + 5%))",
-    "--bg-sunken": "hsl(0 0% calc(var(--bg-l) + 9%))",
-    "--bg-l": "10%",
-    "--danger": semanticShade("#f0645b", "blueprintDark"),
-    "--line": "hsl(0 0% 76% / .11)",
-    "--line-strong": "hsl(0 0% 76% / .2)",
-    "--line-sel": "color-mix(in oklab, var(--accent) 42%, var(--line))",
-    "--scrim": "hsl(0 0% 0% / .68)",
-    "--shadow-lg": "0 30px 70px -24px rgba(0,0,0,.7)",
-    "--shadow-md": "0 12px 30px -14px rgba(0,0,0,.6)",
-    "--success": semanticShade("#5cc98a", "blueprintDark"),
-    "--text": "hsl(0 0% 94%)",
-    "--text-faint": "hsl(0 0% 60%)",
-    "--text-ghost": "hsl(0 0% 68%)",
-    "--text-inv": "hsl(0 0% calc(var(--bg-l) + 4%))",
-    "--text-disabled": "hsl(0 0% 72%)",
-    "--text-soft": "hsl(0 0% 66%)",
-    "--warning": semanticShade("#e0a94a", "blueprintDark"),
-  };
-  for (const [name, value] of Object.entries(paletteText.dark)) {
-    props[`--c-${name}-text`] = value;
-  }
+  Object.assign(props, typeSizeRungs(blueprintType), typeModifiers(type));
   return props;
 }
 
 export function toBlueprintCss(): string {
-  const dark = darkProps();
+  const dark = themeProps(darkTheme);
   const darkLines = Object.entries(dark)
     .map(([key, value]) => `    ${key}: ${value};`)
     .join("\n");
+  const tones = SURFACE_TONE_NAMES.map((tone) =>
+    block(`:root[data-tone='${tone}']`, { "--bg": `var(--bg-tone-${tone})` })
+  ).join("\n\n");
+  const densities = Object.entries(DENSITY_TIERS)
+    .map(([tier, value]) =>
+      block(`:root[data-density='${tier}']`, {
+        "--density-pad": `${value.pad}px`,
+        "--density-row": `${value.row}px`,
+      })
+    )
+    .join("\n\n");
   return [
     "/* Generated by @centraid/design — do not edit by hand. */",
     block(":root", lightProps()),
@@ -143,7 +159,19 @@ export function toBlueprintCss(): string {
       "  }",
       "}",
     ].join("\n"),
+    tones,
+    densities,
     "@media (pointer: fine) { :root { --target-min: 32px; } }",
+    [
+      "@media (prefers-reduced-motion: reduce) {",
+      "  :where(:root) { --dur-1: 0ms; --dur-2: 0ms; }",
+      "  *, *::before, *::after {",
+      "    animation-duration: 0s !important;",
+      "    animation-iteration-count: 1 !important;",
+      "    transition-duration: 0s !important;",
+      "  }",
+      "}",
+    ].join("\n"),
     "/* End generated by @centraid/design — do not edit by hand. */",
     "",
   ].join("\n\n");

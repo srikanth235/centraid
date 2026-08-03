@@ -2,130 +2,160 @@
 version: alpha
 name: Centraid
 description: >-
-  Product grammar for Centraid's desktop shell, compact shell, blueprint apps, served apps, and native mobile surfaces. Values are pinned to packages/design/src.
+  The Binding Layer: one ink-on-paper shell wrapping many first-party apps across a desktop shell, an installable web PWA, served blueprint apps, and native mobile. Values are pinned to packages/design/src.
 colors:
   primary: "{colors.brand}"
-  brand: "#3EC8B4"
-  accent: "#3EC8B4"
-  accent-light: "#62D6C6"
-  accent-deep: "#22776B"
-  accent-deep-dark: "#34B7A4"
-  accent-text: "#0F7A6C"
-  accent-soft: "rgba(62,200,180,.12)"
-  success: "#436837"
-  success-dark: "#6ba15b"
-  danger: "#a53636"
-  danger-dark: "#d37878"
+  brand: "#141414"
+  accent: "#141414"
+  accent-dark: "#EDEDEC"
+  accent-light: "#3D3D3B"
+  accent-light-dark: "#C8C8C6"
+  accent-deep: "#141414"
+  accent-deep-dark: "#EDEDEC"
+  accent-hover: "#000000"
+  accent-hover-dark: "#FFFFFF"
+  accent-text: "#141414"
+  accent-text-dark: "#EDEDEC"
+  accent-soft: "rgba(20,20,20,.08)"
+  link: "#2D4BA8"
+  link-dark: "#9DB0F0"
+  net: "#9A3B2E"
+  net-dark: "#E08878"
+  ring: "#4A67C8"
+  ring-dark: "#8098E8"
+  success: "#3a6540"
+  success-dark: "#7fb588"
+  danger: "#9a3b2e"
+  danger-dark: "#e08878"
   warning: "#7c5619"
-  warning-dark: "#e0a94a"
-  c-amber: "#E89A3C"
-  c-forest: "#5C8A4E"
-  c-indigo: "#4E68DD"
-  c-ochre: "#B47B3F"
-  c-rose: "#E55772"
-  c-slate: "#5C677D"
-  c-teal: "#2EA098"
-  c-violet: "#7C5BD9"
-  c-amber-text: "#8f5611"
-  c-forest-text: "#46693c"
-  c-indigo-text: "#3452d8"
-  c-ochre-text: "#83592e"
-  c-rose-text: "#b91d3a"
-  c-slate-text: "#535d71"
-  c-teal-text: "#1f6d67"
-  c-violet-text: "#6842d3"
-  c-amber-text-dark: "#eba653"
-  c-forest-text-dark: "#8eb881"
-  c-indigo-text-dark: "#97a6eb"
-  c-ochre-text-dark: "#d0a679"
-  c-rose-text-dark: "#ee90a2"
-  c-slate-text-dark: "#a3abbb"
-  c-teal-text-dark: "#38c4ba"
-  c-violet-text-dark: "#b4a1e9"
-  light-bg: "#FCFCFC"
-  light-bg-app: "#FFFFFF"
-  light-bg-elev: "#FFFFFF"
-  light-bg-sunken: "#F0F1F3"
-  light-text: "#14161B"
-  light-text-soft: "rgba(20,22,27,0.78)"
-  light-text-faint: "rgba(20,22,27,0.62)"
-  light-text-ghost: "rgba(20,22,27,0.48)"
-  light-text-inv: "#F4F5F7"
-  light-line: "rgba(20,22,27,0.11)"
-  light-line-strong: "rgba(20,22,27,0.20)"
-  dark-bg: "#0D0D0D"
-  dark-bg-app: "#000000"
-  dark-bg-elev: "#1A1A1A"
-  dark-bg-sunken: "#050505"
-  dark-text: "#ECEEF2"
-  dark-text-soft: "rgba(236,238,242,0.72)"
-  dark-text-faint: "rgba(236,238,242,0.52)"
-  dark-text-ghost: "rgba(236,238,242,0.38)"
-  dark-text-inv: "#141820"
-  dark-line: "rgba(220,230,245,0.08)"
-  dark-line-strong: "rgba(220,230,245,0.16)"
+  warning-dark: "#d9a75b"
+  c-amber: "#904e46"
+  c-forest: "#397247"
+  c-indigo: "#635a93"
+  c-ochre: "#845922"
+  c-rose: "#8c4c61"
+  c-slate: "#3e6596"
+  c-teal: "#00707e"
+  c-violet: "#7a5283"
+  c-amber-dark: "#d78f85"
+  c-forest-dark: "#7bb587"
+  c-indigo-dark: "#a39bda"
+  c-ochre-dark: "#c99b65"
+  c-rose-dark: "#d48da2"
+  c-slate-dark: "#7ea7dc"
+  c-teal-dark: "#58b4c4"
+  c-violet-dark: "#be92c8"
+  c-amber-text: "#894a43"
+  c-forest-text: "#346841"
+  c-indigo-text: "#5f568d"
+  c-ochre-text: "#7c5420"
+  c-rose-text: "#894a5f"
+  c-slate-text: "#3a5e8b"
+  c-teal-text: "#006774"
+  c-violet-text: "#744e7d"
+  c-amber-text-dark: "#d78f85"
+  c-forest-text-dark: "#7bb587"
+  c-indigo-text-dark: "#a39bda"
+  c-ochre-text-dark: "#c99b65"
+  c-rose-text-dark: "#d48da2"
+  c-slate-text-dark: "#7ea7dc"
+  c-teal-text-dark: "#58b4c4"
+  c-violet-text-dark: "#be92c8"
+  tone-neutral: "#FDFDFC"
+  tone-paper: "#FCFBF8"
+  tone-mat: "#F0EFED"
+  tone-cool: "#FBFCFC"
+  tone-warm: "#FDFBF7"
+  tone-neutral-dark: "#0E0E0E"
+  tone-paper-dark: "#12110E"
+  tone-mat-dark: "#0A0A0A"
+  tone-cool-dark: "#0D0E0F"
+  tone-warm-dark: "#131110"
+  light-bg: "#FDFDFC"
+  light-bg-app: "#F0EFED"
+  light-bg-elev: "#F5F4F2"
+  light-bg-sunken: "#F9F8F6"
+  light-text: "#141414"
+  light-text-soft: "#5A5A58"
+  light-text-faint: "#6C6C69"
+  light-text-ghost: "#888885"
+  light-text-disabled: "#9C9C99"
+  light-text-inv: "#FDFDFC"
+  light-line: "#EFEEEB"
+  light-line-strong: "#E5E4E1"
+  dark-bg: "#0E0E0E"
+  dark-bg-app: "#060606"
+  dark-bg-elev: "#171716"
+  dark-bg-sunken: "#121211"
+  dark-text: "#EDEDEC"
+  dark-text-soft: "#9A9A98"
+  dark-text-faint: "#878785"
+  dark-text-ghost: "#656563"
+  dark-text-disabled: "#565654"
+  dark-text-inv: "#0E0E0E"
+  dark-line: "#1B1B1A"
+  dark-line-strong: "#232322"
 typography:
   display:
-    fontFamily: "system-ui"
-    fontSize: "28px"
-    fontWeight: "600"
-    lineHeight: "34px"
+    fontFamily: "Instrument Serif"
+    fontSize: "31px"
+    fontWeight: "400"
+    lineHeight: "36px"
+    letterSpacing: "-0.01em"
   title:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "20px"
-    fontWeight: "600"
+    fontWeight: "500"
     lineHeight: "26px"
+  reading:
+    fontFamily: "Source Serif 4"
+    fontSize: "19px"
+    fontWeight: "400"
+    lineHeight: "33px"
   body:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "15px"
     fontWeight: "400"
     lineHeight: "22px"
   body-strong:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "15px"
-    fontWeight: "600"
+    fontWeight: "500"
     lineHeight: "22px"
   small:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "13px"
     fontWeight: "400"
-    lineHeight: "18px"
+    lineHeight: "19px"
   small-strong:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "13px"
-    fontWeight: "600"
-    lineHeight: "18px"
-  mono:
-    fontFamily: "ui-monospace"
-    fontSize: "12px"
     fontWeight: "500"
-    lineHeight: "16px"
+    lineHeight: "19px"
   control:
-    fontFamily: "system-ui"
+    fontFamily: "Instrument Sans"
     fontSize: "11px"
     fontWeight: "500"
-    lineHeight: "14px"
+    lineHeight: "15px"
   eyebrow:
-    fontFamily: "ui-monospace"
-    fontSize: "10px"
-    fontWeight: "600"
-    lineHeight: "13px"
-  hero:
-    fontFamily: "system-ui"
-    fontSize: "40px"
-    fontWeight: "600"
-    lineHeight: "44px"
-  greeting:
-    fontFamily: "ui-serif"
-    fontSize: "28px"
-    fontWeight: "600"
-    lineHeight: "34px"
+    fontFamily: "Instrument Sans"
+    fontSize: "11px"
+    fontWeight: "400"
+    lineHeight: "15px"
+    letterSpacing: "0.06em"
+    textTransform: "uppercase"
+  mono:
+    fontFamily: "DM Mono"
+    fontSize: "11.5px"
+    fontWeight: "400"
+    lineHeight: "16px"
+    fontVariantNumeric: "tabular-nums"
 rounded:
-  xs: "2px"
+  xs: "0px"
   sm: "4px"
-  md: "6px"
-  lg: "10px"
-  xl: "14px"
+  md: "7px"
+  lg: "12px"
+  xl: "12px"
   pill: "999px"
 spacing:
   "1": "4px"
@@ -134,18 +164,17 @@ spacing:
   "4": "16px"
   "5": "24px"
   "6": "32px"
-  "7": "48px"
 components:
   Button:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
-    typography: "{typography.body-strong}"
+    typography: "{typography.small-strong}"
     rounded: "{rounded.md}"
     padding: "{spacing.3}"
   Button-primary:
-    backgroundColor: "{colors.accent-deep}"
+    backgroundColor: "{colors.accent}"
     textColor: "{colors.light-text-inv}"
-    typography: "{typography.body-strong}"
+    typography: "{typography.small-strong}"
     rounded: "{rounded.md}"
     padding: "{spacing.3}"
   Button-secondary:
@@ -157,18 +186,13 @@ components:
     textColor: "{colors.light-text-soft}"
     rounded: "{rounded.md}"
   Button-destructive:
-    backgroundColor: "{colors.light-bg-elev}"
-    textColor: "{colors.danger}"
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.net}"
     rounded: "{rounded.md}"
-  Button-destructiveFilled:
-    backgroundColor: "{colors.danger}"
-    textColor: "{colors.light-text-inv}"
-    rounded: "{rounded.md}"
-    padding: "{spacing.3}"
   IconButton:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.md}"
   TextField:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -178,7 +202,7 @@ components:
   Search:
     backgroundColor: "{colors.light-bg-sunken}"
     textColor: "{colors.light-text}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.md}"
   Surface:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -188,13 +212,15 @@ components:
     textColor: "{colors.light-text}"
     padding: "{spacing.4}"
   Chip:
-    backgroundColor: "{colors.accent-soft}"
-    textColor: "{colors.light-text}"
-    rounded: "{rounded.pill}"
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text-soft}"
+    typography: "{typography.control}"
+    rounded: "{rounded.md}"
   Badge:
-    backgroundColor: "{colors.accent-soft}"
-    textColor: "{colors.light-text}"
-    rounded: "{rounded.pill}"
+    backgroundColor: "{colors.light-bg}"
+    textColor: "{colors.light-text-soft}"
+    typography: "{typography.eyebrow}"
+    rounded: "{rounded.md}"
   Segmented:
     backgroundColor: "{colors.light-bg-sunken}"
     textColor: "{colors.light-text}"
@@ -202,20 +228,21 @@ components:
   Dialog:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
-    rounded: "{rounded.xl}"
+    rounded: "{rounded.lg}"
     padding: "{spacing.5}"
   Sheet:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
-    rounded: "{rounded.xl}"
+    rounded: "{rounded.lg}"
     padding: "{spacing.5}"
   Toast:
-    backgroundColor: "{colors.dark-bg-elev}"
-    textColor: "{colors.dark-text}"
-    rounded: "{rounded.lg}"
-    padding: "{spacing.4}"
-  Banner:
     backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.light-text}"
+    typography: "{typography.mono}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.2}"
+  Banner:
+    backgroundColor: "{colors.light-bg}"
     textColor: "{colors.light-text}"
     rounded: "{rounded.md}"
   Empty:
@@ -224,31 +251,32 @@ components:
     typography: "{typography.small}"
   Loading:
     backgroundColor: "{colors.light-bg-sunken}"
-    textColor: "{colors.accent-text}"
+    textColor: "{colors.light-text-soft}"
+    typography: "{typography.mono}"
     rounded: "{rounded.pill}"
   Error:
-    backgroundColor: "{colors.accent-soft}"
+    backgroundColor: "{colors.light-bg}"
     textColor: "{colors.danger}"
     rounded: "{rounded.md}"
   AppTile:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
-    rounded: "{rounded.xl}"
+    rounded: "{rounded.lg}"
   AppHeader:
     backgroundColor: "{colors.light-bg}"
     textColor: "{colors.light-text}"
-    typography: "{typography.title}"
+    typography: "{typography.display}"
   Nav:
-    backgroundColor: "{colors.light-bg}"
+    backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text-soft}"
   Switch:
     backgroundColor: "{colors.light-bg-sunken}"
-    textColor: "{colors.accent-text}"
+    textColor: "{colors.light-text}"
     rounded: "{rounded.pill}"
   Checkbox:
     backgroundColor: "{colors.light-bg-elev}"
-    textColor: "{colors.accent-text}"
-    rounded: "{rounded.xs}"
+    textColor: "{colors.light-text}"
+    rounded: "{rounded.sm}"
   Select:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -264,7 +292,7 @@ components:
     padding: "{spacing.2}"
   Progress:
     backgroundColor: "{colors.light-bg-sunken}"
-    textColor: "{colors.accent-text}"
+    textColor: "{colors.light-text}"
     rounded: "{rounded.pill}"
   Avatar:
     backgroundColor: "{colors.c-slate}"
@@ -278,89 +306,162 @@ This is the normative product constitution and the machine-readable design brief
 
 ## Overview
 
-Centraid is a calm field notebook for personal data. Neutrals do the work: hierarchy comes from type, spacing, surfaces, and hairlines. The product grammar is one semantic contract with three lowerings: shell CSS (`SH`/`SH-c`), blueprint CSS (`BI`/`BS`), and typed native (`MO`). A served blueprint and an inline blueprint are the same app contract; only the host boundary changes.
+Centraid is a personal, local-first superapp: one shell wrapping many first-party apps whose content characters could not be more different — a photo grid wants to disappear behind imagery, a document wants reading comfort, an agenda wants dense scannable structure. They have to feel like rooms in one house, not separate products, while each app's content leads.
 
-The five laws are binding:
+The answer is a **binding layer of five invariants**. Everything not named as an invariant is explicitly the app's own choice, and the freedom table below is as binding as the invariants are. That division is the system.
 
-1. A role is a name, meaning, and contrast obligation. A profile may omit only by declaring `unsupported` and a reason.
-2. Accent is a word, not a slot. Centraid teal (`#3EC8B4`) owns action and selection; app identity is a separate hue.
-3. Scarcity is visible: at most one accent-filled action is composed into a viewport, including host chrome. The default button is `secondary`, never accent-filled.
-4. Containers follow interaction shape: a notification is a toast/banner; a decision is a dialog/sheet.
-5. Fills publish their ink. A renderer never chooses foreground by guessing from a background.
+The product grammar is one semantic contract with three lowerings: shell CSS (`SH`/`SH-c`), blueprint CSS (`BI`/`BS`), and typed native (`MO`). A served blueprint and an inline blueprint are the same app contract; only the host boundary changes. A role is a name, a meaning, and a contrast obligation together — a profile may omit one only by declaring `unsupported` and a reason.
+
+### The five invariants
+
+1. **Navigation is the stem.** A reserved band 92px wide on the leading edge, or the bottom band on mobile. It holds the launcher and nothing else, is never themed by an app, never scrolls away, and never changes width. Its promise is "always the same distance from the reading edge" — not "from the left" — so every rule that positions it uses logical properties and it mirrors under RTL. The mobile band is capped at 5 apps plus More; a tab below 44px stops being a tap target, so the cap is a constraint and not a preference.
+2. **One ramp, two registers.** Seven sizes, four faces, two weights. Every app declares its primary register — reading or scanning — and draws every role from the same ramp. Nothing falls below 11px, navigation labels never fall below `--text-soft`, and numerics are mono and tabular in every app without exception.
+3. **One control vocabulary, and the shell owns no colour.** Every control is ink on paper; commit is a filled ink button, never a hue. At most one filled ink element per view. Destructive is an **outlined** button in `--net`, never a fill. Actions live in bounded controls; where a control must be text it carries the ink step plus a hover ground plus a trailing arrow, because hover alone is nothing on a phone. One hue is reserved for prose links, selection and the focus ring, and it is never permitted on a control. State is never expressed with container `opacity` — a recessive state takes its own token on the leaf element.
+4. **One spatial rhythm.** 4px base, scale 4 / 8 / 12 / 16 / 24 / 32. Control 34px, row 44px, segmented 28px, stem 92px. Density tiers scale row height and content padding only. Any text in a fixed-height container is line-clamped, never `overflow: hidden` — a clipped baseline reads as a rendering bug.
+5. **One motion and feedback grammar.** Entry and settle at 280ms, a state change at 140ms, and state reported on one persistent status line rather than a toast. Never a spinner, a bounce, a parallax, a scale-on-hover, a red dot, a badge count, or a toast. `prefers-reduced-motion` is honoured in one global rule.
+
+### What an app may set for itself
+
+This list is as important as the invariants. An app that stays inside it needs no permission from the system, and an app that steps outside it is changing the product, not its own screen.
+
+| Property | Freedom | Token |
+| --- | --- | --- |
+| Surface tone | Free — neutral, paper, mat, cool, or warm. Only the page moves. | `data-tone` → `--bg-tone-*` |
+| Density tier | Free — comfortable, compact, or dense. Row height and content padding only. | `data-density` → `--density-row`, `--density-pad` |
+| Layout | Free. Full-bleed grid, reading measure, 7-column table, message stack. No constraint. | — |
+| Primary register | Declared, not invented: reading, scanning, or none, chosen from the ramp. | `--t-reading` / `--t-small` |
+| Colour | One identity hue, in the icon chip and as a content marker. **Never on a control.** | `--app-hue`, `--app-identity`, `--c-*` |
+
+Everything else — control shape, ink ramp, hairlines, motion, the stem, the status line — belongs to the system.
+
+### The brief-to-repo role mapping
+
+The Binding Layer brief names its roles differently from this repo. The values poured into the existing registry names; there is **no alias layer**. This table is the mapping, once, so nobody has to re-derive it.
+
+| Brief | Repo role | Note |
+| --- | --- | --- |
+| `ink` | `--text` | Primary ink; also `--accent`, because the accent IS the ink. |
+| `ink2` | `--text-soft` | Secondary ink and inactive navigation labels. |
+| `ink3` | `--text-faint` | Validated against the deepest surface tone, not against `--bg`. |
+| `surf` | `--bg-elev` | Raised paper. Darker than the page in light, lighter in dark. |
+| `line` | `--line-strong` | The brief's `line` is the EXPLICIT boundary, which is this repo's strong rung. |
+| `lineS` | `--line` | The brief's hairline is this repo's light rung — the names already ordered this way. |
+| `accent` | `--accent` | Ink. `--accent-fill`, `--accent-deep`, `--accent-deep-hover`, `--accent-text` and `--accent-soft` all resolve from it. |
+| `onAccent` | `--text-inv` | The page colour, not pure white. |
+| `link` | `--link` | New role. Prose links and selection only. |
+| `ring` | `--focus-ring-color` | New value. 2px at a 2px offset via `--focus-ring`. |
+| `net` | `--net` | New role. Borders and 2px rules only, never a fill. |
+
+Retired with the flip: the teal brand hue, the five-accent `ACCENT_PALETTE` and the native `accentKey` parameter, the `--bg-l` dark-ramp anchor, `--t-hero`, `--t-greeting`, and the 48px spacing rung.
+
+### The app identity hues
+
+`oklch(0.50 0.09 h)` in light and `oklch(0.72 0.09 h)` in dark, resolved to sRGB hex at build time by `oklchToHex` in [packages/design/src/oklab.ts](packages/design/src/oklab.ts). One lightness and one chroma per theme, only the hue moves — which is what makes the hues equally loud and stops one app out-shouting another. A third-party hue is clamped to the same chroma and lightness before it is admitted.
+
+| App    | Hue | Key      | App    | Hue | Key      |
+| ------ | --- | -------- | ------ | --- | -------- |
+| locker | 0   | `rose`   | docs   | 210 | `teal`   |
+| photos | 28  | `amber`  | notes  | 255 | `slate`  |
+| tasks  | 70  | `ochre`  | tally  | 290 | `indigo` |
+| agenda | 150 | `forest` | people | 320 | `violet` |
+
+Home takes no hue: it renders in `--text-soft`. Colour is never the only channel — every app mark is distinguishable by silhouette alone at 14px, which is what makes the hue system safe for colour-blind readers.
 
 ## Colors
 
-`--accent` is the product accent on all five surfaces. `--accent-fill` and `--accent-deep-hover` are solved fill roles paired with `--text-inv`; `--accent-text` is the solved text rung. `--accent-soft` is a wash only. App identity is `--app-identity`/`--app-hue` in blueprint surfaces and is not a second action accent.
+**The shell spends no colour.** `--accent` is ink in both themes, and so are `--accent-fill`, `--accent-deep`, `--accent-text` and `--accent-light`. `--accent-deep-hover` steps the fill further FROM the ink it carries, so a hover can never reduce a label's contrast. `--accent-soft` is an 8% ink wash for hover ground, never a fill. If a hue ever reappears in this family, every app identity colour silently stops meaning "this belongs to that app".
 
-The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, and `--bg-sel`. The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`; fill roles publish their required ink. Lines are `--line`, `--line-strong`, and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web/blueprint; native owns its platform focus treatment.
+Three hues are reserved and named. `--link` is prose links and text selection, and is never permitted on a control; `--bg-sel` and `--line-sel` are washes of it. `--focus-ring-color` is the ring. `--net` is "this leaves the device" — a border or a 2px rule, never a fill, because nothing alarming should be a large filled surface. `--danger` is solved from the same base as `--net` so a destructive action and a network egress read as one consequence.
 
-The semantic states are `--success`, `--warning`, and `--danger`. Each has a light and dark solve and is tested against card, track, and its own wash. Status hue separation is measured in Oklab; a merely legible grey is not a status color. Disabled text uses `--text-disabled`; non-text disabled affordances use `--o-disabled: 0.45` once, never stacked opacity.
+The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, `--bg-sel`, and the five tone roles `--bg-tone-neutral` / `-paper` / `-mat` / `-cool` / `-warm`. Surfaces are PAPER, not elevation: in light the raised surface is darker than the page, in dark it is lighter — a tile is a sheet laid on the page, not a plane floating above it. An app's declared tone retunes `--bg` and nothing else.
 
-The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only adapters such as `--target-min` and `--bg-l` carry environment-dependent values. The shell dark ramp pins `--bg-l: 5%`; the blueprint dark ramp pins `--bg-l: 10%`. There is no alias layer. `--r-*`, `--sp-*`, and `--font-*` are shared names and values in the shell and blueprint emitters. Motion uses `--dur-1: 120ms` and `--dur-2: 200ms`.
+The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface tone, not against `--bg`** — in dark every raised surface is lighter than the page, and in light the `mat` tone is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
+
+The semantic states are `--success`, `--warning`, and `--danger`. Each is solved per theme against the hardest surface it lands on AND against a 12% wash of itself; hue separation is measured in Oklab, so a merely legible grey is not a status colour. Disabled text uses `--text-disabled`; non-text disabled affordances use `--o-disabled: 0.45` once, on the LEAF, never on a container — opacity composites every descendant and silently invalidates token-level contrast.
+
+The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only adapters such as `--target-min` carry environment-dependent values. Both ramps are literal: the `--bg-l` anchor retired because the Binding Layer's dark surfaces are warm-tinted paper, which a one-knob greyscale calc cannot express. There is no alias layer. `--r-*`, `--sp-*`, and `--font-*` are shared names and values in the shell and blueprint emitters.
 
 ## Typography
 
-Roles are not families. There is one face per genus: `system-ui` sans, `ui-serif` serif, and `ui-monospace` mono. Mobile maps those genera to loaded Geist, Playfair Display, and JetBrains Mono faces. The legacy marketing face and its 700 scale are retired.
+Roles are not families. There is one face per genus, all four shipped from the repo with no network fetch: `Instrument Sans` sans, `Source Serif 4` serif, `Instrument Serif` display, and `DM Mono` mono. Every family token carries mandatory CJK fallbacks — none of the four faces has CJK coverage, and without them the display face silently drops to a UA default and the product's signature disappears in its largest markets. Mobile maps those genera to loaded faces through the same names.
 
-| Role               | Size / line-height | Weight | Native delta |
-| ------------------ | ------------------ | ------ | ------------ |
-| `--t-display`      | 28 / 34            | 600    | +2 / +2      |
-| `--t-title`        | 20 / 26            | 600    | +2 / +2      |
-| `--t-body`         | 15 / 22            | 400    | +2 / +2      |
-| `--t-body-strong`  | 15 / 22            | 600    | +2 / +2      |
-| `--t-small`        | 13 / 18            | 400    | +2 / +2      |
-| `--t-small-strong` | 13 / 18            | 600    | +2 / +2      |
-| `--t-mono`         | 12 / 16            | 500    | +1 / +2      |
-| `--t-control`      | 11 / 14            | 500    | +2 / +2      |
-| `--t-eyebrow`      | 10 / 13            | 600    | +1 / +2      |
-| `--t-hero`         | 40 / 44            | 600    | +2 / +2      |
-| `--t-greeting`     | 28 / 34            | 600    | +2 / +2      |
+| Role | Brief role | Face | Size / line-height | Weight | Native delta |
+| --- | --- | --- | --- | --- | --- |
+| `--t-display` | Display | Instrument Serif | 31 / 36, −0.01em | 400 | −4 / −4 |
+| `--t-title` | (sanctioned intermediate) | Instrument Sans | 20 / 26 | 500 | +2 / +2 |
+| `--t-reading` | Reading | Source Serif 4 | 19 / 33 | 400 | −1.5 / −2 |
+| `--t-body` | Body | Instrument Sans | 15 / 22 | 400 | +2 / +2 |
+| `--t-body-strong` | Body emphasis | Instrument Sans | 15 / 22 | 500 | +2 / +2 |
+| `--t-small` | UI | Instrument Sans | 13 / 19 | 400 | +2 / +2 |
+| `--t-small-strong` | UI | Instrument Sans | 13 / 19 | 500 | +2 / +2 |
+| `--t-control` | Micro | Instrument Sans | 11 / 15 | 500 | +2 / +2 |
+| `--t-eyebrow` | Micro caps | Instrument Sans | 11 / 15, +0.06em, uppercase | 400 | +2 / +2 |
+| `--t-mono` | Numeric | DM Mono | 11.5 / 16, tabular-nums | 400 | +1 / +2 |
 
-Every `--t-*` is a `font` shorthand. The distinct composable size rungs are `--t-body-size` 15px, `--t-control-size` 11px, `--t-display-size` 28px, `--t-eyebrow-size` 10px, `--t-hero-size` 40px, `--t-mono-size` 12px, `--t-small-size` 13px, and `--t-title-size` 20px. `--t-body-strong-size` does not exist because it would duplicate the body rung. There are no line-height rungs. Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Text scaling and Dynamic Type may enlarge a role, never shrink below its accessibility floor.
+`--t-title` is the one role with no slot in the brief. It is kept deliberately: a section heading between the 31px display serif and the 15px body is real, and the alternative is every surface inventing one. Everything else is the brief's seven roles, with the two-weight pairs named from the prose side (`small`) and the control side (`small-strong`, `control`).
+
+Link is not a size role: it inherits, takes `--link`, and is always underlined.
+
+Every `--t-*` is a `font` shorthand, and the three properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
+
+Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Two roles step DOWN on a phone rather than up — display to 27 and reading to 17.5 — because a 31px serif title overruns a 390px screen. Text scaling and Dynamic Type may enlarge a role, never shrink it below 11px.
 
 ## Layout
 
-`--sp-1` 4px, `--sp-2` 8px, `--sp-3` 12px, `--sp-4` 16px, `--sp-5` 24px, `--sp-6` 32px, and `--sp-7` 48px are the one spacing scale. There is no density token. Radii are `--r-xs` 2px, `--r-sm` 4px, `--r-md` 6px, `--r-lg` 10px, `--r-xl` 14px, and `--r-pill` 999px. A container follows the interaction shape: reading surfaces stay hard-edged; a dialog/sheet composes `xl`; a chip/avatar/FAB composes `pill`.
+`--sp-1` 4px, `--sp-2` 8px, `--sp-3` 12px, `--sp-4` 16px, `--sp-5` 24px, and `--sp-6` 32px are the one spacing scale; the 48px rung retired because the system's largest rhythm step is the 32px desktop content margin. Content margin is 32px desktop and 18px mobile.
 
-The target-min adapter is 44px for coarse web and iOS, 48dp for Android, and 32px for fine-pointer web. Safe-area insets belong to the native renderer. Compact shell law begins at 720px; it changes navigation arrangement, not token meaning. Zoom, Dynamic Type, and reduced motion are required test axes.
+The component metrics are tokens, not conventions: `--h-control` 34px, `--h-row` 44px, `--h-segmented` 28px, and `--w-stem` 92px. Density tiers move `--density-row` and `--density-pad` only — comfortable 44/16, compact 38/12, dense 34/8 — and never control size, because a control below 34px stops being reliably hittable. Mobile renders one tier looser than declared.
+
+Radii are `--r-xs` 0px (content), `--r-sm` 4px (the one sub-control rung), `--r-md` 7px (controls), `--r-lg` 12px and `--r-xl` 12px (containers), and `--r-pill` 999px. An app icon container is 26% of its own size, which no static token can carry — `iconChipRadius()` in [packages/design/src/radii.ts](packages/design/src/radii.ts) is the one source for it.
+
+The target-min adapter is 44px for coarse web and iOS, 48dp for Android, and 32px for fine-pointer web. Safe-area insets belong to the native renderer. Compact shell law begins at 720px; it changes navigation arrangement, not token meaning. Prefer `minmax(<n>px, auto)` over a fixed grid row so content grows at 150% text scale instead of slicing, and express a mobile row's different information density as STRUCTURE — `flex-wrap` on a parent is inert when the children are `nowrap` with `flex: 1`.
 
 ## Elevation & Depth
 
-`--bg-sunken` recesses, `--bg-elev` raises, and `--shadow-sm`/`--shadow-md`/`--shadow-lg` are used only for a meaningful elevation change. Glass is detached-host chrome (`--glass-film`/`--glass-sheen`) and never blueprint content. `--device-wall` is a wall composite, not a content surface. Motion uses one curve, `--ease: cubic-bezier(0.2, 0.7, 0.3, 1)`, and normal transitions stay at or below 200ms; reduced motion removes movement.
+There is very little of it. `--bg-elev` is raised paper and `--bg-sunken` a recessed track; `--shadow-sm`/`--shadow-md`/`--shadow-lg` exist for a dialog, a sheet and a popover, and for nothing else. Glass retired with the flip: `--glass-sheen` is `none` in both themes, because the metaphor is a tinted paper label, not a button under a lens. `--device-wall` is a wall composite, not a content surface. An app icon container has no gradient, no gloss and no drop shadow.
+
+Motion has two cases and two curves. Entry and settle is `--dur-2: 280ms` on `--ease-entry: cubic-bezier(0.2, 0.7, 0.2, 1)`; a state change is `--dur-1: 140ms` on `--ease: cubic-bezier(0.3, 0, 0.4, 1)`. `prefers-reduced-motion` is honoured in ONE global rule emitted by `toCss()` — duration to zero, opacity only — and never per component.
+
+Feedback is one persistent status line at the bottom of the frame, in the numeric register with a small neutral dot. A long local operation gets a determinate bar and exact counts: a spinner says "wait" without saying how long, which is the one thing a local-first product always knows.
 
 ## Shapes
 
-Geometry is an instrument, not a pillow: action controls use `md`, surfaces use `lg`/`xl`, chips and identity marks use `pill`. A shape does not decide semantics, and a renderer does not silently pick a radius because a component happens to be a card.
+Geometry is an instrument, not a pillow: content is square, a control is 7px, a container is 12px, an identity mark is 26% of its size, and only an avatar or a switch track is a pill. A shape does not decide semantics, and a renderer does not silently pick a radius because a component happens to be a card.
 
 ## Components
 
-The Revision 3 recipe inventory is the contract: Button, IconButton, TextField, Search, Surface, ListRow, Chip, Badge, Segmented, Dialog, Sheet, Toast, Banner, Empty, Loading, Error, AppTile, AppHeader, Nav, Switch, Checkbox, Select, DateTimeField, Tooltip, Progress, and Avatar. Each recipe declares rest plus supported hover/pressed/focus/disabled/loading/invalid/selected/open states, capability (`web`, `blueprint`, `native`), and accessibility obligations. Segmented absorbs tabs; ListRow absorbs grip/reorder.
+The recipe inventory is the contract: Button, IconButton, TextField, Search, Surface, ListRow, Chip, Badge, Segmented, Dialog, Sheet, Toast, Banner, Empty, Loading, Error, AppTile, AppHeader, Nav, Switch, Checkbox, Select, DateTimeField, Tooltip, Progress, and Avatar. Each recipe declares rest plus supported hover/pressed/focus/disabled/loading/invalid/selected/open states, capability (`web`, `blueprint`, `native`), and accessibility obligations. Segmented absorbs tabs; ListRow absorbs grip/reorder.
 
-Button variants are exactly `primary`, `secondary`, `quiet`, `destructive`, and `destructiveFilled`. `primary` is accent fill with inverse ink; `secondary` is the default raised action; `quiet` has no fill; destructive variants use danger roles. All controls use `--target-min`, visible focus, and the recipe's duration. Haptics are a native moment channel, not a visual state. DateTimeField uses the native picker on mobile; Tooltip is supplemental and unsupported on native.
+Button variants are `primary`, `secondary`, `quiet`, and `destructive`. `primary` is the ink fill with `--text-inv` on it, and there is at most one per view. `secondary` is the default raised action. `quiet` has no fill. `destructive` is OUTLINED in `--net` — a filled destructive button is not part of this grammar, and the `destructiveFilled` variant is retired as the kit re-skin removes its last renderer. All controls use `--h-control` and `--target-min`, a visible 2px focus ring at a 2px offset, and the recipe's duration. Haptics are a native moment channel, not a visual state. DateTimeField uses the native picker on mobile; Tooltip is supplemental and unsupported on native.
+
+`Toast` is retired as a notification container: state belongs on the status line, in the numeric register, updating in place. `Loading` is determinate-only with static skeletons — a shimmer is attention-seeking about work the product can simply describe.
 
 The three renderers are generated from the same recipe table: the kit renderer emits scoped CSS, the shell renderer emits the shared recipe CSS, and native composes typed recipe states. Kit primitives are recipe-derived; content remains app-owned. Inline apps scope under `:where(.centraid-inline-scope)` and served apps use the same recipe output. Freshness, CSS↔native, and scoped≡served tests are required.
 
-One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Feather dictionaries, blueprint-local icon maps, and kit literals are not sources of truth. Identity uses one initials formatter and one identity-color resolver. Relative time and bytes use one formatter module.
+One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
 
 ## Responsive Behavior
 
-The local responsive constitution is explicit: SH-c is the compact shell at 720px; BI/BS remain host-relative; MO uses safe-area-aware sheets and 44pt/48dp target floors. Layout may adapt, but role names, color meaning, type hierarchy, radii, spacing, icon keys, and action scarcity do not. Components must survive 200% zoom, Dynamic Type, reduced motion, coarse/fine pointers, keyboard focus, and light/dark themes.
+The local responsive constitution is explicit: SH-c is the compact shell at 720px and composes as the mobile band; BI/BS remain host-relative; MO uses safe-area-aware sheets and 44pt/48dp target floors. The mobile band is capped at 5 apps plus More and no tab falls below 44px. Layout may adapt, but role names, colour meaning, type hierarchy, radii, spacing, icon keys, and action scarcity do not. Components must survive 200% zoom, Dynamic Type, reduced motion, coarse/fine pointers, keyboard focus, RTL, and light/dark themes. Under RTL the stem mirrors, which is only true while every rule uses logical properties.
 
 ## Agent Prompt Guide
 
-When authoring an app, start with a recipe and a moment, then choose only roles from `packages/design/src/roles.ts`. Use `primary` once per viewport; use `secondary` for ordinary actions. Use `--accent-text` for accent text, `--text-inv` for published fills, and a status role only for status. Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
+When authoring an app, start with a recipe and a moment, then choose only roles from [packages/design/src/roles.ts](packages/design/src/roles.ts). Declare your surface tone, your density tier and your register; do not invent a fourth axis. Use `primary` once per viewport and `secondary` for ordinary actions. Use `--accent-text` for the action colour on type, `--text-inv` for published fills, `--link` for prose links only, `--net` for anything that leaves the device, and a status role only for status. Put every number in `--t-mono`. Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
 
 ## Do's and Don'ts
 
-Do use shared roles, recipes, icon keys, formatters, safe-area adapters, and generated lowerings. Do keep app identity separate from product accent. Do add a receipt and update the matching refactor progress log when a system fact changes.
+Do use shared roles, recipes, icon keys, formatters, safe-area adapters, and generated lowerings. Do keep app identity separate from the shell, which spends none. Do line-clamp text in a fixed-height container. Do give a recessive state its own token on the leaf element. Do add a receipt and update the matching refactor progress log when a system fact changes.
 
-Do not hardcode colors, font stacks, spacing, radii, icon dictionaries, or foreground choices. Do not add a new token in app CSS or kit CSS. Do not make a default button accent-filled, create a second accent, or use a toast as a decision container. Do not restore `--t-tiny`, `--lib-*`, `--font-title`, `--mono`, `--bezel*`, or `--accent-midnight` as compatibility aliases.
+Do not hardcode colours, font stacks, spacing, radii, icon dictionaries, or foreground choices. Do not add a new token in app CSS or kit CSS. Do not put a hue on a control, ship a second filled element in one view, fill a destructive button, or use a toast as a notification. Do not express state with container `opacity`, clip text with `overflow: hidden`, use a spinner, a badge count or a red dot, or write a physical direction property where a logical one exists. Do not restore `--bg-l`, `--t-hero`, `--t-greeting`, `--sp-7`, `ACCENT_PALETTE`, `--t-tiny`, `--lib-*`, `--font-title`, `--mono`, `--bezel*`, or `--accent-midnight` as compatibility aliases.
 
 ### References
 
 - [packages/design/src/roles.ts](packages/design/src/roles.ts) — role registry and profile matrix
-- [packages/design/src/recipes/index.ts](packages/design/src/recipes/index.ts) — Revision 3 recipes
+- [packages/design/src/recipes/index.ts](packages/design/src/recipes/index.ts) — the recipe inventory
 - [packages/design/src/contract.ts](packages/design/src/contract.ts) — emitted property contracts
+- [packages/design/src/fonts.ts](packages/design/src/fonts.ts) — the four bundled faces and the `@font-face` emitter
+- [docs/design/handoff-binding-layer/README.md](docs/design/handoff-binding-layer/README.md) — the Binding Layer brief this constitution implements
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
 - [docs/refactors/product-grammar.md](docs/refactors/product-grammar.md) — migration safety argument and progress log
 - `bun run lint:design-md` — official design.md validation
+- `bun run check:pr` — the full local mirror of CI

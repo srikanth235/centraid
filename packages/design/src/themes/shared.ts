@@ -1,135 +1,172 @@
-// Centraid — Theme interface + shared constants.
+// Centraid — Theme interface + shared constants (the Binding Layer).
 // Each preset under this folder builds a `Theme` literal; the
 // `themes/index.ts` barrel collects them into a typed registry.
+//
+// THE SHELL OWNS NO HUE. Every control is ink on paper; commit is a filled ink
+// button, never a colour. That is the load-bearing decision of this system: if
+// the shell spends no colour, then every colour on screen provably belongs to
+// an app, and the per-app identity hues in `palette.ts` actually mean
+// something. `--accent` therefore survives as a ROLE NAME and resolves to ink.
+//
+// Exactly one hue is reserved, and never on a control: `link` for prose links
+// and text selection, `ring` for the focus ring. One more, `net`, is the
+// "leaves the device" red — it appears as a border or a 2px rule and never as
+// a fill, because nothing alarming should be a large filled surface.
 
-import { accentRamp, semanticShade } from "../color";
-import type { AccentRamp } from "../color";
-import { palette } from "../palette";
+import { semanticShade } from "../color";
 import type { Palette } from "../palette";
 
-// Brand teal — the single source of truth for the Centraid identity.
-// This is the exact hue used by the logo + app-icon marks; the SVG
-// assets under `assets/` and `docs/assets/` hardcode this same hex, and
-// `toCss()` emits it as a theme-independent `--accent` var.
-export const BRAND = "#3EC8B4";
-
-// Teal accent ramp derived from BRAND. Used for the FAB, sparkle button,
-// primary CTAs, brand mark, focus rings, and active state in version
-// history. Both registered themes declare this accent, and the pref layer
-// only overrides it once the owner picks a different one (#608 group P).
-// The base accent is BRAND itself (see above); the ramp extends from it.
-export const ACCENT_LIGHT = "#62D6C6";
-
-// The accent as a FILLED surface — the primary button, the brand mark, the
-// pressed chip. This rung is the one place the accent carries text, so it is
-// not a free hand-pick: it is solved so `--text-inv` clears AA **on** it.
+// ── Ink ────────────────────────────────────────────────────────────────────
 //
-// The old `#2AA593` was a lightness nudge off BRAND and measured 3.04:1 under
-// white — a real WCAG 1.4.3 failure the `@google/design.md` linter surfaced
-// (#686 F3). CSS has no shipped way to choose the ink from the background
-// (`color-contrast()` is unimplemented and `color-mix()` cannot branch), and
-// an app may retune the accent to any of the eight palette hues, so the FILL
-// is what moves: `accentFillShade()` in `../color.ts` walks BRAND down its own
-// hue to the lightest shade that clears 4.8:1. Saturation and hue are
-// untouched — this is still unmistakably the brand teal, one stop before
-// `--accent-deep`.
+// `BRAND` is the light ink and `BRAND_DARK` the dark one. The product mark is
+// ink: DESIGN.md's `primary` resolves through `BRAND`, but it no longer names
+// a hue — Centraid's identity is the paper and the ink on it, not a colour
+// anyone else could also own.
 //
-// The two ramps take OPPOSITE halves of the same pair, because `--text-inv`
-// itself flips: near-white (#F4F5F7) on light, near-black (#141820) on dark.
-// So the light ramp fills deep and the dark ramp fills lifted — 4.91:1 and
-// 7.16:1 respectively. `contrast.test.ts` measures both off the emitted CSS.
-export const ACCENT_DEEP = "#22776B";
-export const ACCENT_DEEP_DARK = "#34B7A4";
+// `ink3` (`--text-faint`) is the rung that decides whether this system is
+// honest. It is validated against the WORST surface it can land on — in light
+// that is the `mat` tone (`#F0EFED`), which is deeper than both the page and
+// the raised paper, and in dark it is the raised paper (`#171716`), which is
+// LIGHTER than the page. The brief specifies `#70706D` for light and validates
+// it against `surf` alone; on the mat tone that measures 4.32:1, so the
+// shipped value is deepened one step to `#6C6C69` (4.58:1 on mat, 5.18:1 on
+// the page). That is the only place this package departs from the brief's
+// colour table, and `contrast.test.ts` is what would catch it drifting back.
+export const BRAND = "#141414";
+export const BRAND_DARK = "#EDEDEC";
+const INK_2 = "#5A5A58";
+const INK_2_DARK = "#9A9A98";
+const INK_3 = "#6C6C69";
+const INK_3_DARK = "#878785";
+// Below the ramp: placeholders and disabled glyphs. WCAG 1.4.3 exempts
+// inactive controls, and these two rungs exist precisely so a recessive state
+// gets its own colour token on the LEAF element instead of an `opacity` on the
+// container — opacity composites every descendant and silently invalidates
+// token-level contrast.
+const INK_GHOST = "#888885";
+const INK_GHOST_DARK = "#656563";
+const INK_DISABLED = "#9C9C99";
+const INK_DISABLED_DARK = "#565654";
 
-// BRAND as TEXT. It is legible as a button face with white on it, and as text
-// on the dark ramp (9.4:1), but on a near-white surface it lands at 2.0:1 —
-// below the floor for text at any size. Every `color: var(--accent-text)` site
-// reads this instead, so a light surface gets a deepened teal that still reads
-// as the brand hue (5.1:1 on `--bg`). Fills and focus rings keep `--accent`.
-export const ACCENT_TEXT_LIGHT = "#0F7A6C";
+/** The ink stepped one rung toward the paper — restrained emphasis, never a
+ *  fill that carries text. */
+export const ACCENT_LIGHT = "#3D3D3B";
+export const ACCENT_LIGHT_DARK = "#C8C8C6";
 
-/** Product-wide accent choices. These are legal only as an owner preference;
- * app-local surfaces must consume `--app-identity` instead. Keeping the
- * solved ramps here lets shell and native share the same override values. */
-export type AccentKey = "blue" | "ochre" | "rose" | "teal" | "violet";
-export const ACCENT_PALETTE: Record<AccentKey, AccentRamp> = {
-  blue: accentRamp(palette.indigo),
-  ochre: accentRamp(palette.ochre),
-  rose: accentRamp(palette.rose),
-  teal: {
-    accent: BRAND,
-    deep: ACCENT_DEEP,
-    light: ACCENT_LIGHT,
-    text: ACCENT_TEXT_LIGHT,
-  },
-  violet: accentRamp(palette.violet),
-};
+/**
+ * The ink under hover/press when it is A FILL. It steps DEEPER (light) or
+ * BRIGHTER (dark), i.e. further from the ink it carries, so a hover can never
+ * reduce the contrast of the label sitting on it.
+ *
+ * There is deliberately no `ACCENT_DEEP` or `ACCENT_TEXT` constant beside
+ * these: the fill and the text rung ARE the ink, so naming them again would
+ * be an alias layer with extra steps. The ROLES (`--accent-fill`,
+ * `--accent-text`) still exist — a surface needs a name for the job — but they
+ * resolve from `theme.accent`, and there is one value to change.
+ */
+export const ACCENT_HOVER = "#000000";
+export const ACCENT_HOVER_DARK = "#FFFFFF";
 
-// Semantic states, as TEXT. All three are overwhelmingly `color:` on small
-// prose in this repo (131 `color:` rules between them, 9–13.7px, none of them
-// large text), so each is SOLVED rather than hand-picked — `semanticShade()`
-// walks the base along its own hue to the lightest/deepest shade that clears
-// 4.8:1 on the hardest shell surface and on a 12% self-tint of itself there
-// (the `color-mix(… var(--danger) 12%, transparent)` chip is the commonest
-// site of all). Hue and saturation never move.
+// ── The reserved hues ──────────────────────────────────────────────────────
+
+/** Prose links and text selection. Never permitted on a control. */
+export const LINK = "#2D4BA8";
+export const LINK_DARK = "#9DB0F0";
+/** The focus ring, at 2px with a 2px offset. Separate from `LINK` so a focused
+ *  filled-ink button gets a ring that is visible against black. */
+export const RING = "#4A67C8";
+export const RING_DARK = "#8098E8";
+/**
+ * "This leaves the device." Borders and 2px rules ONLY — never a fill.
+ * `--danger` is solved from the same base so a destructive action and a
+ * network egress read as the same consequence.
+ */
+export const NET = "#9A3B2E";
+export const NET_DARK = "#E08878";
+
+// ── Surfaces ───────────────────────────────────────────────────────────────
 //
-// The hand-picked values these replace all missed the body floor somewhere:
-// `#C44A4A` measured 3.74:1 on dark `--bg-elev` and 4.20:1 on light
-// `--bg-sunken` — DESIGN.md claimed it "clears AA on both ramps" and nothing
-// pinned the claim, because `contrast.test.ts` held these three roles to the
-// 3:1 NON-TEXT floor and only on `--bg`. `#9A6B1F` was 4.13:1 on light
-// `--bg-sunken` and `#5C8A4E` 4.40:1 on dark `--bg-elev`. `#E0A94A` was the
-// one that already cleared, and the solver leaves it untouched.
-//
-// DANGER is no longer shared across the ramps: the two surfaces pull in
-// opposite directions (deepen under near-white, lift under near-black), which
-// is why one literal could not clear both.
-const DANGER_BASE = "#C44A4A";
-const SUCCESS_BASE_DARK = "#5C8A4E";
-const SUCCESS_BASE_LIGHT = "#456B39";
-// Amber is the hue; each ramp takes the lightness its own surfaces allow. The
-// role became a contract token in #672, after the kit and the client both
-// painted `var(--warn)` — a name no emitter ever defined.
-const WARNING_BASE_DARK = "#E0A94A";
-const WARNING_BASE_LIGHT = "#9A6B1F";
+// Paper, not elevation. The raised surface in light mode is DARKER than the
+// page (`#F5F4F2` under `#FDFDFC`) and in dark mode LIGHTER (`#171716` over
+// `#0E0E0E`) — a tile is a sheet of paper laid on the page, not a plane
+// floating above it.
 
-export const SUCCESS = semanticShade(SUCCESS_BASE_DARK, "shellDark");
-export const SUCCESS_LIGHT = semanticShade(SUCCESS_BASE_LIGHT, "shellLight");
-export const DANGER = semanticShade(DANGER_BASE, "shellLight");
-export const DANGER_DARK = semanticShade(DANGER_BASE, "shellDark");
-export const WARNING = semanticShade(WARNING_BASE_DARK, "shellDark");
-export const WARNING_LIGHT = semanticShade(WARNING_BASE_LIGHT, "shellLight");
+/**
+ * The per-app surface tones. An app declares one; it retunes `--bg` only —
+ * the raised paper, the hairlines and the ink are invariant, which is what
+ * keeps five differently-toned apps recognisably one product.
+ */
+export const SURFACE_TONES = {
+  cool: { dark: "#0D0E0F", light: "#FBFCFC" },
+  mat: { dark: "#0A0A0A", light: "#F0EFED" },
+  neutral: { dark: "#0E0E0E", light: "#FDFDFC" },
+  paper: { dark: "#12110E", light: "#FCFBF8" },
+  warm: { dark: "#131110", light: "#FDFBF7" },
+} as const;
+
+export type SurfaceTone = keyof typeof SURFACE_TONES;
+
+/** Tone order, as the tone axis is documented and emitted. */
+export const SURFACE_TONE_NAMES = [
+  "neutral",
+  "paper",
+  "mat",
+  "cool",
+  "warm",
+] as const satisfies readonly SurfaceTone[];
+
+// ── Semantic states ────────────────────────────────────────────────────────
+//
+// Kept as roles because recipes and ~130 stylesheet sites reference them, and
+// re-solved for the ink-on-paper world: low chroma, legible as TEXT on every
+// surface AND on a 12% wash of themselves, and never a large filled surface.
+// `semanticShade()` walks each base along its own hue — hue and saturation
+// never move — to the lightest/deepest shade that clears 4.8:1, so "darken it
+// until it passes" cannot quietly turn a state into a grey.
+const DANGER_BASE_LIGHT = NET;
+const DANGER_BASE_DARK = NET_DARK;
+const SUCCESS_BASE_LIGHT = "#3E6B44";
+const SUCCESS_BASE_DARK = "#7FB588";
+const WARNING_BASE_LIGHT = "#7C5619";
+const WARNING_BASE_DARK = "#D9A75B";
+
+export const DANGER = semanticShade(DANGER_BASE_LIGHT, "light");
+export const DANGER_DARK = semanticShade(DANGER_BASE_DARK, "dark");
+export const SUCCESS_LIGHT = semanticShade(SUCCESS_BASE_LIGHT, "light");
+export const SUCCESS = semanticShade(SUCCESS_BASE_DARK, "dark");
+export const WARNING_LIGHT = semanticShade(WARNING_BASE_LIGHT, "light");
+export const WARNING = semanticShade(WARNING_BASE_DARK, "dark");
 
 export interface Theme {
-  /** Light vs dark family — drives the picker grouping and the
-   * applicability of dark-only tuning knobs (surface temperature, --bg-l).
-   * Must equal the theme's registry key; see themes/index.ts. */
+  /** Light vs dark family — drives the picker grouping. Must equal the
+   * theme's registry key; see themes/index.ts. */
   kind: "light" | "dark";
 
-  /** Single brand accent — FAB, sparkle, primary CTAs, focus rings. */
+  /** Ink as the action colour — the one filled control per view. */
   accent: string;
-  /** Lighter accent for "new" badges / hovered active rows. */
+  /** Ink stepped toward the paper, for restrained emphasis. */
   accentLight: string;
-  /** Darker accent for pressed states / depth. */
+  /** Ink AS A FILL. Same value as `accent`; the role names the job. */
   accentDeep: string;
-  /** Accent value chosen for text against the current theme's surface. */
+  /** The fill under hover/press — further from the ink it carries. */
+  accentHover: string;
+  /** Ink as text. */
   accentText: string;
 
-  /** Positive state — green check, "live" status pill. */
+  /** Positive state — complete, connected. Text and rules, never a fill. */
   success: string;
-  /** Negative state — destructive action confirmations, error states. */
+  /** Negative state — destructive confirmations, errors. Outline, never fill. */
   danger: string;
   /** Cautionary state — over-budget readings, degraded status. */
   warning: string;
+  /** "Leaves the device" — borders and 2px rules only. */
+  net: string;
+  /** Prose links and text selection. Never on a control. */
+  link: string;
+  /** The focus ring. */
+  ring: string;
 
-  /**
-   * Single "input" lightness for the dark ramp — surfaces below derive
-   * from it via `hsl(... calc(var(--bg-l) ± n%))`. Emitted only when set;
-   * concrete-surface themes leave it undefined.
-   */
-  bgL?: string;
-
-  // Surfaces (low contrast → high contrast)
+  // Surfaces (page → raised paper)
   bg: string;
   bgSunken: string;
   bgElev: string;
@@ -140,9 +177,12 @@ export interface Theme {
   textSoft: string;
   textFaint: string;
   textGhost: string;
+  textDisabled: string;
   textInv: string;
 
-  // Hairlines
+  // Hairlines. `line` is the LIGHT rung the brief calls `lineS` (separators,
+  // tile borders); `lineStrong` is the brief's `line` (control borders,
+  // section rules). The repo's names already ordered them that way.
   line: string;
   lineStrong: string;
   /** Modal and image-overlay veil. */
@@ -153,28 +193,45 @@ export interface Theme {
   shadowMd: string;
   shadowLg: string;
 
-  /** Vertical "wall" gradient for the main pane and the bottom layer
-   * of the device-wall composite. */
+  /** The wall behind the frame. */
   bgWall: string;
 
-  /** Signature backdrop behind any "device" surface — crosshatch over
-   * `var(--bg-wall)`. Desktop-only. */
+  /** Signature backdrop behind any "device" surface. Desktop-only. */
   deviceWall: string;
 
-  // Sidebar surface — translucent + backdrop-blurred chrome introduced
-  // in v0.5. Desktop-only (mobile has no sidebar shell).
+  /** The stem/chrome surface. Never themed by an app. */
   sidebarBg: string;
   sidebarBlur: string;
   sidebarDivider: string;
 
-  /** App-icon palette — same hues across themes by design. */
+  /** The app identity ring for this theme. */
   palette: Palette;
 }
 
-// Motion. One easing curve for the whole product: a calm, instrument-grade
-// ease-out that both emitters publish as `--ease`. Shell and blueprint
-// surfaces must not spell this role twice, so the literal lives here and
-// nowhere else. It sits with the brand constants rather than in its own
-// module because every extra module in this package widens the shell
-// barrel's load graph (oxlint `no-barrel-file`).
-export const EASE = "cubic-bezier(0.2, 0.7, 0.3, 1)";
+// ── Motion ─────────────────────────────────────────────────────────────────
+//
+// Two cases, two curves, and that is the whole grammar. Entry/settle is slow
+// and lands softly; a state change is quick and decisive. `prefers-reduced-
+// motion` is honoured in ONE global rule (see `toCss`), never per component.
+export const EASE = "cubic-bezier(0.3, 0, 0.4, 1)";
+export const EASE_ENTRY = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+export const DUR_STATE = "140ms";
+export const DUR_ENTRY = "280ms";
+
+// The ink ramp rungs, exported for the two theme presets below.
+export const INK_RAMP = {
+  dark: {
+    disabled: INK_DISABLED_DARK,
+    faint: INK_3_DARK,
+    ghost: INK_GHOST_DARK,
+    soft: INK_2_DARK,
+    text: BRAND_DARK,
+  },
+  light: {
+    disabled: INK_DISABLED,
+    faint: INK_3,
+    ghost: INK_GHOST,
+    soft: INK_2,
+    text: BRAND,
+  },
+} as const;

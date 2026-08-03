@@ -10,7 +10,13 @@ import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
 import { ADAPTERS, contractForProfile } from "./roles";
-import { blueprintType, fontStacks, type, typeSizeRungs } from "./typography";
+import {
+  blueprintType,
+  fontStacks,
+  type,
+  typeModifiers,
+  typeSizeRungs,
+} from "./typography";
 
 const paletteNames = Object.keys(palette).flatMap((key) => [
   `--c-${key}`,
@@ -35,9 +41,6 @@ const adapterNames = (profile: "blueprint" | "shell"): string[] =>
     .filter((adapter) =>
       (adapter.profiles as readonly string[]).includes(profile)
     )
-    // --bg-l is emitted only inside the dark theme block, not on the root
-    // contract tested here. It remains a documented adapter in roles.ts.
-    .filter((adapter) => adapter.css !== "--bg-l")
     .map((adapter) => adapter.css);
 
 export const SHELL_TOKEN_CONTRACT = [
@@ -46,17 +49,13 @@ export const SHELL_TOKEN_CONTRACT = [
     ...commonScale,
     ...typeNames(type),
     ...Object.keys(typeSizeRungs(type)),
+    ...Object.keys(typeModifiers(type)),
     ...Object.keys(library).map((key) => {
       const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
       return `--tile-${suffix}`;
     }),
     ...contractForProfile("shell"),
     ...adapterNames("shell"),
-    "--dur-1",
-    "--dur-2",
-    "--ease",
-    "--focus-ring",
-    "--o-disabled",
   ]),
 ].sort();
 
@@ -66,6 +65,7 @@ export const BLUEPRINT_TOKEN_CONTRACT = [
     ...commonScale,
     ...typeNames(blueprintType),
     ...Object.keys(typeSizeRungs(blueprintType)),
+    ...Object.keys(typeModifiers(type)),
     ...contractForProfile("blueprint"),
     ...adapterNames("blueprint"),
   ]),

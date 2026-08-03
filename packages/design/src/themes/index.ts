@@ -10,14 +10,26 @@ import { darkTheme, lightTheme } from "./centraid";
 
 export type { Theme } from "./shared";
 export {
-  ACCENT_PALETTE,
-  ACCENT_DEEP,
+  ACCENT_HOVER,
+  BRAND_DARK,
+  ACCENT_HOVER_DARK,
   ACCENT_LIGHT,
-  ACCENT_TEXT_LIGHT,
+  ACCENT_LIGHT_DARK,
   BRAND,
+  DUR_ENTRY,
+  DUR_STATE,
   EASE,
+  EASE_ENTRY,
+  LINK,
+  LINK_DARK,
+  NET,
+  NET_DARK,
+  RING,
+  RING_DARK,
+  SURFACE_TONE_NAMES,
+  SURFACE_TONES,
 } from "./shared";
-export type { AccentKey } from "./shared";
+export type { SurfaceTone } from "./shared";
 
 export { darkTheme, lightTheme } from "./centraid";
 

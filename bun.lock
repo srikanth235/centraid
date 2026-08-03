@@ -294,6 +294,10 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/blob-format": "workspace:*",
+        "@fontsource/dm-mono": "5.2.5",
+        "@fontsource/instrument-sans": "5.2.5",
+        "@fontsource/instrument-serif": "5.2.5",
+        "@fontsource/source-serif-4": "5.2.5",
       },
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
@@ -319,7 +323,7 @@
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "jpeg-js": "^0.4.4",
-        "pngjs": "^7.0.0",
+        "pngjs": "7.0.0",
         "qrcode": "^1.5.4",
         "sharp": "^0.35.3",
         "wasm-vips": "^0.0.18",
@@ -864,6 +868,14 @@
     "@expo/ws-tunnel": ["@expo/ws-tunnel@2.0.0", "", { "peerDependencies": { "ws": "^8.0.0" } }, "sha512-j+JfTRdCk820J9dU0sA2SqshQIKFOMo7ED84w9MJFcebfbNQgsLztEY/SABDkGnjatrW4xGqnUhVRxSBVyCkXw=="],
 
     "@expo/xcpretty": ["@expo/xcpretty@4.4.4", "", { "dependencies": { "@babel/code-frame": "^7.20.0", "chalk": "^4.1.0", "js-yaml": "^4.1.0" }, "bin": { "excpretty": "build/cli.js" } }, "sha512-4aQzz9vgxcNXFfo/iyNgDDYfsU5XGKKxWxZopw0cVotHiW+U8IJbIxMaxsINs6bHhtkG3StKNPcOrn3eBuxKPw=="],
+
+    "@fontsource/dm-mono": ["@fontsource/dm-mono@5.2.5", "", {}, "sha512-+dTNMXWxmvNtEWE/45MxFO7s60sy9famJhbtNghcvuEleMFcf32anQe3y4FqoCEL/rdQFvRiCoMCDguHw9krog=="],
+
+    "@fontsource/instrument-sans": ["@fontsource/instrument-sans@5.2.5", "", {}, "sha512-+u6WgD2gZfjEnMKwRZ0D/CizoF0n3sLIT+cQtqJrnmWh2xhcF35xl06vA2uCTBF/CiYKgNmm1AVWBqURY/aJ2w=="],
+
+    "@fontsource/instrument-serif": ["@fontsource/instrument-serif@5.2.5", "", {}, "sha512-ojamX86Kqj+LPHCXdoiY/OWbiJ76L3Ie5WczdtlTZ/xRG+MBE7/+nLQaRSuIivF5YWf1XXQ0MWxZzcp6GlEFYA=="],
+
+    "@fontsource/source-serif-4": ["@fontsource/source-serif-4@5.2.5", "", {}, "sha512-uYrBuHzSDZNq0wM4reU9EiFP2uSEoRTz9ms+jUYLKCbsBq+/RieSOgC/fRTepr6O+q5VJqa5nMMqEj/A8MKeww=="],
 
     "@google/design.md": ["@google/design.md@0.4.0", "", { "dependencies": { "citty": "^0.1.6", "remark-frontmatter": "^5.0.0", "remark-mdx": "^3.1.1", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5", "unist-util-visit": "^5.1.0", "yaml": "^2.7.1", "zod": "^3.24.0" }, "bin": { "design.md": "dist/index.js", "designmd": "dist/index.js" } }, "sha512-7aNIv6hslxIZ9igXq1abbVu+ue/ft/oFMUrAuhzpVFijGr9v+l0CkkCBQsHozucNiZHIBS43XC6l8gYDZRys9Q=="],
 

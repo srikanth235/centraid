@@ -49,19 +49,19 @@ const shared = Object.keys(type).map(
 );
 
 describe("type role parity across emitters", () => {
-  test("every shared role is published by both emitters", () => {
+  test("every role is published by BOTH emitters", () => {
+    // The Binding Layer's ramp is the same on every profile. `--t-hero` and
+    // `--t-greeting` were shell-only, which is how a "shared" scale grew two
+    // roles the app surface could not render; both retired with the flip.
     for (const name of shared) {
       expect(shell[name], `${name} shell`).toBeDefined();
-      const blueprintRole = blueprint[name];
-      expect(blueprintRole === undefined, `${name} blueprint support`).toBe(
-        name === "--t-hero" || name === "--t-greeting"
-      );
+      expect(blueprint[name], `${name} blueprint`).toBeDefined();
     }
+    expect(shared).not.toContain("--t-hero");
+    expect(shared).not.toContain("--t-greeting");
   });
 
-  test.each(
-    shared.filter((name) => name !== "--t-hero" && name !== "--t-greeting")
-  )("%s keeps family genus and weight", (name) => {
+  test.each(shared)("%s keeps family genus and weight", (name) => {
     const a = parse(shell[name] ?? "");
     const b = parse(blueprint[name] ?? "");
     expect({ family: a.family, weight: a.weight }).toStrictEqual({
