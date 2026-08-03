@@ -1,5 +1,14 @@
-// Development-only fixture. The shipped app imports ./content.js (written by the content agent).
-// Shape must match SPEC.md §"content.js schema" exactly.
+// Development-only fixture. The shipped app imports ./content.ts (written by the content agent).
+// Shape must match SPEC.md §"content.ts schema" exactly.
+
+import type {
+  CityDistrict,
+  CityMeta,
+  HudStat,
+  Palette,
+  Scenario,
+  TourChapter,
+} from "./types.js";
 
 export const meta = {
   title: "Centraid City",
@@ -13,7 +22,7 @@ export const meta = {
     "Painting the consent gate violet…",
     "Rolling the WAL conveyor…",
   ],
-};
+} satisfies CityMeta;
 
 export const palette = {
   requests: "#39c5ea",
@@ -24,7 +33,7 @@ export const palette = {
   sync: "#30a46c",
   blob: "#8d9aa5",
   automation: "#ad8b00",
-};
+} satisfies Palette;
 
 export const districts = [
   {
@@ -100,7 +109,7 @@ export const districts = [
       },
     ],
   },
-];
+] satisfies CityDistrict[];
 
 export const tour = [
   {
@@ -116,7 +125,7 @@ export const tour = [
     districtId: "gateway",
     body: "The gateway is the only always-on process. It resolves which vault the request belongs to, opens a scope, and routes onward.",
   },
-];
+] satisfies TourChapter[];
 
 export const scenarios = [
   { id: "steady", name: "Steady state", blurb: "A calm weekday in the city." },
@@ -125,7 +134,7 @@ export const scenarios = [
     name: "Mobile offline",
     blurb: "The replica island drifts out of sync, then catches up.",
   },
-];
+] satisfies Scenario[];
 
 export const hudStats = [
   { id: "turns", label: "Turns", unit: "/s" },
@@ -135,4 +144,4 @@ export const hudStats = [
   { id: "lag", label: "Replica lag", unit: "s" },
   { id: "cas", label: "CAS", unit: "%" },
   { id: "cron", label: "Next cron", unit: "s" },
-];
+] satisfies HudStat[];

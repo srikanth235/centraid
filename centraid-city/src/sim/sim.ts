@@ -1,10 +1,21 @@
-// sim.js — the city's little economy. Fixed 10 Hz logic tick, deterministic-ish PRNG.
+// sim.ts — the city's little economy. Fixed 10 Hz logic tick, deterministic-ish PRNG.
 // Produces: stats (HUD), rates (particles/sec per flow role), pulses (transient FX 0..1),
 // activity (0..1 per district, drives the blinking lights).
 
+import type {
+  CityContent,
+  ScenarioConfig,
+  Sim,
+  SimActivity,
+  SimEvent,
+  SimPulses,
+  SimRates,
+  SimStats,
+} from "../core/types.js";
+
 const TICK = 0.1; // 10 Hz
 
-function mulberry32(seed) {
+function mulberry32(seed: number): () => number {
   let a = seed | 0;
   return function rnd() {
     a = (a + 0x6d2b79f5) | 0;
@@ -55,7 +66,7 @@ const DISTRICTS = [
 ];
 
 // Scenario knobs. Anything omitted falls back to the steady baseline.
-const SCENARIOS = {
+const SCENARIOS: Record<string, ScenarioConfig> = {
   steady: {},
   "first-run": {
     founding: true,
@@ -99,10 +110,10 @@ const SCENARIOS = {
   },
 };
 
-export function createSim(content) {
+export function createSim(content: Pick<CityContent, "scenarios">): Sim {
   const rnd = mulberry32(0xc17a1d);
   const scenarioIds = (content.scenarios || []).map((s) => s.id);
-  const stats = {
+  const stats: SimStats = {
     turns: 0,
     items: 0,
     wal: 0,
@@ -112,11 +123,11 @@ export function createSim(content) {
     cron: 30,
     fps: 60,
   };
-  const rates = {};
+  const rates: SimRates = {};
   for (const r of ROLES) rates[r] = 0;
-  const activity = {};
+  const activity: SimActivity = {};
   for (const d of DISTRICTS) activity[d] = 0;
-  const pulses = {
+  const pulses: SimPulses = {
     crane: 0,
     checkpoint: 0,
     barge: 0,
@@ -136,15 +147,19 @@ export function createSim(content) {
   let cronTimer = 30;
   let checkpointTimer = 8;
   let bargeTimer = 22;
-  const events = [];
+  const events: SimEvent[] = [];
   let turnsWindow = 0;
   let itemsWindow = 0;
   let walWindow = 0;
 
   // smoothed display values
-  const smooth = { turns: 0, items: 0, wal: 0 };
+  const smooth: Pick<SimStats, "turns" | "items" | "wal"> = {
+    turns: 0,
+    items: 0,
+    wal: 0,
+  };
 
-  function setScenario(id) {
+  function setScenario(id: string): void {
     scenarioId = id;
     cfg = SCENARIOS[id] || SCENARIOS.steady;
     scenarioAge = 0;
@@ -160,7 +175,7 @@ export function createSim(content) {
     events.push({ type: "scenario", id });
   }
 
-  function bump(k, v) {
+  function bump(k: string, v: number): void {
     activity[k] = Math.min(1.6, activity[k] + v);
   }
 
@@ -346,7 +361,7 @@ export function createSim(content) {
     stats.wal = smooth.wal;
   }
 
-  function tick(dt) {
+  function tick(dt: number): void {
     acc += Math.min(dt, 0.25);
     let guard = 0;
     while (acc >= TICK && guard++ < 8) {

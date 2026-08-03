@@ -2,19 +2,23 @@
 
 Inspired by PGSimCity (https://nikolays.github.io/PGSimCity/): an isometric/orbitable 3D city rendered with three.js where each district is a subsystem of the Centraid gateway, animated particles show data flowing between them, a HUD shows live simulated stats, buildings are clickable with an inspector panel, and a guided tour walks a user message end-to-end.
 
-**Static bundle. No build step. No network.** ES modules + importmap; three.js is vendored in `./vendor/three.module.min.js`, OrbitControls in `./vendor/OrbitControls.js` (it imports from `"three"`, resolved by the importmap). Serve with any static server.
+**Static bundle. Vite build. No runtime network.** The package owns its `three` runtime dependency in `package.json`; Vite bundles `three` and `three/addons/controls/OrbitControls.js` into the static output. Source is organized like PGSimCity: shared contracts/content in `src/core`, the renderer-independent simulation in `src/sim`, Three.js geography/geometry in `src/world`, browser UI in `src/ui`, and the bootstrap in `src/main.ts`.
 
 ## Files
 
-- `index.html` — importmap, all CSS, all UI overlay DOM (HUD, console, inspector, contents panel, chapter card, loading screen)
-- `content.js` — ALL text content + city data (schema below). Written by the content agent. UI/engine must not hardcode copy.
-- `main.js` (may split into `world.js`, `sim.js`, `ui.js`) — scene, geometry, simulation loop, flows, interactions.
+- `index.html` — all CSS and UI overlay DOM (HUD, console, inspector, contents panel, chapter card, loading screen)
+- `src/core/content.ts` — ALL text content + city data (schema below). Written by the content agent. UI/engine must not hardcode copy.
+- `src/core/types.ts` — typed contracts shared across package boundaries.
+- `src/main.ts` — bootstrap and interaction loop.
+- `src/sim/sim.ts` — renderer-independent simulation loop and scenario effects.
+- `src/world/` — scene, geography, landmark kit, buildings, roads, and particle flows.
+- `src/ui/ui.ts` — HUD, inspector, tour, minimap, and loading/toast surfaces.
 
 ## What Centraid is (ground truth for the model)
 
 Centraid is a personal app builder. One always-on **gateway** per user (host-agnostic core; run by the desktop app as a detached child, or as a standalone daemon). Everything lives in **vaults** — per-vault SQLite databases (`vault.db`, WAL mode) holding an ontology (star-schema around `core_party`), a journal, app data, FTS5 search index, and sealed columns. Runtime model: **conversation ⊃ turn ⊃ item** (never "chat"). Clients (Electron desktop, web PWA, Expo mobile) talk to the gateway over HTTP/SSE; mobile pairs over an **iroh** p2p tunnel and keeps **offline replicas** synced via WAL segment shipping. Agents (Claude et al.) run via **ACP runners**; their tool calls (`vault_sql`, `vault_invoke`, `vault_content`) pass a **consent gateway** — dangerous actions get **parked** until the user approves. Apps are scaffolded from **blueprints** (Locker, Tally, People, Photos, Agenda…) rendered on a shared design kit. An **automation engine** runs triggers (cron with IANA timezones, data triggers) deterministically, zero-token where possible. Blobs live in a local **CAS** (content-addressed, 16 MiB chunks, zstd) with lazy S3 offload for the bounded storage tier; **backups** are snapshots to pluggable providers.
 
-## City geography (single source of truth in content.js)
+## City geography (single source of truth in `src/core/content.ts`)
 
 Ground plane ≈ 240×240 units, origin center. Districts are raised colored plates with a label:
 
@@ -49,16 +53,16 @@ HUD stats (top bar, updating live): turns/s, items appended/s, WAL KiB/s, pendin
 
 ## UI chrome (match PGSimCity's structure, Centraid's identity)
 
-- Loading screen with playful staged messages (from content.js), then reveal.
+- Loading screen with playful staged messages (from `src/core/content.ts`), then reveal.
 - Top HUD bar: logo "Centraid City", subtitle "a working model of the Centraid gateway", stats row, Day/Night toggle, sound-less (no audio), quality toggle optional.
 - **Inspector** (right panel): click any building/district → name, subsystem, what it does, "in the real code" pointer (package path), current sim state.
-- **Contents + chapters**: one Contents panel lists every chapter (content.js), grouped by each chapter's `section`. Picking a row moves the camera, shows a card, and pins the chapter's `scenarioId`; Next/Prev/Close and `#<chapter-id>` deep links all work the same way. The walkthrough section starts at Client Approach with "a message leaves the desktop app…"; the scenarios section carries one chapter per entry in `content.scenarios` (`steady`, `first-run` (vault founding), `agent-builds-app` (crane animates in apps quarter), `photo-flood` (CAS pressure), `offline-mobile` (lag grows then catch-up), `multi-device`, `automation-storm`, `consent-parking`) — sim implements the effects. There is no separate scenario bar; chapters are the only navigation.
+- **Contents + chapters**: one Contents panel lists every chapter (`src/core/content.ts`), grouped by each chapter's `section`. Picking a row moves the camera, shows a card, and pins the chapter's `scenarioId`; Next/Prev/Close and `#<chapter-id>` deep links all work the same way. The walkthrough section starts at Client Approach with "a message leaves the desktop app…"; the scenarios section carries one chapter per entry in `content.scenarios` (`steady`, `first-run` (vault founding), `agent-builds-app` (crane animates in apps quarter), `photo-flood` (CAS pressure), `offline-mobile` (lag grows then catch-up), `multi-device`, `automation-storm`, `consent-parking`) — sim implements the effects. There is no separate scenario bar; chapters are the only navigation.
 - Minimap (bottom-left, 2D canvas of district plates + camera frustum dot) — nice-to-have.
 - Legal footnote: "Centraid City is an illustrative model; details simplified."
 
-## content.js schema (contract between agents — do not change shape)
+## `content.ts` schema (contract between agents — do not change shape)
 
-```js
+```ts
 export const meta = { title, subtitle, legal, loadingMessages: [/* 6-8 strings */] };
 export const palette = { requests, agent, wal, dirty, consent, sync, blob, automation };
 export const districts = [ { id, name, blurb, color, plate: {x, z, w, d},
@@ -71,7 +75,7 @@ export const scenarios = [ { id, name, blurb } ];
 export const hudStats = [ { id, label, unit } ];
 ```
 
-Engine reads geometry ONLY from content.js (positions/sizes), so the content agent owns the city plan; the engine owns rendering, animation, flows, camera, picking, and the sim.
+Engine reads geometry ONLY from `src/core/content.ts` (positions/sizes), so the content agent owns the city plan; the engine owns rendering, animation, flows, camera, picking, and the sim.
 
 ## Quality bar
 

@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit — one bespoke model per building id.
 // Already split three ways by district; each entry is independent of the others.
-// landmarks-edge.js — apps, automation, cas, sync. See KIT_API.md.
+// landmarks-edge.ts — apps, automation, cas, sync. See KIT_API.md.
 //
 // Lane C of the bespoke-geometry set. Every building here depicts what its subsystem
 // actually does; district `color` appears ONLY on sign bands, beacons, seams, glowing
@@ -14,12 +14,25 @@
 // And two machines that must not rhyme: `apps-crane` is a slewing tower crane,
 // `cas-s3crane` is a portal gantry straddling rails.
 
+import type * as THREE from "three";
+
+import type {
+  CityKit,
+  KitOptions,
+  LandmarkBuilder,
+  SurfaceMaterialFactory,
+} from "../core/types.js";
+
 /* ------------------------------------------------------------------ helpers */
 
 // Call a kit member defensively. The kit is authored in a parallel file; a missing or
-// throwing member must cost us one detail, never the whole building (world.js clears
+// throwing member must cost us one detail, never the whole building (world.ts clears
 // the group on an uncaught throw).
-function invoke(kit, name, args) {
+function invoke(
+  kit: CityKit | null | undefined,
+  name: string,
+  args: unknown[]
+): unknown {
   const fn = kit ? kit[name] : null;
   if (typeof fn !== "function") return null;
   try {
@@ -29,50 +42,78 @@ function invoke(kit, name, args) {
   }
 }
 
+function isObject3D(value: unknown): value is THREE.Object3D {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "isObject3D" in value &&
+    (value as { isObject3D?: boolean }).isObject3D === true
+  );
+}
+
 // mk(target, ...) builds and parents in one step; returns the object (or null).
-function mk(target, kit, name, args) {
+function mk(
+  target: THREE.Object3D | null,
+  kit: CityKit | null | undefined,
+  name: string,
+  args: unknown[]
+): THREE.Object3D | null {
   const o = invoke(kit, name, args);
-  if (o && o.isObject3D && target) target.add(o);
-  return o;
+  if (isObject3D(o) && target) target.add(o);
+  return isObject3D(o) ? o : null;
 }
 
 // Placement is done on the returned Object3D rather than through opts, so the code
 // depends only on the documented "builders return a THREE.Object3D" contract.
 // Solid volumes are treated as centred on their own origin; roofs/props sit on theirs.
-function at(o, x, y, z, rotY) {
-  if (o && o.isObject3D) {
+function at(
+  o: THREE.Object3D | null,
+  x = 0,
+  y = 0,
+  z = 0,
+  rotY?: number
+): THREE.Object3D | null {
+  if (isObject3D(o)) {
     o.position.set(x || 0, y || 0, z || 0);
     if (rotY) o.rotation.y = rotY;
   }
   return o;
 }
 
-function tilt(o, rx, rz) {
-  if (o && o.isObject3D) {
+function tilt(
+  o: THREE.Object3D | null,
+  rx?: number,
+  rz?: number
+): THREE.Object3D | null {
+  if (isObject3D(o)) {
     if (rx) o.rotation.x = rx;
     if (rz) o.rotation.z = rz;
   }
   return o;
 }
 
-function noShadow(o) {
+function noShadow(o: THREE.Object3D | null): THREE.Object3D | null {
   if (o && typeof o.traverse === "function") {
     o.traverse((c) => {
-      if (c.isMesh) {
-        c.castShadow = false;
-        c.receiveShadow = false;
+      if ("isMesh" in c && c.isMesh) {
+        const mesh = c as THREE.Mesh;
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
       }
     });
   }
   return o;
 }
 
-// Material book: prefers the shared cached kit materials, falls back to world.js's
+// Material book: prefers the shared cached kit materials, falls back to world.ts's
 // plainMat so a partially-built kit still renders something in the right key.
-function palette(kit, plainMat) {
-  const m = (kit && kit.mat) || {};
-  const p = (hex, o) =>
-    typeof plainMat === "function" ? plainMat(hex, o) : undefined;
+function palette(
+  kit: CityKit | null | undefined,
+  plainMat: SurfaceMaterialFactory
+): Record<string, THREE.Material> {
+  const m: Record<string, THREE.Material> = kit?.mat ?? {};
+  const p = (hex: string, options?: KitOptions): THREE.MeshStandardMaterial =>
+    plainMat(hex, options);
   return {
     bone: m.bone || p("#e8e2d6"),
     concrete: m.concrete || p("#cfc9bd"),
@@ -92,7 +133,7 @@ function palette(kit, plainMat) {
 // Neutral crate/container hues — varied, but still the model-shop palette.
 const CRATE_HUES = ["#7d8894", "#8a7f6f", "#5f6b74", "#9a8b6d", "#6e7a83"];
 
-export const LANDMARKS_EDGE = {
+export const LANDMARKS_EDGE: Record<string, LandmarkBuilder> = {
   /* ================================================================== apps */
 
   // Strongbox shop: ribbed metal front, rolling shutter, oversized padlock, flat parapet.
@@ -374,7 +415,7 @@ export const LANDMARKS_EDGE = {
 
   // Proper tower crane: lattice mast, counter-jib + counterweight, slewing jib, hook,
   // blueprint scaffold and material stack on the pad below.
-  // Keeps the {type:'crane'} contract world.js already animates.
+  // Keeps the {type:'crane'} contract world.ts already animates.
   "apps-crane"({ g, w, h, d, color, kit, THREE, animated, plainMat, beacon }) {
     const M = palette(kit, plainMat);
     const P = (n, ...a) => mk(g, kit, n, a);
@@ -965,7 +1006,7 @@ export const LANDMARKS_EDGE = {
     load.position.set(-railZ * 0.35, 0, 0);
     g.add(load);
     at(
-      mk(load, kit, "box", [0.12, portalH * 0.42, 0.12], M.darkSlate),
+      mk(load, kit, "box", [0.12, portalH * 0.42, 0.12, M.darkSlate]),
       0,
       portalH - portalH * 0.21,
       0
@@ -1099,7 +1140,7 @@ export const LANDMARKS_EDGE = {
     const beamMat =
       (typeof glowMat === "function" ? glowMat(color, 0.18) : M.glass) ||
       M.glass;
-    noShadow(at(mk(lamp, kit, "box", [16, 0.5, 1.4], beamMat), 8, 0, 0));
+    noShadow(at(mk(lamp, kit, "box", [16, 0.5, 1.4, beamMat]), 8, 0, 0));
     invoke(kit, "spin", [lamp, 0.55]);
 
     at(P("roofCone", w * 0.24, h * 0.14, M.copper), 0, galY + lantH, 0);

@@ -90,11 +90,11 @@ Plus factories: `kit.matWindows(hex)` (facade with night-emissive window map), `
 - `bob(obj, amp, speed)` — registers as `{ type:'bob' }`.
 - `activityLamp(hex)` — brightens with district activity (`{ type:'activity' }`).
 
-**The kit author must also add handlers for the new `animated` types** (`spin`, `bob`, `reciprocate`, `clockhands`) to `world.js`'s update loop — those are the only two lines you may change in `world.js`; the landmark dispatch seam is already wired.
+**The kit author must also add handlers for the new `animated` types** (`spin`, `bob`, `reciprocate`, `clockhands`) to `src/world/world.ts`'s update loop — those are the only two lines you may change in the world update seam; the landmark dispatch seam is already wired.
 
 ## Archetype assignments (authoritative — build exactly these)
 
-### Lane A — `landmarks-core.js` (clients, gateway, runtime)
+### Lane A — `src/world/landmarks-core.ts` (clients, gateway, runtime)
 
 | id | archetype |
 | --- | --- |
@@ -111,7 +111,7 @@ Plus factories: `kit.matWindows(hex)` (facade with night-emissive window map), `
 | `runtime-registry` | Pigeonhole rack: open steel frame of labeled cubbies, some slots deliberately empty. |
 | `runtime-models` | Fuel depot: a row of horizontal tanks on saddles behind a gauge board. |
 
-### Lane B — `landmarks-data.js` (consent, vault, wal, backup)
+### Lane B — `src/world/landmarks-data.ts` (consent, vault, wal, backup)
 
 | id | archetype |
 | --- | --- |
@@ -130,7 +130,7 @@ Plus factories: `kit.matWindows(hex)` (facade with night-emissive window map), `
 | `backup-bunker2` | Silo cluster: 3–4 vertical cylinders with conical caps and a link bridge. |
 | `backup-bunker3` | Deliberately domestic contrast: small brick office, pitched roof, chimney, records annex. |
 
-### Lane C — `landmarks-edge.js` (apps, automation, cas, sync)
+### Lane C — `src/world/landmarks-edge.ts` (apps, automation, cas, sync)
 
 | id | archetype |
 | --- | --- |
@@ -155,15 +155,15 @@ Plus factories: `kit.matWindows(hex)` (facade with night-emissive window map), `
 
 ## Constraints
 
-- No new dependencies, no network. ES modules only.
+- Landmark lanes add no dependencies and make no runtime network requests. The package's `three` dependency is declared in `package.json`; source remains ES modules.
 - **Perf budget**: total draw calls must stay under ~900 and triangles under ~180k. Prefer low segment counts (drums ≤ 16, domes ≤ 18), reuse kit materials (they are cached), and merge repeated small props where trivial. No shadows on glow/glass meshes.
-- Landmarks must be **self-contained**: read only from the passed api object; never import content.js; never touch the DOM.
+- Landmarks must be **self-contained**: read only from the passed api object; never import `src/core/content.ts`; never touch the DOM.
 - Sizes: respect the passed `w/h/d` as the building's approximate bounding envelope. You may exceed it by ≤ 25% for expressive elements (spires, jibs, cables, berms).
 
 ## Landmark signature
 
 ```js
-// landmarks-<lane>.js
+// landmarks-<lane>.ts
 export const LANDMARKS_<LANE> = {
   'gateway-frontdesk'({ g, w, h, d, color, districtId, data, kit, THREE, animated }) {
     g.add(kit.box(w, h * 0.6, d, kit.mat.bone, { y: h * 0.3 }));
@@ -174,4 +174,4 @@ export const LANDMARKS_<LANE> = {
 };
 ```
 
-`landmarks.js` (already written) merges the three lane objects into `LANDMARKS`.
+`src/world/landmarks.ts` merges the three lane objects into `LANDMARKS`.

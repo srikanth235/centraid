@@ -1,12 +1,37 @@
-// ui.js — every DOM overlay: loading screen, HUD stats, inspector, tour, minimap, toast.
-// All copy comes from content.js; this module never invents strings — the one exception
-// is SECTION_LABELS below, which names the groupings content.js only refers to by key.
+// ui.ts — every DOM overlay: loading screen, HUD stats, inspector, tour, minimap, toast.
+// All copy comes from core/content.ts; this module never invents strings — the one exception
+// is SECTION_LABELS below, which names the groupings core/content.ts only refers to by key.
+// governance: allow-repo-hygiene file-size-limit — the DOM overlay selectors and
+// callback-driven APIs form one cohesive browser boundary; splitting them would scatter
+// the shared panel state without changing the package seam. Revisit in #704.
 
-const $ = (id) => document.querySelector(`#${id}`);
+import type * as THREE from "three";
+import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+import type {
+  CityMeta,
+  HudApi,
+  HudStat,
+  HoverTipApi,
+  InspectorApi,
+  InspectorDetails,
+  InspectorRef,
+  SimStats,
+  TourApi,
+  TourChapter,
+  TourPosition,
+  WorldApi,
+} from "../core/types.js";
+
+const $ = <T extends Element = HTMLElement>(id: string): T =>
+  document.querySelector<T>(`#${id}`)!;
 
 /* ---------------------------------------------------------------- loading */
 
-export function createLoading(meta, onDone) {
+export function createLoading(
+  meta: CityMeta,
+  onDone: () => void
+): { finish: () => void } {
   const el = $("loading");
   const msgEl = $("loadMsg");
   const barEl = $("loadBar");
@@ -39,9 +64,18 @@ export function createLoading(meta, onDone) {
 
 /* ---------------------------------------------------------------- HUD stats */
 
-// content.js owns the stat ids; map them onto sim values by keyword so a content
+// core/content.ts owns the stat ids; map them onto sim values by keyword so a content
 // agent's naming choices can't break the HUD.
-const STAT_MATCHERS = [
+interface StatDisplay {
+  v: number;
+  dp: number;
+  hot?: boolean;
+  bad?: boolean;
+}
+
+type StatMatcher = [RegExp, (stats: SimStats) => StatDisplay];
+
+const STAT_MATCHERS: StatMatcher[] = [
   [/fps|frame/iu, (s) => ({ v: s.fps, dp: 0 })],
   [/turn/iu, (s) => ({ v: s.turns, dp: 2 })],
   [/item|append/iu, (s) => ({ v: s.items, dp: 1 })],
@@ -55,7 +89,7 @@ const STAT_MATCHERS = [
   [/cron|next|timer|automation/iu, (s) => ({ v: s.cron, dp: 0 })],
 ];
 
-export function createHud(hudStats, meta) {
+export function createHud(hudStats: HudStat[], meta: CityMeta): HudApi {
   $("brandTitle").textContent = meta.title || "";
   $("brandSub").textContent = meta.subtitle || "";
   $("legal").textContent = meta.legal || "";
@@ -80,7 +114,7 @@ export function createHud(hudStats, meta) {
     el.append(k, v);
     wrap.append(el);
     const key = `${d.id || ""} ${d.label || ""} ${d.unit || ""}`;
-    const matcher = (STAT_MATCHERS.find(([re]) => re.test(key)) || [])[1];
+    const matcher = STAT_MATCHERS.find(([re]) => re.test(key))?.[1];
     return { def: d, el, v, matcher };
   });
 
@@ -100,7 +134,11 @@ export function createHud(hudStats, meta) {
 
 /* ---------------------------------------------------------------- inspector */
 
-export function createInspector({ onFocus }) {
+export function createInspector({
+  onFocus,
+}: {
+  onFocus: (ref: InspectorRef) => void;
+}): InspectorApi {
   const el = $("inspector");
   const body = $("inspBody");
   $("inspClose").addEventListener("click", () => close());
@@ -122,7 +160,7 @@ export function createInspector({ onFocus }) {
     return d;
   }
 
-  function para(text, cls) {
+  function para(text: string, cls?: string) {
     const p = document.createElement("p");
     if (cls) p.className = cls;
     p.textContent = text;
@@ -145,7 +183,7 @@ export function createInspector({ onFocus }) {
     codeRef,
     state,
     chips,
-  }) {
+  }: InspectorDetails): void {
     $("inspTitle").textContent = title || "";
     $("inspSub").textContent = subtitle || "";
     $("inspSwatch").style.background = color || "#39c5ea";
@@ -206,7 +244,7 @@ export function createInspector({ onFocus }) {
 /* ---------------------------------------------------------------- tour */
 
 // Chapters carry a `section` key; this names the sections for the Contents panel. A key
-// with no entry here falls back to the raw key, so content.js can add a section without
+// with no entry here falls back to the raw key, so core/content.ts can add a section without
 // this module having to know about it first.
 const SECTION_LABELS = new Map([
   ["walkthrough", "The walkthrough"],
@@ -219,7 +257,18 @@ const SECTION_LABELS = new Map([
 // The position is mirrored into location.hash so a page is bookmarkable. Every entry
 // path — Contents row, page dot, Prev/Next, deep link — funnels through go(), so
 // onEnter() runs exactly once per position no matter how it was reached.
-export function createTour(chapters, { onEnter, onExit, districtNames }) {
+export function createTour(
+  chapters: TourChapter[],
+  {
+    onEnter,
+    onExit,
+    districtNames,
+  }: {
+    onEnter: (chapter: TourChapter, position: TourPosition) => void;
+    onExit: () => void;
+    districtNames: Map<string, string>;
+  }
+): TourApi {
   const el = $("tour");
   const dots = $("tourDots");
   const panel = $("contents");
@@ -233,7 +282,7 @@ export function createTour(chapters, { onEnter, onExit, districtNames }) {
 
   // `pages` is the schema; a chapter that still carries a single `body` (or nothing at
   // all) is read as a one-page chapter so the app keeps working against older content.
-  const pagesOf = (c) => {
+  const pagesOf = (c: TourChapter): NonNullable<TourChapter["pages"]> => {
     const p = c && Array.isArray(c.pages) ? c.pages.filter(Boolean) : null;
     if (p && p.length) return p;
     return [{ body: (c && c.body) || "" }];
@@ -356,7 +405,7 @@ export function createTour(chapters, { onEnter, onExit, districtNames }) {
 
   // `#chapter-7` is the chapter (page 1); `#chapter-7/2` is a page within it. The lazy
   // head means an id is only split on a trailing `/<digits>`.
-  function parseHash() {
+  function parseHash(): { i: number; p: number } {
     const raw = decodeURIComponent(location.hash.replace(/^#/u, ""));
     if (!raw) return { i: -1, p: 0 };
     const m = /^(?<id>.*?)(?:\/(?<page>\d+))?$/u.exec(raw);
@@ -423,9 +472,9 @@ export function createTour(chapters, { onEnter, onExit, districtNames }) {
 
     const atStart = idx === 0 && pidx === 0;
     const atEnd = idx === list.length - 1 && pidx === lastPage(idx);
-    $("tourPrev").disabled = atStart;
-    $("tourPrev").style.opacity = atStart ? 0.4 : 1;
-    $("tourNext").textContent = atEnd ? "Finish" : "Next";
+    $<HTMLButtonElement>("tourPrev").disabled = atStart;
+    $<HTMLButtonElement>("tourPrev").style.opacity = String(atStart ? 0.4 : 1);
+    $<HTMLButtonElement>("tourNext").textContent = atEnd ? "Finish" : "Next";
     setHash(c.id ? (pidx > 0 ? `#${c.id}/${pidx + 1}` : `#${c.id}`) : "");
     onEnter(c, {
       page,
@@ -519,7 +568,7 @@ export function createTour(chapters, { onEnter, onExit, districtNames }) {
 
 /* ---------------------------------------------------------------- misc */
 
-export function createToast() {
+export function createToast(): (text: string, ms?: number) => void {
   const el = $("toast");
   let t = 0;
   return function toast(text, ms = 2600) {
@@ -530,7 +579,7 @@ export function createToast() {
   };
 }
 
-export function createHoverTip() {
+export function createHoverTip(): HoverTipApi {
   const el = $("hoverTip");
   return {
     show(title, sub, x, y) {
@@ -553,8 +602,14 @@ export function createHoverTip() {
   };
 }
 
-export function createMinimap(world) {
-  const cv = $("minimap");
+export function createMinimap(
+  world: WorldApi
+): (
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  highlightId?: string
+) => void {
+  const cv = $<HTMLCanvasElement>("minimap");
   const g = cv.getContext("2d");
   const S = cv.width;
   const EXT = 180; // world half-extent shown
@@ -606,7 +661,7 @@ export function createMinimap(world) {
   };
 }
 
-function hexA(hex, a) {
+function hexA(hex: string, a: number): string {
   const h = String(hex || "#39c5ea").replace("#", "");
   const n = parseInt(
     h.length === 3

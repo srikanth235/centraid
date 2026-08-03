@@ -1,9 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — data, not logic: the city plan and
 // every word of copy. Length here is content volume. #704 gives it a schema type.
-// Centraid City — content.js
+// Centraid City — content.ts
 //
 // ALL text content + city geometry for the Centraid City visualization.
-// The engine (main.js / world.js / sim.js) reads geometry ONLY from this
+// The engine (main.ts / world/world.ts / sim/sim.ts) reads geometry ONLY from this
 // file; it does not hardcode copy or coordinates. Schema is fixed by
 // SPEC.md — do not change the shape of these exports.
 //
@@ -12,6 +12,15 @@
 // `plate` is a rectangle CENTERED at (x, z) with total width `w` (along x)
 // and depth `d` (along z). Building `pos` is an ABSOLUTE world position
 // that falls inside its district's plate bounds.
+
+import type {
+  CityDistrict,
+  CityMeta,
+  HudStat,
+  Palette,
+  Scenario,
+  TourChapter,
+} from "./types.js";
 
 export const meta = {
   title: "Centraid City",
@@ -27,7 +36,7 @@ export const meta = {
     "winding the cron clock tower…",
     "hanging inspector signage on every building…",
   ],
-};
+} satisfies CityMeta;
 
 export const palette = {
   requests: "#39c5ea",
@@ -38,7 +47,7 @@ export const palette = {
   sync: "#30a46c",
   blob: "#8d9aa5",
   automation: "#ad8b00",
-};
+} satisfies Palette;
 
 export const districts = [
   {
@@ -666,7 +675,7 @@ export const districts = [
       },
     ],
   },
-];
+] satisfies CityDistrict[];
 
 // The book. Chapters carry a `section`: "walkthrough" follows one user message end to
 // end, "scenarios" pins the city into one named regime and tells you what to watch.
@@ -995,7 +1004,7 @@ export const tour = [
 
   // --- Scenarios. Each one pins the city into a named regime (scenarioId) and parks the
   // camera where that regime is legible. Copy here describes what the model actually
-  // does — if you retune sim.js, retune these sentences with it.
+  // does — if you retune sim.ts, retune these sentences with it.
   {
     id: "scenario-steady",
     section: "scenarios",
@@ -1213,7 +1222,7 @@ export const tour = [
       },
     ],
   },
-];
+] satisfies TourChapter[];
 
 export const scenarios = [
   {
@@ -1259,7 +1268,7 @@ export const scenarios = [
     name: "Consent Parking",
     blurb: "A wave of tool calls back up in the Parking Lot awaiting approval.",
   },
-];
+] satisfies Scenario[];
 
 export const hudStats = [
   { id: "turnsPerSec", label: "Turns", unit: "/s" },
@@ -1270,4 +1279,4 @@ export const hudStats = [
   { id: "casOccupancy", label: "CAS occupancy", unit: "%" },
   { id: "nextCron", label: "Next cron", unit: "s" },
   { id: "fps", label: "FPS", unit: "" },
-];
+] satisfies HudStat[];

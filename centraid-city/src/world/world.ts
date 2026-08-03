@@ -1,12 +1,24 @@
-// world.js — scene construction: sky, ground, district plates, building silhouettes,
+// world.ts — scene construction: sky, ground, district plates, building silhouettes,
 // particle flows. ALL geometry (plate rects, building positions/sizes/kinds/colors) comes
-// from content.js; this module only knows how to render it.
+// from core/content.ts; this module only knows how to render it.
 // governance: allow-repo-hygiene file-size-limit — scene build, flow system, and the
 // animation registry share the THREE material/instancing state they allocate. Splitting
 // them means exporting that state; tracked for the TypeScript conversion in #704.
 
 import * as THREE from "three";
 
+import type {
+  AnimationRecord,
+  BuildingBuildContext,
+  CityBuilding,
+  CityContent,
+  FlowRuntime,
+  KitOptions,
+  Palette,
+  Sim,
+  WorldApi,
+  WorldDistrict,
+} from "../core/types.js";
 import { makeKit } from "./kit.js";
 import { LANDMARKS } from "./landmarks.js";
 
@@ -266,7 +278,11 @@ function prismGeometry(w, h, d) {
 // Flat road ribbons on the ground, following the same district-to-district routes as the
 // particle flows (see FLOW_PLAN). One merged, indexed, single-material mesh — cheap to draw.
 // Duplicate/reverse edges (e.g. clients↔gateway request+response) collapse to a single ribbon.
-function buildRoadsMesh(flowPlan, byId, roadY) {
+function buildRoadsMesh(
+  flowPlan: Array<[string, string, keyof Palette, string, number]>,
+  byId: Map<string, WorldDistrict>,
+  roadY: number
+): THREE.Mesh | null {
   const HALF_W = 1.15;
   const SEGMENTS = 14;
   const positions = [];
@@ -338,7 +354,7 @@ function buildRoadsMesh(flowPlan, byId, roadY) {
 
 /* ------------------------------------------------------------------ world */
 
-const DEFAULT_PALETTE = {
+const DEFAULT_PALETTE: Palette = {
   requests: "#39c5ea",
   agent: "#5b7cfa",
   wal: "#f5a623",
@@ -349,7 +365,7 @@ const DEFAULT_PALETTE = {
   automation: "#ad8b00",
 };
 
-// Engine-side routing graph. A flow is only created when both districts exist in content.js.
+// Engine-side routing graph. A flow is only created when both districts exist in core/content.ts.
 //
 // Two independent paths share this graph, and the colors are load-bearing:
 //   * the AGENT path (palette.agent / palette.consent — blue + violet) is OPTIONAL. It only
@@ -357,7 +373,7 @@ const DEFAULT_PALETTE = {
 //   * the DIRECT + SYNC path (palette.requests / palette.wal / palette.sync — cyan, amber,
 //     green) is ALWAYS running and never touches the runtime. Multi-device sync lives here:
 //     gateway → vault → WAL → harbor → device, and back. Do not paint any leg of it 'agent'.
-const FLOW_PLAN = [
+const FLOW_PLAN: Array<[string, string, keyof Palette, string, number]> = [
   ["clients", "gateway", "requests", "request", 0.9],
   // --- agent path (optional)
   ["gateway", "runtime", "agent", "agent", 0.6],
@@ -385,8 +401,8 @@ const FLOW_PLAN = [
   ["gateway", "clients", "requests", "response", 0.7],
 ];
 
-export function createWorld(content) {
-  const palette = { ...DEFAULT_PALETTE, ...content.palette };
+export function createWorld(content: CityContent): WorldApi {
+  const palette: Palette = { ...DEFAULT_PALETTE, ...content.palette };
   const scene = new THREE.Scene();
   const root = new THREE.Group();
   scene.add(root);
@@ -395,8 +411,11 @@ export function createWorld(content) {
   const groundTex = makeGroundTexture();
   const convTex = makeConveyorTexture();
 
-  const matCache = new Map();
-  const facadeMat = (hex, opts = {}) => {
+  const matCache = new Map<string, THREE.MeshStandardMaterial>();
+  const facadeMat = (
+    hex: string,
+    opts: KitOptions = {}
+  ): THREE.MeshStandardMaterial => {
     const key = `${hex}|${opts.windows === false ? 0 : 1}|${opts.rough ?? 0.72}|${opts.metal ?? 0.06}`;
     let m = matCache.get(key);
     if (m) return m;
@@ -414,15 +433,18 @@ export function createWorld(content) {
     matCache.set(key, m);
     return m;
   };
-  const plainMat = (hex, opts = {}) =>
+  const plainMat = (
+    hex: string,
+    opts: KitOptions = {}
+  ): THREE.MeshStandardMaterial =>
     facadeMat(hex, {
       windows: false,
       rough: opts.rough ?? 0.8,
       metal: opts.metal ?? 0.1,
     });
 
-  const glowMats = [];
-  const glowMatImpl = (hex, base = 0.55) => {
+  const glowMats: THREE.MeshBasicMaterial[] = [];
+  const glowMatImpl = (hex: string, base = 0.55): THREE.MeshBasicMaterial => {
     const m = new THREE.MeshBasicMaterial({
       color: new THREE.Color(hex),
       transparent: true,
@@ -459,7 +481,7 @@ export function createWorld(content) {
   scene.add(skyDay, skyNight);
 
   // A few very soft, far-off cloud sprites — day-only (faded out at night alongside the sky).
-  const clouds = [];
+  const clouds: THREE.Sprite[] = [];
   const cloudTex = makeCloudTexture();
   const CLOUD_LAYOUT = [
     { x: -260, y: 150, z: -220, s: 150 },
@@ -567,13 +589,13 @@ export function createWorld(content) {
   root.add(ground);
 
   /* ---------------- districts */
-  const districts = [];
-  const byId = new Map();
-  const labels = [];
-  const animated = [];
-  const activityNodes = new Map(); // districtId → [material]
+  const districts: WorldDistrict[] = [];
+  const byId = new Map<string, WorldDistrict>();
+  const labels: THREE.Sprite[] = [];
+  const animated: AnimationRecord[] = [];
+  const activityNodes = new Map<string, THREE.Material[]>(); // districtId → [material]
 
-  // Shared landmark kit: bespoke geometry primitives used by landmarks.js so every
+  // Shared landmark kit: bespoke geometry primitives used by landmarks.ts so every
   // building gets its own architecture instead of a shared `kind` silhouette.
   const kit = makeKit(THREE, { facadeMat, plainMat, glowMat, animated });
   const PIT_Y = -5;
@@ -666,7 +688,7 @@ export function createWorld(content) {
     group.add(sprite);
     labels.push(sprite);
 
-    const rec = {
+    const rec: WorldDistrict = {
       data: d,
       group,
       plate,
@@ -769,7 +791,7 @@ export function createWorld(content) {
   /* ---------------- scenery derived from content geometry */
 
   // Consent parking lot beside the consent gate.
-  let parkPoint = null;
+  let parkPoint: THREE.Vector3 | null = null;
   const consent = byId.get("consent");
   if (consent) {
     const p = consent.data.plate;
@@ -810,7 +832,7 @@ export function createWorld(content) {
   }
 
   // Replica island at the far end of any bridge (Sync Harbor).
-  let islandPoint = null;
+  let islandPoint: THREE.Vector3 | null = null;
   for (const rec of districts) {
     for (const b of rec.buildings) {
       if (b.data.kind !== "bridge") continue;
@@ -860,7 +882,7 @@ export function createWorld(content) {
   }
 
   // Cloud barge departing the CAS warehouse.
-  let barge = null;
+  let barge: THREE.Group | null = null;
   const cas = byId.get("cas");
   if (cas) {
     barge = new THREE.Group();
@@ -895,8 +917,15 @@ export function createWorld(content) {
   if (roadMesh) root.add(roadMesh);
 
   /* ---------------- flows */
-  const flows = [];
-  const mkFlow = (a, b, colorHex, role, height, capacity = 42) => {
+  const flows: FlowRuntime[] = [];
+  const mkFlow = (
+    a: THREE.Vector3,
+    b: THREE.Vector3,
+    colorHex: string,
+    role: string,
+    height: number,
+    capacity = 42
+  ): FlowRuntime => {
     const curve = new THREE.QuadraticBezierCurve3(
       a.clone(),
       new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5),
@@ -934,10 +963,10 @@ export function createWorld(content) {
     mesh.frustumCulled = false;
     mesh.count = capacity;
     root.add(mesh);
-    const parts = [];
+    const parts: Array<{ t: number; speed: number; live: boolean }> = [];
     for (let i = 0; i < capacity; i++)
       parts.push({ t: 0, speed: 0, live: false });
-    const f = {
+    const f: FlowRuntime = {
       role,
       curve,
       mesh,
@@ -1033,7 +1062,7 @@ export function createWorld(content) {
   const _dirtyColor = new THREE.Color(palette.dirty);
   const _roadColor = new THREE.Color();
 
-  function setFlowFocus(roles) {
+  function setFlowFocus(roles: string[] | string | null): void {
     const list =
       typeof roles === "string" ? [roles] : Array.isArray(roles) ? roles : [];
     const wanted = new Set();
@@ -1077,7 +1106,7 @@ export function createWorld(content) {
       .lerp(roadMesh.userData.nightColor, night);
     if (roadFocusW > 0.001)
       _roadColor.multiplyScalar(1 - ROAD_MUTE * roadFocusW);
-    roadMesh.material.color.copy(_roadColor);
+    (roadMesh.material as THREE.MeshStandardMaterial).color.copy(_roadColor);
   }
 
   /* ---------------- hover / select outline */
@@ -1100,7 +1129,7 @@ export function createWorld(content) {
   const hoverOutline = mkOutline("#ffffff", 0.75);
   const selectOutline = mkOutline("#39c5ea", 0.95);
 
-  function frameOutline(o, box) {
+  function frameOutline(o: THREE.LineSegments, box: THREE.Box3 | null): void {
     if (!box) {
       o.visible = false;
       return;
@@ -1123,7 +1152,7 @@ export function createWorld(content) {
   const dayGround = new THREE.Color(0xffffff);
   const nightGround = new THREE.Color(0x222c44);
 
-  function applyNight(n) {
+  function applyNight(n: number): void {
     night = n;
     skyNight.material.opacity = n;
     for (const s of clouds) s.material.opacity = 0.5 * (1 - n);
@@ -1152,7 +1181,7 @@ export function createWorld(content) {
   const UP = new THREE.Vector3(0, 1, 0);
   const _tmpColor = new THREE.Color();
 
-  function update(dt, elapsed, sim) {
+  function update(dt: number, elapsed: number, sim?: Sim): void {
     // animated building details
     for (const a of animated) {
       if (a.type === "crane") {
@@ -1179,14 +1208,14 @@ export function createWorld(content) {
           a.mat.userData.baseOpacity *
           (0.25 + 1.5 * act * (0.7 + 0.3 * Math.sin(elapsed * 4 + a.phase)));
       } else if (a.type === "spin") {
-        // kit.js: fans, flywheels, weathervanes, radar rotors
+        // kit.ts: fans, flywheels, weathervanes, radar rotors
         a.obj.rotation[a.axis || "y"] += dt * a.speed;
       } else if (a.type === "bob") {
-        // kit.js: hanging trolleys, flags, floats
+        // kit.ts: hanging trolleys, flags, floats
         a.obj.position.y =
           a.base + Math.sin(elapsed * a.speed + a.phase) * a.amp;
       } else if (a.type === "reciprocate") {
-        // kit.js: piston rods
+        // kit.ts: piston rods
         a.obj.position[a.axis || "y"] =
           a.base + Math.sin(elapsed * a.speed + a.phase) * a.amp;
       }
@@ -1210,7 +1239,8 @@ export function createWorld(content) {
 
     if (consent && consent.parkRing && sim) {
       const load = Math.min(1, sim.stats.approvals / 8);
-      consent.parkRing.material.opacity = 0.3 + 0.7 * load;
+      (consent.parkRing.material as THREE.MeshBasicMaterial).opacity =
+        0.3 + 0.7 * load;
       consent.parkRing.scale.setScalar(
         1 + 0.04 * Math.sin(elapsed * 3) * (0.2 + load)
       );
@@ -1320,7 +1350,11 @@ export function createWorld(content) {
 
 /* ------------------------------------------------------------------ building kinds */
 
-function buildBuilding(b, districtColor, ctx) {
+function buildBuilding(
+  b: CityBuilding,
+  districtColor: string,
+  ctx: BuildingBuildContext
+): THREE.Group {
   const {
     facadeMat,
     plainMat,
@@ -1756,7 +1790,14 @@ function buildBuilding(b, districtColor, ctx) {
   return g;
 }
 
-function addConveyor(g, w, d, convTex, plainMat, animated) {
+function addConveyor(
+  g: THREE.Group,
+  w: number,
+  d: number,
+  convTex: THREE.Texture,
+  plainMat: (hex: string, options?: KitOptions) => THREE.MeshStandardMaterial,
+  animated: AnimationRecord[]
+): void {
   const belt = new THREE.Mesh(
     new THREE.BoxGeometry(w * 1.5, 0.4, 2.2),
     new THREE.MeshStandardMaterial({
@@ -1778,7 +1819,15 @@ function addConveyor(g, w, d, convTex, plainMat, animated) {
   animated.push({ type: "conveyor", tex: convTex });
 }
 
-function addClock(g, w, h, d, plainMat, glowMat, animated) {
+function addClock(
+  g: THREE.Group,
+  w: number,
+  h: number,
+  d: number,
+  plainMat: (hex: string, options?: KitOptions) => THREE.MeshStandardMaterial,
+  glowMat: (hex: string, base?: number) => THREE.MeshBasicMaterial,
+  animated: AnimationRecord[]
+): void {
   const face = new THREE.Mesh(
     new THREE.CylinderGeometry(w * 0.32, w * 0.32, 0.3, 20),
     plainMat("#f2f5f9", { rough: 0.5 })

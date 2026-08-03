@@ -1,4 +1,4 @@
-// landmarks-data.js — consent, vault, wal, backup. See KIT_API.md.
+// landmarks-data.ts — consent, vault, wal, backup. See KIT_API.md.
 //
 // Every builder below calls ONLY documented kit.* members with documented signatures.
 // Positioning for members that don't document x/y/z opts (most non-box/drum/dome
@@ -7,14 +7,19 @@
 //
 // Flagged: none of these builders were invented. The one spec instruction that could
 // not be satisfied as written is `wal-conveyor`'s scrolling belt texture — the
-// landmark dispatch object (see world.js "Bespoke landmark geometry") does not pass
+// landmark dispatch object (see world.ts "Bespoke landmark geometry") does not pass
 // `convTex` to landmarks, so the belt is built as static geometry instead of pushing
 // `{ type: 'conveyor', tex }` into `animated` (which would crash on `a.tex.offset.x`
 // with an undefined texture).
 
+import type { LandmarkBuilder } from "../core/types.js";
+
 // small local helper — angle math only, not a kit member.
-function ring(count, radius) {
-  const pts = [];
+function ring(
+  count: number,
+  radius: number
+): Array<{ x: number; z: number; a: number }> {
+  const pts: Array<{ x: number; z: number; a: number }> = [];
   for (let i = 0; i < count; i++) {
     const a = (i / count) * Math.PI * 2;
     pts.push({ x: Math.cos(a) * radius, z: Math.sin(a) * radius, a });
@@ -22,7 +27,7 @@ function ring(count, radius) {
   return pts;
 }
 
-export const LANDMARKS_DATA = {
+export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
   // ---------------------------------------------------------------- consent
   "consent-arch"({ g, w, h, d, color, kit }) {
     const pierW = Math.max(1.2, w * 0.18);

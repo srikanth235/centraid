@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit — one bespoke model per building id.
 // Already split three ways by district; each entry is independent of the others.
-// landmarks-core.js — clients, gateway, runtime. See KIT_API.md.
+// landmarks-core.ts — clients, gateway, runtime. See KIT_API.md.
 //
 // Lane A. Twelve bespoke silhouettes. The four rules, as applied here:
 //   1. District color is an ACCENT only — sign bands, door glow, seams, beacons, board
@@ -14,13 +14,23 @@
 //   4. Each shape depicts its subsystem — drawers for the vault registry, shelf bands for
 //      the ledger, gauges for the model catalog, a live scoreboard for health.
 //
-// Defensive by construction: kit.js is authored in parallel, so every kit call goes
+// Defensive by construction: kit.ts is authored in parallel, so every kit call goes
 // through `add()`. A kit member that is missing or throws costs one detail,
-// never the whole building (the dispatch seam in world.js drops a landmark that throws).
+// never the whole building (the dispatch seam in world.ts drops a landmark that throws).
+
+import type * as THREE from "three";
+
+import type { LandmarkBuilder } from "../core/types.js";
 
 /** Build a part, position it, add it to the group. Returns the object or null. */
-function add(g, make, x, y, z) {
-  let o = null;
+function add(
+  g: THREE.Group,
+  make: () => THREE.Object3D,
+  x?: number,
+  y?: number,
+  z?: number
+): THREE.Object3D | null {
+  let o: THREE.Object3D | null = null;
   try {
     o = make();
   } catch {
@@ -39,15 +49,24 @@ function add(g, make, x, y, z) {
 }
 
 /** Rotate a part that was already added. */
-function turn(o, rx, ry, rz) {
+function turn(
+  o: THREE.Object3D | null,
+  rx?: number,
+  ry?: number,
+  rz?: number
+): THREE.Object3D | null {
   if (!o || !o.rotation) return o;
   o.rotation.set(rx || 0, ry || 0, rz || 0);
   return o;
 }
 
 /** A closed ring of [x, y, z] points, for seams and pipe runs. */
-function ringPoints(r, y, count) {
-  const pts = [];
+function ringPoints(
+  r: number,
+  y: number,
+  count: number
+): Array<[number, number, number]> {
+  const pts: Array<[number, number, number]> = [];
   const n = Math.max(4, count | 0);
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * Math.PI * 2;
@@ -56,7 +75,7 @@ function ringPoints(r, y, count) {
   return pts;
 }
 
-export const LANDMARKS_CORE = {
+export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
   // ── Client Approach ──────────────────────────────────────────────────────────────
   // Three towers that must be told apart instantly: heavy chamfered monolith,
   // glass cylinder, slender notched portrait slab.

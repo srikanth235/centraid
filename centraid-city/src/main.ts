@@ -1,13 +1,20 @@
-// main.js — bootstrap: renderer, camera, controls, picking, camera tweens, frame loop.
-// Content (copy + city plan) comes from ./content.js. Rendering lives in world.js,
-// the economy in sim.js, the DOM in ui.js.
+// main.ts — bootstrap: renderer, camera, controls, picking, camera tweens, frame loop.
+// Content (copy + city plan) comes from ./core/content.ts. Rendering lives in world/world.ts,
+// the economy in sim/sim.ts, the DOM in ui/ui.ts.
 // governance: allow-repo-hygiene file-size-limit — 709 lines against a 625 cap; the
 // bootstrap is one linear wiring sequence and an early split would just add indirection.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import { createSim } from "./sim.js";
+import type {
+  CityContent,
+  InspectorRef,
+  InspectorState,
+  WorldBuilding,
+  WorldDistrict,
+} from "./core/types.js";
+import { createSim } from "./sim/sim.js";
 import {
   createLoading,
   createHud,
@@ -16,25 +23,26 @@ import {
   createToast,
   createHoverTip,
   createMinimap,
-} from "./ui.js";
-import { createWorld } from "./world.js";
+} from "./ui/ui.js";
+import { createWorld } from "./world/world.js";
 
 /* ------------------------------------------------------------------ content */
 
-let content;
+let content: CityContent;
 let contentFallback = false;
 try {
-  content = await import("./content.js");
+  content = (await import("./core/content.js")) as unknown as CityContent;
 } catch {
-  content = await import("./content.sample.js");
+  content =
+    (await import("./core/content.sample.js")) as unknown as CityContent;
   contentFallback = true;
 }
-const meta = content.meta || {};
-const districtsData = content.districts || [];
+const meta = content.meta;
+const districtsData = content.districts;
 
 /* ------------------------------------------------------------------ renderer */
 
-const stage = document.querySelector("#stage");
+const stage = document.querySelector<HTMLElement>("#stage")!;
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: "high-performance",
@@ -125,7 +133,7 @@ controls.mouseButtons = {
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
 let rotateModifier = false;
-function setRotateModifier(on) {
+function setRotateModifier(on: boolean): void {
   if (rotateModifier === on) return;
   rotateModifier = on;
   controls.mouseButtons.LEFT = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
@@ -158,10 +166,10 @@ const tween = {
   fromTgt: new THREE.Vector3(),
   toTgt: new THREE.Vector3(),
 };
-const easeInOutCubic = (t) =>
+const easeInOutCubic = (t: number): number =>
   t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 
-function flyTo(targetVec, distance, dur = 1.5) {
+function flyTo(targetVec: THREE.Vector3, distance: number, dur = 1.5): void {
   const dir = new THREE.Vector3().subVectors(targetVec, cityCenter);
   dir.y = 0;
   if (dir.lengthSq() < 1) dir.set(0.35, 0, 1);
@@ -193,7 +201,7 @@ function cancelTween() {
 renderer.domElement.addEventListener("pointerdown", cancelTween);
 renderer.domElement.addEventListener("wheel", cancelTween, { passive: true });
 
-function focusDistrict(id, buildingId) {
+function focusDistrict(id: string, buildingId?: string | null): void {
   const rec = world.byId.get(id);
   if (!rec) return;
   if (buildingId) {
@@ -215,7 +223,7 @@ function focusDistrict(id, buildingId) {
   );
 }
 
-function goHome() {
+function goHome(): void {
   tween.fromPos.copy(camera.position);
   tween.fromTgt.copy(controls.target);
   tween.toPos.copy(HOME.pos);
@@ -240,7 +248,9 @@ const inspector = createInspector({
   },
 });
 
-const districtNames = new Map(districtsData.map((d) => [d.id, d.name || d.id]));
+const districtNames = new Map<string, string>(
+  districtsData.map((d) => [d.id, d.name || d.id])
+);
 
 // A chapter may pin the scenario it narrates, so the city actually shows what the text
 // claims — every Scenarios chapter does, and several walkthrough chapters do too.
@@ -261,7 +271,7 @@ const tour = createTour(content.tour, {
     btnTour.classList.add("on");
     if (at.chapterChanged && c.scenarioId && c.scenarioId !== sim.scenario)
       sim.setScenario(c.scenarioId);
-    // world.js may not expose the spotlight yet — never let a page turn throw
+    // world.ts may not expose the spotlight yet — never let a page turn throw
     if (typeof world.setFlowFocus === "function")
       world.setFlowFocus(at.flows || null);
   },
@@ -278,16 +288,18 @@ const tour = createTour(content.tour, {
 const firstScenario = (content.scenarios || [])[0];
 if (firstScenario) sim.setScenario(firstScenario.id);
 
-const btnTour = document.querySelector("#btnTour");
-const btnDayNight = document.querySelector("#btnDayNight");
+const btnTour = document.querySelector<HTMLButtonElement>("#btnTour")!;
+const btnDayNight = document.querySelector<HTMLButtonElement>("#btnDayNight")!;
 // The top-bar button is the way into the book: it opens the table of contents rather
 // than starting a fixed sequence.
 btnTour.addEventListener("click", () => tour.togglePanel());
-document.querySelector("#btnReset").addEventListener("click", () => {
-  clearSelection();
-  inspector.close();
-  goHome();
-});
+document
+  .querySelector<HTMLButtonElement>("#btnReset")!
+  .addEventListener("click", () => {
+    clearSelection();
+    inspector.close();
+    goHome();
+  });
 
 let nightTarget = 0;
 let nightNow = 0;
@@ -301,10 +313,11 @@ btnDayNight.addEventListener("click", () => {
 
 // OrbitControls only binds arrow keys when listenToKeyEvents() is called, which this
 // build never does — so the arrows are ours for page-turning.
-function isTypingTarget(t) {
-  if (!t || !t.tagName) return false;
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof Element)) return false;
   return (
-    t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)
+    (t instanceof HTMLElement && t.isContentEditable) ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)
   );
 }
 
@@ -340,14 +353,24 @@ window.addEventListener("keydown", (e) => {
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2(-2, -2);
 let pointerPx = { x: 0, y: 0 };
-let hovered = null;
-let selected = null;
-let pointerDown = null;
+let hovered: string | null = null;
+let selected: InspectorRef | null = null;
+let pointerDown: { x: number; y: number } | null = null;
 let pointerMoved = false;
+
+interface PickRef {
+  districtId: string;
+  buildingId?: string | null;
+}
+
+interface PickRecord {
+  rec: WorldDistrict;
+  b: WorldBuilding | null;
+}
 
 const pickRoots = world.districts.map((d) => d.group);
 
-function resolvePick(obj) {
+function resolvePick(obj: THREE.Object3D | null): THREE.Object3D | null {
   let o = obj;
   while (o) {
     if (o.userData && o.userData.pick) return o;
@@ -356,18 +379,18 @@ function resolvePick(obj) {
   return null;
 }
 
-function pickAt() {
+function pickAt(): THREE.Object3D | null {
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(pickRoots, true);
   for (const h of hits) {
-    if (h.object.isSprite) continue;
+    if (h.object instanceof THREE.Sprite) continue;
     const node = resolvePick(h.object);
     if (node) return node;
   }
   return null;
 }
 
-function recordOf(pick) {
+function recordOf(pick: PickRef): PickRecord | null {
   const rec = world.byId.get(pick.districtId);
   if (!rec) return null;
   if (pick.buildingId) {
@@ -377,7 +400,7 @@ function recordOf(pick) {
   return { rec, b: null };
 }
 
-const plateBoxes = new Map();
+const plateBoxes = new Map<string, THREE.Box3>();
 for (const rec of world.districts) {
   const p = rec.data.plate;
   plateBoxes.set(
@@ -389,7 +412,7 @@ for (const rec of world.districts) {
   );
 }
 
-function boxOf(pick) {
+function boxOf(pick: PickRef): THREE.Box3 | null {
   const r = recordOf(pick);
   if (!r) return null;
   if (r.b) return r.b.box;
@@ -436,16 +459,18 @@ function clearSelection() {
   world.selectOutline.visible = false;
 }
 
-function select(districtId, buildingId) {
+function select(districtId: string, buildingId?: string | null): void {
   const r = recordOf({ districtId, buildingId });
   if (!r) return;
   selected = { districtId, buildingId: r.b ? buildingId : null };
   world.frameOutline(world.selectOutline, boxOf(selected));
-  world.selectOutline.material.color.set(r.rec.color);
+  (world.selectOutline.material as THREE.LineBasicMaterial).color.set(
+    r.rec.color
+  );
   showInspector(r);
 }
 
-function showInspector(r) {
+function showInspector(r: PickRecord): void {
   const { rec, b } = r;
   const others = rec.buildings
     .filter((x) => !b || x.data.id !== b.data.id)
@@ -483,10 +508,11 @@ function showInspector(r) {
   };
 }
 
-const n1 = (v) => (Number.isFinite(v) ? v.toFixed(1) : "–");
-const n0 = (v) => (Number.isFinite(v) ? Math.round(v).toString() : "–");
+const n1 = (v: number): string => (Number.isFinite(v) ? v.toFixed(1) : "–");
+const n0 = (v: number): string =>
+  Number.isFinite(v) ? Math.round(v).toString() : "–";
 
-function stateFor(districtId) {
+function stateFor(districtId: string): InspectorState {
   const s = sim.stats;
   const r = sim.rates;
   const rows = [];
@@ -560,7 +586,7 @@ function stateFor(districtId) {
 
 /* ------------------------------------------------------------------ resize */
 
-function resize() {
+function resize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   camera.aspect = w / h;
@@ -582,7 +608,7 @@ let hudAcc = 0;
 let inspAcc = 0;
 let hoverAcc = 0;
 
-function frame() {
+function frame(): void {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
   elapsed += dt;
@@ -703,7 +729,7 @@ frame();
 
 createLoading(meta, () => {
   if (contentFallback)
-    toast("content.js not found — running the development fixture.", 5000);
+    toast("core/content.ts not found — running the development fixture.", 5000);
   // A shared link like …/#chapter-10 opens straight into that chapter once the scene is
   // ready; otherwise settle on the establishing shot.
   tour.applyHash();

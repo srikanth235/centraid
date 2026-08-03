@@ -146,8 +146,6 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
-    // Upstream three.js r180, vendored byte-for-byte (see oxfmt.config.ts).
-    "centraid-city/vendor/**",
   ]),
   rules: {
     // Ultracite's core preset contains type-aware rules. They cannot execute

@@ -59,9 +59,5 @@ export default defineConfig({
     "packages/blueprints/manifest.json",
     "packages/design/kit/tokens.css",
     "packages/design/kit/wall.css",
-    // Upstream three.js r180, vendored byte-for-byte so the city bundle needs
-    // no build step and no network. Reformatting it would fork it from the
-    // release it claims to be.
-    "centraid-city/vendor/**",
   ],
 });
