@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+html,body{margin:0;height:100%}
+*{box-sizing:border-box}
+@keyframes rIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(140,140,140,.22);border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+input::placeholder{color:currentColor;opacity:.5}
+</style>
+</helmet>
+<div style="{{ pageStyle }}">
+
+<div style="{{ ctlBarStyle }}">
+<div style="{{ ctlBrandStyle }}">Discover · refinement options</div>
+<div style="{{ ctlGroupStyle }}">
+<sc-for list="{{ variantBtns }}" as="b" hint-placeholder-count="4">
+<button onClick="{{ b.pick }}" style="{{ b.css }}">{{ b.label }}</button>
+</sc-for>
+</div>
+<div style="{{ ctlDividerStyle }}"></div>
+<div style="{{ ctlGroupStyle }}">
+<sc-for list="{{ surfaceBtns }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.pick }}" style="{{ b.css }}">{{ b.label }}</button>
+</sc-for>
+</div>
+<div style="{{ ctlGroupStyle }}">
+<sc-for list="{{ themeBtns }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.pick }}" style="{{ b.css }}">{{ b.label }}</button>
+</sc-for>
+</div>
+<div style="{{ ctlGroupStyle }}">
+<sc-for list="{{ stateBtns }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.pick }}" style="{{ b.css }}">{{ b.label }}</button>
+</sc-for>
+</div>
+<div style="{{ ctlNoteStyle }}">{{ variantNote }}</div>
+</div>
+
+<div style="{{ stageWrapStyle }}">
+<div style="{{ stageStyle }}">
+
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<div style="{{ titlebarStyle }}">
+<div style="display:flex;gap:8px;align-items:center">
+<span style="width:11px;height:11px;border-radius:50%;background:#ff5f57"></span>
+<span style="width:11px;height:11px;border-radius:50%;background:#febc2e"></span>
+<span style="width:11px;height:11px;border-radius:50%;background:#28c840"></span>
+</div>
+<div style="{{ titlebarLabelStyle }}">{{ titlebarCopy }}</div>
+<div onClick="{{ toggleOffline }}" style="{{ connStyle }}">{{ connLabel }}</div>
+</div>
+</sc-if>
+
+<div style="{{ bodyRowStyle }}">
+
+<sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+<aside style="{{ sidebarStyle }}">
+<div style="{{ brandRowStyle }}">
+<div style="{{ logoStyle }}">◎</div>
+<sc-if value="{{ showBrandName }}" hint-placeholder-val="{{ true }}">
+<div style="{{ brandNameStyle }}">Centraid</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ showSearchBtn }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ openPalette }}" style="{{ searchBtnStyle }}">
+<span style="{{ searchLabelStyle }}">{{ searchLabel }}</span>
+<span style="{{ kbdStyle }}">⌘K</span>
+</button>
+</sc-if>
+
+<div style="{{ navColStyle }}">
+<sc-for list="{{ navItems }}" as="n" hint-placeholder-count="3">
+<button onClick="{{ n.pick }}" style="{{ n.css }}">
+<span style="{{ n.glyphCss }}">{{ n.glyph }}</span>
+<sc-if value="{{ showNavLabels }}" hint-placeholder-val="{{ true }}">
+<span style="{{ n.labelCss }}">{{ n.label }}</span>
+<sc-if value="{{ n.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ n.badgeCss }}">{{ n.badge }}</span></sc-if>
+</sc-if>
+</button>
+</sc-for>
+
+<sc-if value="{{ showPins }}" hint-placeholder-val="{{ true }}">
+<div style="{{ navHeadStyle }}">In your space</div>
+<sc-for list="{{ recents }}" as="r" hint-placeholder-count="3">
+<button onClick="{{ r.open }}" style="{{ r.pinCss }}">
+<span style="{{ r.dotCss }}"></span>
+<span style="{{ r.pinNameCss }}">{{ r.name }}</span>
+<span style="{{ r.pinCatCss }}">{{ r.category }}</span>
+</button>
+</sc-for>
+</sc-if>
+</div>
+
+<sc-if value="{{ showUserRow }}" hint-placeholder-val="{{ true }}">
+<div style="{{ userRowStyle }}">
+<div style="{{ avatarStyle }}">MR</div>
+<div style="flex:1;min-width:0">
+<div style="{{ userNameStyle }}">Maya Rodriguez</div>
+<div style="{{ userHandleStyle }}">Local vault</div>
+</div>
+</div>
+</sc-if>
+</aside>
+</sc-if>
+
+<main style="{{ mainStyle }}">
+
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+<div style="{{ mTopBarStyle }}">
+<div style="{{ mStatusRowStyle }}"><span>9:41</span><span>{{ connLabel }}</span></div>
+<sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ true }}">
+<div style="{{ mTitleRowStyle }}">
+<div style="{{ mTitleStyle }}">Discover</div>
+<button onClick="{{ openPalette }}" style="{{ mSearchIconStyle }}">⌕</button>
+</div>
+</sc-if>
+<sc-if value="{{ isDetailish }}" hint-placeholder-val="{{ false }}">
+<div style="{{ mTitleRowStyle }}">
+<button onClick="{{ back }}" style="{{ mBackStyle }}">‹</button>
+<div style="{{ mNavTitleStyle }}">{{ headerName }}</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+<div style="{{ detailScrollStyle }}">
+<div style="{{ detailInnerStyle }}">
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ back }}" style="{{ backBtnStyle }}">← Discover</button>
+</sc-if>
+<div style="{{ detailIdRowStyle }}">
+<div style="{{ current.markLg }}">{{ current.initial }}</div>
+<div style="flex:1;min-width:0">
+<div style="{{ detailNameStyle }}">{{ current.name }}</div>
+<div style="{{ detailPurposeStyle }}">{{ current.purpose }}</div>
+</div>
+</div>
+<div style="{{ detailMetaRowStyle }}">
+<sc-for list="{{ current.meta }}" as="mt" hint-placeholder-count="3">
+<span style="{{ mt.css }}">{{ mt.label }}</span>
+</sc-for>
+</div>
+
+<div style="{{ shotBandStyle }}">
+<sc-for list="{{ current.shots }}" as="s" hint-placeholder-count="3">
+<div style="{{ s.css }}"></div>
+</sc-for>
+</div>
+
+<div style="{{ descStyle }}">{{ current.desc }}</div>
+
+<div style="{{ accessCardStyle }}">
+<div style="{{ accessHeadStyle }}">What {{ current.name }} can reach</div>
+<div style="{{ accessSubStyle }}">{{ accessSub }}</div>
+<div style="{{ accessTableStyle }}">
+<sc-for list="{{ current.access }}" as="r" hint-placeholder-count="2">
+<div style="{{ r.rowCss }}">
+<div style="{{ r.storeCss }}">{{ r.store }}</div>
+<div style="{{ r.modeWrapCss }}">
+<sc-for list="{{ r.modeTags }}" as="mp" hint-placeholder-count="1">
+<span style="{{ mp.css }}">{{ mp.label }}</span>
+</sc-for>
+</div>
+<div style="{{ r.whyCss }}">{{ r.why }}</div>
+</div>
+</sc-for>
+</div>
+<div style="{{ accessFootStyle }}">{{ current.footnote }}</div>
+</div>
+</div>
+</div>
+
+<div style="{{ installBarStyle }}">
+<div style="{{ installBarInnerStyle }}">
+<div style="flex:1;min-width:0">
+<div style="{{ installHintStyle }}">{{ installHint }}</div>
+<sc-if value="{{ showProgressBar }}" hint-placeholder-val="{{ false }}">
+<div style="{{ progressTrackStyle }}"><div style="{{ progressFillStyle }}"></div></div>
+</sc-if>
+</div>
+<button onClick="{{ toConfirm }}" style="{{ installBtnStyle }}">{{ installLabel }}</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+<div style="{{ confirmOverlayStyle }}">
+<div style="{{ confirmPanelStyle }}">
+<div style="{{ confirmKickerStyle }}">Add {{ current.name }}</div>
+<div style="{{ confirmBodyStyle }}">{{ current.confirmLine }}</div>
+<div style="{{ confirmMetaStyle }}">{{ current.confirmMeta }}</div>
+<div style="{{ confirmBtnRowStyle }}">
+<button onClick="{{ doInstall }}" style="{{ primaryBtnStyle }}">Add to my space</button>
+<button onClick="{{ back }}" style="{{ ghostBtnStyle }}">Cancel</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ true }}">
+<div style="{{ catalogScrollStyle }}">
+<div style="{{ contentColStyle }}">
+
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<div style="{{ headerStyle }}">
+<div style="{{ pageTitleStyle }}">{{ listLabel }}</div>
+<div style="{{ pageSubStyle }}">{{ pageSub }}</div>
+</div>
+</sc-if>
+
+<div style="{{ toolRowStyle }}">
+<div style="{{ catRowStyle }}">
+<sc-for list="{{ cats }}" as="c" hint-placeholder-count="5">
+<button onClick="{{ c.pick }}" style="{{ c.css }}">{{ c.label }}</button>
+</sc-for>
+</div>
+<div style="{{ countStyle }}">{{ countCopy }}</div>
+</div>
+
+<sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+<div style="{{ bannerStyle }}">{{ bannerCopy }}</div>
+</sc-if>
+
+<sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="{{ emptyStyle }}">
+<div style="{{ emptyTitleStyle }}">{{ emptyTitle }}</div>
+<div style="{{ emptyBodyStyle }}">{{ emptyBody }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+
+<sc-if value="{{ showStrip }}" hint-placeholder-val="{{ false }}">
+<div style="{{ stripWrapStyle }}">
+<div style="{{ sectionLabelStyle }}">New this month</div>
+<div style="{{ stripStyle }}">
+<sc-for list="{{ notable }}" as="n" hint-placeholder-count="4">
+<div onClick="{{ n.open }}" style="{{ n.tileWrapCss }}">
+<div style="{{ n.tileTopCss }}">
+<div style="{{ n.markSm }}">{{ n.initial }}</div>
+<div style="{{ n.tileNameCss }}">{{ n.name }}</div>
+</div>
+<div style="{{ n.tilePurposeCss }}">{{ n.purpose }}</div>
+<div style="{{ n.tileMetaCss }}">{{ n.trustLabel }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+<div style="{{ listWrapStyle }}">
+<sc-if value="{{ showListLabel }}" hint-placeholder-val="{{ false }}">
+<div style="{{ sectionLabelStyle }}">All apps</div>
+</sc-if>
+<sc-if value="{{ showColHeads }}" hint-placeholder-val="{{ false }}">
+<div style="{{ colHeadRowStyle }}">
+<div style="{{ colHeadAppStyle }}">App</div>
+<div style="{{ colHeadPurposeStyle }}">Purpose</div>
+<div style="{{ colHeadTouchStyle }}">Touches</div>
+<div style="{{ colHeadNetStyle }}">Network</div>
+<div style="{{ colHeadActStyle }}"></div>
+</div>
+</sc-if>
+<sc-for list="{{ list }}" as="a" hint-placeholder-count="8">
+<div onClick="{{ a.open }}" style="{{ a.rowCss }}">
+<div style="{{ a.markSm }}"><sc-if value="{{ a.showInitial }}" hint-placeholder-val="{{ true }}"><span>{{ a.initial }}</span></sc-if></div>
+<div style="{{ a.textColCss }}">
+<div style="{{ a.nameCss }}">{{ a.name }}</div>
+<div style="{{ a.purposeCss }}">{{ a.purpose }}</div>
+</div>
+<div style="{{ a.touchesCss }}">{{ a.touchesLabel }}</div>
+<div style="{{ a.netCss }}">{{ a.netLabel }}</div>
+<div style="{{ a.actionCss }}">{{ a.action }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isGrid }}" hint-placeholder-val="{{ false }}">
+<div style="{{ gridWrapStyle }}">
+<sc-for list="{{ list }}" as="a" hint-placeholder-count="6">
+<div onClick="{{ a.open }}" style="{{ a.cardCss }}">
+<div style="{{ a.cardTopCss }}">
+<div style="{{ a.markLgCard }}">{{ a.initial }}</div>
+<div style="{{ a.cardActionCss }}">{{ a.action }}</div>
+</div>
+<div style="{{ a.cardNameCss }}">{{ a.name }}</div>
+<div style="{{ a.cardPurposeCss }}">{{ a.purpose }}</div>
+<div style="{{ a.cardMetaCss }}">{{ a.cardMetaCopy }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+</sc-if>
+
+</div>
+</div>
+</sc-if>
+
+</main>
+</div>
+
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+<div style="{{ tabBarStyle }}">
+<sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="5">
+<div style="{{ tb.css }}"><div style="{{ tb.glyphCss }}">{{ tb.glyph }}</div><div>{{ tb.label }}</div></div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closePalette }}" style="{{ paletteOverlayStyle }}">
+<div onClick="{{ stop }}" style="{{ palettePanelStyle }}">
+<div style="{{ paletteInputRowStyle }}">
+<input value="{{ pq }}" onInput="{{ onPq }}" placeholder="{{ palettePlaceholder }}" style="{{ paletteInputStyle }}" />
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}"><button onClick="{{ closePalette }}" style="{{ mCancelStyle }}">Cancel</button></sc-if>
+</div>
+<div style="{{ paletteListStyle }}">
+<sc-if value="{{ paletteEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ paletteEmptyStyle }}">No matches</div></sc-if>
+<sc-for list="{{ paletteItems }}" as="c" hint-placeholder-count="6">
+<button onClick="{{ c.run }}" style="{{ c.css }}">
+<span style="{{ c.glyphCss }}">{{ c.glyph }}</span>
+<span style="{{ c.labelCss }}">{{ c.label }}</span>
+<span style="{{ c.hintCss }}">{{ c.hint }}</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<div style="{{ paletteFootStyle }}"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="{{ toastStyle }}">{{ toastCopy }}</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:980}}">
+const THEMES = {
+  dark:{bg:'#0a0a0a',panel:'#0f0f0f',panel2:'#151515',panel3:'#1c1c1c',border:'#202020',borderS:'#191919',borderL:'#2b2b2b',
+    text:'#ededed',textDim:'#8e8e8e',textMute:'#7d7d7d',accent:'#10b981',amber:'#e0a232',red:'#e5645c',blue:'#5891ef',purple:'#a86ede',
+    chrome:'#0c0c0c',onAccent:'#04120c',scrim:'rgba(0,0,0,.68)',shadowLg:'0 16px 48px rgba(0,0,0,.62)'},
+  light:{bg:'#ffffff',panel:'#ffffff',panel2:'#f7f6f5',panel3:'#f0eeec',border:'#e6e3e0',borderS:'#efedeb',borderL:'#d7d3cf',
+    text:'#1a1815',textDim:'#6b6560',textMute:'#736e68',accent:'#0d8a63',amber:'#a8700f',red:'#c8443c',blue:'#2a6fd4',purple:'#8340c0',
+    chrome:'#fbfaf9',onAccent:'#ffffff',scrim:'rgba(26,24,21,.32)',shadowLg:'0 16px 44px rgba(26,24,21,.14)'}
+};
+const SANS = "'Inter',system-ui,sans-serif", MONO = "'IBM Plex Mono',monospace";
+const CATS = ['All','Productivity','Media','Life','Tools'];
+
+// Refinement variants. Each is a different reading of "Linear / Notion / Cursor".
+const VARIANTS = {
+  base:{label:'Base',note:'Where we are now — tinted marks, pills, hero card, uppercase micro-caps.',
+    layout:'list', mark:'tinted', markSize:36, rowPad:13, rowDivider:true, rowCard:false,
+    trustStyle:'pill', sectionCase:'upper', colHeads:false, strip:true, stripStyle:'plate',
+    measure:null, sidebar:'full', accentUse:'wide', cardBorder:true, actionStyle:'button',
+    titleSize:21, nameSize:13.5, elevate:true},
+  r1:{label:'R1 · Quiet rows',note:'Linear. One column, 34px rows, no dividers, no cards, no plates. Colour only on the primary action.',
+    layout:'list', mark:'dot', markSize:0, rowPad:8, rowDivider:false, rowCard:false,
+    trustStyle:'text', sectionCase:'sentence', colHeads:false, strip:false, stripStyle:'none',
+    measure:880, sidebar:'full', accentUse:'narrow', cardBorder:false, actionStyle:'text',
+    titleSize:19, nameSize:13, elevate:false},
+  r2:{label:'R2 · Gallery',note:'Notion. A wide, airy grid of flat cards, generous whitespace, quiet muted labels.',
+    layout:'grid', mark:'flat', markSize:34, rowPad:16, rowDivider:false, rowCard:true,
+    trustStyle:'text', sectionCase:'sentence', colHeads:false, strip:false, stripStyle:'none',
+    measure:1040, sidebar:'full', accentUse:'narrow', cardBorder:true, actionStyle:'text',
+    titleSize:26, nameSize:14.5, elevate:false},
+  r3:{label:'R3 · Console',note:'Cursor. Icon rail, columnar table, monospace metadata, keyboard-first, densest of the three.',
+    layout:'list', mark:'flat', markSize:20, rowPad:6, rowDivider:false, rowCard:false,
+    trustStyle:'mono', sectionCase:'none', colHeads:true, strip:false, stripStyle:'none',
+    measure:null, sidebar:'rail', accentUse:'narrow', cardBorder:false, actionStyle:'text',
+    titleSize:17, nameSize:12.5, elevate:false}
+};
+
+const APPS = [
+  {id:'ledger',name:'Ledger',cat:'Life',category:'Finance',purpose:'A quiet double-entry book for the household.',hue:'purple',
+   touches:'own store, Files',
+   desc:'Ledger keeps a plain double-entry book for a household: accounts, categories, and a monthly reconciliation view. It writes only to its own store, and there is no account to create and no sync to switch off.',
+   access:[{store:'Ledger store',modes:['read','write'],why:'Its own accounts and entries.',net:false},{store:'Files',modes:['read'],why:'To import a bank CSV you pick.',net:false}],
+   footnote:'Everything else in your space stays invisible to this app.',
+   confirmLine:'Ledger will be able to read and write in its own store, and read files you choose. It cannot see Photos, People, Calendar or Chat.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'sift',name:'Sift',cat:'Media',category:'Photos',purpose:'Cull a shoot down to the keepers.',hue:'blue',touches:'Photos',
+   desc:'Sift is a fast rating pass for a folder of photographs: keyboard-driven, side-by-side compare, one keep-or-discard decision per frame. It reads your library and writes only ratings back.',
+   access:[{store:'Photos',modes:['read'],why:'To show the shoot you pick.',net:false},{store:'Photos · ratings',modes:['write'],why:'To save your keep and discard marks.',net:false}],
+   footnote:'Sift never uploads a photograph, and cannot reach any other store.',
+   confirmLine:'Sift will be able to read your Photos and write ratings back to them. It cannot see Docs, People, Files or Chat.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'almanac',name:'Almanac',cat:'Life',category:'Calendar',purpose:'Sunrise, tides and the shape of the year.',hue:'amber',new:true,touches:'Calendar',
+   desc:'Almanac overlays daylight, moon phase and local tide times onto your calendar, and can write a small set of natural events into a calendar of its own.',
+   access:[{store:'Calendar',modes:['read','write'],why:'To overlay and add natural events.',net:false},{store:'tides.io',modes:['network'],why:'Tide tables for your coastline.',net:true}],
+   footnote:'Only your coarse location is sent — never an event title.',
+   confirmLine:'Almanac will be able to read and write your Calendar, and will contact tides.io for tide tables.',
+   confirmMeta:'One thing leaves this device: your approximate location.'},
+  {id:'threads',name:'Threads',cat:'Productivity',category:'Chat',purpose:'Threaded notes alongside any conversation.',hue:'accent',new:true,touches:'Chat',
+   desc:'Threads lets you keep a private running note beside any conversation, without ever posting into it. Notes live in their own store and are never sent anywhere.',
+   access:[{store:'Chat',modes:['read'],why:'To anchor a note to a conversation.',net:false},{store:'Threads store',modes:['read','write'],why:'Your notes.',net:false}],
+   footnote:'Threads cannot send messages, and cannot reach People.',
+   confirmLine:'Threads will be able to read your Chat conversations and keep notes in its own store. It cannot send messages.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'vault',name:'Vault',cat:'Tools',category:'Files',purpose:'Encrypted shelves inside your Files.',hue:'red',touches:'Files',
+   desc:'Vault adds a passphrase-protected shelf to Files. Contents are encrypted at rest with a key derived on device, which means Centraid itself cannot read them either.',
+   access:[{store:'Files',modes:['read','write'],why:'To create and open encrypted shelves.',net:false}],
+   footnote:'Vault holds no key material outside your device.',
+   confirmLine:'Vault will be able to read and write your Files. It cannot see any other store.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'marginalia',name:'Marginalia',cat:'Productivity',category:'Docs',purpose:'Long-form annotation for anything you read.',hue:'blue',touches:'Docs',
+   desc:'Marginalia adds a margin column to any document: notes, references and a reading log, kept beside the text rather than inside it.',
+   access:[{store:'Docs',modes:['read','write'],why:'To attach notes to passages.',net:false}],
+   footnote:'Marginalia cannot reach Photos, Files, People or Chat.',
+   confirmLine:'Marginalia will be able to read and write your Docs. Nothing else in your space is visible to it.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'kin',name:'Kin',cat:'Life',category:'People',purpose:'Remember who you owe a letter.',hue:'purple',new:true,touches:'People, Calendar',
+   desc:'Kin keeps a gentle cadence for the relationships you care about: last contact, a nudge interval you set, and somewhere for the small facts you always forget.',
+   access:[{store:'People',modes:['read','write'],why:'Contacts and your notes on them.',net:false},{store:'Calendar',modes:['read'],why:'To avoid nudging on a busy day.',net:false}],
+   footnote:'Kin has no server and no address-book upload.',
+   confirmLine:'Kin will be able to read and write your People store, and read your Calendar.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'tally',name:'Tally',cat:'Productivity',category:'Tasks',purpose:'One list, no projects, no streaks.',hue:'accent',touches:'Tasks',
+   desc:'Tally is a single flat list with a hard cap of nine items. Finishing one makes room for the next. There is no history and nothing to maintain.',
+   access:[{store:'Tasks',modes:['read','write'],why:'Your list.',net:false}],
+   footnote:'Tally cannot reach anything else.',
+   confirmLine:'Tally will be able to read and write your Tasks. Nothing else.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'atlas',name:'Atlas',cat:'Tools',category:'Files',purpose:'See what is actually taking up your space.',hue:'red',touches:'Files',
+   desc:'Atlas maps your Files by size and age so you can find the forgotten export folder from four years ago. It reads the listing, never the contents.',
+   access:[{store:'Files',modes:['read'],why:'File names, sizes and dates only.',net:false}],
+   footnote:'Atlas never opens a file\u2019s contents.',
+   confirmLine:'Atlas will be able to read your Files listing — names, sizes and dates, not contents.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'ember',name:'Ember',cat:'Media',category:'Photos',purpose:'A slow slideshow for a quiet room.',hue:'amber',touches:'Photos',
+   desc:'Ember shows one photograph at a time, changing every few minutes, chosen from years you pick. Built for a spare screen on a shelf.',
+   access:[{store:'Photos',modes:['read'],why:'To show your photographs.',net:false}],
+   footnote:'Ember has no network capability at all.',
+   confirmLine:'Ember will be able to read your Photos. It has no network access.',
+   confirmMeta:'Nothing leaves this device.'},
+  {id:'plate',name:'Plate',cat:'Media',category:'Photos',purpose:'Print-accurate proofs for your photographs.',hue:'blue',new:true,touches:'Photos',
+   desc:'Plate soft-proofs a selection against common paper profiles, and can order a physical proof sheet when you ask it to.',
+   access:[{store:'Photos',modes:['read'],why:'The photographs you select.',net:false},{store:'proof.press',modes:['network'],why:'Only when you order a proof.',net:true}],
+   footnote:'Images are sent only for photographs you explicitly order.',
+   confirmLine:'Plate will be able to read your Photos, and will send only the images you order to proof.press.',
+   confirmMeta:'Photographs you order leave this device.'},
+  {id:'quill',name:'Quill',cat:'Productivity',category:'Docs',purpose:'A daily page that disappears if unused.',hue:'accent',touches:'Docs',
+   desc:'Quill opens one empty page each morning. Write anything and it is kept; write nothing and it is never created.',
+   access:[{store:'Docs',modes:['write'],why:'To save the day\u2019s page.',net:false}],
+   footnote:'Quill cannot read documents it did not create.',
+   confirmLine:'Quill will be able to create documents. It cannot read anything you wrote elsewhere.',
+   confirmMeta:'Nothing leaves this device.'}
+];
+
+class Component extends DCLogic {
+  state = {variant:'r1',surface:'desktop',theme:'dark',
+    view:'catalog',openId:null,paletteOpen:false,pq:'',cat:'All',
+    installed:{sift:true,vault:true,marginalia:true},progress:null,toast:null,offline:false,nav:'discover'};
+
+  componentDidMount(){
+    this._key=(e)=>{
+      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();this.setState(s=>({paletteOpen:!s.paletteOpen,pq:''}));}
+      else if(e.key==='Escape'&&this.state.paletteOpen) this.setState({paletteOpen:false});
+    };
+    window.addEventListener('keydown',this._key);
+  }
+  componentWillUnmount(){window.removeEventListener('keydown',this._key);if(this._iv)clearInterval(this._iv);}
+
+  t(){return THEMES[this.state.theme]||THEMES.dark;}
+  v(){return VARIANTS[this.state.variant]||VARIANTS.r1;}
+  mob(){return this.state.surface==='mobile';}
+  isInstalled(id){return !!this.state.installed[id];}
+
+  open=(id)=>()=>this.setState({view:'detail',openId:id,paletteOpen:false,pq:''});
+  back=()=>this.setState({view:'catalog',openId:null,progress:null});
+  toConfirm=()=>{
+    if(this.state.offline)return; const a=APPS.find(x=>x.id===this.state.openId);
+    if(!a||this.isInstalled(a.id)||this.state.progress!==null)return;
+    this.setState({view:'confirm'});
+  };
+  doInstall=()=>{
+    const id=this.state.openId; if(!id)return;
+    this.setState({view:'detail',progress:0});
+    let p=0; this._iv=setInterval(()=>{
+      p+=Math.random()*22+11;
+      if(p>=100){clearInterval(this._iv);
+        const inst={...this.state.installed}; inst[id]=true;
+        this.setState({installed:inst,progress:null,view:'catalog',openId:null,toast:APPS.find(x=>x.id===id).name+' added'});
+        setTimeout(()=>this.setState({toast:null}),2400);
+      } else this.setState({progress:Math.round(p)});
+    },220);
+  };
+  toggleOffline=()=>this.setState({offline:!this.state.offline});
+  openPalette=()=>this.setState({paletteOpen:true,pq:''});
+  closePalette=()=>this.setState({paletteOpen:false,pq:''});
+  stop=(e)=>e.stopPropagation();
+  onPq=(e)=>this.setState({pq:e.target.value});
+
+  ctl(active,strong){
+    return 'font:500 11.5px '+SANS+';padding:4px 10px;border-radius:5px;cursor:pointer;transition:all 120ms ease;border:1px solid '+
+      (active?(strong?'#4a463d':'#37342e'):'transparent')+';background:'+(active?(strong?'#302c25':'#232019'):'transparent')+
+      ';color:'+(active?'#ece8e0':'#8a857c')+';white-space:nowrap';
+  }
+
+  renderVals(){
+    const t=this.t(), V=this.v(), mob=this.mob(), nav=this.state.nav;
+    const q=this.state.pq.trim().toLowerCase();
+    const isBase=this.state.variant==='base', isR1=this.state.variant==='r1',
+          isR2=this.state.variant==='r2', isR3=this.state.variant==='r3';
+
+    const list=APPS.filter(a=>{
+      if(nav==='installed') return this.isInstalled(a.id);
+      if(nav==='updates') return false;
+      return this.state.cat==='All'||a.cat===this.state.cat;
+    });
+    const cur=APPS.find(a=>a.id===this.state.openId)||null;
+    const hue=(a)=>t[a.hue]||t.accent;
+
+    const markCss=(a,size,mode)=>{
+      if(size===0) return 'display:none';
+      const c=hue(a);
+      if(mode==='tinted') return 'flex:none;width:'+size+'px;height:'+size+'px;border-radius:'+Math.round(size*.26)+'px;'+
+        'background:color-mix(in oklab, '+c+' 14%, '+t.panel2+');border:1px solid color-mix(in oklab, '+c+' 30%, transparent);'+
+        'color:'+c+';display:flex;align-items:center;justify-content:center;font:600 '+Math.round(size*.4)+'px '+SANS;
+      return 'flex:none;width:'+size+'px;height:'+size+'px;border-radius:'+(size<=22?5:7)+'px;background:'+t.panel2+
+        ';border:1px solid '+t.borderS+';color:'+c+';display:flex;align-items:center;justify-content:center;font:500 '+
+        (size<=22?10.5:Math.round(size*.38))+'px '+SANS;
+    };
+    const dotCss=(a)=>'flex:none;width:6px;height:6px;border-radius:50%;background:'+hue(a);
+
+    const pill=(label,color)=>({label,css:'display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:4px;flex:none;'+
+      'background:color-mix(in oklab, '+color+' 15%, transparent);color:'+color+';font:500 10.5px '+MONO+';letter-spacing:.03em;white-space:nowrap'});
+    const txt=(label,color)=>({label,css:'font:400 11px '+MONO+';color:'+color+';white-space:nowrap'});
+    const modeColor=(m)=>m==='network'?t.red:m==='write'?t.purple:t.blue;
+
+    const sectionLabelStyle = V.sectionCase==='upper'
+      ? 'font:600 10.5px '+SANS+';color:'+t.textMute+';letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px'
+      : 'font:500 12px '+SANS+';color:'+t.textMute+';margin-bottom:'+(isR2?14:8)+'px';
+
+    const mk=(a)=>{
+      const inst=this.isInstalled(a.id), netApp=a.access.some(r=>r.net);
+      const trustLabel=netApp?'Network':'Local only';
+      const action=this.state.offline&&!inst?(isBase?'Offline':'—'):(inst?(isBase?'Installed':'Added'):'Add');
+      const actionMuted=inst||this.state.offline;
+      return {...a,initial:a.name[0],installed:inst,open:this.open(a.id),trustLabel,
+        showInitial:V.mark!=='dot',
+        markSm:V.mark==='dot'?dotCss(a):markCss(a,mob&&V.markSize<24?24:V.markSize,V.mark),
+        markLg:markCss(a,mob?40:44,V.mark==='tinted'?'tinted':'flat'),
+        markLgCard:markCss(a,34,'flat'),
+
+        textColCss:'flex:1;min-width:0'+((mob||isR2)?'':(isR1?';display:flex;align-items:baseline;gap:12px':'')),
+        nameCss:'font:'+(isBase?'600':'500')+' '+V.nameSize+'px '+SANS+';color:'+t.text+';letter-spacing:-.005em;flex:none',
+        purposeCss:'font:400 12.5px/1.45 '+SANS+';color:'+t.textDim+
+          ((mob)?';margin-top:2px':(isR1?';overflow:hidden;text-overflow:ellipsis;white-space:nowrap':';margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')),
+
+        touchesLabel:isR3?a.touches:trustLabel,
+        touchesCss:mob?'display:none':(isR3
+          ? 'flex:none;width:150px;font:400 11px '+MONO+';color:'+t.textDim+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+          : 'flex:none;width:84px;font:400 11px '+MONO+';color:'+(netApp?t.amber:t.textMute)),
+        netLabel:isR3?(netApp?a.access.find(r=>r.net).store:'none'):'',
+        netCss:(mob||!isR3)?'display:none':'flex:none;width:100px;font:400 11px '+MONO+';color:'+(netApp?t.amber:t.textMute),
+
+        action,
+        actionCss:'flex:none;'+(mob?'margin-left:auto;':'width:'+(isR3?60:64)+'px;text-align:right;')+
+          (V.actionStyle==='button'&&!actionMuted
+            ? 'font:600 12px '+SANS+';color:'+t.accent+';border:1px solid '+t.borderL+';padding:5px 12px;border-radius:6px;'
+            : 'font:500 12px '+SANS+';color:'+(actionMuted?t.textMute:t.accent)+';'),
+
+        rowCss:'display:flex;align-items:center;gap:'+(mob?12:(isR3?12:14))+'px;cursor:pointer;border-radius:6px;'+
+          'padding:'+(mob?'12px 12px':V.rowPad+'px '+(isR3?'8px':'10px'))+';transition:background 100ms linear;'+
+          (mob?'border:1px solid '+t.borderS+';background:'+t.panel+';':
+            (V.rowDivider?'border-bottom:1px solid '+t.borderS+';border-radius:0;':'')),
+
+        cardCss:'cursor:pointer;padding:'+V.rowPad+'px;border-radius:10px;background:'+t.panel+
+          ';border:1px solid '+t.border+';transition:border-color 140ms ease;display:flex;flex-direction:column',
+        cardTopCss:'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px',
+        cardActionCss:'font:500 12px '+SANS+';color:'+(actionMuted?t.textMute:t.accent),
+        cardNameCss:'font:500 '+V.nameSize+'px '+SANS+';color:'+t.text+';letter-spacing:-.01em;margin-bottom:5px',
+        cardPurposeCss:'font:400 12.5px/1.5 '+SANS+';color:'+t.textDim+';margin-bottom:14px;flex:1',
+        cardMetaCss:'font:400 11px '+MONO+';color:'+(netApp?t.amber:t.textMute),
+        cardMetaCopy:a.category+' · '+trustLabel,
+
+        tileWrapCss:'flex:none;width:236px;padding:14px;border-radius:8px;cursor:pointer;border:1px solid '+t.border+
+          ';background:'+t.panel,
+        tileTopCss:'display:flex;align-items:center;gap:9px;margin-bottom:9px',
+        tileNameCss:'font:600 13px '+SANS+';color:'+t.text,
+        tilePurposeCss:'font:400 12px/1.45 '+SANS+';color:'+t.textDim+';height:34px;overflow:hidden',
+        tileMetaCss:'font:400 11px '+MONO+';color:'+(netApp?t.amber:t.textMute)+';margin-top:9px',
+
+        shots:[0,1,2].map(()=>({css:'flex:none;width:'+(mob?200:224)+'px;height:'+(mob?126:140)+'px;border-radius:7px;'+
+          'background:'+t.panel2+';border:1px solid '+t.borderS})),
+        meta:V.trustStyle==='pill'
+          ? [pill(a.category.toUpperCase(),t.textMute),pill(netApp?'NETWORK':'LOCAL',netApp?t.amber:t.textDim),
+             inst?pill('IN YOUR SPACE',t.accent):pill('NOT ADDED',t.textMute)]
+          : [txt(a.category,t.textDim),txt(trustLabel,netApp?t.amber:t.textMute),txt(inst?'In your space':'Not added',inst?t.accent:t.textMute)],
+        access:a.access.map(r=>({...r,
+          rowCss:mob
+            ? 'display:grid;grid-template-columns:1fr auto;grid-template-areas:"a b" "c c";gap:4px 10px;padding:11px 0;border-top:1px solid '+t.borderS
+            : 'display:grid;grid-template-columns:168px 122px 1fr;gap:16px;align-items:baseline;padding:11px 0;border-top:1px solid '+t.borderS,
+          storeCss:(mob?'grid-area:a;':'')+'font:500 12.5px '+SANS+';color:'+t.text,
+          modeWrapCss:(mob?'grid-area:b;':'')+'display:flex;gap:'+(V.trustStyle==='pill'?6:9)+'px;flex-wrap:wrap',
+          modeTags:r.modes.map(m=>V.trustStyle==='pill'?pill(m.toUpperCase(),modeColor(m)):txt(m,modeColor(m))),
+          whyCss:(mob?'grid-area:c;':'')+'font:400 12.5px/1.5 '+SANS+';color:'+t.textDim}))
+      };
+    };
+
+    const enriched=list.map(mk);
+    const notable=APPS.filter(a=>a.new).slice(0,4).map(mk);
+    const curM=cur?mk(cur):null;
+    const inst=cur?this.isInstalled(cur.id):false;
+    const prog=this.state.progress;
+
+    const navDefs=[
+      {id:'discover',label:'Discover',glyph:'◇'},
+      {id:'installed',label:'In your space',glyph:'●',hasBadge:true,badge:Object.keys(this.state.installed).length},
+      {id:'updates',label:'Updates',glyph:'↻'}
+    ];
+    const rail=V.sidebar==='rail';
+    const navItems=navDefs.map(n=>({...n,hasBadge:!!n.hasBadge&&!rail,
+      pick:()=>this.setState({nav:n.id,view:'catalog',openId:null}),
+      css:'display:flex;align-items:center;'+(rail?'justify-content:center;width:34px;height:34px;':'gap:9px;height:29px;padding:0 9px;width:100%;')+
+        'background:'+(nav===n.id?t.panel3:'transparent')+';border:0;border-radius:'+(rail?8:6)+'px;'+
+        'color:'+(nav===n.id?t.text:t.textDim)+';font:'+(nav===n.id?'500':'400')+' 12.5px '+SANS+
+        ';cursor:pointer;transition:background 110ms ease',
+      glyphCss:'width:13px;text-align:center;font-size:'+(rail?13:11)+'px;color:'+(nav===n.id?t.text:t.textMute),
+      labelCss:'flex:1;text-align:left',
+      badgeCss:'font:400 11px '+MONO+';color:'+t.textMute}));
+
+    const recents=APPS.filter(a=>this.isInstalled(a.id)).map(a=>({...a,open:this.open(a.id),
+      dotCss:dotCss(a),
+      pinNameCss:'flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
+      pinCatCss:'font:400 10.5px '+MONO+';color:'+t.textMute+';flex:none',
+      pinCss:'display:flex;align-items:center;gap:9px;height:27px;padding:0 9px;background:transparent;border:0;border-radius:6px;'+
+        'color:'+t.textDim+';font:400 12px '+SANS+';cursor:pointer;width:100%'}));
+
+    const catBtns=CATS.map(c=>{const on=this.state.cat===c&&nav==='discover';
+      return {label:c,pick:()=>this.setState({cat:c,nav:'discover'}),
+      css:'font:'+(on?'500':'400')+' 12.5px '+SANS+';cursor:pointer;flex:none;background:'+(on?t.panel3:'transparent')+
+        ';border:'+(isBase?'1px solid '+(on?t.borderL:t.borderS):'0')+';color:'+(on?t.text:t.textDim)+
+        ';padding:'+(mob?'7px 12px':'5px 10px')+';border-radius:6px;transition:all 110ms ease'};});
+
+    const navCmds=navDefs.map(n=>({id:'n'+n.id,label:n.label,hint:'Go to',glyph:n.glyph,hue:null,
+      run:()=>this.setState({nav:n.id,view:'catalog',openId:null,paletteOpen:false,pq:''})}));
+    const appCmds=APPS.map(a=>({id:'a'+a.id,label:a.name,hint:a.purpose,glyph:a.name[0],hue:hue(a),run:this.open(a.id)}));
+    const all=[...navCmds,...appCmds];
+    const fc=q?all.filter(c=>(c.label+' '+c.hint).toLowerCase().includes(q)):all.slice(0,9);
+    const paletteItems=fc.map(c=>({...c,
+      css:'width:100%;display:flex;align-items:center;gap:11px;padding:'+(mob?'12px 10px':'8px 10px')+';border-radius:6px;border:0;'+
+        'background:transparent;color:'+t.text+';font:400 13px '+SANS+';cursor:pointer;text-align:left',
+      glyphCss:'width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex:none;'+
+        'font:500 10.5px '+SANS+';color:'+(c.hue||t.textMute)+';background:'+t.panel2+';border:1px solid '+t.borderS,
+      labelCss:'flex:none;font:500 13px '+SANS+';color:'+t.text,
+      hintCss:'flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:400 12px '+SANS+';color:'+t.textMute}));
+
+    const stageW=mob?390:1280, stageH=mob?844:824;
+    const subCopy={discover:'Small, careful apps. Each one says what it touches before you add it.',
+      installed:'Apps you have added. Remove one and its store goes with it.',
+      updates:'Checked when you open Discover — never in the background.'};
+    const measure=V.measure&&!mob?V.measure+'px':'none';
+
+    return {
+      isDesktop:!mob, isMobile:mob, showSidebar:!mob,
+      isCatalog:this.state.view==='catalog',
+      isDetail:this.state.view==='detail'||this.state.view==='confirm',
+      isConfirm:this.state.view==='confirm',
+      isDetailish:this.state.view!=='catalog', headerName:cur?cur.name:'Discover',
+      isList:V.layout==='list'||mob, isGrid:V.layout==='grid'&&!mob,
+
+      pageStyle:'min-height:100vh;background:#17150f;display:flex;flex-direction:column;font-family:'+SANS,
+      ctlBarStyle:'display:flex;align-items:center;gap:14px;padding:10px 18px;background:#0f0e0a;flex-wrap:wrap;'+
+        'border-bottom:1px solid #241f18;position:sticky;top:0;z-index:60',
+      ctlBrandStyle:'font:500 11.5px '+SANS+';color:#b8b2a4;letter-spacing:.01em;margin-right:6px',
+      ctlGroupStyle:'display:flex;align-items:center;gap:4px',
+      ctlDividerStyle:'width:1px;height:18px;background:#2c261e',
+      ctlNoteStyle:'flex:1;min-width:180px;text-align:right;font:400 11px '+MONO+';color:#7c7568',
+      variantNote:V.note,
+      variantBtns:Object.keys(VARIANTS).map(k=>({label:VARIANTS[k].label,
+        css:this.ctl(this.state.variant===k,true),
+        pick:()=>this.setState({variant:k,view:'catalog',openId:null,paletteOpen:false})})),
+      surfaceBtns:[['desktop','Desktop'],['mobile','Mobile']].map(([k,l])=>({label:l,
+        css:this.ctl(this.state.surface===k),pick:()=>this.setState({surface:k,view:'catalog',openId:null,paletteOpen:false})})),
+      themeBtns:[['dark','Dark'],['light','Light']].map(([k,l])=>({label:l,
+        css:this.ctl(this.state.theme===k),pick:()=>this.setState({theme:k})})),
+      stateBtns:[
+        {label:this.state.offline?'Offline ✓':'Offline',css:this.ctl(this.state.offline),pick:this.toggleOffline},
+        {label:'Reset',css:this.ctl(false),pick:()=>this.setState({installed:{sift:true,vault:true,marginalia:true},
+          cat:'All',nav:'discover',view:'catalog',openId:null,progress:null,toast:null})}],
+
+      stageWrapStyle:'flex:1;display:block;overflow:auto;padding:24px 20px 40px',
+      stageStyle:'margin:0 auto;flex:none;width:'+stageW+'px;height:'+stageH+'px;position:relative;display:flex;flex-direction:column;overflow:hidden;'+
+        'background:'+t.bg+';color:'+t.text+';font-size:13px;border-radius:'+(mob?38:8)+'px;'+
+        'border:'+(mob?'8px solid #050505':'1px solid '+t.borderL)+';box-shadow:0 22px 56px rgba(0,0,0,.4)',
+      bodyRowStyle:'flex:1;display:flex;min-height:0',
+
+      titlebarStyle:'height:37px;flex:none;background:'+t.chrome+';border-bottom:1px solid '+t.border+
+        ';display:flex;align-items:center;padding:0 14px;user-select:none',
+      titlebarLabelStyle:'flex:1;text-align:center;font:500 11.5px '+SANS+';color:'+t.textDim,
+      titlebarCopy:isR3?'centraid · discover':'Discover',
+      connStyle:'font:400 11px '+MONO+';color:'+(this.state.offline?t.red:t.textMute)+';cursor:pointer',
+      connLabel:this.state.offline?'offline':'connected',
+      toggleOffline:this.toggleOffline, offline:this.state.offline,
+
+      sidebarStyle:'width:'+(rail?'52px':'228px')+';flex:none;background:'+t.chrome+';border-right:1px solid '+t.border+
+        ';display:flex;flex-direction:column;padding:'+(rail?'12px 9px':'12px 10px')+';min-height:0;align-items:'+(rail?'center':'stretch'),
+      brandRowStyle:'display:flex;align-items:center;gap:9px;padding:'+(rail?'2px 0 14px':'4px 8px 16px'),
+      logoStyle:'width:20px;height:20px;color:'+t.accent+';font-size:17px;display:flex;align-items:center;justify-content:center;flex:none',
+      showBrandName:!rail,
+      brandNameStyle:'font:600 13px '+SANS+';color:'+t.text+';letter-spacing:-.01em',
+      showSearchBtn:!rail,
+      searchBtnStyle:'display:flex;align-items:center;gap:8px;height:29px;padding:0 9px;margin-bottom:14px;background:'+t.panel2+
+        ';border:1px solid '+t.border+';border-radius:6px;color:'+t.textMute+';font:400 12px '+SANS+';cursor:pointer',
+      searchLabelStyle:'flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
+      searchLabel:'Search',
+      kbdStyle:'display:inline-flex;align-items:center;justify-content:center;height:17px;padding:0 5px;background:'+t.panel3+
+        ';color:'+t.textMute+';border:1px solid '+t.border+';border-radius:4px;font:500 10px '+MONO+';flex:none',
+      navColStyle:'display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto;min-height:0;align-items:'+(rail?'center':'stretch'),
+      navHeadStyle:'font:500 11px '+SANS+';color:'+t.textMute+';padding:16px 9px 6px',
+      showNavLabels:!rail, showPins:!rail, showUserRow:!rail,
+      navItems, recents, openPalette:this.openPalette,
+      userRowStyle:'display:flex;align-items:center;gap:9px;padding:11px 8px 2px;border-top:1px solid '+t.border+';margin-top:8px',
+      avatarStyle:'width:26px;height:26px;border-radius:50%;flex:none;background:'+t.panel3+';border:1px solid '+t.border+
+        ';color:'+t.textDim+';font:500 10.5px '+SANS+';display:flex;align-items:center;justify-content:center',
+      userNameStyle:'font:500 12px '+SANS+';color:'+t.text,
+      userHandleStyle:'font:400 10.5px '+MONO+';color:'+t.textMute+';margin-top:1px',
+
+      mainStyle:'flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:'+t.bg,
+      mTopBarStyle:'flex:none;padding:0 16px;background:'+t.chrome+';border-bottom:1px solid '+t.border,
+      mStatusRowStyle:'display:flex;align-items:center;justify-content:space-between;height:34px;font:400 11px '+MONO+';color:'+t.textMute,
+      mTitleRowStyle:'display:flex;align-items:center;gap:10px;padding:4px 0 12px',
+      mTitleStyle:'flex:1;font:600 23px '+SANS+';color:'+t.text+';letter-spacing:-.02em',
+      mSearchIconStyle:'width:34px;height:34px;flex:none;border-radius:8px;background:'+t.panel2+';border:1px solid '+t.border+
+        ';color:'+t.textDim+';font-size:15px;cursor:pointer',
+      mBackStyle:'width:32px;height:32px;flex:none;border-radius:8px;background:transparent;border:1px solid '+t.border+
+        ';color:'+t.textDim+';font-size:16px;cursor:pointer;line-height:1',
+      mNavTitleStyle:'flex:1;font:500 15px '+SANS+';color:'+t.text,
+      mCancelStyle:'background:transparent;border:0;color:'+t.accent+';font:500 12.5px '+SANS+';cursor:pointer;flex:none',
+
+      catalogScrollStyle:'flex:1;overflow-y:auto;padding:'+(mob?'16px 16px 24px':(isR2?'34px 36px 48px':(isR3?'18px 20px 32px':'26px 28px 40px'))),
+      contentColStyle:'max-width:'+measure+';margin:0 auto',
+      headerStyle:'margin-bottom:'+(isR2?26:20)+'px',
+      pageTitleStyle:'font:600 '+V.titleSize+'px '+SANS+';color:'+t.text+';letter-spacing:-.02em',
+      pageSubStyle:'font:400 '+(isR2?13.5:12.5)+'px/1.55 '+SANS+';color:'+t.textDim+';margin-top:'+(isR2?8:4)+'px;max-width:60ch',
+      pageSub:subCopy[nav],
+      listLabel:nav==='installed'?'In your space':(nav==='updates'?'Updates':'Discover'),
+
+      toolRowStyle:'display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:'+(isR2?20:16)+'px'+
+        (mob?';margin-bottom:14px':''),
+      catRowStyle:'display:flex;gap:'+(isBase?6:4)+'px;'+(mob?'overflow-x:auto;padding-bottom:2px':'flex-wrap:wrap'),
+      cats:catBtns,
+      countStyle:'font:400 11px '+MONO+';color:'+t.textMute+';flex:none'+(mob?';display:none':''),
+      countCopy:enriched.length+(isR3?' apps':' app'+(enriched.length===1?'':'s')),
+
+      bannerStyle:(V.elevate
+        ? 'padding:11px 13px;border-radius:8px;background:'+t.panel+';border:1px solid '+t.border+';'
+        : 'padding:0 0 0 11px;border-left:2px solid '+t.amber+';')+
+        'font:400 12.5px/1.55 '+SANS+';color:'+t.textDim+';margin-bottom:20px',
+      bannerCopy:'Offline — showing the catalogue from your last sync. Adding an app needs a connection.',
+
+      isEmpty:enriched.length===0, notEmpty:enriched.length>0,
+      emptyStyle:'padding:'+(mob?'32px 4px':'44px 0')+';max-width:44ch',
+      emptyTitleStyle:'font:500 13.5px '+SANS+';color:'+t.text+';margin-bottom:6px',
+      emptyBodyStyle:'font:400 13px/1.6 '+SANS+';color:'+t.textDim,
+      emptyTitle:nav==='updates'?'Everything is current':'Nothing on this shelf yet',
+      emptyBody:nav==='updates'
+        ? 'All three apps in your space are up to date.'
+        : 'The '+this.state.cat+' shelf is empty for now. The catalogue is small on purpose.',
+
+      showStrip:V.strip&&nav==='discover'&&this.state.cat==='All'&&!mob,
+      stripWrapStyle:'margin-bottom:26px',
+      stripStyle:'display:flex;gap:14px;overflow-x:auto;padding-bottom:6px',
+      notable, sectionLabelStyle,
+      showListLabel:V.strip&&nav==='discover'&&this.state.cat==='All'&&!mob,
+
+      showColHeads:V.colHeads&&!mob,
+      colHeadRowStyle:'display:flex;align-items:center;gap:12px;padding:0 8px 7px;border-bottom:1px solid '+t.border+';margin-bottom:4px;'+
+        'font:400 10.5px '+MONO+';color:'+t.textMute+';letter-spacing:.04em',
+      colHeadAppStyle:'flex:none;width:'+(V.markSize+12)+'px',
+      colHeadPurposeStyle:'flex:1;min-width:0',
+      colHeadTouchStyle:'flex:none;width:150px',
+      colHeadNetStyle:'flex:none;width:100px',
+      colHeadActStyle:'flex:none;width:60px',
+
+      listWrapStyle:'display:flex;flex-direction:column;gap:'+(mob?8:(V.rowDivider?0:1))+'px', list:enriched,
+      gridWrapStyle:'display:grid;grid-template-columns:repeat(3,1fr);gap:16px',
+
+      current:curM,
+      detailScrollStyle:'flex:1;overflow-y:auto;min-height:0',
+      detailInnerStyle:'padding:'+(mob?'18px 16px 32px':(isR2?'30px 36px 40px':'24px 28px 36px'))+';max-width:'+
+        (mob?'none':(isR2?'820px':'740px'))+';margin:0 auto',
+      backBtnStyle:'font:500 11.5px '+SANS+';background:transparent;border:0;color:'+t.textMute+
+        ';padding:0;cursor:pointer;margin-bottom:20px',
+      detailIdRowStyle:'display:flex;align-items:flex-start;gap:14px',
+      detailNameStyle:'font:600 '+(mob?20:22)+'px '+SANS+';color:'+t.text+';letter-spacing:-.02em',
+      detailPurposeStyle:'font:400 13.5px/1.5 '+SANS+';color:'+t.textDim+';margin-top:4px;max-width:54ch',
+      detailMetaRowStyle:'display:flex;gap:'+(V.trustStyle==='pill'?6:16)+'px;margin-top:16px;flex-wrap:wrap;align-items:center',
+      shotBandStyle:'display:flex;gap:10px;overflow-x:auto;margin:24px 0 26px;padding-bottom:4px',
+      descStyle:'font:400 14px/1.7 '+SANS+';color:'+t.text+';margin-bottom:26px;max-width:68ch',
+
+      accessCardStyle:'padding:'+(mob?16:18)+'px;border-radius:10px;background:'+t.panel+';border:1px solid '+t.borderL,
+      accessHeadStyle:'font:500 13px '+SANS+';color:'+t.text,
+      accessSubStyle:'font:400 11px '+MONO+';color:'+t.textMute+';margin:3px 0 13px',
+      accessSub:'read this before you add it',
+      accessTableStyle:'', accessFootStyle:'margin-top:14px;font:400 12.5px/1.55 '+SANS+';color:'+t.textDim,
+
+      installBarStyle:'flex:none;background:'+t.chrome+';border-top:1px solid '+t.border,
+      installBarInnerStyle:'display:flex;align-items:center;gap:14px;padding:'+(mob?'12px 16px':'13px 28px')+';max-width:'+
+        (mob?'none':(isR2?'820px':'740px'))+';margin:0 auto',
+      installHintStyle:'font:400 11.5px '+MONO+';color:'+t.textMute,
+      installHint:prog!==null?'writing to your space…':(inst?'already in your space':(this.state.offline?'needs a connection':'nothing is added until you say so')),
+      showProgressBar:prog!==null,
+      progressTrackStyle:'width:'+(mob?140:200)+'px;height:2px;background:'+t.border+';border-radius:999px;overflow:hidden;margin-top:7px',
+      progressFillStyle:'width:'+(prog||0)+'%;height:100%;background:'+t.accent+';border-radius:999px;transition:width .22s linear',
+      installLabel:prog!==null?('Installing '+prog+'%'):(inst?'In your space':(this.state.offline?'Unavailable offline':'Add to my space')),
+      installBtnStyle:'flex:none;font:500 12.5px '+SANS+';border:0;padding:0 '+(mob?16:16)+'px;height:'+(mob?44:34)+'px;border-radius:7px;'+
+        'white-space:nowrap;cursor:'+((inst||this.state.offline||prog!==null)?'default':'pointer')+';'+
+        ((inst||this.state.offline||prog!==null)
+          ? 'background:transparent;color:'+t.textMute+';border:1px solid '+t.border
+          : 'background:'+t.accent+';color:'+t.onAccent),
+      toConfirm:this.toConfirm, back:this.back, doInstall:this.doInstall,
+
+      confirmOverlayStyle:'position:absolute;inset:0;z-index:40;display:flex;align-items:'+(mob?'flex-end':'center')+
+        ';justify-content:center;background:'+t.scrim+';padding:'+(mob?'0':'32px'),
+      confirmPanelStyle:'width:'+(mob?'100%':'480px')+';max-width:100%;background:'+t.panel+';border:1px solid '+t.borderL+
+        ';border-radius:'+(mob?'16px 16px 0 0':'12px')+';padding:'+(mob?'22px 18px 26px':'22px')+';box-shadow:'+t.shadowLg+
+        ';animation:rIn 170ms cubic-bezier(.16,1,.3,1)',
+      confirmKickerStyle:'font:500 12px '+SANS+';color:'+t.textMute+';margin-bottom:12px',
+      confirmBodyStyle:'font:400 15px/1.6 '+SANS+';color:'+t.text+';margin-bottom:10px',
+      confirmMetaStyle:'font:400 11.5px '+MONO+';color:'+t.textMute,
+      confirmBtnRowStyle:'display:flex;'+(mob?'flex-direction:column-reverse;':'')+'gap:10px;margin-top:22px',
+      primaryBtnStyle:'font:500 12.5px '+SANS+';background:'+t.accent+';color:'+t.onAccent+';border:0;padding:0 16px;'+
+        'height:'+(mob?46:34)+'px;border-radius:7px;cursor:pointer',
+      ghostBtnStyle:'font:500 12.5px '+SANS+';background:transparent;color:'+t.textDim+';border:1px solid '+t.border+
+        ';padding:0 16px;height:'+(mob?46:34)+'px;border-radius:7px;cursor:pointer',
+
+      tabBarStyle:'flex:none;display:flex;padding:6px 4px 10px;background:'+t.chrome+';border-top:1px solid '+t.border,
+      tabs:['Home','Docs','Photos','Discover','Me'].map((l,i)=>({label:l,glyph:['◻','▤','▦','◇','◍'][i],
+        css:'flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;'+
+          'font:'+(l==='Discover'?'500':'400')+' 10px '+SANS+';color:'+(l==='Discover'?t.accent:t.textMute),
+        glyphCss:'font-size:14px;line-height:1'})),
+
+      paletteOpen:this.state.paletteOpen, closePalette:this.closePalette, stop:this.stop, pq:this.state.pq, onPq:this.onPq,
+      palettePlaceholder:isR3?'search or run a command…':'Search the catalogue',
+      paletteOverlayStyle:'position:absolute;inset:0;z-index:70;background:'+t.scrim+';display:flex;justify-content:center;'+
+        'align-items:flex-start;padding:'+(mob?'0':'13vh 24px 24px'),
+      palettePanelStyle:'width:'+(mob?'100%':'560px')+';max-width:100%;'+(mob?'height:100%;border-radius:0;':'border-radius:12px;')+
+        'background:'+t.panel+';border:1px solid '+t.borderL+';box-shadow:'+t.shadowLg+';overflow:hidden;display:flex;flex-direction:column',
+      paletteInputRowStyle:'display:flex;align-items:center;gap:10px;padding:'+(mob?'16px':'14px 16px')+
+        ';border-bottom:1px solid '+t.borderS+';flex:none',
+      paletteInputStyle:'flex:1;min-width:0;background:transparent;border:0;outline:0;color:'+t.text+';font:400 '+(mob?15:14)+'px '+SANS,
+      paletteListStyle:'flex:1;min-height:0;'+(mob?'':'max-height:340px;')+'overflow-y:auto;padding:6px',
+      paletteEmpty:fc.length===0,
+      paletteEmptyStyle:'padding:28px;text-align:center;color:'+t.textMute+';font:400 12.5px '+SANS,
+      paletteItems,
+      paletteFootStyle:'display:flex;gap:16px;padding:8px 14px;border-top:1px solid '+t.borderS+';font:400 10.5px '+MONO+
+        ';color:'+t.textMute+';flex:none',
+
+      toast:!!this.state.toast, toastCopy:this.state.toastCopy||this.state.toast,
+      toastStyle:'position:absolute;left:50%;bottom:'+(mob?'84px':'20px')+';transform:translateX(-50%);z-index:80;'+
+        'padding:9px 15px;border-radius:7px;background:'+t.panel3+';border:1px solid '+t.borderL+';color:'+t.text+
+        ';font:500 12.5px '+SANS+';white-space:nowrap;box-shadow:'+t.shadowLg+';animation:rIn 180ms cubic-bezier(.16,1,.3,1)'
+    };
+  }
+}
+</script>
+</body>
+</html>

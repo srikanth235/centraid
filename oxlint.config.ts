@@ -146,6 +146,8 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
+    // Design-agent handoff bundle (#707): vendored prototype runtime.
+    "docs/design/handoff-binding-layer/**",
   ]),
   rules: {
     // Ultracite's core preset contains type-aware rules. They cannot execute
