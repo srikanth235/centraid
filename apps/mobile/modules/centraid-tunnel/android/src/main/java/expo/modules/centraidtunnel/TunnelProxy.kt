@@ -19,7 +19,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-class TunnelProxy(private val openStream: suspend () -> TunnelStream) {
+class TunnelProxy(
+  private val openStream: suspend () -> TunnelStream,
+  private val invalidateConnection: suspend () -> Unit = {},
+) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var server: ServerSocket? = null
 
@@ -86,12 +89,26 @@ class TunnelProxy(private val openStream: suspend () -> TunnelStream) {
           output.write(chunk)
           output.flush() // per-chunk flush: SSE stays live
         }
+        // A server-side 5xx is also the compatibility probe's reconnect
+        // signal. Do not keep sending later requests over a connection whose
+        // peer has already rejected this stream.
+        if (status >= 500) invalidateConnectionBestEffort()
       } catch (err: Throwable) {
         // Dial/stream failure → 502, matching the Node reference proxy. If
         // headers already went out, closing the socket mid-body is the only
         // honest signal left.
+        invalidateConnectionBestEffort()
         if (!headersSent) writeSimpleResponse(output, 502, err.message ?: err.toString())
       }
+    }
+  }
+
+  private suspend fun invalidateConnectionBestEffort() {
+    try {
+      invalidateConnection()
+    } catch (_: Throwable) {
+      // The request's socket is already being closed; cleanup must not mask
+      // the original stream failure.
     }
   }
 

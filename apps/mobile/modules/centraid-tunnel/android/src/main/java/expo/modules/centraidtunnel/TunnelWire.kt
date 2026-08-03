@@ -237,6 +237,17 @@ class TunnelTransport private constructor(
     }
   }
 
+  /**
+   * Drop a connection whose stream failed after openBi() had succeeded. A
+   * QUIC connection can accept another stream briefly after its peer has
+   * become unusable, so openBi() alone cannot prove that the cached connection
+   * is healthy.
+   */
+  suspend fun invalidateConnection() = mutex.withLock {
+    connection?.let { IrohAdapter.closeConnection(it) }
+    connection = null
+  }
+
   suspend fun close() {
     connection?.let { IrohAdapter.closeConnection(it) }
     connection = null

@@ -101,6 +101,7 @@ export default function FrameProbe(): React.JSX.Element | null {
     // were invisible to the hierarchy on iOS 30752843689).
     return (
       <View
+        collapsable={false}
         testID={FRAME_PROBE_SAMPLING_ID}
         accessible
         accessibilityLabel={FRAME_PROBE_SAMPLING_ID}
@@ -120,6 +121,7 @@ export default function FrameProbe(): React.JSX.Element | null {
   }
   return (
     <Pressable
+      collapsable={false}
       testID={FRAME_PROBE_ARM_ID}
       accessible
       accessibilityLabel={FRAME_PROBE_ARM_ID}

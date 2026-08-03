@@ -15,6 +15,9 @@ accessibility zero-grey (15 cells).
 - [x] Drop failed native tunnel connections before retrying compatibility probes
 - [x] Expose the DEV frame-probe arm to iOS accessibility automation
 - [x] Recover a transient iOS dev-client redbox during cold-start sampling
+- [x] Keep the frame probe inside full-screen native-stack covers
+- [x] Invalidate native tunnel connections after post-open stream failures
+- [x] Save the Android emulator snapshot before functional journeys run
 
 ## What changed
 
@@ -93,6 +96,32 @@ accessibility zero-grey (15 cells).
 
 - **iOS perf arm never reached Linking (30752843689).** native-v0/cold-start green; scroll-frames dismissed the Open-in alert but `perf-frame-sampling` never appeared. FrameProbe now exposes DEV `testID="perf-frame-arm"`; scroll-frames taps that instead of `openLink`.
 
+- **Keep the frame probe inside full-screen native-stack covers (30769334602).**
+  `FrameProbe` was mounted beside the root navigator, so iOS's `fullScreenModal`
+  Photos screen placed the accessibility target behind the presented controller.
+  `apps/mobile/App.tsx`, `apps/mobile/src/screens/Home.tsx`, and
+  `apps/mobile/src/apps/people/PeopleHome.tsx` now host the probe in the active
+  native screen tree; its marker views are non-collapsable for XCUITest. The
+  same run confirmed onboarding, volume, and cold-start journeys were green;
+  only the scroll probe failed.
+
+- **Invalidate native tunnel connections after post-open stream failures
+  (30769334446).** `openBi()` can succeed briefly after the peer has stopped
+  accepting streams, leaving later writes/reads to fail while the cached
+  connection remains selected. `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelProxy.kt`
+  now retires that connection after any forwarding exception or 5xx response;
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelRuntime.kt`
+  wires the invalidation to the `TunnelTransport` method in
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelWire.kt`.
+  The native fingerprint ratchet records the Android recipe change.
+
+- **Save the Android emulator snapshot before functional journeys run.** The
+  snapshot restore in `.github/workflows/e2e.yml` used the cache action's
+  implicit post-job save, which is skipped after a Maestro failure. The
+  workflow now restores with `actions/cache/restore` and saves the completed
+  snapshot before the functional suite starts, so later retries pay only the
+  app/flow costs.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
@@ -124,6 +153,7 @@ bun run turbo run typecheck --filter=@centraid/mobile
 bun run lint:e2e-flows
 bun run --cwd apps/mobile lint
 bun run --cwd apps/mobile test -- src/lib/phone-link.test.ts src/lib/replica/mobile-gateway-compatibility.integration.test.ts src/lib/replica/mobile-gateway-compatibility.test.ts
+bun run --cwd apps/mobile ci:native-state --write
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
 ```
 
@@ -158,3 +188,7 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785704912-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 507334 | 0 | 12752896 | 25567 | 532901 | 4.8401 | 1444597 | 0 | 64067328 | 128224 | fix(mobile): retire poisoned tunnel streams (#676) |
 | codex-019fc399-ba8-1785706418-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 19988 | 0 | 2605056 | 3278 | 23266 | 0.7504 | 1464585 | 0 | 66672384 | 131502 | fix(mobile): retire poisoned tunnel streams (#676) |
 | codex-019fc399-ba8-1785706602-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 27169 | 0 | 4895488 | 2748 | 29917 | 1.3330 | 1491754 | 0 | 71567872 | 134250 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785724755-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 975167 | 0 | 9812224 | 36672 | 1011839 | 5.4411 | 2466921 | 0 | 81380096 | 170922 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785724872-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8300 | 0 | 1128448 | 1520 | 9820 | 0.3257 | 2475221 | 0 | 82508544 | 172442 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785724985-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5142 | 0 | 574464 | 1814 | 6956 | 0.1837 | 2480363 | 0 | 83083008 | 174256 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785725113-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4052 | 0 | 586752 | 329 | 4381 | 0.1618 | 2484415 | 0 | 83669760 | 174585 | fix(ci): harden mobile e2e recovery and caches (#676) -m governance: allow-toolc |

@@ -510,9 +510,9 @@ jobs:
       # already settled. The key pins every AVD-shaping input — bump the trailing
       # -vN to invalidate after an emulator/image bump. Distinct from the apk
       # cache (different key, different path); both can hit independently.
-      - name: AVD cache
+      - name: Restore AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -535,6 +535,17 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
+      # Save before Maestro starts. The cache action's implicit post-job save is
+      # skipped when a journey fails, which otherwise makes every red retry pay
+      # the snapshot boot cost again even though the AVD is valid.
+      - name: Save AVD cache
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
       - name: Set up Android SDK + emulator
         id: emu
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).

@@ -28,6 +28,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { AppMetaResolved } from "@centraid/design";
 
+import FrameProbe from "../kit/perf/FrameProbe";
 import { family, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { fetchDailyBrief } from "../lib/daily-brief";
@@ -420,6 +421,7 @@ export default function HomeScreen({
           onClose={() => setVaultsOpen(false)}
           onPairDesktop={openSettings}
         />
+        <FrameProbe />
       </SafeAreaView>
     </GestureDetector>
   );
