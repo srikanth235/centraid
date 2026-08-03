@@ -145,9 +145,27 @@ const TurnCard = memo(
         </Text>
       </View>
       <Text style={styles.turnMeta}>
-        {new Date(turn.startedAt).toLocaleString()}
-        {turn.stepCount === undefined ? "" : ` · ${turn.stepCount} steps`}
-        {turn.toolCount === undefined ? "" : ` · ${turn.toolCount} tools`}
+        <Text style={[styles.turnMeta, t("mono")]}>
+          {new Date(turn.startedAt).toLocaleString()}
+        </Text>
+        {turn.stepCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.stepCount}
+            </Text>{" "}
+            steps
+          </>
+        )}
+        {turn.toolCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.toolCount}
+            </Text>{" "}
+            tools
+          </>
+        )}
       </Text>
       {turn.error ? <Text style={styles.turnError}>{turn.error}</Text> : null}
     </View>

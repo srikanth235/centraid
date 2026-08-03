@@ -125,7 +125,7 @@
   /* Above .dayOpen — see .pill. */
   position: relative;
   font: var(--t-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   text-align: start;
   padding: 1px 5px;

@@ -38,7 +38,7 @@
 }
 .activityDate {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .receiptChip {

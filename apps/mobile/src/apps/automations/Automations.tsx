@@ -209,9 +209,11 @@ function AutomationGallery({
               accessibilityState={{ busy, disabled: installing !== null }}
               disabled={installing !== null}
               onPress={() => onInstall(template)}
-              style={[styles.addBtn, busy && styles.dim]}
+              style={[styles.addBtn, busy && styles.busyOutline]}
             >
-              <Text style={styles.addBtnText}>{busy ? "Adding…" : "Add"}</Text>
+              <Text style={[styles.addBtnText, busy && styles.busyOutlineText]}>
+                {busy ? "Adding…" : "Add"}
+              </Text>
             </Pressable>
           </View>
         );
@@ -359,7 +361,6 @@ const AutomationCard = memo(
               {
                 backgroundColor: row.enabled ? colors.accent : colors.bgSunken,
               },
-              busyToggle && styles.dim,
             ]}
           >
             <Text
@@ -399,15 +400,19 @@ const AutomationCard = memo(
             style={[
               styles.runBtn,
               { borderColor: colors.lineStrong },
-              run !== "idle" && styles.dim,
+              run !== "idle" && styles.busyOutline,
             ]}
           >
             <Icon
               name={run === "started" ? "check" : "play"}
               size={13}
-              color={colors.accent}
+              color={run === "idle" ? colors.accent : colors.textDisabled}
             />
-            <Text style={styles.runText}>{runLabel}</Text>
+            <Text
+              style={[styles.runText, run !== "idle" && styles.busyOutlineText]}
+            >
+              {runLabel}
+            </Text>
           </Pressable>
         </View>
       </View>

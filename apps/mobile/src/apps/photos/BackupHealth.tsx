@@ -19,7 +19,7 @@ import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
-import { useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import {
@@ -62,6 +62,10 @@ type PendingUpload = {
   filename?: string;
 };
 
+type StorageStatus =
+  | { kind: "unavailable" }
+  | { kind: "ready"; replicated: number; offsite: number; casAck: string };
+
 // A one-shot read of the durable upload queue — an external system, opened and
 // closed around the read so the screen never holds the sqlite handle. Lives
 // outside the component so the effect that calls it stays a plain external read
@@ -93,7 +97,9 @@ export default function BackupHealth({
   );
   const [albumError, setAlbumError] = useState<string>();
   const [pending, setPending] = useState<PendingUpload[]>([]);
-  const [storage, setStorage] = useState("Storage policy unavailable offline");
+  const [storage, setStorage] = useState<StorageStatus>({
+    kind: "unavailable",
+  });
   const [running, setRunning] = useState(false);
   const [inCloudSkipped, setInCloudSkipped] = useState(0);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
@@ -138,9 +144,12 @@ export default function BackupHealth({
           }) => {
             const vault = body.vaults?.[0];
             if (vault)
-              setStorage(
-                `${vault.replicated?.count ?? 0} replicated · ${vault.backlog?.count ?? 0} offsite · policy ${vault.casAck ?? "unknown"}`
-              );
+              setStorage({
+                kind: "ready",
+                replicated: vault.replicated?.count ?? 0,
+                offsite: vault.backlog?.count ?? 0,
+                casAck: vault.casAck ?? "unknown",
+              });
           }
         )
         .catch(() => undefined);
@@ -288,23 +297,47 @@ export default function BackupHealth({
             color={pending.length ? colors.accent : "#2f9d6a"}
           />
           <Text style={[styles.heroValue, { color: colors.text }]}>
-            {pending.length ? `${pending.length} pending` : "Backup is healthy"}
+            {pending.length ? (
+              <>
+                <Text style={[t("mono"), { color: colors.text }]}>
+                  {pending.length}
+                </Text>{" "}
+                pending
+              </>
+            ) : (
+              "Backup is healthy"
+            )}
           </Text>
           <Text style={[styles.meta, { color: colors.textSoft }]}>
-            {pending.length
-              ? `${formatBytes(bytes)} remaining`
-              : "The durable queue is empty."}
+            {pending.length ? (
+              <>
+                <Text style={[t("mono"), { color: colors.textSoft }]}>
+                  {formatBytes(bytes)}
+                </Text>{" "}
+                remaining
+              </>
+            ) : (
+              "The durable queue is empty."
+            )}
           </Text>
           <Text style={[styles.meta, { color: colors.textSoft }]}>
             Last successful sync:{" "}
-            {lastSuccessfulSync ? formatSyncTime(lastSuccessfulSync) : "Never"}
+            {lastSuccessfulSync ? (
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {formatSyncTime(lastSuccessfulSync)}
+              </Text>
+            ) : (
+              "Never"
+            )}
           </Text>
         </View>
         {inCloudSkipped ? (
           <View style={[styles.warning, { borderColor: colors.danger }]}>
             <Icon name="cloud-off" size={18} color={colors.danger} />
             <Text style={[styles.warningText, { color: colors.danger }]}>
-              {inCloudSkipped}{" "}
+              <Text style={[t("mono"), { color: colors.danger }]}>
+                {inCloudSkipped}
+              </Text>{" "}
               {inCloudSkipped === 1 ? "original is" : "originals are"}{" "}
               {IN_CLOUD_MESSAGE}, so{" "}
               {inCloudSkipped === 1 ? "it was" : "they were"} not backed up.
@@ -413,7 +446,22 @@ export default function BackupHealth({
         <Text style={[styles.section, { color: colors.textSoft }]}>
           STORAGE
         </Text>
-        <Text style={[styles.storage, { color: colors.text }]}>{storage}</Text>
+        <Text style={[styles.storage, { color: colors.text }]}>
+          {storage.kind === "ready" ? (
+            <>
+              <Text style={[t("mono"), { color: colors.text }]}>
+                {storage.replicated}
+              </Text>{" "}
+              replicated ·{" "}
+              <Text style={[t("mono"), { color: colors.text }]}>
+                {storage.offsite}
+              </Text>{" "}
+              offsite · policy {storage.casAck}
+            </>
+          ) : (
+            "Storage policy unavailable offline"
+          )}
+        </Text>
         {pending
           .filter((item) => item.lastError)
           .map((item, index) => (

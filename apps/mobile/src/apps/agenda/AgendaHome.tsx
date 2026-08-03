@@ -15,12 +15,12 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { t, useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
 import { styles } from "./AgendaHome.styles";
-import type { AgendaEventModel } from "./recurrence";
 import { useAgenda } from "./useAgenda";
 
 // Mobile has no month grid — a 7-column grid at 390px gives 42px cells, well

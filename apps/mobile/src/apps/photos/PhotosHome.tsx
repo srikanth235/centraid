@@ -16,6 +16,7 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -40,7 +41,6 @@ import {
   openDeviceOriginal,
 } from "./device-media";
 import type { DeviceOriginal } from "./device-media";
-import { imageSource } from "./media-source";
 import PhotosCollectionsView from "./PhotosCollectionsView";
 import PhotosDrawer from "./PhotosDrawer";
 import PhotoTimeline from "./PhotoTimeline";
@@ -681,7 +681,6 @@ const styles = StyleSheet.create({
     fontFamily: family.monoMedium,
     fontSize: 11,
     letterSpacing: 1,
-    opacity: 0.9,
   },
   heroImage: { ...StyleSheet.absoluteFill },
   heroShade: {

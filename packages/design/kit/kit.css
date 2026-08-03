@@ -106,7 +106,7 @@
 
 .kit-app-brand-tag {
   font: var(--t-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 
@@ -409,7 +409,7 @@ kit-reference-strip,
   background: var(--accent-soft);
   color: color-mix(in oklab, var(--accent) 72%, var(--text));
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   white-space: nowrap;
   line-height: 1.4;
@@ -517,7 +517,7 @@ kit-reference-strip,
 .kit-chart-ticklabel {
   fill: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
 }
 
@@ -827,7 +827,7 @@ kit-reference-strip,
 .kit-search kbd {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   border: 1px solid var(--line);
   border-radius: 0.35rem;
@@ -1020,12 +1020,9 @@ kit-reference-strip,
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-modal-back,
-  .kit-modal {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: `toCss()`'s emitted global rule
+   (packages/design/src/css.ts) already zeroes `.kit-modal-back`/`.kit-modal`'s
+   entrance animations. */
 
 /* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
 
@@ -1043,7 +1040,7 @@ kit-reference-strip,
 }
 .kit-popover-head {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -1102,11 +1099,8 @@ kit-reference-strip,
     transform: translateY(0);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-popover {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-popover`'s entrance animation. */
 
 /* ---------- Empty states ---------------------------------------------------- */
 
@@ -1196,7 +1190,7 @@ kit-reference-strip,
   align-items: center;
   text-align: center;
   padding: 0.35rem;
-  font-size: 0.68rem;
+  font-size: var(--t-control-size);
   line-height: 1.3;
   color: var(--accent-text);
   word-break: break-word;
@@ -1208,7 +1202,7 @@ kit-reference-strip,
   left: 0;
   right: 0;
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: var(--t-control-size);
   text-align: center;
   color: var(--text);
   background: var(--scrim);
@@ -1232,11 +1226,8 @@ kit-reference-strip,
   justify-content: center;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .kit-bar-fill {
-    transition: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-bar-fill`'s transition. */
 
 /* ---------- Viewer nav arrows ----------------------------------------------
    Circular prev/next overlay for full-screen media viewers (docs' quick-look,
@@ -1312,11 +1303,8 @@ kit-reference-strip,
   padding: 1.6rem 2.4rem;
   box-shadow: var(--shadow-md);
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-drop {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-drop`'s entrance animation. */
 
 /* ---------- Bounded-browse footer ------------------------------------------
    The quiet "showing N of M" line under a windowed list (docs' window foot,
@@ -1429,12 +1417,8 @@ kit-reference-strip,
     opacity: 1;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-ov,
-  .kit-ask-panel {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-ask-ov`/`.kit-ask-panel`'s entrance animations. */
 
 .kit-ask-head {
   display: flex;
@@ -1596,7 +1580,7 @@ kit-reference-strip,
 }
 .kit-msg.ai .asstTable th {
   text-align: left;
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-soft);
@@ -1653,7 +1637,7 @@ kit-reference-strip,
 .kit-msg.ai .asstChartX {
   display: flex;
   justify-content: space-between;
-  font-size: 0.625rem;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   padding-top: 4px;
   gap: 4px;
@@ -2054,11 +2038,8 @@ kit-reference-strip,
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-model-menu {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-ask-model-menu`'s entrance animation. */
 .kit-ask-model-item {
   display: flex;
   align-items: center;
@@ -2088,7 +2069,7 @@ kit-reference-strip,
   flex: none;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2150,7 +2131,7 @@ kit-reference-strip,
 .kit-ask-applied .ac-t .ac-s {
   display: block;
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   margin-top: 0.15rem;
 }
@@ -2191,6 +2172,11 @@ kit-reference-strip,
   height: 0.42rem;
   border-radius: 50%;
   background: var(--text-faint);
+  /* Base (non-animated) opacity — masked by the blink below while it runs,
+     but it's what shows once the global `prefers-reduced-motion` rule
+     collapses the animation to a single instant: a steady, mid-tone dot
+     instead of the blink's full-opacity peak. */
+  opacity: 0.5;
   animation: kit-blink 1.2s infinite;
 }
 .kit-ask-typing i:nth-child(2) {
@@ -2209,12 +2195,9 @@ kit-reference-strip,
     opacity: 1;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .kit-ask-typing i {
-    animation: none;
-    opacity: 0.5;
-  }
-}
+/* No `prefers-reduced-motion` block: the global rule already zeroes
+   `.kit-ask-typing i`'s blink; its reduced-motion look (steady, mid-tone) is
+   its own base `opacity: 0.5` above, not a per-component override. */
 
 /* ---------- Ask · conversation history (issue #190 read side) -------------
    A toggleable in-panel view: past conversations for this app, newest
@@ -2316,7 +2299,7 @@ kit-reference-strip,
 }
 .kit-ask-history-meta {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .kit-ask-history-del {
@@ -2334,7 +2317,7 @@ kit-reference-strip,
 .kit-ask-toolnote {
   align-self: center;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 0.2rem 0.6rem;
 }
@@ -2421,7 +2404,7 @@ kit-reference-strip,
 }
 .kit-ask-pending-size {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .kit-ask-pending-chip.is-error .kit-ask-pending-size {
@@ -2507,7 +2490,7 @@ kit-reference-strip,
   border: 1px solid var(--line);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   text-transform: lowercase;
 }
@@ -2575,7 +2558,7 @@ kit-reference-strip,
 .kit-ref-kind {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   text-transform: lowercase;
 }
@@ -2587,7 +2570,7 @@ kit-reference-strip,
   border-radius: 999px;
   background: var(--accent-soft);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   text-transform: uppercase;
   letter-spacing: 0.04em;

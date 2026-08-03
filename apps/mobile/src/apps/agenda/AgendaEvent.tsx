@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: family.sansMedium, fontSize: 14 },
   content: { padding: 22, paddingBottom: 60 },
-  date: { fontFamily: family.monoMedium, fontSize: 10, letterSpacing: 1 },
+  date: { fontFamily: family.monoMedium, fontSize: 12.5, letterSpacing: 1 },
   description: {
     fontFamily: family.sansRegular,
     fontSize: 14,
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   pendingText: { flex: 1, fontFamily: family.sansMedium, fontSize: 13 },
-  risk: { fontFamily: family.monoRegular, fontSize: 10 },
+  risk: { fontFamily: family.monoRegular, fontSize: 12.5 },
   rsvp: { flexDirection: "row", gap: 8, marginTop: 14 },
   rsvpButton: {
     alignItems: "center",
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   section: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 12.5,
     letterSpacing: 1,
     marginBottom: 6,
     marginTop: 30,

@@ -16,9 +16,9 @@ import { runOnJS } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
 import { family, useTheme } from "../../kit/theme";
-import { gridImageProps } from "./grid-image";
-import { imageSource } from "./media-source";
 import { addDragSelection } from "./timeline-model";
 import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
   scopeBadgeText: {
     color: "#fff",
     fontFamily: family.sansMedium,
-    fontSize: 8,
+    fontSize: 13,
   },
   selectDay: { fontFamily: family.sansMedium, fontSize: 12 },
   selection: {

@@ -114,8 +114,18 @@ export default function GatewayAlerts(props: {
             >
               <Text style={styles.cardTitle}>{row.headline}</Text>
               <Text style={styles.meta}>
-                {new Date(row.lastAt).toLocaleString()}
-                {row.count > 1 ? ` · ${row.count} events` : ""}
+                <Text style={[styles.meta, t("mono")]}>
+                  {new Date(row.lastAt).toLocaleString()}
+                </Text>
+                {row.count > 1 ? (
+                  <>
+                    {" · "}
+                    <Text style={[styles.meta, t("mono")]}>
+                      {row.count}
+                    </Text>{" "}
+                    events
+                  </>
+                ) : null}
               </Text>
               <Text style={styles.detail} selectable>
                 {gatewayAlertDetail(row.detail)}

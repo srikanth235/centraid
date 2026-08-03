@@ -13,6 +13,7 @@ import { ADAPTERS, contractForProfile } from "./roles";
 import {
   blueprintType,
   fontStacks,
+  remSizeScale,
   type,
   typeModifiers,
   typeSizeRungs,
@@ -48,7 +49,7 @@ export const SHELL_TOKEN_CONTRACT = [
     ...paletteNames,
     ...commonScale,
     ...typeNames(type),
-    ...Object.keys(typeSizeRungs(type)),
+    ...Object.keys(typeSizeRungs(remSizeScale(type))),
     ...Object.keys(typeModifiers(type)),
     ...Object.keys(library).map((key) => {
       const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;

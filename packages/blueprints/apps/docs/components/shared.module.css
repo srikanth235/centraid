@@ -73,7 +73,7 @@
 .mediaPlay.small {
   width: 1.35rem;
   height: 1.35rem;
-  font-size: 0.55rem;
+  font-size: var(--t-control-size);
 }
 
 /* Free-form label chip (Toolbar's TagChips + Details' Tags editor). */

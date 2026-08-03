@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  onText: { fontFamily: family.sansMedium, fontSize: 10 },
+  onText: { fontFamily: family.sansMedium, fontSize: 13 },
   panel: {
     borderRightWidth: 0.5,
     flex: 0,
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   },
   switchEyebrow: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 12.5,
     letterSpacing: 0.8,
     marginBottom: 2,
   },

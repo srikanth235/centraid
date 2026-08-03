@@ -25,6 +25,7 @@ import {
 import type { Theme, ThemeName } from "./themes";
 import {
   fontStacks,
+  remSizeScale,
   type,
   typeKeyToKebab,
   typeModifiers,
@@ -158,7 +159,11 @@ export function toCss(): string {
   for (const [key, value] of Object.entries(type)) {
     staticProps[`--t-${typeKeyToKebab(key)}`] = typeShorthand(value);
   }
-  Object.assign(staticProps, typeSizeRungs(type), typeModifiers(type));
+  Object.assign(
+    staticProps,
+    typeSizeRungs(remSizeScale(type)),
+    typeModifiers(type)
+  );
 
   // Library became a tile recipe.  The values stay shared between Home and
   // Discover, but the semantic namespace no longer suggests a separate UI.

@@ -14,6 +14,8 @@ import {
   NATIVE_DELTA_BY_FAMILY,
   NATIVE_DELTA_OVERRIDES,
   nativeTypeStyle,
+  remSizeScale,
+  toRemStyle,
   type,
   typeModifiers,
   typeSizeRungs,
@@ -72,18 +74,19 @@ describe("generated stylesheet values", () => {
   test("the type scale is one role set and size rungs collapse duplicates", () => {
     const root = parseBlocks(toCss()).get(":root");
     for (const [key, value] of Object.entries(type)) {
+      const { size, lineHeight } = toRemStyle(value);
       expect(
         root?.get(
           `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
         )
-      ).toContain(`${value.size}px/${value.lineHeight}px`);
+      ).toContain(`${size}/${lineHeight}`);
     }
     // Seven distinct sizes, ten roles: `--t-body-strong-size` would duplicate
     // the body rung, `--t-small-strong-size` the UI rung, `--t-eyebrow-size`
     // the micro rung. The declaration order in `typography.ts` is what decides
     // which name owns each rung, which is why it is ramp order and not
     // alphabetical.
-    const rungs = typeSizeRungs(type);
+    const rungs = typeSizeRungs(remSizeScale(type));
     expect(Object.keys(rungs)).toStrictEqual([
       "--t-display-size",
       "--t-title-size",
@@ -93,14 +96,17 @@ describe("generated stylesheet values", () => {
       "--t-control-size",
       "--t-mono-size",
     ]);
+    // rem = px / 16 — the shell now emits host-relative units (issue #708)
+    // so 200% OS text scale, which moves the ROOT font-size, actually reaches
+    // these rungs; a `px` literal would be invisible to that preference.
     expect(Object.values(rungs)).toStrictEqual([
-      "31px",
-      "20px",
-      "19px",
-      "15px",
-      "13px",
-      "11px",
-      "11.5px",
+      "1.9375rem",
+      "1.25rem",
+      "1.1875rem",
+      "0.9375rem",
+      "0.8125rem",
+      "0.6875rem",
+      "0.71875rem",
     ]);
     // Nothing in the ramp falls below 11px.
     for (const value of Object.values(type)) {

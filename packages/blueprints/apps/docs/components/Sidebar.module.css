@@ -35,7 +35,7 @@
 }
 .navCount {
   font: var(--t-mono);
-  opacity: 0.6;
+  color: var(--text-soft);
 }
 
 .folder {
@@ -92,7 +92,7 @@
 }
 .storageTop .val {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .storageLabel {

@@ -17,6 +17,7 @@
 
 export {
   APP_HUES,
+  clampIdentityHue,
   IDENTITY_CHROMA,
   palette,
   paletteDark,

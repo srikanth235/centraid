@@ -70,8 +70,13 @@ describe("type role parity across emitters", () => {
     });
   });
 
-  test("the blueprint adapts units while retaining the semantic body role", () => {
-    expect(shell["--t-body"]).toContain("15px/22px");
+  test("the shell and blueprint both adapt units host-relatively", () => {
+    // The shell now lowers to `rem` too (issue #708): 15px / 22px ÷ 16.
+    expect(shell["--t-body"]).toContain("0.9375rem/1.375rem");
+    // The blueprint's line-height stays a unitless ratio (÷ the role's own
+    // size, not the root) rather than a second `rem` value — a deliberate
+    // divergence the role-parity law permits, since it gates family and
+    // weight, not size (see typography.ts's `toBlueprintStyle`).
     expect(blueprint["--t-body"]).toContain("0.9375rem/1.4666666666666666");
     expect(parse(shell["--t-body"] ?? "").weight).toBe("400");
     expect(parse(blueprint["--t-body"] ?? "").weight).toBe("400");

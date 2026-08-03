@@ -97,7 +97,10 @@ const makeStyles = (colors: ThemeColors, recipeStyle: NativeButtonStyle) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    disabled: { borderColor: colors.lineStrong, opacity: 0.45 },
+    // Disabled recedes on the leaves — the icon and the label each take
+    // `textDisabled` above. Fading the Pressable instead would composite every
+    // descendant and quietly invalidate the contrast those tokens guarantee.
+    disabled: { borderColor: colors.lineStrong },
     label: { ...t("smallStrong"), color: recipeStyle.color },
     labelDestructive: { color: recipeStyle.color },
     labelDisabled: { color: colors.textDisabled },

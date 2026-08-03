@@ -5,6 +5,7 @@ import { formatBytes } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { t } from "../../kit/theme";
 import type { useTheme } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
@@ -79,8 +80,10 @@ export function ListItem({
         <Text style={[styles.meta, { color: colors.textSoft }]}>
           {item.location ? `${item.location} · ` : ""}
           {formatType(item.document.mediaType)} ·{" "}
-          {formatBytes(item.document.byteSize)} ·{" "}
-          {item.document.custody ?? "local"} ·{" "}
+          <Text style={[t("mono"), { color: colors.textSoft }]}>
+            {formatBytes(item.document.byteSize)}
+          </Text>{" "}
+          · {item.document.custody ?? "local"} ·{" "}
           {item.document.scopeLabels?.join(" + ") ?? "Vault"}
         </Text>
       </View>
@@ -146,9 +149,20 @@ export function GridItem({
         {item.kind === "folder" ? item.folder.name : item.document.title}
       </Text>
       <Text style={[styles.meta, { color: colors.textSoft }]}>
-        {document
-          ? `${item.kind === "document" && item.location ? `${item.location} · ` : ""}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)} · ${document.scopeLabels?.join(" + ") ?? "Vault"}`
-          : "Folder"}
+        {document ? (
+          <>
+            {item.kind === "document" && item.location
+              ? `${item.location} · `
+              : ""}
+            {formatType(document.mediaType)} ·{" "}
+            <Text style={[t("mono"), { color: colors.textSoft }]}>
+              {formatBytes(document.byteSize)}
+            </Text>{" "}
+            · {document.scopeLabels?.join(" + ") ?? "Vault"}
+          </>
+        ) : (
+          "Folder"
+        )}
       </Text>
     </Pressable>
   );

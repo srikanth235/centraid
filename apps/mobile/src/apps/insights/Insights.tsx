@@ -26,7 +26,7 @@ import { palette } from "@centraid/design";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
   formatBytes,
@@ -200,9 +200,13 @@ function HealthHero({
         <View style={styles.heroMeta}>
           <Text style={styles.heroStatus}>{STATUS_WORD[health.status]}</Text>
           <Text style={styles.heroSub}>
-            {`${okCount}/${health.components.length} components ok · up ${formatUptime(
-              health.uptimeMs
-            )}`}
+            <Text style={[styles.heroSub, t("mono")]}>
+              {okCount}/{health.components.length}
+            </Text>{" "}
+            components ok · up{" "}
+            <Text style={[styles.heroSub, t("mono")]}>
+              {formatUptime(health.uptimeMs)}
+            </Text>
           </Text>
         </View>
       </View>
@@ -385,9 +389,16 @@ function UsageSection({
             </View>
           ) : (
             <Text style={styles.kpiFoot}>
-              {kpis.hydrationTokens > 0
-                ? `${formatCount(kpis.hydrationTokens)} hydration`
-                : "this window"}
+              {kpis.hydrationTokens > 0 ? (
+                <>
+                  <Text style={[styles.kpiFoot, t("mono")]}>
+                    {formatCount(kpis.hydrationTokens)}
+                  </Text>{" "}
+                  hydration
+                </>
+              ) : (
+                "this window"
+              )}
             </Text>
           )}
         </Kpi>
@@ -399,9 +410,16 @@ function UsageSection({
           colors={colors}
         >
           <Text style={styles.kpiFoot}>
-            {kpis.unpricedRuns > 0
-              ? `${kpis.unpricedRuns} unpriced`
-              : "last 30 days"}
+            {kpis.unpricedRuns > 0 ? (
+              <>
+                <Text style={[styles.kpiFoot, t("mono")]}>
+                  {kpis.unpricedRuns}
+                </Text>{" "}
+                unpriced
+              </>
+            ) : (
+              "last 30 days"
+            )}
           </Text>
         </Kpi>
         <Kpi
@@ -411,7 +429,10 @@ function UsageSection({
           styles={styles}
           colors={colors}
         >
-          <Text style={styles.kpiFoot}>{`${kpis.retries} retries`}</Text>
+          <Text style={styles.kpiFoot}>
+            <Text style={[styles.kpiFoot, t("mono")]}>{kpis.retries}</Text>{" "}
+            retries
+          </Text>
         </Kpi>
         <Kpi
           icon="grid"
@@ -420,9 +441,13 @@ function UsageSection({
           styles={styles}
           colors={colors}
         >
-          <Text
-            style={styles.kpiFoot}
-          >{`≈ ${formatUsd(kpis.forecastCostUsd)} forecast`}</Text>
+          <Text style={styles.kpiFoot}>
+            ≈{" "}
+            <Text style={[styles.kpiFoot, t("mono")]}>
+              {formatUsd(kpis.forecastCostUsd)}
+            </Text>{" "}
+            forecast
+          </Text>
         </Kpi>
       </View>
 

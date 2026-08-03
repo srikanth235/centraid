@@ -103,7 +103,7 @@
   inset-inline-end: 6px;
   transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   background: var(--bg-elev);
@@ -177,7 +177,7 @@
 }
 .weekEvTime {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   opacity: 0.9;
   white-space: nowrap;

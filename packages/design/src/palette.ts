@@ -56,6 +56,44 @@ export const APP_HUES = {
 export type ColorKey = keyof typeof APP_HUES;
 export type ColorHex = string;
 
+/**
+ * Clamp an arbitrary SUBMITTED identity hue to the system's own rules — the
+ * same chroma ceiling and lightness rung every built-in app hue is held to
+ * ("Third-party hues get clamped to `C ≤ .09` and the lightness above, so no
+ * vendor can out-shout the system" — the brief, "App identity hues"). The
+ * eight `APP_HUES` above are the shipped catalog; this is the function a
+ * gateway/third-party app MANIFEST's requested identity colour should be run
+ * through before it is ever admitted as an `AppMeta.color`.
+ *
+ * Nothing in this repo currently validates a third-party manifest's hue claim
+ * — only the eight built-in `APP_HUES` are ever constructed into an
+ * `AppMetaResolved` (see `apps.ts`), so there is no existing call site to
+ * wire this into yet. This export IS the seam: whoever adds third-party app
+ * installation (see docs/decisions.md's Discover/consent work) should clamp
+ * the manifest's claimed hue through this function at the point the manifest
+ * is admitted, not at render time — the same "resolve at build/admission
+ * time, not render time" rule the built-in ring already follows.
+ *
+ * `chroma` is clamped to AT MOST `IDENTITY_CHROMA` — never raised. A
+ * submission asking for less chroma than the ceiling is left alone; the
+ * ceiling is a maximum, not a floor the system owns. `hue` is normalised into
+ * `[0, 360)` so an out-of-range submission (negative, or a claim past a full
+ * turn) still resolves to a real point on the wheel rather than silently
+ * feeding `oklchToHex` an angle its trig would wrap unpredictably.
+ */
+export function clampIdentityHue(
+  submitted: { hue: number; chroma?: number },
+  scheme: "light" | "dark"
+): ColorHex {
+  const hue = ((submitted.hue % 360) + 360) % 360;
+  const chroma = Math.min(
+    Math.max(submitted.chroma ?? IDENTITY_CHROMA, 0),
+    IDENTITY_CHROMA
+  );
+  const lightness = scheme === "dark" ? DARK_L : LIGHT_L;
+  return oklchToHex(lightness, chroma, hue);
+}
+
 const ring = (lightness: number): Record<ColorKey, string> =>
   Object.fromEntries(
     Object.entries(APP_HUES).map(([key, hue]) => [

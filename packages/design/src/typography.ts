@@ -233,12 +233,46 @@ export function nativeTypeStyle(styleValue: TypeStyle): TypeStyle {
   };
 }
 
-/** CSS `font` shorthand for one semantic style. */
+// The root a `rem` is relative to. No surface in this repo sets a non-16px
+// `html { font-size }` — desktop/web (apps/web/index.html, packages/client)
+// and the blueprint iframe both inherit the UA default — so `rem` and `px`
+// name the same pixel today. The point of emitting `rem` isn't that they
+// differ NOW; it's that only `rem` (or `em`) tracks the OS's 200% text-size
+// preference, which changes the ROOT font-size, not individual `px` rules. A
+// `px` shorthand is invisible to that preference; a `rem` one scales with it.
+export const REM_BASE_PX = 16;
+
+/** CSS `font` shorthand for one semantic style, in host-relative `rem` units
+ *  (issue #708 §"Implementation notes for the port" — "Emit `rem`, not `px`,
+ *  so 200% OS text scale works"). `toRemStyle` is the single ÷16 conversion
+ *  both the shell and the 11px-floor gate reason from. */
 export function typeShorthand(styleValue: TypeStyle): string {
-  return `${styleValue.weight} ${styleValue.size}px/${styleValue.lineHeight}px var(--font-${styleValue.family})`;
+  const { size, lineHeight } = toRemStyle(styleValue);
+  return `${styleValue.weight} ${size}/${lineHeight} var(--font-${styleValue.family})`;
 }
 
-/** Blueprint lowers the same values into host-relative units. */
+export interface RemTypeStyle {
+  size: `${number}rem`;
+  lineHeight: `${number}rem`;
+}
+
+/** ÷16 against the standard 16px root — see `REM_BASE_PX` above. Shared by
+ *  the shell's `typeShorthand` and `typeSizeRungs`'s `--t-<role>-size` rungs,
+ *  so the shorthand and its rung never disagree on unit. */
+export function toRemStyle(styleValue: {
+  size: number;
+  lineHeight: number;
+}): RemTypeStyle {
+  return {
+    lineHeight: `${styleValue.lineHeight / REM_BASE_PX}rem`,
+    size: `${styleValue.size / REM_BASE_PX}rem`,
+  };
+}
+
+/** Blueprint lowers the same values into host-relative units. Size matches
+ *  the shell's own `rem` conversion (both ÷16); line-height stays a unitless
+ *  ratio (÷ the role's OWN size, not the root) — proven independently useful
+ *  for a sandboxed app pane that may nest inside a caller-scaled ancestor. */
 export interface BlueprintTypeStyle {
   size: `${number}rem`;
   lineHeight: `${number}`;
@@ -250,7 +284,7 @@ function toBlueprintStyle(styleValue: TypeStyle): BlueprintTypeStyle {
   return {
     family: styleValue.family,
     lineHeight: `${styleValue.lineHeight / styleValue.size}`,
-    size: `${styleValue.size / 16}rem`,
+    size: `${styleValue.size / REM_BASE_PX}rem`,
     weight: styleValue.weight,
   };
 }
@@ -301,6 +335,20 @@ export function typeModifiers(
     }
   }
   return out;
+}
+
+/** `type`'s raw px sizes, lowered to `rem` — feeds `typeSizeRungs` so the
+ *  `--t-<role>-size` rungs carry the same unit as the shorthand's own size
+ *  half rather than drifting back to `px` behind the shorthand's back. */
+export function remSizeScale(
+  scale: Readonly<Record<string, { size: number }>>
+): Record<string, { size: `${number}rem` }> {
+  return Object.fromEntries(
+    Object.entries(scale).map(([key, value]) => [
+      key,
+      { size: toRemStyle({ lineHeight: 0, size: value.size }).size },
+    ])
+  );
 }
 
 /** Publish one size rung per distinct role size. */

@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   dateText: { fontFamily: family.sansRegular, fontSize: 14 },
   label: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 12.5,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },

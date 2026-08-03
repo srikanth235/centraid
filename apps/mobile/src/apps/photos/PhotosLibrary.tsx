@@ -11,6 +11,8 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -32,8 +34,6 @@ import {
 } from "./device-media";
 import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
 import type { DeviceByteProbe } from "./free-up-space";
-import { gridImageProps } from "./grid-image";
-import { imageSource } from "./media-source";
 import { styles } from "./PhotosLibrary.styles";
 import type { PhotoAsset } from "./timeline-source";
 import { usePhotoTimeline } from "./timeline-source";

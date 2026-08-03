@@ -64,7 +64,7 @@ export const styles = StyleSheet.create({
   safe: { flex: 1 },
   section: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 12.5,
     letterSpacing: 1,
     marginBottom: 4,
     marginTop: 24,

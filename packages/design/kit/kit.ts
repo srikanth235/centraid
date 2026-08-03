@@ -1324,7 +1324,12 @@ export function wireThemeToggle(
       "</button>" +
       '<div class="kit-ask-controls-spacer"></div>' +
       '<div class="kit-ask-model">' +
-      '<button type="button" class="kit-ask-model-btn" aria-label="Model" aria-haspopup="menu" aria-expanded="false">' +
+      // No static aria-label here on purpose: `.kit-ask-model-label`'s text is
+      // rewritten at runtime when the model changes, and a static aria-label
+      // would drift from it (issue #708 §B.4 — the accessible name has to
+      // match what's on screen, not freeze on the button's PURPOSE). The
+      // visible label plus the chevron already give the button a name.
+      '<button type="button" class="kit-ask-model-btn" aria-haspopup="menu" aria-expanded="false">' +
       '<span class="kit-ask-model-label">Default</span>' +
       CHEVRON_ICON +
       "</button>" +

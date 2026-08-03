@@ -121,7 +121,7 @@ export const styles = StyleSheet.create({
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
   newFolderLabel: {
     fontFamily: family.monoMedium,
-    fontSize: 9,
+    fontSize: 12.5,
     letterSpacing: 1,
     marginTop: 18,
   },

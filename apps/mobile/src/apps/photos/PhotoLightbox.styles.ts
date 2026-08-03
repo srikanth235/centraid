@@ -39,7 +39,7 @@ export const styles = StyleSheet.create({
   liveText: {
     color: "#fff",
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 12.5,
     letterSpacing: 1,
   },
   mediaCenter: { alignItems: "center", justifyContent: "center" },

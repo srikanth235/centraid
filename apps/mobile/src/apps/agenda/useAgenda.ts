@@ -6,7 +6,7 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
-import { expandEvent } from "./recurrence";
+import { expandEvent } from "../../kit/schedule/recurrence";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
   row[key] as T | undefined;

@@ -34,7 +34,7 @@
 .navCount {
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
-  opacity: 0.6;
+  color: var(--text-soft);
 }
 
 .projectLabel {

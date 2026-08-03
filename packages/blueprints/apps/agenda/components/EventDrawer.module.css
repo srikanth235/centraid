@@ -206,7 +206,7 @@
 }
 .activityDate {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }

@@ -70,9 +70,11 @@ export function LockerUnlockScreen({
         accessibilityRole="button"
         disabled={working || passphrase.length < 12}
         onPress={onUnlock}
-        style={[styles.primary, working && styles.disabled]}
+        style={[styles.primary, working && styles.disabledPrimary]}
       >
-        <Text style={styles.primaryText}>
+        <Text
+          style={[styles.primaryText, working && styles.disabledPrimaryText]}
+        >
           {configured ? "Unlock" : "Create passphrase"}
         </Text>
       </Pressable>

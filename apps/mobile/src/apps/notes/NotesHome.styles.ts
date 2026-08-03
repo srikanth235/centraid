@@ -16,7 +16,7 @@ export const styles = StyleSheet.create({
   },
   backlinkMeta: {
     fontFamily: family.monoRegular,
-    fontSize: 10,
+    fontSize: 12.5,
   },
   backlinks: { gap: 8, marginTop: 18 },
   body: {
@@ -136,7 +136,7 @@ export const styles = StyleSheet.create({
   },
   noteMeta: {
     fontFamily: family.monoRegular,
-    fontSize: 10,
+    fontSize: 12.5,
   },
   notePreview: {
     fontFamily: family.sansRegular,

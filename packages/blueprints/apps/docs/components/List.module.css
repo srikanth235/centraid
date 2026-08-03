@@ -154,8 +154,9 @@
   gap: var(--sp-1);
 }
 .cell.purge {
-  color: var(--danger);
-  opacity: 0.85;
+  /* Text-only leaf: the purge state is carried by hue, softened via
+     color-mix rather than container opacity (rule 5). */
+  color: color-mix(in oklab, var(--danger) 85%, transparent);
 }
 .rowEnd {
   /* Above the .rowOpen overlay. */

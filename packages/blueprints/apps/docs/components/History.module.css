@@ -55,7 +55,7 @@
 }
 .versionSize {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .versionTag {

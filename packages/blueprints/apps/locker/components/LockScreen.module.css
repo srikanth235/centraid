@@ -97,7 +97,7 @@
 .lockBtn:disabled,
 .cancelBtn:disabled,
 .lockIn:disabled {
-  opacity: 0.6;
+  color: var(--text-disabled);
 }
 
 @keyframes fade {
