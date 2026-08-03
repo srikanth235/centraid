@@ -188,6 +188,12 @@ accessibility zero-grey (15 cells).
   marker. `scroll-frames.mjs` now waits on the always-rendered People subtitle
   and retains `people rows observed` as an honest zero lower bound.
 
+- **Retry an iOS Maestro control-channel flake.** Run 30847197133 failed
+  `home-loads` before its first assertion because Maestro could not connect to
+  its XCTest permission bridge (`Unable to set permissions`, port 54309). The
+  flow now retries that exact fresh-launch smoke once on iOS with a new Maestro
+  session; Android remains single-attempt.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -346,3 +352,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785783971-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 229480 | 0 | 6862848 | 14396 | 243876 | 2.5054 | 11147475 | 0 | 415563776 | 680307 | fix(ios): retry transient mobile pairing (#676) |
 | codex-019fc399-ba8-1785784233-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 64884 | 0 | 1684736 | 1535 | 66419 | 0.6064 | 11212359 | 0 | 417248512 | 681842 | fix(ios): retry transient mobile pairing (#676) |
 | codex-019fc399-ba8-1785786280-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 315639 | 0 | 15962880 | 12871 | 328510 | 4.9729 | 11527998 | 0 | 433211392 | 694713 | fix(ios): handle empty People frame fixture (#676) |
+| codex-019fc399-ba8-1785787763-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 328274 | 0 | 15957504 | 12344 | 340618 | 4.9952 | 11856272 | 0 | 449168896 | 707057 | fix(ios): retry fresh launch control channel (#676) |

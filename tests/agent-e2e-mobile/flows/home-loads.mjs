@@ -15,8 +15,7 @@ await runFlow("home-loads", async (ctx) => {
   // live default hierarchy, then open paste and confirm the ticket UI.
   // Android cold emulators may raise a Pixel Launcher ANR sheet that hides
   // the hierarchy — waitForOnboardingConnectCommands dismisses it.
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+  const freshHomeYaml = `appId: ${ctx.state.appId}
 ---
 - launchApp:
     clearState: true
@@ -27,9 +26,19 @@ ${openPastePathCommands()}- assertVisible: "PAIRING CODE"
     id: "onboarding-connect"
 - assertVisible: "Scan the QR code instead"
 - takeScreenshot: scan-first-onboarding
-`,
-    "home-fresh"
-  );
+`;
+  try {
+    await ctx.run(freshHomeYaml, "home-fresh");
+  } catch (error) {
+    // A fresh iOS simulator can lose Maestro's XCTest permission bridge before
+    // the first assertion (30847197133). Retry the same flow once with a new
+    // Maestro session; Android keeps the original single-attempt behavior.
+    if (ctx.state.platform !== "ios") throw error;
+    ctx.note(
+      "iOS fresh-launch control channel failed; retrying the same smoke"
+    );
+    await ctx.run(freshHomeYaml, "home-fresh-retry");
+  }
 
   ctx.note(
     "Fresh state rendered scan-first onboarding with paste behind the secondary control"
