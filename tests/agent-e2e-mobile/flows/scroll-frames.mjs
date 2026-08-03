@@ -58,12 +58,13 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  * | People  | 5,000 contacts | whatever the CI gateway fixture seeded — NOT year-3 |
  *
  * The seeded totals are not observable from the device, so this flow does not
- * guess them. What it CAN observe it reports: `people-directory-row-<index>` is
- * positional, so the highest index appearing in any hierarchy during the fling
- * is a real lower bound on the rows scrolled past, published as
- * `people rows observed`. A fling over a directory that turns out to hold 12
- * rows says nothing about a 5,000-row one, and that lower bound is what lets a
- * reader tell the two apart instead of inferring it from seed code.
+ * guess them. What it CAN observe it reports: the highest positional row index
+ * appearing in any hierarchy during the fling is a real lower bound on the rows
+ * scrolled past, published as `people rows observed`. A fling over a directory
+ * that turns out to hold 12 rows says nothing about a 5,000-row one, and that
+ * lower bound is what lets a reader tell the two apart instead of inferring it
+ * from seed code. The arrival marker is the People cover subtitle because an
+ * empty seeded directory has no row to match.
  */
 const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
 const FLINGS = 8;

@@ -258,6 +258,14 @@ accessibility zero-grey (15 cells).
   loopback address. `apps/mobile/modules/centraid-tunnel/android/src/test/java/expo/modules/centraidtunnel/TunnelProxyTest.kt`
   proves the returned port accepts the advertised IPv4 URL.
 
+- **Align the remaining mobile journey notes with the shipped flow.**
+  `tests/onboarding-scenarios.md` now records the empty-ticket validation,
+  while `tests/agent-e2e-mobile/README.md`, `tests/agent-e2e-mobile/flows/native-v0-resilience.md`,
+  `tests/agent-e2e-mobile/flows/template-gate.md`,
+  `tests/agent-e2e-mobile/lib/harness.mjs`, and
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs` describe scan-first
+  onboarding and the subtitle-based People arrival marker.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
@@ -367,3 +375,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785793807-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 113012 | 0 | 22895616 | 16005 | 129017 | 6.2465 | 12468745 | 0 | 504302336 | 759712 | fix(ios): avoid transient frame marker assertion (#676) |
 | codex-019fc399-ba8-1785796576-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 259636 | 0 | 17554176 | 24158 | 283794 | 5.4000 | 12728381 | 0 | 521856512 | 783870 | fix(ios): wait for lazy Settings route (#676) |
 | codex-019fc399-ba8-1785796611-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7954 | 0 | 665344 | 658 | 8612 | 0.1961 | 12736335 | 0 | 522521856 | 784528 | fix(ios): wait for lazy Settings route (#676) |
+| codex-019fc399-ba8-1785799828-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 308356 | 0 | 28658432 | 26692 | 335048 | 8.3359 | 13044691 | 0 | 551180288 | 811220 | docs(mobile): align onboarding journey notes (#676) |
+| codex-019fc399-ba8-1785799882-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20073 | 0 | 331776 | 1377 | 21450 | 0.1538 | 13064764 | 0 | 551512064 | 812597 | docs(mobile): align onboarding journey notes (#676) |

@@ -234,7 +234,7 @@ Reset with `xcrun simctl erase` unless a scenario says otherwise.
 | G5 | Garbage payload | Paste random text | `That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from \`centraid-gateway pair\`.`; `scannedRef` resets so retry works |
 | G6 | Ticket missing `vaultName` | Craft a valid gw-pair token with `vaultName` removed | Rejected at parse (parser requires `vaultName` to be a string) → `invalid_qr` copy, not a dial failure |
 | G7 | Stale desktop `centraid-pair` payload | Paste an old desktop-shape payload | Accepted by the parser (no expiry pre-check on this shape — gw-pair only) → dials → fails server-side with `pair_failed`. Note the asymmetry |
-| G8 | Empty submit gives no feedback | Open paste path, then tap `Connect` with an empty field | **Current behaviour**: `submit()` returns silently — no error, no spinner. Record as a UX gap |
+| G8 | Empty submit gives no feedback | Open paste path, then tap `Connect` with an empty field | **Current behaviour**: shows `Paste a pairing ticket first.` and remains on the paste form so the user can retry |
 | G9 | Gateway down during pair | Stop the gateway; paste a valid ticket | `Could not reach your gateway: …` (`tunnel_failed`); no timeout is configured anywhere in the pairing path, so note how long it hangs — candidate issue |
 | G10 | No back navigation | On profile or done, try swipe-back and (Android) hardware back | **No back handling exists** anywhere in the flow — no `NavigationContainer` is mounted. Confirm the user cannot get stuck or crash |
 | G11 | Profile validation | Advance from profile with an empty/whitespace name | `Enter a name so the people you share with know who you are.` — the only validation in the flow |

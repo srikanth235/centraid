@@ -307,9 +307,9 @@ async function runMaestroChunk(
  *       ---
  *       - launchApp: { clearState: true }
  *       - extendedWaitUntil: { visible: { text: "Connect your gateway." }, timeout: 30000 }
- *       - takeScreenshot: 01-ticket-onboarding
+ *       - takeScreenshot: 01-scan-first-onboarding
  *     `);
- *     ctx.note('ticket-only onboarding rendered after clearState');
+ *     ctx.note('scan-first onboarding rendered after clearState');
  *     return { pass: true, notes: 'one-line verdict summary' };
  *   });
  *
@@ -317,7 +317,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete either valid identity branch
+ *   ctx.configureGateway()  clear state, open scan-first onboarding, redeem a ticket, and complete either valid identity branch
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
