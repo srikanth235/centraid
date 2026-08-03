@@ -271,6 +271,13 @@ export default function AssistantScreen({
   const [modelPicker, setModelPicker] =
     useState<AsstModelPickerDTO>(EMPTY_MODEL_PICKER);
   const [modelPickerLoaded, setModelPickerLoaded] = useState(false);
+  const [pickerLoadedKey, setPickerLoadedKey] = useState<string | null>(null);
+  const pickerLoadSeqRef = useRef(0);
+  const runnerSwitchSeqRef = useRef(0);
+  // The key changes during a thread/capability revision, so the old loaded
+  // state cannot briefly enable controls while the new picker is in flight.
+  const pickerLoadKey = `${conversationId ?? ""}:${snap.pickerRevision ?? 0}`;
+  const pickerReady = modelPickerLoaded && pickerLoadedKey === pickerLoadKey;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -332,16 +339,28 @@ export default function AssistantScreen({
   }, [onReady]);
 
   useEffect(() => {
+    const loadSeq = ++pickerLoadSeqRef.current;
+    const switchSeq = ++runnerSwitchSeqRef.current;
     let cancelled = false;
-    void loadModelPicker().then((p) => {
-      if (cancelled) return;
-      setModelPicker(p);
-      setModelPickerLoaded(true);
-    });
+    const active = (): boolean =>
+      !cancelled &&
+      pickerLoadSeqRef.current === loadSeq &&
+      runnerSwitchSeqRef.current === switchSeq;
+    void loadModelPicker()
+      .then((p) => {
+        if (!active()) return;
+        setModelPicker(p);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!active()) return;
+        setPickerLoadedKey(pickerLoadKey);
+        setModelPickerLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [loadModelPicker]);
+  }, [conversationId, loadModelPicker, pickerLoadKey, snap.pickerRevision]);
 
   // Restore the per-conversation draft when the open thread changes (§4).
   // Done during render, so the composer never paints the previous thread's
@@ -395,16 +414,25 @@ export default function AssistantScreen({
     onSetEffort(effort);
   };
   const selectRunner = (runnerKind: string): void => {
+    const switchSeq = ++runnerSwitchSeqRef.current;
+    // Invalidate a passive picker request that started before this explicit
+    // switch; its completion must not re-enable the old runner's controls.
+    pickerLoadSeqRef.current += 1;
     setModelPickerLoaded(false);
     // `finally` is load-bearing: a rejected switch used to leave every picker
     // disabled forever (plus an unhandled rejection). Mirrors BuilderChatPane.
     void onSetRunner(runnerKind)
-      .then((picker) => setModelPicker(picker))
+      .then((picker) => {
+        if (runnerSwitchSeqRef.current === switchSeq) setModelPicker(picker);
+      })
       .catch(() => {
         // The route owns the user-facing failure (it toasts the preflight
         // reason); the screen's only job here is not to strand its controls.
       })
-      .finally(() => setModelPickerLoaded(true));
+      .finally(() => {
+        if (runnerSwitchSeqRef.current === switchSeq)
+          setModelPickerLoaded(true);
+      });
   };
 
   // Memoized because `Message` is memoized: a fresh callbacks object every
@@ -597,6 +625,9 @@ export default function AssistantScreen({
               onSend={send}
               onStop={onStop}
               busy={snap.busy}
+              // Do not let the first turn outrun provider/capability loading or
+              // a persisted conversation runner binding.
+              disabled={!pickerReady || snap.runnerReady === false}
               canSend={
                 draft.trim().length > 0 ||
                 snap.pendingAttachments.some(
@@ -660,13 +691,13 @@ export default function AssistantScreen({
                 <>
                   <RunnerPicker
                     picker={modelPicker}
-                    loaded={modelPickerLoaded}
+                    loaded={pickerReady}
                     busy={snap.busy}
                     onSelect={selectRunner}
                   />
                   <ModelPicker
                     picker={modelPicker}
-                    loaded={modelPickerLoaded}
+                    loaded={pickerReady}
                     busy={snap.busy}
                     onSelect={selectModel}
                   />
@@ -700,7 +731,7 @@ export default function AssistantScreen({
               effort={
                 <EffortPicker
                   picker={modelPicker}
-                  loaded={modelPickerLoaded}
+                  loaded={pickerReady}
                   busy={snap.busy}
                   onSelect={selectEffort}
                 />
