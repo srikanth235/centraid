@@ -13,8 +13,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -24,6 +22,7 @@ import {
 } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
 import { useTheme } from "../../kit/theme";

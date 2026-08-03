@@ -71,7 +71,7 @@ export default function HomeKey({
           style={styles.headerKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Icon name="grid" size={19} color={colors.accent} />
+          <Icon name="Grid" size={19} color={colors.accent} />
         </Pressable>
       </GlassBar>
     );
@@ -88,7 +88,7 @@ export default function HomeKey({
           style={styles.barKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Icon name="grid" size={22} color={colors.accent} />
+          <Icon name="Grid" size={22} color={colors.accent} />
         </Pressable>
       </GlassBar>
     );
@@ -111,7 +111,7 @@ export default function HomeKey({
           style={styles.floatKey}
         >
           <View style={styles.wash} pointerEvents="none" />
-          <Icon name="grid" size={22} color={colors.accent} />
+          <Icon name="Grid" size={22} color={colors.accent} />
         </Pressable>
       </GlassBar>
     </View>

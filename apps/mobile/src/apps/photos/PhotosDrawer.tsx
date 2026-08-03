@@ -17,13 +17,17 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import {
+  motionDuration,
+  useReducedMotion,
+} from "../../kit/hooks/useReducedMotion";
 import { family, useTheme } from "../../kit/theme";
 import { getProfileColor, getProfileName, initialsOf } from "../../lib/profile";
 import { getActiveVaultLink, subscribeVaultLinks } from "../../lib/vault-links";
@@ -52,6 +56,7 @@ export default function PhotosDrawer({
   onSwitchVault,
 }: PhotosDrawerProps): React.JSX.Element {
   const { colors } = useTheme();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const name = getProfileName();
   const color = getProfileColor();
@@ -75,18 +80,18 @@ export default function PhotosDrawer({
     Animated.parallel([
       Animated.timing(slide, {
         toValue: 0,
-        duration: 260,
+        duration: motionDuration(260, reducedMotion),
         easing: Easing.bezier(0.2, 0.7, 0.2, 1),
         useNativeDriver: true,
       }),
       Animated.timing(fade, {
         toValue: 1,
-        duration: 200,
+        duration: motionDuration(200, reducedMotion),
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [visible, slide, fade]);
+  }, [fade, reducedMotion, slide, visible]);
 
   return (
     <Modal

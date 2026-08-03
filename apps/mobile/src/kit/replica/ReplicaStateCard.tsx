@@ -1,7 +1,8 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../components/Icon";
+import { Text } from "../components/NativeText";
 import type { ReplicaQueryConnection } from "../hooks/useReplicaQuery";
 import { family, radii, useTheme } from "../theme";
 

@@ -43,8 +43,8 @@ export type { AccentRamp } from "./color";
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
 // Brand teal — theme-independent identity color shared by the logo /
-// app-icon SVGs and emitted as `--accent`. Also aliased as `brand`.
-export { BRAND, BRAND as brand } from "./themes";
+// app-icon SVGs and emitted as `--accent`.
+export { BRAND } from "./themes";
 
 export { spacing } from "./density";
 export type { DensityScale } from "./density";

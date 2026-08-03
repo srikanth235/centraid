@@ -1,10 +1,16 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
-import { ICON_CONCEPTS, iconSvg, icons, isIconName } from "./icons.js";
+import {
+  ICON_CONCEPTS,
+  iconForConcept,
+  iconSvg,
+  icons,
+  isIconName,
+} from "./icons.js";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -19,13 +25,10 @@ describe("single icon registry", () => {
       const dir = path.join(appRoot, app);
       for (const file of ["icons.ts", "icons.tsx"]) {
         const full = path.join(dir, file);
-        try {
-          const source = readFileSync(full, "utf8");
-          expect(source, full).toContain("@centraid/design");
-          expect(source, full).not.toMatch(/<svg|<path|<circle|<rect/gu);
-        } catch {
-          // Not every app has both the string and React adapter forms.
-        }
+        if (!existsSync(full)) continue;
+        const source = readFileSync(full, "utf8");
+        expect(source, full).toContain("@centraid/design");
+        expect(source, full).not.toMatch(/<svg|<path|<circle|<rect/gu);
       }
     }
   });
@@ -62,6 +65,36 @@ describe("single icon registry", () => {
       expect(iconSvg(name)).toContain('stroke-width="1.5"');
     }
     expect(Object.keys(icons).length).toBeGreaterThan(40);
+  });
+
+  test("the standalone kit dictionary mirrors the shared path data", () => {
+    const kit = readFileSync(
+      path.join(ROOT, "packages/design/kit/icons.js"),
+      "utf8"
+    );
+    const mirrored = {
+      ChevronDown: ["M6 9l6 6 6-6"],
+      History: ["M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5M12 7v5l3 2"],
+      Paperclip: [
+        "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
+      ],
+    } as const;
+    for (const [name, paths] of Object.entries(mirrored)) {
+      expect(kit, name).toContain(`${name}:`);
+      for (const pathData of paths)
+        expect(kit, `${name}:${pathData}`).toContain(pathData);
+      expect(
+        icons[name as keyof typeof icons].map((segment) => segment.d)
+      ).toStrictEqual(paths);
+    }
+  });
+
+  test("the navigation concepts keep distinct directional semantics", () => {
+    expect(ICON_CONCEPTS.leave).toBe("Grid");
+    expect(ICON_CONCEPTS.up).toBe("ChevronLeft");
+    expect(iconForConcept("leave")).toBe("Grid");
+    expect(isIconName("toString")).toBe(false);
+    expect(isIconName("not-a-real-icon")).toBe(false);
   });
 });
 

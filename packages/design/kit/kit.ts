@@ -1194,8 +1194,8 @@ export async function runBulk(
 /**
  * Theme is a host-owned setting. Blueprint apps receive the resolved profile
  * through the served document and must not create a second per-app theme
- * preference. Keep this compatibility hook inert for older app roots while
- * the visible legacy controls are hidden by the kit stylesheet.
+ * preference. The v0 hook is intentionally inert; the host owns appearance
+ * and any retired local control is marked with `data-kit-appearance-control`.
  */
 export function wireThemeToggle(
   _btn: HTMLElement,

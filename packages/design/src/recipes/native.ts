@@ -1,4 +1,4 @@
-import type { NativeTheme } from "../native";
+import type { NativeColors, NativeTheme } from "../native";
 import { RECIPES } from "./index";
 import type { ButtonVariant, RecipeName } from "./index";
 
@@ -36,11 +36,19 @@ export interface NativeButtonStyle {
   borderRadius: number;
 }
 
+type NativeThemeParts = Pick<NativeTheme, "radii" | "targetMin"> & {
+  colors: NativeColors;
+};
+
 /** Concrete RN button geometry and published foreground for a recipe variant. */
 export function nativeButtonStyle(
   variant: ButtonVariant,
-  theme: NativeTheme
+  theme: NativeThemeParts
 ): NativeButtonStyle {
+  const recipe = NATIVE_RECIPES.Button;
+  if (!recipe.capabilities.includes("native")) {
+    throw new Error("Button recipe must support native lowering");
+  }
   const { colors, radii, targetMin } = theme;
   switch (variant) {
     case "primary":
@@ -61,7 +69,7 @@ export function nativeButtonStyle(
       };
     case "destructive":
       return {
-        backgroundColor: colors.bgElev,
+        backgroundColor: "transparent",
         borderColor: colors.danger,
         color: colors.danger,
         minHeight: targetMin.coarse,

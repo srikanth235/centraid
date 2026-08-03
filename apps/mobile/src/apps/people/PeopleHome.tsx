@@ -5,8 +5,6 @@ import {
   Pressable,
   ScrollView,
   Switch,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -16,6 +14,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import {
   combineReplicaQueryStates,
@@ -345,10 +344,13 @@ export default function PeopleHome({
           ]}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add person"
+          hitSlop={6}
           onPress={() => void addPerson()}
-          style={[styles.add, { backgroundColor: colors.accent }]}
+          style={[styles.add, { backgroundColor: colors.accentFill }]}
         >
-          <Icon name="user-plus" size={18} color={colors.bg} />
+          <Icon name="user-plus" size={18} color={colors.textInv} />
         </Pressable>
       </View>
       <View style={styles.body}>
@@ -477,10 +479,14 @@ export default function PeopleHome({
                   <Text style={{ color: colors.textSoft }}>Preferred</Text>
                   <Switch value={preferred} onValueChange={setPreferred} />
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => void saveChannel()}
-                    style={[styles.save, { backgroundColor: colors.accent }]}
+                    style={[
+                      styles.save,
+                      { backgroundColor: colors.accentFill },
+                    ]}
                   >
-                    <Text style={{ color: colors.bg }}>
+                    <Text style={{ color: colors.textInv }}>
                       {editingChannelId ? "Update" : "Add channel"}
                     </Text>
                   </Pressable>

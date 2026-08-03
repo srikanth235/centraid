@@ -10,17 +10,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import { gridImageProps } from "./grid-image";
 import { imageSource } from "./media-source";

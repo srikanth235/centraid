@@ -6,13 +6,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
 import { formatRelativeTime } from "@centraid/design";
 
 import Icon from "../components/Icon";
+import { Text } from "../components/NativeText";
 import { family, radii, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";

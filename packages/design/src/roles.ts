@@ -23,7 +23,6 @@ export type RoleCategory =
   | "type"
   | "component";
 export type RoleValueKind =
-  | "alias"
   | "literal"
   | "scalar"
   | "solved"
@@ -127,7 +126,7 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     {
       blueprint: solved("var(--accent-deep)"),
-      native: solved("#16796D"),
+      native: solved("#0F7A6C"),
       shell: solved("#0F7A6C"),
     },
     4.5
@@ -168,7 +167,7 @@ const roleTable: RoleDef[] = [
       blueprint: solved(
         "color-mix(in oklab, var(--accent-fill) 88%, var(--text))"
       ),
-      native: solved("#1D685E"),
+      native: solved("#206c62"),
       shell: solved("#1D685E"),
     },
     4.5
@@ -205,7 +204,7 @@ const roleTable: RoleDef[] = [
     shellAndNative,
     {
       blueprint: unsupported("Blueprint content has no detached app backing."),
-      native: literal("#FCFCFC"),
+      native: unsupported("Native colors expose one concrete background role."),
       shell: literal("#FFFFFF"),
     }
   ),
@@ -217,7 +216,7 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     {
       blueprint: literal("#FFFFFF"),
-      native: literal("#FFFFFF"),
+      native: literal("#F4F5F7"),
       shell: literal("#FFFFFF"),
     }
   ),
@@ -280,7 +279,9 @@ const roleTable: RoleDef[] = [
     shellAndNative,
     {
       blueprint: unsupported("Blueprint content has no detached HUD."),
-      native: literal("#FFFFFF"),
+      native: unsupported(
+        "Native surfaces do not expose detached host HUD chrome."
+      ),
       shell: literal("rgba(255,255,255,.92)"),
     }
   ),
@@ -292,7 +293,7 @@ const roleTable: RoleDef[] = [
     shellAndNative,
     {
       blueprint: unsupported("Blueprint apps do not own the host wall."),
-      native: literal("#F4F5F7"),
+      native: unsupported("Native surfaces do not own the detached host wall."),
       shell: literal("#FCFCFC"),
     }
   ),
@@ -369,7 +370,7 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     {
       blueprint: literal("#FFFFFF"),
-      native: literal("#FFFFFF"),
+      native: literal("#F4F5F7"),
       shell: literal("#FFFFFF"),
     },
     4.5
@@ -449,7 +450,7 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     {
       blueprint: literal("var(--accent)"),
-      native: unsupported("Native focus is supplied by the platform."),
+      native: literal("#3EC8B4"),
       shell: literal("var(--accent)"),
     },
     3
@@ -462,7 +463,7 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     {
       blueprint: literal("rgba(20,22,27,.48)"),
-      native: literal("rgba(0,0,0,.52)"),
+      native: literal("rgba(20,22,27,.52)"),
       shell: literal("rgba(20,22,27,.52)"),
     }
   ),
@@ -608,15 +609,11 @@ const roleTable: RoleDef[] = [
     "color",
     "Solved text rung for the selected app identity hue; never an action color.",
     "identity text clears AA on its local surface",
-    blueprintSurfaces,
+    ["BI", "BS", "SH", "SH-c"],
     {
       blueprint: literal("var(--c-teal-text)"),
-      native: unsupported(
-        "Native app identity text is lowered by the app catalog."
-      ),
-      shell: unsupported(
-        "Shell host identity is separate from blueprint content."
-      ),
+      native: solved("#0F7A6C"),
+      shell: literal("var(--c-teal-text)"),
     },
     4.5
   ),
@@ -671,15 +668,24 @@ const generatedScalarRoles: RoleDef[] = [
       "type",
       `Semantic type role ${key}.`,
       "the role's declared text floor",
-      key === "hero" || key === "greeting" ? shellAndNative : allSurfaces,
+      key === "hero"
+        ? ["SH", "SH-c"]
+        : key === "greeting"
+          ? shellAndNative
+          : allSurfaces,
       {
         blueprint:
           key === "hero" || key === "greeting"
             ? unsupported("This role is not part of the blueprint profile.")
             : literal(`var(--t-${typeKeyToKebab(key)})`),
-        native: literal(
-          `${value.size + value.nativeDelta.size}/${value.lineHeight + value.nativeDelta.lineHeight}`
-        ),
+        native:
+          key === "hero"
+            ? unsupported(
+                "Native compact surfaces use title/display, not hero type."
+              )
+            : literal(
+                `${value.size + value.nativeDelta.size}/${value.lineHeight + value.nativeDelta.lineHeight}`
+              ),
         shell: literal(`var(--t-${typeKeyToKebab(key)})`),
       }
     )
@@ -710,6 +716,12 @@ export const ADAPTERS = {
   glassFilm: {
     css: "--glass-film",
     meaning: "Detached chrome glass layer; blueprint content never uses it.",
+    profiles: ["shell"] as const,
+  },
+  glassSheen: {
+    css: "--glass-sheen",
+    meaning:
+      "Detached chrome blur/opacity finish; blueprint content never uses it.",
     profiles: ["shell"] as const,
   },
 } as const;
@@ -753,6 +765,55 @@ export function assertTotalProfileValues(): void {
           `${entry.css} unsupported ${profile} lowering has no reason`
         );
       }
+    }
+  }
+}
+
+/** Native field names are mapped back to the semantic registry once. */
+export const NATIVE_COLOR_ROLE_MAP = {
+  accent: "--accent",
+  accentDeep: "--accent-deep",
+  accentFill: "--accent-fill",
+  accentDeepHover: "--accent-deep-hover",
+  accentLight: "--accent-light",
+  accentSoft: "--accent-soft",
+  accentText: "--accent-text",
+  appIdentityText: "--app-identity-text",
+  bg: "--bg",
+  bgChrome: "--bg-chrome",
+  bgElev: "--bg-elev",
+  bgHover: "--bg-hover",
+  bgPress: "--bg-press",
+  bgSel: "--bg-sel",
+  bgSunken: "--bg-sunken",
+  danger: "--danger",
+  line: "--line",
+  lineStrong: "--line-strong",
+  lineSel: "--line-sel",
+  onAccent: "--on-accent",
+  focusRingColor: "--focus-ring-color",
+  scrim: "--scrim",
+  shadowLg: "--shadow-lg",
+  shadowMd: "--shadow-md",
+  shadowSm: "--shadow-sm",
+  success: "--success",
+  text: "--text",
+  textFaint: "--text-faint",
+  textGhost: "--text-ghost",
+  textDisabled: "--text-disabled",
+  textInv: "--text-inv",
+  textSoft: "--text-soft",
+  warning: "--warning",
+} as const;
+
+export function assertNativeColorRoleContract(colors: object): void {
+  for (const [field, css] of Object.entries(NATIVE_COLOR_ROLE_MAP)) {
+    const roleDef = ROLE_REGISTRY[css];
+    if (!roleDef || roleDef.by.native.kind === "unsupported") {
+      throw new Error(`${field} is not backed by a native lowering for ${css}`);
+    }
+    if (!(field in colors)) {
+      throw new Error(`${field} is missing from the native color emitter`);
     }
   }
 }

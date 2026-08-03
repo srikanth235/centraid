@@ -8,9 +8,10 @@
 import { spacing } from "./density";
 import { palette } from "./palette";
 import { radii } from "./radii";
+import { assertNativeColorRoleContract } from "./roles";
 import { ACCENT_PALETTE } from "./themes";
 import type { AccentKey } from "./themes";
-import { nativeTypeStyle, type } from "./typography";
+import { nativeTypeStyle, typeForProfile } from "./typography";
 import type { TypeKey } from "./typography";
 
 export type NativeScheme = "dark" | "light";
@@ -59,14 +60,16 @@ export interface NativeTypeStyle {
   weight: Type["weight"];
 }
 
-type Type = (typeof type)[TypeKey];
+export type NativeTypeKey = Exclude<TypeKey, "hero">;
+
+type Type = (typeof import("./typography").type)[TypeKey];
 
 export interface NativeTheme {
   scheme: NativeScheme;
   colors: NativeColors;
   radii: typeof radii;
   spacing: typeof spacing;
-  type: Record<TypeKey, NativeTypeStyle>;
+  type: Record<NativeTypeKey, NativeTypeStyle>;
   targetMin: { coarse: number; fine: number };
   durations: { one: number; two: number };
 }
@@ -94,25 +97,38 @@ function rgbaHex(hex: string, alpha: number): string {
   return `rgba(${channels.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
 }
 
+function mixHex(from: string, toward: string, weight: number): string {
+  const channels = (hex: string) =>
+    [0, 2, 4].map((offset) =>
+      Number.parseInt(hex.slice(1).slice(offset, offset + 2), 16)
+    );
+  const first = channels(from);
+  const second = channels(toward);
+  return `#${first
+    .map((channel, index) =>
+      Math.round(channel + ((second[index] ?? channel) - channel) * weight)
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
 function colorsFor(scheme: NativeScheme, accentKey: AccentKey): NativeColors {
   const dark = scheme === "dark";
   const accent = ACCENT_PALETTE[accentKey];
-  return {
+  const colors: NativeColors = {
     ...iconPalette(),
     ...shared,
     accent: accent.accent,
     accentDeep: dark ? accent.light : accent.deep,
     accentFill: dark ? accent.light : accent.deep,
-    accentDeepHover:
-      accentKey === "teal"
-        ? dark
-          ? "#4BC3B2"
-          : "#1D685E"
-        : dark
-          ? accent.light
-          : accent.deep,
+    accentDeepHover: mixHex(
+      dark ? accent.light : accent.deep,
+      dark ? "#ECEEF2" : "#141820",
+      0.12
+    ),
     accentLight: accent.light,
-    appIdentityText: dark ? "#73D8C9" : "#16796D",
+    appIdentityText: dark ? accent.light : accent.text,
     accentSoft: rgbaHex(accent.accent, dark ? 0.18 : 0.12),
     accentText: dark ? accent.accent : accent.text,
     bg: dark ? "#0D0D0D" : "#FCFCFC",
@@ -139,9 +155,11 @@ function colorsFor(scheme: NativeScheme, accentKey: AccentKey): NativeColors {
     textDisabled: dark ? "#858A92" : "#9BA1AA",
     textFaint: dark ? "#9AA0AA" : "#5F6672",
     textGhost: dark ? "#727780" : "#8A909A",
-    textInv: dark ? "#141820" : "#FFFFFF",
+    textInv: dark ? "#141820" : "#F4F5F7",
     textSoft: dark ? "#ADB2BA" : "#454A54",
   };
+  assertNativeColorRoleContract(colors);
+  return colors;
 }
 
 export function toNativeTheme(
@@ -149,7 +167,7 @@ export function toNativeTheme(
   accentKey: AccentKey = "teal"
 ): NativeTheme {
   const nativeType = Object.fromEntries(
-    Object.entries(type).map(([key, value]) => {
+    Object.entries(typeForProfile("native")).map(([key, value]) => {
       const lowered = nativeTypeStyle(value);
       return [
         key,
@@ -161,7 +179,7 @@ export function toNativeTheme(
         },
       ];
     })
-  ) as Record<TypeKey, NativeTypeStyle>;
+  ) as Record<NativeTypeKey, NativeTypeStyle>;
   return {
     colors: colorsFor(scheme, accentKey),
     durations: { one: 120, two: 200 },

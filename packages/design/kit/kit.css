@@ -12,17 +12,15 @@
    App identity (--app-identity) is a separate mark/tint axis. Hairline
    borders, soft depth, motion under 200ms.
 
-   Shared tokens every app.css MUST define (contract):
+   Shared tokens every generated app.css publishes (contract):
      --bg-elev   card / raised fill
      --line      hairline border
      --text      primary ink            --text-soft     secondary ink
-     --text-inv  ink ON an --accent-deep fill (flips per theme; NOT
-                 --text-inv, which is the fixed white for saturated
-                 accent + scrim surfaces)
+     --text-inv  ink ON an --accent-deep fill (flips per theme)
      --accent    product action accent (never rebound per app)
 
-   Optional tokens the redesigned apps ALSO define — kit degrades gracefully
-   when they're absent (older apps):
+   Optional tokens the redesigned apps ALSO define. This is a v0 migration, so
+   the live kit and generated blueprint app.css move together as one contract.
      --bg-sunken   recessed / track fill      --line-strong  stronger hairline
      --text-faint   tertiary ink               --r-md       base radius (0.75rem)
      --shadow-md   soft elevation             --accent-soft  ~12% accent tint
@@ -41,9 +39,9 @@
    height IS the line box, and anything paired with `em`-derived geometry
    should not — those hold one size on purpose and stay literals.
 
-   Only the five rungs BOTH emitters publish are usable here: body, mono,
-   small, tiny, title. `--t-display-size` / `--t-hero-size` /
-   `--t-title-size` / `--t-small-strong-size` are shell-only; naming one here yields an
+   Shared body, body-strong, control, eyebrow, mono, small, small-strong, and
+   title rungs are usable here. `--t-display-size`, `--t-greeting-size`, and
+   `--t-hero-size` are shell-only; naming one here yields an
    invalid declaration inside an app pane, which is dropped whole and leaves
    the element at its inherited size, silently.
    ========================================================================== */
@@ -210,13 +208,20 @@
   display: none !important;
 }
 
-/* Appearance belongs to the host shell. Older blueprint roots still pass a
-   compatibility ref for this control, so remove it at the kit boundary rather
-   than letting an inline app flip the host document's theme. */
-:where(.kit-app-shell button[aria-label="Toggle light/dark"]),
-:where(.centraid-inline-scope button[aria-label="Toggle light/dark"]),
-:where(.kit-app-shell button[aria-label="Theme"]),
-:where(.centraid-inline-scope button[aria-label="Theme"]) {
+/* Ask and popover helpers are intentionally mounted on body so they can
+   escape an app's stacking context. Keep their hidden contract equally
+   explicit without applying a document-global rule to host chrome. */
+:where(body > .kit-ask-ov[hidden]),
+:where(body > .kit-popover[hidden]),
+:where(.kit-ask-model-menu[hidden]) {
+  display: none !important;
+}
+
+/* Appearance belongs to the host shell. Blueprint roots mark any retired
+   local control explicitly; accessible copy is free to evolve without
+   changing this boundary. */
+:where(.kit-app-shell [data-kit-appearance-control]),
+:where(.centraid-inline-scope [data-kit-appearance-control]) {
   display: none !important;
 }
 
@@ -659,11 +664,11 @@ kit-reference-strip,
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-control);
+  color: var(--text);
+  font: var(--t-small-strong);
   padding: var(--sp-2) var(--sp-4);
   min-height: var(--target-min);
   cursor: pointer;
@@ -674,19 +679,26 @@ kit-reference-strip,
     border-color var(--dur-1) var(--ease),
     background var(--dur-1) var(--ease);
 }
-.kit-btn:hover {
+.kit-btn:hover:not(:disabled):not(.primary):not(.destructive):not(
+    .destructive-filled
+  ):not(.destructiveFilled):not([data-variant="destructiveFilled"]) {
+  background: var(--bg-hover, var(--bg-sunken, var(--bg-elev)));
   border-color: var(--line-strong);
   color: var(--text);
 }
 .kit-btn.secondary {
   border-color: var(--line);
   background: var(--bg-elev);
-  color: var(--text-soft);
+  color: var(--text);
 }
 .kit-btn.quiet {
   border-color: transparent;
   background: transparent;
   color: var(--text-soft);
+}
+.kit-btn.quiet:hover:not(:disabled) {
+  background: var(--bg-hover, var(--bg-sunken, var(--bg-elev)));
+  color: var(--text);
 }
 .kit-btn.destructive {
   border-color: var(--danger);
@@ -748,6 +760,12 @@ kit-reference-strip,
 .kit-btn[data-variant="destructiveFilled"] {
   background: var(--danger);
   border-color: transparent;
+  color: var(--text-inv);
+}
+.kit-btn.destructive-filled:hover:not(:disabled),
+.kit-btn.destructiveFilled:hover:not(:disabled),
+.kit-btn[data-variant="destructiveFilled"]:hover:not(:disabled) {
+  background: var(--danger);
   color: var(--text-inv);
 }
 

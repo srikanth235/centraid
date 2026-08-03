@@ -3,11 +3,12 @@ import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";

@@ -1,14 +1,8 @@
 import React from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Modal, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Text, TextInput } from "../../kit/components/NativeText";
 import type { LockerStyles } from "./LockerHome.styles";
 import type { LockerItem, LockerRow } from "./LockerHome.types";
 import { visibleFields } from "./LockerHome.types";

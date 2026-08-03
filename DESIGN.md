@@ -55,8 +55,8 @@ colors:
   light-line-strong: "rgba(20,22,27,0.20)"
   dark-bg: "#0D0D0D"
   dark-bg-app: "#000000"
-  dark-bg-elev: "#181818"
-  dark-bg-sunken: "#030303"
+  dark-bg-elev: "#1A1A1A"
+  dark-bg-sunken: "#050505"
   dark-text: "#ECEEF2"
   dark-text-soft: "rgba(236,238,242,0.72)"
   dark-text-faint: "rgba(236,238,242,0.52)"
@@ -160,6 +160,11 @@ components:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.danger}"
     rounded: "{rounded.md}"
+  Button-destructiveFilled:
+    backgroundColor: "{colors.danger}"
+    textColor: "{colors.light-text-inv}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.3}"
   IconButton:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -190,6 +195,10 @@ components:
     backgroundColor: "{colors.accent-soft}"
     textColor: "{colors.light-text}"
     rounded: "{rounded.pill}"
+  Segmented:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.light-text}"
+    rounded: "{rounded.md}"
   Dialog:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -213,6 +222,14 @@ components:
     backgroundColor: "{colors.light-bg}"
     textColor: "{colors.light-text-faint}"
     typography: "{typography.small}"
+  Loading:
+    backgroundColor: "{colors.light-bg-sunken}"
+    textColor: "{colors.accent-text}"
+    rounded: "{rounded.pill}"
+  Error:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.danger}"
+    rounded: "{rounded.md}"
   AppTile:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
@@ -240,6 +257,11 @@ components:
     backgroundColor: "{colors.light-bg-elev}"
     textColor: "{colors.light-text}"
     rounded: "{rounded.md}"
+  Tooltip:
+    backgroundColor: "{colors.light-bg-elev}"
+    textColor: "{colors.light-text}"
+    rounded: "{rounded.xs}"
+    padding: "{spacing.2}"
   Progress:
     backgroundColor: "{colors.light-bg-sunken}"
     textColor: "{colors.accent-text}"
@@ -274,7 +296,7 @@ The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall
 
 The semantic states are `--success`, `--warning`, and `--danger`. Each has a light and dark solve and is tested against card, track, and its own wash. Status hue separation is measured in Oklab; a merely legible grey is not a status color. Disabled text uses `--text-disabled`; non-text disabled affordances use `--o-disabled: 0.45` once, never stacked opacity.
 
-The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only adapters such as `--target-min` and `--bg-l` carry environment-dependent values. There is no alias layer. `--r-*`, `--sp-*`, and `--font-*` are shared names and values in the shell and blueprint emitters. Motion uses `--dur-1: 120ms` and `--dur-2: 200ms`.
+The role registry marks values as `literal`, `scalar`, `solved`, or `wash`; only adapters such as `--target-min` and `--bg-l` carry environment-dependent values. The shell dark ramp pins `--bg-l: 5%`; the blueprint dark ramp pins `--bg-l: 10%`. There is no alias layer. `--r-*`, `--sp-*`, and `--font-*` are shared names and values in the shell and blueprint emitters. Motion uses `--dur-1: 120ms` and `--dur-2: 200ms`.
 
 ## Typography
 

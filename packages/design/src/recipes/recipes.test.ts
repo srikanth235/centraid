@@ -21,10 +21,7 @@ describe("revision 3 recipe registry", () => {
       expect(recipe.rest.length, `${name} rest`).toBeGreaterThan(0);
       expect(recipe.states.rest).toStrictEqual(recipe.rest);
       expect(recipe.states.focus.length).toBeGreaterThan(0);
-      expect(
-        recipe.a11y.length,
-        `${name} accessibility`
-      ).toBeGreaterThanOrEqual(0);
+      expect(recipe.a11y.length, `${name} accessibility`).toBeGreaterThan(0);
     }
   });
 
@@ -63,6 +60,9 @@ describe("revision 3 recipe registry", () => {
       expect(style.borderRadius).toBe(theme.radii.md);
       expect(style.color).toMatch(/^#/u);
     }
+    expect(nativeButtonStyle("destructive", theme).backgroundColor).toBe(
+      "transparent"
+    );
   });
 
   test("emits the scoped web lowering from the shared recipe contract", () => {
@@ -75,5 +75,18 @@ describe("revision 3 recipe registry", () => {
       '.centraid-inline-scope .kit-btn[data-variant="destructiveFilled"]'
     );
     expect(css.endsWith("\n")).toBe(true);
+  });
+
+  test("rejects a button recipe without native capability", () => {
+    const recipe = NATIVE_RECIPES.Button;
+    const originalCapabilities = recipe.capabilities;
+    recipe.capabilities = ["web", "blueprint"];
+    try {
+      expect(() =>
+        nativeButtonStyle("primary", toNativeTheme("light"))
+      ).toThrow("Button recipe must support native lowering");
+    } finally {
+      recipe.capabilities = originalCapabilities;
+    }
   });
 });

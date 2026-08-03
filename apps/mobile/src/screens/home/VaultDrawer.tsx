@@ -21,13 +21,17 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import {
+  motionDuration,
+  useReducedMotion,
+} from "../../kit/hooks/useReducedMotion";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { initialsOf } from "../../lib/profile";
@@ -87,6 +91,7 @@ export default function VaultDrawer({
   onSettings,
 }: VaultDrawerProps): React.JSX.Element {
   const { colors } = useTheme();
+  const reducedMotion = useReducedMotion();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const slide = useAnimatedValue(-PANEL_WIDTH);
@@ -107,18 +112,18 @@ export default function VaultDrawer({
     Animated.parallel([
       Animated.timing(slide, {
         toValue: 0,
-        duration: 260,
+        duration: motionDuration(260, reducedMotion),
         easing: Easing.bezier(0.2, 0.7, 0.2, 1),
         useNativeDriver: true,
       }),
       Animated.timing(fade, {
         toValue: 1,
-        duration: 200,
+        duration: motionDuration(200, reducedMotion),
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [open, slide, fade]);
+  }, [fade, open, reducedMotion, slide]);
 
   // Close first, then route — so the cover we push slides over a dismissed drawer
   // (matches PhotosDrawer's onHome contract).

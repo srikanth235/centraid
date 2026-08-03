@@ -57,7 +57,9 @@ const ICON_DATA = {
     { d: "M16 8l-2.4 5.6L8 16l2.4-5.6z", fill: "currentColor" },
   ],
   Bolt: [{ d: "M13 2L4 13h7l-2 9 11-13h-8z" }],
+  BoltOff: [{ d: "m3 3 18 18" }, { d: "m13 2-9 11h7l-2 9 4-4" }],
   Activity: [{ d: "M3 12h4l3 8 4-16 3 8h4" }],
+  BarChart2: [{ d: "M4 20V10M10 20V4M16 20v-7M22 20H2" }],
   ChevronDown: [{ d: "M6 9l6 6 6-6" }],
   Coin: [
     { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
@@ -70,6 +72,13 @@ const ICON_DATA = {
     {
       d: "M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z",
     },
+  ],
+  Cloud: [
+    { d: "M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.2 8.4 4.5 4.5 0 0 0 7 18z" },
+  ],
+  CloudOff: [
+    { d: "m3 3 18 18" },
+    { d: "M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.2 8.4 4.5 4.5 0 0 0 7 18z" },
   ],
   Phone: [
     {
@@ -191,6 +200,10 @@ const ICON_DATA = {
     { d: "M4 9h10v6H4z", fill: "currentColor" },
     { d: "M22 11v2" },
   ],
+  BatteryCharging: [
+    { d: "M2 7h18v10H2z" },
+    { d: "M22 11v2M11 10l-2 3h3l-1 3 4-5h-3l1-1z" },
+  ],
   // Profile / space switcher glyphs (issue: profiles feature).
   User: [
     { d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
@@ -202,6 +215,10 @@ const ICON_DATA = {
     { d: "M16.5 4.8a3.5 3.5 0 0 1 0 6.9M22 20.5a6.5 6.5 0 0 0-4.2-6.1" },
   ],
   SwitchVert: [{ d: "M8 4v16M8 20l-3-3M8 4l3 3M16 20V4M16 4l3 3M16 20l-3-3" }],
+  UserPlus: [
+    { d: "M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" },
+    { d: "M2.5 20.5a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6" },
+  ],
   Home: [{ d: "M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7h-6v7H5a2 2 0 0 1-2-2z" }],
   Book: [
     { d: "M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z" },
@@ -330,7 +347,13 @@ const ICON_DATA = {
   ],
   ChevronRight: [{ d: "M9 6l6 6-6 6" }],
   ChevronLeft: [{ d: "M15 6l-6 6 6 6" }],
+  ChevronsDown: [{ d: "m7 7 5 5 5-5M7 13l5 5 5-5" }],
   Menu: [{ d: "M4 7h16M4 12h16M4 17h16" }],
+  MessageCircle: [
+    {
+      d: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z",
+    },
+  ],
   Heart: [
     {
       d: "M12 20s-7-4.4-9.2-8.4C1.3 8.9 2.6 6 5.4 6c1.8 0 3 1 3.6 2 .6-1 1.8-2 3.6-2 2.8 0 4.1 2.9 2.6 5.6C19 15.6 12 20 12 20z",
@@ -343,6 +366,8 @@ const ICON_DATA = {
     { d: "M8 9h.01" },
   ],
   Grid: [{ d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" }],
+  Layers: [{ d: "m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5" }],
+  Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
   Archive: [{ d: "M4 5h16v4H4z" }, { d: "M6 9v10h12V9M9 13h6" }],
   Upload: [{ d: "M12 15V3m0 0 4 4m-4-4-4 4M5 21h14" }],
@@ -352,6 +377,13 @@ const ICON_DATA = {
     { d: "M12 11v5M9.5 13.5h5" },
   ],
   Bookmark: [{ d: "M6 4h12v17l-6-3-6 3z" }],
+  Shield: [{ d: "M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6z" }],
+  Smartphone: [
+    {
+      d: "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
+    },
+    { d: "M11 18h2" },
+  ],
   EyeOff: [
     { d: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" },
     { d: "m4 4 16 16" },
@@ -374,6 +406,10 @@ const ICON_DATA = {
     { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
     { d: "M12 8v8M8 12h8" },
   ],
+  XCircle: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "m9 9 6 6M15 9l-6 6" },
+  ],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;
@@ -394,14 +430,14 @@ export const ICON_CONCEPTS: Record<IconConcept, IconName> = {
   ask: "Sparkle",
   back: "ArrowLeft",
   close: "X",
-  leave: "ArrowRight",
+  leave: "Grid",
   settings: "Settings",
   trash: "Trash",
-  up: "ArrowRight",
+  up: "ChevronLeft",
 };
 
 export function isIconName(value: string): value is IconName {
-  return value in icons;
+  return Object.hasOwn(icons, value);
 }
 
 export function iconForConcept(concept: IconConcept): IconName {

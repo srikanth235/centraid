@@ -7,8 +7,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +16,7 @@ import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -389,7 +388,7 @@ export default function NotesHome({
           style={[
             styles.chip,
             {
-              backgroundColor: showTrash ? colors.accent : colors.bgElev,
+              backgroundColor: showTrash ? colors.accentFill : colors.bgElev,
               borderColor: colors.line,
             },
           ]}
@@ -397,7 +396,7 @@ export default function NotesHome({
           <Text
             style={[
               styles.chipText,
-              { color: showTrash ? colors.bg : colors.textSoft },
+              { color: showTrash ? colors.textInv : colors.textSoft },
             ]}
           >
             {showTrash ? "Notes" : "Trash"}
@@ -571,10 +570,10 @@ export default function NotesHome({
               <Pressable
                 accessibilityRole="button"
                 onPress={() => void lifecycle("restore-note")}
-                style={[styles.button, { backgroundColor: colors.accent }]}
+                style={[styles.button, { backgroundColor: colors.accentFill }]}
               >
-                <Icon name="rotate-ccw" size={17} color={colors.bg} />
-                <Text style={[styles.buttonText, { color: colors.bg }]}>
+                <Icon name="rotate-ccw" size={17} color={colors.textInv} />
+                <Text style={[styles.buttonText, { color: colors.textInv }]}>
                   Restore note
                 </Text>
               </Pressable>
@@ -601,10 +600,10 @@ export default function NotesHome({
                   onPress={() => void save()}
                   style={[
                     styles.button,
-                    { backgroundColor: colors.accent, flex: 1 },
+                    { backgroundColor: colors.accentFill, flex: 1 },
                   ]}
                 >
-                  <Text style={[styles.buttonText, { color: colors.bg }]}>
+                  <Text style={[styles.buttonText, { color: colors.textInv }]}>
                     Save note
                   </Text>
                 </Pressable>

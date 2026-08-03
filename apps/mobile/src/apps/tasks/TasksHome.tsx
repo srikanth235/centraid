@@ -7,8 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -18,6 +16,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,

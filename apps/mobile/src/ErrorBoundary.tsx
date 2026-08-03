@@ -1,9 +1,11 @@
-// React Native error boundary (issue #468 K1) — class component required.
 import React, { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { Appearance, View, Text, Pressable, StyleSheet } from "react-native";
+import { Appearance, View, Pressable, StyleSheet } from "react-native";
 
 import { toNativeTheme } from "@centraid/design";
+
+// React Native error boundary (issue #468 K1) — class component required.
+import { Text } from "./kit/components/NativeText";
 
 interface Props {
   children: ReactNode;

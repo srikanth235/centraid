@@ -18,9 +18,10 @@
 
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
+import { Text } from "../components/NativeText";
 
 /**
  * `centraid://perf-frames?ms=4000` arms one sample. The probe opens this, does

@@ -12,7 +12,6 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  Text,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -21,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AppHeader from "../../kit/components/AppHeader";
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
 import { appQuery, resolveAppMeta } from "../../lib/gateway";

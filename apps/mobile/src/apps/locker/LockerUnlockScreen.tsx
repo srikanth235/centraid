@@ -6,9 +6,10 @@
 // unrelated change had to be reviewed against a passphrase field.
 
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import type { useTheme } from "../../kit/theme";
 import type { makeLockerStyles } from "./LockerHome.styles";
 

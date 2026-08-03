@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { readFileSync } from "node:fs";
 // Product-grammar screenshot gallery (issue #690, §4.2).
 //
 // `--update` refreshes the committed baselines. Without it the same captures
@@ -12,12 +13,22 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 
-import { toBlueprintCss, toCss } from "../packages/design/src/index.ts";
+import {
+  toBlueprintCss,
+  toCss,
+  toNativeTheme,
+} from "../packages/design/src/index.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const BASELINE_DIR = path.join(ROOT, "tests/design-gallery/baselines");
 const ACTUAL_DIR = path.join(ROOT, "artifacts/design-gallery/actual");
 const MANIFEST_FILE = path.join(ROOT, "tests/design-gallery/manifest.json");
+const MATRIX_FILE = path.join(ROOT, "tests/design-grammar-matrix.json");
+const KIT_CSS = readFileSync(
+  path.join(ROOT, "packages/design/kit/kit.css"),
+  "utf8"
+);
+const MATRIX = JSON.parse(readFileSync(MATRIX_FILE, "utf8"));
 const UPDATE = process.argv.includes("--update");
 
 const BLUEPRINT_APPS = [
@@ -35,14 +46,72 @@ const VIEWPORTS = {
   compact: { width: 390, height: 844 },
 };
 
+const APP_METADATA = Object.fromEntries(
+  BLUEPRINT_APPS.map((app) => {
+    const manifest = JSON.parse(
+      readFileSync(
+        path.join(ROOT, "packages/blueprints/apps", app, "app.json"),
+        "utf8"
+      )
+    );
+    return [app, manifest];
+  })
+);
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function nativeTokenCss(scheme) {
+  const theme = toNativeTheme(scheme);
+  const vars = [];
+  for (const [key, value] of Object.entries(theme.colors)) {
+    const name = key.replace(
+      /(?<letter>[A-Z])/gu,
+      (_match, letter) => `-${letter.toLowerCase()}`
+    );
+    vars.push(`--${name}: ${value};`);
+  }
+  for (const [key, value] of Object.entries(theme.radii))
+    vars.push(`--r-${key}: ${value}px;`);
+  for (const [key, value] of Object.entries(theme.spacing))
+    vars.push(`--sp-${key}: ${value}px;`);
+  for (const [key, value] of Object.entries(theme.type))
+    vars.push(
+      `--t-${key.replace(/(?<letter>[A-Z])/gu, (_match, letter) => `-${letter.toLowerCase()}`)}: ${value.fontSize}px/${value.lineHeight}px system-ui;`
+    );
+  vars.push(
+    `--target-min: ${theme.targetMin.coarse}px;`,
+    `--dur-1: ${theme.durations.one}ms;`,
+    `--dur-2: ${theme.durations.two}ms;`,
+    "--ease: cubic-bezier(0.2, 0.7, 0.3, 1);",
+    "--font-sans: system-ui, sans-serif;",
+    "--font-mono: ui-monospace, monospace;"
+  );
+  return `:root { ${vars.join(" ")} }`;
+}
+
 function fixtureHtml({ surface, scheme, width, app }) {
   const tokens =
-    surface === "BI" || surface === "BS" ? toBlueprintCss() : toCss();
+    surface === "BI" || surface === "BS"
+      ? toBlueprintCss()
+      : surface === "MO"
+        ? nativeTokenCss(scheme)
+        : toCss();
+  const manifest = app ? APP_METADATA[app] : undefined;
+  const appName = manifest?.name ?? "Centraid";
+  const appDescription = manifest?.description ?? "Shared host reference state";
+  const appIcon = manifest?.iconKey ?? "Grid";
+  const appColor = manifest?.colorKey ?? "teal";
   const appIdentity =
     surface === "MO" ? "var(--c-indigo)" : "var(--app-identity, var(--c-teal))";
   return `<!doctype html>
 <html data-theme="${scheme}">
-<head><meta charset="utf-8"><style>${tokens}
+<head><meta charset="utf-8"><style>${tokens}${KIT_CSS}
   :root[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { margin: 0; min-width: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
@@ -52,19 +121,16 @@ function fixtureHtml({ surface, scheme, width, app }) {
   h1 { margin: 4px 0 0; font: var(--t-title); }
   .identity { display: inline-flex; align-items: center; gap: 8px; color: var(--text-soft); font: var(--t-small); }
   .mark { width: 28px; height: 28px; border-radius: var(--r-md); background: ${appIdentity}; }
-  .panel { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px; background: var(--bg-elev); box-shadow: var(--shadow-sm); display: grid; gap: 12px; }
+  .kit-panel { padding: 18px; box-shadow: var(--shadow-sm); display: grid; gap: 12px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--target-min); }
   .meta { color: var(--text-soft); font: var(--t-small); }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  button { min-height: var(--target-min); border-radius: var(--r-md); padding: 0 14px; border: 1px solid var(--line-strong); background: var(--bg-elev); color: var(--text); font: var(--t-control); }
-  button.primary { border-color: var(--accent-fill); background: var(--accent-fill); color: var(--text-inv); }
-  button.quiet { border-color: transparent; background: transparent; color: var(--text-soft); }
   .notice { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; color: var(--text-soft); font: var(--t-small); }
   @media (max-width: 719px) { .gallery { padding: 16px; } .actions button { flex: 1; } }
 </style></head>
 <body><main class="gallery" data-gallery-surface="${surface}" data-gallery-scheme="${scheme}" data-gallery-width="${width}">
-  <header class="top"><div><div class="eyebrow">${surface} reference${app ? ` · ${app}` : ""}</div><h1>Product grammar</h1></div><div class="identity"><span class="mark"></span><span>Centraid</span></div></header>
-  <section class="panel" aria-label="Reference state"><div class="row"><div><strong>Ready to act</strong><div class="meta">Shared hierarchy, adapted density, local host chrome.</div></div><span aria-label="Selected" class="mark"></span></div><div class="notice">News is a notice. Decisions belong in a dialog.</div><div class="actions"><button class="primary">Create note</button><button class="quiet">Ask your vault</button><button>Close</button></div></section>
+  <header class="top"><div><div class="eyebrow">${escapeHtml(surface)} reference${app ? ` · ${escapeHtml(app)}` : ""}</div><h1>${escapeHtml(appName)}</h1></div><div class="identity"><span class="mark" style="background:var(--c-${escapeHtml(appColor)})"></span><span>Centraid</span></div></header>
+  <section class="kit-panel" data-role="reference-state" aria-label="Reference state"><div class="row"><div><strong>${escapeHtml(appName)} ready to act</strong><div class="meta">${escapeHtml(appDescription.slice(0, 96))}</div></div><span aria-label="Selected" class="mark"></span></div><div class="notice">News is a notice. Decisions belong in a dialog.</div><div class="actions"><button class="kit-btn primary" data-variant="primary">Create note</button><button class="kit-btn quiet" data-variant="quiet">Ask your vault</button><button class="kit-btn secondary" data-variant="secondary">Close</button></div><div class="meta" data-icon-key="${escapeHtml(appIcon)}">Manifest icon: ${escapeHtml(appIcon)}</div></section>
 </main></body></html>`;
 }
 
@@ -75,37 +141,41 @@ function captures() {
       entries.push({
         id: `bs-${app}-${scheme}`,
         lane: "BS",
-        fixture: true,
+        source: "blueprint-manifest+kit-runtime",
         surface: "BS",
         app,
         scheme,
         viewport: VIEWPORTS.desktop,
+        matrixMoments: ["M4", "M7", "M10"],
       });
     }
     entries.push(
       {
         id: `bi-${scheme}`,
         lane: "BI",
-        fixture: true,
+        source: "blueprint-contract+kit-runtime",
         surface: "BI",
         scheme,
         viewport: VIEWPORTS.desktop,
+        matrixMoments: ["M4", "M9", "M17"],
       },
       {
         id: `sh-c-${scheme}`,
         lane: "SH-c",
-        fixture: true,
+        source: "shell-contract+kit-runtime",
         surface: "SH-c",
         scheme,
         viewport: VIEWPORTS.compact,
+        matrixMoments: ["M2", "M5", "M13"],
       },
       {
         id: `mo-advisory-${scheme}`,
         lane: "MO-advisory",
-        fixture: true,
+        source: "native-contract+kit-runtime",
         surface: "MO",
         scheme,
         viewport: VIEWPORTS.compact,
+        matrixMoments: ["M4", "M8", "M17"],
       }
     );
   }
@@ -132,16 +202,62 @@ function diffPng(expected, actual) {
   return { changed: changed / pixels, max, reason: "pixel delta" };
 }
 
+function validateGalleryContract(entries) {
+  const failures = [];
+  const expectedSurfaces = new Set(["BI", "BS", "SH-c", "MO"]);
+  const seen = new Set();
+  for (const entry of entries) {
+    if (!expectedSurfaces.has(entry.surface))
+      failures.push(`${entry.id}: unknown surface ${entry.surface}`);
+    if (!MATRIX.surfaces[entry.surface === "MO" ? "MO" : entry.surface])
+      failures.push(
+        `${entry.id}: surface is missing from design grammar matrix`
+      );
+    for (const moment of entry.matrixMoments ?? []) {
+      if (!MATRIX.moments[moment])
+        failures.push(`${entry.id}: matrix moment ${moment} is missing`);
+    }
+    seen.add(`${entry.surface}:${entry.scheme}`);
+  }
+  for (const surface of expectedSurfaces) {
+    for (const scheme of ["light", "dark"]) {
+      if (!seen.has(`${surface}:${scheme}`))
+        failures.push(`missing ${surface}/${scheme} gallery state`);
+    }
+  }
+  return failures;
+}
+
+async function assertRenderable(page, selector, id) {
+  if ((await page.locator(selector).count()) === 0)
+    throw new Error(`${id}: missing renderable ${selector}`);
+}
+
 async function main() {
   const entries = captures();
+  const manifest = {
+    issue: 690,
+    reviewIssue: 695,
+    generatedBy: "scripts/design-gallery.mjs",
+    entries,
+  };
+  const failures = validateGalleryContract(entries);
   await mkdir(BASELINE_DIR, { recursive: true });
   await mkdir(ACTUAL_DIR, { recursive: true });
-  await writeFile(
-    MANIFEST_FILE,
-    `${JSON.stringify({ issue: 690, generatedBy: "scripts/design-gallery.mjs", entries }, null, 2)}\n`
-  );
+  if (UPDATE) {
+    await writeFile(MANIFEST_FILE, `${JSON.stringify(manifest, null, 2)}\n`);
+  } else {
+    try {
+      const checkedIn = JSON.parse(await readFile(MANIFEST_FILE, "utf8"));
+      if (JSON.stringify(checkedIn) !== JSON.stringify(manifest))
+        failures.push("manifest is stale; run design:gallery -- --update");
+    } catch {
+      failures.push(
+        "manifest is missing or invalid; run design:gallery -- --update"
+      );
+    }
+  }
   const browser = await chromium.launch({ headless: true });
-  const failures = [];
   try {
     await entries.reduce(
       (chain, entry) =>
@@ -150,23 +266,46 @@ async function main() {
             viewport: entry.viewport,
             deviceScaleFactor: 1,
           });
-          if (entry.fixture) {
-            await page.setContent(
-              fixtureHtml({
-                surface: entry.surface,
-                scheme: entry.scheme,
-                width: entry.viewport.width,
-                app: entry.app,
-              })
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          await page.setContent(
+            fixtureHtml({
+              surface: entry.surface,
+              scheme: entry.scheme,
+              width: entry.viewport.width,
+              app: entry.app,
+            }),
+            { waitUntil: "load" }
+          );
+          await page.locator("main[data-gallery-surface]").waitFor();
+          await page.evaluate(() => document.fonts?.ready);
+          await assertRenderable(page, "main[data-gallery-surface]", entry.id);
+          await assertRenderable(
+            page,
+            '[data-role="reference-state"]',
+            entry.id
+          );
+          await assertRenderable(page, '[data-variant="primary"]', entry.id);
+          await assertRenderable(page, '[data-variant="secondary"]', entry.id);
+          const primaryCount = await page
+            .locator('[data-variant="primary"]')
+            .count();
+          if (primaryCount !== 1)
+            throw new Error(
+              `${entry.id}: expected one primary action, found ${primaryCount}`
             );
-          } else {
-            await page.goto(entry.url, { waitUntil: "domcontentloaded" });
-          }
+          await page.locator('[data-variant="primary"]').focus();
+          if (
+            (await page.evaluate(
+              () => document.activeElement?.dataset.variant
+            )) !== "primary"
+          )
+            throw new Error(
+              `${entry.id}: primary action is not keyboard focusable`
+            );
           await page.addStyleTag({
             content:
               "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }",
           });
-          await page.waitForTimeout(400);
           const actualFile = path.join(ACTUAL_DIR, `${entry.id}.png`);
           const baselineFile = path.join(BASELINE_DIR, `${entry.id}.png`);
           await page.screenshot({ path: actualFile, fullPage: true });

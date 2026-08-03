@@ -32,83 +32,87 @@ export interface TypeStyle {
   nativeDelta: NativeDelta;
 }
 
-const style = <T extends TypeStyle>(value: T): T => value;
+export const NATIVE_DELTA_BY_FAMILY = {
+  mono: { lineHeight: 2, size: 1 },
+  sans: { lineHeight: 2, size: 2 },
+  serif: { lineHeight: 2, size: 2 },
+} as const satisfies Record<FontFamily, NativeDelta>;
+
+type TypeStyleSource = Omit<TypeStyle, "nativeDelta"> & {
+  nativeDelta?: NativeDelta;
+};
+
+const style = <T extends TypeStyleSource>(
+  value: T
+): Omit<T, "nativeDelta"> & { nativeDelta: NativeDelta } => ({
+  ...value,
+  nativeDelta: NATIVE_DELTA_BY_FAMILY[value.family],
+});
 
 export const type = {
   body: style({
     family: "sans",
     lineHeight: 22,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 15,
     weight: "400",
   }),
   bodyStrong: style({
     family: "sans",
     lineHeight: 22,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 15,
     weight: "600",
   }),
   control: style({
     family: "sans",
     lineHeight: 14,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 11,
     weight: "500",
   }),
   display: style({
     family: "sans",
     lineHeight: 34,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 28,
     weight: "600",
   }),
   eyebrow: style({
     family: "mono",
     lineHeight: 13,
-    nativeDelta: { lineHeight: 2, size: 1 },
     size: 10,
     weight: "600",
   }),
   greeting: style({
     family: "serif",
     lineHeight: 34,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 28,
     weight: "600",
   }),
   hero: style({
     family: "sans",
     lineHeight: 44,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 40,
     weight: "600",
   }),
   mono: style({
     family: "mono",
     lineHeight: 16,
-    nativeDelta: { lineHeight: 2, size: 1 },
     size: 12,
     weight: "500",
   }),
   small: style({
     family: "sans",
     lineHeight: 18,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 13,
     weight: "400",
   }),
   smallStrong: style({
     family: "sans",
     lineHeight: 18,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 13,
     weight: "600",
   }),
   title: style({
     family: "sans",
     lineHeight: 26,
-    nativeDelta: { lineHeight: 2, size: 2 },
     size: 20,
     weight: "600",
   }),
@@ -149,7 +153,6 @@ export const TYPE_PROFILE_SUPPORT = {
     "display",
     "eyebrow",
     "greeting",
-    "hero",
     "mono",
     "small",
     "smallStrong",

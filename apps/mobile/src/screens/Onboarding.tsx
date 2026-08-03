@@ -7,8 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -17,6 +15,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { Text, TextInput } from "../kit/components/NativeText";
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {

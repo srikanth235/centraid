@@ -9,8 +9,6 @@ import React, {
 import {
   Alert,
   View,
-  Text,
-  TextInput,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -20,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
+import { Text, TextInput } from "../kit/components/NativeText";
 import { family, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {

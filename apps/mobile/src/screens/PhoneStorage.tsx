@@ -1,18 +1,12 @@
 import { File } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { formatBytes } from "@centraid/design";
 
 import Icon from "../kit/components/Icon";
+import { Text } from "../kit/components/NativeText";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { family, radii, useTheme } from "../kit/theme";
 import {

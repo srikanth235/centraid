@@ -12,7 +12,6 @@ import {
   AppState,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +24,7 @@ import {
   enableAppLock,
 } from "../../lib/app-lock";
 import { clearSecureCache } from "../../lib/secure-storage";
+import { Text } from "../components/NativeText";
 import { family, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 

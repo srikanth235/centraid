@@ -1,11 +1,12 @@
 import React, { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
 
 import type { IconName } from "@centraid/design";
 
 import { radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
+import { Text } from "./NativeText";
 
 export interface AppHeaderProps {
   title: string;

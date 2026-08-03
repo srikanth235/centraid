@@ -8,7 +8,7 @@
 // gateway serving one but not the other still shows what it has.
 
 import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -25,6 +25,7 @@ import { palette } from "@centraid/design";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {

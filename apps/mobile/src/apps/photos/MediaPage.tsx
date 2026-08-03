@@ -10,7 +10,7 @@
 import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -18,6 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import {
   fullQualityAccess,
   LOAD_FULL_QUALITY_LABEL,

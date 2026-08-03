@@ -5,7 +5,7 @@
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   display: inline-flex;
-  font: var(--t-control);
+  font: var(--t-small-strong);
   gap: var(--sp-2);
   justify-content: center;
   min-height: var(--target-min, 44px);
@@ -17,7 +17,7 @@
     transform var(--dur-1) var(--ease);
 }
 
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not(.destructiveFilled) {
   background: var(--bg-hover);
 }
 
@@ -76,6 +76,11 @@
 .destructiveFilled {
   background: var(--danger);
   border-color: transparent;
+  color: var(--text-inv);
+}
+
+.destructiveFilled:hover:not(:disabled) {
+  background: var(--danger);
   color: var(--text-inv);
 }
 
