@@ -72,8 +72,10 @@ export default function SearchOverlay({
   );
   const trimmed = query.trim();
   const searchKey = `${appFilter ?? "all"}:${trimmed}`;
-  const entityHits = entitySearch?.key === searchKey ? entitySearch.hits : [];
-  const groups = useMemo(() => groupSearchHits(entityHits), [entityHits]);
+  const groups = useMemo(() => {
+    const entityHits = entitySearch?.key === searchKey ? entitySearch.hits : [];
+    return groupSearchHits(entityHits);
+  }, [entitySearch, searchKey]);
   const searching =
     Boolean(session && trimmed) &&
     (entitySearch?.key !== searchKey || entitySearch.searching);

@@ -92,9 +92,11 @@ function normalizeWords(text) {
  *  redundant duplicate. Only checked when the aria-label is a plain quoted
  *  string; a `{…}` expression value is left to the existing checks. */
 function ariaLabelContainsVisibleText(tagText, visibleText) {
-  const literal = tagText.match(/aria-label\s*=\s*["']([^"']*)["']/u);
+  const literal = tagText.match(/aria-label\s*=\s*["'](?<label>[^"']*)["']/u);
   if (!literal) return false;
-  return normalizeWords(literal[1] ?? "").includes(normalizeWords(visibleText));
+  return normalizeWords(literal.groups?.label ?? "").includes(
+    normalizeWords(visibleText)
+  );
 }
 
 function walk(dir, out = []) {
@@ -318,7 +320,7 @@ export function lintAriaLabels(root = ROOT, targets = TARGETS) {
       // tag-matching heuristic cannot tell code from content. Rule 2 (svg
       // aria-hidden) is a same-tag attribute check with no such ambiguity,
       // so it still runs everywhere.
-      if (/\.[tj]sx$/u.test(file) || /\.html$/u.test(file)) {
+      if (/\.[tj]sx$/u.test(file) || file.endsWith(".html")) {
         ariaFindings.push(...scanAriaLabelTargets(src, rel));
       }
       svgFindings.push(...scanSvgAriaHidden(src, rel));

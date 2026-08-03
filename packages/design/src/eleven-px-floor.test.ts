@@ -20,7 +20,8 @@ import { REM_BASE_PX, type } from "./typography.js";
 
 const FLOOR = 11;
 
-const remToPx = (rem: string): number => Number.parseFloat(rem) * REM_BASE_PX;
+/** `rem` is the bare numeric string from the CSS (e.g. `"0.8125"`), not `"0.8125rem"`. */
+const remToPx = (rem: string): number => Number(rem) * REM_BASE_PX;
 
 /** Pull every `--t-<role>: <weight> <size>rem/<lineHeight>rem var(...);`
  *  declaration's size out of the `font` shorthand — deliberately NOT reading
@@ -36,7 +37,7 @@ function shorthandSizesFromCss(css: string): Record<string, number> {
     const role = match.groups?.role;
     const size = match.groups?.size;
     if (!role || !size) continue;
-    sizes[role] = remToPx(`${size}rem`);
+    sizes[role] = remToPx(size);
   }
   return sizes;
 }
@@ -75,7 +76,7 @@ describe("the 11px floor", () => {
       const role = match.groups?.role;
       const size = match.groups?.size;
       if (!role || !size) continue;
-      sizes[role] = remToPx(`${size}rem`);
+      sizes[role] = remToPx(size);
     }
     expect(Object.keys(sizes).length).toBeGreaterThan(0);
     for (const [role, size] of Object.entries(sizes)) {

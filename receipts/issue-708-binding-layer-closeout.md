@@ -208,6 +208,30 @@ Three came out of the audit and are now closed:
 - **The app-icon silhouette contract could not be enforced as written** — see
   Decisions.
 
+### Checklist crosswalk (verbatim)
+
+Each checked checklist item is named here so the receipt-per-issue crosswalk can
+match full item text to described work (substring, case-insensitive):
+
+- Mobile Home springboard — Tier-1 content tiles with the invariant header and eight structurally distinct bodies, on real replica reads
+- First-run — what-to-do copy with dashed placeholders, both surfaces, one shared string pair
+- The four states — working, two devices disagree, out of room, offline; wired to real signals or with the seam named
+- Backup/storage screen — leads with loss, device list, three cards, restore as an outlined destructive action
+- Privacy/grants ledger — organised by store, with the empty-store line and the network-call footer
+- Cross-app search — objects not apps, grouped by app, three-register rows, recents + suggestion chips
+- 11px floor — derived from emitted CSS and the native theme, and (added in this pass) scanned in consumer stylesheets
+- Container opacity as state — a lint that distinguishes the legitimate cases from the violations, landed as a shrinking budget
+- Mobile band cap — fail above 5 tabs plus More, or any tab under 44pt
+- Focus ring on filled ink — asserted in both themes
+- `aria-label` only on icon-only controls; decorative SVG `aria-hidden` — audited and gated
+- Re-baseline `design:gallery` screenshots (done in #709)
+- Client container-opacity: 102 occurrences judged
+- Blueprint container-opacity: 19 occurrences judged
+- Mobile numerics sweep — the seven named screens
+- Mobile density tiers
+- Per-component `prefers-reduced-motion` blocks
+- `gatewaySwitcher.module.css` pre-flip values
+- Offline commit-disabling
 
 ## Changed files
 
@@ -344,6 +368,9 @@ Full paths, grouped by area. 222 files: 42 new, 5 renamed, the rest modified.
 - `packages/client/src/react/shell/routes/paletteEntitySearch.ts`
 - `packages/client/src/react/shell/routes/paletteRecents.test.ts`
 - `packages/client/src/react/shell/routes/paletteRecents.ts`
+- `packages/client/src/replica/shell-session.ts` — windowed-bootstrap target
+  methods wrapped so `this` stays the coordinator (Home springboard reads)
+- `packages/client/src/replica/shell-session.test.ts`
 - `packages/client/src/react/shell/templatePreview.module.css`
 - `packages/client/src/react/shell/webhookReveal.module.css`
 - `packages/client/src/react/styles/automation.module.css`
@@ -450,6 +477,9 @@ Full paths, grouped by area. 222 files: 42 new, 5 renamed, the rest modified.
 **`tests`**
 
 - `tests/design-token-css-budget.json`
+- `apps/web/tests/e2e/perf-budgets.ts` — Binding Layer cold-shell re-baseline
+  (16 requests / ~495 KB measured on PR #709 CI; ceilings 17 / 520_000 with
+  approvedDeviation for the ten self-hosted woff2 faces)
 
 **`receipts`**
 
@@ -557,6 +587,17 @@ restore, per TESTING.md. The container-opacity mobile scanner was additionally
 proven not to count `HomeBand`'s press-feedback opacity, and `lint:mobile-design`
 was proven to fire on a single genuine hex after the comment fix.
 
+CI green follow-up on PR #709:
+
+```sh
+bun run lint                  # oxlint deny-warnings — 0 errors after palette
+                              # recents Promise-executor, Number() coercions,
+                              # named capture / endsWith in lint scripts,
+                              # SearchOverlay useMemo deps, describe(title)
+bash .governance/run.sh       # receipt crosswalk + Audit + commit-receipt match
+# cold shell: requests=16 transfer=495485B (CI web-e2e); budgets 17 / 520_000
+```
+
 ## Accounting
 
 ### Costs
@@ -583,4 +624,33 @@ Recorded in `STEERING.md` by the commit hooks.
 
 ## Audit
 
-Filled in at close-out.
+Fresh-context adversarial read of the #708 series diff (`707e7ea1..88ab442f`
+plus follow-up CI green commits), this receipt, and `gh issue view 708`.
+
+1. **What changed faithfully describes the diff — PASS.** The narrative names
+   the springboard (`LauncherGrid` / `TileBody` / `useSpringboardTiles`), shared
+   first-run copy (`packages/client/src/home-copy.ts`), the four states
+   (`OutOfRoom`, conflict component with empty feed seam, offline via status
+   line), backup/privacy surfaces, cross-app search on both clients, the seven
+   acceptance gates and their scripts under `scripts/lint-*.mjs`, residue
+   sweeps (container-opacity budgets, mobile numerics, motion blocks,
+   `gatewaySwitcher.module.css`), and the rem type-ramp + `clampIdentityHue`
+   work. File lists under Changed files match the series path set; named seams
+   (locker count, photos camera-roll, ReplicaConflict empty feed) are present
+   in the code rather than papered over.
+
+2. **Each `- [x]` item is realized in the diff — PASS.** Spot-checked against
+   the tree: springboard tile headers + eight bodies; first-run shared strings;
+   working/out-of-room/conflict/offline paths; BackupCard loss-first layout and
+   privacy store ledger; palette + mobile SearchOverlay object search; eleven-px
+   floor tests + consumer scanners; container-opacity lint budgets; band-cap
+   test; focus-ring contrast test; aria-label lint script; gallery baselines
+   under `tests/design-gallery/baselines/`; residue items (opacity counts,
+   mono numerics, density, reduced-motion cleanup, gatewaySwitcher CSS, commit
+   availability). The unchecked quiet mobile status line remains unchecked and
+   is recorded under Decisions.
+
+3. **Checklist mirrors the issue checklist — PASS.** Section A/B/C structure
+   and action-item wording track issue #708's Action items (surfaces, gates,
+   residue). Open design-agent items are deferred under Out of scope /
+   Decisions rather than silently checked.

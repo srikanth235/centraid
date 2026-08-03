@@ -30,7 +30,9 @@ describe(createPaletteRecents, () => {
     expect(source.items()).toStrictEqual([]);
     source.ensure();
     source.ensure(); // second call before the fetch settles must not refetch
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
     expect(fetch).toHaveBeenCalledOnce();
     expect(source.items()).toStrictEqual([hit()]);
@@ -43,7 +45,9 @@ describe(createPaletteRecents, () => {
       .mockRejectedValue(new Error("offline"));
     const source = createPaletteRecents({ fetch });
     source.ensure();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     expect(source.items()).toStrictEqual([]);
     source.ensure();
     expect(fetch).toHaveBeenCalledOnce();
@@ -53,11 +57,15 @@ describe(createPaletteRecents, () => {
     const fetch = vi.fn<() => Promise<PaletteRecentHit[]>>(async () => [hit()]);
     const source = createPaletteRecents({ fetch });
     source.ensure();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     source.reset();
     expect(source.items()).toStrictEqual([]);
     source.ensure();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

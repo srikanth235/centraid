@@ -1,4 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -743,6 +746,36 @@ describe("shell-session", () => {
       await session.flushIntents();
       expect(revoked).toHaveBeenCalledWith(session);
       expect(coordinator.purge).toHaveBeenCalledOnce();
+    });
+  });
+  // The windowed-bootstrap `target` hands the coordinator's own methods to
+  // `runWindowedBootstrap`, which invokes them as `target.bootstrapBegin(...)`.
+  // A bare method reference therefore arrives with `this` bound to the object
+  // literal, and `bootstrapBegin` calls a private method on itself as its very
+  // first act — so detaching them threw `this.resetFeedGeneration is not a
+  // function` on any vault large enough to take the windowed path. Unit tests
+  // stayed green because nothing here drives a real windowed bootstrap; it
+  // surfaced only when the desktop Home springboard began reading the replica.
+  //
+  // This is a STRUCTURAL guard, not a behavioural one: a windowed-bootstrap
+  // fixture does not exist yet, so this pins the shape of the call site until
+  // one does.
+  describe("windowed bootstrap target", () => {
+    test("passes coordinator methods wrapped, never as detached references", () => {
+      const source = readFileSync(
+        path.join(import.meta.dirname, "shell-session.ts"),
+        "utf8"
+      );
+      const target = /target:\s*\{(?<body>[\s\S]*?)\n\s{8}\}/u.exec(source)
+        ?.groups?.body;
+      expect(target, "windowed-bootstrap target literal not found").toBeTypeOf(
+        "string"
+      );
+      // A bare `this.coordinator.foo!,` or `this.coordinator.foo,` entry is the
+      // regression; every method must be reached through an arrow that keeps
+      // the coordinator as the receiver.
+      expect(target).not.toMatch(/:\s*this\.coordinator\.\w+!?,/u);
+      expect(target).toMatch(/[=]>\s*this\.coordinator\.bootstrapBegin!\(/u);
     });
   });
 });

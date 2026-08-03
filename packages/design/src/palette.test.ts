@@ -16,7 +16,7 @@ import {
   paletteDark,
 } from "./palette";
 
-describe("clampIdentityHue", () => {
+describe(clampIdentityHue, () => {
   test("a submission at the system's own chroma reproduces the built-in ring exactly", () => {
     // Every shipped app hue run back through the clamp must land on the
     // exact hex the built-in ring already publishes — the clamp is not a

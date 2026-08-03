@@ -476,12 +476,21 @@ export class ReplicaShellSession {
       const resolved: IntentOutcome[] = [];
       await runWindowedBootstrap({
         gatewayAuth: this.gatewayAuth,
+        // Wrapped, not referenced. `runWindowedBootstrap` invokes these as
+        // `target.bootstrapBegin(...)`, so a bare method reference arrives with
+        // `this` bound to this object literal instead of the coordinator — and
+        // the first thing `bootstrapBegin` does is call a private method on
+        // itself. Detaching them threw `this.resetFeedGeneration is not a
+        // function` the moment anything drove a windowed bootstrap.
         target: {
-          bootstrapBegin: this.coordinator.bootstrapBegin!,
-          bootstrapPage: this.coordinator.bootstrapPage!,
-          bootstrapPreview: this.coordinator.bootstrapPreview,
-          bootstrapCommit: this.coordinator.bootstrapCommit!,
-          applyChanges: this.coordinator.applyChanges!,
+          bootstrapBegin: (header) => this.coordinator.bootstrapBegin!(header),
+          bootstrapPage: (rows) => this.coordinator.bootstrapPage!(rows),
+          bootstrapPreview: this.coordinator.bootstrapPreview
+            ? (rows) => this.coordinator.bootstrapPreview!(rows)
+            : undefined,
+          bootstrapCommit: (cursor, epoch) =>
+            this.coordinator.bootstrapCommit!(cursor, epoch),
+          applyChanges: (changes) => this.coordinator.applyChanges!(changes),
         },
         fetcher: this.#fetcher,
         signal: abort.signal,

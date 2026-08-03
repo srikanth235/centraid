@@ -75,7 +75,7 @@ function scanCssFile(src, rel) {
   CSS_FONT_SIZE_RE.lastIndex = 0;
   let match;
   while ((match = CSS_FONT_SIZE_RE.exec(src))) {
-    const raw = Number.parseFloat(match.groups.value);
+    const raw = Number(match.groups.value);
     const unit = match.groups.unit;
     const px = unit === "rem" ? raw * REM_BASE_PX : raw;
     if (px === 0) continue;
@@ -121,7 +121,7 @@ function scanTsFile(src, rel) {
   TS_FONT_SIZE_RE.lastIndex = 0;
   let match;
   while ((match = TS_FONT_SIZE_RE.exec(src))) {
-    const value = Number.parseFloat(match.groups.value);
+    const value = Number(match.groups.value);
     if (value <= 0) continue; // 0 or negative: not a text size.
     if (value < FLOOR) {
       const line = lineOf(src, match.index);
