@@ -20,6 +20,7 @@ accessibility zero-grey (15 cells).
 - [x] Save the Android emulator snapshot before functional journeys run
 - [x] Forward bodyless tunnel metadata requests without waiting for native half-close
 - [x] Record mobile compatibility probe and gateway request outcomes for CI diagnosis
+- [x] Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch
 
 ## What changed
 
@@ -143,6 +144,12 @@ accessibility zero-grey (15 cells).
   gateway log after the Android journey. `packages/tunnel/src/native-relay.test.ts`
   also covers a bodyless metadata request through the native relay.
 
+- **Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch.**
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelProxy.kt`
+  now binds `127.0.0.1` explicitly instead of Android's IPv6-first generic
+  loopback address. `apps/mobile/modules/centraid-tunnel/android/src/test/java/expo/modules/centraidtunnel/TunnelProxyTest.kt`
+  proves the returned port accepts the advertised IPv4 URL.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
@@ -179,6 +186,7 @@ bun run --cwd packages/tunnel test
 bun run --cwd packages/tunnel lint:data-plane
 bun run turbo run typecheck --filter=@centraid/tunnel --filter=@centraid/gateway --filter=@centraid/mobile
 bun run --cwd packages/tunnel test:native
+bun run --cwd apps/mobile ci:android-native
 git diff --check
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
 ```
@@ -222,3 +230,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785730473-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6056 | 0 | 342784 | 1685 | 7741 | 0.1261 | 3237784 | 0 | 123773440 | 234219 | fix(tunnel): forward bodyless metadata requests (#676) |
 | codex-019fc399-ba8-1785736553-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1189054 | 0 | 30959360 | 54215 | 1243269 | 11.5257 | 4426838 | 0 | 154732800 | 288434 | fix(ci): expose mobile compatibility diagnostics (#676) |
 | codex-019fc399-ba8-1785736735-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5597 | 0 | 344320 | 710 | 6307 | 0.1107 | 4432435 | 0 | 155077120 | 289144 | fix(ci): expose mobile compatibility diagnostics (#676) -m governance: allow-too |
+| codex-019fc399-ba8-1785739324-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 388341 | 0 | 11571456 | 26398 | 414739 | 4.2597 | 4820776 | 0 | 166648576 | 315542 | fix(android): bind mobile proxy to IPv4 loopback (#676) |

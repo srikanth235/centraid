@@ -29,9 +29,13 @@ class TunnelProxy(
   /**
    * Bind 127.0.0.1:0 (ephemeral). Loopback only — the proxy must never be
    * reachable from off-device.
+   *
+   * Android's InetAddress.getLoopbackAddress() is IPv6-first (::1), while the
+   * JS client advertises the proxy as http://127.0.0.1:<port>. Bind the same
+   * IPv4 family explicitly so the advertised URL reaches this listener.
    */
   fun start(): Int {
-    val socket = ServerSocket(0, 64, InetAddress.getLoopbackAddress())
+    val socket = ServerSocket(0, 64, InetAddress.getByName("127.0.0.1"))
     server = socket
     scope.launch { acceptLoop(socket) }
     return socket.localPort
