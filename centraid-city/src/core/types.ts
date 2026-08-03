@@ -72,8 +72,6 @@ export interface CityDistrict {
   buildings: CityBuilding[];
 }
 
-export type TourSection = string;
-
 export interface TourPage {
   body: string;
   buildingId?: string;
@@ -82,7 +80,7 @@ export interface TourPage {
 
 export interface TourChapter {
   id: string;
-  section?: TourSection;
+  section?: string;
   title: string;
   districtId: string;
   buildingId?: string;
