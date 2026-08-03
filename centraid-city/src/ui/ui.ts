@@ -26,6 +26,31 @@ import type {
 const $ = <T extends Element = HTMLElement>(id: string): T =>
   document.querySelector<T>(`#${id}`)!;
 
+function row(k: string, v: string): HTMLDivElement {
+  const d = document.createElement("div");
+  d.className = "kv";
+  const b = document.createElement("b");
+  b.textContent = k;
+  const s = document.createElement("span");
+  s.textContent = v;
+  d.append(b, s);
+  return d;
+}
+
+function para(text: string, cls?: string): HTMLParagraphElement {
+  const p = document.createElement("p");
+  if (cls) p.className = cls;
+  p.textContent = text;
+  return p;
+}
+
+function sec(text: string): HTMLDivElement {
+  const h = document.createElement("div");
+  h.className = "insp-sec";
+  h.textContent = text;
+  return h;
+}
+
 /* ---------------------------------------------------------------- loading */
 
 export function createLoading(
@@ -147,31 +172,6 @@ export function createInspector({
   function close() {
     el.classList.remove("open");
     current = null;
-  }
-
-  function row(k, v) {
-    const d = document.createElement("div");
-    d.className = "kv";
-    const b = document.createElement("b");
-    b.textContent = k;
-    const s = document.createElement("span");
-    s.textContent = v;
-    d.append(b, s);
-    return d;
-  }
-
-  function para(text: string, cls?: string) {
-    const p = document.createElement("p");
-    if (cls) p.className = cls;
-    p.textContent = text;
-    return p;
-  }
-
-  function sec(text) {
-    const h = document.createElement("div");
-    h.className = "insp-sec";
-    h.textContent = text;
-    return h;
   }
 
   function show({
@@ -466,9 +466,9 @@ export function createTour(
       if (i === idx) r.setAttribute("aria-current", "step");
       else r.removeAttribute("aria-current");
     });
-    const row = rowEls[idx];
-    if (row && panel.classList.contains("open"))
-      row.scrollIntoView({ block: "nearest" });
+    const activeRow = rowEls[idx];
+    if (activeRow && panel.classList.contains("open"))
+      activeRow.scrollIntoView({ block: "nearest" });
 
     const atStart = idx === 0 && pidx === 0;
     const atEnd = idx === list.length - 1 && pidx === lastPage(idx);
@@ -663,7 +663,7 @@ export function createMinimap(
 
 function hexA(hex: string, a: number): string {
   const h = String(hex || "#39c5ea").replace("#", "");
-  const n = parseInt(
+  const n = Number.parseInt(
     h.length === 3
       ? h
           .split("")

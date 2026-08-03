@@ -67,7 +67,7 @@ function ringPoints(
   count: number
 ): Array<[number, number, number]> {
   const pts: Array<[number, number, number]> = [];
-  const n = Math.max(4, count | 0);
+  const n = Math.max(4, Number.isFinite(count) ? Math.trunc(count) : 0);
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * Math.PI * 2;
     pts.push([Math.cos(a) * r, y, Math.sin(a) * r]);

@@ -1253,8 +1253,8 @@ export function createWorld(content: CityContent): WorldApi {
       applyRoadTint();
     for (const rec of districts) {
       rec.focusW += (rec.focusTarget - rec.focusW) * ease;
-      const up = rec.focusW > 0 ? rec.focusW : 0;
-      const down = rec.focusW < 0 ? -rec.focusW : 0;
+      const up = Math.max(0, rec.focusW);
+      const down = Math.max(0, -rec.focusW);
       if (up < 0.001 && down < 0.001) continue;
       // rim glow: base is whatever applyNight computed, then lifted / eased back
       const rimBase = rec.rimMat.userData.baseOpacity * (0.55 + 0.75 * night);
@@ -1266,8 +1266,8 @@ export function createWorld(content: CityContent): WorldApi {
     // flows
     for (const f of flows) {
       f.focusW += (f.focusTarget - f.focusW) * ease;
-      const up = f.focusW > 0 ? f.focusW : 0;
-      const down = f.focusW < 0 ? -f.focusW : 0;
+      const up = Math.max(0, f.focusW);
+      const down = Math.max(0, -f.focusW);
       const scaleMul = 1 + FOCUS_SCALE_GAIN * up - MUTE_SCALE_CUT * down;
       let rate = sim ? sim.rates[f.role] || 0 : 4;
       if (up > 0.001) {

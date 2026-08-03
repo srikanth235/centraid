@@ -284,7 +284,7 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
   },
 
   // -------------------------------------------------------------------- wal
-  "wal-conveyor"({ g, w, h, kit, animated }) {
+  "wal-conveyor"({ g, w, h, kit }) {
     const beltLen = Math.max(4, w * 1.4);
     const gallery = kit.box(beltLen, 0.7, 2, kit.mat.steel, {
       windows: false,
@@ -322,7 +322,6 @@ export const LANDMARKS_DATA: Record<string, LandmarkBuilder> = {
     g.add(hopper);
 
     // NOTE: no scrolling texture — landmarks don't receive `convTex` (see file header).
-    void animated;
   },
 
   "wal-checkpointer"({ g, w, h, d, color, kit }) {

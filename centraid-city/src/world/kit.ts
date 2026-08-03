@@ -21,7 +21,12 @@
 //   * Repeated sub-parts (columns, fins, ribs, treads, mullions) are merged into a single
 //     BufferGeometry before they become a mesh — one draw call per rhythm, not per part.
 
-import type { Material, MeshBasicMaterial } from "three";
+import type {
+  BufferGeometry,
+  Material,
+  MeshBasicMaterial,
+  Object3D,
+} from "three";
 
 import type {
   AnimationRecord,
@@ -39,6 +44,46 @@ interface KitDependencies {
   animated: AnimationRecord[];
 }
 
+function place(o: Object3D, opts?: KitOptions): Object3D {
+  if (!opts) return o;
+  o.position.set(opts.x || 0, opts.y || 0, opts.z || 0);
+  if (opts.rotY) o.rotation.y = opts.rotY;
+  if (opts.rotX) o.rotation.x = opts.rotX;
+  if (opts.rotZ) o.rotation.z = opts.rotZ;
+  return o;
+}
+
+function windowUVs(
+  geo: BufferGeometry,
+  w: number,
+  h: number,
+  d: number
+): BufferGeometry {
+  const uv = geo.attributes.uv;
+  if (!uv) return geo;
+  const U = 2.4;
+  const V = 3;
+  const cols = 6;
+  const rows = 12;
+  const face = (start: number, su: number, sv: number) => {
+    const ru = su / (cols * U);
+    const rv = sv / (rows * V);
+    const base = 0.08;
+    const span = 0.92;
+    uv.setXY(start + 0, 0, base + span * rv);
+    uv.setXY(start + 1, ru, base + span * rv);
+    uv.setXY(start + 2, 0, base);
+    uv.setXY(start + 3, ru, base);
+  };
+  face(0, d, h);
+  face(4, d, h);
+  for (let i = 8; i < 16; i++) uv.setXY(i, 0.5, 0.02);
+  face(16, w, h);
+  face(20, w, h);
+  uv.needsUpdate = true;
+  return geo;
+}
+
 export function makeKit(
   THREE: ThreeNamespace,
   { facadeMat, plainMat, glowMat, animated }: KitDependencies
@@ -51,14 +96,17 @@ export function makeKit(
   const _eul = new THREE.Euler();
   const _one = new THREE.Vector3(1, 1, 1);
   const _up = new THREE.Vector3(0, 1, 0);
-  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const TAU = Math.PI * 2;
 
   // Defensive coercion — landmarks are written by other hands, so a missing/zero/NaN
   // dimension must degrade to something sane instead of producing NaN geometry.
   const D = (v, dflt) =>
-    typeof v === "number" && isFinite(v) && Math.abs(v) > 1e-4 ? v : dflt;
-  const N = (v, dflt) => (typeof v === "number" && isFinite(v) ? v : dflt);
+    typeof v === "number" && Number.isFinite(v) && Math.abs(v) > 1e-4
+      ? v
+      : dflt;
+  const N = (v, dflt) =>
+    typeof v === "number" && Number.isFinite(v) ? v : dflt;
   const M = (m, fb) => (m && m.isMaterial ? m : fb);
   const O = (o: KitOptions | undefined): KitOptions =>
     o && typeof o === "object" ? o : {};
@@ -92,15 +140,6 @@ export function makeKit(
   const isNoShadow = (m) =>
     !m || m.isMeshBasicMaterial === true || noShadow.has(m);
 
-  function place(o, opts) {
-    if (!opts) return o;
-    o.position.set(opts.x || 0, opts.y || 0, opts.z || 0);
-    if (opts.rotY) o.rotation.y = opts.rotY;
-    if (opts.rotX) o.rotation.x = opts.rotX;
-    if (opts.rotZ) o.rotation.z = opts.rotZ;
-    return o;
-  }
-
   function group(opts: KitOptions = {}) {
     return place(new THREE.Group(), opts);
   }
@@ -114,18 +153,18 @@ export function makeKit(
     return m;
   }
 
-  function xf(
-    geo,
-    x = 0,
-    y = 0,
-    z = 0,
-    rx = 0,
-    ry = 0,
-    rz = 0,
-    sx = 1,
-    sy = 1,
-    sz = 1
-  ) {
+  function xf(geo, ...transform: number[]) {
+    const [
+      x = 0,
+      y = 0,
+      z = 0,
+      rx = 0,
+      ry = 0,
+      rz = 0,
+      sx = 1,
+      sy = 1,
+      sz = 1,
+    ] = transform;
     _eul.set(rx, ry, rz);
     _quat.setFromEuler(_eul);
     _mtx.compose(V3(x, y, z), _quat, V3(sx, sy, sz));
@@ -185,7 +224,7 @@ export function makeKit(
     const dir = B.clone().sub(A);
     const len = dir.length();
     if (len < 1e-5) return null;
-    const g = new THREE.BoxGeometry(t, len, t2 == null ? t : t2);
+    const g = new THREE.BoxGeometry(t, len, t2 ?? t);
     _quat.setFromUnitVectors(_up, dir.divideScalar(len));
     _mtx.compose(A.add(B).multiplyScalar(0.5), _quat, _one);
     g.applyMatrix4(_mtx);
@@ -245,34 +284,6 @@ export function makeKit(
     );
     g.computeVertexNormals();
     return g;
-  }
-
-  // Box UVs so the shared window texture keeps a constant world-space density and roof /
-  // floor faces land in the blank band at the bottom of the texture. Mirrors world.ts.
-  function windowUVs(geo, w, h, d) {
-    const uv = geo.attributes.uv;
-    if (!uv) return geo;
-    const U = 2.4;
-    const V = 3;
-    const cols = 6;
-    const rows = 12;
-    const face = (start, su, sv) => {
-      const ru = su / (cols * U);
-      const rv = sv / (rows * V);
-      const base = 0.08;
-      const span = 0.92;
-      uv.setXY(start + 0, 0, base + span * rv);
-      uv.setXY(start + 1, ru, base + span * rv);
-      uv.setXY(start + 2, 0, base);
-      uv.setXY(start + 3, ru, base);
-    };
-    face(0, d, h);
-    face(4, d, h);
-    for (let i = 8; i < 16; i++) uv.setXY(i, 0.5, 0.02);
-    face(16, w, h);
-    face(20, w, h);
-    uv.needsUpdate = true;
-    return geo;
   }
 
   // Square chamfer cap: a 4-sided frustum whose top is inset by `c` on every edge.
@@ -405,7 +416,9 @@ export function makeKit(
   function vault(rw, rh, rd, m, rawOpts) {
     const opts = O(rawOpts);
     if (opts.axis === "x") {
-      const inner = vault(rd, rh, rw, m, {
+      const swappedWidth = rd;
+      const swappedDepth = rw;
+      const inner = vault(swappedWidth, rh, swappedDepth, m, {
         ...opts,
         axis: "z",
         x: 0,
@@ -540,7 +553,7 @@ export function makeKit(
 
   // roofGable — ridge along Z, gable ends face ±Z. Base at y. opts { overhang, rotY }
   function roofGable(w, d, rise, m, opts: KitOptions = {}) {
-    const oh = opts.overhang == null ? 0.35 : opts.overhang;
+    const oh = opts.overhang ?? 0.35;
     const W = w + oh * 2;
     const Dtot = d + oh * 2;
     const hw = W / 2;
@@ -611,7 +624,7 @@ export function makeKit(
     const g = group(opts);
     const n = Math.max(1, Math.min(bays || 4, 10));
     const bw = w / n;
-    const t = opts.thick == null ? 0.34 : opts.thick;
+    const t = opts.thick ?? 0.34;
     // zig-zag ribbon profile in XY, extruded across the depth
     const s = new THREE.Shape();
     s.moveTo(-w / 2, 0);
@@ -797,8 +810,8 @@ export function makeKit(
   // roofParapet — flat roof with a raised rim and a coping band. Base at y.
   function roofParapet(w, d, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const h = opts.h == null ? 0.95 : opts.h;
-    const t = opts.thick == null ? 0.38 : opts.thick;
+    const h = opts.h ?? 0.95;
+    const t = opts.thick ?? 0.38;
     const parts = [
       xf(new THREE.BoxGeometry(w, 0.2, d), 0, 0.1, 0),
       xf(new THREE.BoxGeometry(w, h, t), 0, h / 2, d / 2 - t / 2),
@@ -846,7 +859,7 @@ export function makeKit(
   // roofDomeRibbed — ribbed copper dome with a base ring. Base at y.
   function roofDomeRibbed(r, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const ratio = opts.ratio == null ? 0.62 : opts.ratio;
+    const ratio = opts.ratio ?? 0.62;
     const seg = Math.min(opts.seg || 18, 18);
     const shell = new THREE.SphereGeometry(r, seg, 8, 0, TAU, 0, Math.PI / 2);
     xf(shell, 0, 0, 0, 0, 0, 0, 1, ratio, 1);
@@ -980,7 +993,7 @@ export function makeKit(
     const faces = opts.faces === "all" ? ["z", "-z", "x", "-x"] : ["z", "-z"];
     for (const f of faces) {
       const axis = f.includes("x") ? "x" : "z";
-      const sgn = f[0] === "-" ? -1 : 1;
+      const sgn = f.startsWith("-") ? -1 : 1;
       const span = axis === "x" ? d : w;
       const off = axis === "x" ? w / 2 : d / 2;
       const n =
@@ -1020,10 +1033,10 @@ export function makeKit(
     const body = m || mat.bone;
     g.add(mesh(new THREE.BoxGeometry(w, h, d), body));
     const n = Math.max(2, Math.min(fins || 8, 28));
-    const depth = opts.depth == null ? 0.3 : opts.depth;
+    const depth = opts.depth ?? 0.3;
     const parts = [];
-    const fh = opts.finH == null ? h : opts.finH;
-    const fy = opts.finY == null ? 0 : opts.finY;
+    const fh = opts.finH ?? h;
+    const fy = opts.finY ?? 0;
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + (w * (i + 0.5)) / n;
       parts.push(
@@ -1057,13 +1070,13 @@ export function makeKit(
           opts.coreMat || mat.darkSlate
         )
       );
-    const ang = opts.angle == null ? 0.62 : opts.angle;
+    const ang = opts.angle ?? 0.62;
     const parts = [];
     const sh = h / n;
     const faces = opts.faces === "all" ? ["z", "-z", "x", "-x"] : ["z", "-z"];
     for (const f of faces) {
       const axis = f.includes("x") ? "x" : "z";
-      const sgn = f[0] === "-" ? -1 : 1;
+      const sgn = f.startsWith("-") ? -1 : 1;
       for (let i = 0; i < n; i++) {
         const y = -h / 2 + sh * (i + 0.5);
         if (axis === "z") {
@@ -1291,7 +1304,7 @@ export function makeKit(
     const g = group(opts);
     const cols = Math.max(2, opts.cols || Math.round(w / 4.5));
     const rows = Math.max(2, opts.rows || Math.round(d / 4.5));
-    const r = opts.r == null ? 0.42 : opts.r;
+    const r = opts.r ?? 0.42;
     const parts = [];
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
@@ -1313,8 +1326,8 @@ export function makeKit(
       2,
       Math.min(opts.segments || Math.round(len / 2.6), 20)
     );
-    const t = opts.thick == null ? 0.18 : opts.thick;
-    const dep = opts.depth == null ? Math.min(h, 0.8) : opts.depth;
+    const t = opts.thick ?? 0.18;
+    const dep = opts.depth ?? Math.min(h, 0.8);
     const parts = [];
     const zz = [dep / 2, -dep / 2];
     for (const z of zz) {
@@ -1353,8 +1366,8 @@ export function makeKit(
       3,
       Math.min(opts.segments || Math.round(h / 3.2), 14)
     );
-    const taper = opts.taper == null ? 0.55 : opts.taper;
-    const t = opts.thick == null ? 0.2 : opts.thick;
+    const taper = opts.taper ?? 0.55;
+    const t = opts.thick ?? 0.2;
     const half = (i) => (w / 2) * (1 - (1 - taper) * (i / segs));
     const corner = (i, c) => {
       const s = half(i);
@@ -1393,7 +1406,7 @@ export function makeKit(
   // gantry — portal frame straddling a track along X. Base at y.
   function gantry(span, h, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const legW = opts.legW == null ? Math.max(0.5, span * 0.05) : opts.legW;
+    const legW = opts.legW ?? Math.max(0.5, span * 0.05);
     const parts = [];
     for (const sx of [-1, 1]) {
       const x = (sx * span) / 2;
@@ -1501,7 +1514,7 @@ export function makeKit(
       }
     }
     if (opts.closed && pts.length > 2) {
-      const a = pts[pts.length - 1];
+      const a = pts.at(-1);
       const b = pts[0];
       parts.push(
         strutGeo([a.x, a.y + H, a.z], [b.x, b.y + H, b.z], 0.09),
@@ -1543,7 +1556,7 @@ export function makeKit(
   // spiralStair — treads winding around a central pole. Base at y.
   function spiralStair(r, h, m, opts: KitOptions = {}) {
     const n = Math.max(6, Math.min(Math.round(h / 0.34), 40));
-    const turns = opts.turns == null ? 1.25 : opts.turns;
+    const turns = opts.turns ?? 1.25;
     const parts = [
       xf(new THREE.CylinderGeometry(0.16, 0.16, h, 8), 0, h / 2, 0),
     ];
@@ -1570,7 +1583,7 @@ export function makeKit(
   // steps — entry stairs: top tread against the building (z=0), descending toward +z.
   function steps(w, d, count, m, opts: KitOptions = {}) {
     const n = Math.max(1, Math.min(count || 4, 14));
-    const rise = opts.rise == null ? 0.3 : opts.rise;
+    const rise = opts.rise ?? 0.3;
     const tread = d / n;
     const parts = [];
     for (let i = 0; i < n; i++) {
@@ -1600,7 +1613,7 @@ export function makeKit(
 
   // buttress — a battered pier projecting +X from a wall. Base at y.
   function buttress(h, d, m, opts: KitOptions = {}) {
-    const w = opts.w == null ? 0.8 : opts.w;
+    const w = opts.w ?? 0.8;
     const s = new THREE.Shape();
     s.moveTo(0, 0);
     s.lineTo(d, 0);
@@ -1660,7 +1673,7 @@ export function makeKit(
   function dish(r, m, opts: KitOptions = {}) {
     const yaw = group({ x: opts.x || 0, y: opts.y || 0, z: opts.z || 0 });
     let az = opts.az || 0;
-    let el = opts.el == null ? 0.35 : opts.el;
+    let el = opts.el ?? 0.35;
     if (opts.aim) {
       const a = opts.aim;
       az = Math.atan2(a[0], a[2]);
@@ -1726,7 +1739,7 @@ export function makeKit(
 
   // mast — a tapered pole with collars. Base at y.
   function mast(h, m, opts: KitOptions = {}) {
-    const r = opts.r == null ? Math.max(0.12, h * 0.02) : opts.r;
+    const r = opts.r ?? Math.max(0.12, h * 0.02);
     const parts = [
       xf(new THREE.CylinderGeometry(r * 0.5, r, h, 8), 0, h / 2, 0),
     ];
@@ -1832,7 +1845,7 @@ export function makeKit(
     }
     rot.add(mesh(mergeGeos(blades), opts.bladeMat || mat.darkSlate));
     g.add(rot);
-    spin(rot, opts.speed == null ? 2.6 : opts.speed, "y");
+    spin(rot, opts.speed ?? 2.6, "y");
     return g;
   }
 
@@ -2063,7 +2076,7 @@ export function makeKit(
 
   // crateStack — battened crates stacked in a w×d×h envelope. Base at y.
   function crateStack(w, h, d, m, opts: KitOptions = {}) {
-    const cw = opts.crate == null ? Math.min(1.9, w * 0.5) : opts.crate;
+    const cw = opts.crate ?? Math.min(1.9, w * 0.5);
     const cols = Math.max(1, Math.round(w / cw));
     const rows = Math.max(1, Math.round(d / cw));
     const lev = Math.max(1, Math.round(h / cw));
@@ -2245,7 +2258,7 @@ export function makeKit(
   // planter — a tub with soil and a shrub. Base at y.
   function planter(r, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const h = opts.h == null ? r * 0.85 : opts.h;
+    const h = opts.h ?? r * 0.85;
     const parts = [
       frustumGeo(r * 2, r * 2, r * 1.7, r * 1.7, h),
       xf(new THREE.BoxGeometry(r * 2.2, 0.14, r * 2.2), 0, h - 0.07, 0),
@@ -2271,7 +2284,7 @@ export function makeKit(
   // tree — trunk + canopy. opts { r, kind: 'round' | 'conifer', x, y, z }
   function tree(h, opts: KitOptions = {}) {
     const g = group(opts);
-    const r = opts.r == null ? h * 0.24 : opts.r;
+    const r = opts.r ?? h * 0.24;
     g.add(
       mesh(
         new THREE.CylinderGeometry(h * 0.035, h * 0.055, h * 0.5, 6),
@@ -2316,7 +2329,7 @@ export function makeKit(
   // streetlamp — pole with a curved arm and a glowing head. Base at y.
   function streetlamp(h, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const arm = opts.arm == null ? h * 0.28 : opts.arm;
+    const arm = opts.arm ?? h * 0.28;
     const parts = [
       xf(new THREE.CylinderGeometry(0.07, 0.11, h, 7), 0, h / 2, 0),
       xf(new THREE.CylinderGeometry(0.2, 0.24, 0.3, 8), 0, 0.15, 0),
@@ -2358,7 +2371,7 @@ export function makeKit(
   // signBand — the primary home of district colour: a glowing fascia in a dark surround.
   function signBand(w, h, hex, opts: KitOptions = {}) {
     const g = group(opts);
-    const dep = opts.depth == null ? 0.22 : opts.depth;
+    const dep = opts.depth ?? 0.22;
     if (opts.frame !== false)
       g.add(
         mesh(
@@ -2369,7 +2382,7 @@ export function makeKit(
     g.add(
       mesh(
         new THREE.BoxGeometry(w, h, dep + 0.12),
-        matGlow(hex || "#ffd479", opts.base == null ? 0.62 : opts.base)
+        matGlow(hex || "#ffd479", opts.base ?? 0.62)
       )
     );
     if (opts.brackets) {
@@ -2391,7 +2404,7 @@ export function makeKit(
   // plaqueWall — a wall faced with a grid of small brass plaques. CENTRED on y.
   function plaqueWall(w, h, cols, rows, m, opts: KitOptions = {}) {
     const g = group(opts);
-    const d = opts.d == null ? 0.6 : opts.d;
+    const d = opts.d ?? 0.6;
     g.add(mesh(new THREE.BoxGeometry(w, h, d), m || mat.bone));
     const c = Math.max(1, Math.min(cols || 6, 22));
     const r = Math.max(1, Math.min(rows || 5, 22));
@@ -2601,7 +2614,7 @@ export function makeKit(
   function solarArray(w, d, m, opts: KitOptions = {}) {
     const g = group(opts);
     const rows = Math.max(1, Math.min(opts.rows || Math.round(d / 2.4), 8));
-    const tilt = opts.tilt == null ? 0.55 : opts.tilt;
+    const tilt = opts.tilt ?? 0.55;
     const legs = [];
     const panes = [];
     const pd = (d / rows) * 0.78;
@@ -2659,7 +2672,7 @@ export function makeKit(
     }
     rot.add(mesh(mergeGeos(parts), m || mat.steel));
     g.add(rot);
-    spin(rot, opts.speed == null ? 1.4 : opts.speed, "z");
+    spin(rot, opts.speed ?? 1.4, "z");
     return g;
   }
 
@@ -2728,8 +2741,8 @@ export function makeKit(
       axis: "x",
       base: 0,
       amp: len * 0.18,
-      speed: opts.speed == null ? 1.6 : opts.speed,
-      phase: opts.phase == null ? 0 : opts.phase,
+      speed: opts.speed ?? 1.6,
+      phase: opts.phase ?? 0,
     });
     return g;
   }
@@ -2770,7 +2783,7 @@ export function makeKit(
       if (s) parts.push(s);
     }
     if (opts.closed && P.length > 2) {
-      const a = P[P.length - 1];
+      const a = P.at(-1);
       const b = P[0];
       const s = strutGeo([a.x, a.y + lift, a.z], [b.x, b.y + lift, b.z], wdt);
       if (s) parts.push(s);
@@ -2790,7 +2803,7 @@ export function makeKit(
     animated.push({
       type: "spin",
       obj,
-      speed: speed == null ? 1 : speed,
+      speed: speed ?? 1,
       axis,
     });
     return obj;
@@ -2800,8 +2813,8 @@ export function makeKit(
     animated.push({
       type: "bob",
       obj,
-      amp: amp == null ? 0.2 : amp,
-      speed: speed == null ? 1 : speed,
+      amp: amp ?? 0.2,
+      speed: speed ?? 1,
       base: obj.position.y,
       phase: rnd(animated.length, 4) * 6,
     });

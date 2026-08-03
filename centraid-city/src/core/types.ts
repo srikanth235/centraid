@@ -72,7 +72,7 @@ export interface CityDistrict {
   buildings: CityBuilding[];
 }
 
-export type TourSection = "walkthrough" | "scenarios" | string;
+export type TourSection = string;
 
 export interface TourPage {
   body: string;

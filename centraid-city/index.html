@@ -293,9 +293,9 @@
         transform: translateY(1px);
       }
       .btn.on {
-        background: rgba(57, 197, 234, 0.16);
-        border-color: rgba(57, 197, 234, 0.45);
-        color: #bfeeff;
+        background: #164452;
+        border-color: #39c5ea;
+        color: #ffffff;
       }
       .btn .ic {
         font-size: 13px;
@@ -386,10 +386,10 @@
       .code-ref {
         font-family: var(--mono);
         font-size: 11.5px;
-        color: #8fd8ee;
+        color: #dff8ff;
         word-break: break-all;
-        background: rgba(57, 197, 234, 0.08);
-        border: 1px solid rgba(57, 197, 234, 0.2);
+        background: #12303b;
+        border: 1px solid #2a8aa5;
         padding: 7px 9px;
         border-radius: 8px;
         display: block;
@@ -496,6 +496,10 @@
         justify-content: center;
         gap: 2px;
         flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
       }
       .tour-dots[hidden] {
         display: none;
@@ -836,11 +840,11 @@
       </div>
     </div>
 
-    <aside id="inspector" class="panel">
+    <aside id="inspector" class="panel" aria-label="Building inspector">
       <div class="insp-head">
         <div class="insp-swatch" id="inspSwatch"></div>
         <div>
-          <h2 id="inspTitle"></h2>
+          <h2 id="inspTitle" aria-live="polite">Building inspector</h2>
           <p class="sub" id="inspSub"></p>
         </div>
         <button class="insp-close" id="inspClose" aria-label="Close">✕</button>
@@ -865,7 +869,7 @@
     <section id="tour" class="panel">
       <div class="tour-top">
         <span class="tour-step" id="tourStep"></span>
-        <h3 id="tourTitle"></h3>
+        <h3 id="tourTitle" aria-live="polite">Architecture journey</h3>
         <button class="insp-close" id="tourClose" aria-label="Exit tour">
           ✕
         </button>
@@ -873,13 +877,12 @@
       <div class="tour-body" id="tourBody"></div>
       <div class="tour-foot">
         <button class="btn" id="tourPrev">Prev</button>
-        <div
+        <fieldset
           class="tour-dots"
           id="tourDots"
-          role="group"
           aria-label="Pages in this chapter"
           hidden
-        ></div>
+        ></fieldset>
         <button class="btn on" id="tourNext">Next</button>
       </div>
     </section>
