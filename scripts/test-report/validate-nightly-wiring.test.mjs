@@ -72,6 +72,30 @@ describe("validate-nightly-wiring structure (#545)", () => {
     expect(pairingBlock).toMatch(/nightly-evidence-pairing/u);
   });
 
+  test("iOS suites fan out from one native build artifact", () => {
+    const iosBlock = e2e.slice(
+      e2e.indexOf("  mobile-e2e-ios-build:"),
+      e2e.indexOf("  mobile-e2e-android:")
+    );
+    expect(iosBlock).toMatch(/mobile-e2e-ios:/u);
+    expect(iosBlock).toMatch(/needs:\s+mobile-e2e-ios-build/u);
+    expect(iosBlock).toMatch(/fail-fast:\s+false/u);
+    expect(iosBlock).toMatch(/nightly-mobile-ios-app/u);
+    expect(iosBlock).toMatch(
+      /nightly-evidence-mobile-ios-\$\{\{ matrix\.suite \}\}/u
+    );
+    for (const suite of [
+      "home-loads",
+      "template-gate",
+      "native-v0-resilience",
+      "volume-proof",
+      "cold-start",
+      "scroll-frames",
+    ]) {
+      expect(iosBlock).toContain(`- ${suite}`);
+    }
+  });
+
   test("a failed issue create is loud, never swallowed (A11)", () => {
     // #557 moved the open-or-update logic out of four near-identical inline
     // shell blocks into scripts/ci/file-tracking-issue.mjs. The A11 invariant

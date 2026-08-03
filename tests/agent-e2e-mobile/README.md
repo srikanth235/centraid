@@ -1,6 +1,6 @@
 # Agent-driven exploratory QA — mobile
 
-This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The three stable journeys are also run nightly, while ad-hoc agent exploration remains its primary authoring loop.
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The six stable flows are run nightly; iOS runs them as isolated parallel suites from one cached native build, while Android retains its smaller functional subset. Ad-hoc agent exploration remains this adapter's primary authoring loop.
 
 The structural payoff matches the desktop layer: the device (sim, emulator, or real) outlives the runner, so an agent (Claude Code) can attach, inspect the screen, take ad-hoc actions, screenshot, and resume. Maestro ships a first-party **MCP server** that exposes exactly that surface to Claude Code.
 

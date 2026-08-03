@@ -20,6 +20,10 @@ const requiredFlowScripts = [
 ];
 
 const requiredJobs = [
+  // iOS native compilation is one producer; the six device suites fan out from
+  // its artifact so a cold cache never triggers six Xcode builds.
+  "mobile-e2e-ios-build:",
+  "mobile-e2e-ios:",
   "pairing-e2e:",
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
@@ -32,6 +36,7 @@ const retiredPairingJobs = [
 ];
 
 const requiredArtifactNames = [
+  "nightly-mobile-ios-app",
   "nightly-evidence-pairing",
   "nightly-evidence-mutation",
 ];
@@ -48,6 +53,37 @@ const e2eCode = e2e
     return hash === -1 ? line : line.slice(0, hash);
   })
   .join("\n");
+
+const iosStart = e2eCode.indexOf("mobile-e2e-ios-build:");
+const androidStart = e2eCode.indexOf("mobile-e2e-android:");
+const iosChunk =
+  iosStart === -1
+    ? ""
+    : e2eCode.slice(iosStart, androidStart === -1 ? undefined : androidStart);
+const requiredIosSuites = [
+  "home-loads",
+  "template-gate",
+  "native-v0-resilience",
+  "volume-proof",
+  "cold-start",
+  "scroll-frames",
+];
+
+if (!iosChunk.includes("fail-fast: false")) {
+  errors.push("iOS matrix must keep all suite evidence when one cell fails");
+}
+for (const suite of requiredIosSuites) {
+  if (!iosChunk.includes(`- ${suite}`)) {
+    errors.push(`iOS matrix is missing suite ${suite}`);
+  }
+}
+const matrixSuiteToken = ["$", "{{ matrix.suite }}"].join("");
+if (!iosChunk.includes(`nightly-evidence-mobile-ios-${matrixSuiteToken}`)) {
+  errors.push("iOS matrix evidence artifacts must be unique per suite");
+}
+if (!iosChunk.includes(`nightly-debug-mobile-ios-${matrixSuiteToken}-runs`)) {
+  errors.push("iOS matrix debug artifacts must be unique per suite");
+}
 
 for (const job of requiredJobs) {
   if (!e2eCode.includes(job)) errors.push(`e2e.yml missing job key ${job}`);
@@ -78,6 +114,7 @@ if (reportIdx === -1) {
 } else {
   const reportChunk = e2eCode.slice(reportIdx, reportIdx + 1_200);
   for (const need of [
+    "mobile-e2e-ios-build",
     "mobile-e2e-android",
     "pairing-e2e",
     "mutation-testing",

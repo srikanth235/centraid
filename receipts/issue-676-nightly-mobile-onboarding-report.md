@@ -24,6 +24,7 @@ accessibility zero-grey (15 cells).
 - [x] Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy
 - [x] Grant iOS Photos permission before the frame-probe journey
 - [x] Keep the iOS frame-probe sampling marker visible to Maestro while sampling
+- [x] Fan iOS journeys out to isolated parallel suite runners from one cached app build
 
 ## What changed
 
@@ -127,10 +128,31 @@ accessibility zero-grey (15 cells).
 
 - **Keep the iOS frame-probe sampling marker visible to Maestro while sampling.** Final run 30805802852
   passed the Photos permission and search-marker checks but could not observe
-  `perf-frame-sampling` after `perf-frame-arm`; the probe's `opacity: 0.01`
-  made the native accessibility node eligible to be classified as hidden. The
-  sampling-only marker now uses a fully opaque transparent view, preserving the
-  invisible measurement overlay while keeping its XCTest/Maestro bounds visible.
+  `perf-frame-sampling` after `perf-frame-arm`. The follow-up artifact from run
+  30813118964 showed the arm node still present at `[386,4][398,16]` after the
+  tap: its bounds overlapped the iOS status bar, so XCTest tapped system chrome
+  and never called `onPress`. The marker now sits below the status bar while the
+  sampling-only node remains fully opaque with a transparent background.
+
+- **Use the measured iOS launch budget for volume proof.** The rerun of
+  `mobile-volume-proof` reached its twentieth relaunch with the old 30s
+  per-launch assertion; the passing cold-start distribution in the same run had
+  an approximately 89s p95. The flow now consumes the shared 120s first-launch
+  budget so simulator scheduling does not turn a valid slow launch into a red
+  volume cell.
+
+- **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
+  the fingerprinted native `.app` build/cache a single producer and publishes
+  that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
+  matrix runs home-loads, template-gate, native-v0-resilience, volume-proof,
+  cold-start, and scroll-frames on separate macOS simulators with unique
+  evidence/debug artifacts. `apps/mobile/scripts/select-ci-xcode.sh` and
+  `apps/mobile/scripts/boot-ci-ios-simulator.sh` keep Xcode selection and
+  simulator boot logic shared so the producer and matrix cells cannot drift.
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs` uses the measured launch
+  budget, while `tests/agent-e2e-mobile/README.md` and `TESTING.md` document the
+  split. This removes shared simulator state from the concurrency boundary
+  while preserving every flow owner for the nightly report.
 
 - **Invalidate native tunnel connections after post-open stream failures
   (30769334446).** `openBi()` can succeed briefly after the peer has stopped
@@ -197,6 +219,8 @@ accessibility zero-grey (15 cells).
 
 ```sh
 bun run lint:e2e-flows
+node scripts/test-report/validate-nightly-wiring.mjs
+node node_modules/vitest/vitest.mjs run scripts/test-report/validate-nightly-wiring.test.mjs
 bun run test:matrix
 node --test scripts/mobile-onboarding-maestro-contract.test.mjs
 bun run test:accessibility
@@ -261,3 +285,8 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785759343-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 515212 | 0 | 33238528 | 45353 | 560565 | 10.2780 | 6679500 | 0 | 257318400 | 429481 | fix(ios): keep frame probe visible (#676) |
 | codex-019fc399-ba8-1785759384-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 2674 | 0 | 413184 | 605 | 3279 | 0.1191 | 6682174 | 0 | 257731584 | 430086 | fix(ios): keep frame probe visible (#676) |
 | codex-019fc399-ba8-1785759430-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1835 | 0 | 416256 | 235 | 2070 | 0.1122 | 6684009 | 0 | 258147840 | 430321 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785770058-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1816842 | 0 | 59516160 | 95194 | 1912036 | 20.8491 | 8500851 | 0 | 317664000 | 525515 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770111-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3809 | 0 | 480768 | 865 | 4674 | 0.1427 | 8504660 | 0 | 318144768 | 526380 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770274-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20328 | 0 | 739328 | 646 | 20974 | 0.2453 | 8524988 | 0 | 318884096 | 527026 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770401-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 15763 | 0 | 514560 | 2397 | 18160 | 0.2040 | 8540751 | 0 | 319398656 | 529423 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770482-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5920 | 0 | 254976 | 716 | 6636 | 0.0893 | 8546671 | 0 | 319653632 | 530139 | ci(mobile-e2e): parallelize iOS suites (#676) -m governance: allow-toolchain-con |

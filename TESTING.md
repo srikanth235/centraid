@@ -66,7 +66,7 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [doc
 | --- | --- |
 | **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/gateway` + `packages/app-engine` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
 | **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
-| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)** |
+| **Nightly** | Full cross-client suites, perf budgets, mobile (**six isolated iOS suites in parallel + Android functional journeys**), pairing journeys, scale, **mutation (Stryker)** |
 
 **Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
 
@@ -145,7 +145,7 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
-Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
+Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e-ios` matrix in [`e2e.yml`](.github/workflows/e2e.yml) builds the iOS app once, publishes the cache-safe bundle, and runs each flow on an isolated macOS simulator; Android runs its functional subset in `mobile-e2e-android`. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
 
 Property-style checks follow the normal `*.test.ts` convention and say `property` in the suite name. `.spec.ts` is Playwright-only.
 
@@ -240,7 +240,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
 | `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
-| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+| `.github/workflows/e2e.yml` | desktop, web, mobile (parallel iOS suites + Android functional journeys), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
 
 ### Test-health report (main + nightly)
 
