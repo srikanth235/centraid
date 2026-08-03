@@ -29,11 +29,10 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  *           `frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%`
  *
  * `copyTextFrom` is the blessed read and this flow issues it — it fails loudly
- * if the id is absent, which is the assertion that matters. But Maestro keeps
- * `maestro.copiedText` inside the flow and offers no supported channel back to
- * a `.mjs` host, so the NUMBER is recovered from the view hierarchies
- * `--debug-output` already writes under `runs/<id>/maestro-debug/`, where the
- * report string appears verbatim. Parsing is deliberately two-tier: the strict
+ * if the id is absent, which is the assertion that matters. Maestro keeps
+ * `maestro.copiedText` inside the flow, so the next `evalScript` logs the
+ * copied value into `maestro.log`; `readFrameEvidence` recovers the number from
+ * that uploaded debug output. Parsing is deliberately two-tier: the strict
  * whole-line pattern first, then an independent `dropped=` / `targetHz=` scan,
  * so a change that escapes or splits the line degrades to a still-correct read
  * instead of a silent zero. A phase that yields NO parse FAILS the flow —
@@ -125,6 +124,7 @@ ${settle}
     timeout: ${SAMPLE_WINDOW_MS + 15_000}
 - copyTextFrom:
     id: "perf-frame-report"
+- evalScript: ${console.log("centraid-frame-report " + maestro.copiedText)}
 - takeScreenshot: frame-report-${surface}
 `;
 }
