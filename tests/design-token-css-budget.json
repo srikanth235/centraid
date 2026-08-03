@@ -1,23 +1,14 @@
 {
-  "packages/blueprints/apps/agenda/components/CreateModal.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/agenda/components/EventDrawer.module.css": {
-    "rawFontSize": 1
-  },
   "packages/blueprints/apps/agenda/components/MonthView.module.css": {
-    "rawFontSize": 3
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/agenda/components/ScheduleView.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/agenda/components/WeekView.module.css": {
-    "rawFontSize": 4
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/docs/Chrome.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/docs/components/Activity.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/docs/components/BulkBar.module.css": {
@@ -30,10 +21,7 @@
     "rawFontSize": 1
   },
   "packages/blueprints/apps/docs/components/Grid.module.css": {
-    "rawFontSize": 3
-  },
-  "packages/blueprints/apps/docs/components/History.module.css": {
-    "rawFontSize": 1
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/docs/components/List.module.css": {
     "rawFontSize": 2
@@ -41,11 +29,8 @@
   "packages/blueprints/apps/docs/components/QuickLook.module.css": {
     "rawFontSize": 1
   },
-  "packages/blueprints/apps/docs/components/Sidebar.module.css": {
-    "rawFontSize": 1
-  },
   "packages/blueprints/apps/docs/components/shared.module.css": {
-    "rawFontSize": 3
+    "rawFontSize": 2
   },
   "packages/blueprints/apps/locker/components/Detail.module.css": {
     "rawFontSize": 1
@@ -84,151 +69,145 @@
     "rawFontSize": 4
   },
   "packages/client/src/react/screens/AppSettingsPanel.module.css": {
-    "rawFontSize": 12,
+    "rawFontSize": 4,
     "rawRadius": 8
   },
   "packages/client/src/react/screens/ApprovalsScreen.module.css": {
     "literalFontFamily": 1,
-    "rawFontSize": 19,
+    "rawFontSize": 13,
     "rawRadius": 5
   },
   "packages/client/src/react/screens/AssistantScreen.module.css": {
-    "rawFontSize": 15,
+    "rawFontSize": 11,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/AtlasBrowseTab.module.css": {
-    "rawFontSize": 26,
+    "rawFontSize": 12,
     "rawRadius": 18
   },
   "packages/client/src/react/screens/AtlasKindsTab.module.css": {
-    "rawFontSize": 10,
+    "rawFontSize": 3,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/AtlasRelationsTab.module.css": {
-    "rawFontSize": 16
+    "rawFontSize": 1
   },
   "packages/client/src/react/screens/AtlasScreen.module.css": {
-    "rawFontSize": 2,
+    "rawFontSize": 1,
     "rawRadius": 2
   },
   "packages/client/src/react/screens/AutomationCompilePane.module.css": {
-    "rawFontSize": 11,
+    "rawFontSize": 7,
     "rawRadius": 4
   },
   "packages/client/src/react/screens/AutomationEditorScreen.module.css": {
-    "rawFontSize": 30,
+    "rawFontSize": 25,
     "rawRadius": 18
   },
   "packages/client/src/react/screens/AutomationTemplatesScreen.module.css": {
-    "rawFontSize": 5,
+    "rawFontSize": 4,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/AutomationThreadScreen.module.css": {
-    "rawFontSize": 20,
+    "rawFontSize": 14,
     "rawRadius": 8
   },
   "packages/client/src/react/screens/AutomationsOverviewScreen.module.css": {
-    "rawFontSize": 12,
+    "rawFontSize": 6,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/BackupCard.module.css": {
-    "rawFontSize": 27,
+    "rawFontSize": 11,
     "rawRadius": 2
   },
   "packages/client/src/react/screens/BuilderChatPane.module.css": {
     "literalFontFamily": 1,
-    "rawFontSize": 12,
+    "rawFontSize": 6,
     "rawRadius": 4
   },
   "packages/client/src/react/screens/ChatComposer.module.css": {
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/DevicePairPanel.module.css": {
-    "rawFontSize": 6,
+    "rawFontSize": 4,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/DevicesCard.module.css": {
-    "rawFontSize": 12,
+    "rawFontSize": 5,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/DiscoverScreen.module.css": {
-    "rawFontSize": 6
+    "rawFontSize": 4
   },
   "packages/client/src/react/screens/GatewayScreen.module.css": {
-    "rawFontSize": 41,
+    "rawFontSize": 15,
     "rawFontWeight": 1,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/HomeScreen.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 5
+    "rawFontSize": 4,
+    "rawRadius": 3
   },
   "packages/client/src/react/screens/HouseholdScreen.module.css": {
-    "rawFontSize": 3,
+    "rawFontSize": 2,
     "rawRadius": 4
   },
-  "packages/client/src/react/screens/ImportScreen.module.css": {
-    "rawFontSize": 1
-  },
   "packages/client/src/react/screens/InsightsScreen.module.css": {
-    "rawFontSize": 25,
+    "rawFontSize": 14,
     "rawFontWeight": 1,
     "rawRadius": 10
   },
   "packages/client/src/react/screens/LocalFootprintCard.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 1
-  },
-  "packages/client/src/react/screens/LogsScreen.module.css": {
     "rawFontSize": 5,
     "rawRadius": 1
   },
+  "packages/client/src/react/screens/LogsScreen.module.css": {
+    "rawFontSize": 3,
+    "rawRadius": 1
+  },
   "packages/client/src/react/screens/OnboardingScreen.module.css": {
-    "rawFontSize": 9,
+    "rawFontSize": 6,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/PaletteScreen.module.css": {
-    "rawFontSize": 10,
+    "rawFontSize": 4,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/PhoneScreen.module.css": {
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/RecoverScreen.module.css": {
-    "rawFontSize": 9,
+    "rawFontSize": 7,
     "rawRadius": 5
   },
   "packages/client/src/react/screens/ResourceDialogs.module.css": {
-    "rawFontSize": 5,
+    "rawFontSize": 3,
     "rawRadius": 1
   },
   "packages/client/src/react/screens/ResourceReceiptPanel.module.css": {
-    "rawFontSize": 6
+    "rawFontSize": 4
   },
   "packages/client/src/react/screens/RunViewScreen.module.css": {
-    "rawFontSize": 20,
-    "rawRadius": 7
-  },
-  "packages/client/src/react/screens/SettingsConnectionsScreen.module.css": {
     "rawFontSize": 12,
     "rawRadius": 7
   },
+  "packages/client/src/react/screens/SettingsConnectionsScreen.module.css": {
+    "rawFontSize": 7,
+    "rawRadius": 7
+  },
   "packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css": {
-    "rawFontSize": 10,
+    "rawFontSize": 2,
     "rawRadius": 3
   },
   "packages/client/src/react/screens/SettingsProfileScreen.module.css": {
-    "rawFontSize": 4
-  },
-  "packages/client/src/react/screens/SettingsProvidersScreen.module.css": {
     "rawFontSize": 3
   },
-  "packages/client/src/react/screens/SettingsStorageScreen.module.css": {
-    "rawFontSize": 7,
-    "rawRadius": 1
-  },
-  "packages/client/src/react/screens/StartupErrorScreen.module.css": {
+  "packages/client/src/react/screens/SettingsProvidersScreen.module.css": {
     "rawFontSize": 1
+  },
+  "packages/client/src/react/screens/SettingsStorageScreen.module.css": {
+    "rawFontSize": 5,
+    "rawRadius": 1
   },
   "packages/client/src/react/screens/StorageLimitsPanel.module.css": {
     "rawFontSize": 3,
@@ -244,28 +223,26 @@
     "rawRadius": 1
   },
   "packages/client/src/react/shell/CaptureOverlay.module.css": {
-    "rawFontSize": 1,
     "rawRadius": 2
   },
   "packages/client/src/react/shell/PageScroll.module.css": {
     "rawFontSize": 2
   },
   "packages/client/src/react/shell/automationTemplatePreview.module.css": {
-    "rawFontSize": 3,
+    "rawFontSize": 2,
     "rawRadius": 1
   },
   "packages/client/src/react/shell/chrome.module.css": {
     "rawFontSize": 1
   },
   "packages/client/src/react/shell/gatewaySwitcher.module.css": {
-    "rawFontSize": 3
+    "rawFontSize": 1
   },
   "packages/client/src/react/shell/routes/AppInfoModal.module.css": {
-    "rawFontSize": 1,
     "rawRadius": 2
   },
   "packages/client/src/react/shell/routes/AppViewRoute.module.css": {
-    "rawFontSize": 2,
+    "rawFontSize": 1,
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/ConnectFlow.module.css": {
@@ -276,7 +253,7 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/shell/routes/RunsPane.module.css": {
-    "rawFontSize": 4,
+    "rawFontSize": 3,
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/ScopePicker.module.css": {
@@ -284,7 +261,7 @@
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/SettingsRoute.module.css": {
-    "rawFontSize": 6,
+    "rawFontSize": 2,
     "rawRadius": 2
   },
   "packages/client/src/react/shell/routes/VaultModal.module.css": {
@@ -292,40 +269,39 @@
     "rawRadius": 7
   },
   "packages/client/src/react/shell/routes/assistantRich.module.css": {
-    "rawFontSize": 5,
+    "rawFontSize": 2,
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css": {
-    "rawFontSize": 19,
+    "rawFontSize": 13,
     "rawRadius": 4
   },
   "packages/client/src/react/shell/routes/builder/BuilderCloud.module.css": {
     "literalFontFamily": 1,
-    "rawFontSize": 13,
+    "rawFontSize": 8,
     "rawFontWeight": 1,
     "rawRadius": 8
   },
   "packages/client/src/react/shell/routes/builder/BuilderCode.module.css": {
-    "rawFontSize": 7,
+    "rawFontSize": 3,
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/builder/BuilderHistory.module.css": {
     "rawRadius": 1
   },
   "packages/client/src/react/shell/routes/builder/BuilderPreview.module.css": {
-    "rawFontSize": 1,
     "rawRadius": 3
   },
   "packages/client/src/react/shell/routes/builder/BuilderShell.module.css": {
     "literalFontFamily": 1,
-    "rawFontSize": 5,
+    "rawFontSize": 4,
     "rawRadius": 7
   },
   "packages/client/src/react/shell/templatePreview.module.css": {
-    "rawFontSize": 3
+    "rawFontSize": 1
   },
   "packages/client/src/react/shell/webhookReveal.module.css": {
-    "rawFontSize": 2,
+    "rawFontSize": 1,
     "rawRadius": 2
   },
   "packages/client/src/react/styles/appSettings.module.css": {
@@ -339,7 +315,7 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/styles/automation.module.css": {
-    "rawFontSize": 6,
+    "rawFontSize": 2,
     "rawRadius": 5
   },
   "packages/client/src/react/styles/chatMessage.module.css": {
@@ -374,21 +350,15 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/styles/vault.module.css": {
-    "rawFontSize": 9,
+    "rawFontSize": 2,
     "rawRadius": 2
   },
   "packages/client/src/react/ui/AppCard.module.css": {
     "rawFontSize": 2,
     "rawRadius": 1
   },
-  "packages/client/src/react/ui/KindBadge.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/client/src/react/ui/StatusPill.module.css": {
-    "rawFontSize": 1
-  },
   "packages/design/kit/kit.css": {
-    "rawFontSize": 61,
+    "rawFontSize": 44,
     "rawFontWeight": 2,
     "rawRadius": 12
   }
