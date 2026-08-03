@@ -445,42 +445,62 @@ export async function runFlow(slug, fn) {
         "MAESTRO_GATEWAY_URL is required for this mobile journey"
       );
     }
-    const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
+    // A cold iOS simulator can lose the first iroh redemption after the
+    // onboarding UI has already rendered (30842553646). Retry only on iOS:
+    // each attempt mints a fresh one-time ticket and clears app state, so a
+    // failed redemption cannot poison the next attempt. Android keeps its
+    // existing single-attempt behavior until it has its own evidence.
+    const maxPairingAttempts = process.env.MAESTRO_PLATFORM === "ios" ? 2 : 1;
+    const pairAttempt = async (attempt) => {
+      try {
+        const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #643/#644 made the default path
-    // scan-first (showPaste=false): open paste via the secondary control, then
-    // fill the ticket field and submit with the live primary label "Connect"
-    // (not the pre-scan-first "Continue with pasted code"). #634 made the
-    // profile step conditional: a named roster member goes straight to Done,
-    // while an unnamed member is asked for a profile. The gateway URL is used
-    // only by the host-side harness to mint that ticket; the phone reaches the
-    // gateway through the ticket's iroh endpoint.
-    await ctx.run(
-      `appId: ${state.appId}
+        // #603 removed the local/manual-URL bypass: every fresh client must
+        // redeem a real one-time pairing ticket. #643/#644 made the default
+        // path scan-first (showPaste=false): open paste via the secondary
+        // control, then fill the ticket field and submit with the live primary
+        // label "Connect" (not the pre-scan-first "Continue with pasted code").
+        // #634 made the profile step conditional: a named roster member goes
+        // straight to Done, while an unnamed member is asked for a profile.
+        // The gateway URL is used only by the host-side harness to mint that
+        // ticket; the phone reaches the gateway through the ticket's iroh
+        // endpoint.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
 ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
+          "configure-gateway",
+          {
+            maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+            sensitive: true,
+          }
+        );
 
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
-    // Tickets minted above deliberately name their member "Mobile E2E …", so
-    // the normal branch skips the form and greets "Mobile"; the conditional
-    // form path remains covered for gateways that return no roster name.
-    await ctx.run(
-      `appId: ${state.appId}
+        // A second, non-sensitive Maestro chunk keeps the pairing capability
+        // out of retained diagnostics while proving both legitimate identity
+        // paths. Tickets minted above deliberately name their member "Mobile
+        // E2E …", so the normal branch skips the form and greets "Mobile";
+        // the conditional form path remains covered for gateways that return
+        // no roster name.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 ${completeOnboardingCommands(HOME_READY_MARKER)}`,
-      "complete-onboarding"
-    );
-    ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+          "complete-onboarding"
+        );
+        ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+        return true;
+      } catch (error) {
+        if (attempt === maxPairingAttempts) throw error;
+        ctx.note(
+          `iOS pairing attempt ${attempt} did not complete; retrying with a fresh ticket`
+        );
+        return pairAttempt(attempt + 1);
+      }
+    };
+    await pairAttempt(1);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage

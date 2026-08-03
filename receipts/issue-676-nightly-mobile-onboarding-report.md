@@ -175,6 +175,13 @@ accessibility zero-grey (15 cells).
   retry and asserts the stable Tasks subtitle instead of depending on the
   intermittently absent iOS TextInput accessibility label.
 
+- **Retry transient iOS pairing setup.** In run 30842553646 the native cell
+  failed during its sensitive configure-gateway chunk before any native cover
+  ran; the gateway was healthy and the parallel template cell paired
+  successfully. `harness.mjs` now gives iOS two bounded pairing attempts, each
+  with a fresh one-time ticket and cleared app state; Android remains on its
+  prior single-attempt path.
+
 - **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
   the fingerprinted native `.app` build/cache a single producer and publishes
   that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
@@ -330,3 +337,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785776135-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 70287 | 0 | 3353088 | 6381 | 76668 | 1.1097 | 9488187 | 0 | 354875904 | 587015 | fix(ios): avoid duplicate volume relaunch termination (#676) |
 | codex-019fc399-ba8-1785779028-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 628288 | 0 | 20321536 | 36482 | 664770 | 7.1983 | 10116475 | 0 | 375197440 | 623497 | fix(ios): make Settings retry destination-aware (#676) |
 | codex-019fc399-ba8-1785782499-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 801520 | 0 | 33503488 | 42414 | 843934 | 11.0159 | 10917995 | 0 | 408700928 | 665911 | fix(ios): retry Tasks cover transition (#676) |
+| codex-019fc399-ba8-1785783971-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 229480 | 0 | 6862848 | 14396 | 243876 | 2.5054 | 11147475 | 0 | 415563776 | 680307 | fix(ios): retry transient mobile pairing (#676) |
+| codex-019fc399-ba8-1785784233-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 64884 | 0 | 1684736 | 1535 | 66419 | 0.6064 | 11212359 | 0 | 417248512 | 681842 | fix(ios): retry transient mobile pairing (#676) |
