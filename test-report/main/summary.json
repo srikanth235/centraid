@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-03T03:46:58.806Z",
+  "generatedAt": "2026-08-03T11:41:56.270Z",
   "passed": 910,
   "failed": 0,
   "skipped": 0,
@@ -150,7 +150,7 @@
   ],
   "newFailedCellIds": [],
   "floorSeries": {
-    "coverage:repo-wide:lines": 64.93,
+    "coverage:repo-wide:lines": 64.92,
     "coverage:repo-wide:branches": 54.7,
     "coverage:packages/app-engine/src/**:lines": 86.04,
     "coverage:packages/app-engine/src/**:branches": 75.11,
@@ -176,8 +176,8 @@
     "coverage:packages/time-engine/src/**:branches": 86.51,
     "coverage:packages/agent-runtime/src/**:lines": 86.75,
     "coverage:packages/agent-runtime/src/**:branches": 77.17,
-    "coverage:packages/vault/src/**:lines": 87.94,
-    "coverage:packages/vault/src/**:branches": 74.19,
+    "coverage:packages/vault/src/**:lines": 87.92,
+    "coverage:packages/vault/src/**:branches": 74.16,
     "coverage:packages/design/src/**:lines": 98.92,
     "coverage:packages/design/src/**:branches": 86.82,
     "coverage:packages/tunnel/src/**:lines": 71.84,
