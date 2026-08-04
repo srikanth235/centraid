@@ -321,17 +321,11 @@ jobs:
   mobile-e2e-ios:
     needs: mobile-e2e-ios-build
     if: >
-      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios') && (github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all' || github.event.inputs.ios_suite == matrix.suite)
+      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios')
     strategy:
       fail-fast: false
       matrix:
-        suite:
-          - home-loads
-          - template-gate
-          - native-v0-resilience
-          - volume-proof
-          - cold-start
-          - scroll-frames
+        suite: ${{ fromJSON((github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all') && '["home-loads","template-gate","native-v0-resilience","volume-proof","cold-start","scroll-frames"]' || format('["{0}"]', github.event.inputs.ios_suite)) }}
     runs-on: macos-26
     # Each matrix cell owns one simulator and one flow. Native-v0 is the
     # slowest cell; 60m keeps enough room for a transient Maestro retry without
