@@ -30,20 +30,43 @@ const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/time-engine");
 export interface DemoRouteDeps {
   /** Live code root (`<main worktree>/apps`) of the ACTIVE vault's store. */
   codeAppsDir: () => string;
+  /**
+   * Directories a BUNDLED app serves from, by id — the shipped
+   * `@centraid/blueprints` trees, which are not under `codeAppsDir` at all.
+   *
+   * Without this the whole demo plane was dead for exactly the apps it was
+   * written for. Issue #434 made a bundled install serve IN PLACE (no per-vault
+   * code copy), and #708 made every first-party app installed by default — so
+   * `GET /demo` scanned the git store, found nothing, and answered `{apps:[]}`
+   * while `POST /demo/tasks` 404'd, on a vault that owned all eight seedable
+   * apps. The resolver mirrors `codeDirOverride` in build-gateway: bundled and
+   * installed wins, everything else is the code store.
+   */
+  bundledAppDirs: () => ReadonlyMap<string, string>;
 }
 
-/** Apps whose live code ships a seed.js scenario generator. */
-function seedableApps(codeAppsDir: string): Set<string> {
-  const seedable = new Set<string>();
-  let entries: string[] = [];
+/** The directory an app's `seed.js` would live in, bundled tree first. */
+function appDirsFor(deps: DemoRouteDeps): Map<string, string> {
+  const dirs = new Map<string, string>();
+  const codeAppsDir = deps.codeAppsDir();
   try {
-    entries = readdirSync(codeAppsDir);
+    for (const entry of readdirSync(codeAppsDir))
+      dirs.set(entry, path.join(codeAppsDir, entry));
   } catch {
-    return seedable;
+    /* a vault with no code store yet is the normal case now */
   }
-  for (const entry of entries) {
-    if (existsSync(path.join(codeAppsDir, entry, "seed.js")))
-      seedable.add(entry);
+  // Bundled last so an installed blueprint wins over a same-named store entry,
+  // which is the same precedence the listing union and the compat route use.
+  for (const [appId, dir] of deps.bundledAppDirs()) dirs.set(appId, dir);
+  return dirs;
+}
+
+/** Apps that ship a seed.js scenario generator, wherever they serve from. */
+function seedableApps(deps: DemoRouteDeps): Map<string, string> {
+  const seedable = new Map<string, string>();
+  for (const [appId, dir] of appDirsFor(deps)) {
+    const seedFile = path.join(dir, "seed.js");
+    if (existsSync(seedFile)) seedable.set(appId, seedFile);
   }
   return seedable;
 }
@@ -68,8 +91,8 @@ export function makeDemoRouteHandler(
       const rowsByApp = new Map(
         plane.demoStatus().map((s) => [s.appId, s.rows])
       );
-      const seedable = seedableApps(deps.codeAppsDir());
-      const apps = [...new Set([...rowsByApp.keys(), ...seedable])]
+      const seedable = seedableApps(deps);
+      const apps = [...new Set([...rowsByApp.keys(), ...seedable.keys()])]
         .sort()
         .map((id) => ({
           appId: id,
@@ -81,8 +104,8 @@ export function makeDemoRouteHandler(
     }
 
     if (method === "POST" && appId !== null) {
-      const seedFile = path.join(deps.codeAppsDir(), appId, "seed.js");
-      if (!existsSync(seedFile)) {
+      const seedFile = seedableApps(deps).get(appId);
+      if (seedFile === undefined) {
         sendJson(res, 404, {
           error: `app "${appId}" ships no seed.js scenario`,
         });

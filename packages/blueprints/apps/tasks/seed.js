@@ -27,7 +27,11 @@ export default async function seedHandler({ input, log, ctx }) {
   const done = (task_id) =>
     invoke("schedule.set_task_status", { task_id, status: "completed" });
 
-  await add({ title: "Renew car insurance", due_at: day(-2), priority: 8 });
+  await add({
+    title: "Rotate the tires before the drive",
+    due_at: day(-2),
+    priority: 8,
+  });
   await add({
     title: "Book dentist appointment",
     due_at: day(1),
@@ -35,25 +39,25 @@ export default async function seedHandler({ input, log, ctx }) {
     effort_min: 15,
   });
   await add({
-    title: "Water the balcony plants",
-    description: "The basil is looking thirsty.",
+    title: "Pick up the dry cleaning",
+    description: "Ticket is on the fridge.",
     due_at: day(0),
     priority: 3,
   });
 
   const trip = await add({
-    title: "Plan the Goa trip",
-    description: "Long weekend with the college gang.",
+    title: "Plan the Tahoe trip",
+    description: "Long weekend at the lake with Maya, Jake and Chris.",
     due_at: day(7),
     priority: 6,
   });
   await add({
-    title: "Compare beach-side stays",
+    title: "Compare cabins — South Lake vs Truckee",
     parent_task_id: trip.task_id,
     effort_min: 45,
   });
   await add({
-    title: "Check train availability",
+    title: "Book the Tahoe cabin",
     parent_task_id: trip.task_id,
     due_at: day(3),
   });
@@ -64,7 +68,7 @@ export default async function seedHandler({ input, log, ctx }) {
   await done(packed.task_id);
 
   const groceries = await add({
-    title: "Weekly groceries run",
+    title: "Weekly grocery run",
     due_at: day(-1),
     priority: 4,
   });

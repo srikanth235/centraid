@@ -85,8 +85,11 @@ describe("serve scenarios", () => {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as unknown[];
-    expect(body).toStrictEqual([]);
+    // A mounted vault carries every bundled app (#708) — this is the listing
+    // union, not an empty code store. What is under test here is the bearer
+    // check, so the shape is what matters, not the roster.
+    const body = (await res.json()) as { id: string }[];
+    expect(body.map((a) => a.id)).toContain("tasks");
   });
 
   test("honors a caller-supplied token instead of minting one", async () => {

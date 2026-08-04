@@ -2294,10 +2294,29 @@ export async function buildGateway(
         const appDir = await host.store.resolveActiveAppDir(appId);
         if (appDir) await prewarmApp(appId, appDir);
       });
-      // Installed bundled apps (issue #434) aren't in the git store, so the
-      // loop above misses them — re-register each from the enrollment record
-      // so its data plane and generic compatibility route recover after a
-      // gateway restart.
+      // Every first-party app ships INSTALLED (issue #708). The catalogue that
+      // used to hand them out one at a time is retired, so a vault does not
+      // ACQUIRE its first-party apps — it has them, the way a phone has its
+      // camera. Mount is the right seam rather than vault creation: it is the
+      // one path every vault takes on every boot, so an older vault and a vault
+      // created while a release was mid-upgrade converge on the same catalog
+      // without a migration. `installApp` is idempotent (a `consent.app` row
+      // that already exists is returned, not rewritten), so the steady state is
+      // eight no-ops.
+      //
+      // Consequence, stated here because it is the reason the Uninstall verb
+      // left the app gear popover: a bundled app removed from a mounted vault
+      // would come back on the next mount, and a verb that undoes itself is a
+      // worse answer than no verb. Access is still reviewable and revocable —
+      // per-grant, in the Privacy ledger — which is the surface that question
+      // actually belongs on.
+      await forEachSequentially(bundledAppIds, async (appId) => {
+        const meta = await readBundledAppMeta(bundledAppDir(appId));
+        plane.installApp(appId, meta.name);
+      });
+      // Bundled apps aren't in the git store, so the first loop misses them —
+      // register each from the enrollment record so its data plane and generic
+      // compatibility route recover after a gateway restart.
       await forEachSequentially(plane.installedAppIds(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
@@ -4101,6 +4120,17 @@ export async function buildGateway(
       "/centraid/_vault/demo",
       makeDemoRouteHandler(vaultRegistry, {
         codeAppsDir: () => currentSettledHost().codeAppsDir(),
+        // Same precedence as `codeDirOverride` above: a bundled app INSTALLED
+        // in this vault serves from the shipped blueprint tree, so that is
+        // where its scenario generator lives too.
+        bundledAppDirs: () => {
+          const installed = vaultRegistry.current().installedAppIds();
+          return new Map(
+            [...bundledAppIds]
+              .filter((appId) => installed.has(appId))
+              .map((appId) => [appId, bundledAppDir(appId)])
+          );
+        },
       })
     ),
     // File-drop imports (issue #290 phase 2): stage → review → publish.

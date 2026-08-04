@@ -587,7 +587,10 @@ describe("build-gateway scenarios", () => {
       // the composed chain must serve the request, not 401 it.
       const res = await fetch(`${srv.url}/centraid/_apps`);
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toStrictEqual([]);
+      // The mounted vault's bundled roster (#708) — what is under test is that
+      // the chain SERVED the route rather than 401'd it.
+      const body = (await res.json()) as { id: string }[];
+      expect(body.map((a) => a.id)).toContain("tasks");
     } finally {
       await srv.close();
     }

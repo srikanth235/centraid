@@ -144,7 +144,10 @@ export function bootstrapVault(
       vaultId,
       ownerPartyId,
       displayName,
-      options.baseCurrency ?? "INR",
+      // No caller passes baseCurrency today, so this default IS the currency
+      // every real vault displays; every reader (tally, brief, ingest, mobile)
+      // already falls back to USD when the row is missing.
+      options.baseCurrency ?? "USD",
       now
     );
   // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
