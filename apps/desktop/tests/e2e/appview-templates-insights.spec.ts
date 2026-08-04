@@ -14,6 +14,7 @@ import {
   markUserApp,
   openTile,
   seedRemoteGateway,
+  startBuilderFromPalette,
   startMockGateway,
   waitForHome,
 } from "./fixtures";
@@ -358,11 +359,8 @@ test("10.3 — independent builder drafts coexist on disk and survive a full Ele
       const prompt = prompts[index];
       if (prompt === undefined) return;
       await waitForHome(launched.page);
-      const composer = launched.page.getByPlaceholder(
-        /Describe an app you want/iu
-      );
-      await composer.fill(prompt);
-      await composer.press("Control+Enter");
+      // Home composer is gone (#708); palette Create carries the initialPrompt.
+      await startBuilderFromPalette(launched.page, prompt);
       await expect
         .poll(() => gateway.state.apps.length, { timeout: 10_000 })
         .toBe(index + 1);

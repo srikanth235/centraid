@@ -986,12 +986,13 @@ export async function markUserApp(
  *
  *  Post-#707/#708 the stem replaces the old sidebar, and Home is the content
  *  springboard (or day-one first-moves) rather than the library shelf + filter
- *  tabs. The stable anchors are the stem nav and the Home section label.
+ *  tabs. Wait past the "Reading your vault…" WorkingState so tests see the
+ *  graded treatment (springboard or first-run), not the loading skeleton.
  */
 export async function waitForHome(page: Page): Promise<void> {
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   const home = page.locator(
-    '[data-testid="home-springboard"], [data-testid="home-first-run"], [aria-label="Your apps"]'
+    '[data-testid="home-springboard"], [data-testid="home-first-run"]'
   );
   try {
     await home.first().waitFor({ state: "visible", timeout: 15_000 });
@@ -1011,6 +1012,7 @@ export async function waitForHome(page: Page): Promise<void> {
 /** Open the ⌘K / Ctrl+K command palette (stem Search, with keyboard fallback). */
 export async function openCommandPalette(page: Page): Promise<void> {
   // Stem Search's accessible name is "Search" or "Search ⌘K" depending on host.
+  // Always .first() — other surfaces can also expose a Search control.
   const search = page.getByRole("button", { name: /^Search/u });
   if ((await search.count()) > 0) {
     await search.first().click();
@@ -1020,6 +1022,14 @@ export async function openCommandPalette(page: Page): Promise<void> {
   await page
     .getByRole("dialog", { name: "Command palette" })
     .waitFor({ state: "visible" });
+}
+
+/**
+ * The shell's one status line (#707) replaced toasts. Notes from `showToast` /
+ * `postStatus` land here as polite live-region text.
+ */
+export function statusLine(page: Page) {
+  return page.locator("output[aria-live='polite']").first();
 }
 
 /** Open an installed (or draft) app by its display name via the command palette.

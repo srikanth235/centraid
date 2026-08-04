@@ -16,6 +16,7 @@ import {
   openAppFromPalette,
   seedRemoteGateway,
   startMockGateway,
+  statusLine,
   waitForHome,
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
@@ -33,13 +34,15 @@ import type { MockGateway, TestEnv } from "./fixtures";
  * arm Delete app → confirm dialog.
  */
 
-/** Open the app, arm Delete app in App settings, and wait for the confirm dialog. */
+/** Open the app, arm Delete app in App settings → Manage, wait for confirm. */
 async function openDeleteDialog(
   page: TypeImport_11i4z7t.Page,
   name: string
 ): Promise<void> {
   await openAppFromPalette(page, name);
   await page.getByRole("button", { name: "App settings" }).click();
+  // Delete lives on the Manage tab (danger zone), not Appearance.
+  await page.getByRole("tab", { name: "Manage" }).click();
   const deleteBtn = page.getByRole("button", { name: /Delete app/iu });
   await deleteBtn.click(); // arm
   await deleteBtn.click(); // fire onDelete → confirm dialog
@@ -87,9 +90,7 @@ test("3.1 — deleting a draft removes it via the gateway", async () => {
     await openDeleteDialog(page, "Grocery list");
     await confirmDelete(page);
 
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "Grocery list"'
-    );
+    await expect(statusLine(page)).toContainText('Deleted "Grocery list"');
     expect(deletes(gateway, "draft-grocery").length).toBeGreaterThanOrEqual(1);
     await expect(fs.access(draftDir)).rejects.toThrow();
 
@@ -123,9 +124,7 @@ test("3.2 — deleting a published app deregisters on the gateway and clears loc
     await confirmDelete(page);
 
     // App view closes back to Home; toast confirms.
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "My Todos"'
-    );
+    await expect(statusLine(page)).toContainText('Deleted "My Todos"');
     await expect(page.getByTestId("app-view")).toHaveCount(0);
 
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
@@ -155,9 +154,7 @@ test("3.3 — gateway offline: surfaces an error and keeps the app open", async 
     await openDeleteDialog(page, "Daily Habits");
     await confirmDelete(page);
 
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      /Could not delete/iu
-    );
+    await expect(statusLine(page)).toContainText(/Could not delete/iu);
     // Failed delete leaves the app view mounted (no Home bounce).
     await expect(page.getByTestId("app-view")).toBeVisible();
   } finally {
@@ -197,7 +194,7 @@ test("3.4 — 404 from the gateway surfaces a delete error (not phantom success)
     await confirmDelete(page);
 
     // Client throws on non-2xx → toast error path; no "Deleted …" success toast.
-    await expect(page.locator("[data-global-toast]")).toContainText(
+    await expect(statusLine(page)).toContainText(
       /Could not delete|not_found|delete app/iu,
       {
         timeout: 10_000,
@@ -269,9 +266,7 @@ test("3.5d — Enter confirms the delete", async () => {
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("app-view")).toHaveCount(0);
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "Enter App"'
-    );
+    await expect(statusLine(page)).toContainText('Deleted "Enter App"');
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
   } finally {
     await closeApp(app);

@@ -646,6 +646,7 @@ CI run `30901194404` on head `7126ff85` failed five jobs. Fixes landed on this b
 
 Local evidence for the product fix: `packages/client` `HomeSpringboard.test.tsx` 31/31 green; oxlint switch-exhaustiveness clean on `HomeSpringboard.tsx`; floors ratchet reports ok with approved deviations.
 
+- Follow-up: desktop e2e statusLine helper (toasts→status), Settings via All apps, Manage tab Delete, palette builder drafts.
 - Follow-up: web-e2e locator strict-mode (nav first()) + LCP ceiling fallback to `_intendedCeilingMs` when Binding Layer produces a real LCP entry.
 
 

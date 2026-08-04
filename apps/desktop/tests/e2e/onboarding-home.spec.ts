@@ -207,13 +207,18 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
 });
 
 test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", async () => {
-  gateway.state.apps = [];
+  // First-party empties: day-one first-moves only appear for installed apps
+  // with empty bodies (buildHomeTiles filters to installedIds).
+  gateway.state.apps = [
+    appEntry({ id: "photos", name: "Photos" }),
+    appEntry({ id: "notes", name: "Notes" }),
+  ];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // With no vault content, Home is day-one: first-moves into apps that can
-    // take content, not a "Nothing here yet" library card.
+    // With installed apps but no vault content, Home is day-one: first-moves
+    // into apps that can take content, not a "Nothing here yet" library card.
     await expect(page.getByTestId("home-first-run")).toBeVisible();
     await expect(page.getByTestId("home-first-move").first()).toBeVisible();
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
@@ -252,6 +257,7 @@ test("2.5 — App settings exposes Delete app for a code-store install", async (
     await waitForHome(page);
     await openAppFromPalette(page, "Menu App");
     await page.getByRole("button", { name: "App settings" }).click();
+    await page.getByRole("tab", { name: "Manage" }).click();
     await expect(
       page.getByRole("button", { name: /Delete app/iu })
     ).toBeVisible();
