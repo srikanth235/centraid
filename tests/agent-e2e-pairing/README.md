@@ -1,6 +1,6 @@
 # Agent-driven exploratory QA — device pairing
 
-The manual-QA verification loop for the device-pairing ceremony (issue #289), with promoted journeys scheduled inside the nightly [`.github/workflows/e2e.yml`](../../.github/workflows/e2e.yml) product lane (parallel jobs: lifecycle, ticket-hygiene, cross-network-relay). It shares run/verdict plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but has no Electron or browser — each flow boots the REAL `centraid-gateway` daemon on a fresh data dir, drives the REAL admin CLI as separate processes, and plays the device role with `@centraid/tunnel` over real iroh QUIC.
+The manual-QA verification loop for the device-pairing ceremony (issue #289), with promoted journeys scheduled inside the nightly [`.github/workflows/e2e.yml`](../../.github/workflows/e2e.yml) product lane as one concurrent pairing suite (lifecycle, ticket-hygiene, and cross-network-relay). It shares run/verdict plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but has no Electron or browser — each flow boots the REAL `centraid-gateway` daemon on a fresh data dir, drives the REAL admin CLI as separate processes, and plays the device role with `@centraid/tunnel` over real iroh QUIC.
 
 This is the tier the unit tests can't reach: cross-process seams (the daemon persists host identity + grants in `gateway.db` → the live CLI mints a ticket → a device proves its EndpointId over iroh → enrollment gates the tunnel) exercised the way an owner actually performs the ceremony.
 

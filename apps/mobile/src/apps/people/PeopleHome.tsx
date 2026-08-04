@@ -20,6 +20,7 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import FrameProbe from "../../kit/perf/FrameProbe";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -509,6 +510,7 @@ export default function PeopleHome({
         onClose={closeMerge}
         onPick={merge}
       />
+      <FrameProbe />
     </SafeAreaView>
   );
 }

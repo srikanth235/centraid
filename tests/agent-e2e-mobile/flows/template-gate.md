@@ -8,7 +8,7 @@
 - A running gateway the flow can install/delete against over plain HTTP. Base + token come from env:
   - `MAESTRO_GATEWAY_URL` (default `http://127.0.0.1:18789`)
   - `MAESTRO_GATEWAY_TOKEN` (omit when the dev gateway runs token-less)
-- **The phone must reach the same gateway.** The flow clears app state, mints a run-unique write-role member ticket from `MAESTRO_GATEWAY_URL`, and redeems it through the real ticket-only onboarding UI before installing. Nightly CI supplies a loopback-only, tokenless real gateway host for host-side setup; the phone uses the paired iroh tunnel.
+- **The phone must reach the same gateway.** The flow clears app state, mints a run-unique write-role member ticket from `MAESTRO_GATEWAY_URL`, and redeems it through the real scan-first onboarding UI (opening the paste path for the ticket) before installing. Nightly CI supplies a loopback-only, tokenless real gateway host for host-side setup; the phone uses the paired iroh tunnel.
 - Optional: `MAESTRO_TEMPLATES=notes,tasks` to gate a subset (useful on iOS, where long flows hit driver disconnects — see README caveats; prefer Android for the full sweep).
 
 **Steps (per template):**

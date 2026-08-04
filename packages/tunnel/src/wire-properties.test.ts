@@ -7,6 +7,7 @@ import {
   MAX_HEADER_FRAME_BYTES,
   parsePairQrPayload,
   sanitizeHeaders,
+  tunnelRequestHasBody,
 } from "./protocol.js";
 
 /**
@@ -171,6 +172,23 @@ describe("tunnel wire property", () => {
       ),
       { numRuns: 32, seed: 53283 }
     );
+  });
+
+  test("does not wait for a bodyless metadata request to half-close", () => {
+    expect(tunnelRequestHasBody({ method: "GET", headers: {} })).toBe(false);
+    expect(
+      tunnelRequestHasBody({
+        method: "GET",
+        headers: { "content-length": "3" },
+      })
+    ).toBe(true);
+    expect(tunnelRequestHasBody({ method: "POST", headers: {} })).toBe(true);
+    expect(
+      tunnelRequestHasBody({
+        method: "POST",
+        headers: { "Content-Length": "0" },
+      })
+    ).toBe(false);
   });
 
   test("encodeHeaderFrame is deterministic for the same object shape", () => {

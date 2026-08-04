@@ -134,6 +134,13 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== "1")(
       expect(boxedAuthorize).not.toHaveBeenCalled();
       expect(boxedPair).not.toHaveBeenCalled();
 
+      const metadata = await tunnelRequest(connection, {
+        method: "GET",
+        target: "/metadata",
+      });
+      expect(metadata.status).toBe(200);
+      expect(metadata.body).toStrictEqual(Buffer.alloc(0));
+
       await endpoint.revokeEndpoint(client.endpointId);
       await expect(
         tunnelRequest(connection, {

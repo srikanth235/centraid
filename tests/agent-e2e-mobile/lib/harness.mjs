@@ -24,8 +24,9 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  DISMISS_KEYBOARD_ONBOARDING,
-  retryableTapCommands,
+  completeOnboardingCommands,
+  pasteAndConnectPairingTicketCommands,
+  waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
   METRO_ORIGIN,
@@ -267,33 +268,30 @@ async function runMaestroChunk(
   // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
   // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
   // is already an uploaded artifact path.
+  // Sensitive flows: ticket is a MAESTRO_* env var (YAML keeps a placeholder)
+  // and stdout is quiet. On success discard hierarchy/screenshots; on failure
+  // keep them in the uploaded run dir so CI can diagnose (run 30707656659).
+  // Note: e2e.yml still prunes `*-configure-gateway` debug dirs before upload
+  // as a defense against ticket material on screen; that cleanup is separate.
   const run = sensitive ? spawnQuiet : spawnLive;
-  try {
-    await run(
-      "maestro",
-      [
-        "--udid",
-        state.udid,
-        "test",
-        "--debug-output",
-        debugDir,
-        "--flatten-debug-output",
-        flowFile,
-      ],
-      {
-        cwd: state.screenshotsDir,
-        env: { ...process.env, ...maestroEnv },
-        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
-      }
-    );
-  } finally {
-    // A pairing ticket is a live enrollment capability. Sensitive flows use a
-    // MAESTRO_* variable so the retained YAML contains only a placeholder, run
-    // without console output, and discard Maestro's hierarchy/screenshots even
-    // on failure. The workflow repeats this cleanup before artifact upload as a
-    // defense against abrupt harness termination.
-    if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
-  }
+  await run(
+    "maestro",
+    [
+      "--udid",
+      state.udid,
+      "test",
+      "--debug-output",
+      debugDir,
+      "--flatten-debug-output",
+      flowFile,
+    ],
+    {
+      cwd: state.screenshotsDir,
+      env: { ...process.env, ...maestroEnv },
+      timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
+    }
+  );
+  if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
 }
 
 /**
@@ -309,9 +307,9 @@ async function runMaestroChunk(
  *       ---
  *       - launchApp: { clearState: true }
  *       - extendedWaitUntil: { visible: { text: "Connect your gateway." }, timeout: 30000 }
- *       - takeScreenshot: 01-ticket-onboarding
+ *       - takeScreenshot: 01-scan-first-onboarding
  *     `);
- *     ctx.note('ticket-only onboarding rendered after clearState');
+ *     ctx.note('scan-first onboarding rendered after clearState');
  *     return { pass: true, notes: 'one-line verdict summary' };
  *   });
  *
@@ -319,7 +317,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete either valid identity branch
+ *   ctx.configureGateway()  clear state, open scan-first onboarding, redeem a ticket, and complete either valid identity branch
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -447,94 +445,62 @@ export async function runFlow(slug, fn) {
         "MAESTRO_GATEWAY_URL is required for this mobile journey"
       );
     }
-    const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
+    // A cold iOS simulator can lose the first iroh redemption after the
+    // onboarding UI has already rendered (30842553646). Retry only on iOS:
+    // each attempt mints a fresh one-time ticket and clears app state, so a
+    // failed redemption cannot poison the next attempt. Android keeps its
+    // existing single-attempt behavior until it has its own evidence.
+    const maxPairingAttempts = process.env.MAESTRO_PLATFORM === "ios" ? 2 : 1;
+    const pairAttempt = async (attempt) => {
+      try {
+        const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // a named roster member goes straight to Done, while an unnamed member is
-    // asked for a profile. The gateway URL is used only by the host-side
-    // harness to mint that ticket; the phone reaches the gateway through the
-    // ticket's iroh endpoint.
-    await ctx.run(
-      `appId: ${state.appId}
+        // #603 removed the local/manual-URL bypass: every fresh client must
+        // redeem a real one-time pairing ticket. #643/#644 made the default
+        // path scan-first (showPaste=false): open paste via the secondary
+        // control, then fill the ticket field and submit with the live primary
+        // label "Connect" (not the pre-scan-first "Continue with pasted code").
+        // #634 made the profile step conditional: a named roster member goes
+        // straight to Done, while an unnamed member is asked for a profile.
+        // The gateway URL is used only by the host-side harness to mint that
+        // ticket; the phone reaches the gateway through the ticket's iroh
+        // endpoint.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      text: "Connect your gateway."
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Paste the one-line ticket"
-# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
-# onboarding and is erased before the pairing ticket is entered.
-- inputText: "x"
-${DISMISS_KEYBOARD_ONBOARDING}- eraseText
-# e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
-# multiline React Native TextInput values; successful redemption below is the
-# end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
-# resolved by Maestro without persisting the live capability in this YAML.
-- inputText: \${MAESTRO_PAIRING_TICKET}
-- hideKeyboard
-# The pasted ticket grows the field to ~14 lines, which pushes the submit button
-# off screen — and Maestro matches (and "taps") off-screen elements, so the tap
-# reports COMPLETED while nothing happens and the flow dies later on an
-# unrelated assertion. Scroll it fully into view first.
-- scrollUntilVisible:
-    element:
-      text: "Continue with pasted code"
-    direction: DOWN
-    visibilityPercentage: 100
-- tapOn: "Continue with pasted code"
-# Redemption dials the gateway over iroh; on a cold simulator that handshake is
-# the slowest step in the journey, so budget for the network, not the render.
-- extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
-    timeout: 90000
-`,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
+          "configure-gateway",
+          {
+            maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+            sensitive: true,
+          }
+        );
 
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
-    // Tickets minted above deliberately name their member "Mobile E2E …", so
-    // the normal branch skips the form and greets "Mobile"; the conditional
-    // form path remains covered for gateways that return no roster name.
-    await ctx.run(
-      `appId: ${state.appId}
+        // A second, non-sensitive Maestro chunk keeps the pairing capability
+        // out of retained diagnostics while proving both legitimate identity
+        // paths. Tickets minted above deliberately name their member "Mobile
+        // E2E …", so the normal branch skips the form and greets "Mobile";
+        // the conditional form path remains covered for gateways that return
+        // no roster name.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
-- runFlow:
-    when:
-      visible: "Who's using this phone[?]"
-    commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
-      - inputText: "Nightly"
-      - hideKeyboard
-      - tapOn: "Continue"
-- extendedWaitUntil:
-    visible: "You're all set, (Nightly|Mobile)[.]"
-    timeout: 60000
-# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
-# The button's press animation changes the hierarchy even if navigation was
-# ignored, so retry only while the source control remains visible. The Home
-# marker below remains mandatory and prevents a vacuous pass.
-${retryableTapCommands("Enter Centraid")}
-# The rail remains visible while Home loads, and the async Daily Brief can move
-# every tile when it arrives. Wait for its explicit settled accessibility label
-# so the next tap never uses coordinates captured before that layout shift.
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: 30000
-`,
-      "complete-onboarding"
-    );
-    ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+${completeOnboardingCommands(HOME_READY_MARKER)}`,
+          "complete-onboarding"
+        );
+        ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+        return true;
+      } catch (error) {
+        if (attempt === maxPairingAttempts) throw error;
+        ctx.note(
+          `iOS pairing attempt ${attempt} did not complete; retrying with a fresh ticket`
+        );
+        return pairAttempt(attempt + 1);
+      }
+    };
+    await pairAttempt(1);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage

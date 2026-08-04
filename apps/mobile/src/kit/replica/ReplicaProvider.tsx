@@ -18,6 +18,7 @@ import {
   syncDueNotifications,
   syncNotifications,
 } from "../../lib/notifications-core";
+import { restartTunnel } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
@@ -454,7 +455,13 @@ export function ReplicaProvider({
               ready: true,
               online: false,
               reachability: "gateway-asleep",
-              refresh: async () => setRetryNonce((current) => current + 1),
+              refresh: async () => {
+                // A reconnect wall can be caused by a half-open iroh session
+                // behind a still-running localhost proxy. Recreate that
+                // session before remounting the replica provider.
+                if (compatibility === "reconnect") await restartTunnel();
+                setRetryNonce((current) => current + 1);
+              },
               ...(compatibility ? { compatibility } : {}),
               error: error instanceof Error ? error.message : String(error),
             },

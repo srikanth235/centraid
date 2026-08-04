@@ -187,27 +187,35 @@ function UploadReconciliation(): null {
 function PhotosNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <PhotosStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
-      <PhotosStack.Screen
-        name="PhotoLightbox"
-        component={PhotoLightbox}
-        options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-      />
-      <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-      <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="BackupHealth" component={BackupHealth} />
-      <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
-      <PhotosStack.Screen name="FaceReview" component={FaceReview} />
-      <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
-      <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
-      <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
-    </PhotosStack.Navigator>
+    <View style={{ flex: 1 }}>
+      <PhotosStack.Navigator
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.bg },
+          headerShown: false,
+        }}
+      >
+        <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
+        <PhotosStack.Screen
+          name="PhotoLightbox"
+          component={PhotoLightbox}
+          options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+        />
+        <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
+        <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
+        <PhotosStack.Screen name="BackupHealth" component={BackupHealth} />
+        <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
+        <PhotosStack.Screen name="FaceReview" component={FaceReview} />
+        <PhotosStack.Screen
+          name="DuplicateReview"
+          component={DuplicateReview}
+        />
+        <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
+        <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
+      </PhotosStack.Navigator>
+      {/* A full-screen native-stack cover sits above the root shell, so the
+        root probe cannot be observed while Photos is presented. */}
+      <FrameProbe />
+    </View>
   );
 }
 
@@ -288,13 +296,18 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
 }
 
 function ReplicaCompatibilityGate({
+  active,
   children,
 }: {
+  /** Only block the post-onboarding shell. Pairing can set vault links while
+   * the person is still on Done / profile; covering those steps with the wall
+   * (Android 30711575336) traps Maestro on "Reconnect once" before Home. */
+  active: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { compatibility, refresh } = useReplica();
-  if (!compatibility) return <>{children}</>;
+  if (!active || !compatibility) return <>{children}</>;
   const copy = MOBILE_COMPATIBILITY_WALL_COPY[compatibility];
   return (
     <SafeAreaView
@@ -336,6 +349,11 @@ function ReplicaCompatibilityGate({
           {copy.body}
         </Text>
         <Pressable
+          // testID so Maestro taps the Pressable, not the child TextView
+          // (Android 30745070094: tapOn "Retry connection" hit clickable=false
+          // Text and never called refresh — wall stayed for the full Home wait).
+          testID="replica-compatibility-retry"
+          accessibilityLabel="Retry connection"
           accessibilityRole="button"
           onPress={() => void refresh?.()}
           style={{
@@ -435,7 +453,7 @@ export default function App(): React.JSX.Element | null {
             >
               <AppLockProvider>
                 <ReplicaProvider>
-                  <ReplicaCompatibilityGate>
+                  <ReplicaCompatibilityGate active={onboarded === true}>
                     <UploadReconciliation />
                     <ShareIntentIngest />
                     <NotificationCoordinator />
@@ -568,11 +586,6 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            {/* Last child so its absolute readout sits above the navigator.
-              Renders nothing, installs nothing and schedules nothing outside a
-              `__DEV__` build that a probe has explicitly armed — see
-              src/kit/perf/FrameProbe.tsx. */}
-            <FrameProbe />
             <ToastHost />
           </View>
         </SafeAreaProvider>

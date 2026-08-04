@@ -1,5 +1,5 @@
 {
   "_comment": "Expected @expo/fingerprint hashes. Native/dependency changes must update these values after a human reviews the generated-project diff (#587 E23/F31).",
-  "ios": "b3eb4d41bab44896f569c3e7d65c14dfe0e2afe5",
-  "android": "b22cbe33215ff8aa348c0326f6c261653777f2ee"
+  "ios": "9e3ce7727ea274e0a277713c3d4672eeca35f00d",
+  "android": "991db3b207ec14f4ea1df30e624dbbd05c10fa0a"
 }

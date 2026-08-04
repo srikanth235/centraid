@@ -43,6 +43,64 @@ describe("validate-nightly-wiring structure (#545)", () => {
     expect(failBlock).toMatch(/needs\.mutation-testing\.result/u);
   });
 
+  test("pairing flows run under one suite job", () => {
+    const pairingJobs = [
+      ...e2e.matchAll(/^\s{2}(?<job>pairing-[^:]+):/gmu),
+    ].map(({ groups }) => groups.job);
+    expect(pairingJobs).toEqual(["pairing-e2e"]);
+
+    const pairingBlock = e2e.slice(
+      e2e.indexOf("  pairing-e2e:"),
+      e2e.indexOf("  mutation-testing:")
+    );
+    for (const flow of [
+      "device-pairing-lifecycle.mjs",
+      "pairing-ticket-hygiene.mjs",
+      "cross-network-relay.mjs",
+    ]) {
+      expect(pairingBlock).toContain(flow);
+    }
+    expect(pairingBlock).toMatch(/Run pairing flows concurrently/u);
+    for (const pid of [
+      "lifecycle_pid=$!",
+      "ticket_hygiene_pid=$!",
+      "cross_network_relay_pid=$!",
+    ]) {
+      expect(pairingBlock).toContain(pid);
+    }
+    expect(pairingBlock).toMatch(/Fail if pairing suite failed/u);
+    expect(pairingBlock).toMatch(/nightly-evidence-pairing/u);
+  });
+
+  test("iOS suites fan out from one native build artifact", () => {
+    const iosBlock = e2e.slice(
+      e2e.indexOf("  mobile-e2e-ios-build:"),
+      e2e.indexOf("  mobile-e2e-android:")
+    );
+    expect(iosBlock).toMatch(/mobile-e2e-ios:/u);
+    expect(iosBlock).toMatch(/needs:\s+mobile-e2e-ios-build/u);
+    expect(iosBlock).toMatch(/fail-fast:\s+false/u);
+    expect(iosBlock).toMatch(/nightly-mobile-ios-app/u);
+    expect(iosBlock).toMatch(
+      /nightly-evidence-mobile-ios-\$\{\{ matrix\.suite \}\}/u
+    );
+    for (const suite of [
+      "home-loads",
+      "template-gate",
+      "native-v0-resilience",
+      "volume-proof",
+      "cold-start",
+      "scroll-frames",
+    ]) {
+      // The matrix is a literal list for scheduled/all runs and a JSON
+      // expression for targeted workflow_dispatch runs; both must retain the
+      // complete suite vocabulary in the shipped workflow.
+      expect(iosBlock).toMatch(
+        new RegExp(`(?:- ${suite}|["']${suite}["'])`, "u")
+      );
+    }
+  });
+
   test("a failed issue create is loud, never swallowed (A11)", () => {
     // #557 moved the open-or-update logic out of four near-identical inline
     // shell blocks into scripts/ci/file-tracking-issue.mjs. The A11 invariant

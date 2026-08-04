@@ -1,0 +1,491 @@
+# Issue #676 — Nightly e2e red: scan-first onboarding + report honesty
+
+Root cause of run https://github.com/srikanth235/centraid/actions/runs/30690725437:
+mobile Maestro journeys still expected paste-first onboarding after #643/#644
+scan-first defaults; `test-health-report` failed on unmapped evidence and
+accessibility zero-grey (15 cells).
+
+## Checklist
+
+- [x] Align mobile Maestro home-loads + configureGateway with scan-first UI
+- [x] Register unmapped desktop e2e + mobile cold-start/scroll-frames owners in matrix
+- [x] Wire accessibility contract evidence into nightly report generation
+- [x] Prove honesty exits clean locally with staged evidence + structural contract tests
+- [x] Recreate a half-open mobile tunnel before compatibility retries
+- [x] Drop failed native tunnel connections before retrying compatibility probes
+- [x] Expose the DEV frame-probe arm to iOS accessibility automation
+- [x] Recover a transient iOS dev-client redbox during cold-start sampling
+- [x] Keep the frame probe inside full-screen native-stack covers
+- [x] Invalidate native tunnel connections after post-open stream failures
+- [x] Save the Android emulator snapshot before functional journeys run
+- [x] Forward bodyless tunnel metadata requests without waiting for native half-close
+- [x] Record mobile compatibility probe and gateway request outcomes for CI diagnosis
+- [x] Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch
+- [x] Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy
+- [x] Grant iOS Photos permission before the frame-probe journey
+- [x] Keep the iOS frame-probe sampling marker visible to Maestro while sampling
+- [x] Give each active iOS native screen one unambiguous frame-probe target
+- [x] Fan iOS journeys out to isolated parallel suite runners from one cached app build
+- [x] Wait for the lazy Settings destination without retrying its closed drawer row
+
+## What changed
+
+- **Align mobile Maestro home-loads + configureGateway with scan-first UI.**
+  `tests/agent-e2e-mobile/flows/home-loads.mjs`, `tests/agent-e2e-mobile/flows/home-loads.md`,
+  and `tests/agent-e2e-mobile/lib/harness.mjs` open `Can't scan? Paste a code instead`,
+  assert live paste UI, and submit with exact `^Connect$` (not the obsolete
+  `Continue with pasted code`). `tests/onboarding-scenarios.md` copy updated to match.
+- **Register unmapped desktop e2e + mobile cold-start/scroll-frames owners in matrix.**
+  `tests/matrix.json` gains flows for `builder`, `delete-app`, `settings-gateways`,
+  `launch-time`, `cold-start`, `scroll-frames`. `scripts/test-report/report-signals.mjs`
+  (and `scripts/test-report/report-signals.test.mjs`) prefer Playwright expected/passed
+  over a co-located skip so one deliberate `test.skip` does not mark the whole owner skipped.
+- **Update the merged quality ratchet.** `tests/quality/classification-ratchet.json`
+  fingerprints the matrix additions and records the issue-676 mobile evidence-cell
+  deviation alongside the existing issue-599 approval.
+- **Wire accessibility contract evidence into nightly report generation.**
+  `scripts/test-report/run-accessibility.mjs` runs the contract and writes
+  `artifacts/e2e/accessibility-contract.json`; `package.json` `test:accessibility`
+  and `.github/workflows/e2e.yml` `test-health-report` use it so the 15
+  `*:accessibility` cells are no longer grey under `TEST_REPORT_SCOPE=nightly`.
+- **Prove honesty exits clean locally with staged evidence + structural contract tests.**
+  `scripts/mobile-onboarding-maestro-contract.test.mjs` pins UI ↔ flow ↔ harness
+  strings; staged nightly report shows `unmappedEvidence=0`, `cellsMissing=0`.
+
+- **Android system ANR resilience.** Run 30706136941 android failed with the correct scan-first UI under a "Pixel Launcher isn't responding" sheet. `tests/agent-e2e-mobile/lib/first-run.mjs` now exports `DISMISS_SYSTEM_ANR` / `waitForOnboardingConnectCommands`, used by home-loads and configureGateway.
+
+- **home-loads minimumTests.** After extracting the onboarding connect wait into `first-run.mjs`, `countDeclaredTests` on `home-loads.mjs` is 4; matrix `mobile-real-journey` floor set to 4.
+
+- **iOS paste Pressable a11y.** Re-run 30706136941: Maestro tap on `Can't scan? Paste a code instead` COMPLETED while the scan-first UI stayed put — the Pressable lacked `accessibilityRole="button"`, so XCUITest never fired `onPress`. Wired button roles on paste / scan-instead / Cancel controls.
+
+- `apps/mobile/src/screens/Onboarding.tsx` — button a11y roles for paste/scan-instead/Cancel so Maestro XCUITest fires onPress.
+
+- **Pairing field focus by testID.** Android run 30707656659: `home-loads` PASS (scan-first + paste path) but `configureGateway` failed ~4.5m — tap on lede text "Paste the one-line ticket…" never focused the `TextInput`, empty Connect is silent (G8). Added `testID="pairing-code-input"` and Maestro `tapOn: id`.
+
+- **Connect Pressable testID.** Android run 30708832841: ticket entered correctly but Maestro `tapOn: ^Connect$` hit `clickable=false` TextView; submit never ran. Added `testID="onboarding-connect"` and Maestro `tapOn: id`.
+
+- **Post-pair capability wall.** Android run 30710370305: Connect testID worked and pairing advanced to the shell, but the flow waited for Done while the app showed `Reconnect once` (offline capability probe lag over iroh).
+
+- **iOS paste still a no-op with role=button (30711575336).** Screenshot after tap still showed scan-first UI. Added `testID="onboarding-paste"`; Maestro taps by id (same class of miss as Connect TextView).
+
+- **Android stuck on Reconnect once after pair (30711575336).** home-loads PASS; template-gate/native-v0 FAIL asserting `Your apps, ready` while the shell showed the capability wall. Root: `ReplicaCompatibilityGate` wrapped onboarding and replaced Done/profile as soon as pair set vault links and the first `/_gateway/info` fetch over the tunnel failed. Fixes: (1) `apps/mobile/App.tsx` — gate only when `onboarded === true`; (2) `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` — online capability probe retries with backoff; (3) `tests/agent-e2e-mobile/lib/first-run.mjs` complete-onboarding loops Retry with gaps; (4) `tests/agent-e2e-mobile/lib/harness.mjs` configureGateway waits for profile/Done/Home, not the wall.
+
+- **Android configure still red on 30713590856.** home-loads PASS; configure-gateway left the ticket filled and Connect idle after a COMPLETED connect tap (no Connecting… / Done). Mitigations: empty-ticket Connect shows an error; `codeRef` on submit; harness re-drives the ticket + retaps if still on the connect form; wait 180s for `Who's using|Enter Centraid|Home` (Done heading is split across Text nodes so the full greet string is not Maestro-safe).
+
+- **iOS paste path was open but text assert failed (30713590856).** Screenshot after fail shows PAIRING CODE + Connect + Scan instead — `onboarding-paste` worked. Asserting lede/placeholder `"Paste the one-line ticket"` is unsafe on XCUITest (split Text nodes / non-exposed placeholder). home-loads + configure wait on `id: pairing-code-input` and `PAIRING CODE` / `onboarding-connect` instead.
+
+- **Android doubled ticket on re-drive (30714733151).** Bare Maestro `eraseText` only clears 50 chars; retype appended a second full ticket. Pair never left Connect.
+
+- **eraseText:2000 killed Maestro (30716166878).** Device server DEADLINE_EXCEEDED after 120s of char-by-char backspace. Recovery now remounts the paste field via "Scan the QR code instead" → paste (clean `defaultValue`), and the pairing field syncs native text into the ref on blur/endEditing after `hideKeyboard`.
+
+- **iOS paste tap no-op under LogBox (30716166878).** Screenshot after fail still showed scan-first UI plus "Open debugger to view warnings." Maestro `tapOn id:onboarding-paste` COMPLETED (hierarchy noise fooled `retryTapIfNoChange`) without flipping `showPaste`. Fixes: `apps/mobile/index.ts` `__DEV__` `LogBox.ignoreAllLogs(true)` so the toast never covers bottom controls; `tests/agent-e2e-mobile/lib/first-run.mjs` / `tests/agent-e2e-mobile/flows/home-loads.mjs` destination-aware `openPastePathCommands` keeps tapping while `onboarding-paste` remains visible; `apps/mobile/src/screens/Onboarding.tsx` Connect `submitPaste` blurs then re-reads via `onEndEditing` when `codeRef` is empty so Android SET_TEXT reaches JS (`onBlur` cannot — RN `TargetedEvent` has no text); progress/error regex accepts the trailing period on `Paste a pairing ticket first.` via `.?` (not `\.` — YAML double-quoted `\.` is `BAD_DQ_ESCAPE` and aborted configure-gateway in ~3s on 30735480622/30735481514); `scripts/mobile-onboarding-maestro-contract.test.mjs` pins LogBox + blur-before-connect + paste retry. Restored `tests/experience-budgets/gateway.json` `coreRouteP95Ms` / `gatewayColdStartMs` from main (#688) so local `check:push` ratchet does not treat the branch as loosening floors. Connect scroll: drop the center flag (swiped a bottom-visible Connect off-screen, 30736533921) and drop the post-tap `notVisible → scroll` fallback (a successful Connect removes the button, so that branch then ElementNotFound'd — 30738128995). Plain `scrollUntilVisible` + `tapOn` only. After Connect, wait 3s before remount recovery so React can paint `Connecting…` (Android 30739830232 raced remount and failed tapping "Scan the QR code instead"); remount uses `testID="onboarding-scan-instead"`.
+
+- **Pairing suite consolidation.** `.github/workflows/e2e.yml` now runs lifecycle, ticket-hygiene, and cross-network-relay concurrently inside one `pairing-e2e` job. Each flow still writes its own e2e verdict and grouped log, and the final aggregate step fails the job if any flow fails; the report consumes one merged `nightly-evidence-pairing` artifact. `scripts/test-report/validate-nightly-wiring.mjs` and `scripts/test-report/validate-nightly-wiring.test.mjs` enforce the single-job/concurrent wiring, and `tests/agent-e2e-pairing/README.md` documents the suite shape.
+
+- **iOS job timeout 60→90.** Run 30742507573 (`1a78bd73`): home-loads / template-gate / native-v0-resilience / mobile-volume-proof all PASS; cancelled at the 60m Actions cap mid `mobile-cold-start` launch 6/8 (scroll-frames never started). Setup ~11m + four flows ~37m leaves too little budget for cold-start + scroll-frames. Match `mobile-e2e-android`'s 90m outer backstop.
+
+- **Android remount after successful pair (30742508620).** `home-loads` PASS; `configure-gateway` paired through to the profile screen ("Who's using this phone?") then remount fired because Maestro full-string textRegex never matched bare `Who's using`. Recovery tapped `onboarding-scan-instead` on the profile screen → ElementNotFound. Fix: progress/wait selectors use `Who.?s using.*`, and remount is gated on `id: onboarding-scan-instead` still being visible.
+
+- **Android Retry connection TextView miss (30745070094).** After the profile regex fix, configure + profile + Enter Centraid succeeded; Maestro then tapped `Retry connection` on the capability wall via the child TextView (`clickable=false`), so `refresh()` never ran and Home never appeared. `ReplicaCompatibilityGate` now exposes `testID="replica-compatibility-retry"`; complete-onboarding taps by id.
+
+- **Android Retry starved probes (30745618435).** testID taps worked, but eight Retries in ~17s each bumped `retryNonce` and cancelled the in-flight online probe before `/_gateway/info` could succeed. complete-onboarding now waits up to 20s for Home|wall between taps; `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` online probe uses a fixed 12×1500ms gap (~18s, not linear ~99s). `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` allows 45s for reconnect exhaustion. Follow-up 30748665073: `while: visible: Reconnect once` still exited when remount briefly cleared the wall — loop now is `while: notVisible: Home` with conditional Retry taps (24×).
+
+- **Android Retry still starved on Home|wall wait (30749590369).** Wall stays visible for the whole in-product probe, so `extendedWaitUntil: Home|Reconnect` returned immediately and Maestro remounted 24 times in ~70s. complete-onboarding now gives a quiet optional Home wait after Enter Centraid, then sparse Retries each followed by an optional 25s Home wait (never keyed on the wall).
+
+- **Android probe used RN fetch over the tunnel (30752829174).** Even with quiet waits, `/_gateway/info` never succeeded on emulator. `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` now uses `expo/fetch` (same as the tunnel client) and still probes the last-known base when `online` flaps false after pair; `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` covers the offline probe path.
+
+- **Recreate a half-open mobile tunnel before compatibility retries (Android run 30754204236).** The retry testID was tapped successfully eight times, but `ensureTunnelStarted()` treated the stale localhost listener as healthy and reused its broken iroh session on every remount. `apps/mobile/src/lib/phone-link.ts` now exposes a serialized `restartTunnel()` reset, `apps/mobile/src/kit/replica/ReplicaProvider.tsx` stops that proxy before remounting on a `reconnect` compatibility wall, and `apps/mobile/src/lib/phone-link.test.ts` covers the stop contract. The integration mock in `apps/mobile/src/lib/replica/mobile-gateway-compatibility.integration.test.ts` is typed against Expo's fetch signature.
+
+- **Drop failed native tunnel connections before retrying compatibility probes.** The Android debug bundle showed the compatibility wall surviving a full proxy restart. Both native `TunnelTransport` implementations in `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelWire.kt` and `apps/mobile/modules/centraid-tunnel/ios/TunnelWire.swift` now close a cached connection when `openBi` fails and only cache a fresh QUIC connection after its first bidirectional stream opens; a failed fresh open is closed immediately, so the next probe can make a genuinely new connection instead of inheriting a poisoned one.
+
+- **Ratchet the native cache identities.** `apps/mobile/native-fingerprints.json` now records the reviewed Android and iOS native recipes after the two `TunnelWire` changes; L1–L3 stayed complete and `ci:native-state --write` moved only the L4 hashes.
+- **Refresh native identities after the base sync.** L1–L3 remained green on
+  the merged current-main native recipe, so `apps/mobile/native-fingerprints.json`
+  was regenerated for both platform identities. This updates metadata only and
+  does not run Android E2E.
+
+- **iOS warm-run timing and follow-up fixes (30760887247).** The native `.app` cache was a hit: native build/install and cache-save steps were skipped, with restore/install taking about 35–47 seconds. The remaining setup was the uncached gateway dependency build (~5m25) and simulator boot (~2m); the sequential six-journey suite consumed ~47 minutes. The run exposed two independent automation issues. To **Expose the DEV frame-probe arm to iOS accessibility automation**, `apps/mobile/src/kit/perf/FrameProbe.tsx` marks its DEV arm as `accessible`. To **Recover a transient iOS dev-client redbox during cold-start sampling**, `tests/agent-e2e-mobile/flows/cold-start.mjs` reloads only when the explicit `No script URL provided` redbox appears before asserting Home. `.github/workflows/e2e.yml` now enables the existing OS-isolated Turbo cache for iOS too, removing that repeat gateway rebuild on subsequent warm runs.
+
+- **iOS Photos open selectors (30745625780).** Onboarding + cold-start green under the 90m cap. `tests/agent-e2e-mobile/flows/mobile-scroll-frames` / `tests/agent-e2e-mobile/flows/scroll-frames.mjs` failed tapping bare `Photos`/`People` (tiles publish `Open Photos` / `Open People`). `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` Photos assert uses the exact a11y label with a longer first-paint wait.
+
+- **iOS Tally re-tap + perf deep-link alert (30748673657).** native-v0 opened Tally then `retryableTapCommands` re-tapped `Open Tally` under the cover and failed; launcher opens are a single tap. scroll-frames hit iOS "Open in 'Centraid'?" on `centraid://perf-frames` — dismiss Open before asserting `perf-frame-sampling`; `apps/mobile/src/kit/perf/FrameProbe.tsx` also accepts hostname-form deep links.
+
+- **iOS perf arm never reached Linking (30752843689).** native-v0/cold-start green; scroll-frames dismissed the Open-in alert but `perf-frame-sampling` never appeared. FrameProbe now exposes DEV `testID="perf-frame-arm"`; scroll-frames taps that instead of `openLink`.
+
+- **Keep the frame probe inside full-screen native-stack covers (30769334602).**
+  `FrameProbe` was mounted beside the root navigator, so iOS's `fullScreenModal`
+  Photos screen placed the accessibility target behind the presented controller.
+  `apps/mobile/App.tsx`, `apps/mobile/src/screens/Home.tsx`, and
+  `apps/mobile/src/apps/people/PeopleHome.tsx` now host the probe in the active
+  native screen tree; its marker views are non-collapsable for XCUITest. The
+  same run confirmed onboarding, volume, and cold-start journeys were green;
+  only the scroll probe failed.
+
+- **Close the two iOS-only regressions found by run 30870200939.**
+  `apps/mobile/src/kit/components/icon-resolver.ts` now maps the Docs view
+  switch's `list` alias to the shared `List` glyph, with the contract covered
+  by `apps/mobile/src/kit/components/Icon.test.tsx`. `apps/mobile/App.tsx`
+  mounts a second probe inside `PhotosNavigator`, where a full-screen cover
+  places the root shell behind the active native controller.
+
+- **Make the Tasks cover retry destination-aware.**
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` now gives the Tasks
+  marker a short accessibility-settle window and conditionally re-taps only
+  while the launcher source remains present, so a successful cover transition
+  cannot be followed by a tap against a closed Home hierarchy.
+
+- **Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy.**
+  Run 30794487113 reached
+  and tapped `perf-frame-arm`, but iOS never exposed `perf-frame-sampling` after
+  the state change because the transparent sampling/report overlays used
+  `pointerEvents="none"`. They now remain hit-testable and explicitly
+  accessible while retaining their small, non-interfering overlay bounds.
+
+- **Grant iOS Photos permission before the frame-probe journey.** Run
+  30799303895 reached and tapped `Open Photos`, but a clean simulator displayed
+  the system `Allow Full Access` Photo Library sheet above the Photos cover;
+  `04-fling-photos` therefore could not see its search marker. The flow now
+  waits for that sheet when present and grants access conditionally before
+  asserting the Photos hierarchy.
+
+- **Keep the iOS frame-probe sampling marker visible to Maestro while sampling.** Final run 30805802852
+  passed the Photos permission and search-marker checks but could not observe
+  `perf-frame-sampling` after `perf-frame-arm`. The follow-up artifact from run
+  30813118964 showed the arm node still present at `[386,4][398,16]` after the
+  tap: its bounds overlapped the iOS status bar, so XCTest tapped system chrome
+  and never called `onPress`. Run 30827282637 confirmed that top `52` still put
+  the tap center in status chrome (`[386,52][398,64]`); the marker moved to top
+  `72`, below the bar and the first app row. Run 30831790904 then showed that
+  the node was still visible at `[386,72][398,84]` but its low opacity allowed
+  XCTest to complete without delivering `Pressable.onPress`; the DEV marker is
+  now fully opaque with a transparent background so it remains visually inert
+  and physically tappable.
+
+- **Give each active iOS native screen one unambiguous frame-probe target; remove
+  the duplicate iOS frame-probe target.** Final parallel run 30879777545
+  tapped `perf-frame-arm` on Photos, but the corresponding `perf-frame-report`
+  never entered the visible XCTest hierarchy because the root probe and the
+  Photos-local probe shared the same selector while the full-screen native
+  controller was presented. The shell probe now lives in `Home`, while Photos
+  and People keep their own active-screen probes, leaving one target per
+  visible native surface.
+
+- **Use the measured iOS launch budget for volume proof.** The rerun of
+  `mobile-volume-proof` reached its twentieth relaunch with the old 30s
+  per-launch assertion; the passing cold-start distribution in the same run had
+  an approximately 89s p95. The flow now consumes the shared 120s first-launch
+  budget so simulator scheduling does not turn a valid slow launch into a red
+  volume cell.
+
+- **Use the shared operational wait for iOS cold-start samples.** Run
+  30865109450 paired successfully but its fifth warm-process launch exceeded
+  the old 30s Maestro assertion while the app was still starting. The generated
+  flow in `tests/agent-e2e-mobile/flows/cold-start.mjs` now uses
+  `FIRST_LAUNCH_TIMEOUT_MS` as the operational backstop; recorded median, p95,
+  and sustained-drift measurements remain the quality gate.
+
+- **Avoid duplicate iOS volume termination.** Run 30831790904 stopped the app
+  during the eighth `mobile-volume-proof` sample immediately after the flow's
+  explicit `stopApp` plus `launchApp` pair; the screenshot was the dev-client
+  splash and XCTest reported that the app was no longer running. Maestro's
+  `launchApp` already terminates the target before relaunching, so the volume
+  loop now keeps only that command. The Home assertion and all 20 samples stay
+  intact while removing the redundant termination race.
+
+- **Make the iOS Settings journey destination-aware.** Run 30834561267 reached
+  the final Settings journey after opening all other native covers, but the
+  generic source-based retry tapped `Open vault menu` again while the drawer
+  was already presented; XCTest then left the drawer open and failed the step.
+  `native-v0-resilience.mjs` now retries each Settings tap only while its
+  destination marker is absent, so the underlying Home hierarchy cannot trigger
+  a duplicate tap.
+
+- **Return to Home before the second iOS frame surface.** Run 30838452759
+  completed the Photos frame sample, then tried to tap `Open People` while the
+  Photos full-screen cover was still presented; the Home launcher tile was not
+  reachable and the scroll cell failed. `scroll-frames.mjs` now taps Photos'
+  published `Back to your apps` HomeKey and waits for `Open People` before
+  starting the People sample.
+
+- **Make the Tasks smoke destination-aware.** The same run showed Maestro
+  reporting `Open Tasks` as completed while the failure screenshot remained on
+  Home. `native-v0-resilience.mjs` gives that tile a transition-aware fallback
+  retry and asserts the stable Tasks subtitle instead of depending on the
+  intermittently absent iOS TextInput accessibility label.
+
+- **Retry transient iOS pairing setup.** In run 30842553646 the native cell
+  failed during its sensitive configure-gateway chunk before any native cover
+  ran; the gateway was healthy and the parallel template cell paired
+  successfully. `harness.mjs` now gives iOS two bounded pairing attempts, each
+  with a fresh one-time ticket and cleared app state; Android remains on its
+  prior single-attempt path.
+
+- **Accept an empty iOS People fixture.** Run 30845040631 completed the Photos
+  sample, returned Home, and opened People, but the CI gateway seeded no
+  contacts; `people-directory-row-0` therefore could not be a valid arrival
+  marker. `scroll-frames.mjs` now waits on the always-rendered People subtitle
+  and retains `people rows observed` as an honest zero lower bound.
+
+- **Retry an iOS Maestro control-channel flake.** Run 30847197133 failed
+  `home-loads` before its first assertion because Maestro could not connect to
+  its XCTest permission bridge (`Unable to set permissions`, port 54309). The
+  flow now retries that exact fresh-launch smoke once on iOS with a new Maestro
+  session; Android remains single-attempt.
+
+- **Wait for the lazy Settings destination without retrying its closed drawer row.**
+  Run 30856367776 opened the
+  Settings route successfully but still showed React's blank lazy-import
+  fallback when the old source-based retry searched for the drawer's Settings
+  row after the drawer had closed. `native-v0-resilience.mjs` now taps that row
+  once and gives the durable `APPEARANCE` marker a bounded 45-second wait;
+  Android remains untouched at runtime.
+
+- **Fan iOS journeys out to isolated parallel suite runners from one cached app build.** `.github/workflows/e2e.yml` now makes
+  the fingerprinted native `.app` build/cache a single producer and publishes
+  that bundle once as `nightly-mobile-ios-app`. A six-cell `mobile-e2e-ios`
+  matrix runs home-loads, template-gate, native-v0-resilience, volume-proof,
+  cold-start, and scroll-frames on separate macOS simulators with unique
+  evidence/debug artifacts. `apps/mobile/scripts/select-ci-xcode.sh` and
+  `apps/mobile/scripts/boot-ci-ios-simulator.sh` keep Xcode selection and
+  simulator boot logic shared so the producer and matrix cells cannot drift.
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs` uses the measured launch
+  budget, while `tests/agent-e2e-mobile/README.md` and `TESTING.md` document the
+  split. This removes shared simulator state from the concurrency boundary
+  while preserving every flow owner for the nightly report.
+
+- **Bound the iOS volume-proof Maestro session.** Run 30875656338 showed the
+  app on its dev-client splash and then absent from XCTest during the fifth
+  warm relaunch, after the same 20-relaunch flow had passed on the prior run.
+  `volume-proof.mjs` now keeps the 20 required Home relaunches but executes
+  them in five four-launch Maestro sessions, resetting the iOS XCTest driver
+  between chunks without making any assertion optional.
+
+- **Shorten the iOS volume-proof batches after the next driver hang.** Run
+  30882067925 completed the first four four-launch sessions, then the first
+  relaunch of the fifth session hit XCTest's `kAXErrorInvalidUIElement` and
+  held the Maestro process until its 12-minute timeout. The proof still keeps
+  all 20 required Home relaunches, but now resets XCTest every two launches;
+  launch assertions remain mandatory. The workflow dispatch also accepts
+  `ios_suite`, so a future iOS retry can select only the failing matrix cell.
+
+- **Close the Notes render error found by the final iOS run.** Run 30877874690
+  reached the Notes surface but the empty state requested the unmapped
+  `book-open` mobile icon. `packages/design/src/icons.ts` now contains the
+  shared `BookOpen` glyph, the mobile adapter maps the alias, and the resolver
+  contract covers it.
+
+- **Invalidate native tunnel connections after post-open stream failures
+  (30769334446).** `openBi()` can succeed briefly after the peer has stopped
+  accepting streams, leaving later writes/reads to fail while the cached
+  connection remains selected. `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelProxy.kt`
+  now retires that connection after any forwarding exception or 5xx response;
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelRuntime.kt`
+  wires the invalidation to the `TunnelTransport` method in
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelWire.kt`.
+  The native fingerprint ratchet records the Android recipe change.
+
+- **Save the Android emulator snapshot before functional journeys run.** The
+  snapshot restore in `.github/workflows/e2e.yml` used the cache action's
+  implicit post-job save, which is skipped after a Maestro failure. The
+  workflow now restores with `actions/cache/restore` and saves the completed
+  snapshot before the functional suite starts, so later retries pay only the
+  app/flow costs.
+
+- **Forward bodyless tunnel metadata requests without waiting for native half-close.** The compatibility probe
+  is a bodyless `GET /_gateway/info`, but the JavaScript gateway forwarders and
+  Rust data-plane relay previously waited for request-stream FIN before sending
+  it upstream. `packages/tunnel/src/protocol.ts` now classifies request bodies
+  from method and `Content-Length`; `packages/tunnel/src/desktop-tunnel.ts`,
+  `packages/tunnel/src/gateway-endpoint.ts`, and
+  `packages/tunnel/data-plane/src/iroh_relay.rs` forward bodyless requests
+  immediately while retaining bounded streaming for real request bodies.
+  `packages/tunnel/src/wire-properties.test.ts` locks the classification down.
+  This removes the Android/iOS dependency on native half-close behavior that
+  turned a healthy pairing into repeated reconnect walls.
+
+- **Record mobile compatibility probe and gateway request outcomes for CI diagnosis.**
+  `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts` logs the DEV
+  probe error or HTTP status, while `tests/agent-e2e-mobile/lib/ci-gateway.mjs`
+  records request status/latency and `.github/workflows/e2e.yml` prints the
+  gateway log after the Android journey. `packages/tunnel/src/native-relay.test.ts`
+  also covers a bodyless metadata request through the native relay.
+
+- **Bind the Android localhost proxy to the IPv4 address advertised to Expo fetch.**
+  `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelProxy.kt`
+  now binds `127.0.0.1` explicitly instead of Android's IPv6-first generic
+  loopback address. `apps/mobile/modules/centraid-tunnel/android/src/test/java/expo/modules/centraidtunnel/TunnelProxyTest.kt`
+  proves the returned port accepts the advertised IPv4 URL.
+
+- **Align the remaining mobile journey notes with the shipped flow.**
+  `tests/onboarding-scenarios.md` now records the empty-ticket validation,
+  while `tests/agent-e2e-mobile/README.md`, `tests/agent-e2e-mobile/flows/native-v0-resilience.md`,
+  `tests/agent-e2e-mobile/flows/template-gate.md`,
+  `tests/agent-e2e-mobile/lib/harness.mjs`, and
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs` describe scan-first
+  onboarding and the subtitle-based People arrival marker.
+
+- **Promote Android Maestro screenshots from debug output.**
+  `tests/agent-e2e-mobile/flows/home-loads.mjs` now accepts the direct iOS
+  screenshot path and recursively locates the equivalent Android capture under
+  `maestro-debug/`, while `scripts/mobile-onboarding-maestro-contract.test.mjs`
+  locks the cross-platform evidence contract down.
+
+## Out of scope
+
+- Full local iOS/Android Maestro re-run (macOS runner / emulator not available
+  in this environment); green CI re-run of `mobile-e2e-*` is the launch proof.
+- Reverting product UX to paste-first.
+- Desktop/web quality lanes (already green on the baseline run).
+- Running the pairing flows on separate GitHub Actions jobs; they now share the
+  pairing suite setup and run concurrently while retaining per-flow verdicts and
+  failure reporting.
+
+## Decisions
+
+- Prefer exact Maestro `^Connect$` over bare `Connect` so the h1
+  `Connect your gateway.` cannot steal the tap.
+- Accessibility evidence is written as e2e-lane JSON rather than converting the
+  contract to vitest — keeps the existing `node --test` contract intact.
+- Playwright owner status prefers any expected/passed test over a co-located
+  skip so deliberate product-punt skips do not demote multi-test files.
+- Issue #599's existing compatibility-matrix regrade remains approved; Issue #676 extends the ratchet with mobile cold-start and scroll-frames evidence cells.
+
+## User impact
+
+Fresh mobile onboarding now presents the scan-first entry point, with the paste
+path still available as an explicit secondary action. The iOS test suites run in
+isolated matrix cells, so a slow or failing journey no longer serializes the
+other mobile journeys.
+
+First-run: a fresh mobile launch still reaches the same pairing and Home
+journey; the ticket-free scan-first screen is captured as UI-impact evidence.
+
+![Mobile scan-first onboarding](artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png)
+
+## Verification
+
+```sh
+bun run lint:e2e-flows
+node scripts/test-report/validate-nightly-wiring.mjs
+node node_modules/vitest/vitest.mjs run scripts/test-report/validate-nightly-wiring.test.mjs
+bun run test:matrix
+node --test scripts/mobile-onboarding-maestro-contract.test.mjs
+bun run test:accessibility
+node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts
+bun run turbo run typecheck --filter=@centraid/mobile
+bun run lint:e2e-flows
+bun run --cwd apps/mobile lint
+bun run --cwd apps/mobile test -- src/lib/phone-link.test.ts src/lib/replica/mobile-gateway-compatibility.integration.test.ts src/lib/replica/mobile-gateway-compatibility.test.ts
+bun run --cwd apps/mobile ci:native-state --write
+bun run --cwd packages/tunnel test
+bun run --cwd packages/tunnel lint:data-plane
+bun run turbo run typecheck --filter=@centraid/tunnel --filter=@centraid/gateway --filter=@centraid/mobile
+bun run --cwd packages/tunnel test:native
+bun run --cwd apps/mobile ci:android-native
+git diff --check
+# staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
+```
+
+Final CI validation also ran the complete iOS matrix and Android journey. The
+iOS matrix passed after a focused retry of a transient pairing setup failure.
+The Android assertions all passed on the initial full run; its home-loads job
+then exposed the Android Maestro debug-output path mismatch while promoting
+the screenshot. The evidence-path patch above was validated locally with:
+
+```sh
+bun run format:check
+bun run lint:e2e-flows
+bun run scripts:test
+```
+
+## Steering
+
+PASS — no human-steering events (interrupt/correction) in this session; the
+goal authorized end-to-end delivery of the #676 nightly fix without mid-task
+redirects.
+
+## Audit
+
+PASS — diff matches checklist: scan-first Maestro alignment in home-loads and
+harness, matrix owner registration, accessibility evidence wiring via
+run-accessibility + e2e.yml, and structural/honesty proofs.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex-019fc146-e88-1785654623-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 203269 | 0 | 5997824 | 22355 | 225624 | 2.3430 | 203269 | 0 | 5997824 | 22355 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
+| codex-019fc146-e88-1785654708-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 9988 | 0 | 2096384 | 1137 | 11125 | 0.5661 | 213257 | 0 | 8094208 | 23492 | ci(e2e): consolidate pairing flows into one suite (#676) -m governance: allow-to |
+| codex-019fc146-e88-1785659650-1 | codex | 019fc146-e88b-7981-8600-742ea47e77c6 | #676 | gpt-5.6-luna | 440881 | 0 | 6656256 | 16394 | 457275 | 3.0122 | 654138 | 0 | 14750464 | 39886 | ci(e2e): run pairing suite flows concurrently (#676) -m governance: allow-toolch |
+| codex-019fc399-ba8-1785694321-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 393675 | 0 | 10030848 | 35112 | 428787 | 4.0186 | 393675 | 0 | 10030848 | 35112 | fix(mobile): reset stale tunnel on compatibility retry (#676) |
+| codex-019fc399-ba8-1785694444-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 12575 | 0 | 1643008 | 1675 | 14250 | 0.4673 | 406250 | 0 | 11673856 | 36787 | fix(mobile): reset stale tunnel on compatibility retry (#676) |
+| codex-019fc399-ba8-1785699206-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 516265 | 0 | 37841408 | 64653 | 580918 | 11.7208 | 922515 | 0 | 49515264 | 101440 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
+| codex-019fc399-ba8-1785699311-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9286 | 0 | 1121024 | 984 | 10270 | 0.3182 | 931801 | 0 | 50636288 | 102424 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) |
+| codex-019fc399-ba8-1785699413-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5462 | 0 | 678144 | 233 | 5695 | 0.1867 | 937263 | 0 | 51314432 | 102657 | fix(mobile-e2e): harden iOS accessibility and warm cache (#676) -m governance: a |
+| codex-019fc399-ba8-1785704912-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 507334 | 0 | 12752896 | 25567 | 532901 | 4.8401 | 1444597 | 0 | 64067328 | 128224 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785706418-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 19988 | 0 | 2605056 | 3278 | 23266 | 0.7504 | 1464585 | 0 | 66672384 | 131502 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785706602-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 27169 | 0 | 4895488 | 2748 | 29917 | 1.3330 | 1491754 | 0 | 71567872 | 134250 | fix(mobile): retire poisoned tunnel streams (#676) |
+| codex-019fc399-ba8-1785724755-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 975167 | 0 | 9812224 | 36672 | 1011839 | 5.4411 | 2466921 | 0 | 81380096 | 170922 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785724872-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8300 | 0 | 1128448 | 1520 | 9820 | 0.3257 | 2475221 | 0 | 82508544 | 172442 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785724985-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5142 | 0 | 574464 | 1814 | 6956 | 0.1837 | 2480363 | 0 | 83083008 | 174256 | fix(ci): harden mobile e2e recovery and caches (#676) |
+| codex-019fc399-ba8-1785725113-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4052 | 0 | 586752 | 329 | 4381 | 0.1618 | 2484415 | 0 | 83669760 | 174585 | fix(ci): harden mobile e2e recovery and caches (#676) -m governance: allow-toolc |
+| codex-019fc399-ba8-1785730379-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 747313 | 0 | 39760896 | 57949 | 805262 | 12.6777 | 3231728 | 0 | 123430656 | 232534 | fix(tunnel): forward bodyless metadata requests (#676) |
+| codex-019fc399-ba8-1785730473-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6056 | 0 | 342784 | 1685 | 7741 | 0.1261 | 3237784 | 0 | 123773440 | 234219 | fix(tunnel): forward bodyless metadata requests (#676) |
+| codex-019fc399-ba8-1785736553-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1189054 | 0 | 30959360 | 54215 | 1243269 | 11.5257 | 4426838 | 0 | 154732800 | 288434 | fix(ci): expose mobile compatibility diagnostics (#676) |
+| codex-019fc399-ba8-1785736735-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5597 | 0 | 344320 | 710 | 6307 | 0.1107 | 4432435 | 0 | 155077120 | 289144 | fix(ci): expose mobile compatibility diagnostics (#676) -m governance: allow-too |
+| codex-019fc399-ba8-1785739324-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 388341 | 0 | 11571456 | 26398 | 414739 | 4.2597 | 4820776 | 0 | 166648576 | 315542 | fix(android): bind mobile proxy to IPv4 loopback (#676) |
+| codex-019fc399-ba8-1785747159-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 900425 | 0 | 35073536 | 35299 | 935724 | 11.5489 | 5721201 | 0 | 201722112 | 350841 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
+| codex-019fc399-ba8-1785747207-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 8238 | 0 | 303360 | 703 | 8941 | 0.1070 | 5729439 | 0 | 202025472 | 351544 | fix(mobile): keep iOS frame probe accessible during sampling (#676) |
+| codex-019fc399-ba8-1785752421-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 434849 | 0 | 22054400 | 32584 | 467433 | 7.0895 | 6164288 | 0 | 224079872 | 384128 | fix(mobile-e2e): grant iOS Photos permission for frame probe (#676) |
+| codex-019fc399-ba8-1785759343-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 515212 | 0 | 33238528 | 45353 | 560565 | 10.2780 | 6679500 | 0 | 257318400 | 429481 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785759384-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 2674 | 0 | 413184 | 605 | 3279 | 0.1191 | 6682174 | 0 | 257731584 | 430086 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785759430-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1835 | 0 | 416256 | 235 | 2070 | 0.1122 | 6684009 | 0 | 258147840 | 430321 | fix(ios): keep frame probe visible (#676) |
+| codex-019fc399-ba8-1785770058-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1816842 | 0 | 59516160 | 95194 | 1912036 | 20.8491 | 8500851 | 0 | 317664000 | 525515 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770111-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3809 | 0 | 480768 | 865 | 4674 | 0.1427 | 8504660 | 0 | 318144768 | 526380 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770274-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20328 | 0 | 739328 | 646 | 20974 | 0.2453 | 8524988 | 0 | 318884096 | 527026 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770401-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 15763 | 0 | 514560 | 2397 | 18160 | 0.2040 | 8540751 | 0 | 319398656 | 529423 | ci(mobile-e2e): parallelize iOS suites (#676) |
+| codex-019fc399-ba8-1785770482-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 5920 | 0 | 254976 | 716 | 6636 | 0.0893 | 8546671 | 0 | 319653632 | 530139 | ci(mobile-e2e): parallelize iOS suites (#676) -m governance: allow-toolchain-con |
+| codex-019fc399-ba8-1785773903-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 693014 | 0 | 18749696 | 29371 | 722385 | 6.8605 | 9239685 | 0 | 338403328 | 559510 | fix(ios): move frame probe below status bar (#676) |
+| codex-019fc399-ba8-1785773946-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 3216 | 0 | 227840 | 348 | 3564 | 0.0702 | 9242901 | 0 | 338631168 | 559858 | fix(ios): move frame probe below status bar (#676) |
+| codex-019fc399-ba8-1785775718-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 174999 | 0 | 12891648 | 20776 | 195775 | 3.9720 | 9417900 | 0 | 351522816 | 580634 | fix(ios): make frame probe target hittable (#676) |
+| codex-019fc399-ba8-1785776135-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 70287 | 0 | 3353088 | 6381 | 76668 | 1.1097 | 9488187 | 0 | 354875904 | 587015 | fix(ios): avoid duplicate volume relaunch termination (#676) |
+| codex-019fc399-ba8-1785779028-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 628288 | 0 | 20321536 | 36482 | 664770 | 7.1983 | 10116475 | 0 | 375197440 | 623497 | fix(ios): make Settings retry destination-aware (#676) |
+| codex-019fc399-ba8-1785782499-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 801520 | 0 | 33503488 | 42414 | 843934 | 11.0159 | 10917995 | 0 | 408700928 | 665911 | fix(ios): retry Tasks cover transition (#676) |
+| codex-019fc399-ba8-1785783971-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 229480 | 0 | 6862848 | 14396 | 243876 | 2.5054 | 11147475 | 0 | 415563776 | 680307 | fix(ios): retry transient mobile pairing (#676) |
+| codex-019fc399-ba8-1785784233-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 64884 | 0 | 1684736 | 1535 | 66419 | 0.6064 | 11212359 | 0 | 417248512 | 681842 | fix(ios): retry transient mobile pairing (#676) |
+| codex-019fc399-ba8-1785786280-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 315639 | 0 | 15962880 | 12871 | 328510 | 4.9729 | 11527998 | 0 | 433211392 | 694713 | fix(ios): handle empty People frame fixture (#676) |
+| codex-019fc399-ba8-1785787763-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 328274 | 0 | 15957504 | 12344 | 340618 | 4.9952 | 11856272 | 0 | 449168896 | 707057 | fix(ios): retry fresh launch control channel (#676) |
+| codex-019fc399-ba8-1785789999-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 332454 | 0 | 15333376 | 19830 | 352284 | 4.9619 | 12188726 | 0 | 464502272 | 726887 | fix(ios): surface copied frame reports in Maestro logs (#676) |
+| codex-019fc399-ba8-1785791743-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 164567 | 0 | 16529408 | 16318 | 180885 | 4.7885 | 12355733 | 0 | 481406720 | 743707 | fix(ios): escape Maestro report expression (#676) |
+| codex-019fc399-ba8-1785793807-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 113012 | 0 | 22895616 | 16005 | 129017 | 6.2465 | 12468745 | 0 | 504302336 | 759712 | fix(ios): avoid transient frame marker assertion (#676) |
+| codex-019fc399-ba8-1785796576-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 259636 | 0 | 17554176 | 24158 | 283794 | 5.4000 | 12728381 | 0 | 521856512 | 783870 | fix(ios): wait for lazy Settings route (#676) |
+| codex-019fc399-ba8-1785796611-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7954 | 0 | 665344 | 658 | 8612 | 0.1961 | 12736335 | 0 | 522521856 | 784528 | fix(ios): wait for lazy Settings route (#676) |
+| codex-019fc399-ba8-1785799828-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 308356 | 0 | 28658432 | 26692 | 335048 | 8.3359 | 13044691 | 0 | 551180288 | 811220 | docs(mobile): align onboarding journey notes (#676) |
+| codex-019fc399-ba8-1785799882-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20073 | 0 | 331776 | 1377 | 21450 | 0.1538 | 13064764 | 0 | 551512064 | 812597 | docs(mobile): align onboarding journey notes (#676) |
+| codex-019fc399-ba8-1785804509-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 702659 | 0 | 22420224 | 32817 | 735476 | 7.8540 | 13767423 | 0 | 573932288 | 845414 | fix(ios): use shared cold-start wait budget (#676) |
+| codex-019fc399-ba8-1785807461-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 453275 | 0 | 13046016 | 28777 | 482052 | 4.8263 | 14220698 | 0 | 586978304 | 874191 | Merge main into fix/nightly-676-mobile-onboarding-report (#676) |
+| codex-019fc399-ba8-1785807552-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9290 | 0 | 1080576 | 1089 | 10379 | 0.3097 | 14229988 | 0 | 588058880 | 875280 | Merge main into fix/nightly-676-mobile-onboarding-report (#676) |
+| codex-019fc399-ba8-1785808170-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 91495 | 0 | 6327296 | 15895 | 107390 | 2.0490 | 14321483 | 0 | 594386176 | 891175 | test(ios): align merged CI evidence contracts (#676) |
+| codex-019fc399-ba8-1785808212-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9723 | 0 | 968192 | 783 | 10506 | 0.2781 | 14331206 | 0 | 595354368 | 891958 | test(ios): align merged CI evidence contracts (#676) |
+| codex-019fc399-ba8-1785808394-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20952 | 0 | 3391488 | 2857 | 23809 | 0.9431 | 14352158 | 0 | 598745856 | 894815 | fix(ci): refresh merged native fingerprints (#676) |
+| codex-019fc399-ba8-1785812454-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 492721 | 0 | 25080576 | 22736 | 515457 | 7.8430 | 14844879 | 0 | 623826432 | 917551 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785812506-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4101 | 0 | 489728 | 531 | 4632 | 0.1406 | 14848980 | 0 | 624316160 | 918082 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785812605-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 10928 | 0 | 1164544 | 1211 | 12139 | 0.3366 | 14859908 | 0 | 625480704 | 919293 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785814997-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 195907 | 0 | 24004608 | 24609 | 220516 | 6.8601 | 15055815 | 0 | 649485312 | 943902 | fix(ios): harden Tasks cover retry (#676) |
+| codex-019fc399-ba8-1785816868-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 227881 | 0 | 11495936 | 22029 | 249910 | 3.7741 | 15283696 | 0 | 660981248 | 965931 | fix(ios): bound volume proof sessions (#676) |
+| codex-019fc399-ba8-1785816954-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6900 | 0 | 697088 | 990 | 7890 | 0.2064 | 15290596 | 0 | 661678336 | 966921 | fix(ios): bound volume proof sessions (#676) |
+| codex-019fc399-ba8-1785817638-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 56907 | 0 | 4671488 | 6025 | 62932 | 1.4005 | 15347503 | 0 | 666349824 | 972946 | fix(ios): retry native smoke driver flake (#676) |
+| codex-019fc399-ba8-1785819812-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 184167 | 0 | 21511424 | 17636 | 201803 | 6.1028 | 15531670 | 0 | 687861248 | 990582 | fix(ios): map Notes book icon (#676) |
+| codex-019fc399-ba8-1785819892-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6940 | 0 | 682240 | 509 | 7449 | 0.1955 | 15538610 | 0 | 688543488 | 991091 | fix(ios): map Notes book icon (#676) |
+| codex-019fc399-ba8-1785822555-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 275881 | 0 | 18227968 | 27309 | 303190 | 5.6563 | 15814491 | 0 | 706771456 | 1018400 | fix(ios): disambiguate frame probe targets (#676) |
+| codex-019fc399-ba8-1785822603-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7879 | 0 | 1051904 | 759 | 8638 | 0.2941 | 15822370 | 0 | 707823360 | 1019159 | fix(ios): disambiguate frame probe targets (#676) |
+| codex-019fc399-ba8-1785826617-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 365367 | 0 | 34666240 | 37671 | 403038 | 10.1450 | 16187737 | 0 | 742489600 | 1056830 | fix(ios): shorten volume-proof batches (#676) |
+| codex-019fc399-ba8-1785826716-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9689 | 0 | 1116160 | 900 | 10589 | 0.3168 | 16197426 | 0 | 743605760 | 1057730 | fix(ios): shorten volume-proof batches (#676) -m governance: allow-toolchain-con |
+| codex-019fc399-ba8-1785827032-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 30414 | 0 | 3391744 | 3585 | 33999 | 0.9777 | 16227840 | 0 | 746997504 | 1061315 | fix(ci): select individual ios suites (#676) -m governance: allow-toolchain-conf |
+| codex-019fc399-ba8-1785827322-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 37165 | 0 | 3442432 | 4230 | 41395 | 1.0170 | 16265005 | 0 | 750439936 | 1065545 | fix(ci): validate targeted ios matrix suites (#676) |
+| codex-019fc399-ba8-1785827429-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 11678 | 0 | 1547008 | 1284 | 12962 | 0.4352 | 16276683 | 0 | 751986944 | 1066829 | fix(ci): validate targeted ios matrix suites (#676) |
+| codex-019fc399-ba8-1785840977-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1234970 | 0 | 70792192 | 98904 | 1333874 | 22.2690 | 17511653 | 0 | 822779136 | 1165733 | fix(e2e): promote Android Maestro screenshots from debug output (#676) |

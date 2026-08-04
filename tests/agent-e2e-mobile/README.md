@@ -1,6 +1,6 @@
 # Agent-driven exploratory QA — mobile
 
-This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The three stable journeys are also run nightly, while ad-hoc agent exploration remains its primary authoring loop.
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The six stable flows are run nightly; iOS runs them as isolated parallel suites from one cached native build, while Android retains its smaller functional subset. Ad-hoc agent exploration remains this adapter's primary authoring loop.
 
 The structural payoff matches the desktop layer: the device (sim, emulator, or real) outlives the runner, so an agent (Claude Code) can attach, inspect the screen, take ad-hoc actions, screenshot, and resume. Maestro ships a first-party **MCP server** that exposes exactly that surface to Claude Code.
 
@@ -119,7 +119,7 @@ ctx surface:
 - `ctx.state` — `{ runId, runDir, screenshotsDir, flowsDir, udid, appId }`
 - `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call spawns `maestro test` once (~hundreds of ms overhead), so batch many directives per call rather than one-per-action. The harness uses the internal `sensitive` option only for capability-bearing input; it suppresses console/debug retention and keeps the live value in a `MAESTRO_*` variable.
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with a 300ms pre-stop delay (analogous to the desktop harness's flushMs before SIGTERM, gives AsyncStorage time to flush).
-- `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique write-role member ticket from the declared gateway, redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
+- `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique write-role member ticket from the declared gateway, redeem it through the real scan-first onboarding UI (opening the paste path when needed), and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes` in `verdict.md`.
 
 Authoring rules of thumb (carried over from desktop):
