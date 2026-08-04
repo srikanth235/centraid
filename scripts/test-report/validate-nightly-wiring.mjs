@@ -73,7 +73,13 @@ if (!iosChunk.includes("fail-fast: false")) {
   errors.push("iOS matrix must keep all suite evidence when one cell fails");
 }
 for (const suite of requiredIosSuites) {
-  if (!iosChunk.includes(`- ${suite}`)) {
+  // Scheduled/all runs use the literal matrix vocabulary; targeted
+  // workflow_dispatch runs use the same vocabulary inside a JSON expression.
+  if (
+    !iosChunk.includes(`- ${suite}`) &&
+    !iosChunk.includes(`"${suite}"`) &&
+    !iosChunk.includes(`'${suite}'`)
+  ) {
     errors.push(`iOS matrix is missing suite ${suite}`);
   }
 }

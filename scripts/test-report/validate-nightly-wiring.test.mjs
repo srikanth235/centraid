@@ -92,7 +92,12 @@ describe("validate-nightly-wiring structure (#545)", () => {
       "cold-start",
       "scroll-frames",
     ]) {
-      expect(iosBlock).toContain(`- ${suite}`);
+      // The matrix is a literal list for scheduled/all runs and a JSON
+      // expression for targeted workflow_dispatch runs; both must retain the
+      // complete suite vocabulary in the shipped workflow.
+      expect(iosBlock).toMatch(
+        new RegExp(`(?:- ${suite}|["']${suite}["'])`, "u")
+      );
     }
   });
 
