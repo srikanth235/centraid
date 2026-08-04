@@ -632,6 +632,7 @@ CI run `30901194404` on head `7126ff85` failed five jobs. Fixes landed on this b
 - `packages/client/src/react/screens/HomeSpringboard.tsx` — exhaustive `case "empty"`
 - `apps/desktop/tests/e2e/fixtures.ts` — `waitForHome`, palette helpers, openTile
 - `apps/desktop/tests/e2e/onboarding-home.spec.ts` — springboard journeys (2.1–2.11)
+- `apps/desktop/tests/e2e/automations.spec.ts` — statusLine instead of toast
 - `apps/desktop/tests/e2e/builder.spec.ts` — palette Create / Build entry
 - `apps/desktop/tests/e2e/delete-app.spec.ts` — App settings Delete path
 - `apps/desktop/tests/e2e/launch-time.spec.ts` — palette open for probe app

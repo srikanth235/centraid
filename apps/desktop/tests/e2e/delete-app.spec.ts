@@ -41,9 +41,11 @@ async function openDeleteDialog(
 ): Promise<void> {
   await openAppFromPalette(page, name);
   await page.getByRole("button", { name: "App settings" }).click();
-  // Delete lives on the Manage tab (danger zone), not Appearance.
-  await page.getByRole("tab", { name: "Manage" }).click();
-  const deleteBtn = page.getByRole("button", { name: /Delete app/iu });
+  const settings = page.getByRole("dialog", { name: "App settings" });
+  await settings.waitFor({ state: "visible" });
+  // Tabs are plain buttons (no role=tab) in the segment control.
+  await settings.getByRole("button", { name: "Manage", exact: true }).click();
+  const deleteBtn = settings.getByRole("button", { name: /Delete app/iu });
   await deleteBtn.click(); // arm
   await deleteBtn.click(); // fire onDelete → confirm dialog
   await expectConfirm(page, "Delete app?");

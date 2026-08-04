@@ -281,7 +281,8 @@ test("13.4 — switching the active gateway re-scopes home", async () => {
       )
       .toBe(newId);
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
-    await waitForHome(page);
+    // Stem stays mounted across gateway switch; springboard may re-fetch.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }

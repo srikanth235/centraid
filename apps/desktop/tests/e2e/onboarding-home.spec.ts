@@ -257,9 +257,11 @@ test("2.5 — App settings exposes Delete app for a code-store install", async (
     await waitForHome(page);
     await openAppFromPalette(page, "Menu App");
     await page.getByRole("button", { name: "App settings" }).click();
-    await page.getByRole("tab", { name: "Manage" }).click();
+    const settings = page.getByRole("dialog", { name: "App settings" });
+    await settings.waitFor({ state: "visible" });
+    await settings.getByRole("button", { name: "Manage", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: /Delete app/iu })
+      settings.getByRole("button", { name: /Delete app/iu })
     ).toBeVisible();
   } finally {
     await closeApp(app);
