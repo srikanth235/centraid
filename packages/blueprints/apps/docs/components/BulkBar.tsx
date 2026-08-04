@@ -37,7 +37,7 @@ export function BulkBar({
             </button>
             <button
               type="button"
-              className="kit-btn danger"
+              className="kit-btn destructive danger"
               onClick={(e) => {
                 if (
                   !armConfirm(e.currentTarget, {

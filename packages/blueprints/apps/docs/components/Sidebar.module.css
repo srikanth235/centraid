@@ -17,12 +17,16 @@
   background: none;
   color: var(--text-soft);
 }
+/* Clamped, not clipped: `overflow: hidden` on a text box is a named
+   violation, and a long folder name must still end in an ellipsis. */
 .navItem span:first-of-type {
   flex: 1;
   text-align: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .navItem:hover {
   background: var(--bg-sunken);
@@ -31,10 +35,11 @@
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-weight: 600;
+  font: var(--t-body-strong);
 }
 .navCount {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-soft);
 }
 
@@ -46,13 +51,18 @@
 .folder .navItem {
   padding-inline-end: var(--sp-2);
 }
+/* Hover-revealed on a fine pointer, ALWAYS present on a coarse one: a phone
+   has no hover, so gating rename/delete on `:hover` alone leaves folder
+   management with no reachable affordance at all on compact widths. The
+   gradient masks the count the tools slide over; it is a logical `to inline-end`
+   ramp so it mirrors under RTL rather than always fading leftward. */
 .folderTools {
   position: absolute;
-  inset-inline-end: 6px;
+  inset-inline-end: var(--sp-1);
   display: none;
   gap: 2px;
-  background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
-  padding-inline-start: 14px;
+  background: linear-gradient(to inline-end, transparent, var(--bg-elev) 22%);
+  padding-inline-start: var(--sp-4);
 }
 .folder:hover .folderTools,
 .folder:focus-within .folderTools {
@@ -61,21 +71,27 @@
 .folder:hover .navCount {
   opacity: 0;
 }
+@media (hover: none) {
+  .folderTools {
+    display: flex;
+  }
+  .navCount {
+    display: none;
+  }
+}
 /* Rename/delete tool buttons: kit.css's .kit-icon-btn (+ .danger variant). */
 .folderEdit {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: var(--sp-2);
   width: 100%;
   padding: var(--sp-1) 2px;
 }
-/* The input itself is kit.css's .kit-input.bare (transparent until focus). */
-.folderEdit button {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-small);
-  padding: 0 10px;
+/* The input is kit.css's .kit-input.bare (transparent until focus) and the
+   commit control is kit.css's .kit-btn — this module carries only the row. */
+.folderEdit :global(.kit-btn) {
+  flex: none;
+  padding-inline: var(--sp-3);
 }
 
 .storageTop {
@@ -85,14 +101,14 @@
   margin-bottom: var(--sp-2);
 }
 .storageTop .lbl {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .storageTop .val {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .storageLabel {

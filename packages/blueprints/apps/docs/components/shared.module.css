@@ -31,12 +31,13 @@
 /* The search-hit snippet (List row, via Shared's Snippet). */
 .snippet {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-soft);
   margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .snippet mark {
   background: var(--accent-soft);
@@ -48,8 +49,10 @@
 /* The vault-canonical star (issue #274) riding a Grid card or List row title. */
 .starInd {
   color: var(--app-identity);
-  font-size: 0.85em;
+  font-size: var(--t-small-size);
   margin-inline-start: var(--sp-1);
+  /* A star glued to the last word reads as a typo. */
+  padding-inline-start: 2px;
 }
 
 /* The play badge over a video thumbnail (Grid card, List row `.small`, Details
@@ -79,6 +82,7 @@
 /* Free-form label chip (Toolbar's TagChips + Details' Tags editor). */
 .tagChip {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 
 /* Drawer action/footer button pills (Details actions + footer, History

@@ -157,7 +157,7 @@ export function History({
   if (denied)
     return (
       <div className={styles.versionStatus}>
-        Ask the owner to approve history access.
+        Approve history access to see earlier versions.
       </div>
     );
   if (versions.length <= 1)

@@ -18,6 +18,11 @@ export const I = {
   close: glyph("X", 18),
   chevL: glyph("ChevronLeft", 22, 1.9),
   chevR: glyph("ChevronRight", 22, 1.9),
+  // A disclosure points DOWN when it is open — a left-pointing chevron for
+  // "expanded" reads as "go back", not "this section is showing".
+  chevDown: glyph("ChevronDown", 15, 1.9),
+  chevRSmall: glyph("ChevronRight", 15, 1.9),
+  plus: glyph("Plus", 13, 2),
   download: glyph("Download", 15),
 };
 

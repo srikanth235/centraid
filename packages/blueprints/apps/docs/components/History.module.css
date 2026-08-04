@@ -54,8 +54,8 @@
   color: var(--text);
 }
 .versionSize {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .versionTag {

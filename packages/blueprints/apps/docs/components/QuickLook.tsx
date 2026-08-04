@@ -3,6 +3,7 @@ import {
   fillVar,
   fmtBytes,
   fmtFull,
+  inlineText,
   isAudio,
   isImage,
   isVideo,
@@ -44,6 +45,7 @@ export function QuickLook({
 }) {
   const m = typeMeta(doc.media_type);
   const idx = rows.findIndex((d) => d.document_id === doc.document_id);
+  const text = inlineText(doc);
 
   let stage;
   if (isImage(doc)) {
@@ -101,29 +103,31 @@ export function QuickLook({
         sandbox=""
       />
     );
+  } else if (text) {
+    // The real document, set in the app's declared READING register at the
+    // reading measure — this is the surface a reader opens to READ, and a
+    // decorative mock of a page here showed strictly less of the document
+    // than the row it was opened from.
+    stage = (
+      <div className={styles.quickRead} key={doc.content_id}>
+        <div className={styles.quickReadBody}>{text}</div>
+      </div>
+    );
   } else {
-    // A document-page mock for docs / sheets / slides / other.
+    // A document-page mock — only for a kind whose bytes this app cannot
+    // render (a .docx, a spreadsheet, a deck), never for text it holds.
     const widths = [96, 88, 93, 70, 90, 82, 60];
     stage = (
       <div className={styles.quickPage} key={doc.content_id}>
         <i
-          style={{
-            height: "11px",
-            width: "44%",
-            background: `var(${fillVar(m.cv)})`,
-            opacity: 0.85,
-            marginBottom: "22px",
-          }}
+          className={styles.quickPageHead}
+          style={{ background: `var(${fillVar(m.cv)})` }}
         />
         {widths.map((w, i) => (
           <i
             key={i}
-            style={{
-              height: "7px",
-              width: `${w}%`,
-              background: i < 4 ? "#e6e7ea" : "#eceef1",
-              marginBottom: `${i === 3 ? 26 : 11}px`,
-            }}
+            className={i === 3 ? styles.quickPageBreak : styles.quickPageRule}
+            style={{ width: `${w}%` }}
           />
         ))}
       </div>
@@ -146,17 +150,17 @@ export function QuickLook({
         </span>
         <span className={styles.quickTitle}>{doc.title ?? "Untitled"}</span>
         <a
-          className={styles.quickBtn}
+          className={`kit-btn quiet ${styles.quickBtn}`}
           href={doc.content_uri}
           download={doc.title ?? "file"}
         >
           <Icon svg={I.download!} />
-          Download
+          <span className={styles.quickBtnLabel}>Download</span>
         </a>
         <button
           type="button"
           className={`kit-icon-btn ${styles.quickIcon}`}
-          aria-label="Close"
+          aria-label="Close quick look"
           onClick={onClose}
         >
           <Icon svg={I.close!} />

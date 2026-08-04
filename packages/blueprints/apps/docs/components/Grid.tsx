@@ -5,8 +5,10 @@ import {
   fillVar,
   fmtBytes,
   fmtDate,
+  inlineText,
   isImage,
   isVideo,
+  textExcerpt,
   tintBg,
   typeMeta,
 } from "../format.ts";
@@ -33,6 +35,10 @@ export function GridCard({
 }) {
   const m = typeMeta(doc.media_type);
   const selected = selectedIds.has(doc.document_id);
+  // The document's real first words, when its bytes rode along inline. A
+  // decorative mock of a page is only honest when there is nothing to show.
+  const body = inlineText(doc);
+  const excerpt = body ? textExcerpt(body) : "";
   return (
     <div className={styles.card} data-selected={String(selected)}>
       {/* The card can't be a <button> (it holds the select + thumb buttons), so
@@ -66,6 +72,8 @@ export function GridCard({
               ▶
             </span>
           </>
+        ) : excerpt ? (
+          <span className={styles.thumbExcerpt}>{excerpt}</span>
         ) : (
           <>
             <span
@@ -115,9 +123,14 @@ export function GridCard({
       <div className={styles.cardBody}>
         <div className={styles.cardTitle}>
           {doc.title ?? "Untitled"}
+          {/* The star's label is real (visually hidden) TEXT rather than an
+              `aria-label` on a faked `role="img"` — same announcement, no
+              invented role, and the same pattern Shared.tsx's CustodyDot
+              already uses. */}
           {doc.starred ? (
-            <span className={shared.starInd} aria-label="Starred">
-              ★
+            <span className={shared.starInd}>
+              <span aria-hidden="true">★</span>
+              <span className="kit-sr-only">Starred</span>
             </span>
           ) : null}
         </div>

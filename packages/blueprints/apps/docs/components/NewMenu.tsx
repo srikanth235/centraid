@@ -2,8 +2,6 @@
 import { I } from "../icons.ts";
 import { Icon } from "./Shared.tsx";
 
-import styles from "./NewMenu.module.css";
-
 export function NewMenu({
   onUpload,
   onNewFolder,
@@ -15,17 +13,17 @@ export function NewMenu({
     <>
       <button
         type="button"
-        className={styles.menuItem}
+        className="kit-popover-item"
         role="menuitem"
         onClick={onUpload}
       >
         <Icon svg={I.upload!} />
         Upload files
       </button>
-      <div className={styles.menuSep} />
+      <div className="kit-popover-sep" />
       <button
         type="button"
-        className={styles.menuItem}
+        className="kit-popover-item"
         role="menuitem"
         onClick={onNewFolder}
       >

@@ -55,7 +55,7 @@ function ReplaceButton({
     <>
       <button
         type="button"
-        className={`kit-btn ${shared.detailBtn}`}
+        className={`kit-btn quiet ${shared.detailBtn}`}
         onClick={() => inputRef.current?.click()}
       >
         Replace file…
@@ -129,7 +129,7 @@ export function Details({
       <button
         type="button"
         className={`kit-plain-btn ${styles.detailsBackdrop}`}
-        aria-label="Close"
+        aria-label="Dismiss details"
         onClick={onClose}
       />
       <dialog
@@ -143,7 +143,7 @@ export function Details({
           <button
             type="button"
             className="kit-icon-btn"
-            aria-label="Close"
+            aria-label="Close details"
             onClick={onClose}
           >
             <Icon svg={I.close!} />
@@ -185,15 +185,20 @@ export function Details({
           <div className={styles.detailLabel}>Tags</div>
           <Tags doc={doc} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
           <div className={shared.detailActions}>
+            {/* Exactly one primary in this sheet (DESIGN.md: at most one
+                filled ink element per view) — opening the document is the
+                drawer's reason to exist; everything beside it is `quiet`,
+                which has no fill, so the six actions stop reading as six
+                equals. */}
             <button
               type="button"
-              className={`kit-btn ${shared.detailBtn}`}
+              className={`kit-btn primary ${shared.detailBtn}`}
               onClick={() => onOpenQuick(doc.document_id)}
             >
               Open
             </button>
             <a
-              className={`kit-btn ${shared.detailBtn}`}
+              className={`kit-btn quiet ${shared.detailBtn}`}
               href={doc.content_uri}
               download={doc.title ?? "file"}
             >
@@ -202,16 +207,18 @@ export function Details({
             {trashed ? null : (
               <button
                 type="button"
-                className={`kit-btn ${shared.detailBtn}`}
+                className={`kit-btn quiet ${shared.detailBtn}`}
+                aria-pressed={Boolean(doc.starred)}
                 onClick={() => onToggleStar(doc)}
               >
-                {doc.starred ? "★ Starred" : "☆ Star"}
+                <span aria-hidden="true">{doc.starred ? "★" : "☆"}</span>
+                {doc.starred ? "Starred" : "Star"}
               </button>
             )}
             {trashed ? null : isTextEditable(doc) ? (
               <button
                 type="button"
-                className={`kit-btn ${shared.detailBtn}`}
+                className={`kit-btn quiet ${shared.detailBtn}`}
                 onClick={() => onEdit(doc)}
               >
                 <Icon svg={RENAME_ICON} />
@@ -228,7 +235,7 @@ export function Details({
               label="Share document"
             />
           )}
-          <div className={styles.detailLabel}>Details</div>
+          <div className={styles.detailLabel}>Properties</div>
           <dl className={styles.detailGrid}>
             <dt>Type</dt>
             <dd>{m.name}</dd>
@@ -249,12 +256,12 @@ export function Details({
           />
           <button
             type="button"
-            className={`${styles.detailLabel} ${styles.versionToggle}`}
+            className={`kit-plain-btn ${styles.detailLabel} ${styles.versionToggle}`}
             aria-expanded={historyOpen}
             onClick={() => setHistoryOpen((o) => !o)}
           >
             Version history
-            <Icon svg={historyOpen ? I.chevL! : I.chevR!} />
+            <Icon svg={historyOpen ? I.chevDown! : I.chevRSmall!} />
           </button>
           {historyOpen ? (
             <History
@@ -288,7 +295,7 @@ export function Details({
               </button>
               <button
                 type="button"
-                className={`kit-btn ${shared.detailBtn} danger`}
+                className={`kit-btn destructive danger ${shared.detailBtn}`}
                 onClick={(e) => {
                   if (
                     !armConfirm(e.currentTarget, {

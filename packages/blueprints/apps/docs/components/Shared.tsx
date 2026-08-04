@@ -14,9 +14,17 @@ import styles from "./shared.module.css";
 // (e.g. `.navItem { gap: 11px }`) keep behaving identically. `<i>` (not
 // `<span>`) so it never collides with `.navItem span:first-of-type`, the one
 // rule in Sidebar.module.css that counts sibling spans.
+// `aria-hidden` on the wrapper, not on the SVG: `iconSvg()` (packages/design)
+// emits a bare `<svg>` with no `aria-hidden` of its own, so without this every
+// glyph in the app is an unnamed graphic sitting inside a control — some
+// screen readers narrate it as a second, empty stop next to the control's own
+// name, and a control whose ONLY content is a glyph computes no name at all
+// from its contents. `display: contents` removes the <i> from the box tree but
+// not from the accessibility tree, so the attribute still hides the subtree.
 export function Icon({ svg }: { svg: string }) {
   return (
     <i
+      aria-hidden="true"
       style={{ display: "contents" }}
       // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: svg }}

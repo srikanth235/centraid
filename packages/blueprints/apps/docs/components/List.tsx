@@ -106,16 +106,21 @@ export function ListRow({
       <div className={styles.rowMain}>
         <button
           type="button"
-          className={styles.rowTitle}
+          className={`kit-plain-btn ${styles.rowTitle}`}
           onClick={(e) => {
             e.stopPropagation();
             onOpenQuick(doc.document_id);
           }}
         >
           {title}
+          {/* The star's label is real (visually hidden) TEXT rather than an
+              `aria-label` on a faked `role="img"` — same announcement, no
+              invented role, and the same pattern Shared.tsx's CustodyDot
+              already uses. */}
           {doc.starred ? (
-            <span className={shared.starInd} aria-label="Starred">
-              ★
+            <span className={shared.starInd}>
+              <span aria-hidden="true">★</span>
+              <span className="kit-sr-only">Starred</span>
             </span>
           ) : null}
         </button>
@@ -195,7 +200,9 @@ export function ListHead({
         onClick={() => onToggleAll(rows, allSel)}
         label={allSel ? "Deselect all" : "Select all"}
       />
-      <span style={{ width: "34px" }} />
+      {/* Column spacer aligning the head with each row's kind badge, which is
+          exactly one control tall and wide (`--h-control`). */}
+      <span style={{ width: "var(--h-control)" }} />
       <span className={`${styles.col} ${styles.name}`}>Name</span>
       <span className={`${styles.col} ${styles.where}`}>Where</span>
       <span className={`${styles.col} ${styles.size}`}>Size</span>

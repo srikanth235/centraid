@@ -8,9 +8,9 @@
    these rules via `:global(...)`. */
 
 .col {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 .col.name {
@@ -106,45 +106,50 @@
   flex: 1;
   min-width: 0;
 }
+/* Line-CLAMPED, never `overflow: hidden` — a clipped baseline reads as a
+   rendering bug, and a hard clip drops the ellipsis that tells a reader the
+   title continues. Geometry (the UA button box reset) is kit-plain-btn's. */
 .rowTitle {
   /* Above the .rowOpen overlay. */
   position: relative;
   font: var(--t-body-strong);
-  font-size: 14px;
   color: var(--text);
-  background: none;
-  border: none;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
   text-align: start;
   max-width: 100%;
 }
 .rowMeta {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: 2px;
 }
 .cell {
   color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .cell.where {
   width: 120px;
   font: var(--t-small);
-  font-size: 12px;
 }
 .cell.size {
   width: 70px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   text-align: end;
 }
 .cell.added {
   width: 88px;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   /* Flex (not the shared .cell's plain nowrap+ellipsis) so the trailing
      custody dot (issue #352 phase 4) sits beside the date instead of
      getting clipped by the cell's own text-overflow. */

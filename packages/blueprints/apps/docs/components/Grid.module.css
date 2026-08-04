@@ -4,19 +4,19 @@
    shared.module.css. `.card`'s `[data-selected]` attribute hook stays a real
    attribute (glue passes it as a string) — the module localizes only the class. */
 
+/* A sheet laid ON the page, not a plane floating above it: the raised tone
+   plus a hairline IS the elevation. `--shadow-*` belongs to a dialog, a sheet
+   and a popover and to nothing else, so hover deepens the hairline instead. */
 .card {
   position: relative;
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--bg-elev);
-  transition:
-    border-color var(--dur-1) var(--ease),
-    box-shadow var(--dur-1) var(--ease);
+  transition: border-color var(--dur-1) var(--ease);
 }
 .card:hover {
   border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
 }
 .card[data-selected="true"] {
   border-color: var(--line-strong);
@@ -49,11 +49,26 @@
    off that ratio, applied after the fact and invisible to the token layer. If
    the label needs to recede, the rung is the place to say so. */
 .thumbLabel {
+  font: var(--t-body-strong);
   font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--t-eyebrow-tracking);
 }
+/* The document's own opening words, set in the app's declared READING
+   register — the surface where a reader meets the document should show the
+   document. Clamped, never clipped: the thumb is a fixed-height container. */
+.thumbExcerpt {
+  align-self: stretch;
+  padding: var(--sp-3);
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-align: start;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow-wrap: anywhere;
+}
+
 .thumbLines {
   position: absolute;
   inset-inline: 12px;
@@ -82,15 +97,23 @@
   justify-content: center;
   border: 1.5px solid var(--line-strong);
   border-radius: var(--r-md);
-  background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
-  backdrop-filter: blur(4px);
+  /* Opaque paper, not glass — the lens metaphor retired with the flip. */
+  background: var(--bg-elev);
   padding: 0;
   opacity: 0;
   transition: opacity var(--dur-1) var(--ease);
 }
 .card:hover .cardSelect,
+.card:focus-within .cardSelect,
 .card[data-selected="true"] .cardSelect {
   opacity: 1;
+}
+/* A phone has no hover: gating multi-select on `:hover` alone leaves the
+   grid with no way to select anything at all on a compact width. */
+@media (hover: none) {
+  .cardSelect {
+    opacity: 1;
+  }
 }
 .cardSelect[aria-pressed="true"] {
   background: var(--accent-deep);
@@ -100,17 +123,19 @@
 .cardBody {
   padding: var(--sp-3) var(--sp-3) var(--sp-3);
 }
+/* Two clamped lines, never a hard clip — a document title is the one string
+   on a card a reader must be able to finish reading. */
 .cardTitle {
-  font: var(--t-body-strong);
-  font-size: 13.5px;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font: var(--t-small-strong);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 .cardMeta {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: var(--sp-1);
 }
