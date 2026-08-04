@@ -96,7 +96,7 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
   // Home is the content springboard (#708) — custom apps open via the command
   // palette, not a library card on Home.
   await expect(
-    page.locator('[aria-label="Your apps"], nav[aria-label="Apps"]'),
+    page.locator('nav[aria-label="Apps"]').first(),
     JSON.stringify(gatewayResponses, null, 2)
   ).toBeVisible();
   expect(

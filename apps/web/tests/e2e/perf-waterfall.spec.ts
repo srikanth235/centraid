@@ -217,9 +217,7 @@ async function establishSession(page: Page): Promise<void> {
   await page.reload();
   // Home is the springboard (#708); custom apps open via the palette, not a
   // library card. Wait for the shell, then confirm the service worker.
-  await expect(
-    page.locator('[aria-label="Your apps"], nav[aria-label="Apps"]')
-  ).toBeVisible();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
@@ -257,9 +255,7 @@ async function ensureInstalled(page: Page): Promise<void> {
     .waitFor({ state: "visible" });
   // Return to Home so openInstalledAndMeasure starts from a cold shell open.
   await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(
-    page.locator('[aria-label="Your apps"], nav[aria-label="Apps"]')
-  ).toBeVisible();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
 async function openInstalledAndMeasure(
@@ -308,9 +304,7 @@ async function openInstalledAndMeasure(
 
 async function goHome(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(
-    page.locator('[aria-label="Your apps"], nav[aria-label="Apps"]')
-  ).toBeVisible();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
 test("app-open waterfall — shell + iframe, cold vs warm (real installed app)", async ({
@@ -866,8 +860,14 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     )
   ) as {
     metrics: {
-      largestContentfulPaint: { ceilingMs: number };
-      interactionToNextPaint: { ceilingMs: number };
+      largestContentfulPaint: {
+        ceilingMs?: number;
+        _intendedCeilingMs?: number;
+      };
+      interactionToNextPaint: {
+        ceilingMs?: number;
+        _intendedCeilingMs?: number;
+      };
       cumulativeLayoutShift: { maxScore: number };
     };
   };
@@ -962,8 +962,15 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
         `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
     });
   } else {
+    // Binding Layer content can produce a real LCP where the old connect screen
+    // did not. Prefer a live ceiling; fall back to the parked intended ceiling
+    // until web.json is re-seeded with a measured status.
+    const lcpCeiling =
+      budgets.metrics.largestContentfulPaint.ceilingMs ??
+      budgets.metrics.largestContentfulPaint._intendedCeilingMs;
+    expect(lcpCeiling, "LCP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.lcpMs, "largest contentful paint").toBeLessThanOrEqual(
-      budgets.metrics.largestContentfulPaint.ceilingMs
+      lcpCeiling
     );
   }
   if (vitals.inpMs === null) {
@@ -972,8 +979,12 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
       description: `no event-timing entry recorded (interaction driven: ${clicked}); INP not asserted this run`,
     });
   } else {
+    const inpCeiling =
+      budgets.metrics.interactionToNextPaint.ceilingMs ??
+      budgets.metrics.interactionToNextPaint._intendedCeilingMs;
+    expect(inpCeiling, "INP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.inpMs, "interaction to next paint").toBeLessThanOrEqual(
-      budgets.metrics.interactionToNextPaint.ceilingMs
+      inpCeiling
     );
   }
 });
