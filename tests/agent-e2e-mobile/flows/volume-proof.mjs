@@ -12,7 +12,7 @@ import {
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
 const ITERATIONS = 20;
-const CHUNK_SIZE = 4;
+const CHUNK_SIZE = 2;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
 await runFlow("mobile-volume-proof", async (ctx) => {
@@ -29,9 +29,11 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   // Keep each Maestro session short. A single long iOS repeat can leave the
   // XCTest launch channel behind the app after several rapid relaunches (the
   // app was on its splash screen and then reported as not running in run
-  // 30875656338). Fresh sessions preserve all 20 successful launch samples
-  // while resetting the driver at a bounded interval; no assertion is made
-  // optional and a real app crash still fails its chunk.
+  // 30875656338; run 30882067925 later returned kAXErrorInvalidUIElement in
+  // the fifth four-launch session). Fresh two-launch sessions preserve all 20
+  // launch samples while resetting the driver before that accumulated state
+  // can wedge it; no assertion is made optional and a real app crash still
+  // fails its chunk.
   const volumeFlow = (times) => `appId: ${ctx.state.appId}
 ---
 - repeat:

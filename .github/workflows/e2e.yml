@@ -27,6 +27,19 @@ on:
           - pairing
           - report
           - mutation
+      ios_suite:
+        description: "For mobile-ios: run one iOS matrix suite (all | home-loads | template-gate | native-v0-resilience | volume-proof | cold-start | scroll-frames)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - home-loads
+          - template-gate
+          - native-v0-resilience
+          - volume-proof
+          - cold-start
+          - scroll-frames
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -308,7 +321,7 @@ jobs:
   mobile-e2e-ios:
     needs: mobile-e2e-ios-build
     if: >
-      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios')
+      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios') && (github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all' || github.event.inputs.ios_suite == matrix.suite)
     strategy:
       fail-fast: false
       matrix:

@@ -260,6 +260,14 @@ accessibility zero-grey (15 cells).
   them in five four-launch Maestro sessions, resetting the iOS XCTest driver
   between chunks without making any assertion optional.
 
+- **Shorten the iOS volume-proof batches after the next driver hang.** Run
+  30882067925 completed the first four four-launch sessions, then the first
+  relaunch of the fifth session hit XCTest's `kAXErrorInvalidUIElement` and
+  held the Maestro process until its 12-minute timeout. The proof still keeps
+  all 20 required Home relaunches, but now resets XCTest every two launches;
+  launch assertions remain mandatory. The workflow dispatch also accepts
+  `ios_suite`, so a future iOS retry can select only the failing matrix cell.
+
 - **Close the Notes render error found by the final iOS run.** Run 30877874690
   reached the Notes surface but the empty state requested the unmapped
   `book-open` mobile icon. `packages/design/src/icons.ts` now contains the
@@ -457,3 +465,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785819892-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6940 | 0 | 682240 | 509 | 7449 | 0.1955 | 15538610 | 0 | 688543488 | 991091 | fix(ios): map Notes book icon (#676) |
 | codex-019fc399-ba8-1785822555-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 275881 | 0 | 18227968 | 27309 | 303190 | 5.6563 | 15814491 | 0 | 706771456 | 1018400 | fix(ios): disambiguate frame probe targets (#676) |
 | codex-019fc399-ba8-1785822603-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7879 | 0 | 1051904 | 759 | 8638 | 0.2941 | 15822370 | 0 | 707823360 | 1019159 | fix(ios): disambiguate frame probe targets (#676) |
+| codex-019fc399-ba8-1785826617-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 365367 | 0 | 34666240 | 37671 | 403038 | 10.1450 | 16187737 | 0 | 742489600 | 1056830 | fix(ios): shorten volume-proof batches (#676) |
+| codex-019fc399-ba8-1785826716-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9689 | 0 | 1116160 | 900 | 10589 | 0.3168 | 16197426 | 0 | 743605760 | 1057730 | fix(ios): shorten volume-proof batches (#676) -m governance: allow-toolchain-con |
