@@ -15,7 +15,14 @@
 //
 // Canonical design document: DESIGN.md (repo root).
 
-export { palette } from "./palette";
+export {
+  APP_HUES,
+  clampIdentityHue,
+  IDENTITY_CHROMA,
+  palette,
+  paletteDark,
+  paletteFor,
+} from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";
 export { IDENTITY_COLORS, identityColor, identityInitials } from "./identity";
 export type { IdentityPaletteKey } from "./identity";
@@ -23,17 +30,26 @@ export { formatBytes, formatRelativeTime } from "./format";
 
 export { themes, lightTheme, darkTheme, THEME_PRESETS } from "./themes";
 export {
-  ACCENT_PALETTE,
-  ACCENT_DEEP,
+  ACCENT_HOVER,
+  ACCENT_HOVER_DARK,
   ACCENT_LIGHT,
-  ACCENT_TEXT_LIGHT,
+  ACCENT_LIGHT_DARK,
+  BRAND,
+  BRAND_DARK,
+  DUR_ENTRY,
+  DUR_STATE,
+  EASE,
+  EASE_ENTRY,
+  LINK,
+  LINK_DARK,
+  NET,
+  NET_DARK,
+  RING,
+  RING_DARK,
+  SURFACE_TONE_NAMES,
+  SURFACE_TONES,
 } from "./themes";
-export type { AccentKey } from "./themes";
-
-// Accent ramp derivation — keeps a picked accent's tint/shade/text variants on
-// the accent's own hue instead of hand-picking them. See src/accent.ts.
-export { accentRamp } from "./color";
-export type { AccentRamp } from "./color";
+export type { SurfaceTone } from "./themes";
 
 // Contrast/oklab maths lives behind the `@centraid/design/oklab` subpath, NOT
 // this barrel: it is measurement machinery, not a token, and `packages/client`
@@ -42,25 +58,35 @@ export type { AccentRamp } from "./color";
 // BuilderCode.tokens.test.ts for the consumer.
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
-// Brand teal — theme-independent identity color shared by the logo /
-// app-icon SVGs and emitted as `--accent`.
-export { BRAND } from "./themes";
+// The product mark, which is INK: the shell spends no hue, so every colour on
+// screen provably belongs to an app. `BRAND_DARK` is the same mark on the
+// dark ramp; both are exported from the themes barrel above.
 
-export { spacing } from "./density";
-export type { DensityScale } from "./density";
+export {
+  DEFAULT_DENSITY_TIER,
+  DENSITY_TIER_NAMES,
+  DENSITY_TIERS,
+  metrics,
+  spacing,
+} from "./density";
+export type { DensityScale, DensityTier, MetricKey } from "./density";
 
-export { radii } from "./radii";
+export { ICON_CHIP_RADIUS_RATIO, iconChipRadius, radii } from "./radii";
 export type { RadiusKey } from "./radii";
 
 export {
   fonts,
   fontStacks,
+  NATIVE_DELTA_BY_FAMILY,
+  NATIVE_DELTA_OVERRIDES,
+  TYPE_PROFILE_SUPPORT,
   blueprintType,
   blueprintTypeShorthand,
   nativeTypeStyle,
   type,
   typeShorthand,
   typeForProfile,
+  typeModifiers,
   typeSizeRungs,
 } from "./typography";
 export type {
@@ -74,13 +100,19 @@ export type {
 export { library } from "./library";
 export type { LibraryTokenKey } from "./library";
 
-export { tileFinish, TILE_VARIANTS } from "./tile";
-export type { TileVariant, TileFinish } from "./tile";
+export {
+  tileFinish,
+  TILE_VARIANTS,
+  ICON_CHIP_TINT,
+  iconChipFinish,
+} from "./tile";
+export type { TileVariant, TileFinish, IconChipFinish } from "./tile";
 
 export { toCss } from "./css";
 export { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "./contract";
 export {
   ADAPTERS,
+  DARK_THEME_ROLE_VALUES,
   PROFILE_SURFACES,
   ROLE_REGISTRY,
   assertTotalProfileValues,

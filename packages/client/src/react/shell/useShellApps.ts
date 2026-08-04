@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { apps as FIRST_PARTY_APPS } from "@centraid/design";
+
 import { colorForIcon, tileVisualFromListing } from "../../app-format.js";
 import { listApps, listVaults } from "../../gateway-client.js";
 import { optimisticUpdate } from "./optimisticUpdate.js";
 import { Store } from "./store.js";
+
+/**
+ * The first-party app ids, resolved locally rather than fetched.
+ *
+ * Every one of these is installed in every vault at mount (issue #708), so a
+ * listing row carrying one of these ids is an INSTALLED APP — never a draft and
+ * never something waiting to be pinned.
+ */
+const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
+  FIRST_PARTY_APPS.map((app) => app.id)
+);
 
 // Pins are per-vault state: the reconcile below prunes them against the
 // active vault's listing, so pins carried across a vault switch would all
@@ -11,15 +24,77 @@ import { Store } from "./store.js";
 // client currently addresses the same way useMemberScopes does — the auth
 // pointer, falling back to the registry's first (the gateway's default) so
 // the implicit-default and explicit-id spellings of the same vault agree.
-async function activeVaultKey(): Promise<string> {
+//
+// `null` means UNKNOWN, and unknown is not a vault. It used to be `""`, which
+// compares unequal to every real vault id — so an offline boot, where both
+// reads fail, looked exactly like a switch to a vault named "": the branch
+// below parked the member's real pins under the last vault and installed
+// `byVault[""] ?? []`, emptying the persisted pin list on a launch that never
+// reached the gateway at all.
+async function activeVaultKey(): Promise<string | null> {
   try {
     const auth = await window.CentraidApi.getGatewayAuth();
     if (auth.vaultId) return auth.vaultId;
     const vaults = await listVaults();
-    return vaults?.[0]?.vaultId ?? "";
+    return vaults?.[0]?.vaultId ?? null;
   } catch {
-    return "";
+    return null;
   }
+}
+
+/**
+ * The last vault this client knew it was addressing.
+ *
+ * Offline the live answer is unknown, but the installed-apps cache below is
+ * keyed by vault and has to be read under SOME key. The pin store's own vault
+ * pointer is that key: it was written by the last reconcile that did reach the
+ * gateway, so it names the vault whose cache is on this device.
+ */
+function lastKnownVaultKey(): string | null {
+  return Store.get<string | null>("home.userApps.vault", null);
+}
+
+/**
+ * The installed set, remembered per vault, READ-ONLY.
+ *
+ * Distinct from the pin store on purpose. Pins are a member's decisions and the
+ * reconcile is allowed to rewrite them; this is a cache of an ANSWER the
+ * gateway gave, kept solely so a launch that cannot reach the gateway still
+ * paints the apps this vault has instead of the day-one empty state. Nothing
+ * promotes it back into `home.userApps`, so a real uninstall of a code-store
+ * app is never undone by it — the next successful reconcile simply overwrites
+ * the cache with the shorter list.
+ */
+function readInstalledCache(vault: string | null): UserAppMeta[] {
+  if (vault === null) return [];
+  const byVault = Store.get<Record<string, UserAppMeta[]>>(
+    "home.installedApps.byVault",
+    {}
+  );
+  const cached = byVault[vault];
+  return Array.isArray(cached) ? cached : [];
+}
+
+function writeInstalledCache(vault: string | null, apps: UserAppMeta[]): void {
+  if (vault === null) return;
+  const byVault = Store.get<Record<string, UserAppMeta[]>>(
+    "home.installedApps.byVault",
+    {}
+  );
+  byVault[vault] = apps;
+  Store.set("home.installedApps.byVault", byVault);
+}
+
+/**
+ * Forget every vault's remembered installed set.
+ *
+ * Wired to the shell's re-scope hook (`App.tsx`, alongside `resetQueryCache`):
+ * a gateway or vault change makes every cached answer describe the OLD world,
+ * and a grid painted from the previous vault's cache is the same correctness
+ * bug the query cache purges for.
+ */
+export function resetInstalledAppsCache(): void {
+  Store.remove("home.installedApps.byVault");
 }
 
 /** What a reconcile pass produces; `null` means the listing itself failed.
@@ -34,7 +109,24 @@ export interface ShellAppsSnapshot {
  *  rewrites the Store, and hands back the next lists for the caller to apply. */
 async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   const projs = await listApps().catch(() => null);
-  if (projs === null) return null;
+  // The listing is the only source for what a vault HAS (issue #708), so a
+  // launch with the gateway down had nothing to show and Home rendered its
+  // day-one empty state on a vault holding a fully synced replica — the one
+  // moment the offline copy exists for. Fall back to what the last successful
+  // reconcile saw. Drafts stay empty: a draft is a builder-side row and there
+  // is no honest offline answer for it.
+  if (projs === null) {
+    const active = await activeVaultKey();
+    const cached = readInstalledCache(active ?? lastKnownVaultKey());
+    // Nothing remembered for this vault. If we can NAME the vault and it is not
+    // the one the lists on screen came from, an empty grid is the honest
+    // answer — showing the previous vault's apps would be exactly the leak this
+    // cache is keyed to avoid. Otherwise keep whatever is mounted (`null`).
+    const known = lastKnownVaultKey();
+    if (cached.length === 0 && (active === null || active === known))
+      return null;
+    return { drafts: [], userApps: cached };
+  }
   const liveIds = new Set(projs.map((p) => p.id));
   // Read the current pins straight from the Store so the reconcile doesn't need
   // userApps in any dep list (avoids a stale-closure re-fetch loop).
@@ -43,9 +135,11 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   // vault's set BEFORE the orphan prune below — otherwise every pin of the
   // old vault looks deleted against the new vault's listing and the prune
   // destroys them permanently (the "installed app demoted to DRAFT" bug).
+  // Unknown (`null`) changes nothing: it is not a vault, so it can neither
+  // trigger a park nor be recorded as the pin store's owner.
   const vid = await activeVaultKey();
-  const pinsVault = Store.get<string | null>("home.userApps.vault", null);
-  if (pinsVault !== null && pinsVault !== vid) {
+  const pinsVault = lastKnownVaultKey();
+  if (vid !== null && pinsVault !== null && pinsVault !== vid) {
     const byVault = Store.get<Record<string, UserAppMeta[]>>(
       "home.userApps.byVault",
       {}
@@ -55,7 +149,7 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
     pins = byVault[vid] ?? [];
     Store.set("home.userApps", pins);
   }
-  if (pinsVault !== vid) Store.set("home.userApps.vault", vid);
+  if (vid !== null && pinsVault !== vid) Store.set("home.userApps.vault", vid);
   // Prune orphan pins (app deleted out-of-band), then overlay tile identity
   // AND name/description — the gateway listing is the source of truth for
   // both (a rename via updateAppMeta only lands on the server; without
@@ -82,7 +176,47 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
     });
   if (reconciled.length !== pins.length) Store.set("home.userApps", reconciled);
 
-  const knownIds = new Set(reconciled.map((a) => a.id));
+  // The first-party apps, from the LISTING rather than from the pin store
+  // (issue #708).
+  //
+  // Before this, "installed" meant "a pin the Discover install flow wrote into
+  // local storage". Retiring the catalogue removed the only writer, so an app
+  // the gateway had installed reached the client as an unpinned listing row —
+  // which the branch below classifies as a DRAFT, and drafts are hidden
+  // entirely while the builder is off. Home therefore stayed empty on a vault
+  // that owned all eight apps: the pin store had become a cache of a decision
+  // nothing made any more.
+  //
+  // Derived every pass and deliberately NOT persisted: the gateway is the
+  // source of truth for what a vault has, and writing these back as pins would
+  // make them survive a real uninstall of a code-store app that happened to
+  // share an id.
+  const pinnedIds = new Set(
+    reconciled.flatMap((a) =>
+      a.centraidAppId ? [a.id, a.centraidAppId] : [a.id]
+    )
+  );
+  const firstParty = projs
+    .filter((p) => FIRST_PARTY_IDS.has(p.id) && !pinnedIds.has(p.id))
+    .map((p) => {
+      const vis = tileVisualFromListing(p);
+      return {
+        centraidAppId: p.id,
+        color: vis?.color ?? colorForIcon("Sparkle"),
+        colorKey: vis?.colorKey ?? "violet",
+        desc: p.description || "",
+        iconKey: vis?.iconKey ?? "Sparkle",
+        id: p.id,
+        name: p.name || p.id,
+      } as UserAppMeta;
+    });
+  const installed = [...reconciled, ...firstParty];
+  // Remember the answer for the next launch that cannot ask (see the null
+  // branch at the top). Under the vault we actually resolved — never under
+  // "unknown", which would file one vault's grid where any vault could read it.
+  writeInstalledCache(vid, installed);
+
+  const knownIds = new Set(installed.map((a) => a.id));
   const drafts = projs
     .filter((p) => p.kind !== "automation")
     .filter((p) => !knownIds.has(p.id))
@@ -99,7 +233,7 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
         name: p.name || p.id,
       } as DraftAppMeta;
     });
-  return { userApps: reconciled, drafts };
+  return { drafts, userApps: installed };
 }
 
 export interface ShellAppsController {

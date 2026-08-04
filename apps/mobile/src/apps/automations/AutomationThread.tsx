@@ -10,7 +10,7 @@ import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
@@ -57,10 +57,9 @@ export default function AutomationThread(props: {
     void runAutomation(props.automationRef)
       .then(load)
       .catch((error: unknown) =>
-        showToast({
-          message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-          tone: "danger",
-        })
+        postStatus(
+          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
+        )
       )
       .finally(() => setRunning(false));
   };
@@ -146,9 +145,27 @@ const TurnCard = memo(
         </Text>
       </View>
       <Text style={styles.turnMeta}>
-        {new Date(turn.startedAt).toLocaleString()}
-        {turn.stepCount === undefined ? "" : ` · ${turn.stepCount} steps`}
-        {turn.toolCount === undefined ? "" : ` · ${turn.toolCount} tools`}
+        <Text style={[styles.turnMeta, t("mono")]}>
+          {new Date(turn.startedAt).toLocaleString()}
+        </Text>
+        {turn.stepCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.stepCount}
+            </Text>{" "}
+            steps
+          </>
+        )}
+        {turn.toolCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.toolCount}
+            </Text>{" "}
+            tools
+          </>
+        )}
       </Text>
       {turn.error ? <Text style={styles.turnError}>{turn.error}</Text> : null}
     </View>
@@ -187,7 +204,7 @@ const makeStyles = (colors: ThemeColors) =>
     subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

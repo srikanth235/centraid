@@ -17,7 +17,7 @@ import type { ReplicaValue } from "@centraid/client/replica/native";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -203,11 +203,9 @@ export default function NotesHome({
   ): Promise<boolean> => {
     if (!session) return false;
     if (note && !note.canWrite) {
-      showToast({
-        message:
-          "Read-only note — choose the writable copy in its source vault.",
-        tone: "danger",
-      });
+      postStatus(
+        "Read-only note — choose the writable copy in its source vault."
+      );
       return false;
     }
     try {
@@ -233,10 +231,7 @@ export default function NotesHome({
   const save = async (): Promise<void> => {
     const cleanTitle = title.trim();
     if (!cleanTitle) {
-      showToast({
-        message: "Add a title before saving this note.",
-        tone: "danger",
-      });
+      postStatus("Add a title before saving this note.");
       return;
     }
     const cleanBody = body || cleanTitle;

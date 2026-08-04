@@ -111,36 +111,28 @@ export interface PerfBudgets {
 // re-baseline would have needed. `maxTransferBytes` tightens 1,250,000 ->
 // 470,000 in the same edit — a genuine tightening against both measurements.
 export const approvedDeviation =
-  "Vite 8 (rolldown) re-baseline in #565. Like-for-like vs main (051658de): cold shell 8 -> 15 requests unmitigated; a shell-common chunk group in apps/web/vite.config.ts recovers that to 12, with transfer 402,997 -> 387,990 B (-3.7%). Going below 12 needs a source change (web-host.ts assigns window.CentraidApi at module-eval time, so wider grouping ships a blank page) and is tracked separately. maxRequests widens 10 -> 13, not the 18 an unmitigated re-baseline needed; maxTransferBytes tightens 1,250,000 -> 470,000 in the same change.";
+  "Binding Layer font fan-out re-baseline in #707/#708/#709. CI web-e2e on PR #709 head 88ab442f measured cold same-origin shell requests=16 transfer=495485B (PWA WATERFALL SUMMARY). The +4 requests / +~74 KB vs the prior 12 / 470_000 ceilings are the ten self-hosted woff2 faces (Instrument Sans 400/500 × latin/latin-ext, Instrument Serif, Source Serif 4, DM Mono — each latin + latin-ext) served from /fonts by the centraid-fonts Vite plugin; they are intentional product identity, not accidental chunk bloat. Prior Vite 8 note (#565) still holds for JS chunking: going below the JS half still needs a web-host.ts source change. maxRequests widens 12 -> 17 (measured 16 + 1); maxTransferBytes widens 470_000 -> 520_000 (measured 495_485 + ~5% headroom). Tighten only if font subsets or faces are cut later.";
 
 export const perfBudgets: PerfBudgets = {
   shell: {
-    // MEASURED cold shell (same-origin, 4173): 11 requests under Vite 8 with
-    // the `shell-common` group (boot js+css, index js+css, src, shell-common,
-    // the gateway info fetch, two workers, and the rolldown/preload runtimes).
-    // Ceiling = measured + 1. If chunking work reduces this, tighten.
+    // MEASURED cold shell (same-origin, 4173) on PR #709 Binding Layer head
+    // (88ab442f, CI client-e2e / web-e2e): 16 requests / 495_485 B.
     //
-    // TIGHTENED 13 -> 12 (issue #659): re-measured at 11 after the #659 client
-    // work settled. Route-level code splitting was tried here and REVERTED —
-    // see the byte note below.
-    maxRequests: 12,
-    // MEASURED cold same-origin shell transfer 421,956 B (issue #659,
-    // re-measured; was 387,990 B under Vite 8, Vite 7 like-for-like 402,997 B).
-    // The ceiling is UNCHANGED — the measurement moved up inside it, and
-    // widening a budget to fit a number is what this file exists to prevent.
+    // Prior ceiling was 12 / 470_000 after Vite 8 + #659. The Binding Layer
+    // adds ten same-origin woff2 faces under /fonts (four families, latin +
+    // latin-ext subsets; Sans also ships weight 500). Resource timing counts
+    // each face; transfer includes their compressed bodies. That is product
+    // identity load, not a JS-chunk regression — see approvedDeviation.
     //
-    // The +34 KB is the #659 shell infrastructure now in the eager bundle: the
-    // shared stale-while-revalidate cache, the optimistic-mutation contract,
-    // the transcript projection + memo, and the skeleton styles. It buys the
-    // streaming-transcript and route-re-entry wins measured elsewhere.
-    //
+    // Ceiling = measured + 1 request / ~5% byte headroom for CI jitter.
+    maxRequests: 17,
     // MEASURE IT THE SAME WAY OR THE NUMBER IS MEANINGLESS: `transferSize` is
     // the COMPRESSED size, and `scripts/perf/run-waterfall.mjs` runs a bare
     // `vite build`, which skips `scripts/precompress.mjs` while `emptyOutDir`
     // deletes any sidecars a previous full build left. Measuring that way reads
     // ~1.79 MB here — uncompressed serving, not a regression. Run
     // `bun run --cwd apps/web build` first, then the spec.
-    maxTransferBytes: 470_000,
+    maxTransferBytes: 520_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.
     maxWarmToColdByteRatio: 0.15,

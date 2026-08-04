@@ -2,9 +2,17 @@ export interface PaletteEntityHit {
   appId: string;
   appLabel: string;
   entity: string;
+  /** MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+   *  short lowercase noun for what the row IS: `doc`, `person`, `event`. Never
+   *  the app name (the group header already carries that). */
+  kind: string;
   id: string;
   label: string;
   snippet: string;
+  /** NUMERIC register (date/size/count) when the entity records one worth
+   *  surfacing — tabular mono, distinct from `snippet`'s free text. Empty
+   *  string when the entity has nothing to show here. */
+  meta: string;
 }
 
 export interface PaletteEntitySearch {
@@ -14,13 +22,28 @@ export interface PaletteEntitySearch {
   setOnResults: (fn: (() => void) | null) => void;
 }
 
-interface EntityTarget {
+export interface EntityTarget {
   appId: string;
   appLabel: string;
   entity: string;
+  kind: string;
   id: string;
   labels: string[];
-  snippets: string[];
+  /** Free-text preview fields (UI-register `sub`), first non-empty wins. */
+  snippetFields: string[];
+  /** NUMERIC-register fields (a date, a type) — first non-empty wins. */
+  metaFields: string[];
+  /**
+   * Column to sort "recently opened/edited" by (the palette's empty-state
+   * Recents, issue #708 §A) and to order-filter live reads. Omitted when the
+   * entity's canonical schema carries no edit-time column at all —
+   * `schedule.task` (packages/vault/src/schema/domains-health-finance-schedule.ts)
+   * has only `due_at`/`completed_at`, no `created_at`/`updated_at`, so tasks
+   * are excluded from Recents rather than faked with a borrowed field.
+   */
+  recentField?: string;
+  /** Soft-delete guard column, when the table has one. */
+  deletedColumn?: string;
 }
 
 export const PALETTE_ENTITY_TARGETS: readonly EntityTarget[] = [
@@ -28,69 +51,101 @@ export const PALETTE_ENTITY_TARGETS: readonly EntityTarget[] = [
     appId: "agenda",
     appLabel: "Agenda",
     entity: "core.event",
+    kind: "event",
     id: "event_id",
     labels: ["summary"],
-    snippets: ["description", "dtstart"],
+    snippetFields: ["description"],
+    metaFields: ["dtstart"],
+    recentField: "updated_at",
   },
   {
     appId: "tasks",
     appLabel: "Tasks",
     entity: "schedule.task",
+    kind: "task",
     id: "task_id",
     labels: ["title"],
-    snippets: ["description", "due_at"],
+    snippetFields: ["description"],
+    metaFields: ["due_at"],
+    // No recentField: schedule_task has no created_at/updated_at column —
+    // a genuine schema gap, not an oversight (see EntityTarget doc above).
   },
   {
     appId: "people",
     appLabel: "People",
     entity: "core.party",
+    kind: "person",
     id: "party_id",
     labels: ["display_name"],
-    snippets: [],
+    snippetFields: [],
+    metaFields: [],
+    recentField: "updated_at",
   },
   {
     appId: "notes",
     appLabel: "Notes",
     entity: "knowledge.note",
+    kind: "note",
     id: "note_id",
     labels: ["title"],
-    snippets: ["_snippet", "body"],
+    snippetFields: ["_snippet", "body"],
+    metaFields: [],
+    recentField: "updated_at",
+    deletedColumn: "deleted_at",
   },
   {
     appId: "docs",
     appLabel: "Docs",
     entity: "core.document",
+    kind: "doc",
     id: "document_id",
     labels: ["title"],
-    snippets: ["_snippet"],
+    snippetFields: ["_snippet"],
+    metaFields: [],
+    recentField: "updated_at",
+    deletedColumn: "deleted_at",
   },
   {
     appId: "photos",
     appLabel: "Photos",
     entity: "core.content_item",
+    kind: "photo",
     id: "content_id",
     labels: ["title"],
-    snippets: ["_snippet", "media_type"],
+    snippetFields: ["_snippet"],
+    metaFields: ["media_type"],
+    // core_content_item is create-once (no updated_at column); created_at is
+    // the only edit-time signal it has.
+    recentField: "created_at",
+    deletedColumn: "deleted_at",
   },
   {
     appId: "tally",
     appLabel: "Tally",
     entity: "tally.expense",
+    kind: "entry",
     id: "expense_id",
     labels: ["description"],
-    snippets: ["spent_on", "category"],
+    snippetFields: ["category"],
+    metaFields: ["spent_on"],
+    recentField: "updated_at",
+    deletedColumn: "deleted_at",
   },
   {
     appId: "locker",
     appLabel: "Locker",
     entity: "locker.item",
+    kind: "item",
     id: "item_id",
     labels: ["title"],
-    snippets: ["type"],
+    snippetFields: ["type"],
+    metaFields: [],
+    recentField: "updated_at",
+    deletedColumn: "deleted_at",
   },
 ] as const;
 
-function clean(value: unknown): string {
+export function clean(value: unknown): string {
   return typeof value === "string"
     ? value
         .replace(/[⟦⟧]/gu, "")
@@ -99,12 +154,29 @@ function clean(value: unknown): string {
     : "";
 }
 
-function first(values: Record<string, unknown>, fields: readonly string[]) {
+export function first(
+  values: Record<string, unknown>,
+  fields: readonly string[]
+) {
   for (const field of fields) {
     const value = clean(values[field]);
     if (value) return value;
   }
   return "";
+}
+
+/** Render a raw meta field as the NUMERIC register: dates compact to
+ *  "Aug 3" (UTC, fixed locale — deterministic across machines/tests); any
+ *  other value (e.g. a media type) passes through as-is. */
+export function formatMetaValue(raw: string): string {
+  if (!raw) return "";
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return raw;
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(parsed);
 }
 
 function requestOf(query: string): {
@@ -154,9 +226,11 @@ export async function searchPaletteEntities(
             appId: target.appId,
             appLabel: target.appLabel,
             entity: target.entity,
+            kind: target.kind,
             id,
             label,
-            snippet: first(values, target.snippets),
+            snippet: first(values, target.snippetFields),
+            meta: formatMetaValue(first(values, target.metaFields)),
           },
         ];
       });

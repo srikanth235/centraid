@@ -114,7 +114,7 @@ export interface CentraidSettings {
    * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
    * new app…" row, draft apps + their menus, "Edit with Centraid", and the
    * `builder` / `automation-builder` routes. The builder is hidden from the
-   * first release — apps are installed from Discover, not authored here — but
+   * first release — the first-party apps ship installed, not authored here — but
    * the machinery stays fully wired (the builder is also the headless
    * automations compiler), so this only gates UI reachability. There is no
    * settings-screen toggle for v1: hand-edit the settings JSON (set

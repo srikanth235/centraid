@@ -30,19 +30,16 @@
   align-items: center;
   gap: 2px;
   padding: var(--sp-2) 0 7px;
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
 }
 .weekDow {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font: var(--t-eyebrow);
   color: var(--text-faint);
 }
 .weekNum {
   font-family: var(--font-mono);
   font-size: 15px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: var(--t-mono-numeric);
   min-width: 26px;
   height: 26px;
   line-height: 26px;
@@ -64,26 +61,24 @@
   overflow: auto;
 }
 .weekAlldayLabel {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font: var(--t-control);
   color: var(--text-faint);
   padding: 6px var(--sp-1);
-  text-align: right;
+  text-align: end;
 }
 .weekAlldayCell {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 3px;
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   min-height: 1.4rem;
 }
 .alldayChip {
   --ev-color: var(--app-identity);
   font: var(--t-small);
-  font-size: 11px;
   line-height: 1.4;
-  text-align: left;
+  text-align: start;
   color: var(--text-inv);
   background: var(--ev-color);
   border: none;
@@ -105,17 +100,18 @@
 }
 .weekHour {
   position: absolute;
-  right: 6px;
+  inset-inline-end: 6px;
   transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   background: var(--bg-elev);
   padding: 0 2px;
 }
 .weekCol {
   position: relative;
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   cursor: pointer;
   background-image: repeating-linear-gradient(
     to bottom,
@@ -136,8 +132,7 @@
 }
 .nowLine {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 2px;
   background: var(--danger);
   z-index: 3;
@@ -145,7 +140,7 @@
 .nowLine::before {
   content: "";
   position: absolute;
-  left: -3px;
+  inset-inline-start: -3px;
   top: -3px;
   width: 8px;
   height: 8px;
@@ -159,7 +154,7 @@
   flex-direction: column;
   gap: 1px;
   overflow: hidden;
-  text-align: left;
+  text-align: start;
   color: var(--text-inv);
   background: var(--ev-color);
   border: 1px solid color-mix(in srgb, var(--ev-color) 65%, var(--text));
@@ -182,7 +177,8 @@
 }
 .weekEvTime {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
+  font-variant-numeric: var(--t-mono-numeric);
   opacity: 0.9;
   white-space: nowrap;
   overflow: hidden;

@@ -1,9 +1,8 @@
 /* The redesigned lightbox's React-owned classes. Authored camelCase (old
    `ph-lb-`/`ph-lightbox` prefixes dropped). The fixed `.lightbox` container
    (z-index 60) stays global (static index.html element / React root). The
-   filmstrip's placeholder shimmer moved here with its frame; it references the
-   global `@keyframes ph-shimmer` (kept in app.css alongside `.ph-tile-ph`) by
-   name, and the `is-placeholder`/`zoomable`/`zoomed` markers are `:global`
+   filmstrip's placeholder ground moved here with its frame (static, matching
+   `.kit-skeleton`), and the `is-placeholder`/`zoomable`/`zoomed` markers are `:global`
    (shared vocabulary set imperatively / as static strings). */
 
 .lightbox {
@@ -13,8 +12,12 @@
   display: flex;
   flex-direction: column;
   /* A theater stage, not a themed surface — same fixed dark backdrop as the
-     slideshow (z-index 65) it opens into, in both themes. */
-  background: hsl(var(--app-hue) 25% 4%);
+     slideshow (z-index 65) it opens into, in both themes. NEUTRAL: an identity
+     hue is a mark or a content accent, never a full-bleed ground. Still a
+     literal: `--scrim` is translucent (a veil over content) and the token layer
+     has no OPAQUE stage role. Pinned at functional:1 in
+     token-purity-allowlist.ts; the seam is recorded there. */
+  background: hsl(0 0% 4%); /* governance: allow-no-hardcoded-colors stage */
   color: var(--text-inv);
 }
 .topbar {
@@ -31,7 +34,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 8%, transparent);
   color: var(--text-inv);
   flex-shrink: 0;
@@ -50,14 +53,13 @@
 }
 .title {
   font: var(--t-body-strong);
-  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dateline {
   font: var(--t-mono);
-  font-size: 10.5px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: color-mix(in oklab, var(--text-inv) 65%, transparent);
 }
 .body {
@@ -79,7 +81,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   box-shadow: var(--shadow-lg);
 }
 .audio {
@@ -88,7 +90,7 @@
   justify-items: center;
   gap: 1.25rem;
   padding: 2rem;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: color-mix(in oklab, var(--text-inv) 7%, transparent);
 }
 .audio > span {
@@ -96,10 +98,10 @@
   place-items: center;
   width: 5rem;
   height: 5rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 10%, transparent);
   color: color-mix(in oklab, var(--text-inv) 82%, transparent);
-  font-size: 2.25rem;
+  font-size: var(--t-display-size);
 }
 .audio audio {
   width: 100%;
@@ -107,7 +109,7 @@
 .stagewrap img:global(.zoomable) {
   cursor: zoom-in;
   touch-action: none;
-  transition: transform 0.15s var(--ease);
+  transition: transform var(--dur-1) var(--ease);
 }
 .stagewrap img:global(.zoomed) {
   cursor: grab;
@@ -135,7 +137,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 10%, transparent);
   color: var(--text-inv);
   z-index: 2;
@@ -144,21 +146,22 @@
   background: color-mix(in oklab, var(--text-inv) 18%, transparent);
 }
 .nav:disabled {
-  opacity: 0.2;
+  /* Icon-only leaf control (no text child) — the canonical disabled token. */
+  opacity: var(--o-disabled);
   pointer-events: none;
 }
 .nav.prev {
-  left: 8px;
+  inset-inline-start: 8px;
 }
 .nav.next {
-  right: 8px;
+  inset-inline-end: 8px;
 }
 .info {
   width: min(340px, 88vw);
   flex-shrink: 0;
   background: var(--bg-elev);
   color: var(--text);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   overflow-y: auto;
   padding: 18px;
 }
@@ -168,15 +171,15 @@
   }
   .info {
     position: fixed;
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     bottom: 0;
     top: auto;
     width: auto;
     max-height: 72vh;
-    border-left: none;
+    border-inline-start: none;
     border-top: 1px solid var(--line);
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
     box-shadow: var(--shadow-lg);
   }
 }
@@ -195,16 +198,14 @@
   flex: 0 0 auto;
   width: 56px;
   height: 56px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   padding: 0;
   background: var(--bg-sunken);
   border: 2px solid transparent;
-  opacity: 0.6;
 }
 .frame[data-active="true"] {
   border-color: var(--text-inv);
-  opacity: 1;
 }
 .frame img {
   width: 100%;
@@ -212,26 +213,21 @@
   object-fit: cover;
   display: block;
   pointer-events: none;
+  /* Muted-vs-active is a leaf treatment (the image), never the button
+     container it sits inside — rule 5. */
+  opacity: 0.6;
+}
+.frame[data-active="true"] img {
+  opacity: 1;
 }
 .frame:global(.is-placeholder) {
   position: relative;
   overflow: hidden;
 }
+/* Static, like `.kit-skeleton` and `.ph-tile-ph` — see Chrome.module.css. */
 .frame:global(.is-placeholder)::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
-    var(--bg-sunken) 70%
-  );
-  background-size: 220% 100%;
-  animation: kit-shimmer 1.4s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .frame:global(.is-placeholder)::after {
-    animation: none;
-  }
+  background: var(--bg-sunken);
 }

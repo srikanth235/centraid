@@ -4,7 +4,7 @@ import { colorForCalendar } from "./format.ts";
 // closes over app.tsx's own `state`/`data` (mutated in place, never
 // reassigned) plus the render/refresh entry points app.tsx defines — the
 // same factory shape tasks/logic.ts and notes/logic.ts use.
-import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { debounce, outcomeMessage, statusLine } from "./kit.ts";
 import {
   clearPendingState,
   reconcilePendingChange,
@@ -36,7 +36,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   // Executed clears the banner and tells the caller to refresh; parked is
-  // narrated by the caller (toast + the accent-rail/pending-chip treatment,
+  // narrated by the caller (statusLine + the accent-rail/pending-chip treatment,
   // not the banner — this is a designed calm state, not an error);
   // failed/denied surface the plain-language reason in the banner.
   function narrate(outcome: VaultOutcome | undefined): boolean {
@@ -150,7 +150,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     if (outcome?.status === "executed") {
       const newId = outcome.output?.event_id as string | undefined;
       logActivity(newId, `Proposed on ${input.calendar_id}`, outcome);
-      toast("Event proposed · receipt", {
+      statusLine("Event proposed · receipt", {
         undoLabel: newId ? "Undo" : undefined,
         onUndo: newId
           ? () => write("cancel-event", { event_id: newId })
@@ -160,7 +160,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      toast(
+      statusLine(
         "Event saved on this device — it will sync when the gateway is reachable."
       );
     }
@@ -173,12 +173,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     const outcome = await write("edit-event", input);
     if (outcome?.status === "executed") {
       logActivity(input.event_id, "Event details edited", outcome);
-      toast("Event updated · receipt");
+      statusLine("Event updated · receipt");
     } else if (
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      toast("Event edit saved on this device — it will sync when connected.");
+      statusLine(
+        "Event edit saved on this device — it will sync when connected."
+      );
     }
     return outcome;
   }
@@ -193,12 +195,12 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         `${input.action === "skip" ? "Skipped" : "Edited"} ${input.scope}`,
         outcome
       );
-      toast("Recurring event updated · receipt");
+      statusLine("Recurring event updated · receipt");
     } else if (
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      toast(
+      statusLine(
         "Recurrence edit saved on this device — it will sync when connected."
       );
     }
@@ -237,14 +239,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
             ? "Not going"
             : "Maybe";
       logActivity(eventId, `RSVP: ${label}`, outcome);
-      toast(`RSVP recorded: ${label} · receipt`);
+      statusLine(`RSVP recorded: ${label} · receipt`);
     } else if (
       outcome?.status === "parked" ||
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
       trackPending(eventId, "rsvp", outcome);
-      toast(
+      statusLine(
         outcome.status === "parked"
           ? "Sent to the owner for confirmation."
           : "RSVP saved on this device — it will sync when the gateway is reachable."
@@ -272,7 +274,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
           : "Cancellation saved offline",
         outcome
       );
-      toast(
+      statusLine(
         outcome.status === "parked"
           ? "Sent to the owner for confirmation — it stays on the agenda until approved."
           : "Cancellation saved on this device — it will sync when the gateway is reachable.",
@@ -281,7 +283,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       render();
     } else if (executed) {
       logActivity(eventId, "Cancelled", outcome);
-      toast("Event cancelled · receipt");
+      statusLine("Event cancelled · receipt");
       await refresh();
     } else if (outcome?.status === "denied") {
       await refresh();

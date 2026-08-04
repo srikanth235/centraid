@@ -68,7 +68,7 @@
 }
 .headMeta {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -120,7 +120,7 @@
 }
 .tabBadge {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   line-height: 1;
   padding: 2px 5px;
@@ -271,7 +271,7 @@
 .statusError {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--danger);
   max-width: min(380px, 100%);
   overflow: hidden;
@@ -281,7 +281,7 @@
 .statusDegraded {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--c-amber-text);
 }
 
@@ -306,7 +306,7 @@
 }
 .figureLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -331,7 +331,7 @@
 .figureSub {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
@@ -360,7 +360,7 @@
 }
 .stripEmpty {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   align-self: center;
 }
@@ -369,7 +369,7 @@
   justify-content: space-between;
   margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -442,7 +442,7 @@
 }
 .resourceModeBtn:has(:disabled) {
   cursor: default;
-  opacity: 0.7;
+  opacity: var(--o-disabled);
 }
 .resourceModeBtnActive,
 .resourceModeBtnActive:hover:not(:has(:disabled)) {
@@ -463,7 +463,7 @@
 }
 .resourceModeHint {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.01em;
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
@@ -524,13 +524,13 @@
 .resourceNote {
   padding: 0 18px 14px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .resourceError {
   padding: 0 18px 14px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--danger);
 }
 
@@ -569,7 +569,7 @@
   background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourcePauseBtn:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .resourcePauseIcon {
@@ -594,7 +594,7 @@
 .resourcePauseChoicesLabel {
   margin-right: 2px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -635,7 +635,7 @@
 }
 .resourceSummaryAttr {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -643,7 +643,7 @@
    as separate note lines below the pause control. */
 .resourceSummaryStatus {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -663,7 +663,7 @@
 .resourcePostureAttr {
   margin-top: 2px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -705,7 +705,7 @@
 }
 .resourceDetailsGroupTitle {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -769,13 +769,13 @@
 }
 .resourceKnobTagLinked {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
 .resourceKnobTagCustom {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--accent);
 }
@@ -784,7 +784,7 @@
   align-items: center;
   gap: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -804,12 +804,11 @@
   color: var(--text);
 }
 .resourceKnobInput:disabled {
-  color: var(--text-ghost);
-  opacity: 0.8;
+  color: var(--text-disabled);
 }
 .resourceKnobMeta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -830,7 +829,7 @@
 }
 .resourceKnobPending {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
@@ -866,7 +865,7 @@
 .panelMeta {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   white-space: nowrap;
   color: var(--text-ghost);
@@ -946,7 +945,7 @@
 }
 .outageBadge {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1018,7 +1017,7 @@
   border-color: var(--accent);
 }
 .switch:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .switchThumb {
@@ -1038,15 +1037,22 @@
   transform: translateX(13.5px);
 }
 
-.alertAfter {
-  transition: opacity 0.18s var(--ease);
+/* Disabled state lands on the leaf text (label + pill copy), not the
+   container — a container-level opacity would composite the accent-tinted
+   `.presetActive` pill into an unreadable wash instead of a plain dim. */
+.alertAfter[data-disabled] .alertAfterLabel,
+.alertAfter[data-disabled] .preset {
+  color: var(--text-disabled);
 }
-.alertAfter[data-disabled] {
-  opacity: 0.45;
+.alertAfter[data-disabled] .presetActive {
+  background: var(--bg-elev);
+  border-color: var(--line-strong);
+  color: var(--text-disabled);
+  font-weight: 500;
 }
 .alertAfterLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1078,6 +1084,7 @@
 }
 .preset:disabled {
   cursor: default;
+  color: var(--text-disabled);
 }
 .presetActive {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -1103,7 +1110,7 @@
 }
 .idRow dt {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1150,14 +1157,11 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .restartIcon[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.restartIcon`'s spin. */
 .restartError {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }

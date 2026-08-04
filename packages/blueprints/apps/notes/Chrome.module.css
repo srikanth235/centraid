@@ -70,7 +70,7 @@
   color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
-  transition: filter 0.14s var(--ease);
+  transition: filter var(--dur-1) var(--ease);
 }
 .new:hover {
   filter: brightness(1.07);
@@ -106,7 +106,7 @@
 }
 .searchClear {
   position: absolute;
-  right: 8px;
+  inset-inline-end: 8px;
   top: 50%;
   transform: translateY(-50%);
   width: 26px;
@@ -171,7 +171,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: var(--sp-3) 22px var(--sp-7);
+  padding: var(--sp-3) 22px var(--sp-6);
 }
 
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
@@ -187,16 +187,14 @@
   composes: kit-app-side-open from global;
 }
 .shell.isNarrow.sideOpen .scrim {
-  animation: kit-fade-in 0.2s ease;
+  animation: kit-fade-in var(--dur-2) var(--ease-entry);
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .scroll {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
+  padding-inline: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: var(--sp-4);
-  margin-right: var(--sp-4);
+  margin-inline: var(--sp-4);
 }
 .shell.isNarrow .topbar {
   flex-wrap: wrap;
@@ -204,7 +202,7 @@
 }
 .shell.isNarrow .topbarTools {
   flex: 1 0 100%;
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 .shell.isNarrow .search {
   max-width: none;

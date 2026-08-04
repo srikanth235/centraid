@@ -12,9 +12,8 @@
   align-items: center;
   gap: var(--sp-2);
   padding: 7px var(--sp-3);
-  border-radius: 999px;
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--bg-elev);
   font: var(--t-small);
-  font-size: 12.5px;
 }

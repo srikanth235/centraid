@@ -27,7 +27,7 @@ import {
   outcomeMessage,
   popItem,
   runBulk as runBulkBase,
-  toast,
+  statusLine,
 } from "./kit.ts";
 import type {
   DashboardData,
@@ -208,7 +208,7 @@ export function createLogic({
       party_id: p.party_id,
     });
     if (!narrate(outcome)) return;
-    toast(
+    statusLine(
       p.starred ? "Favorite removed · receipted." : "Favorited · receipted."
     );
     await refresh();
@@ -226,7 +226,7 @@ export function createLogic({
     };
     const outcome = await act("move-person", input);
     if (!narrate(outcome)) return;
-    toast(`Moved to ${name} · receipted.`);
+    statusLine(`Moved to ${name} · receipted.`);
     await refresh();
     await reloadOpenDetail(p.party_id);
   }
@@ -240,7 +240,7 @@ export function createLogic({
       revision_id: revisionId,
     });
     if (!narrate(outcome)) return;
-    toast("Change undone · receipt");
+    statusLine("Change undone · receipt");
     await refresh();
     await reloadOpenDetail(partyId);
   }
@@ -255,7 +255,7 @@ export function createLogic({
     });
     if (!narrate(outcome)) return false;
     const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Profile updated · receipt", {
+    statusLine("Profile updated · receipt", {
       duration: revisionId ? 10_000 : undefined,
       undoLabel: revisionId ? "Undo" : undefined,
       onUndo: revisionId
@@ -277,7 +277,7 @@ export function createLogic({
     });
     if (!narrate(outcome)) return false;
     const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Cadence updated · receipt", {
+    statusLine("Cadence updated · receipt", {
       duration: revisionId ? 10_000 : undefined,
       undoLabel: revisionId ? "Undo" : undefined,
       onUndo: revisionId
@@ -294,7 +294,7 @@ export function createLogic({
     if (!narrate(outcome)) return;
     const revisionId = String(outcome?.output?.revision_id ?? "");
     closeDetails();
-    toast(`${p.name} moved to trash`, {
+    statusLine(`${p.name} moved to trash`, {
       duration: revisionId ? 10_000 : undefined,
       undoLabel: revisionId ? "Undo" : undefined,
       onUndo: revisionId
@@ -307,7 +307,7 @@ export function createLogic({
   async function restorePerson(p: Person): Promise<void> {
     const outcome = await act("restore-person", { party_id: p.party_id });
     if (!narrate(outcome)) return;
-    toast(`${p.name} restored · receipt`);
+    statusLine(`${p.name} restored · receipt`);
     await refresh();
   }
 
@@ -318,7 +318,7 @@ export function createLogic({
       text,
     });
     if (!narrate(outcome)) return;
-    toast(`Logged · receipted.`);
+    statusLine(`Logged · receipted.`);
     await refresh();
     await reloadOpenDetail(p.party_id);
   }
@@ -351,7 +351,7 @@ export function createLogic({
     const outcome = await act("create-list", { name });
     if (narrate(outcome)) {
       state.creatingList = false;
-      toast(`List "${name}" created · receipted.`);
+      statusLine(`List "${name}" created · receipted.`);
       await refresh();
     } else {
       render();
@@ -361,7 +361,7 @@ export function createLogic({
     const outcome = await act("rename-list", { list_id: listId, name });
     if (narrate(outcome)) {
       state.renamingListId = null;
-      toast("List renamed · receipted.");
+      statusLine("List renamed · receipted.");
       await refresh();
     } else {
       render();
@@ -372,7 +372,7 @@ export function createLogic({
     if (narrate(outcome)) {
       if (state.nav.kind === "list" && state.nav.listId === list.list_id)
         state.nav = { kind: "all" };
-      toast("List deleted · receipted.");
+      statusLine("List deleted · receipted.");
       await refresh();
     }
   }
@@ -435,7 +435,7 @@ export function createLogic({
   ): Promise<boolean> {
     const outcome = await act(action, input);
     if (!narrate(outcome)) return false;
-    toast(`${message} · receipted.`);
+    statusLine(`${message} · receipted.`);
     await refresh();
     if (state.detailsId) await loadDetail(state.detailsId);
     return true;
@@ -455,7 +455,7 @@ export function createLogic({
     const duplicates = Array.isArray(outcome?.output?.duplicate_party_ids)
       ? outcome.output.duplicate_party_ids.length
       : 0;
-    toast(
+    statusLine(
       duplicates > 0
         ? `Contact saved · ${duplicates} possible duplicate${duplicates === 1 ? "" : "s"}`
         : "Contact saved · receipt",
@@ -482,7 +482,7 @@ export function createLogic({
     });
     if (!narrate(outcome)) return;
     const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Contact deleted · receipt", {
+    statusLine("Contact deleted · receipt", {
       duration: revisionId ? 10_000 : undefined,
       undoLabel: revisionId ? "Undo" : undefined,
       onUndo: revisionId
@@ -502,7 +502,7 @@ export function createLogic({
       revision_id: revisionId,
     });
     if (!narrate(outcome)) return;
-    toast("Contact restored · receipt");
+    statusLine("Contact restored · receipt");
     await loadDetail(partyId);
   }
 
@@ -518,7 +518,7 @@ export function createLogic({
     closeDetails();
     await refresh();
     // core.merge_party is irreversible by design (#290 / #306 Tier 4).
-    toast(`${source.name} merged · receipt`);
+    statusLine(`${source.name} merged · receipt`);
   }
 
   // ---------- Add-person modal ----------
@@ -546,7 +546,7 @@ export function createLogic({
     if (!narrate(outcome)) return false;
     state.addModalOpen = false;
     renderModal();
-    toast("Added · receipted.");
+    statusLine("Added · receipted.");
     await refresh();
     const newId = outcome?.output?.party_id;
     if (typeof newId === "string") await openDetails(newId);
@@ -604,7 +604,7 @@ export function createLogic({
   async function addJournalEntry(mood: string, text: string): Promise<boolean> {
     const outcome = await act("add-journal-entry", { mood, text });
     if (!narrate(outcome)) return false;
-    toast("Entry added · receipted.");
+    statusLine("Entry added · receipted.");
     await loadJournal();
     renderRows();
     return true;

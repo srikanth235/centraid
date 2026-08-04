@@ -136,5 +136,5 @@ const styles = StyleSheet.create({
   },
   map: { flex: 1 },
   safe: { flex: 1 },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
+  title: { fontFamily: family.sansMedium, fontSize: 18 },
 });

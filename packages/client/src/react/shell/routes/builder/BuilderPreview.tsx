@@ -3,7 +3,6 @@ import type { CSSProperties, JSX } from "react";
 
 import { draftPreviewUrl } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
-import { parseAnchor } from "../../appearance.js";
 import { appFramePostMessageOrigin } from "../appFramePostMessage.js";
 
 import styles from "./BuilderPreview.module.css";
@@ -13,7 +12,7 @@ import styles from "./BuilderPreview.module.css";
 // previews the gateway *draft* worktree, so staged agent edits show before an
 // explicit Publish. While the draft has no index.html yet (fresh app
 // mid-generation) it shows the building skeleton. Theme is synced into the
-// frame the same way the running-app view does it: a `#theme=…&bgL=…` hash for
+// frame the same way the running-app view does it: a `#theme=…` hash for
 // first paint plus a `centraid:theme` postMessage on load.
 
 // NO sandbox on the preview iframe, matching AppFrame: allow-scripts +
@@ -26,7 +25,6 @@ export interface PreviewResolved {
   src: string;
   themedSrc: string;
   theme: "light" | "dark";
-  bgL: number;
 }
 
 export interface BuilderPreviewProps {
@@ -39,22 +37,14 @@ export interface BuilderPreviewProps {
   onResolved: (info: { src: string } | null) => void;
 }
 
-function resolveTheme(): { theme: "light" | "dark"; bgL: number } {
+function resolveTheme(): { theme: "light" | "dark" } {
   const html = document.documentElement;
   const shellTheme = html.dataset.theme || "dark";
   const themes = window.CentraidTokens.themes as Record<
     string,
-    { kind: "light" | "dark"; bgL?: string } | undefined
+    { kind: "light" | "dark" } | undefined
   >;
-  const resolved = themes[shellTheme];
-  const theme = resolved?.kind ?? "dark";
-  // The lightness anchor is the ACTIVE theme's declaration unless the owner
-  // moved the knob, in which case an inline style shadows it (#608 group P).
-  // Reading the inline style alone used to mean the pref layer's value always
-  // won here; read the computed value so both cases resolve the same way.
-  const declared =
-    getComputedStyle(html).getPropertyValue("--bg-l") || resolved?.bgL || "";
-  return { theme, bgL: parseAnchor(declared) };
+  return { theme: themes[shellTheme]?.kind ?? "dark" };
 }
 
 function Skeleton(): JSX.Element {
@@ -122,16 +112,11 @@ export default function BuilderPreview({
         onResolved(null);
         return;
       }
-      const { theme, bgL } = resolveTheme();
+      const { theme } = resolveTheme();
       const sep = src.includes("#") ? "&" : "#";
       setSettled({
         key: resolveKey,
-        resolved: {
-          src,
-          themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`,
-          theme,
-          bgL,
-        },
+        resolved: { src, themedSrc: `${src}${sep}theme=${theme}`, theme },
       });
       onResolved({ src });
     })();
@@ -179,11 +164,7 @@ export default function BuilderPreview({
                 const frame = e.currentTarget;
                 try {
                   frame.contentWindow?.postMessage(
-                    {
-                      type: "centraid:theme",
-                      theme: resolved.theme,
-                      bgL: resolved.bgL,
-                    },
+                    { type: "centraid:theme", theme: resolved.theme },
                     appFramePostMessageOrigin(frame)
                   );
                 } catch {

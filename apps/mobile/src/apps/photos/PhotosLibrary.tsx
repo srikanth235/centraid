@@ -9,8 +9,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -32,8 +34,6 @@ import {
 } from "./device-media";
 import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
 import type { DeviceByteProbe } from "./free-up-space";
-import { gridImageProps } from "./grid-image";
-import { imageSource } from "./media-source";
 import { styles } from "./PhotosLibrary.styles";
 import type { PhotoAsset } from "./timeline-source";
 import { usePhotoTimeline } from "./timeline-source";
@@ -292,38 +292,32 @@ export default function PhotosLibrary({
         lines.push(
           `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`
         );
-      showToast({
-        message: lines.length
+      postStatus(
+        lines.length
           ? lines.join(" ")
           : result.changedCount || result.missingCount || result.inCloudCount
             ? "Vault freed with exclusions."
-            : "Vault freed.",
-        tone: "accent",
-      });
+            : "Vault freed."
+      );
     } catch (error) {
-      showToast({
-        message: `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`,
-        tone: "danger",
-      });
+      postStatus(
+        `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`
+      );
     } finally {
       setFreeing(false);
     }
   };
   const freeSpace = (): void => {
     if (!pinsHydrated) {
-      showToast({
-        message:
-          "Checking device pins — try again when protected albums finish loading.",
-        tone: "neutral",
-      });
+      postStatus(
+        "Checking device pins — try again when protected albums finish loading."
+      );
       return;
     }
     if (!freeCandidates.length) {
-      showToast({
-        message:
-          "Nothing to free — no verified backups are eligible right now.",
-        tone: "neutral",
-      });
+      postStatus(
+        "Nothing to free — no verified backups are eligible right now."
+      );
       return;
     }
     Alert.alert(

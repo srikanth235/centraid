@@ -18,6 +18,7 @@ import styles from "./AssistantScreen.module.css";
 function ThumbUpGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width="13"
       height="13"
       viewBox="0 0 24 24"
@@ -34,6 +35,7 @@ function ThumbUpGlyph(): JSX.Element {
 function ThumbDownGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width="13"
       height="13"
       viewBox="0 0 24 24"

@@ -6,7 +6,7 @@
 // oklab mix, extracted from `contrast.test.ts` so both that file and its
 // callers stay under the file-size limit.
 
-import { parseColor, rgbToHsl, toHex } from "./color.js";
+import { parseColor, rgbToHsl, SELF_TINT, toHex } from "./color.js";
 
 type Triple = [number, number, number];
 
@@ -31,15 +31,69 @@ function rgbToOklab(value: string): Triple {
   ];
 }
 
-function oklabToHex([L, a, b]: Triple): string {
+function oklabToHex(lab: Triple): string {
+  const rgb = oklabToLinearRgb(lab).map((c) =>
+    Math.max(0, Math.min(255, toGamma(c) * 255))
+  );
+  return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
+}
+
+/** Linear-light sRGB triple for one oklab colour, BEFORE gamut clamping. */
+function oklabToLinearRgb([L, a, b]: Triple): Triple {
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const rgb = [
+  return [
     4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
     -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
     -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((c) => Math.max(0, Math.min(255, toGamma(c) * 255)));
+  ];
+}
+
+const IN_GAMUT_EPSILON = 0.000_01;
+
+const inGamut = (rgb: Triple): boolean =>
+  rgb.every(
+    (channel) => channel >= -IN_GAMUT_EPSILON && channel <= 1 + IN_GAMUT_EPSILON
+  );
+
+/**
+ * `oklch(<l> <c> <h>)` resolved to an sRGB hex at BUILD TIME.
+ *
+ * React Native has no `oklch()` and no `color-mix()`, and the shell must paint
+ * the same pixels as the app surface, so an identity hue may never reach a
+ * renderer as a colour function. The one subtlety is gamut: `oklch(0.5 0.09 h)`
+ * is inside sRGB at every hue this package ships, but a caller can ask for a
+ * chroma that is not, and naively clipping the channels shifts the HUE (the
+ * clipped channel moves the colour sideways, not just inward). So chroma is
+ * bisected down to the largest value that still lands in gamut, which keeps
+ * lightness and hue exact — the two properties the app palette is defined by.
+ */
+export function oklchToHex(
+  lightness: number,
+  chroma: number,
+  hue: number
+): string {
+  const radians = (hue * Math.PI) / 180;
+  const at = (c: number): Triple =>
+    oklabToLinearRgb([lightness, c * Math.cos(radians), c * Math.sin(radians)]);
+
+  let usable = chroma;
+  if (!inGamut(at(chroma))) {
+    let low = 0;
+    let high = chroma;
+    // 24 halvings resolve chroma far finer than the 1/255 the hex can carry.
+    for (let step = 0; step < 24; step++) {
+      const mid = (low + high) / 2;
+      if (inGamut(at(mid))) low = mid;
+      else high = mid;
+    }
+    usable = low;
+  }
+
+  const rgb = at(usable).map((channel) =>
+    Math.max(0, Math.min(255, toGamma(Math.max(0, Math.min(1, channel))) * 255))
+  );
   return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
 }
 
@@ -163,9 +217,7 @@ export function declarations(
 // ── Semantic states ────────────────────────────────────────────────────────
 /** The three state roles, in the order the separation check reports them. */
 export const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
-/** The self-wash strength `color.ts` solves these rungs for, and the strength
- *  every `color-mix(… var(--danger) N%, transparent)` chip in the tree uses. */
-export const SELF_TINT = 0.12;
+export { SELF_TINT } from "./color.js";
 /** Past this a state has stopped being its hue and become near-black (light)
  *  or near-white (dark). Same guard the accent fills carry. */
 export const RECOGNISABLE_STATE = 12;

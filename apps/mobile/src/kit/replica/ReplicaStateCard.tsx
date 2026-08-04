@@ -84,11 +84,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   retryText: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 13,
   },
   title: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 19,
     textAlign: "center",
   },

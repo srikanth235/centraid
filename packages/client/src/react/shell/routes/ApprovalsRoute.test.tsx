@@ -32,8 +32,13 @@ vi.mock(import("../../../gateway-client-outbox.js"), () => ({
   decideScopeRequest: vi.fn<OutboxModule["decideScopeRequest"]>(),
   revokeOutboxGrant: vi.fn<OutboxModule["revokeOutboxGrant"]>(),
 }));
+const vaultApps = vi.fn<VaultModule["vaultApps"]>().mockResolvedValue([]);
+const listAgents = vi.fn<VaultModule["listAgents"]>().mockResolvedValue([]);
 vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
+  vaultApps: () => vaultApps(),
+  listAgents: () => listAgents(),
+  revokeVaultGrant: vi.fn<VaultModule["revokeVaultGrant"]>(),
 }));
 vi.mock(import("../../../gateway-client-push.js"), () => ({
   enableWebPushWake: (requestPermission: boolean) =>

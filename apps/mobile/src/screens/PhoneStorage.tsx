@@ -8,7 +8,7 @@ import { formatBytes } from "@centraid/design";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import { useReplica } from "../kit/replica/ReplicaProvider";
-import { family, radii, useTheme } from "../kit/theme";
+import { density, family, radii, t, useTheme } from "../kit/theme";
 import {
   pendingBytesByVault,
   sqliteFamilyBytes,
@@ -86,7 +86,10 @@ export default function PhoneStorage({
             Phone storage
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            {formatBytes(total)} used by offline data
+            <Text style={[t("mono"), { color: colors.textSoft }]}>
+              {formatBytes(total)}
+            </Text>{" "}
+            used by offline data
           </Text>
         </View>
       </View>
@@ -114,7 +117,7 @@ export default function PhoneStorage({
                 <Text style={[styles.cardTitle, { color: colors.text }]}>
                   {row.label}
                 </Text>
-                <Text style={[styles.total, { color: colors.text }]}>
+                <Text style={[t("mono"), styles.total, { color: colors.text }]}>
                   {formatBytes(used)}
                 </Text>
               </Pressable>
@@ -126,7 +129,15 @@ export default function PhoneStorage({
                     color={colors.textSoft}
                   />
                   <StorageLine
-                    label={`Offline thumbnails · ${formatBytes(THUMBNAIL_SOURCE_BUDGET_BYTES)} budget`}
+                    label={
+                      <>
+                        Offline thumbnails ·{" "}
+                        <Text style={[t("mono"), { color: colors.textSoft }]}>
+                          {formatBytes(THUMBNAIL_SOURCE_BUDGET_BYTES)}
+                        </Text>{" "}
+                        budget
+                      </>
+                    }
                     bytes={row.thumbnailBytes}
                     color={colors.textSoft}
                   />
@@ -146,9 +157,12 @@ export default function PhoneStorage({
           >
             <Icon name="alert-circle" size={18} color={colors.accent} />
             <Text style={[styles.explainerText, { color: colors.textSoft }]}>
-              {formatBytes(unassignedPendingBytes)} of pending uploads are not
-              assigned to a vault. They remain durable and are not assigned to
-              whichever vault is currently focused.
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {formatBytes(unassignedPendingBytes)}
+              </Text>{" "}
+              of pending uploads are not assigned to a vault. They remain
+              durable and are not assigned to whichever vault is currently
+              focused.
             </Text>
           </View>
         ) : null}
@@ -195,14 +209,16 @@ function StorageLine({
   bytes,
   color,
 }: {
-  label: string;
+  label: React.ReactNode;
   bytes: number;
   color: string;
 }): React.JSX.Element {
   return (
     <View style={styles.line}>
       <Text style={[styles.lineLabel, { color }]}>{label}</Text>
-      <Text style={[styles.lineValue, { color }]}>{formatBytes(bytes)}</Text>
+      <Text style={[t("mono"), styles.lineValue, { color }]}>
+        {formatBytes(bytes)}
+      </Text>
     </View>
   );
 }
@@ -223,14 +239,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 14,
   },
-  buttonText: { fontFamily: family.sansBold, fontSize: 13 },
-  card: { borderRadius: radii.lg, borderWidth: 1, gap: 10, padding: 16 },
+  buttonText: { fontFamily: family.sansMedium, fontSize: 13 },
+  card: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 10,
+    // One row per vault — the Binding Layer's `comfortable` density tier is
+    // mobile's floor (one tier looser than declared), so the card's content
+    // padding reads from the tier rather than a bare literal.
+    padding: density.comfortable.pad,
+  },
   cardHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  cardTitle: { fontFamily: family.sansBold, fontSize: 17 },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: 17 },
   explainer: {
     alignItems: "flex-start",
     borderRadius: radii.md,
@@ -260,6 +284,6 @@ const styles = StyleSheet.create({
   lineValue: { fontFamily: family.sansMedium, fontSize: 12 },
   safe: { flex: 1 },
   subtitle: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 2 },
-  title: { fontFamily: family.sansBold, fontSize: 23 },
-  total: { fontFamily: family.sansBold, fontSize: 14 },
+  title: { fontFamily: family.sansMedium, fontSize: 23 },
+  total: { fontFamily: family.sansMedium, fontSize: 14 },
 });

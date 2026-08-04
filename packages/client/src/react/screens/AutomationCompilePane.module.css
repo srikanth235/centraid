@@ -109,7 +109,7 @@
   margin: 0;
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -173,11 +173,8 @@
   color: var(--accent);
   animation: cd-spin 0.9s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .step[data-status="running"] .stepMark {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.stepMark`'s spin. */
 .stepLabel {
   font-family: var(--font-mono);
   font-size: var(--t-mono-size);
@@ -189,7 +186,7 @@
 }
 .stepTime {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   line-height: 1.6;
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
@@ -265,7 +262,7 @@
 .historyOutcome {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -279,7 +276,7 @@
   background: transparent;
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);

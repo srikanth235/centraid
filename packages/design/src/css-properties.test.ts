@@ -1,20 +1,23 @@
 import { describe, expect, test } from "vitest";
 
 import { toBlueprintCss } from "./blueprint.js";
-import { paletteText } from "./color.js";
 import { BLUEPRINT_TOKEN_CONTRACT, SHELL_TOKEN_CONTRACT } from "./contract.js";
 import { toCss } from "./css.js";
 import { spacing } from "./density.js";
 import { library } from "./library.js";
-import { palette } from "./palette.js";
+import { palette, paletteText } from "./palette.js";
 import { radii } from "./radii.js";
 import { BRAND, themes } from "./themes/index.js";
 import {
   blueprintType,
   blueprintTypeShorthand,
   NATIVE_DELTA_BY_FAMILY,
+  NATIVE_DELTA_OVERRIDES,
   nativeTypeStyle,
+  remSizeScale,
+  toRemStyle,
   type,
+  typeModifiers,
   typeSizeRungs,
 } from "./typography.js";
 
@@ -56,6 +59,8 @@ describe("generated stylesheet values", () => {
     const root = parseBlocks(toCss()).get(":root");
     for (const [key, value] of Object.entries(palette))
       expect(root?.get(`--c-${key}`)).toBe(value);
+    for (const [key, value] of Object.entries(paletteText.light))
+      expect(root?.get(`--c-${key}-text`)).toBe(value);
     for (const [key, value] of Object.entries(radii))
       expect(root?.get(`--r-${key}`)).toBe(`${value}px`);
     for (const [key, value] of Object.entries(spacing))
@@ -69,47 +74,98 @@ describe("generated stylesheet values", () => {
   test("the type scale is one role set and size rungs collapse duplicates", () => {
     const root = parseBlocks(toCss()).get(":root");
     for (const [key, value] of Object.entries(type)) {
+      const { size, lineHeight } = toRemStyle(value);
       expect(
         root?.get(
           `--t-${key.replace(/(?<l>[a-z])(?<u>[A-Z])/gu, "$<l>-$<u>").toLowerCase()}`
         )
-      ).toContain(`${value.size}px/${value.lineHeight}px`);
-      expect(value.nativeDelta.size).toBeGreaterThan(0);
-      expect(value.nativeDelta.lineHeight).toBeGreaterThan(0);
+      ).toContain(`${size}/${lineHeight}`);
     }
-    const rungs = typeSizeRungs(type);
-    expect(Object.keys(rungs)).toContain("--t-body-size");
-    expect(Object.keys(rungs)).not.toContain("--t-body-strong-size");
+    // Seven distinct sizes, ten roles: `--t-body-strong-size` would duplicate
+    // the body rung, `--t-small-strong-size` the UI rung, `--t-eyebrow-size`
+    // the micro rung. The declaration order in `typography.ts` is what decides
+    // which name owns each rung, which is why it is ramp order and not
+    // alphabetical.
+    const rungs = typeSizeRungs(remSizeScale(type));
+    expect(Object.keys(rungs)).toStrictEqual([
+      "--t-display-size",
+      "--t-title-size",
+      "--t-reading-size",
+      "--t-body-size",
+      "--t-small-size",
+      "--t-control-size",
+      "--t-mono-size",
+    ]);
+    // rem = px / 16 — the shell now emits host-relative units (issue #708)
+    // so 200% OS text scale, which moves the ROOT font-size, actually reaches
+    // these rungs; a `px` literal would be invisible to that preference.
+    expect(Object.values(rungs)).toStrictEqual([
+      "1.9375rem",
+      "1.25rem",
+      "1.1875rem",
+      "0.9375rem",
+      "0.8125rem",
+      "0.6875rem",
+      "0.71875rem",
+    ]);
+    // Nothing in the ramp falls below 11px.
+    for (const value of Object.values(type)) {
+      expect(value.size, "11px floor").toBeGreaterThanOrEqual(11);
+    }
+    // The `font` shorthand has no slot for tracking, caps or figure spacing,
+    // so those travel beside it as their own tokens rather than as decoration
+    // a stylesheet remembers to add. "Numerics are tabular in every app,
+    // without exception" is only true while `--t-mono-numeric` exists.
+    expect(typeModifiers(type)).toStrictEqual({
+      "--t-display-tracking": "-0.01em",
+      "--t-eyebrow-tracking": "0.06em",
+      "--t-eyebrow-transform": "uppercase",
+      "--t-mono-numeric": "tabular-nums",
+    });
+    for (const [name, value] of Object.entries(typeModifiers(type))) {
+      expect(root?.get(name), name).toBe(value);
+      expect(
+        parseBlocks(toBlueprintCss()).get(":root")?.get(name),
+        `${name} blueprint`
+      ).toBe(value);
+    }
   });
 
-  test("native deltas are derived from the family contract", () => {
-    for (const value of Object.values(type)) {
-      expect(value.nativeDelta).toStrictEqual(
-        NATIVE_DELTA_BY_FAMILY[value.family]
+  test("native deltas come from the family contract, or from a named override", () => {
+    for (const [key, value] of Object.entries(type)) {
+      const override = (
+        NATIVE_DELTA_OVERRIDES as Record<string, typeof value.nativeDelta>
+      )[key];
+      expect(value.nativeDelta, key).toStrictEqual(
+        override ?? NATIVE_DELTA_BY_FAMILY[value.family]
       );
       expect(nativeTypeStyle(value)).toStrictEqual({
-        family: value.family,
-        lineHeight:
-          value.lineHeight + NATIVE_DELTA_BY_FAMILY[value.family].lineHeight,
-        nativeDelta: NATIVE_DELTA_BY_FAMILY[value.family],
-        size: value.size + NATIVE_DELTA_BY_FAMILY[value.family].size,
-        weight: value.weight,
+        ...value,
+        lineHeight: value.lineHeight + value.nativeDelta.lineHeight,
+        size: value.size + value.nativeDelta.size,
       });
     }
+    // The overrides are exactly the two roles the brief gives a smaller mobile
+    // size for; every other role gains a point or two on a phone.
+    expect(Object.keys(NATIVE_DELTA_OVERRIDES)).toStrictEqual([
+      "display",
+      "reading",
+    ]);
+    expect(type.display.size + type.display.nativeDelta.size).toBe(27);
+    expect(type.reading.size + type.reading.nativeDelta.size).toBe(17.5);
   });
 
-  test("every theme has the same solved roles and the dark anchor is explicit", () => {
+  test("every theme publishes exactly the same role set", () => {
     const blocks = parseBlocks(toCss());
     const sets = Object.keys(themes).map((name) => {
       const props = blocks.get(`[data-theme='${name}']`);
       expect(props).toBeDefined();
-      return [...(props?.keys() ?? [])]
-        .filter((key) => key !== "--bg-l")
-        .sort();
+      return [...(props?.keys() ?? [])].sort();
     });
     expect(sets[0]).toStrictEqual(sets[1]);
-    expect(blocks.get("[data-theme='dark']")?.has("--bg-l")).toBe(true);
-    expect(blocks.get("[data-theme='light']")?.has("--bg-l")).toBe(false);
+    // Neither ramp carries a derived anchor any more: a surface is a value you
+    // can read, in both themes.
+    for (const set of sets) expect(set).not.toContain("--bg-l");
   });
 
   test("theme lowerings preserve solved values and static adapters", () => {
@@ -117,11 +173,9 @@ describe("generated stylesheet values", () => {
     const blocks = parseBlocks(css);
     for (const [name, theme] of Object.entries(themes)) {
       const props = blocks.get(`[data-theme='${name}']`);
-      expect(props?.get("--accent-deep-hover")).toBe(
-        `color-mix(in oklab, ${theme.accentDeep} 88%, ${theme.text} 12%)`
-      );
+      expect(props?.get("--accent-deep-hover")).toBe(theme.accentHover);
       expect(props?.get("--accent-soft")).toBe(
-        `color-mix(in oklab, ${theme.accent} 12%, transparent)`
+        `color-mix(in oklab, ${theme.accent} 8%, transparent)`
       );
       expect(props?.get("--bg-hover")).toBe(
         `color-mix(in oklab, ${theme.text} 5%, transparent)`
@@ -129,34 +183,40 @@ describe("generated stylesheet values", () => {
       expect(props?.get("--bg-press")).toBe(
         `color-mix(in oklab, ${theme.text} 9%, transparent)`
       );
+      // Selection is the ONE hue the system reserves, and it is never the
+      // accent: the accent is ink, so a selection wash of it would be a grey.
       expect(props?.get("--bg-sel")).toBe(
-        "color-mix(in oklab, var(--accent) 12%, transparent)"
+        "color-mix(in oklab, var(--link) 12%, transparent)"
       );
+      expect(props?.get("--link")).toBe(theme.link);
+      expect(props?.get("--net")).toBe(theme.net);
       expect(props?.get("--glass-sheen")).toBe(
         theme.sidebarBlur === "none" ? "none" : theme.sidebarBlur
       );
+      // 2px of ring at a 2px offset, with the page colour between — which is
+      // what makes the ring visible on a FILLED ink button rather than
+      // black-on-black.
       expect(props?.get("--focus-ring")).toBe(
-        "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)"
+        "0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring-color)"
       );
+      expect(props?.get("--focus-ring-color")).toBe(theme.ring);
       expect(props?.get("--line-sel")).toBe(
-        "color-mix(in oklab, var(--accent) 42%, var(--line))"
+        "color-mix(in oklab, var(--link) 42%, var(--line))"
       );
-      expect(props?.get("--on-accent")).toBe("#141820");
-      expect(props?.get("--text-disabled")).toBe(
-        `color-mix(in oklab, ${theme.text} 36%, ${theme.bg})`
-      );
+      expect(props?.get("--on-accent")).toBe("#FDFDFC");
+      expect(props?.get("--text-disabled")).toBe(theme.textDisabled);
     }
 
     const root = blocks.get(":root");
-    expect(root?.get("--app-identity-text")).toBe(paletteText.light.teal);
+    expect(root?.get("--app-identity-text")).toBe("var(--text)");
     expect(root?.get("--accent")).toBe(BRAND);
     expect(root?.get("--focus-ring")).toBe(
-      "0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent)"
+      "0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring-color)"
     );
     expect(root?.get("--target-min")).toBe("44px");
     expect(root?.get("--o-disabled")).toBe("0.45");
-    expect(root?.get("--dur-1")).toBe("120ms");
-    expect(root?.get("--dur-2")).toBe("200ms");
+    expect(root?.get("--dur-1")).toBe("140ms");
+    expect(root?.get("--dur-2")).toBe("280ms");
     expect(
       css.startsWith(
         "/* Generated by @centraid/design — do not edit by hand. */"
@@ -198,6 +258,10 @@ describe("generated stylesheet values", () => {
     expect(css).not.toMatch(
       /--brand\b|--accent-midnight\b|--bezel\b|--font-title\b|--mono\b|--lib-/u
     );
-    expect(css).not.toContain("#128A78");
+    // The retired teal identity, the retired ramp anchor and the retired type
+    // roles. A value flip that leaves one of these behind is a half-flip.
+    expect(css).not.toContain("#3EC8B4");
+    expect(css).not.toContain("--bg-l");
+    expect(css).not.toMatch(/--t-hero\b|--t-greeting\b|--sp-7\b/u);
   });
 });

@@ -51,7 +51,7 @@
      it — the input is the hit area, so the label must position it. */
   position: relative;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 5px 12px;
@@ -74,7 +74,7 @@
   outline-offset: 2px;
 }
 .metricOption:has(:disabled) {
-  opacity: 0.4;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 
@@ -94,12 +94,12 @@
   color: var(--text);
 }
 .refresh:disabled {
-  opacity: 0.5;
+  color: var(--text-disabled);
   cursor: default;
 }
 .refreshStamp {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
 }
 
@@ -124,7 +124,7 @@
 }
 .packMeta {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -183,7 +183,7 @@
 .cardGhostNote {
   margin-top: auto;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -199,7 +199,7 @@
 .cardQuiet {
   margin-top: auto;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -251,7 +251,7 @@
 }
 .machineryMeta {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -264,7 +264,7 @@
 .machineryTable th {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;

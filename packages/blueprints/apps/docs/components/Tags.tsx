@@ -6,7 +6,9 @@
 // class names.
 import { useState } from "react";
 
+import { I } from "../icons.ts";
 import type { DriveDoc } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
 import styles from "./Tags.module.css";
@@ -36,7 +38,8 @@ export function Tags({
           disabled={trashed}
           onClick={() => onRemoveTag(doc, tag.tag_id)}
         >
-          {tag.label} ×
+          {tag.label}
+          <span aria-hidden="true">×</span>
         </button>
       ))}
       {trashed ? null : adding ? (
@@ -73,7 +76,8 @@ export function Tags({
           className="kit-chip quiet"
           onClick={() => setAdding(true)}
         >
-          ＋ Tag
+          <Icon svg={I.plus!} />
+          Tag
         </button>
       )}
     </div>

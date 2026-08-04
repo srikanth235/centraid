@@ -38,6 +38,7 @@ import {
   openNativeReplicaDriver,
 } from "../../lib/replica/op-sqlite-driver";
 import { postPlacement } from "../../lib/replica/placement-transport";
+import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { nativeSyncAllowed } from "../../lib/upload/native-policy";
 import {
@@ -94,6 +95,9 @@ export interface ReplicaContextValue {
   /** C1(b) is a blocking wall: no route-specific degraded modes on skew. */
   compatibility?: MobileCompatibilityDisposition;
   error?: string;
+  /** The real signal behind the `out of room` state (#708): the driver hit
+   *  SQLITE_FULL/ENOSPC opening or reading a replica. */
+  storageFull?: boolean;
 }
 
 const REPLICA_LOADING: ReplicaContextValue = {
@@ -456,6 +460,9 @@ export function ReplicaProvider({
               reachability: "gateway-asleep",
               refresh: async () => setRetryNonce((current) => current + 1),
               ...(compatibility ? { compatibility } : {}),
+              ...(isReplicaStorageFullError(error)
+                ? { storageFull: true }
+                : {}),
               error: error instanceof Error ? error.message : String(error),
             },
           });

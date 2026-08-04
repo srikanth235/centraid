@@ -11,9 +11,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
   color: var(--text-faint);
   margin: 2px 2px 10px;
 }

@@ -181,7 +181,7 @@ export function Editor({
       <button
         type="button"
         className="kit-modal-scrim"
-        aria-label="Close"
+        aria-label="Dismiss editor"
         onClick={onClose}
       />
       <dialog
@@ -194,7 +194,7 @@ export function Editor({
           <button
             type="button"
             className="kit-icon-btn"
-            aria-label="Close"
+            aria-label="Close editor"
             onClick={onClose}
           >
             <Icon svg={I.close!} />

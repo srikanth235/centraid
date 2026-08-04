@@ -26,7 +26,7 @@ export interface AppCardProps {
 
 /**
  * Home-grid app tile — icon plate + name/blurb + footer, styled by the
- * co-located `AppCard.module.css` (shared with the Home shelf and Discover
+ * co-located `AppCard.module.css` (shared with the Home shelf and Starred
  * grid, which compose richer tiles from the same module). Desktop-specific
  * (there is no mobile twin for this exact composite; mobile's simpler
  * launcher `<Tile>` is the closest cousin). The icon plate's finish is

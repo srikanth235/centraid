@@ -123,5 +123,5 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  text: { color: "#0f0", fontSize: 10 },
+  text: { color: "#0f0", fontSize: 13 },
 });

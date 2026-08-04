@@ -15,11 +15,11 @@ const PROFILE_NAME_KEY = "profile.name";
 const PROFILE_COLOR_KEY = "profile.color";
 const PROFILE_ONBOARDED_KEY = "profile.onboarded";
 
-// Brand teal — the mobile design's single primary. It is the theme `accent`
-// (buttons, links, Automations, Assistant, the Home key; see kit/theme/resolve
-// ts) and also the default profile colour used for the avatar + greeting
-// highlight. So out of the box the whole app is teal; personalising the profile
-// colour re-tints only the avatar + greeting, leaving the controls teal.
+// The product mark — ink, per the Binding Layer (the shell spends no hue; see
+// kit/theme/resolve.ts, where `colors.accent` is `colors.text`). `BRAND` is
+// only the DEFAULT profile colour here, for the avatar + greeting highlight;
+// personalising the profile colour re-tints just those two spots, never a
+// control.
 export { BRAND } from "@centraid/design";
 
 // Swatch options offered in Settings → You for the avatar + greeting tint. Teal

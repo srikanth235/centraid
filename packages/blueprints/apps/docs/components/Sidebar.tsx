@@ -112,7 +112,7 @@ function FolderCreateEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" onClick={commit}>
+      <button type="button" className="kit-btn" onClick={commit}>
         Create
       </button>
     </div>
@@ -157,7 +157,7 @@ function FolderRenameEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" onClick={commit}>
+      <button type="button" className="kit-btn" onClick={commit}>
         Save
       </button>
     </div>

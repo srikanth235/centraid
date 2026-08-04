@@ -83,5 +83,5 @@ const styles = StyleSheet.create({
   },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   safe: { flex: 1 },
-  title: { fontFamily: family.sansBold, fontSize: 17 },
+  title: { fontFamily: family.sansMedium, fontSize: 17 },
 });

@@ -22,7 +22,13 @@
   gap: 11px;
   opacity: 0;
   animation: ladderIn 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  animation-delay: calc(var(--stage-i, 0) * 80ms);
+  /* Stagger interval rides on `--dur-1` (not a hardcoded ms value) so the
+     global `prefers-reduced-motion` rule — which zeroes `--dur-1` alongside
+     `animation-duration` — collapses the delay to 0 too. With both the delay
+     and the duration at 0, `both` fill-mode has no backwards-fill window to
+     paint `opacity: 0` into, so the list lands fully visible in one frame:
+     an instant, static list with no separate per-component override. */
+  animation-delay: calc(var(--stage-i, 0) * var(--dur-1));
 }
 @keyframes ladderIn {
   from {
@@ -114,13 +120,8 @@
   color: var(--danger);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .stage {
-    animation: none;
-    animation-delay: 0ms;
-    opacity: 1;
-  }
-  .dot[data-status="pending"] svg {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule. `.stage`'s delay is `--dur-1`-driven (see above) so it
+   collapses with the duration; `.dot[data-status="pending"] svg`'s spin is a
+   360deg rotation, which the global `animation-duration: 0s` already renders
+   indistinguishably from rest. */

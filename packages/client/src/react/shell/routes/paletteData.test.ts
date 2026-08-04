@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
-import { buildPaletteGroups } from "./paletteData.js";
+import { buildPaletteGroups, buildPaletteSuggestions } from "./paletteData.js";
 import type { PaletteDeps } from "./paletteData.js";
 import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
+import type { PaletteRecentHit, PaletteRecents } from "./paletteRecents.js";
 
 // `vi.mock` is hoisted above the import by vitest, so iconSvg's design-tokens
 // dependency resolves before paletteData.js loads.
@@ -157,7 +158,7 @@ describe("paletteData", () => {
       ).toBeUndefined();
     });
 
-    it("groups entity-aware vault hits by blueprint and supports navigation", () => {
+    it("groups entity-aware vault hits by app — objects, not apps (#708 §A)", () => {
       const navigate = vi.fn<PaletteDeps["navigate"]>();
       const onClose = vi.fn<PaletteDeps["onClose"]>();
       const ensure = vi.fn<PaletteEntitySearch["ensure"]>();
@@ -168,9 +169,11 @@ describe("paletteData", () => {
             appId: "notes",
             appLabel: "Notes",
             entity: "knowledge.note",
+            kind: "note",
             id: "note-1",
             label: "Café plans",
             snippet: "旅行 ✨",
+            meta: "",
           },
         ],
         reset: vi.fn<PaletteEntitySearch["reset"]>(),
@@ -182,14 +185,122 @@ describe("paletteData", () => {
       );
       expect(ensure).toHaveBeenCalledWith("notes: café");
       const notes = groups.find((group) => group.group === "Notes")!;
+      // Group header carries the owning app's icon + identity hue (point 2).
+      expect(notes.icon).toMatchObject({ hue: "var(--c-slate)" });
+      // Row anatomy (point 3): kind (MONO), title, sub — no `meta` here since
+      // this hit has none, and it must not restate the app label the group
+      // header already carries.
       expect(notes.items[0]).toMatchObject({
         label: "Café plans",
         sub: "旅行 ✨",
-        meta: "Notes",
+        kind: "note",
       });
+      expect(notes.items[0]!.meta).toBeUndefined();
+      // Objects, not apps: the known seam is opening the owning app (no
+      // deep-link plumbing exists yet — see paletteData.ts's `entityRow` doc).
       notes.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "notes" });
+    });
+
+    it("gives the Conversations group an icon + a conversation kind on its rows", () => {
+      const conversationSearch: PaletteConversationSearch = {
+        ensure: vi.fn<PaletteConversationSearch["ensure"]>(),
+        results: () => [{ id: "c9", title: "Budget chat", snippet: "" }],
+        reset: vi.fn<PaletteConversationSearch["reset"]>(),
+        setOnResults: vi.fn<PaletteConversationSearch["setOnResults"]>(),
+      };
+      const groups = buildPaletteGroups("budget", deps({ conversationSearch }));
+      const convo = groups.find((g) => g.group === "Conversations")!;
+      expect(convo.icon).toBeDefined();
+      expect(convo.items[0]!.kind).toBe("conversation");
+    });
+  });
+
+  describe("Recents + suggestions empty state (#708 §A point 4)", () => {
+    function recentsSource(items: PaletteRecentHit[]): PaletteRecents {
+      return {
+        items: () => items,
+        suggestions: () =>
+          [...new Set(items.map((h) => h.appId))]
+            .map((appId) => items.find((h) => h.appId === appId)!.label)
+            .slice(0, 4),
+        ensure: vi.fn<PaletteRecents["ensure"]>(),
+        reset: vi.fn<PaletteRecents["reset"]>(),
+        setOnResults: vi.fn<PaletteRecents["setOnResults"]>(),
+      };
+    }
+
+    it("shows a Recents group of vault objects before any query", () => {
+      const recents = recentsSource([
+        {
+          appId: "notes",
+          appLabel: "Notes",
+          entity: "knowledge.note",
+          kind: "note",
+          id: "n1",
+          label: "Trip notes",
+          snippet: "",
+          meta: "Aug 3",
+        },
+      ]);
+      const groups = buildPaletteGroups("", deps({ recents }));
+      expect(recents.ensure).toHaveBeenCalledWith();
+      const group = groups.find((g) => g.group === "Recents")!;
+      expect(group).toBeDefined();
+      expect(group.items[0]).toMatchObject({
+        label: "Trip notes",
+        kind: "note",
+        meta: "Aug 3",
+      });
+    });
+
+    it("omits Recents once a query is typed", () => {
+      const recents = recentsSource([
+        {
+          appId: "notes",
+          appLabel: "Notes",
+          entity: "knowledge.note",
+          kind: "note",
+          id: "n1",
+          label: "Trip notes",
+          snippet: "",
+          meta: "",
+        },
+      ]);
+      const groups = buildPaletteGroups("café", deps({ recents }));
+      expect(groups.find((g) => g.group === "Recents")).toBeUndefined();
+    });
+
+    it("omits Recents entirely when there are no hits yet — no empty group", () => {
+      const groups = buildPaletteGroups(
+        "",
+        deps({ recents: recentsSource([]) })
+      );
+      expect(groups.find((g) => g.group === "Recents")).toBeUndefined();
+    });
+
+    it("buildPaletteSuggestions reads the recents source's chips", () => {
+      const recents = recentsSource([
+        {
+          appId: "people",
+          appLabel: "People",
+          entity: "core.party",
+          kind: "person",
+          id: "p1",
+          label: "Alex Rivera",
+          snippet: "",
+          meta: "",
+        },
+      ]);
+      expect(buildPaletteSuggestions(deps({ recents }))).toStrictEqual([
+        "Alex Rivera",
+      ]);
+      expect(recents.ensure).toHaveBeenCalledWith();
+    });
+
+    it("buildPaletteSuggestions returns no chips without a recents source", () => {
+      expect(buildPaletteSuggestions(deps())).toStrictEqual([]);
     });
   });
 });

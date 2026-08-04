@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 // The leaf-route data pattern, ported from the vanilla render fns: each screen
 // fetches its data over IPC, shows a loading line, then the screen (or an error
-// line). React-owned equivalent of `renderInsights`/`renderDiscover`/… — the
+// line). React-owned equivalent of `renderInsights`/`renderStarred`/… — the
 // effect runs the fetch, tracks mount so a navigation mid-flight is dropped
 // (the vanilla `if (!document.contains(host)) return` guard).
 

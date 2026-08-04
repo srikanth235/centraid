@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationFeedEntry } from "./automationsData.js";
-import {
-  attentionCount,
-  buildHomeAppItems,
-  buildHomeAutoItems,
-} from "./homeData.js";
+import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub is in
 // place before homeData.js pulls gateway-client-core's load-time side-effect.
@@ -93,11 +89,6 @@ describe("homeData", () => {
         triggerIcon: "Clock",
       });
       expect(items[0]?.footOk).toBe(true);
-    });
-
-    it("counts automations whose last run failed as needing attention", () => {
-      expect(attentionCount([row()], [entry(false)])).toBe(1);
-      expect(attentionCount([row()], [entry(true)])).toBe(0);
     });
   });
 });

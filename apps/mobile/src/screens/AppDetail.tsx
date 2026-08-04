@@ -5,13 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  View,
-  StyleSheet,
-  ActivityIndicator,
-  BackHandler,
-  Platform,
-} from "react-native";
+import { View, StyleSheet, BackHandler, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type {
@@ -24,6 +18,7 @@ import type {
 import AppHeader from "../kit/components/AppHeader";
 import Button from "../kit/components/Button";
 import { Text } from "../kit/components/NativeText";
+import { clearStatus, postStatus } from "../kit/components/status-line";
 import { spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { dispatch } from "../lib/bridge/dispatch";
@@ -120,6 +115,16 @@ export default function AppDetailScreen({
 
   // Resolve the gateway base (tunnel first) each time we mount or retry.
   useEffect(() => startBaseResolve(setters), [appId, reloadKey, setters]);
+
+  // The WebView's own remote load is genuinely unknowable and remote — this
+  // product cannot honestly say how long a blueprint app takes to answer, so
+  // there is no bar and no spinning glyph, only a note on the one persistent
+  // status line for the duration of the load.
+  useEffect(() => {
+    if (!loading) return undefined;
+    postStatus(`Loading ${meta.name}…`);
+    return () => clearStatus();
+  }, [loading, meta.name]);
 
   const handleNavStateChange = useCallback((event: WebViewNavigation): void => {
     setCanGoBack(event.canGoBack);
@@ -235,11 +240,6 @@ export default function AppDetailScreen({
               originWhitelist={["*"]}
             />
           ) : null}
-          {loading ? (
-            <View style={styles.loadingOverlay} pointerEvents="none">
-              <ActivityIndicator color={colors.textFaint} />
-            </View>
-          ) : null}
         </View>
       )}
     </SafeAreaView>
@@ -282,16 +282,6 @@ const makeStyles = (colors: ThemeColors) =>
     emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
     emptyMsg: { ...t("body"), color: colors.textSoft },
     emptyTitle: { ...t("title"), color: colors.text, marginBottom: spacing[2] },
-    loadingOverlay: {
-      alignItems: "center",
-      backgroundColor: "transparent",
-      bottom: 0,
-      justifyContent: "center",
-      left: 0,
-      position: "absolute",
-      right: 0,
-      top: 0,
-    },
     safe: { backgroundColor: colors.bg, flex: 1 },
     web: { backgroundColor: colors.bg, flex: 1 },
     webWrap: { flex: 1 },

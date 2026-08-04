@@ -6,6 +6,14 @@
 export interface IconPath {
   d: string;
   fill?: "currentColor";
+  /** `fill-rule="evenodd"` — the knockout rule the handoff brief's app-icon
+   *  silhouette contract specifies ("App icons": identity lives in the
+   *  primary silhouette as evenodd knockouts, so the container tint reads as
+   *  negative space). No shipped icon sets this yet (see
+   *  icons-contract.test.ts's app-icon silhouette suite) — it exists so a
+   *  future filled compound mark has somewhere real to declare it, rendered
+   *  by `pathMarkup` below the moment it does. */
+  fillRule?: "evenodd";
 }
 
 // Defined as `as const` so the keys narrow to a literal union for IconName,
@@ -444,16 +452,24 @@ export function iconForConcept(concept: IconConcept): IconName {
   return ICON_CONCEPTS[concept];
 }
 
+/** Markup for one path entry — the seam the app-icon silhouette contract
+ *  activates on: a path that declares `fillRule: "evenodd"` renders a real
+ *  `fill-rule="evenodd"` attribute, so a future filled compound mark is
+ *  enforceable on day one rather than needing a second pass through the
+ *  renderer later. Exported so the contract test can exercise it directly
+ *  without a shipped icon having to carry one first. */
+export function pathMarkup(iconPath: IconPath): string {
+  const fill =
+    iconPath.fill === "currentColor"
+      ? ' fill="currentColor" stroke="none"'
+      : "";
+  const fillRule =
+    iconPath.fillRule === "evenodd" ? ' fill-rule="evenodd"' : "";
+  return `<path d="${iconPath.d}"${fill}${fillRule}/>`;
+}
+
 export function iconPathMarkup(name: IconName): string {
-  return icons[name]
-    .map((path) => {
-      const fill =
-        path.fill === "currentColor"
-          ? ' fill="currentColor" stroke="none"'
-          : "";
-      return `<path d="${path.d}"${fill}/>`;
-    })
-    .join("");
+  return icons[name].map(pathMarkup).join("");
 }
 
 export function iconSvg(

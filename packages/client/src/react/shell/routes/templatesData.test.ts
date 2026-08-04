@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TemplateMetaEntry } from "../../../gateway-client.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
-  installAppTemplate,
   loadAppTemplates,
   loadAutomationTemplates,
   loadOverviewSuggestions,
@@ -13,17 +12,13 @@ import {
 
 // `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
 // close over them without a TDZ error, keeping the real imports first.
-const { listTemplates, gwCloneTemplate, gwInstallTemplate } = vi.hoisted(
-  () => ({
-    listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
-    gwCloneTemplate: vi.fn<typeof TypeImport_1gl5zx7.cloneTemplate>(),
-    gwInstallTemplate: vi.fn<typeof TypeImport_1gl5zx7.installTemplate>(),
-  })
-);
+const { listTemplates, gwCloneTemplate } = vi.hoisted(() => ({
+  listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
+  gwCloneTemplate: vi.fn<typeof TypeImport_1gl5zx7.cloneTemplate>(),
+}));
 vi.mock(import("../../../gateway-client.js"), () => ({
   listTemplates,
   cloneTemplate: gwCloneTemplate,
-  installTemplate: gwInstallTemplate,
 }));
 
 const app = {
@@ -49,7 +44,6 @@ describe("templatesData", () => {
   beforeEach(() => {
     listTemplates.mockReset();
     gwCloneTemplate.mockReset();
-    gwInstallTemplate.mockReset();
   });
 
   describe("templatesData", () => {
@@ -152,41 +146,6 @@ describe("templatesData", () => {
       ]);
       const rows = await loadOverviewSuggestions(3);
       expect(rows).toStrictEqual([]);
-    });
-
-    it("installAppTemplate installs in place (keeps the blueprint id) and shapes a Home pin — no draft flag, no clone", async () => {
-      gwInstallTemplate.mockResolvedValue({
-        app: {
-          id: "todos",
-          name: "Todos",
-          description: "in place",
-          iconKey: "Todo",
-          colorKey: "blue",
-        },
-        alreadyInstalled: false,
-      });
-      const pin = await installAppTemplate(app as never);
-      expect(gwInstallTemplate).toHaveBeenCalledWith({ templateId: "todos" });
-      expect(gwCloneTemplate).not.toHaveBeenCalled();
-      expect(pin).toMatchObject({
-        centraidAppId: "todos",
-        id: "todos",
-        name: "Todos",
-        desc: "in place",
-      });
-      expect((pin as unknown as { __draft?: boolean }).__draft).toBeUndefined();
-      expect(pin.createdAt).toBeTruthy();
-      expect(pin.updatedAt).toBeTruthy();
-    });
-
-    it("falls back to the template name/desc when the install response omits them", async () => {
-      gwInstallTemplate.mockResolvedValue({
-        app: { id: "todos" },
-        alreadyInstalled: true,
-      });
-      const pin = await installAppTemplate(app as never);
-      expect(pin.name).toBe("Todos");
-      expect(pin.desc).toBe("d");
     });
 
     it("surfaceMintedWebhook never logs the URL or plaintext secret", () => {

@@ -4,7 +4,7 @@
    get the same scoped class names. Lifted from the monolithic styles.css. */
 .label {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);
@@ -28,11 +28,11 @@
   border: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--text) 4%, transparent);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .scopeVerbs {
-  font-size: 9px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);
@@ -43,7 +43,7 @@
 }
 .purpose {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .grants {
@@ -67,7 +67,7 @@
   filter: brightness(1.08);
 }
 .grantBtn:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .grantRow {
@@ -86,7 +86,7 @@
 }
 .grantSub {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   margin-top: 2px;
   line-height: 1.5;
@@ -108,7 +108,7 @@
 .revokeBtn:disabled,
 .denyBtn:disabled,
 .approveBtn:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .parked {
@@ -135,7 +135,7 @@
   color: var(--text);
 }
 .parkedWhen {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .parkedInput {
@@ -144,7 +144,7 @@
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
   max-height: 120px;

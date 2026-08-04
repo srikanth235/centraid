@@ -10,15 +10,15 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
-import type { TileVariant } from "@centraid/design";
-
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
 // The bridge is intentionally self-contained — it must not import the vanilla
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
-// `DiscoverTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
+// `CatalogTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
 // field so the vanilla side's `TemplateEntry` values pass through unchanged.
-export interface DiscoverTemplate {
+// It was `DiscoverTemplate` until Discover was retired (issue #708); the shape
+// outlived the page because the automation gallery renders the same card.
+export interface CatalogTemplate {
   id: string;
   name: string;
   desc: string;
@@ -26,37 +26,17 @@ export interface DiscoverTemplate {
   iconKey: string;
   version: string;
   kind?: "app" | "automation";
-  /** App-kind template already installed in the addressed vault (issue #434) —
-   *  the card shows Open instead of Install. */
-  installed?: boolean;
-  /** Requested vault access, for the install/consent sheet (issue #434). */
-  vault?: {
-    purpose?: string;
-    why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
-  };
+  /* `installed` and `vault` are deliberately NOT mirrored: they existed for the
+     install/consent sheet, and the only screen that still renders this card is
+     the automation gallery, where adopting a template is a clone rather than an
+     install. The wire type (`TemplateEntry`) keeps both — the gateway still
+     sends them — but a screen contract that carries fields no screen reads is
+     how a retired flow keeps looking alive. */
   emoji?: string;
   category?: string;
   triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
   integrations?: readonly string[];
-}
-
-/** Right-click anchor passed back to the shell's template context menu. */
-export interface DiscoverMenuAnchor {
-  kind: "point";
-  x: number;
-  y: number;
-}
-
-/** Everything the React Discover screen needs from the vanilla shell. */
-export interface DiscoverBridgeProps {
-  appTemplates: readonly DiscoverTemplate[];
-  automationTemplates: readonly DiscoverTemplate[];
-  tileVariant: TileVariant;
-  onOpenTemplate: (t: DiscoverTemplate) => void;
-  onOpenAutomationTemplate: (t: DiscoverTemplate) => void;
-  onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }
 
 // ── Insights (#514 transparency rewrite) ────────────────────────────────────
@@ -226,11 +206,11 @@ export interface VaultBridgeProps {
 
 // ── Automation templates gallery ────────────────────────────────────────────
 export interface AutomationTemplatesBridgeProps {
-  templates: readonly DiscoverTemplate[];
+  templates: readonly CatalogTemplate[];
   /** Subtitle under the self-painted "Templates" header (issue: automations UX pass). */
   subtitle?: string;
   /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
-  onPreview: (t: DiscoverTemplate) => void;
+  onPreview: (t: CatalogTemplate) => void;
   /** "Start from scratch" → the conversational automation builder. */
   onStartFromScratch: () => void;
 }
@@ -253,13 +233,37 @@ export interface PaletteRowDTO {
   variant: "action" | "app" | "chat";
   /** For `variant: 'app'` — the gradient tile paint. */
   tile?: PaletteTileDTO;
+  /**
+   * MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+   * short lowercase noun for what the row IS (`doc`, `person`, `event`,
+   * `conversation`), rendered ahead of the title. Unset for rows that are
+   * not a vault object (apps, nav destinations, the create row).
+   */
+  kind?: string;
+  /**
+   * NUMERIC register — tabular mono, a date/size/count. Distinct from `sub`,
+   * which stays free UI-register text.
+   */
   meta?: string;
   kbd?: string;
   accent?: boolean;
   run: () => void;
 }
+export interface PaletteGroupIconDTO {
+  /** Pre-rendered icon SVG markup — the owning app's glyph. */
+  html: string;
+  /** Identity hue as a CSS value, e.g. `var(--c-teal)`. Omitted = no tint. */
+  hue?: string;
+}
 export interface PaletteGroupDTO {
   group: string;
+  /**
+   * Group marker (Binding Layer row anatomy, issue #708 §A point 2) — set
+   * when every row in the group is a vault object owned by one app/surface
+   * (entity search, Conversations, Recents); omitted for navigational
+   * groups (Apps, Go to, Create) that stay plain text.
+   */
+  icon?: PaletteGroupIconDTO;
   items: PaletteRowDTO[];
 }
 export interface PaletteBridgeProps {
@@ -271,6 +275,12 @@ export interface PaletteBridgeProps {
    * async data (templates) arrives so `buildGroups` re-runs.
    */
   onReady?: (refresh: () => void) => void;
+  /**
+   * Example queries for the pre-query empty state (issue #708 §A) — seeded
+   * from what the vault actually contains, not static copy. Read only while
+   * the query field is empty; a click fills the field with the chip's text.
+   */
+  suggestions?: () => string[];
 }
 
 // ── Phone settings pane ─────────────────────────────────────────────────────
@@ -942,15 +952,14 @@ export interface AutomationThreadBridgeProps {
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
 /** Appearance is the one visual-treatment page: theme and card
- *  surface. Layout was folded into it (#608). The accent swatches and the
- *  app-tile treatment picker were cut but keep their prefs; the dark ramp's
- *  surface temperature was removed outright, so dark has exactly one ramp —
- *  parity with light, which never had a temperature.
+ *  surface. Layout was folded into it (#608). The app-tile treatment picker
+ *  was cut but keeps its pref; the dark ramp's surface temperature was removed
+ *  outright, so dark has exactly one ramp — parity with light, which never had
+ *  a temperature.
  *
- *  `sidebarOpen` is deliberately absent: the sidebar has a toggle in the
- *  chrome itself, so a settings switch for it was a second control for the
- *  same state, one of them always stale-looking. The pref still exists and
- *  the chrome toggle still writes it. */
+ *  The accent swatches went the same way in #608 and their PREF went in #707:
+ *  the shell spends no hue at all now, so there is no accent to store. Neither
+ *  is `sidebarOpen` — the stem never hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
   cardVariant: "flat" | "outlined" | "elevated";
@@ -1154,34 +1163,6 @@ export interface HomeAutoItemDTO {
   footOk: boolean;
   starred: boolean;
 }
-export interface HomeDailyBriefDTO {
-  date: string;
-  events: Array<{ id: string; title: string; at: string }>;
-  tasks: Array<{ id: string; title: string; dueAt: string }>;
-  newPhotos: number;
-  balanceMinor: number;
-  currency: string;
-}
-export interface HomeBridgeProps {
-  /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
-   *  "What should we build?" composer hero + its suggestions don't render and
-   *  the empty states drop their "describe an app" build prompt. */
-  builderEnabled: boolean;
-  suggestions: string[];
-  dateLabel: string;
-  appItems: HomeAppItemDTO[];
-  automationItems: HomeAutoItemDTO[];
-  dailyBrief?: HomeDailyBriefDTO;
-  counts: { all: number; apps: number; automations: number };
-  attention: number;
-  onBuild: (prompt: string) => void;
-  onOpenApp: (id: string) => void;
-  onEnterDraft: (id: string) => void;
-  onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
-  onOpenAutomation: (ref: string) => void;
-  onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
-  onBrowseTemplates: () => void;
-}
 
 // ── Automation run-viewer (SSE, live) ───────────────────────────────────────
 // The vanilla side owns the SSE stream + node model and derives a fully-display
@@ -1264,9 +1245,10 @@ export interface RunViewBridgeProps {
 // and the rich-answer renderer; it pushes a snapshot to React on each change.
 // Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
 // React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
-// The conversation LIST + selection now live in the shell sidebar (App.tsx +
-// Sidebar.tsx) — AssistantScreen renders a single, full-width conversation
-// only, so there's no `threads`/`onSelectThread`/`onDeleteThread` here.
+// The conversation LIST + selection live in the assistant SURFACE since #707
+// (AssistantRoute + AssistantConversations) — AssistantScreen still renders a
+// single conversation only, so there's no `threads`/`onSelectThread`/
+// `onDeleteThread` here.
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;

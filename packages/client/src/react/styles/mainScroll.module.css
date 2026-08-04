@@ -16,6 +16,18 @@
   padding: 48px 56px 56px;
 }
 
+/* The compact form factor (720px — the same signal as `useCompactLayout` and
+   docs/platform-gating.md). The 56px gutter above is a DESKTOP measure: at
+   375px it spends 30% of the screen on margin, leaving 253px of content, which
+   is what wraps "Google Calendar" onto two lines and truncates every row's
+   meta text. A phone's gutter is the rhythm's own step, not a reading measure —
+   the measure is the screen. */
+@media (max-width: 720px) {
+  .mainScroll {
+    padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  }
+}
+
 /* Screens whose content owns its own spacing (Day-1 home hero) drop the
    standard page padding — vanilla stacked `.cd-day1-scroll` on the scroll. */
 .flush {

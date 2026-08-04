@@ -20,7 +20,7 @@
 }
 .navItem .lbl {
   flex: 1;
-  text-align: left;
+  text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -35,14 +35,14 @@
   font-weight: 600;
 }
 .navCount {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  opacity: 0.6;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
 }
 .navDot {
   width: 9px;
   height: 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   flex-shrink: 0;
 }
 .folder {
@@ -51,15 +51,15 @@
   align-items: center;
 }
 .folder .navItem {
-  padding-right: var(--sp-2);
+  padding-inline-end: var(--sp-2);
 }
 .folderTools {
   position: absolute;
-  right: 6px;
+  inset-inline-end: 6px;
   display: none;
   gap: 2px;
   background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
-  padding-left: 14px;
+  padding-inline-start: 14px;
 }
 .folder:hover .folderTools,
 .folder:focus-within .folderTools {
@@ -123,8 +123,8 @@
   color: var(--text-faint);
 }
 .storageTop .val {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .storageLabel {

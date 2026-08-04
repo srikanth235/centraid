@@ -31,7 +31,7 @@
   inset: 0;
   z-index: 44;
   background: color-mix(in oklab, var(--scrim) 39%, transparent);
-  animation: fade 0.2s ease;
+  animation: fade var(--dur-2) var(--ease-entry);
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
   cursor: default;
@@ -39,16 +39,16 @@
 .details {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   width: min(360px, 92vw);
   z-index: 45;
   background: var(--bg-elev);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  animation: slideR 0.24s var(--ease);
+  animation: slideR var(--dur-2) var(--ease-entry);
 }
 .detailsHead {
   display: flex;
@@ -58,10 +58,12 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
+/* The eyebrow role whole, from the ramp — caps and tracking travel beside the
+   `font` shorthand as their own tokens, so a local pair is a second copy. */
 .detailsHead .lbl {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
 /* Close button: kit.css's .kit-icon-btn. */
@@ -73,7 +75,7 @@
 .hero {
   position: relative;
   height: 132px;
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,20 +87,19 @@
   object-fit: cover;
 }
 .hero span {
+  font: var(--t-title);
   font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 22px;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--t-eyebrow-tracking);
 }
 .detailName {
-  font: var(--t-body-strong);
-  font-size: 16px;
+  font: var(--t-title);
   text-align: center;
   margin-top: 14px;
   overflow-wrap: anywhere;
 }
 .detailExt {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   text-align: center;
   margin-top: var(--sp-1);
@@ -138,9 +139,9 @@
 }
 
 .detailLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
   margin-bottom: var(--sp-2);
 }
@@ -153,6 +154,7 @@
 }
 .detailGrid dt {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin: 0;
 }
@@ -171,21 +173,28 @@
 
 /* ---------- Version history toggle (issue #352) ---------- */
 /* The toggle button lives in Details; the panel it opens is History.module.css. */
+/* A control that must be text carries the ink step plus a hover GROUND plus a
+   trailing chevron — hover alone is nothing on a phone, and `--text-faint` at
+   rest made this read as a dead section heading rather than the disclosure it
+   is. Geometry (`kit-plain-btn` undoes the UA button box) comes from the kit. */
 .versionToggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-faint);
+  gap: var(--sp-2);
+  color: var(--text-soft);
+  padding: var(--sp-2) var(--sp-2);
+  margin-inline: calc(var(--sp-2) * -1);
+  border-radius: var(--r-md);
+  min-height: var(--target-min);
+  transition: background var(--dur-1) var(--ease);
 }
-.versionToggle svg {
-  width: 13px;
-  height: 13px;
+.versionToggle:hover {
+  background: var(--bg-hover, var(--bg-sunken));
+  color: var(--text);
+}
+.versionToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

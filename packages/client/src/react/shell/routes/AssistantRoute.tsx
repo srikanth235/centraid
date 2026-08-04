@@ -37,12 +37,17 @@ import type {
   AgentRunnerKind,
 } from "../../screen-contracts.js";
 import AssistantScreen from "../../screens/AssistantScreen.js";
+import Icon from "../../ui/Icon.js";
 import { useShellActions } from "../actions.js";
+import type { ShellMenuAnchor } from "../contextMenu.js";
 import { createFrameBatch } from "../frameBatch.js";
 import type { FrameBatch } from "../frameBatch.js";
 import { openPrompt } from "../prompt.js";
+import { useCompactLayout } from "../useCompactLayout.js";
 import { useMemberScopes } from "../useMemberScopes.js";
 import { catchUpAfterDrop } from "./assistantCatchUp.js";
+import AssistantConversations from "./AssistantConversations.js";
+import type { AssistantConversationEntry } from "./AssistantConversations.js";
 import { createTranscriptProjection } from "./assistantProjection.js";
 import { hydrateRefs, wireCodeCopy } from "./assistantRich.js";
 import { DEFAULT_STARTERS, resolveStarters } from "./assistantStarters.js";
@@ -71,6 +76,7 @@ import {
 } from "./settingsProvidersData.js";
 
 import mainScrollCss from "../../styles/mainScroll.module.css";
+import ledgerCss from "./AssistantConversations.module.css";
 import scopeBarCss from "./ScopePicker.module.css";
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
@@ -110,14 +116,32 @@ interface AssistantRouteProps {
    *  conversationId}`) — `undefined` is a fresh, not-yet-created
    *  conversation. */
   conversationId?: string;
+  /** The persisted ledger, newest first (the list endpoint already sorts —
+   *  see useAssistantConversations). Omitted entirely — a route rendered
+   *  without a ledger, as every unit-test fixture is — draws no column. */
+  conversations?: readonly AssistantConversationEntry[];
+  /** The row to mark as open. Distinct from `conversationId` only while a
+   *  fresh conversation has not been created yet. */
+  activeConversationId?: string;
+  onSelectConversation?: (id: string) => void;
+  onNewChat?: () => void;
+  onDeleteConversation?: (id: string) => void;
+  onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
 }
 
 // React-owned Assistant copilot. Owns the SSE stream + message model + the
 // rich-answer renderer and pushes a derived snapshot into AssistantScreen. The
 // mutable model lives in a ref (the snapshot, not React state, is the source of
-// truth for the screen). The conversation LIST lives in the shell sidebar.
+// truth for the screen). The conversation LIST is this route's too (#707): a
+// ledger column beside the transcript, or a disclosure above it when compact.
 export default function AssistantRoute({
   conversationId,
+  conversations,
+  activeConversationId: ledgerActiveId,
+  onSelectConversation,
+  onNewChat,
+  onDeleteConversation,
+  onConversationMenu,
 }: AssistantRouteProps): JSX.Element {
   const { showToast, replace, navigate, confirm, refreshAssistantThreads } =
     useShellActions();
@@ -162,6 +186,11 @@ export default function AssistantRoute({
   // Render-visible mirror of `m.current.currentId !== null` — the slash-command
   // list gates Export/Rename on it, and render may not read the model ref.
   const [hasThread, setHasThread] = useState(Boolean(conversationId));
+  // Presentation only (docs/platform-gating.md): on a narrow window the ledger
+  // is not worth a permanent column, so it collapses behind a disclosure and
+  // stacks above the transcript. Nothing about capability branches on this.
+  const compact = useCompactLayout();
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
   const modelPickerRunnerRef = useRef<AgentRunnerKind>("codex");
@@ -1374,34 +1403,70 @@ export default function AssistantRoute({
           />
         </div>
       ) : null}
-      <AssistantScreen
-        suggestions={starters}
-        searchEntities={screenSearchEntities}
-        slashCommands={slashCommands}
-        onRunSlash={screenRunSlash}
-        {...(conversationId ? { conversationId } : {})}
-        onReady={screenOnReady}
-        onSend={screenOnSend}
-        onStop={screenOnStop}
-        onLoadEarlier={screenOnLoadEarlier}
-        onAttachFiles={screenOnAttachFiles}
-        onRemovePendingAttachment={screenOnRemovePendingAttachment}
-        onAddWorkspace={screenOnAddWorkspace}
-        onRemoveWorkspace={screenOnRemoveWorkspace}
-        hydrateRefs={screenHydrateRefs}
-        wireCodeCopy={screenWireCodeCopy}
-        loadAttachmentImage={screenLoadAttachmentImage}
-        onCopyMessage={screenOnCopyMessage}
-        onFeedback={screenOnFeedback}
-        onRegenerate={screenOnRegenerate}
-        onRetryError={screenOnRetryError}
-        onPagerNav={screenOnPagerNav}
-        loadModelPicker={loadModelPicker}
-        onSetModel={screenOnSetModel}
-        onSetEffort={screenOnSetEffort}
-        onSetRunner={screenOnSetRunner}
-        onSetWorkspaceKind={screenOnSetWorkspaceKind}
-      />
+      <div
+        className={ledgerCss.split}
+        data-ledger={conversations ? "true" : undefined}
+        data-compact={compact ? "true" : undefined}
+      >
+        {conversations ? (
+          <div className={ledgerCss.aside}>
+            {compact ? (
+              <button
+                className={ledgerCss.disclosure}
+                type="button"
+                aria-expanded={ledgerOpen}
+                onClick={() => setLedgerOpen((open) => !open)}
+              >
+                <Icon
+                  name={ledgerOpen ? "ChevronDown" : "ChevronRight"}
+                  size={13}
+                />
+                <span>Conversations</span>
+              </button>
+            ) : null}
+            {compact && !ledgerOpen ? null : (
+              <AssistantConversations
+                conversations={conversations}
+                activeConversationId={ledgerActiveId ?? conversationId}
+                onSelect={onSelectConversation}
+                onNewChat={onNewChat}
+                onDelete={onDeleteConversation}
+                onMenu={onConversationMenu}
+              />
+            )}
+          </div>
+        ) : null}
+        <div className={ledgerCss.stage}>
+          <AssistantScreen
+            suggestions={starters}
+            searchEntities={screenSearchEntities}
+            slashCommands={slashCommands}
+            onRunSlash={screenRunSlash}
+            {...(conversationId ? { conversationId } : {})}
+            onReady={screenOnReady}
+            onSend={screenOnSend}
+            onStop={screenOnStop}
+            onLoadEarlier={screenOnLoadEarlier}
+            onAttachFiles={screenOnAttachFiles}
+            onRemovePendingAttachment={screenOnRemovePendingAttachment}
+            onAddWorkspace={screenOnAddWorkspace}
+            onRemoveWorkspace={screenOnRemoveWorkspace}
+            hydrateRefs={screenHydrateRefs}
+            wireCodeCopy={screenWireCodeCopy}
+            loadAttachmentImage={screenLoadAttachmentImage}
+            onCopyMessage={screenOnCopyMessage}
+            onFeedback={screenOnFeedback}
+            onRegenerate={screenOnRegenerate}
+            onRetryError={screenOnRetryError}
+            onPagerNav={screenOnPagerNav}
+            loadModelPicker={loadModelPicker}
+            onSetModel={screenOnSetModel}
+            onSetEffort={screenOnSetEffort}
+            onSetRunner={screenOnSetRunner}
+            onSetWorkspaceKind={screenOnSetWorkspaceKind}
+          />
+        </div>
+      </div>
     </div>
   );
 }

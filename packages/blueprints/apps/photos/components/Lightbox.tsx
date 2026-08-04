@@ -24,7 +24,7 @@ import {
 // EditorView), which only the shell here can do.
 // CSS split: React-owned classes in Lightbox.module.css; the imperatively
 // toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
-import { fmtBytes, toast } from "../kit.ts";
+import { fmtBytes, statusLine } from "../kit.ts";
 import { gridSrc, isRenderableUri } from "../media.ts";
 import { act, narrate } from "../outcomes.ts";
 import { canWriteScope, scopeAttr } from "../scopes.ts";
@@ -210,13 +210,13 @@ async function handleShare(asset: Asset): Promise<void> {
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(url);
-      toast("Link copied.");
+      statusLine("Link copied.");
       return;
     } catch {
       /* fall through */
     }
   }
-  toast("Sharing isn’t available in this browser.");
+  statusLine("Sharing isn’t available in this browser.");
 }
 
 export function LightboxShell({
@@ -344,17 +344,20 @@ export function LightboxShell({
                 );
                 if (narrate(outcome)) {
                   onClose();
-                  toast("Moved to trash — it leaves every album it was in.", {
-                    undoLabel: "Undo",
-                    onUndo: async () => {
-                      await act(
-                        "restore",
-                        { asset_id: asset.asset_id },
-                        asset.scope_id
-                      );
-                      await refresh();
-                    },
-                  });
+                  statusLine(
+                    "Moved to trash — it leaves every album it was in.",
+                    {
+                      undoLabel: "Undo",
+                      onUndo: async () => {
+                        await act(
+                          "restore",
+                          { asset_id: asset.asset_id },
+                          asset.scope_id
+                        );
+                        await refresh();
+                      },
+                    }
+                  );
                   await refresh();
                 }
               }}

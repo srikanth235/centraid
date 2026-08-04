@@ -78,7 +78,7 @@
 }
 .settingsEyebrow {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   margin-top: 2px;
   letter-spacing: 0.06em;
@@ -144,7 +144,7 @@
   background: color-mix(in srgb, var(--text) 14%, transparent);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .settingsTabBadge[hidden] {
@@ -188,7 +188,7 @@
 }
 .settingsDangerLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--danger);
@@ -202,7 +202,7 @@
 .settingsConfirmPill {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -314,7 +314,7 @@
   color: var(--text-faint);
 }
 .order[data-enabled="false"] .orderPrompt {
-  opacity: 0.6;
+  color: var(--text-disabled);
 }
 .orderBody {
   min-width: 0;
@@ -330,7 +330,7 @@
 }
 .orderSchedule {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -385,13 +385,13 @@
 }
 .orderHandler {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   letter-spacing: 0.01em;
 }
 .orderResult {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   padding: 1px 6px;
   border-radius: 3px;
   margin-left: auto;
@@ -478,7 +478,7 @@
 }
 .settingsSectionLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);

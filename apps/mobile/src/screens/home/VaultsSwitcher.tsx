@@ -537,7 +537,11 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 20,
       padding: 16,
     },
-    activeName: { ...t("title"), color: colors.text, fontFamily: family.serif },
+    activeName: {
+      ...t("title"),
+      color: colors.text,
+      fontFamily: family.displayRegular,
+    },
     activePill: {
       borderRadius: 8,
       paddingHorizontal: 8,
@@ -545,8 +549,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     activePillText: {
       color: "#fff",
-      fontFamily: family.monoBold,
-      fontSize: 9,
+      fontFamily: family.monoMedium,
+      fontSize: 12.5,
       letterSpacing: 1,
     },
     activeSub: { ...t("small"), color: colors.textFaint, marginTop: 3 },
@@ -646,7 +650,7 @@ const makeStyles = (colors: ThemeColors) =>
     scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 28,
       letterSpacing: -0.4,
       marginTop: 2,

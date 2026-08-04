@@ -192,7 +192,7 @@ export default function CaptureScreen({
             setText(value);
             setPreview(undefined);
           }}
-          placeholder="Remind me to call Priya…"
+          placeholder="Remind me to call Maya…"
           placeholderTextColor={colors.textFaint}
           style={[
             styles.editor,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   field: { gap: 7 },
-  fieldLabel: { fontFamily: family.sansBold, fontSize: 12 },
+  fieldLabel: { fontFamily: family.sansMedium, fontSize: 12 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   kindText: {
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 12,
     textTransform: "capitalize",
   },
@@ -466,14 +466,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 12,
   },
-  previewText: { fontFamily: family.sansBold, fontSize: 14 },
+  previewText: { fontFamily: family.sansMedium, fontSize: 14 },
   review: { fontFamily: family.monoMedium, fontSize: 11 },
   safe: { flex: 1 },
   save: { alignItems: "center", borderRadius: 12, marginTop: 6, padding: 14 },
-  saveText: { fontFamily: family.sansBold, fontSize: 15 },
+  saveText: { fontFamily: family.sansMedium, fontSize: 15 },
   title: {
     flex: 1,
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 21,
     textAlign: "center",
   },

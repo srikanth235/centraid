@@ -63,7 +63,7 @@
   content: "✓";
   position: absolute;
   top: 0.3rem;
-  left: 0.3rem;
+  inset-inline-start: 0.3rem;
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 50%;
@@ -71,8 +71,7 @@
   /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
      the theme-stable --text-inv (kit.css header contract, #686). */
   color: var(--text-inv);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font: var(--t-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,8 +82,9 @@
   gap: 0.5rem;
 }
 .count {
-  margin-right: auto;
+  margin-inline-end: auto;
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font: var(--t-mono);
   font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
 }

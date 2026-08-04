@@ -16,20 +16,21 @@
      belongs to this app rather than being a hardcoded near-black. */
   --ql-stage: hsl(var(--app-hue) 25% 4%);
   background: var(--ql-stage);
-  animation: kit-fade 0.2s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
 .quickTop {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 14px 18px;
+  padding: var(--sp-3) var(--sp-4);
   color: var(--text-inv);
   flex-shrink: 0;
+  min-width: 0;
 }
 .quickBadge {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,24 +41,26 @@
   flex: 1;
   min-width: 0;
   font: var(--t-body-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
-.quickBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  border: 1px solid color-mix(in oklab, var(--text-inv) 22%, transparent);
+/* kit.css's `.kit-btn.quiet` owns the shape, the control height, the focus
+   ring and the 7px control radius (a pill is for an avatar or a switch track,
+   not a button). Only the on-dark ink/ground is local, and it is compounded so
+   it outranks `.kit-btn`'s own colour rules regardless of load order. */
+.quickBtn:global(.kit-btn) {
+  border-color: color-mix(in oklab, var(--text-inv) 22%, transparent);
   background: color-mix(in oklab, var(--text-inv) 8%, transparent);
   color: var(--text-inv);
-  font: var(--t-small);
-  padding: var(--sp-2) 14px;
-  border-radius: var(--r-pill);
-  text-decoration: none;
+  flex: none;
 }
-.quickBtn:hover {
+.quickBtn:global(.kit-btn):hover {
+  border-color: color-mix(in oklab, var(--text-inv) 34%, transparent);
   background: color-mix(in oklab, var(--text-inv) 18%, transparent);
+  color: var(--text-inv);
 }
 /* Close button: kit.css's .kit-icon-btn, on the quick-look's dark surface —
    the compound selector bumps specificity above .kit-icon-btn's own
@@ -74,7 +77,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 60px 28px;
+  padding-inline: var(--sp-6);
+  padding-block-end: var(--sp-5);
   position: relative;
 }
 /* Prev/next: kit.css's .kit-viewer-nav (+.prev/.next); .quickStage above
@@ -82,7 +86,8 @@
 .quickImage {
   max-width: min(760px, 90%);
   max-height: 100%;
-  border-radius: 8px;
+  /* Media content, not chrome — stays square. */
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow-lg);
   object-fit: contain;
 }
@@ -90,14 +95,14 @@
   width: min(760px, 90%);
   height: 100%;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   background: var(--text-inv);
   box-shadow: var(--shadow-lg);
 }
 .quickMedia {
   max-width: min(900px, 90%);
   max-height: 100%;
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   background: var(--ql-stage);
   box-shadow: var(--shadow-lg);
 }
@@ -107,18 +112,39 @@
   justify-items: center;
   gap: 1.25rem;
   padding: 2.25rem;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: color-mix(in oklab, var(--text-inv) 8%, transparent);
 }
+/* The document itself, at the reading measure. A sheet of paper on the
+   theater stage: the app's declared READING register (19/33 serif), 34em of
+   measure, and the page's own scroll — never a mock of a page. */
+.quickRead {
+  width: min(46rem, 96%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  /* Content, not chrome — stays square. */
+  border-radius: var(--r-xs);
+  padding: var(--sp-6) var(--sp-5);
+}
+.quickReadBody {
+  max-inline-size: 34em;
+  margin-inline: auto;
+  font: var(--t-reading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .quickAudio > span {
   display: grid;
   place-items: center;
   width: 5rem;
   height: 5rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 10%, transparent);
   color: color-mix(in oklab, var(--text-inv) 82%, transparent);
-  font-size: 2.2rem;
+  font-size: var(--t-display-size);
 }
 .quickAudio audio {
   width: 100%;
@@ -127,18 +153,60 @@
   width: min(520px, 84%);
   aspect-ratio: 8.5 / 11;
   background: var(--text-inv);
-  border-radius: 6px;
+  /* A mocked document page — content, not chrome — stays square. */
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow-lg);
   padding: 44px 46px;
   overflow: hidden;
 }
 .quickPage > i {
   display: block;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
+  /* Token hairlines, not hand-picked greys — a literal hex here is a fork of
+     the line ramp that never flips with the theme. */
+  background: var(--line);
+}
+.quickPageHead {
+  height: 11px;
+  width: 44%;
+  margin-block-end: var(--sp-5);
+}
+.quickPageRule {
+  height: 7px;
+  margin-block-end: var(--sp-3);
+}
+.quickPage > i.quickPageBreak {
+  height: 7px;
+  background: var(--line-strong);
+  margin-block-end: var(--sp-6);
 }
 .quickFoot {
   text-align: center;
   color: color-mix(in oklab, var(--text-inv) 60%, transparent);
   font: var(--t-mono);
-  padding-bottom: var(--sp-4);
+  font-variant-numeric: var(--t-mono-numeric);
+  padding-block-end: var(--sp-4);
+  padding-inline: var(--sp-4);
+}
+
+/* ---------- Narrow (phone) ---------- */
+/* The stage's inline padding reserved room for the prev/next controls, which
+   on a phone leaves the content a sliver; the controls overlay the edges
+   instead. The Download label collapses to its glyph so the title keeps the
+   row. */
+:global(.docs.is-narrow) .quickStage {
+  padding-inline: var(--sp-2);
+}
+:global(.docs.is-narrow) .quickBtnLabel {
+  /* Visually collapsed, still the control's accessible name — no
+     `position: absolute`, which would escape the button's own box. */
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:global(.docs.is-narrow) .quickRead {
+  width: 100%;
+  padding: var(--sp-4);
 }

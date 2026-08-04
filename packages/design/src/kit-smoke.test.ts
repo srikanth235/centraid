@@ -51,7 +51,7 @@ describe("kit smoke", () => {
       "kit-line-chart",
       "kit-bar-chart",
       "kit-skeleton",
-      "kit-toast",
+      "kit-status-line",
       "kit-mention-chip",
       "kit-reference-strip",
     ]) {

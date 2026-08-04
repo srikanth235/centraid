@@ -81,7 +81,6 @@ export function AutomationEditorAgentPicker({
           <label className={styles.agentPickerField}>
             <span>Runner</span>
             <select
-              aria-label="Automation runner"
               value={runner ?? ""}
               onChange={(event) =>
                 onChange({ runner: event.target.value || null, model: null })
@@ -101,7 +100,6 @@ export function AutomationEditorAgentPicker({
           <label className={styles.agentPickerField}>
             <span>Model</span>
             <select
-              aria-label="Automation model"
               value={model ?? ""}
               onChange={(event) =>
                 onChange({

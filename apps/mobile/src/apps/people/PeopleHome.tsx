@@ -15,7 +15,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -218,23 +218,18 @@ export default function PeopleHome({
     const revisionId = String(output?.revision_id ?? "");
     resetChannel();
     if (duplicates > 0)
-      showToast({
-        message: `Possible duplicate — this channel is also used by ${duplicates} other person${duplicates === 1 ? "" : "s"}.`,
-        tone: "danger",
-      });
+      postStatus(
+        `Possible duplicate — this channel is also used by ${duplicates} other person${duplicates === 1 ? "" : "s"}.`
+      );
     else if (revisionId && channelId)
-      showToast({
-        message: "Contact saved. The previous value can be restored.",
-        tone: "accent",
-        action: {
-          label: "Undo",
-          onPress: () =>
-            void write("undo-contact-channel", {
-              channel_id: channelId,
-              revision_id: revisionId,
-            }),
-        },
-      });
+      showUndoStatus(
+        "Contact saved. The previous value can be restored.",
+        () =>
+          void write("undo-contact-channel", {
+            channel_id: channelId,
+            revision_id: revisionId,
+          })
+      );
   };
   const deleteChannel = (channel: ReplicaRow): void => {
     Alert.alert("Delete contact channel?", String(channel.value ?? ""), [
@@ -250,18 +245,14 @@ export default function PeopleHome({
               nativeWriteOutput(result)?.revision_id ?? ""
             );
             if (!revisionId) return;
-            showToast({
-              message: "Contact deleted. You can restore it now.",
-              tone: "accent",
-              action: {
-                label: "Undo",
-                onPress: () =>
-                  void write("undo-contact-channel", {
-                    channel_id: String(channel.channel_id),
-                    revision_id: revisionId,
-                  }),
-              },
-            });
+            showUndoStatus(
+              "Contact deleted. You can restore it now.",
+              () =>
+                void write("undo-contact-channel", {
+                  channel_id: String(channel.channel_id),
+                  revision_id: revisionId,
+                })
+            );
           }),
       },
     ]);
@@ -284,11 +275,9 @@ export default function PeopleHome({
               if (!result) return;
               setSelectedId(String(target.party_id));
               closeMerge();
-              showToast({
-                message:
-                  "People merged — references now point at the survivor.",
-                tone: "accent",
-              });
+              postStatus(
+                "People merged — references now point at the survivor."
+              );
             }),
         },
       ]

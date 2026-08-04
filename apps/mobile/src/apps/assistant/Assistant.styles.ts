@@ -99,7 +99,7 @@ export const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flex: 1,
       justifyContent: "center",
-      paddingBottom: spacing[7],
+      paddingBottom: spacing[6],
       paddingHorizontal: spacing[6],
     },
     errorText: { ...t("body"), color: colors.danger },
@@ -129,7 +129,8 @@ export const makeStyles = (colors: ThemeColors) =>
     pendingText: { ...t("body"), color: colors.textFaint, fontStyle: "italic" },
     rowLeft: { alignItems: "flex-start" },
     rowRight: { alignItems: "flex-end" },
-    safe: { backgroundColor: colors.bg, flex: 1 },
+    // Assistant's declared surface tone is "warm" (freedom table, DESIGN.md).
+    safe: { backgroundColor: colors.toneWarm, flex: 1 },
     sendButton: {
       alignItems: "center",
       backgroundColor: colors.accent,
@@ -151,7 +152,7 @@ export const makeStyles = (colors: ThemeColors) =>
     subtitle: { ...t("small"), color: colors.textSoft, marginTop: 2 },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 26,
       letterSpacing: -0.3,
     },

@@ -157,6 +157,7 @@ function makeProps(
     parked: [],
     scopeRequests: [],
     grants: [],
+    storeGrants: [],
     activity: [],
     busyId: null,
     onApproveOutbox: vi.fn<ApprovalsScreenProps["onApproveOutbox"]>(),
@@ -165,6 +166,7 @@ function makeProps(
     onConfirmParked: vi.fn<ApprovalsScreenProps["onConfirmParked"]>(),
     onDecideScopeRequest: vi.fn<ApprovalsScreenProps["onDecideScopeRequest"]>(),
     onRevokeGrant: vi.fn<ApprovalsScreenProps["onRevokeGrant"]>(),
+    onRevokeStoreGrant: vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>(),
     ...over,
   };
 }
@@ -544,6 +546,88 @@ describe("screens/ApprovalsScreen", () => {
         findButton(el, "Revoke").click();
       });
       expect(onRevokeGrant).toHaveBeenCalledWith("g1");
+    });
+
+    it("Privacy tab lists a store's holders and reads 'reachable by nothing' when empty", () => {
+      const el = mount(
+        makeProps({
+          storeGrants: [
+            {
+              storeId: "photos",
+              label: "Photos",
+              holders: [
+                {
+                  grantId: "g-photos",
+                  holderKind: "app",
+                  holderId: "photos",
+                  holderLabel: "Photos",
+                  mode: "read",
+                },
+              ],
+            },
+            { storeId: "locker", label: "Locker", holders: [] },
+          ],
+        })
+      );
+      act(() => {
+        findButton(el, "Privacy").click();
+      });
+      expect(el.textContent).toContain("Photos");
+      expect(el.textContent).toContain("read");
+      // The count slot names the positive claim ("1 app"), not just the
+      // negative one — every store gets it, populated or not.
+      expect(el.textContent).toContain("1 app");
+      expect(el.textContent).toContain("Locker");
+      expect(el.textContent).toContain("reachable by nothing");
+      expect(el.textContent).not.toContain("Reachable by nothing.");
+      // The lead paragraph names the screen's whole claim before any store.
+      expect(el.textContent).toContain(
+        "Everything an app can reach, and nothing it cannot."
+      );
+      // The network-call footer names every real call the product makes.
+      expect(el.textContent).toContain("Your configured AI provider");
+      expect(el.textContent).toContain("The pairing relay");
+    });
+
+    it("revoking a store grant strikes the mode through instead of removing the row", () => {
+      const onRevokeStoreGrant =
+        vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>();
+      const el = mount(
+        makeProps({
+          storeGrants: [
+            {
+              storeId: "photos",
+              label: "Photos",
+              holders: [
+                {
+                  grantId: "g-photos",
+                  holderKind: "app",
+                  holderId: "photos",
+                  holderLabel: "Photos",
+                  mode: "write",
+                },
+              ],
+            },
+          ],
+          onRevokeStoreGrant,
+        })
+      );
+      act(() => {
+        findButton(el, "Privacy").click();
+      });
+      const toggle = el.querySelector<HTMLInputElement>(
+        '[aria-label="write access to Photos"]'
+      );
+      expect(toggle).not.toBeNull();
+      act(() => {
+        toggle?.click();
+      });
+      expect(onRevokeStoreGrant).toHaveBeenCalledWith(
+        expect.objectContaining({ grantId: "g-photos", holderLabel: "Photos" })
+      );
+      // The row survives with its mode struck through — never removed.
+      expect(el.textContent).toContain("Photos");
+      expect(el.querySelector("[data-struck]")?.textContent).toBe("write");
     });
 
     it("shows the origin of a recent Locker fill in review activity", () => {

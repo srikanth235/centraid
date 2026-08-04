@@ -15,7 +15,7 @@
 }
 .navItem .lbl {
   flex: 1;
-  text-align: left;
+  text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -38,7 +38,7 @@
   border: none;
   background: none;
   border-radius: var(--r-md);
-  text-align: left;
+  text-align: start;
   color: var(--text);
 }
 .listitem:hover {
@@ -53,8 +53,7 @@
 }
 .liName {
   display: block;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-small);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -62,7 +61,7 @@
 .liSub {
   display: block;
   font: var(--t-mono);
-  font-size: 10px;
+  font-variant-numeric: var(--t-mono-numeric);
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;

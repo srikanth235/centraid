@@ -10,6 +10,7 @@ import styles from "./BuilderChatPane.module.css";
 function BoltGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={13}
       height={13}
       viewBox="0 0 24 24"
@@ -27,6 +28,7 @@ function BoltGlyph(): JSX.Element {
 function ChevronDownGlyph(): JSX.Element {
   return (
     <svg
+      aria-hidden="true"
       width={13}
       height={13}
       viewBox="0 0 24 24"

@@ -47,7 +47,22 @@ export * from "@centraid/design/kit/kit.js";
 const LINKS_ROUTE = "/centraid/_vault/links";
 type AttachmentLike = Attachment;
 
+// Object URLs this strip owns, plus the render that created them. The
+// generation is what makes the bookkeeping correct under re-render: a strip
+// re-rendered while an authorization is still in flight would otherwise let the
+// STALE render's `.then` push into (and re-publish) its own array, clobbering
+// the live render's list so those URLs were never revoked. A late URL from a
+// superseded render is revoked on arrival instead of being recorded.
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
+const stripGeneration = new WeakMap<HTMLElement, number>();
+
+function revokeObjectUrl(url: string): void {
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    /* already revoked */
+  }
+}
 
 /**
  * Render attachment tiles, then authorise any `/_vault/blobs/…` bytes. Inline,
@@ -67,16 +82,18 @@ export function renderAttachments(
     | null,
   options: { onZoom?: (attachment: unknown) => void } = {}
 ): void {
-  for (const url of stripObjectUrls.get(stripEl) ?? []) {
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      /* already revoked */
-    }
-  }
+  // `baseRenderAttachments` rebuilds the strip's DOM below, so the previous
+  // render's tiles — and the object URLs they point at — are about to be
+  // discarded. Revoking them here is safe precisely because nothing survives
+  // the rebuild; unlike inline-blob-images, this path re-reads every
+  // `/_vault/blobs` ref from `list`, so a re-render always re-authorizes.
+  for (const url of stripObjectUrls.get(stripEl) ?? []) revokeObjectUrl(url);
   stripObjectUrls.delete(stripEl);
+  const generation = (stripGeneration.get(stripEl) ?? 0) + 1;
+  stripGeneration.set(stripEl, generation);
   baseRenderAttachments(stripEl, list, onRemove, options);
   const created: string[] = [];
+  stripObjectUrls.set(stripEl, created);
   const targets = [
     ...stripEl.querySelectorAll<HTMLImageElement>("img"),
     ...stripEl.querySelectorAll<HTMLAnchorElement>("a"),
@@ -86,10 +103,15 @@ export function renderAttachments(
     const raw = el.getAttribute(attr);
     if (!raw || !raw.startsWith(BLOB_PREFIX)) continue;
     void authorizeBlobUrl(raw).then((objectUrl) => {
-      if (!objectUrl || !el.isConnected) return;
+      if (!objectUrl) return;
+      // A URL that arrives for a superseded render, or for a tile that has left
+      // the document, has no owner to revoke it later — revoke it now.
+      if (stripGeneration.get(stripEl) !== generation || !el.isConnected) {
+        revokeObjectUrl(objectUrl);
+        return;
+      }
       el.setAttribute(attr, objectUrl);
       created.push(objectUrl);
-      stripObjectUrls.set(stripEl, created);
     });
   }
 }

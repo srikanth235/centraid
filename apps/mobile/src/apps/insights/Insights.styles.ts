@@ -13,7 +13,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     title: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 30,
       letterSpacing: -0.4,
     },
@@ -42,7 +42,7 @@ export const makeStyles = (colors: ThemeColors) =>
     heroDot: { borderRadius: 7, height: 14, width: 14 },
     heroStatus: {
       color: colors.text,
-      fontFamily: family.serif,
+      fontFamily: family.displayRegular,
       fontSize: 20,
       letterSpacing: -0.2,
     },
@@ -69,13 +69,14 @@ export const makeStyles = (colors: ThemeColors) =>
     chipLabel: {
       color: colors.textFaint,
       fontFamily: family.monoMedium,
-      fontSize: 10,
+      fontSize: 12.5,
       letterSpacing: 0.6,
     },
     chipValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 16,
+      fontVariant: ["tabular-nums"],
       marginTop: 3,
     },
 
@@ -116,7 +117,8 @@ export const makeStyles = (colors: ThemeColors) =>
     eventMeta: {
       color: colors.textGhost,
       fontFamily: family.monoRegular,
-      fontSize: 10,
+      fontSize: 12.5,
+      fontVariant: ["tabular-nums"],
       marginTop: 2,
     },
 
@@ -135,13 +137,14 @@ export const makeStyles = (colors: ThemeColors) =>
     kpiLabelText: {
       color: colors.textFaint,
       fontFamily: family.monoMedium,
-      fontSize: 10,
+      fontSize: 12.5,
       letterSpacing: 0.5,
     },
     kpiValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 24,
+      fontVariant: ["tabular-nums"],
       letterSpacing: -0.5,
       marginTop: 8,
     },
@@ -159,7 +162,8 @@ export const makeStyles = (colors: ThemeColors) =>
     meterFoot: {
       color: colors.textFaint,
       fontFamily: family.monoRegular,
-      fontSize: 10,
+      fontSize: 12.5,
+      fontVariant: ["tabular-nums"],
       marginTop: 5,
     },
 
@@ -182,7 +186,8 @@ export const makeStyles = (colors: ThemeColors) =>
     panelMeta: {
       color: colors.textFaint,
       fontFamily: family.monoMedium,
-      fontSize: 10,
+      fontSize: 12.5,
+      fontVariant: ["tabular-nums"],
       letterSpacing: 0.5,
     },
     chartStats: {
@@ -193,13 +198,14 @@ export const makeStyles = (colors: ThemeColors) =>
     chartStatLabel: {
       color: colors.textFaint,
       fontFamily: family.monoMedium,
-      fontSize: 10,
+      fontSize: 12.5,
       letterSpacing: 0.5,
     },
     chartStatValue: {
       color: colors.text,
-      fontFamily: family.monoBold,
+      fontFamily: family.monoMedium,
       fontSize: 16,
+      fontVariant: ["tabular-nums"],
       marginTop: 2,
     },
     chartAxis: {
@@ -210,7 +216,8 @@ export const makeStyles = (colors: ThemeColors) =>
     chartAxisText: {
       color: colors.textGhost,
       fontFamily: family.monoRegular,
-      fontSize: 10,
+      fontSize: 12.5,
+      fontVariant: ["tabular-nums"],
     },
 
     // Model bars.
@@ -225,6 +232,7 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.textFaint,
       fontFamily: family.monoRegular,
       fontSize: 11,
+      fontVariant: ["tabular-nums"],
     },
 
     // Recent activity.
@@ -238,6 +246,7 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.textGhost,
       fontFamily: family.monoRegular,
       fontSize: 11,
+      fontVariant: ["tabular-nums"],
       width: 62,
     },
     actBody: { flex: 1, minWidth: 0 },
@@ -245,7 +254,7 @@ export const makeStyles = (colors: ThemeColors) =>
     actKind: {
       color: colors.textFaint,
       fontFamily: family.monoMedium,
-      fontSize: 10,
+      fontSize: 12.5,
       letterSpacing: 0.5,
       marginTop: 2,
     },
@@ -254,11 +263,13 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.textSoft,
       fontFamily: family.monoMedium,
       fontSize: 12,
+      fontVariant: ["tabular-nums"],
     },
     actUsd: {
       color: colors.textFaint,
       fontFamily: family.monoRegular,
       fontSize: 11,
+      fontVariant: ["tabular-nums"],
       marginTop: 2,
     },
 

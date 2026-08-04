@@ -29,7 +29,12 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     detailList: { padding: spacing[5] },
     detailSafe: { backgroundColor: colors.bg, flex: 1 },
     detailTitle: { ...t("title"), color: colors.text },
-    disabled: { opacity: 0.5 },
+    // Working recedes by swapping the fill and the label for their own tokens,
+    // never by fading the Pressable — an opacity on the container would carry
+    // the ink fill and the inverse label down together and land the pair below
+    // the contrast the tokens exist to guarantee.
+    disabledPrimary: { backgroundColor: colors.bgSunken },
+    disabledPrimaryText: { color: colors.textDisabled },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     field: {
       borderBottomColor: colors.line,

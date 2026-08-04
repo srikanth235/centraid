@@ -215,7 +215,9 @@ async function establishSession(page: Page): Promise<void> {
     }
   );
   await page.reload();
-  await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
+  // Home is the springboard (#708); custom apps open via the palette, not a
+  // library card. Wait for the shell, then confirm the service worker.
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
@@ -223,33 +225,44 @@ async function establishSession(page: Page): Promise<void> {
     .toBe(true);
 }
 
-// Open the installed app from Home and measure the iframe waterfall from the
-// iframe's OWN origin (cross-origin timing from the shell would read 0 bytes).
-// The very first tile click opens a builder PREVIEW; a Publish promotes it to
-// the installed `iframe[title="app"]` path a user actually re-opens. We
-// deliberately do NOT invoke `window.centraid.read` — the asset waterfall is
-// the subject, and the query runtime is a separate concern.
-async function ensureInstalled(page: Page): Promise<void> {
-  await page
-    .locator(`[data-app-id="${APP_ID}"] [data-testid="app-tile"]`)
+/** Open the published fixture app via the command palette. */
+async function openFixtureApp(page: Page): Promise<void> {
+  const search = page.getByRole("button", { name: /^Search/u });
+  if ((await search.count()) > 0) {
+    await search.first().click();
+  } else {
+    await page.keyboard.press("ControlOrMeta+k");
+  }
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.waitFor({ state: "visible" });
+  await palette.locator("input").fill("Web E2E App");
+  await palette
+    .getByRole("button")
+    .filter({ hasText: "Web E2E App" })
     .first()
     .click();
-  const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(preview.locator("#ready")).toHaveText("generated app ready");
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(page.getByText(/added to Home/iu).first()).toBeVisible();
+}
+
+// The fixture is already published on the harness gateway. Home no longer lists
+// custom apps (#708); open via the palette into the running-app iframe.
+// We deliberately do NOT invoke `window.centraid.read` — the asset waterfall is
+// the subject, and the query runtime is a separate concern.
+async function ensureInstalled(page: Page): Promise<void> {
+  await openFixtureApp(page);
+  await page
+    .frameLocator('iframe[title="app"]')
+    .locator("#ready")
+    .waitFor({ state: "visible" });
+  // Return to Home so openInstalledAndMeasure starts from a cold shell open.
   await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
 async function openInstalledAndMeasure(
   page: Page
 ): Promise<{ summary: OpenSummary; elapsedMs: number }> {
   const started = Date.now();
-  await page
-    .locator(`[data-app-id="${APP_ID}"] [data-testid="app-tile"]`)
-    .first()
-    .click();
+  await openFixtureApp(page);
   const iframe = await page.waitForSelector('iframe[title="app"]', {
     state: "attached",
     timeout: 30_000,
@@ -291,7 +304,7 @@ async function openInstalledAndMeasure(
 
 async function goHome(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
+  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
 test("app-open waterfall — shell + iframe, cold vs warm (real installed app)", async ({
@@ -847,8 +860,14 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
     )
   ) as {
     metrics: {
-      largestContentfulPaint: { ceilingMs: number };
-      interactionToNextPaint: { ceilingMs: number };
+      largestContentfulPaint: {
+        ceilingMs?: number;
+        _intendedCeilingMs?: number;
+      };
+      interactionToNextPaint: {
+        ceilingMs?: number;
+        _intendedCeilingMs?: number;
+      };
       cumulativeLayoutShift: { maxScore: number };
     };
   };
@@ -943,8 +962,15 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
         `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
     });
   } else {
+    // Binding Layer content can produce a real LCP where the old connect screen
+    // did not. Prefer a live ceiling; fall back to the parked intended ceiling
+    // until web.json is re-seeded with a measured status.
+    const lcpCeiling =
+      budgets.metrics.largestContentfulPaint.ceilingMs ??
+      budgets.metrics.largestContentfulPaint._intendedCeilingMs;
+    expect(lcpCeiling, "LCP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.lcpMs, "largest contentful paint").toBeLessThanOrEqual(
-      budgets.metrics.largestContentfulPaint.ceilingMs
+      lcpCeiling
     );
   }
   if (vitals.inpMs === null) {
@@ -953,8 +979,12 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
       description: `no event-timing entry recorded (interaction driven: ${clicked}); INP not asserted this run`,
     });
   } else {
+    const inpCeiling =
+      budgets.metrics.interactionToNextPaint.ceilingMs ??
+      budgets.metrics.interactionToNextPaint._intendedCeilingMs;
+    expect(inpCeiling, "INP ceiling configured").toEqual(expect.any(Number));
     expect(vitals.inpMs, "interaction to next paint").toBeLessThanOrEqual(
-      budgets.metrics.interactionToNextPaint.ceilingMs
+      inpCeiling
     );
   }
 });

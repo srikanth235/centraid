@@ -6,11 +6,11 @@ import {
   surfaceWriteOutcome,
 } from "./write-outcome";
 
-const { toast } = vi.hoisted(() => ({
-  toast: vi.fn<(...args: unknown[]) => void>(),
+const { post } = vi.hoisted(() => ({
+  post: vi.fn<(...args: unknown[]) => void>(),
 }));
-vi.mock(import("../components/Toast"), () => ({
-  showToast: toast,
+vi.mock(import("../components/status-line"), () => ({
+  postStatus: post,
 }));
 vi.mock(import("react-native"), () => ({
   Alert: {
@@ -20,7 +20,7 @@ vi.mock(import("react-native"), () => ({
 }));
 
 describe("native write outcome surface", () => {
-  beforeEach(() => toast.mockReset());
+  beforeEach(() => post.mockReset());
 
   it("surfaces each non-executed admission outcome", () => {
     const onParked = vi.fn<() => void>();
@@ -32,21 +32,15 @@ describe("native write outcome surface", () => {
     expect(surfaceWriteOutcome({ intentId: "i-2", status: "queued" })).toBe(
       true
     );
-    expect(toast).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining("Saved offline"),
-        tone: "accent",
-      })
+    expect(post).toHaveBeenLastCalledWith(
+      expect.stringContaining("Saved offline")
     );
 
     expect(surfaceWriteOutcome({ intentId: "i-3", status: "in-flight" })).toBe(
       true
     );
-    expect(toast).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining("final status remains visible"),
-        tone: "accent",
-      })
+    expect(post).toHaveBeenLastCalledWith(
+      expect.stringContaining("final status remains visible")
     );
 
     expect(
@@ -56,10 +50,7 @@ describe("native write outcome surface", () => {
         reason: "nope",
       })
     ).toBe(false);
-    expect(toast).toHaveBeenLastCalledWith({
-      message: "Change not applied: nope",
-      tone: "danger",
-    });
+    expect(post).toHaveBeenLastCalledWith("Change not applied: nope");
 
     expect(surfaceWriteOutcome({ intentId: "i-5", status: "executed" })).toBe(
       true
@@ -91,15 +82,12 @@ describe("native write outcome surface", () => {
     expect(onParked).toHaveBeenCalledOnce();
     expect(onQueued).toHaveBeenCalledOnce();
     expect(onInFlight).toHaveBeenCalledOnce();
-    expect(toast).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("surfaces rejected write promises", () => {
     surfaceWriteFailure(new Error("transport down"), "Album not renamed");
-    expect(toast).toHaveBeenCalledWith({
-      message: "Album not renamed: transport down",
-      tone: "danger",
-    });
+    expect(post).toHaveBeenCalledWith("Album not renamed: transport down");
   });
 
   it("reads command output from successful write results", () => {

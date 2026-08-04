@@ -15,7 +15,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
-  margin-left: var(--sp-1);
+  margin-inline-start: var(--sp-1);
   vertical-align: middle;
 }
 .custodyDot.custodyOk {
@@ -31,25 +31,28 @@
 /* The search-hit snippet (List row, via Shared's Snippet). */
 .snippet {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-soft);
   margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .snippet mark {
   background: var(--accent-soft);
   color: var(--accent-text);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0 1px;
 }
 
 /* The vault-canonical star (issue #274) riding a Grid card or List row title. */
 .starInd {
   color: var(--app-identity);
-  font-size: 0.85em;
-  margin-left: var(--sp-1);
+  font-size: var(--t-small-size);
+  margin-inline-start: var(--sp-1);
+  /* A star glued to the last word reads as a typo. */
+  padding-inline-start: 2px;
 }
 
 /* The play badge over a video thumbnail (Grid card, List row `.small`, Details
@@ -62,23 +65,24 @@
   place-items: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   /* Darkens the thumbnail behind it — the scrim token, dialled down. */
   background: color-mix(in oklab, var(--scrim) 81%, transparent);
   color: var(--text-inv);
   font-size: var(--t-small-size);
-  padding-left: 2px;
+  padding-inline-start: 2px;
   pointer-events: none;
 }
 .mediaPlay.small {
   width: 1.35rem;
   height: 1.35rem;
-  font-size: 0.55rem;
+  font-size: var(--t-control-size);
 }
 
 /* Free-form label chip (Toolbar's TagChips + Details' Tags editor). */
 .tagChip {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 
 /* Drawer action/footer button pills (Details actions + footer, History

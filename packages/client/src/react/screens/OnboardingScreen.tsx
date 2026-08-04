@@ -7,6 +7,7 @@ import ConnectTicketPanel, {
   CONNECT_TICKET_INTRO,
 } from "../shell/routes/ConnectTicketPanel.js";
 import { isNameSet, loadSelfProfile } from "../shell/routes/profileData.js";
+import Button from "../ui/Button.js";
 import { ErrorNote } from "./OnboardingErrorNote.js";
 import {
   AVATAR_PALETTE,
@@ -245,6 +246,13 @@ export default function OnboardingScreen({
     // this client already joined.
   }, [path, dialAttempt]);
 
+  // Where this run is in the threshold (moment M15 carries `step-indicator`).
+  // The total is two until the member says they have data to bring, because
+  // promising a third step to everyone and then not showing it is the kind of
+  // small lie a first run cannot afford.
+  const stepTotal = wantsImport ? 3 : 2;
+  const stepIndex = step === "identity" ? 2 : step === "import" ? 3 : 1;
+
   return (
     <div
       className={styles.view}
@@ -252,12 +260,13 @@ export default function OnboardingScreen({
       data-mounted="true"
       style={{ "--onb-accent": avatarColor } as CSSProperties}
     >
-      <div className={styles.stageBg} aria-hidden="true" />
-      <div className={styles.stageGlow} aria-hidden="true" />
       <div className={styles.card} data-step={step}>
         <div className={styles.eyebrow}>
           <span className={styles.eyebrowDot} aria-hidden="true" />
-          CENTRAID
+          Centraid
+          <span className={styles.step}>
+            {stepIndex} of {stepTotal}
+          </span>
         </div>
         {step === "identity" ? (
           <>
@@ -332,7 +341,9 @@ export default function OnboardingScreen({
             onBack={onBack}
           />
         ) : step === "connect" ? (
-          <div className={styles.connectPanel} data-theme="dark">
+          // No `data-theme="dark"` any more: the screen is themed like every
+          // other surface now, so the panel inherits the member's own ramp.
+          <div className={styles.connectPanel}>
             <ConnectTicketPanel
               context="onboarding"
               {...(onBack ? { onCancel: onBack } : {})}
@@ -345,19 +356,24 @@ export default function OnboardingScreen({
             {error ? (
               <>
                 <ErrorNote summary={error} detail={errorDetail} />
-                <button
-                  type="button"
-                  className={styles.cta}
-                  disabled={submitting}
-                  data-testid="onboarding-connect-retry"
-                  onClick={() => {
-                    setSubmitting(true);
-                    setError(null);
-                    setDialAttempt((n) => n + 1);
-                  }}
-                >
-                  <span>Try again</span>
-                </button>
+                {/* Retrying a local dial writes nothing, so `commit={false}`:
+                    the filled ink is about being the one primary here, not
+                    about committing, and an offline shell must not refuse the
+                    button whose whole job is to get back online. */}
+                <div data-testid="onboarding-connect-retry">
+                  <Button
+                    className={styles.cta}
+                    label="Try again"
+                    variant="primary"
+                    commit={false}
+                    disabled={submitting}
+                    onClick={() => {
+                      setSubmitting(true);
+                      setError(null);
+                      setDialAttempt((n) => n + 1);
+                    }}
+                  />
+                </div>
                 {onBack ? (
                   <button
                     type="button"

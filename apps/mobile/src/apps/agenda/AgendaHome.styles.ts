@@ -22,17 +22,24 @@ export const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
   },
-  createText: { color: "#fff", fontFamily: family.sansBold, fontSize: 13 },
-  day: {
+  createText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 13 },
+  // The 34px date column — day-of-month (mono, tabular) over day-of-week
+  // (eyebrow caps). Width is fixed per the Binding Layer reference so every
+  // row's events column starts at the same inset regardless of digit count.
+  dateCol: {
     alignItems: "center",
-    height: 42,
-    justifyContent: "center",
-    width: `${100 / 7}%`,
+    borderRadius: 6,
+    paddingTop: 4,
+    paddingBottom: 6,
+    width: 34,
   },
-  dayHeader: { justifyContent: "flex-end", minHeight: 45, paddingBottom: 6 },
-  dayHeaderTitle: { fontFamily: family.sansBold, fontSize: 15 },
-  dayNumber: { fontFamily: family.sansMedium, fontSize: 12 },
-  dayText: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 3 },
+  dateNum: { fontSize: 16 },
+  dayRow: {
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 16,
+    paddingVertical: 12,
+  },
   dialog: {
     borderRadius: 16,
     left: 28,
@@ -47,24 +54,23 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
-  dot: { borderRadius: 2, height: 4, marginTop: 2, width: 4 },
+  dialogTitle: { fontFamily: family.sansMedium, fontSize: 19 },
   empty: {
     fontFamily: family.sansRegular,
     fontSize: 14,
     padding: 40,
     textAlign: "center",
   },
-  event: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    minHeight: 72,
+  // One mini-card per event: title above time (never beside it), a 2px
+  // leading accent rule standing in for the identity hue the row itself
+  // never carries.
+  eventCard: {
+    borderStartWidth: 2,
+    gap: 2,
+    paddingStart: 10,
   },
-  eventCopy: { flex: 1 },
-  eventLine: { borderRadius: 2, height: 42, marginRight: 12, width: 3 },
-  eventMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
   eventTitle: { fontFamily: family.sansMedium, fontSize: 14 },
+  eventsCol: { flex: 1, gap: 10, minWidth: 0 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -83,7 +89,6 @@ export const styles = StyleSheet.create({
     padding: 12,
   },
   list: { paddingBottom: 40, paddingHorizontal: 18 },
-  month: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12 },
   nav: {
     alignItems: "center",
     flexDirection: "row",
@@ -94,7 +99,7 @@ export const styles = StyleSheet.create({
   navArrows: { flexDirection: "row", gap: 10 },
   rangeTitle: {
     flex: 1,
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 14,
     textAlign: "right",
   },
@@ -138,12 +143,9 @@ export const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   todayText: { fontFamily: family.sansMedium, fontSize: 12 },
-  time: { width: 68 },
-  timeText: { fontFamily: family.monoMedium, fontSize: 12 },
-  title: { fontFamily: family.sansBold, fontSize: 23 },
+  title: { fontFamily: family.sansMedium, fontSize: 23 },
   week: { gap: 8, padding: 14, paddingHorizontal: 18 },
-  weekCount: { fontFamily: family.monoBold, fontSize: 10, marginTop: 7 },
+  weekCount: { marginTop: 7 },
   weekDay: { alignItems: "center", borderRadius: 12, padding: 10, width: 52 },
-  weekName: { fontFamily: family.sansMedium, fontSize: 10 },
-  weekNumber: { fontFamily: family.sansBold, fontSize: 17, marginTop: 5 },
+  weekNumber: { fontSize: 17, marginTop: 5 },
 });

@@ -30,15 +30,17 @@ export default async function seedHandler({ input, log, ctx }) {
   const me = vaultRow.rows?.[0]?.owner_party_id;
   if (!me) throw new Error("vault has no owner party");
 
-  const meera = await invoke("tally.add_friend", { name: "Meera" });
-  const arjun = await invoke("tally.add_friend", { name: "Arjun" });
-  const sana = await invoke("tally.add_friend", { name: "Sana" });
-  const friends = [meera.party_id, arjun.party_id, sana.party_id];
+  const maya = await invoke("tally.add_friend", { name: "Maya" });
+  const jake = await invoke("tally.add_friend", { name: "Jake" });
+  const chris = await invoke("tally.add_friend", { name: "Chris" });
+  const friends = [maya.party_id, jake.party_id, chris.party_id];
 
+  // Icon is rendered verbatim — it must come from format.ts's GROUP_ICONS
+  // emoji set, not a lucide name.
   const group = await invoke("tally.create_group", {
-    name: "Goa Trip",
-    icon: "Palmtree",
-    color: "teal",
+    name: "Tahoe Trip",
+    icon: "🏔️",
+    color: "steelblue",
     member_ids: friends,
   });
 
@@ -71,32 +73,26 @@ export default async function seedHandler({ input, log, ctx }) {
       splits: even(amount_minor, parties, paid_by),
     });
 
-  await expense("Beach shack lunch", 248000, me, "food", 6);
+  await expense("Cabin deposit", 30000, me, "travel", 6);
+  await expense("Gas for the drive up", 4820, jake.party_id, "transport", 6);
   await expense(
-    "Scooter rentals, 2 days",
-    160000,
-    arjun.party_id,
-    "transport",
-    6
-  );
-  await expense(
-    "Groceries for the villa",
-    187550,
-    meera.party_id,
+    "Groceries for the cabin",
+    11267,
+    maya.party_id,
     "groceries",
     5
   );
-  await expense("Night market", 92000, sana.party_id, "fun", 4, [
+  await expense("Ski rentals", 9200, chris.party_id, "fun", 4, [
     me,
-    meera.party_id,
-    sana.party_id,
+    maya.party_id,
+    chris.party_id,
   ]);
-  await expense("Ferry tickets", 60000, me, "travel", 4);
+  await expense("Lift tickets", 6000, me, "travel", 4);
 
   await invoke("tally.settle_up", {
-    from_party: sana.party_id,
+    from_party: chris.party_id,
     to_party: me,
-    amount_minor: 50000,
+    amount_minor: 5000,
     group_id: group.group_id,
     paid_on: day(-2),
   });

@@ -49,7 +49,7 @@
 
 .kindBadge {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -64,7 +64,7 @@
 }
 .useBadge {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -217,7 +217,7 @@
 }
 .binaryOption:has(:disabled) {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--text-disabled);
 }
 .binaryOption[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);

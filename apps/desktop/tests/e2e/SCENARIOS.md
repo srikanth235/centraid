@@ -10,7 +10,7 @@ This is the current, executable coverage map for the real Electron app. A scenar
 | Onboarding and Home | `onboarding-home.spec.ts` | 10 | First-run CTA, auto-founded `Shared` + `Personal`, returning user, tiles/badges, empty state, rename, tile menu, app open, sidebar, command palette |
 | Delete | `delete-app.spec.ts` | 8 | Draft/published delete, offline/404 behavior, cancel/Escape/Enter/backdrop dismissal |
 | Builder | `builder.spec.ts` | 6 | New builder turn and tool pill, publish failure, preview iframe, existing-app edit, Code file tree, Logs filtering |
-| App view / Discover / Analytics | `appview-templates-insights.spec.ts` | 6 | System app renders inline with no iframe, automation clone, independent drafts, empty gallery, Analytics hero |
+| App view / automation templates / Analytics | `appview-templates-insights.spec.ts` | 4 | System app renders inline with no iframe, automation clone survives a restart, independent drafts, Analytics hero |
 | Automations | `automations.spec.ts` | 12 | List/error/retry, create/edit, enable/disable, webhook URL, delete, run viewer, success/failure timeline, nested tool transcript, rerun |
 | Settings / gateways | `settings-gateways.spec.ts` | 12 | Theme and system mode persistence, dark restart, Agents page, pairing-only enrollment, switch/rename/remove gateway, unreachable/auth errors, Cmd+K |
 

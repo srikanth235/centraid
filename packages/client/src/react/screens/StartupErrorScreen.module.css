@@ -81,7 +81,7 @@
   display: block;
   margin-bottom: 4px;
   font: var(--t-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);

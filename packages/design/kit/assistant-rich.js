@@ -197,7 +197,7 @@ function chartBlock(spec, C) {
       );
     });
   }
-  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${C.asstChartSvg}">${parts.join("")}</svg>`;
+  const svg = `<svg aria-hidden="true" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${C.asstChartSvg}">${parts.join("")}</svg>`;
   const labels = el(
     "div",
     { class: C.asstChartX },

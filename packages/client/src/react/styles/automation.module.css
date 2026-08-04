@@ -132,7 +132,7 @@
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 500;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -168,11 +168,8 @@
 .auStatusIc[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .auStatusIc[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.auStatusIc`'s spin. */
 .auTrigbadge {
   display: inline-flex;
   align-items: center;
@@ -212,7 +209,7 @@
     filter 0.14s ease;
 }
 .auBtn:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .auBtnPrimary {
@@ -320,7 +317,7 @@
 }
 .auOvDotMore {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .auOvRun {
@@ -383,7 +380,7 @@
   flex: none;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .auOvRunWhen b {
@@ -393,7 +390,7 @@
 }
 .auOvRunMeta {
   display: block;
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }

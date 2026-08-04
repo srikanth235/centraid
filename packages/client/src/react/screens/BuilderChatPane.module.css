@@ -107,11 +107,8 @@
 .abProgressDots i[data-on="true"]:last-of-type {
   animation: cd-pulse 1.2s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .abProgressDots i {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.abProgressDots i`'s pulse. */
 .abProgressMain {
   flex: 1;
   min-width: 0;
@@ -150,7 +147,7 @@
 .abProgressCancel {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -216,7 +213,7 @@
 }
 .tgChangeCard .tgCardSub {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -225,7 +222,7 @@
 .tgChangeCard .tgCardVersion {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 5%, transparent);
   padding: 2px 7px;
@@ -283,7 +280,7 @@
 }
 .promptStartersLabel {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -323,7 +320,7 @@
 }
 .chatInputKbd {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding: 2px 7px;
   border-radius: var(--r-sm);
@@ -360,7 +357,7 @@
 }
 .attachSize {
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   flex: none;
 }
 .attachRemove {
@@ -442,7 +439,7 @@
   background: color-mix(in oklab, var(--accent) 88%, black);
 }
 .sendBtn:disabled {
-  opacity: 0.4;
+  opacity: var(--o-disabled);
 }
 .historyList {
   flex: 1;

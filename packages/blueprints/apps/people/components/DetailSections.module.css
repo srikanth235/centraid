@@ -25,14 +25,13 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 3px 9px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-mono);
-  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -71,7 +70,6 @@
 }
 .kvK {
   font: var(--t-mono);
-  font-size: 10px;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -86,16 +84,15 @@
   border-bottom: none;
 }
 .relBadge {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
+  width: var(--h-control);
+  height: var(--h-control);
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text) 6%, transparent);
   color: var(--text-soft);
   display: flex;
   align-items: center;
   justify-content: center;
   font: var(--t-small);
-  font-size: 13px;
   flex-shrink: 0;
 }
 .note {
@@ -113,7 +110,6 @@
 .note .when {
   margin-top: 6px;
   font: var(--t-mono);
-  font-size: 10px;
   color: var(--text-faint);
 }
 .taskrow {
@@ -148,7 +144,6 @@
   min-height: 0;
   padding: 3px 9px;
   font: var(--t-mono);
-  font-size: 10px;
   text-transform: uppercase;
 }
 span.chipSm {

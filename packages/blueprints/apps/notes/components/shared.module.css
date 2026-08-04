@@ -7,28 +7,25 @@
 .nbDot {
   width: 9px;
   height: 9px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
 }
 .eyebrowLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
   color: var(--text-faint);
 }
 .tagChip {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  font-size: 12px;
+  font: var(--t-control);
   color: var(--accent-text);
   background: var(--accent-soft);
   border-radius: 999px;
   padding: 3px 6px 3px 10px;
 }
 .armedLabel {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-mono);
   padding: 0 2px;
   white-space: nowrap;
 }

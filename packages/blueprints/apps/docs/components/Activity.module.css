@@ -37,15 +37,15 @@
   margin-top: 2px;
 }
 .activityDate {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .receiptChip {
   font: var(--t-control);
   color: var(--accent-text);
   border: 1px solid var(--accent-soft);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
 }
 .activityStatus {

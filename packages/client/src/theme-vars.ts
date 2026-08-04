@@ -7,6 +7,16 @@
 // shadows, device-wall) live in the design-tokens package. This file
 // owns the *delivery* mechanism, nothing more — tweaks to design values
 // happen in TS, not here.
+//
+// `cssText` also carries the `@font-face` block for the four bundled faces,
+// concatenated AHEAD of the token rules by whichever host built the bridge
+// (issue #707): the desktop preload (`apps/desktop/src/preload.ts`, relative
+// `fonts/` next to the file:// document) and the web entry
+// (`apps/web/src/main.ts`, `/fonts/` on its own origin). One string and one
+// <style> is the point — the faces must be declared before the first
+// `var(--font-sans)` resolves, or the shell paints a frame in the UA default.
+// Each host serves the `.woff2` files from its OWN origin; no host may point
+// these rules at a CDN.
 
 (function () {
   const tokens = window.CentraidTokens;

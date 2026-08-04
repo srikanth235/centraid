@@ -4,13 +4,13 @@ import type * as TypeImport_11i4z7t from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   launchApp,
   makeEnv,
   markUserApp,
-  openTileMenu,
+  openAppFromPalette,
   seedRemoteGateway,
+  startBuilderFromPalette,
   startMockGateway,
   waitForHome,
 } from "./fixtures";
@@ -63,7 +63,12 @@ const TURN_FRAMES = [
   { data: { type: "final", text: "Done." }, delayMs: 20 },
 ];
 
-/** Open an existing published app in the builder (Edit with Centraid). */
+/** Open an existing published app in the builder (App view → Build).
+ *
+ *  Home no longer shows a tile context menu for custom apps (#708). The open
+ *  path is the command palette; the edit path is the Use/Build switch on the
+ *  running app's titlebar.
+ */
 async function openEditor(
   page: TypeImport_11i4z7t.Page,
   id: string,
@@ -73,20 +78,21 @@ async function openEditor(
   await markUserApp(page, { id, name });
   await page.reload();
   await waitForHome(page);
-  await openTileMenu(page, id);
-  await clickMenuItem(page, "Edit with Centraid");
+  await openAppFromPalette(page, name);
+  await page.getByRole("button", { name: "Build", exact: true }).click();
   await page.getByTestId("builder-body").waitFor({ state: "visible" });
 }
 
 // ─────────────────────────── §4 creation ───────────────────────────
 
-test("4.1 + 4.2 — composer opens the builder and the initial turn streams a tool pill", async () => {
+test("4.1 + 4.2 — palette Create opens the builder and the initial turn streams a tool pill", async () => {
   gateway.state.turnFrames = TURN_FRAMES;
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await page.getByTestId("home-composer").fill("A habit tracker");
-    await page.getByTestId("home-composer").press("Meta+Enter");
+    // Home composer is gone (#708); the palette Create row is the path that
+    // carries an initialPrompt into the builder.
+    await startBuilderFromPalette(page, "A habit tracker");
 
     await expect(page.getByTestId("builder-body")).toBeVisible();
     // The new-app scaffold posts to the apps collection.

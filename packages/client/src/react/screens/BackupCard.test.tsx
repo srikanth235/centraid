@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CentraidGatewayDevice } from "../../gateway-client-devices.js";
 import type { UsageInput } from "../../storage-metrics.js";
 import BackupCard from "./BackupCard.js";
 import type { BackupCardProps, BackupStatusDTO } from "./BackupCard.js";
@@ -49,6 +50,8 @@ describe("screens/BackupCard", () => {
     onVerifyBucket?: (
       vaultId: string
     ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
+    loadDevices?: () => Promise<CentraidGatewayDevice[]>;
+    onRestore?: () => void;
     now?: number;
   }): Promise<HTMLDivElement> {
     container = document.createElement("div");
@@ -66,6 +69,8 @@ describe("screens/BackupCard", () => {
           onExportRecoveryKit={props.onExportRecoveryKit}
           onUpdatePolicy={props.onUpdatePolicy}
           onVerifyBucket={props.onVerifyBucket}
+          loadDevices={props.loadDevices}
+          onRestore={props.onRestore}
         />
       );
     });
@@ -486,6 +491,99 @@ describe("screens/BackupCard", () => {
       expect(el.textContent).toContain(
         "Couldn’t reach the gateway: fetch failed"
       );
+    });
+
+    it("leads with loss, names what is held back, and shows an outlined disabled Restore when no restore flow is wired (issue #708 A2)", async () => {
+      const status: BackupStatusDTO = {
+        configured: true,
+        provider: "Clawgnition",
+        vaults: [
+          {
+            vaultId: "v1",
+            name: "Main",
+            lastBackupAt: "2026-07-11T11:59:00.000Z",
+            lastVerifyAt: "2026-07-11T11:59:00.000Z",
+            lastWalDrainAt: "2026-07-11T11:59:30.000Z",
+            pendingOffsite: { count: 0, bytes: 0 },
+            policy: POLICY,
+          },
+        ],
+      };
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(status),
+        onRunNow: neverRun,
+      });
+      expect(el.textContent).toContain(
+        "If this device died right now, you would lose almost nothing."
+      );
+      expect(el.textContent).toContain("What is held back");
+      expect(el.textContent).toContain(
+        "Nothing. A partial backup would be a promise Centraid could not keep."
+      );
+      const restoreBtn = [...el.querySelectorAll("button")].find((b) =>
+        b.textContent?.includes("Restore from backup")
+      ) as HTMLButtonElement;
+      expect(restoreBtn).toBeDefined();
+      expect(restoreBtn.disabled).toBe(true);
+      expect(restoreBtn.className).not.toContain("destructiveFilled");
+      expect(el.textContent).toContain("Restore from a backup");
+      const reasonId = restoreBtn.getAttribute("aria-describedby");
+      expect(reasonId).toBeTruthy();
+      expect(
+        el.querySelector(`#${CSS.escape(reasonId as string)}`)?.textContent
+      ).toContain("isn’t wired into the app yet");
+      expect(restoreBtn.title).toBe("");
+    });
+
+    it("renders the paired-device list with a role chip and last-seen in the mono register", async () => {
+      const status: BackupStatusDTO = {
+        configured: true,
+        vaults: [
+          {
+            vaultId: "v1",
+            name: "Main",
+            lastBackupAt: "2026-07-11T11:00:00.000Z",
+            lastVerifyAt: "2026-07-11T11:00:00.000Z",
+            lastWalDrainAt: "2026-07-11T11:00:00.000Z",
+            pendingOffsite: { count: 0, bytes: 0 },
+            policy: POLICY,
+          },
+        ],
+      };
+      const loadDevices = vi
+        .fn<() => Promise<CentraidGatewayDevice[]>>()
+        .mockResolvedValue([
+          {
+            deviceId: "d1",
+            endpointId: "ep1",
+            memberId: "m1",
+            memberLabel: "Ravi",
+            label: "Ravi’s Mac",
+            transport: "iroh",
+            vaultId: "v1",
+            vaultName: "Main",
+            lastUsedAt: "2026-07-11T10:00:00.000Z",
+            role: "admin",
+            rememberDevice: true,
+            current: true,
+          },
+        ]);
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(status),
+        onRunNow: neverRun,
+        loadDevices,
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("Ravi’s Mac");
+      expect(el.textContent).toContain("Owner");
+      expect(el.textContent).toContain("Main");
     });
   });
 

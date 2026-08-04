@@ -110,7 +110,7 @@
    forces the export and restores the reused Sidebar.module.css drawer slide
    once ready (value mirrors that module so open/close animates as designed). */
 .appRoot.ready > aside {
-  transition: transform 0.26s var(--ease);
+  transition: transform var(--dur-2) var(--ease-entry);
 }
 
 /* Consent / notice banners (app.css `.k-banner`, folded in). Fixed + centered
@@ -121,13 +121,13 @@
 .banner {
   position: fixed;
   top: 14px;
-  left: 50%;
+  inset-inline-start: 50%;
   transform: translateX(-50%);
   z-index: 85;
   max-width: min(560px, calc(100% - 32px));
   background: var(--bg-elev);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-md);
   padding: 11px var(--sp-4);
   font: var(--t-small);
@@ -146,7 +146,7 @@
 .askMount {
   composes: kit-app-ask-mount from global;
   position: absolute;
-  right: 16px;
+  inset-inline-end: 16px;
   bottom: 16px;
   z-index: 30;
 }
@@ -167,7 +167,7 @@
    (app.css re-pinned `.k-ask-mount` top-right in narrow). */
 .appRoot:global(.is-narrow) .askMount {
   top: 12px;
-  right: 14px;
+  inset-inline-end: 14px;
   bottom: auto;
   z-index: 45;
 }

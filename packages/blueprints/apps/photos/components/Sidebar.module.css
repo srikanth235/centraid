@@ -11,7 +11,7 @@
   gap: 2px;
   padding: 14px var(--sp-3);
   background: var(--bg-elev);
-  border-right: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
   height: 100vh;
   position: sticky;
   top: 0;
@@ -20,7 +20,7 @@
 }
 .sidebarClose {
   display: none;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .scrim {
   display: none;
@@ -31,7 +31,7 @@
     inset: 0 auto 0 0;
     box-shadow: var(--shadow-lg);
     transform: translateX(-110%);
-    transition: transform 0.26s var(--ease);
+    transition: transform var(--dur-2) var(--ease);
   }
   .sidebar[data-open="true"] {
     transform: translateX(0);
@@ -66,28 +66,15 @@
 .brandTag {
   composes: kit-app-brand-tag from global;
 }
+/* Layout only — the fill, ink, radius, height, focus ring and hover step all
+   come from `kit-btn primary`. The hand-rolled version carried its own
+   `--accent-deep` fill plus a `brightness()` hover and a `scale(0.99)` press,
+   both of which DESIGN.md rules out ("no scale-on-hover", one motion grammar). */
 .uploadBtn {
-  display: flex;
-  align-items: center;
+  width: 100%;
   justify-content: center;
   gap: var(--sp-2);
-  width: 100%;
-  padding: 10px 14px;
   margin-bottom: var(--sp-3);
-  border: none;
-  border-radius: var(--r-md);
-  background: var(--accent-deep);
-  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --text-inv (kit.css header contract, #686). */
-  color: var(--text-inv);
-  font: var(--t-body-strong);
-  box-shadow: var(--shadow-sm);
-}
-.uploadBtn:hover {
-  filter: brightness(1.07);
-}
-.uploadBtn:active {
-  transform: scale(0.99);
 }
 .nav {
   display: flex;
@@ -110,8 +97,8 @@
   background: none;
   color: var(--text-soft);
   font: var(--t-body);
-  font-size: 13.5px;
-  text-align: left;
+  font-size: var(--t-small-size);
+  text-align: start;
 }
 .navItem:hover {
   background: var(--bg-sunken);
@@ -119,7 +106,7 @@
 .navItem[data-active="true"] {
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .navIcon {
   display: flex;
@@ -135,8 +122,8 @@
 }
 .navCount {
   font: var(--t-mono);
-  font-size: 11px;
-  opacity: 0.6;
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
   flex-shrink: 0;
 }
 .albumList {
@@ -153,18 +140,18 @@
   padding: 2px 0;
 }
 .albumItem {
-  padding-right: 3.5rem; /* room for the hover tools */
+  padding-inline-end: 3.5rem; /* room for the hover tools */
 }
 .albumCover {
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
   background: var(--bg-sunken) center/cover no-repeat;
 }
 .albumTools {
   position: absolute;
-  right: 4px;
+  inset-inline-end: 4px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -193,7 +180,7 @@
   background: none;
   color: var(--text-faint);
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   margin-top: 2px;
 }
 .newAlbum:hover {
@@ -208,7 +195,7 @@
 }
 :global(.kit-chip).tagChip {
   font: var(--t-mono);
-  font-size: 11px;
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .sidebarFoot {
   margin-top: auto;
@@ -221,9 +208,9 @@
   background: var(--bg-elev);
 }
 .storageTop {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
   color: var(--text-faint);
   margin-bottom: var(--sp-1);
 }
@@ -240,5 +227,5 @@
 }
 .trustLine span:last-child {
   font: var(--t-small);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
 }

@@ -26,7 +26,7 @@ export const styles = StyleSheet.create({
   },
   detail: { flex: 1.45 },
   detailContent: { gap: 10, padding: 12, paddingBottom: 80 },
-  detailTitle: { fontFamily: family.sansBold, fontSize: 23 },
+  detailTitle: { fontFamily: family.sansMedium, fontSize: 23 },
   directory: { flex: 1 },
   form: { borderRadius: radii.lg, borderWidth: 1, gap: 9, padding: 10 },
   header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
@@ -67,6 +67,6 @@ export const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   switchRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-  title: { fontFamily: family.sansBold, fontSize: 28 },
+  title: { fontFamily: family.sansMedium, fontSize: 28 },
   warning: { fontFamily: family.sansMedium, fontSize: 11, marginTop: 3 },
 });

@@ -106,9 +106,13 @@ function fixtureHtml({ surface, scheme, width, app }) {
   const appName = manifest?.name ?? "Centraid";
   const appDescription = manifest?.description ?? "Shared host reference state";
   const appIcon = manifest?.iconKey ?? "Grid";
-  const appColor = manifest?.colorKey ?? "teal";
-  const appIdentity =
-    surface === "MO" ? "var(--c-indigo)" : "var(--app-identity, var(--c-teal))";
+  // An identity hue belongs to an app. The host itself — the "Centraid" mark
+  // these hostless fixtures render — takes no hue under the Binding Layer; it
+  // is ink, like Home in the launcher. Falling back to a product hue here made
+  // every hostless baseline claim a colour the shell never shows (#707).
+  const appIdentity = manifest
+    ? `var(--c-${manifest.colorKey})`
+    : "var(--text)";
   return `<!doctype html>
 <html data-theme="${scheme}">
 <head><meta charset="utf-8"><style>${tokens}${KIT_CSS}
@@ -129,7 +133,7 @@ function fixtureHtml({ surface, scheme, width, app }) {
   @media (max-width: 719px) { .gallery { padding: 16px; } .actions button { flex: 1; } }
 </style></head>
 <body><main class="gallery" data-gallery-surface="${surface}" data-gallery-scheme="${scheme}" data-gallery-width="${width}">
-  <header class="top"><div><div class="eyebrow">${escapeHtml(surface)} reference${app ? ` · ${escapeHtml(app)}` : ""}</div><h1>${escapeHtml(appName)}</h1></div><div class="identity"><span class="mark" style="background:var(--c-${escapeHtml(appColor)})"></span><span>Centraid</span></div></header>
+  <header class="top"><div><div class="eyebrow">${escapeHtml(surface)} reference${app ? ` · ${escapeHtml(app)}` : ""}</div><h1>${escapeHtml(appName)}</h1></div><div class="identity"><span class="mark"></span><span>Centraid</span></div></header>
   <section class="kit-panel" data-role="reference-state" aria-label="Reference state"><div class="row"><div><strong>${escapeHtml(appName)} ready to act</strong><div class="meta">${escapeHtml(appDescription.slice(0, 96))}</div></div><span aria-label="Selected" class="mark"></span></div><div class="notice">News is a notice. Decisions belong in a dialog.</div><div class="actions"><button class="kit-btn primary" data-variant="primary">Create note</button><button class="kit-btn quiet" data-variant="quiet">Ask your vault</button><button class="kit-btn secondary" data-variant="secondary">Close</button></div><div class="meta" data-icon-key="${escapeHtml(appIcon)}">Manifest icon: ${escapeHtml(appIcon)}</div></section>
 </main></body></html>`;
 }

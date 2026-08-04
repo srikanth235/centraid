@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run build:ts && bun run build:preload && bun run build:assets && bun run build:react",
-    "build:assets": "mkdir -p dist/renderer && cp ../../packages/client/src/index.html ../../packages/client/src/styles.css dist/renderer/",
+    "build:assets": "mkdir -p dist/renderer && cp ../../packages/client/src/index.html ../../packages/client/src/styles.css dist/renderer/ && node scripts/copy-fonts.mjs",
     "build:preload": "bun build src/preload.ts --target=node --format=cjs --external electron --outfile dist/preload.cjs",
     "build:react": "vite build",
     "build:ts": "tsc -p tsconfig.json",

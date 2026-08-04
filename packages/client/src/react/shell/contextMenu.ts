@@ -1,7 +1,20 @@
 import { iconSvg } from "./iconSvg.js";
-import type { ShellMenuAnchor } from "./Sidebar.js";
 
 import styles from "./contextMenu.module.css";
+
+/**
+ * Where an anchored menu hangs from — a pointer position (right-click) or a
+ * rect (a ••• button, a row).
+ *
+ * It lived in Sidebar.tsx until #707 retired that column. It belongs here: the
+ * menu mechanics are what the type describes, and every caller already reaches
+ * for `openMenu` beside it. Mirrors the ambient `MenuAnchor` in the renderer's
+ * types.d.ts, redeclared because the React tsconfig does not pull that ambient
+ * file in.
+ */
+export type ShellMenuAnchor =
+  | { kind: "point"; x: number; y: number }
+  | { kind: "rect"; rect: DOMRect };
 
 // Context menu — the generic anchored popup menu, ported from the vanilla
 // app-cards.ts openMenu/closeContextMenu. A body-portal overlay with the same
@@ -33,9 +46,9 @@ export function isContextMenuOpen(): boolean {
 export interface MenuOptions {
   /**
    * Stretch the menu to the anchor rect's width instead of sizing to its
-   * longest label. For a menu anchored to a full-width row — the sidebar's
-   * account row — a content-width popup reads as a stray tooltip; matching
-   * the row makes it read as that row opening.
+   * longest label. For a menu anchored to a full-width row, a content-width
+   * popup reads as a stray tooltip; matching the row makes it read as that
+   * row opening.
    */
   matchAnchorWidth?: boolean;
 }

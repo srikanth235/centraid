@@ -1,10 +1,11 @@
-import { safeMediaUrl } from "../_shared/untrusted.ts";
+import { safeMediaUrl, VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
 // Tile media: the once-per-mount fill (thumb image or placeholder) plus the
 // mount guard that makes it safe to call from a React callback ref on every
 // render. JSX-free by design — shared by every component that renders a tile
 // (Timeline.tsx, Picker.tsx, Duplicates.tsx).
 import { isAudioAsset, isVideoAsset } from "./format.ts";
 import {
+  BLOB_PENDING_ATTR,
   observeNextScreen,
   stopNextScreenObservation,
 } from "./media-observer.ts";
@@ -52,13 +53,26 @@ export function gridSrc(asset: Asset): string | null | undefined {
       Math.max(asset.width, asset.height) <= THUMB_EDGE;
     return safeMediaUrl(knownSmall ? asset.content_uri : asset.thumb_uri);
   }
-  // A non-blob `data:` URI already travelled inline with the row — render it
-  // directly (no network). Any other bare URI would be a full remote original,
-  // so it stays a placeholder.
-  if (
-    typeof asset.content_uri === "string" &&
-    asset.content_uri.startsWith("data:")
-  ) {
+  // No thumb recorded. Two sources are still paintable, and refusing them is
+  // what made a freshly imported library render as a wall of grey boxes
+  // (issue #708): `thumb_uri` is only set once the gateway's preview backstop
+  // has written the derivative row, so EVERY photo is thumb-less for a while
+  // after import — and a library that has never been opened is thumb-less
+  // entirely.
+  //
+  //  * a `data:` URI travelled inline with the row, so it costs no network;
+  //  * a vault blob path is the ORIGINAL, which is what the shell's own Home
+  //    mosaic paints in exactly this state (`photoThumbs` in
+  //    client/src/react/shell/routes/homeTileContent.ts).
+  //
+  // Anything else — a bare remote URL — stays a placeholder, because that
+  // would be a full-size original fetched off-device.
+  //
+  // The `<img>` error retry below cannot cover this case: it only runs for a
+  // tile that got an `<img>` at all, and returning null here means no `<img>`
+  // is ever built.
+  const inline = typeof asset.content_uri === "string" ? asset.content_uri : "";
+  if (inline.startsWith("data:") || inline.startsWith(VAULT_BLOB_PATH)) {
     return safeMediaUrl(asset.content_uri);
   }
   return null;
@@ -68,7 +82,11 @@ export function durationLabel(
   seconds: number | null | undefined
 ): string | null {
   const value = Number(seconds);
-  if (!Number.isFinite(value) || value < 0) return null;
+  // A still photo whose `duration_s` column is 0 (or an empty string, which
+  // `Number()` also makes 0) is not a zero-second clip — it has no timeline at
+  // all, and stamping "0:00" on it reads as a broken video. Only a POSITIVE
+  // duration is a duration.
+  if (!Number.isFinite(value) || value <= 0) return null;
   const total = Math.round(value);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -104,6 +122,10 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
 }
 
 function renderDuration(tile: HTMLElement, asset: Asset): void {
+  // Only timed media has a duration to show. A PNG still carrying a stray
+  // `duration_s` is a data artefact, not a clip, and the chip made two seeded
+  // photos look like broken videos (#708).
+  if (!isVideoAsset(asset) && !isAudioAsset(asset)) return;
   const label = durationLabel(asset.duration_s);
   if (!label) return;
   const badge = document.createElement("span");
@@ -144,20 +166,57 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
     img.width = asset.width;
     img.height = asset.height;
   }
-  // A thumb 404 (variant never produced) must NOT fall back to the original —
-  // swap in a placeholder instead of pulling multi-MB bytes into the grid.
-  img.addEventListener(
-    "error",
-    () => {
+  // ONE retry against the original before the tile gives up (#708).
+  //
+  // Two real failures land here and both used to paint a permanent grey box:
+  //
+  //  1. The derivative does not exist YET. `?variant=thumb` answers
+  //     `no-variant` → 404 for every photo between import and the gateway's
+  //     preview backstop running, which on a fresh library is EVERY photo. The
+  //     shell's own Home mosaic already fell back for exactly this reason —
+  //     `photoThumbs` in client/src/react/shell/routes/homeTileContent.ts.
+  //  2. The authorized `blob:` object URL was revoked out from under an
+  //     in-flight decode (ERR_FILE_NOT_FOUND). Re-assigning the RELATIVE
+  //     `/centraid/_vault/blobs/…` path re-enters the inline authorizer's
+  //     MutationObserver and mints a fresh one.
+  //
+  // The cost argument the old comment made still holds for the steady state —
+  // which is why this is one retry on a source we already committed to
+  // painting, not a policy of preferring originals. A tile that cannot paint
+  // is worth more bytes than a tile that paints nothing.
+  const original = safeMediaUrl(asset.content_uri);
+  img.addEventListener("error", () => {
+    // NOT a verdict on the asset: the element is still pointed at a raw
+    // `/centraid/_vault/blobs/…` path AND the shell's blob authorizer says it
+    // is mid-flight on exactly that reference. Off the gateway origin that
+    // path answers with the SPA shell's `index.html`, so this `error` is the
+    // un-authorized load failing, not the photo. Tearing the tile down here is
+    // what made the whole web grid grey. Wait instead: the authorizer either
+    // swaps in an authed `blob:` URL (a fresh load, no error) or clears the
+    // stamp and re-fires this event, and the fallback below runs then.
+    if (
+      img.getAttribute(BLOB_PENDING_ATTR) === "1" &&
+      (img.getAttribute("src") ?? "").startsWith(VAULT_BLOB_PATH)
+    ) {
+      return;
+    }
+    if (
+      original &&
+      img.dataset.originalFallback !== "1" &&
+      img.src !== original
+    ) {
+      img.dataset.originalFallback = "1";
       stopNextScreenObservation(img);
-      img.remove();
-      tile.querySelector(".ph-tile-video-badge")?.remove();
-      tile.querySelector(".ph-tile-duration")?.remove();
-      renderPlaceholder(tile, asset);
-      renderDuration(tile, asset);
-    },
-    { once: true }
-  );
+      img.src = original;
+      return;
+    }
+    stopNextScreenObservation(img);
+    img.remove();
+    tile.querySelector(".ph-tile-video-badge")?.remove();
+    tile.querySelector(".ph-tile-duration")?.remove();
+    renderPlaceholder(tile, asset);
+    renderDuration(tile, asset);
+  });
   tile.appendChild(img);
   if (isVideoAsset(asset)) {
     const badge = document.createElement("span");

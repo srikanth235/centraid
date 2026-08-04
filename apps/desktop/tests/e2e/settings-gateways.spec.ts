@@ -7,12 +7,11 @@ import type { Page } from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   launchApp,
   makeEnv,
   markUserApp,
-  openTileMenu,
+  openAppFromPalette,
   seedRemoteGateway,
   seedRemoteGatewayProfile,
   startMockGateway,
@@ -23,16 +22,18 @@ import type { MockGateway, TestEnv } from "./fixtures";
 /** §12 Settings, §13 Gateways / profiles, §14 cross-cutting. */
 
 /**
- * Open Settings from the sidebar.
+ * Open Settings from the All apps sheet (stem foot).
  *
- * Not `gotoNav(page, 'Settings')`: the sidebar foot is the account row now
- * (#634), and Settings lives in the menu it opens alongside Pair device and
- * Log out. The row's accessible name carries the person's name, so match on
- * the stable "Account menu." suffix instead.
+ * Settings is a launcher destination (#707), not a sidebar page. The account
+ * menu still hosts it too, but the account control is only mounted once the
+ * member identity resolves — All apps is always present on the stem foot.
  */
 async function gotoSettings(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /Account menu\.$/u }).click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("button", { name: /All apps/iu }).click();
+  await page
+    .getByRole("dialog", { name: "All apps" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
 }
 
 let env: TestEnv;
@@ -280,7 +281,8 @@ test("13.4 — switching the active gateway re-scopes home", async () => {
       )
       .toBe(newId);
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
-    await waitForHome(page);
+    // Stem stays mounted across gateway switch; springboard may re-fetch.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -361,8 +363,8 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
       deadId
     );
     // No crash — the shell stays mounted even though the gateway is unreachable.
-    // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).
-    await expect(page.locator("[data-sidebar]")).toBeVisible();
+    // The stem (`nav[aria-label="Apps"]`) is the chrome root post-#707.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -379,8 +381,9 @@ test("14.2 — an auth failure on publish surfaces a token/Settings prompt", asy
     await markUserApp(page, { id, name: "Todoer" });
     await page.reload();
     await waitForHome(page);
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Edit with Centraid");
+    // Custom apps open via palette; Build is the titlebar entry to the builder.
+    await openAppFromPalette(page, "Todoer");
+    await page.getByRole("button", { name: "Build", exact: true }).click();
     await page.getByTestId("builder-body").waitFor({ state: "visible" });
 
     gateway.state.forceStatus = 401; // every call now rejects with auth_required

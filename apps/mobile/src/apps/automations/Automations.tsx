@@ -16,7 +16,7 @@ import {
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { spacing, useTheme } from "../../kit/theme";
 import {
   cloneAutomationTemplate,
@@ -76,16 +76,12 @@ function AutomationsList({
       void cloneAutomationTemplate(template.id)
         .then(async () => {
           await refresh();
-          showToast({
-            message: `${template.name} is ready to use.`,
-            tone: "accent",
-          });
+          postStatus(`${template.name} is ready to use.`);
         })
         .catch((error: unknown) => {
-          showToast({
-            message: `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`
+          );
         })
         .finally(() => setInstalling(null));
     },
@@ -213,9 +209,11 @@ function AutomationGallery({
               accessibilityState={{ busy, disabled: installing !== null }}
               disabled={installing !== null}
               onPress={() => onInstall(template)}
-              style={[styles.addBtn, busy && styles.dim]}
+              style={[styles.addBtn, busy && styles.busyOutline]}
             >
-              <Text style={styles.addBtnText}>{busy ? "Adding…" : "Add"}</Text>
+              <Text style={[styles.addBtnText, busy && styles.busyOutlineText]}>
+                {busy ? "Adding…" : "Add"}
+              </Text>
             </Pressable>
           </View>
         );
@@ -315,10 +313,9 @@ const AutomationCard = memo(
         })
         .catch((error: unknown) => {
           if (mounted.current) setRun("idle");
-          showToast({
-            message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
+          );
         });
     }, [run, row.ref]);
 
@@ -327,10 +324,9 @@ const AutomationCard = memo(
       setBusyToggle(true);
       void toggle(row.ref, !row.enabled)
         .catch((error: unknown) => {
-          showToast({
-            message: `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`,
-            tone: "danger",
-          });
+          postStatus(
+            `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`
+          );
         })
         .finally(() => {
           if (mounted.current) setBusyToggle(false);
@@ -365,7 +361,6 @@ const AutomationCard = memo(
               {
                 backgroundColor: row.enabled ? colors.accent : colors.bgSunken,
               },
-              busyToggle && styles.dim,
             ]}
           >
             <Text
@@ -405,15 +400,19 @@ const AutomationCard = memo(
             style={[
               styles.runBtn,
               { borderColor: colors.lineStrong },
-              run !== "idle" && styles.dim,
+              run !== "idle" && styles.busyOutline,
             ]}
           >
             <Icon
               name={run === "started" ? "check" : "play"}
               size={13}
-              color={colors.accent}
+              color={run === "idle" ? colors.accent : colors.textDisabled}
             />
-            <Text style={styles.runText}>{runLabel}</Text>
+            <Text
+              style={[styles.runText, run !== "idle" && styles.busyOutlineText]}
+            >
+              {runLabel}
+            </Text>
           </Pressable>
         </View>
       </View>

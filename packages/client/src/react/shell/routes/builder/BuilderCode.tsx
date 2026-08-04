@@ -19,7 +19,7 @@ import type { CodeLang, TokenClasses } from "../../../../format.js";
 import { readAppFiles, writeAppFile } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { iconSvg } from "../../iconSvg.js";
-import { showToast } from "../../toast.js";
+import { postStatus } from "../../statusChannel.js";
 
 import atomsCss from "../../../styles/atoms.module.css";
 import buttonCss from "../../../ui/Button.module.css";
@@ -29,9 +29,9 @@ import styles from "./BuilderCode.module.css";
 // ~110-113). Small enough to inline; emitted as HTML strings for the
 // tree's chevron/folder spans.
 const ChevronIcon = (size = 12): string =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+  `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
 const FolderIcon = (size = 14): string =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
 
 // Module-scoped span classes for the syntax highlighter — keeps tokenize()'s
 // emitted HTML inside this module's scope instead of global `tok-*` names.
@@ -324,9 +324,9 @@ export default function BuilderCode({
           if (!cur) return prev;
           return { ...prev, [p]: { ...cur, original: cur.current } };
         });
-        showToast(`Saved ${basename(p)}`);
+        postStatus(`Saved ${basename(p)}`);
       } catch (error) {
-        showToast(
+        postStatus(
           `Save failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
@@ -493,7 +493,6 @@ export default function BuilderCode({
           </button>
         );
       }
-      const lang = languageHint(node.path);
       const buf = buffers[node.path];
       const isDirty = !!buf && buf.current !== buf.original;
       return (
@@ -511,7 +510,7 @@ export default function BuilderCode({
           }}
         >
           <span className={styles.treeChevronSpacer} />
-          <span className={styles.treeLangDot} data-lang={lang} />
+          <span className={styles.treeLangDot} />
           <span className={styles.treeName}>{node.name}</span>
           {isDirty ? <span className={styles.treeDirty} /> : null}
         </button>
@@ -609,7 +608,7 @@ export default function BuilderCode({
               data-active={String(activePath === p)}
               data-dirty={String(dirty)}
             >
-              <span className={styles.tabDot} data-lang={languageHint(p)} />
+              <span className={styles.tabDot} />
               <button
                 type="button"
                 className={styles.tabLabel}
@@ -687,7 +686,13 @@ export default function BuilderCode({
               setMenuOpen((v) => !v);
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <circle cx="5" cy="12" r="1.7" />
               <circle cx="12" cy="12" r="1.7" />
               <circle cx="19" cy="12" r="1.7" />

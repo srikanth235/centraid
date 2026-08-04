@@ -92,7 +92,7 @@
 }
 .metricLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -171,7 +171,7 @@
   justify-content: space-between;
   gap: 10px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .clockLine span:last-child {
@@ -243,7 +243,7 @@
 }
 .runningBadge {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--accent-deep, var(--accent));
@@ -264,7 +264,7 @@
 }
 .vaultError {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }
@@ -304,7 +304,7 @@
 }
 .destinationGrid dt {
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .destinationGrid dd {
   margin: 2px 0 0;
@@ -342,7 +342,7 @@
 .policySetting small {
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
 }
 /* The policy selects wear the shared `styles/select.module.css` look
@@ -358,7 +358,7 @@
    select has no disabled state of its own. */
 .policySelect:disabled {
   cursor: wait;
-  opacity: 0.62;
+  opacity: var(--o-disabled);
 }
 .pendingLine {
   display: flex;
@@ -366,7 +366,7 @@
   gap: 7px;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .pendingDot {
   width: 7px;
@@ -400,7 +400,7 @@
   padding-top: 7px;
   color: var(--success);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   animation: policy-message-in 160ms ease-out;
 }
 .policyMessage[data-error] {
@@ -424,7 +424,7 @@
   margin-top: 3px;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   line-height: 1.35;
 }
 .inventoryHead > span {
@@ -434,7 +434,7 @@
   background: color-mix(in srgb, var(--success) 10%, transparent);
   color: var(--success);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
 }
 .inventoryHead > span[data-state="degraded"] {
@@ -478,7 +478,7 @@
 .inventoryStore > span,
 .inventoryStore em {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-style: normal;
 }
 .inventoryStore em {
@@ -496,7 +496,7 @@
 }
 .inventoryFacts dt,
 .inventoryFacts dd {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .inventoryFacts dt {
   color: var(--text-faint);
@@ -513,13 +513,13 @@
   gap: 4px;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
 }
 .inventoryHistory strong {
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
 }
 .inventoryHistory b {
@@ -582,7 +582,7 @@
 }
 .sealNudge code {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 .sealNudgeBody {
@@ -607,7 +607,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .kitField input {
   width: 100%;
@@ -657,8 +657,211 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .runIcon[data-spin="true"] {
-    animation: none;
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.runIcon`'s spin. */
+
+/* ── Lead with loss (issue #708 A2) ──────────────────────────────────────── */
+.lossSummary {
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.lossSummary[data-tone="exposed"],
+.lossSummary[data-tone="unconfigured"] {
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
+}
+.lossSummary[data-tone="safe"] {
+  border-color: color-mix(in oklab, var(--success) 35%, var(--line));
+}
+.lossHeadline {
+  margin: 0;
+  font-size: var(--t-body-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.lossDetail {
+  margin: 4px 0 0;
+  font-size: var(--t-small-size);
+  color: var(--text-faint);
+}
+
+/* ── Device list — every copy of your data (issue #708 A2) ──────────────── */
+.deviceListSection h3,
+.copyCard h3 {
+  margin: 0 0 8px;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.deviceListTable {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-xl);
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.deviceListHead,
+.deviceListRow {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr 1fr 0.8fr 0.9fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+}
+.deviceListHead {
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-ghost);
+  border-bottom: 0.5px solid var(--line);
+}
+.deviceListRow {
+  border-bottom: 0.5px solid var(--line);
+  font-size: var(--t-small-size);
+}
+.deviceListRow:last-child {
+  border-bottom: none;
+}
+.deviceListName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deviceListCurrent {
+  flex: none;
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.deviceListRole {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  color: var(--text-soft);
+}
+.deviceListScope {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-soft);
+}
+.deviceListSize {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  font-variant-numeric: tabular-nums;
+}
+.deviceListSize[data-quiet="true"] {
+  color: var(--text-ghost);
+  font-style: italic;
+}
+.deviceListSeen {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+.deviceListError {
+  margin: 0;
+  font-size: var(--t-small-size);
+  color: var(--text-ghost);
+}
+
+/* ── The three copy/encryption cards + Restore (issue #708 A2) ──────────── */
+.copyCardsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.copyCards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 720px) {
+  .copyCards {
+    grid-template-columns: 1fr;
   }
+}
+.copyCard {
+  padding: 14px 15px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.copyCard p {
+  margin: 0;
+  font-size: var(--t-small-size);
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.copyCardList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--t-small-size);
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.copyCardEmphasis {
+  margin: 4px 0 0;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.copyCardFacts {
+  margin: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.copyCardFacts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.copyCardFacts dt {
+  font-size: var(--t-control-size);
+  color: var(--text-faint);
+}
+.copyCardFacts dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  color: var(--text);
+}
+.copyCardMeta {
+  font-family: var(--font-mono);
+  font-size: var(--t-control-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+.restoreCard {
+  align-items: flex-start;
+}
+.restoreNote {
+  max-width: 56ch;
+}
+.restoreBtn {
+  align-self: flex-start;
+}
+.restoreSeamNote {
+  margin: 0;
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
 }

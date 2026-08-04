@@ -8,7 +8,7 @@ import {
   isPendingOffsite,
   stageDerivative,
   stageFileBytes,
-  toast,
+  statusLine,
 } from "./kit.ts";
 import { act, narrate, writeTarget } from "./outcomes.ts";
 import { thumbHashFromImage } from "./thumbhash.ts";
@@ -270,14 +270,14 @@ export async function runUpload(
   // a drop or paste can race the shell revoking write access.
   const target = writeTarget("new");
   if (target.disabled) {
-    toast(target.reason);
+    statusLine(target.reason);
     return;
   }
   const scope = target.scopeId;
   const oversized = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
   if (accepted.length === 0) {
-    toast(
+    statusLine(
       oversized.length === 1
         ? `Skipped “${oversized[0]!.name}” — each upload tops out at 512 MB.`
         : `Skipped ${oversized.length} files — each upload tops out at 512 MB.`
@@ -399,7 +399,7 @@ export async function runUpload(
     parts.push(`${retryable} interrupted — add again to resume`);
   if (oversized.length > 0)
     parts.push(`${oversized.length} over the 512 MB cap`);
-  toast(parts.join(" · ") || "Nothing added");
+  statusLine(parts.join(" · ") || "Nothing added");
   if (lastBad) narrate(lastBad);
   await refresh();
 }

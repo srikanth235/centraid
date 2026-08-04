@@ -2,9 +2,21 @@
   "issue": 690,
   "revision": 3,
   "surfaces": {
-    "SH": { "profile": "shell", "renderer": "client", "host": "desktop-pwa" },
-    "SH-c": { "profile": "shell", "renderer": "client", "host": "compact-720" },
-    "BI": { "profile": "blueprint", "renderer": "kit-inline", "host": "shell" },
+    "SH": {
+      "profile": "shell",
+      "renderer": "client",
+      "host": "desktop-pwa"
+    },
+    "SH-c": {
+      "profile": "shell",
+      "renderer": "client",
+      "host": "compact-720"
+    },
+    "BI": {
+      "profile": "blueprint",
+      "renderer": "kit-inline",
+      "host": "shell"
+    },
     "BS": {
       "profile": "blueprint",
       "renderer": "kit-served",
@@ -67,18 +79,24 @@
     "M7": {
       "name": "Status / notification",
       "shared": [
+        "one-status-line",
         "decision-notice-status-tiers",
-        "badge-only-decisions",
+        "status-line-never-toast",
         "tone-data"
       ],
-      "adapted": ["toast-vs-banner"],
+      "adapted": ["status-line-placement"],
       "local": ["host-notification-plumbing"],
       "referenceStates": ["sh-dark-status", "bi-light-status"]
     },
     "M8": {
       "name": "Empty / loading / error",
-      "shared": ["triad-anatomy", "error-not-empty", "subject-glyph"],
-      "adapted": ["skeleton-vs-native-activity"],
+      "shared": [
+        "triad-anatomy",
+        "error-not-empty",
+        "subject-glyph",
+        "determinate-progress-never-spinner"
+      ],
+      "adapted": ["static-skeleton-vs-native-placeholder"],
       "local": ["content-shape"],
       "referenceStates": ["sh-light-empty", "mo-dark-error"]
     },
@@ -113,7 +131,8 @@
       "shared": [
         "one-status-line",
         "consequence-copy",
-        "canonical-status-vocabulary"
+        "canonical-status-vocabulary",
+        "offline-banner-not-tooltip"
       ],
       "adapted": ["status-line-placement"],
       "local": ["replica-transport"],
@@ -198,9 +217,10 @@
         "progress-meter",
         "verb-object-count",
         "cancel-long-work",
-        "in-app-visibility"
+        "in-app-visibility",
+        "exact-counts-never-spinner"
       ],
-      "adapted": ["native-background-service", "activity-vs-determinate"],
+      "adapted": ["native-background-service", "determinate-only"],
       "local": ["os-notification"],
       "referenceStates": [
         "sh-dark-upload",

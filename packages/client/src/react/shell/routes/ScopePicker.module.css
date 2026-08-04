@@ -58,7 +58,7 @@
 }
 
 /* The strip a route puts the picker in — above the assistant transcript, above
-   the Discover gallery. Shared so both surfaces state their target the same
+   the builder's target gate. Shared so both surfaces state their target the same
    way. */
 .bar {
   display: flex;

@@ -5,6 +5,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
 
 import { Text } from "../../kit/components/NativeText";
+import { t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./TallyHome.styles";
 
@@ -89,11 +90,17 @@ export default function TallyRecurringTemplates({
               · {asString(template.original_currency)}
             </Text>
             <Text style={[styles.meta, { color: colors.textFaint }]}>
-              {upcoming.length
-                ? upcoming
+              {upcoming.length ? (
+                <Text
+                  style={[styles.meta, t("mono"), { color: colors.textFaint }]}
+                >
+                  {upcoming
                     .map((start) => new Date(start).toLocaleDateString())
-                    .join(" · ")
-                : asString(template.status)}
+                    .join(" · ")}
+                </Text>
+              ) : (
+                asString(template.status)
+              )}
             </Text>
             <View style={styles.row}>
               <Pressable

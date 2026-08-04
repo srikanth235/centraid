@@ -5,7 +5,7 @@
   "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, IOUs are Tally obligations, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.1",
   "iconKey": "Users",
-  "colorKey": "rose",
+  "colorKey": "violet",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",

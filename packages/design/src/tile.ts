@@ -90,3 +90,44 @@ function shade(hex: string, amount: number): string {
   const out = rgb.map((n) => adj(n).toString(16).padStart(2, "0")).join("");
   return `#${out}`;
 }
+
+// ── App icon chips ─────────────────────────────────────────────────────────
+//
+// An app icon is a classic filled mark in a rounded-square container: the
+// container is the app hue at 13% (light) / 20% (dark) over the surface, the
+// mark is the full hue, and nothing else — no gradient, no gloss, no drop
+// shadow. The metaphor is a tinted paper label, not a glass button.
+//
+// The tint is composited HERE, in TypeScript, for the same reason the hues are
+// resolved here: `color-mix(in oklab, <hue> 13%, transparent)` does not exist
+// in React Native, and a chip whose tint the shell and the phone compute
+// differently is a chip that is not the same chip.
+
+/** Share of the app hue in the icon container, per theme. */
+export const ICON_CHIP_TINT = { dark: 0.2, light: 0.13 } as const;
+
+export interface IconChipFinish {
+  /** Opaque container fill — the hue composited over `surface`. */
+  backgroundColor: string;
+  /** The mark itself: the full hue. */
+  markColor: string;
+}
+
+/** The icon-container finish for `hue` drawn on `surface` in `scheme`. */
+export function iconChipFinish(
+  hue: string,
+  surface: string,
+  scheme: "light" | "dark"
+): IconChipFinish {
+  const fg = parseHex(hue);
+  const bg = parseHex(surface);
+  if (!fg || !bg) return { backgroundColor: surface, markColor: hue };
+  const share = ICON_CHIP_TINT[scheme];
+  const mixed = fg.map((channel, index) =>
+    Math.round(channel * share + (bg[index] ?? channel) * (1 - share))
+  );
+  return {
+    backgroundColor: `#${mixed.map((n) => n.toString(16).padStart(2, "0")).join("")}`,
+    markColor: hue,
+  };
+}

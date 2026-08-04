@@ -1,12 +1,7 @@
-// Shared renderer types — appearance prefs, the accent palette, the route
-// union, and the template/app metadata the React shell (react/shell/*) renders
-// against. Once the seam between the vanilla app.ts shell and its route modules;
-// after the full-React flip (#325) app.ts is gone and this is just the types +
-// the ACCENT_PALETTE the appearance code shares.
-import type { AccentKey } from "@centraid/design";
-
-export { ACCENT_PALETTE } from "@centraid/design";
-export type { AccentKey } from "@centraid/design";
+// Shared renderer types — appearance prefs, the route union, and the
+// template/app metadata the React shell (react/shell/*) renders against. Once
+// the seam between the vanilla app.ts shell and its route modules; after the
+// full-React flip (#325) app.ts is gone and this is just the types.
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
@@ -23,11 +18,12 @@ export type GatewayProfile = Awaited<
 /**
  * The renderer's appearance prefs.
  *
- * `bgL` and `accent` are OVERRIDES, not values (#608 group P). They are
- * applied as inline styles on `<html>`, which outrank every
- * `[data-theme='…']` block, so writing them unconditionally means a theme's
- * own accent and lightness anchor can never render. Absent = the active
- * theme's declaration wins.
+ * The Binding Layer retired both per-owner colour overrides (#707): the shell
+ * spends no hue, so there is no accent to pick, and the dark ramp is a set of
+ * literal surface tones rather than one `--bg-l` lightness anchor to slide.
+ * `sidebarOpen` went with them: the stem never scrolls away and never changes
+ * width, so there is no open state to remember. What is left is what an owner
+ * can still meaningfully choose — light/dark, card treatment, tile finish.
  */
 export interface AppearancePrefs {
   /** The owner's pick. `system` re-resolves on OS appearance changes. */
@@ -35,11 +31,6 @@ export interface AppearancePrefs {
   /** The resolved theme actually applied — `themeMode` unless it is `system`. */
   theme: ThemeName;
   tileVariant: TileVariant;
-  sidebarOpen: boolean;
-  /** Dark ramp lightness override, in percent. Absent = the theme's `bgL`. */
-  bgL?: number;
-  /** Accent override. Absent = the accent the active theme declares. */
-  accent?: AccentKey;
   cardVariant: CardVariant;
 }
 
@@ -56,14 +47,13 @@ export type ShellRoute =
   // SettingsRoute.tsx validates it against its known page ids itself.
   | { kind: "settings"; page?: string }
   // `conversationId` omitted = a fresh, not-yet-created conversation (the
-  // composer creates one lazily on first send); set = the sidebar's Chats
-  // list or a resumed session. See AssistantRoute.tsx.
+  // composer creates one lazily on first send); set = the assistant surface's
+  // own conversation ledger or a resumed session. See AssistantRoute.tsx.
   | { kind: "assistant"; conversationId?: string }
   | { kind: "insights" }
-  | { kind: "discover" }
   | { kind: "starred" }
   | { kind: "automations" }
-  // Vault data-source connections (Gmail, GitHub, …) — primary sidebar
+  // Vault data-source connections (Gmail, GitHub, …) — a launcher
   // destination; previously Settings → Account → Connections.
   | { kind: "connectors" }
   | { kind: "approvals" }
@@ -73,21 +63,21 @@ export type ShellRoute =
     }
   // The people side of this installation (issue #599, Decision 14): the member
   // roster, the devices acting for each person, and every vault this member can
-  // reach. Sits under the sidebar's Operations section beside Gateway — which
-  // it took People & devices from, leaving Gateway purely about runtime health.
+  // reach. A launcher destination beside Gateway — which it took People &
+  // devices from, leaving Gateway purely about runtime health.
   | { kind: "household" }
   // Local disk footprint by component, the owner's disk budget, and the
   // offsite snapshot custody that used to be the whole page (issue #544 —
-  // this was `backups`). Sits under the sidebar's Operations section beside
-  // Gateway; Settings → Storage provider owns the connection itself.
+  // this was `backups`). A launcher destination beside Gateway; Settings →
+  // Storage provider owns the connection itself.
   | { kind: "storage" }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
-  // schema (issue #441 Part B). Sits under the sidebar's Operations section.
+  // schema (issue #441 Part B). A launcher destination.
   | { kind: "atlas" }
   | { kind: "templates" }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a
-  // template gallery entry (Discover/Templates "Use template" for an
+  // template gallery entry (the automation gallery's "Use template" for an
   // automation). `watchEntity` (a logical entity KIND, `schema.table`) seeds a
   // create-mode data trigger watching that kind — the per-app "Automate this
   // data" deep-link (issue #446 follow-up 1). Like `templateId`, it only shapes
@@ -114,7 +104,7 @@ export type ShellRoute =
   // (overview "New automation", thread's "Edit") open the chat cold.
   | { automationId: string; kind: "automation-builder"; seedMessage?: string };
 
-// Compact summary of the active gateway, fed into the sidebar head row.
+// Compact summary of the active gateway, fed into the vault identity control.
 export interface GatewaySummary {
   activeId: string;
   activeKind: "local" | "remote";
@@ -126,8 +116,9 @@ export interface GatewaySummary {
 // Renderer-side mirror of @centraid/blueprints' `TemplateMeta`. We don't
 // import the package here — the IPC layer carries plain JSON. `kind` splits
 // the catalog into the home Templates shelf (kind: 'app') and the Automations
-// gallery (kind: 'automation'); the unified clone path handles both. Shared
-// across app.ts (cards/templates), app-automations.ts, and app-discover.ts.
+// gallery (kind: 'automation'); the unified clone path handles both. The 'app'
+// half is read-only since #708 — it names which ids are BUNDLED, and every
+// bundled app is already installed.
 export interface TemplateEntry {
   id: string;
   name: string;
@@ -137,9 +128,13 @@ export interface TemplateEntry {
   version: string;
   kind?: "app" | "automation";
   /** Whether this app-kind template is already installed in the addressed
-   *  vault (issue #434). Drives Install vs Open in Discover. */
+   *  vault (issue #434). Always true for a mounted vault since #708 installs
+   *  every bundled app at mount; kept because it is the gateway's own answer
+   *  and an unmounted audience vault can still say `false`. */
   installed?: boolean;
-  /** Requested vault access, for the install/consent sheet (issue #434). */
+  /** Requested vault access as the gateway declares it (issue #434). Read by
+   *  the Privacy grants ledger; the install/consent sheet that used to render
+   *  it retired with Discover (#708), since nothing asks to install any more. */
   vault?: TemplateVaultBlock;
   // automation-only display fields:
   emoji?: string;
@@ -149,8 +144,8 @@ export interface TemplateEntry {
   integrations?: readonly string[];
 }
 
-/** A template's requested vault access (issue #434) — the consent surface the
- *  install sheet renders. Mirrors the gateway's `TemplateVaultDTO`. */
+/** A template's requested vault access (issue #434) — what the app declares it
+ *  will touch. Mirrors the gateway's `TemplateVaultDTO`. */
 export interface TemplateVaultBlock {
   purpose?: string;
   why?: string;

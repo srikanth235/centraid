@@ -134,7 +134,7 @@ const nav: ShellNav = {
   canGoForward: false,
   route: { kind: "app", id: "tasks" },
 };
-const prefs = { sidebarOpen: true, theme: "dark", bgL: 5 } as never;
+const prefs = { sidebarOpen: true, theme: "dark" } as never;
 
 // A distinct appId per test — InlineAppRoute keys its module-level descriptor
 // cache on (appId, attempt), so reusing an id would serve a prior test's chunk.
@@ -148,9 +148,8 @@ function routeEl(
       appId={appId}
       loader={loader}
       nav={nav}
-      renderSidebar={() => null}
+      renderStem={() => null}
       prefs={prefs}
-      onToggleSidebar={() => {}}
     />
   );
 }
@@ -263,6 +262,76 @@ describe("InlineAppRoute suite", () => {
       act(() => root?.unmount());
       root = null;
       expect((window as { centraid?: unknown }).centraid).toBeUndefined();
+    });
+
+    // The blank-photo-grid bug: `rootRef` was an inline arrow, so every shell
+    // re-render changed the ref's identity, React detached and reattached the
+    // SAME element, and the mount callback's teardown revoked every live blob:
+    // object URL out from under the mounted <img>s (ERR_FILE_NOT_FOUND).
+    it("keeps a mounted image's blob: URL alive across a shell re-render, and revokes it on unmount", async () => {
+      const createObjectURL = (
+        URL as unknown as { createObjectURL?: (b: Blob) => string }
+      ).createObjectURL;
+      const revokeObjectURL = (
+        URL as unknown as { revokeObjectURL?: (u: string) => void }
+      ).revokeObjectURL;
+      const revoked: string[] = [];
+      let seq = 0;
+      // jsdom implements neither; supply both for the duration of this test.
+      (
+        URL as unknown as { createObjectURL: (b: Blob) => string }
+      ).createObjectURL = () => `blob:mock/${++seq}`;
+      (
+        URL as unknown as { revokeObjectURL: (u: string) => void }
+      ).revokeObjectURL = (u) => {
+        revoked.push(u);
+      };
+      doFetch.mockImplementation(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            blob: async () => new Blob(["bytes"], { type: "image/jpeg" }),
+          }) as unknown as Response
+      );
+      const Root = ({ rootRef }: InlineAppProps): JSX.Element => (
+        <div ref={rootRef} data-testid="tasks-root">
+          <img data-testid="tile" src="/centraid/_vault/blobs/photo-1" alt="" />
+        </div>
+      );
+      try {
+        const loader = async (): Promise<{ default: InlineAppModule }> => ({
+          default: makeApp(Root),
+        });
+        await mount(routeEl(loader, "tasks-blob-render"));
+        await flush();
+        const tile = host!.querySelector<HTMLImageElement>(
+          '[data-testid="tile"]'
+        )!;
+        const authed = tile.getAttribute("src");
+        expect(authed).toMatch(/^blob:mock\//u);
+
+        await act(async () => {
+          root!.render(routeEl(loader, "tasks-blob-render"));
+        });
+        await flush();
+
+        expect(revoked).toStrictEqual([]);
+        expect(tile.getAttribute("src")).toBe(authed);
+
+        // A REAL unmount still revokes — the fix must not trade the bug for a leak.
+        act(() => root?.unmount());
+        root = null;
+        expect(revoked).toStrictEqual([authed]);
+      } finally {
+        (
+          URL as unknown as { createObjectURL?: (b: Blob) => string }
+        ).createObjectURL = createObjectURL;
+        (
+          URL as unknown as { revokeObjectURL?: (u: string) => void }
+        ).revokeObjectURL = revokeObjectURL;
+      }
     });
 
     it("catches a failed chunk load and Retry re-imports + remounts", async () => {

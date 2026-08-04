@@ -28,6 +28,10 @@ export function MemoriesStrip({ memories }: { memories: MemoryCard[] }) {
                  from a shared audience's photo — so the card names the scope its
                  background-image must be fetched in (issue #599). */
               data-scope={scopeAttr(m.coverScopeId)}
+              /* A composite control (cover + title + subtitle), so this is a
+                 custom accessible NAME, not a duplicate of visible text — the
+                 same case DESIGN.md's "aria-label is a replacement" rule and
+                 lint-aria-labels' allowlist both carve out for rich cards. */
               aria-label={`Open ${title}`}
               onClick={handleOpen}
             >

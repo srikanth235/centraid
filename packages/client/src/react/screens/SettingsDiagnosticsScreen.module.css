@@ -58,7 +58,7 @@
 }
 .metricLabel {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -74,7 +74,7 @@
 .metricSub {
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -153,14 +153,14 @@
 .errCount {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 
 .jumpToLogs {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--accent-deep, var(--accent));
   background: none;
   border: none;
@@ -176,7 +176,7 @@
 .healthLabel {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -196,7 +196,7 @@
 .eventsHead {
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -222,7 +222,7 @@
   flex: none;
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
 }
 .eventLevel[data-level="warn"] {
@@ -270,7 +270,7 @@
 .connBadge {
   margin-left: 6px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;

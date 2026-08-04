@@ -18,16 +18,12 @@
   flex: 0 0 auto;
   width: 132px;
   height: 176px;
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   overflow: hidden;
   border: none;
   background: var(--bg-sunken) center/cover no-repeat;
   box-shadow: var(--shadow-sm);
   padding: 0;
-  transition: transform 0.16s var(--ease);
-}
-.memoryCard:hover {
-  transform: translateY(-2px);
 }
 .memoryScrim {
   position: absolute;
@@ -41,17 +37,17 @@
 }
 .memoryText {
   position: absolute;
-  left: 12px;
-  right: 12px;
+  inset-inline-start: 12px;
+  inset-inline-end: 12px;
   bottom: 12px;
-  text-align: left;
+  text-align: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .memoryTitle {
   font: var(--t-body-strong);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-inv);
   line-height: 1.25;
   overflow: hidden;
@@ -60,6 +56,6 @@
 }
 .memorySub {
   font: var(--t-mono);
-  font-size: 10px;
+  font-variant-numeric: var(--t-mono-numeric);
   color: color-mix(in oklab, var(--text-inv) 80%, transparent);
 }

@@ -16,14 +16,22 @@
 .toolbarTitle {
   min-width: 0;
 }
+/* A long album title has to ellipsize, not run past the actions on its row —
+   the parent already carries `min-width: 0` so the flex item can shrink. */
 .toolbarH1 {
   font: var(--t-title);
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .toolbarSub {
   font: var(--t-small);
   color: var(--text-soft);
   margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The scope chips (issue #599) sit under the subtitle, inside the title block,
    so they read as "what this view is showing" rather than as another action.
@@ -32,7 +40,7 @@
   margin-top: 6px;
 }
 .toolbarActions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: var(--sp-2);

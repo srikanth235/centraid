@@ -23,12 +23,23 @@ import {
   oklabDistance,
   resolveVars,
 } from "./oklab.js";
-import { palette } from "./palette.js";
+import { palette, paletteDark } from "./palette.js";
 
 const AA_BODY = 4.5;
 
-/** Every opaque surface the shell can paint a foreground on. */
-const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"] as const;
+/** Every opaque surface the shell can paint a foreground on, including the
+ *  five per-app surface tones — an app may declare any of them. */
+const SURFACE_NAMES = [
+  "--bg",
+  "--bg-app",
+  "--bg-elev",
+  "--bg-sunken",
+  "--bg-tone-neutral",
+  "--bg-tone-paper",
+  "--bg-tone-mat",
+  "--bg-tone-cool",
+  "--bg-tone-warm",
+] as const;
 
 /** A palette ink is almost never on a bare surface — it sits on a weak wash of
  *  its own FILL (a chip, a badge, an identity tile), which has already walked
@@ -49,11 +60,14 @@ describe("palette-hue-as-text on the shell surfaces", () => {
   const dark = { ...light, ...declarations(css, "[data-theme='dark']") };
 
   describe.each([
-    ["light", light, {}],
-    // The shell's dark ramp is anchored at 5%, NOT the blueprint layer's 10%.
-    // Substituted because only a browser resolves `hsl(0 0% var(--bg-l))`.
-    ["dark", dark, { "--bg-l": "5%" }],
-  ] as const)("%s", (theme, tokens, scope) => {
+    ["light", light, palette],
+    // Each theme is measured against ITS OWN identity ring: the dark ring sits
+    // at `oklch(0.72 …)` and the light one at `oklch(0.50 …)`, so comparing a
+    // dark rung to a light fill would measure the ring's own lightness step
+    // rather than the solve.
+    ["dark", dark, paletteDark],
+  ] as const)("%s", (theme, tokens, ring) => {
+    const scope = {};
     const surfaces = SURFACE_NAMES.map((key) =>
       evalColorMix(resolveVars(tokens[key] ?? "", scope))
     );
@@ -68,7 +82,7 @@ describe("palette-hue-as-text on the shell surfaces", () => {
       }
     });
 
-    test.each(Object.entries(palette))(
+    test.each(Object.entries(ring))(
       `${theme}: --c-%s-text clears AA bare and on every wash the shell paints`,
       (name, fillHex) => {
         const declared = tokens[`--c-${name}-text`];
@@ -97,7 +111,7 @@ describe("palette-hue-as-text on the shell surfaces", () => {
       // Re-measured off THIS emitter for the same reason the floors are: the
       // moment a solve is allowed to desaturate, eight hues converge on one
       // grey that clears every floor and codes nothing.
-      for (const [name, fillHex] of Object.entries(palette)) {
+      for (const [name, fillHex] of Object.entries(ring)) {
         const ink = evalColorMix(
           resolveVars(tokens[`--c-${name}-text`] ?? "", scope)
         );
@@ -124,7 +138,7 @@ describe("palette-hue-as-text on the shell surfaces", () => {
       // The pairing that reads worst in practice: an ink label beside its own
       // saturated dot or bar. Not an AA site (the dot is non-text), but if the
       // two collapse, the label stops looking like the same state as the dot.
-      for (const [name, fillHex] of Object.entries(palette)) {
+      for (const [name, fillHex] of Object.entries(ring)) {
         const ink = evalColorMix(
           resolveVars(tokens[`--c-${name}-text`] ?? "", scope)
         );

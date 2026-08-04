@@ -78,11 +78,17 @@ export function Chrome(props: ChromeProps): ReactNode {
     .join(" ");
 
   return (
-    <div className={shellClass} data-docs-root>
+    <div
+      className={shellClass}
+      data-docs-root
+      data-tone="paper"
+      data-density="comfortable"
+    >
       <aside className={styles.side} aria-label="Docs navigation">
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">
             <svg
+              aria-hidden="true"
               width="17"
               height="17"
               viewBox="0 0 24 24"
@@ -106,6 +112,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             onClick={props.onCloseSide}
           >
             <svg
+              aria-hidden="true"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -122,12 +129,13 @@ export function Chrome(props: ChromeProps): ReactNode {
         <div className={styles.newWrap} data-new-wrap>
           <button
             type="button"
-            className={styles.new}
+            className={`kit-btn primary ${styles.new}`}
             aria-haspopup="menu"
             aria-expanded={props.newMenuOpen}
             onClick={props.onToggleNewMenu}
           >
             <svg
+              aria-hidden="true"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -140,6 +148,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             </svg>
             <span>New</span>
             <svg
+              aria-hidden="true"
               className={styles.newChev}
               width="15"
               height="15"
@@ -173,6 +182,7 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div className={styles.storage}>{props.storage}</div>
           <div className={styles.consentLine}>
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -196,7 +206,7 @@ export function Chrome(props: ChromeProps): ReactNode {
       <button
         type="button"
         className={`kit-plain-btn ${styles.scrim}`}
-        aria-label="Close menu"
+        aria-label="Dismiss menu"
         onClick={props.onCloseSide}
       />
 
@@ -209,6 +219,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             onClick={props.onOpenSide}
           >
             <svg
+              aria-hidden="true"
               width="19"
               height="19"
               viewBox="0 0 24 24"
@@ -255,6 +266,7 @@ export function Chrome(props: ChromeProps): ReactNode {
                 onClick={() => props.onSelectView("grid")}
               >
                 <svg
+                  aria-hidden="true"
                   width="17"
                   height="17"
                   viewBox="0 0 24 24"
@@ -277,6 +289,7 @@ export function Chrome(props: ChromeProps): ReactNode {
                 onClick={() => props.onSelectView("list")}
               >
                 <svg
+                  aria-hidden="true"
                   width="17"
                   height="17"
                   viewBox="0 0 24 24"
@@ -329,6 +342,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             <span className={styles.toolbarDiv} aria-hidden="true" />
             <button type="button" className="kit-btn" onClick={props.onSort}>
               <svg
+                aria-hidden="true"
                 width="15"
                 height="15"
                 viewBox="0 0 24 24"

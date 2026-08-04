@@ -72,9 +72,7 @@ describe("AppFrame", () => {
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
-      root!.render(
-        <AppFrame appId="todos" accentColor="#123" theme="dark" bgL={5} />
-      );
+      root!.render(<AppFrame appId="todos" accentColor="#123" theme="dark" />);
     });
     await act(async () => {
       await Promise.resolve();
@@ -93,7 +91,7 @@ describe("AppFrame", () => {
       expect(frame.dataset.centraidApp).toBe("1");
       expect(appLiveUrl).toHaveBeenCalledWith({ id: "todos" });
       expect(frame.getAttribute("src")).toMatch(
-        /^https:\/\/gw\.local\/app\/todos\?theme=dark&bgL=5#theme=dark&bgL=5&bridge=.+$/u
+        /^https:\/\/gw\.local\/app\/todos\?theme=dark#theme=dark&bridge=.+$/u
       );
     });
 
@@ -134,7 +132,7 @@ describe("AppFrame", () => {
       );
       expect(appLiveUrl).toHaveBeenCalledTimes(2);
       expect(tunnelFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/_web/session?code=one&theme=dark&bgL=5"),
+        expect.stringContaining("/_web/session?code=one&theme=dark"),
         expect.objectContaining({ redirect: "follow" })
       );
     });

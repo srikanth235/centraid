@@ -44,7 +44,7 @@ export function Activity({
   if (denied)
     return (
       <div className={styles.activityStatus}>
-        Ask the owner to approve activity access.
+        Approve receipts access to see this document's activity.
       </div>
     );
   // Honest empty state (a document seeded outside the command pipeline, or a

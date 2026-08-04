@@ -13,11 +13,12 @@
 // unchanged prop — the pilot's `#noticeBanner` pattern).
 //
 // Classes: structural chrome comes from Chrome.module.css (scoped, positioned
-// for the inline app pane — never the viewport); the `ph-header-icon-btn`
-// vocabulary and the media/faces/selection guts stay the global `:global(...)`
-// strings app.css owns (Enrichment.tsx / media.ts / faces.ts write them as plain
-// strings), and `kit-*` is the global kit vocabulary (kit.css, loaded once by the
-// route host). The served path (index.html + app.css) is untouched.
+// for the inline app pane — never the viewport); the media/faces/selection guts
+// stay the global `:global(...)` strings app.css owns (media.ts / faces.ts write
+// them as plain strings), and `kit-*` is the global kit vocabulary (kit.css,
+// loaded once by the route host). Every icon-only control here is the kit's
+// `kit-icon-btn` — the hand-rolled `ph-header-icon-btn` retired with #708.
+// The served path (index.html + app.css) is untouched.
 import type { ReactNode } from "react";
 
 import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
@@ -45,6 +46,7 @@ export interface ChromeProps {
 
 const hamburgerGlyph = (
   <svg
+    aria-hidden="true"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -70,6 +72,7 @@ const searchGlyph = (
 );
 const zoomOutGlyph = (
   <svg
+    aria-hidden="true"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -85,6 +88,7 @@ const zoomOutGlyph = (
 );
 const zoomInGlyph = (
   <svg
+    aria-hidden="true"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -96,8 +100,20 @@ const zoomInGlyph = (
     <rect x="13" y="13" width="8" height="8" rx="1" />
   </svg>
 );
+const closeGlyph = (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.75"
+    strokeLinecap="round"
+  >
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+);
 const playGlyph = (
-  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" stroke="none">
     <path d="M8 5v14l11-7z" />
   </svg>
 );
@@ -111,7 +127,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
     .filter(Boolean)
     .join(" ");
   return (
-    <div className={shellClass}>
+    <div className={shellClass} data-tone="mat" data-density="compact">
       {/* Sidebar host — the SidebarView Fragment (scrim + <aside>) renders here.
           `display:contents` lets the <aside> be a real flex child while the
           host id survives for app.tsx's `$('sidebarMount').hidden` toggle. */}
@@ -124,7 +140,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
           <button
             id="hamburgerBtn"
             type="button"
-            className="ph-header-icon-btn ph-hamburger"
+            className="kit-icon-btn ph-hamburger"
             aria-label="Menu"
           >
             {hamburgerGlyph}
@@ -141,7 +157,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             <input
               id="searchInput"
               type="search"
-              placeholder="Search people, places, things — try “beach” or “Dana”"
+              placeholder="Search people, places, things"
               aria-label="Search photos"
               autoComplete="off"
             />
@@ -152,7 +168,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
               aria-label="Clear search"
               hidden
             >
-              ×
+              {closeGlyph}
             </button>
           </search>
           <div className={styles.headerActions}>
@@ -160,7 +176,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
               <button
                 id="zoomOutBtn"
                 type="button"
-                className="ph-header-icon-btn"
+                className="kit-icon-btn"
                 aria-label="Smaller tiles"
               >
                 {zoomOutGlyph}
@@ -168,7 +184,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
               <button
                 id="zoomInBtn"
                 type="button"
-                className="ph-header-icon-btn"
+                className="kit-icon-btn"
                 aria-label="Larger tiles"
               >
                 {zoomInGlyph}
@@ -180,7 +196,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             <button
               id="slideshowBtn"
               type="button"
-              className="ph-header-icon-btn slideshow-toolbar-btn"
+              className="kit-icon-btn slideshow-toolbar-btn"
               aria-label="Slideshow"
             >
               {playGlyph}
@@ -223,10 +239,10 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
                 <button
                   id="emptyUpload"
                   type="button"
-                  className="kit-btn primary"
+                  className="kit-btn"
                   hidden
                 >
-                  ＋ Add media
+                  Add media
                 </button>
               </div>
             </div>

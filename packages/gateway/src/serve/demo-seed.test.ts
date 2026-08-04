@@ -74,15 +74,19 @@ describe("demo-seed", () => {
     const plane = openPlane(dir);
     const appsDir = path.join(dir, "apps");
 
-    await forEachSequentially(["tasks", "notes", "people", "tally"], (appId) =>
-      loadSeed(plane, appId, appsDir)
+    await forEachSequentially(
+      ["agenda", "docs", "tasks", "notes", "people", "photos", "tally"],
+      (appId) => loadSeed(plane, appId, appsDir)
     );
 
     const status = plane.demoStatus();
     const byApp = new Map(status.map((s) => [s.appId, s.rows]));
     expect([...byApp.keys()].sort()).toStrictEqual([
+      "agenda",
+      "docs",
       "notes",
       "people",
+      "photos",
       "tally",
       "tasks",
     ]);
@@ -115,6 +119,9 @@ describe("demo-seed", () => {
       "knowledge_note",
       "tally_expense",
       "people_profile",
+      "core_event",
+      "core_document",
+      "media_media_asset",
     ]) {
       const left = plane.db.vault
         .prepare(`SELECT count(*) AS n FROM ${table}`)
@@ -123,6 +130,52 @@ describe("demo-seed", () => {
       };
       expect(left.n, `${table} empty after purge`).toBe(0);
     }
+  });
+
+  // The photo roll is the one scenario whose bytes ship BESIDE its generator
+  // (issue #708): seed.js reads `sample/*.png` off its own directory through
+  // `import.meta.url`. A missing image, a lost `files:` entry, or a renamed
+  // sample would still "seed" — as zero assets — so this asserts the shape the
+  // grid, the favorites filter and the album rail actually render.
+  test("the photos scenario lands a full camera roll, favorites and an album", async () => {
+    const dir = await tempDir();
+    const plane = openPlane(dir);
+    await loadSeed(plane, "photos", path.join(dir, "apps"));
+
+    const count = (sql: string): number =>
+      (plane.db.vault.prepare(sql).get() as { n: number }).n;
+    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(10);
+    expect(
+      count("SELECT count(*) AS n FROM media_media_asset WHERE favorite = 1")
+    ).toBe(2);
+    // Every asset carries what the grid needs to paint without a round trip:
+    // real bytes, dimensions, a capture time, and a ThumbHash placeholder.
+    expect(
+      count(
+        `SELECT count(*) AS n FROM media_media_asset a
+           JOIN core_content_item c ON c.content_id = a.content_id
+           JOIN core_content_derivative d
+             ON d.content_id = a.content_id AND d.variant = 'thumbhash'
+          WHERE a.width IS NOT NULL AND a.height IS NOT NULL
+            AND a.captured_at IS NOT NULL AND c.byte_size > 0`
+      )
+    ).toBe(10);
+    const album = plane.db.vault
+      .prepare(
+        "SELECT collection_id, cover_content_id FROM core_collection WHERE name = 'Tahoe scouting'"
+      )
+      .get() as { collection_id: string; cover_content_id: string | null };
+    expect(album.cover_content_id).not.toBeNull();
+    expect(
+      (
+        plane.db.vault
+          .prepare(
+            `SELECT count(*) AS n FROM core_collection_entry
+              WHERE collection_id = ? AND target_type = 'media.media_asset'`
+          )
+          .get(album.collection_id) as { n: number }
+      ).n
+    ).toBe(4);
   });
 
   test("the demo bridge refuses non-scenario ops and non-owner registers stay impossible", async () => {

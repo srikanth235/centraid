@@ -1,13 +1,16 @@
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
-import Geist_400Regular from "@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf";
-import Geist_500Medium from "@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf";
-import Geist_600SemiBold from "@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf";
-import JetBrainsMono_400Regular from "@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf";
-import JetBrainsMono_500Medium from "@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf";
-import JetBrainsMono_600SemiBold from "@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf";
-import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf";
-import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
+//
+// The Binding Layer's four faces, two weights (400 / 500) each where the face
+// ships one: Instrument Sans (body/UI), Instrument Serif (display, plus its
+// italic for the home greeting), Source Serif 4 (reading), DM Mono (numeric).
+import DMMono_400Regular from "@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf";
+import DMMono_500Medium from "@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf";
+import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
+import InstrumentSans_500Medium from "@expo-google-fonts/instrument-sans/500Medium/InstrumentSans_500Medium.ttf";
+import InstrumentSerif_400Regular from "@expo-google-fonts/instrument-serif/400Regular/InstrumentSerif_400Regular.ttf";
+import InstrumentSerif_400Regular_Italic from "@expo-google-fonts/instrument-serif/400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf";
+import SourceSerif4_400Regular from "@expo-google-fonts/source-serif-4/400Regular/SourceSerif4_400Regular.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
@@ -29,7 +32,7 @@ import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { Text } from "./src/kit/components/NativeText";
-import ToastHost from "./src/kit/components/Toast";
+import StatusLine from "./src/kit/components/StatusLine";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
@@ -40,13 +43,11 @@ import {
 import { AppLockProvider } from "./src/kit/security/AppLock";
 import {
   hydrateAppearance,
-  hydrateAccent,
   navThemeFor,
   radii,
   resolveScheme,
   resolveTheme,
   t,
-  useAccent,
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
@@ -366,30 +367,26 @@ export default function App(): React.JSX.Element | null {
   // scheme here so the nav container theme + status bar follow it, matching the
   // per-screen `useTheme()` override (src/kit/theme/appearance.ts).
   const scheme = resolveScheme(useAppearance(), useColorScheme());
-  const accentKey = useAccent();
-  const { colors } = resolveTheme(scheme, accentKey);
+  const { colors } = resolveTheme(scheme);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   // The return tuple is deliberately dropped: nothing gates on it any more (see
   // the tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
-    Geist_400Regular,
-    Geist_500Medium,
-    Geist_600SemiBold,
-    JetBrainsMono_400Regular,
-    JetBrainsMono_500Medium,
-    JetBrainsMono_600SemiBold,
-    PlayfairDisplay_600SemiBold,
-    PlayfairDisplay_600SemiBold_Italic,
+    DMMono_400Regular,
+    DMMono_500Medium,
+    InstrumentSans_400Regular,
+    InstrumentSans_500Medium,
+    InstrumentSerif_400Regular,
+    InstrumentSerif_400Regular_Italic,
+    SourceSerif4_400Regular,
   });
 
   useEffect(() => {
-    // Both hydrations are kicked off in the same tick and neither is awaited by
-    // the other: the appearance read must not sit behind the profile read, or
-    // first paint waits on two round trips to AsyncStorage instead of one.
+    // The appearance read must not sit behind the profile read, or first paint
+    // waits on two round trips to AsyncStorage instead of one.
     void hydrateAppearance();
-    void hydrateAccent();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
     // expo-image ships with no ceiling on its in-memory bitmap cache, so a long
     // scroll through the photo grid otherwise holds every decoded thumbnail
@@ -447,7 +444,7 @@ export default function App(): React.JSX.Element | null {
                       <NavigationContainer
                         ref={rootNavigationRef}
                         linking={LINKING}
-                        theme={navThemeFor(scheme, accentKey)}
+                        theme={navThemeFor(scheme)}
                       >
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
@@ -573,7 +570,7 @@ export default function App(): React.JSX.Element | null {
               `__DEV__` build that a probe has explicitly armed — see
               src/kit/perf/FrameProbe.tsx. */}
             <FrameProbe />
-            <ToastHost />
+            <StatusLine />
           </View>
         </SafeAreaProvider>
       </GestureHandlerRootView>

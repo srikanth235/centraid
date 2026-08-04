@@ -93,8 +93,10 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
   expect(appsProbe.status, appsProbe.text).toBe(200);
   expect(appsProbe.text).toContain("web-e2e");
 
+  // Home is the content springboard (#708) — custom apps open via the command
+  // palette, not a library card on Home.
   await expect(
-    page.locator('[data-app-id="web-e2e"]'),
+    page.locator('nav[aria-label="Apps"]').first(),
     JSON.stringify(gatewayResponses, null, 2)
   ).toBeVisible();
   expect(
@@ -124,30 +126,22 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
     )
     .toBe(true);
 
-  await page
-    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
-    .click();
-  const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(
-    preview.getByRole("heading", { name: "Web E2E App" })
-  ).toBeVisible();
-  await expect(preview.locator("#ready")).toHaveText("generated app ready");
-
-  const previewPing = await preview.locator("body").evaluate(async () => {
-    return window.centraid.read({ query: "ping", input: {} });
-  });
-  expect(previewPing).toEqual({ pong: true, surface: "web" });
-
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(
-    page.getByText("Already up to date — added to Home.")
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.locator('[data-app-id="web-e2e"]').first()).toBeVisible();
-  await page
-    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
+  // Open the published fixture app via the palette Apps group.
+  const search = page.getByRole("button", { name: /^Search/u });
+  if ((await search.count()) > 0) {
+    await search.first().click();
+  } else {
+    await page.keyboard.press("ControlOrMeta+k");
+  }
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.waitFor({ state: "visible" });
+  await palette.locator("input").fill("Web E2E App");
+  await palette
+    .getByRole("button")
+    .filter({ hasText: "Web E2E App" })
     .first()
     .click();
+
   const app = page.frameLocator('iframe[title="app"]');
   await expect(app.getByRole("heading", { name: "Web E2E App" })).toBeVisible();
   await expect(app.locator("#ready")).toHaveText("generated app ready");

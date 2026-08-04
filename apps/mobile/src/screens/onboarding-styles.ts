@@ -62,7 +62,7 @@ export const styles = StyleSheet.create({
   },
   avatarInitial: {
     color: C.onBrand,
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 19,
   },
   center: { alignItems: "center" },
@@ -91,7 +91,7 @@ export const styles = StyleSheet.create({
   fieldGap: { marginTop: 20 },
   h1: {
     color: C.text,
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 31,
     letterSpacing: -0.8,
     lineHeight: 37,
@@ -154,7 +154,11 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 28,
   },
-  primaryLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 16 },
+  primaryLabel: {
+    color: C.onBrand,
+    fontFamily: family.sansMedium,
+    fontSize: 16,
+  },
   safe: { backgroundColor: C.bg, flex: 1 },
   /** The pairing step's primary action — deliberately taller and heavier than
    *  `primary`, because it is the way in rather than one option among two. */
@@ -166,7 +170,11 @@ export const styles = StyleSheet.create({
     marginTop: 26,
     paddingVertical: 20,
   },
-  scanBtnLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 17 },
+  scanBtnLabel: {
+    color: C.onBrand,
+    fontFamily: family.sansMedium,
+    fontSize: 17,
+  },
   scanFrame: {
     aspectRatio: 1,
     backgroundColor: WAIVED.viewfinder,
@@ -189,7 +197,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: SWATCH,
   },
-  swatchMark: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 14 },
+  swatchMark: { color: C.onBrand, fontFamily: family.sansMedium, fontSize: 14 },
   swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   textBtn: {
     alignItems: "center",

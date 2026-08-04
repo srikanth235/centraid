@@ -14,8 +14,7 @@
   padding: 0 var(--sp-1) var(--sp-2);
 }
 .miniLabel {
-  font: var(--t-body-strong);
-  font-size: 13px;
+  font: var(--t-small-strong);
 }
 .miniNav {
   display: flex;
@@ -32,8 +31,7 @@
 }
 .miniDow span {
   text-align: center;
-  font: var(--t-mono);
-  font-size: 9px;
+  font: var(--t-eyebrow);
   color: var(--text-faint);
   padding: 2px 0;
 }
@@ -51,13 +49,12 @@
   border: none;
   border-radius: var(--r-sm);
   font: var(--t-mono);
-  font-size: 11px;
+  font-variant-numeric: var(--t-mono-numeric);
   background: none;
   color: var(--text-soft);
 }
 .miniDay[data-outside="true"] {
   color: var(--text-faint);
-  opacity: 0.6;
 }
 .miniDay:hover {
   background: var(--bg-sunken);
@@ -76,7 +73,7 @@
 .miniDot {
   position: absolute;
   bottom: 2px;
-  left: 50%;
+  inset-inline-start: 50%;
   transform: translateX(-50%);
   width: 3px;
   height: 3px;
@@ -99,10 +96,9 @@
   width: 100%;
   padding: var(--sp-2) 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: none;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-small);
   color: var(--text-soft);
 }
 .calRow:hover {
@@ -124,7 +120,7 @@
 }
 .calName {
   flex: 1;
-  text-align: left;
+  text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -133,7 +129,7 @@
   color: var(--text-faint);
 }
 .calCount {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  opacity: 0.55;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }

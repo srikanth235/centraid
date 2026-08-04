@@ -43,16 +43,21 @@ export interface AppIconProps {
   name: IconName;
   color: string;
   size?: number;
+  /** Not-yet-installed recedes via a neutral tile colour rather than
+   *  container opacity — opacity would dim the whole tile (paper, deboss,
+   *  glyph) together and silently invalidate each layer's own contrast. */
+  muted?: boolean;
 }
 
 export default function AppIcon({
   name,
   color,
   size = 62,
+  muted = false,
 }: AppIconProps): React.JSX.Element {
-  const { scheme } = useTheme();
+  const { colors, scheme } = useTheme();
   const t = ENGRAVED[scheme];
-  const finish = tileFinish(color, "glassy");
+  const finish = tileFinish(muted ? colors.textFaint : color, "glassy");
   const glyph = Math.round(size * 0.48);
   return (
     <View

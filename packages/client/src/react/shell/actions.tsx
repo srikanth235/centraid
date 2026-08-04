@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 
 import type { ShellRoute } from "../../app-shell-context.js";
 import type { ConfirmOpts } from "./confirm.js";
-import type { ShellMenuAnchor } from "./Sidebar.js";
+import type { ShellMenuAnchor } from "./contextMenu.js";
 
 // The cross-cutting action surface the route wrappers consume — the React
 // equivalent of the vanilla ShellContext's action entries. Navigation is NOT

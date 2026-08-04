@@ -47,7 +47,7 @@
 .searchKbd {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-faint);
@@ -164,35 +164,19 @@
 .tab[data-active="true"] {
   border-bottom-color: var(--accent);
 }
-/* Language dots (the tab strip and the file tree share this set).
-   They named `--c-blue` / `--c-orange` / `--c-yellow` until #686 — three hues
-   the palette has never had, so every dot but `md` rendered with NO background
-   at all. The replacements are real palette FILLS, chosen against three
-   neighbours and all clear of the 0.08 oklab floor BuilderCode.tokens.test.ts
-   holds the syntax scheme to:
-     • each other — min 0.143 (html/js-ts);
-     • the `--text-ghost` unknown-file default in the tree — min 0.099 light,
-       0.168 dark;
-     • the solved syntax inks in this same file — min 0.122 light, 0.123 dark.
-   `amber` and `indigo` are barred outright, sitting 0.031 from `.tokAttr` and
-   0.064 from `.tokKey`; `slate` is barred too, landing 0.038 from the dark
-   theme's composited `--text-ghost` — i.e. reading as "unknown file type". */
+/* File marker. It carried one palette hue per language until #707 — a
+   four-hue set that, on the Binding Layer's one-chroma identity wheel, could
+   not stay 0.08 oklab clear of the four solved syntax inks shown directly
+   below it (eight members on an eight-hue ring puts adjacent pairs 0.043
+   apart). It is also hue the SHELL was spending: a file kind is not an app
+   identity, and the row already names the file with its extension. So the
+   marker is neutral, and the language reads from the name. */
 .tabDot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex: none;
-  background: var(--c-rose);
-}
-.tabDot[data-lang="css"] {
-  background: var(--c-teal);
-}
-.tabDot[data-lang="js"],
-.tabDot[data-lang="ts"] {
-  background: var(--c-ochre);
-}
-.tabDot[data-lang="md"] {
-  background: var(--c-violet);
+  background: var(--text-ghost);
 }
 .tabLabel {
   border: 0;
@@ -403,7 +387,7 @@
   padding: 8px 18px;
   border-top: 0.5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0;
   color: var(--text-faint);
 }
@@ -429,7 +413,7 @@
   align-items: center;
   gap: 6px;
   padding: 16px 10px 4px;
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -441,7 +425,7 @@
 .treeGroupCount {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0;
   color: var(--text-ghost);
 }
@@ -453,19 +437,6 @@
   background: var(--text-ghost);
   /* Sit on the same baseline as the chevron spacer beside it. */
   margin: 0 3px;
-}
-.treeLangDot[data-lang="html"] {
-  background: var(--c-rose);
-}
-.treeLangDot[data-lang="css"] {
-  background: var(--c-teal);
-}
-.treeLangDot[data-lang="js"],
-.treeLangDot[data-lang="ts"] {
-  background: var(--c-ochre);
-}
-.treeLangDot[data-lang="md"] {
-  background: var(--c-violet);
 }
 .treeRow[data-active="true"] {
   position: relative;
@@ -489,13 +460,16 @@
    `.tokAttr` was violet, one hue off `.tokKey`'s indigo: the fills were
    already only 0.068 apart in oklab and solving both to the same contrast
    floor pulled them to 0.075 light / 0.040 dark — two token classes the eye
-   cannot separate. Amber is the far corner of the palette from the other
-   three, and takes the set's closest pair back to 0.119 / 0.126. */
+   cannot separate. Amber replaced it, and then the Binding Layer wheel (#707)
+   put amber at 28° — 28° from rose, which `.tokTag` takes — collapsing the
+   same pair from the other side at 0.043. Ochre (70°) is the nearest slot that
+   holds: {rose, ochre, forest, indigo} is one of the widest four-hue subsets
+   the eight-slot ring admits, and its tightest pair measures 0.082. */
 .tokTag {
   color: var(--c-rose-text);
 }
 .tokAttr {
-  color: var(--c-amber-text);
+  color: var(--c-ochre-text);
 }
 .tokStr {
   color: var(--c-forest-text);

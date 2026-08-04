@@ -340,8 +340,10 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
  */
 export async function installTemplate(input: {
   templateId: string;
-  /** The vault the app is installed into (issue #599) — Discover's target
-   *  picker names it; omitted falls back to the internal default. */
+  /** The vault the app is installed into (issue #599). Omitted falls back to
+   *  the internal default — which is the only spelling left now that the
+   *  catalogue's target picker retired with it (#708); the remaining caller is
+   *  the gateway's own "app follows the member into an audience vault" seam. */
   scopeId?: string;
 }): Promise<{
   app: {

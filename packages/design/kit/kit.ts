@@ -29,15 +29,17 @@ import {
 // bundled template or deployed clone — picks it up on next load.
 //
 // Everything here is presentation plumbing the 14 apps used to hand-roll
-// with drift: outcome toasts, loading/error states, confirm-to-act, money
-// and local-date formatting, letter avatars, and small SVG charts. App
+// with drift: outcome status lines, loading/error states, confirm-to-act,
+// money and local-date formatting, letter avatars, and small SVG charts. App
 // logic stays in each app.js.
 //
-// The presentation PRIMITIVES (avatar, meter, charts, skeleton, toast, mention
-// chip, reference strip) are now native Web Components defined in `elements.js`
-// (issue #327). Importing it here runs the `customElements.define()` calls; the
-// factory functions below (`letterAvatar`, `lineChart`, `toast`, …) construct +
-// configure those elements, so app code that calls them is unchanged. The
+// The presentation PRIMITIVES (avatar, meter, charts, skeleton, status line,
+// mention chip, reference strip) are now native Web Components defined in
+// `elements.js` (issue #327). Importing it here runs the `customElements.define()`
+// calls; the factory functions below (`letterAvatar`, `lineChart`, `statusLine`,
+// …) construct + configure those elements, so app code that calls them is
+// unchanged (the Binding Layer flip only renamed `toast` to `statusLine` —
+// #707 Phase 3). The
 // live-network controllers (Ask driver, @-mention popover/field) stay as the
 // imperative controllers they always were — see the excluded set in issue #327.
 import { entityKindLabel } from "./elements.js";
@@ -116,12 +118,19 @@ export interface CentraidChangeDetail {
   ts?: number;
 }
 
-export interface ToastOptions {
+export interface StatusLineOptions {
   undoLabel?: string;
   onUndo?: () => void;
+  /** Ms before the line reverts to quiet (default 5000; sticky if 0). Ignored
+   *  while `progress` is running — a determinate operation clears itself. */
   duration?: number;
-  /** Feedback tone is explicit; neutral toasts do not vibrate or imply success. */
+  /** Feedback tone is explicit; neutral updates do not vibrate or imply
+   *  success. The status line's dot stays a fixed neutral colour regardless
+   *  — tone only ever selects the haptic, never a visual hue. */
   tone?: "affirm" | "change" | "destructive" | "none";
+  /** A long local operation: renders a determinate track+fill bar with exact
+   *  counts instead of a spinner. */
+  progress?: { done: number; total: number };
 }
 
 export interface ReadSubscription {
@@ -227,67 +236,83 @@ function haptic(kind) {
   }
 }
 
-// ---------- Toasts (the one feedback channel that follows the user) ----------
+// ---------- Status line (the one feedback channel that follows the user) ---
+//
+// Retired the floating `toast` stack (#707 Phase 3 — the Binding Layer's
+// fifth invariant): state is reported on ONE persistent line docked to the
+// bottom of the frame, updated IN PLACE. There is no stack, no per-call
+// element, and no entry/exit animation — a single `<kit-status-line>` is
+// mounted once and its properties change under it. A duration still clears
+// the message back to quiet, but the line itself never leaves the DOM.
 
-let toastHost = null;
+let statusLineHost = null;
+// Module-level, not per-call: the host is reused across every `statusLine()`
+// call, so the pending auto-clear timer has to be shared too — a per-call
+// local would let an OLDER call's timer fire later and wipe a NEWER (or
+// sticky, duration 0) message it knows nothing about.
+let statusLineTimer = 0;
 
-function ensureToastHost() {
-  if (toastHost) return toastHost;
-  toastHost = document.createElement("div");
-  toastHost.className = "kit-toasts";
-  toastHost.setAttribute("role", "status");
-  toastHost.setAttribute("aria-live", "polite");
-  document.body.appendChild(toastHost);
-  return toastHost;
+function ensureStatusLineHost() {
+  if (statusLineHost) return statusLineHost;
+  statusLineHost = document.createElement("kit-status-line");
+  document.body.appendChild(statusLineHost);
+  return statusLineHost;
 }
 
 /**
- * Show a transient toast. Options:
- *  - undoLabel/onUndo: renders an action button (e.g. Undo) that runs once.
- *  - duration: ms before auto-dismiss (default 5000; sticky if 0).
- *  - tone: semantic outcome; only explicit non-neutral tones haptically signal.
+ * Update the one persistent status line. Options:
+ *  - undoLabel/onUndo: the line's single inline text action (e.g. Undo).
+ *  - duration: ms before the line reverts to quiet (default 5000; sticky if
+ *    0). Ignored while `progress` is set.
+ *  - tone: semantic outcome; only explicit non-neutral tones haptically
+ *    signal — the dot stays neutral regardless.
+ *  - progress: {done,total} renders a determinate bar with exact counts
+ *    instead of a spinner, for a long local operation.
  */
-export function toast(
+export function statusLine(
   text: string,
-  { undoLabel, onUndo, duration = 5000, tone = "none" }: ToastOptions = {}
+  {
+    undoLabel,
+    onUndo,
+    duration = 5000,
+    tone = "none",
+    progress,
+  }: StatusLineOptions = {}
 ): () => void {
   if (tone === "affirm") haptic("success");
   else if (tone === "change" || tone === "destructive") haptic("selection");
-  const host = ensureToastHost();
-  const elLocal = document.createElement("kit-toast");
-  elLocal.text = text;
-  if (tone === "destructive") elLocal.tone = "danger";
-  else if (tone === "affirm" || tone === "change") elLocal.tone = "accent";
-  let timer = 0;
-  const dismiss = () => {
-    clearTimeout(timer);
-    elLocal.remove();
+  const line = ensureStatusLineHost();
+  const clear = () => {
+    clearTimeout(statusLineTimer);
+    line.text = "";
+    line.undoLabel = "";
+    line.onUndo = undefined;
+    line.done = null;
+    line.total = null;
   };
-  if (undoLabel && onUndo) {
-    elLocal.undoLabel = undoLabel;
-    elLocal.addEventListener("kit-undo", () => {
-      dismiss();
-      onUndo();
-    });
+  line.text = text;
+  line.undoLabel = undoLabel && onUndo ? undoLabel : "";
+  // The button reads `this.onUndo` at CLICK time, not at render time, so
+  // setting it in any order relative to the other properties above is safe —
+  // there is only ever one live handler, never a stack of accumulated
+  // listeners the way a `addEventListener` on a reused host would leak.
+  line.onUndo =
+    undoLabel && onUndo
+      ? () => {
+          clear();
+          onUndo();
+        }
+      : undefined;
+  line.done = progress ? progress.done : null;
+  line.total = progress ? progress.total : null;
+  clearTimeout(statusLineTimer);
+  // A determinate operation clears itself when the caller reports it done
+  // (done >= total) or is left running; a plain message reverts on its own
+  // duration. Sticky (duration 0) leaves the line up for an explicit clear.
+  if (!progress && duration > 0) {
+    statusLineTimer = setTimeout(clear, duration);
   }
-  elLocal.addEventListener("kit-dismiss", dismiss);
-  if (duration === 0) elLocal.dataset.sticky = "1";
-  host.appendChild(elLocal);
-  // A quick-capture burst (bulk add, demo seed) stacks a toast per receipt
-  // and can cover half the app for seconds — keep only the newest few.
-  // Sticky toasts (duration 0, e.g. errors awaiting dismissal) are evicted
-  // last. An evicted toast's timer later fires dismiss() on a detached
-  // node, which is a no-op.
-  const MAX_TOASTS = 3;
-  while (host.children.length > MAX_TOASTS) {
-    const victim =
-      [...host.children].find((c) => c.dataset.sticky !== "1") ??
-      host.firstElementChild;
-    if (!victim) break;
-    victim.remove();
-  }
-  if (duration > 0) timer = setTimeout(dismiss, duration);
-  return dismiss;
+  return clear;
 }
 
 /** The shared translation of a typed-command outcome into a human sentence. */
@@ -1185,7 +1210,7 @@ export async function runBulk(
   );
   const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
   if (parked > 0) parts.push(`${parked} waiting for approval.`);
-  toast(parts.join(" "));
+  statusLine(parts.join(" "));
   await after?.();
 }
 
@@ -1299,7 +1324,12 @@ export function wireThemeToggle(
       "</button>" +
       '<div class="kit-ask-controls-spacer"></div>' +
       '<div class="kit-ask-model">' +
-      '<button type="button" class="kit-ask-model-btn" aria-label="Model" aria-haspopup="menu" aria-expanded="false">' +
+      // No static aria-label here on purpose: `.kit-ask-model-label`'s text is
+      // rewritten at runtime when the model changes, and a static aria-label
+      // would drift from it (issue #708 §B.4 — the accessible name has to
+      // match what's on screen, not freeze on the button's PURPOSE). The
+      // visible label plus the chevron already give the button a name.
+      '<button type="button" class="kit-ask-model-btn" aria-haspopup="menu" aria-expanded="false">' +
       '<span class="kit-ask-model-label">Default</span>' +
       CHEVRON_ICON +
       "</button>" +
@@ -3136,7 +3166,7 @@ export function appendWithChips(
 //   onChange    () => void                            — re-render strip/read-view after a mutation
 //   relation    string = 'references'
 //   kinds       string[]?                             — restrict the picker
-//   onError     (outcome) => void?                    — vault refusal (default: a toast)
+//   onError     (outcome) => void?                    — vault refusal (default: the status line)
 // returns { detach(), reconcile(body): Promise, startMention() }.
 export function attachMentionField(
   textarea: HTMLTextAreaElement,
@@ -3156,14 +3186,14 @@ export function attachMentionField(
   const changed = () => options.onChange && options.onChange();
   const fail = (outcome, label) => {
     if (options.onError) options.onError(outcome);
-    else toast(`Couldn’t link ${label}.`);
+    else statusLine(`Couldn’t link ${label}.`);
   };
 
   async function onPick(card, range) {
     const from = getFrom();
     if (!from) return;
     if (card.type === from.type && card.id === from.id) {
-      toast("You can’t reference this record from itself.");
+      statusLine("You can’t reference this record from itself.");
       return;
     }
     const refs = getRefs();
@@ -3199,7 +3229,7 @@ export function attachMentionField(
     }
     if (orphan) orphan.selector = selector;
     else refs.push({ link_id: outcome.output?.link_id, selector, card });
-    toast(`${orphan ? "Re-linked" : "Linked"} ${label}.`);
+    statusLine(`${orphan ? "Re-linked" : "Linked"} ${label}.`);
     changed();
   }
 
@@ -3259,7 +3289,7 @@ export function attachMentionField(
     const names = retracted
       .map((r) => r.card?.title ?? entityKindLabel(r.card?.type))
       .join(", ");
-    toast(
+    statusLine(
       retracted.length === 1
         ? `Unlinked ${names} — its mention left the text.`
         : `Unlinked ${retracted.length} references whose mentions left the text.`,

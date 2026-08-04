@@ -60,7 +60,7 @@
   white-space: nowrap;
 }
 .chip {
-  font-size: 10px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -97,18 +97,17 @@
   padding: 6px 10px;
   animation: ab-diff-flash 1.8s ease-out;
 }
-@media (prefers-reduced-motion: reduce) {
-  .sectionFlash {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule. `.sectionFlash` has no explicit `fill-mode`, so once the
+   global rule zeroes its duration the flash never paints — it renders as
+   the section's plain, unflashed background. */
 .diffRibbon {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -136,7 +135,7 @@
 }
 .codeTag {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -188,7 +187,7 @@
 }
 .flowKind {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -328,7 +327,7 @@
   color: var(--text-soft);
 }
 .triggerActionBtn:disabled {
-  opacity: 0.4;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .addTriggerBtn {
@@ -350,7 +349,7 @@
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .addTriggerBtn:disabled {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 /* Trigger add/edit form (GAP 1). */
@@ -379,7 +378,7 @@
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .triggerKindBtn:disabled {
-  opacity: 0.45;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 .formRow {
@@ -523,7 +522,7 @@
 }
 .vaultVerb {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .hint {
@@ -590,7 +589,7 @@
   white-space: nowrap;
 }
 .runTrigger {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-ghost);

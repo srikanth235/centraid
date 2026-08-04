@@ -14,6 +14,7 @@ import {
   makeEnv,
   seedRemoteGateway,
   startMockGateway,
+  statusLine,
   waitForHome,
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
@@ -197,7 +198,7 @@ test("8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
     // Fault-inject the Resume path — the one that does toast.
     gateway.state.setEnabledStatus = 500;
     await page.getByTestId("automation-menu-toggle").click();
-    await expect(page.locator("[data-global-toast]")).toContainText(
+    await expect(statusLine(page)).toContainText(
       /Could not enable Inbox Digest/iu
     );
   } finally {
@@ -224,9 +225,7 @@ test("8.6 — a webhook automation shows its URL and copies it", async () => {
       "wh-123"
     );
     await page.getByRole("button", { name: "Copy webhook URL" }).click();
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      /Webhook URL copied/iu
-    );
+    await expect(statusLine(page)).toContainText(/Webhook URL copied/iu);
   } finally {
     await closeApp(app);
   }
@@ -248,9 +247,7 @@ test("8.7 — deleting an automation confirms, posts DELETE, returns to the list
     await page.getByTestId("automation-menu-delete").click();
     await expectConfirm(page, "Delete automation?");
     await confirmDelete(page);
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "Inbox Digest"'
-    );
+    await expect(statusLine(page)).toContainText('Deleted "Inbox Digest"');
     expect(
       gateway.calls.some(
         (c) => c.method === "DELETE" && c.pathname === "/centraid/_automations"

@@ -28,8 +28,7 @@ import {
   SEMANTIC_STATES,
   selfTint,
 } from "./oklab.js";
-import { palette } from "./palette.js";
-import { BRAND } from "./themes/shared.js";
+import { palette, paletteDark } from "./palette.js";
 
 const AA_BODY = 4.5;
 const AA_LARGE = 3;
@@ -87,14 +86,26 @@ describe("shell token contrast floors", () => {
   const light = declarations(css, ":root");
   const dark = { ...light, ...declarations(css, "[data-theme='dark']") };
 
-  // Every opaque surface a foreground can be painted on. The dark ramp derives
-  // from `--bg-l`, which only the browser resolves, so it is substituted with
-  // the lightness the shipped dark theme declares.
-  const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"];
+  // Every opaque surface a foreground can be painted on — including the five
+  // per-app surface TONES, because an app may declare any of them and the deep
+  // ones are where the ink ramp is genuinely hard. The dark ramp used to be a
+  // `--bg-l` calc that only a browser could resolve; both ramps are literal
+  // now, so nothing needs substituting.
+  const SURFACE_NAMES = [
+    "--bg",
+    "--bg-app",
+    "--bg-elev",
+    "--bg-sunken",
+    "--bg-tone-neutral",
+    "--bg-tone-paper",
+    "--bg-tone-mat",
+    "--bg-tone-cool",
+    "--bg-tone-warm",
+  ];
 
   describe.each([
     ["light", light, {}],
-    ["dark", dark, { "--bg-l": "5%" }],
+    ["dark", dark, {}],
   ] as const)("%s", (name, tokens, scope) => {
     const surfaces = SURFACE_NAMES.map((key) =>
       resolve(tokens[key] ?? "", scope)
@@ -237,17 +248,24 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    test(`${name}: the filled destructive button carries its ink`, () => {
-      // `.kit-btn.primary.danger` — a `--danger` FILL under `--text-inv`, the
-      // same contract `.kit-btn.primary` has. It inked with `--text` until
-      // this gate existed, which is the SAME-side ink and measured 3.81:1 on
-      // light / 4.09:1 on dark at the button's 13px.
-      const fill = resolve(tokens["--danger"] ?? "", scope);
-      const ink = resolve(tokens["--text-inv"] ?? "", scope);
+    // The filled destructive button (`.kit-btn.primary.danger`, née the
+    // `destructiveFilled` variant) is retired with the Binding Layer flip —
+    // destructive is OUTLINED in `--net`/`--danger`, never a fill, so there
+    // is no danger-under-`--text-inv` fill pairing left to pin here. See
+    // "keeps the ink contract for filled states" below for the StatusLine
+    // fill/track pairing that replaces this coverage.
+
+    test(`${name}: the status line's determinate fill carries its ink`, () => {
+      // `.kit-status-line-fill` paints `--text` — the SAME ink `--text-soft`
+      // (the line's own foreground) is already validated against — on
+      // `--bg-elev` (`.kit-status-line-track`), never a hue: a long local
+      // operation is reported in the ink ramp, not a tone.
+      const fill = resolve(tokens["--text"] ?? "", scope);
+      const track = resolve(tokens["--bg-elev"] ?? "", scope);
       expect(
-        contrastRatio(ink, fill),
-        `${name} .kit-btn.primary.danger`
-      ).toBeGreaterThanOrEqual(AA_BODY);
+        contrastRatio(fill, track),
+        `${name} .kit-status-line-fill on .kit-status-line-track`
+      ).toBeGreaterThanOrEqual(AA_LARGE);
     });
   });
 });
@@ -257,20 +275,20 @@ describe("blueprint token contrast floors", () => {
   const light = declarations(css, ":root");
   const dark = { ...light, ...declarations(css, ":root[data-theme='dark']") };
 
-  // The app surface is hue-parameterized; an app overrides `--app-hue` for its
-  // own identity, so the floors are asserted on the shipped default (BRAND's
-  // hue) — what every app that sets no identity actually renders.
-  const HUE = "171";
+  // `--app-hue` is the app's slot on the identity wheel; hue 0 is the wheel
+  // origin an app inherits when it declares none. Nothing in the surface ramp
+  // reads it any more, which is why the floors below need no hue scope.
+  const HUE = "0";
   // The app layer has no `--text-ghost`; its ramp stops at faint.
   const ROLES = ["--text", "--text-soft", "--text-faint"];
 
   describe.each([
     ["light", light, {}],
-    ["dark", dark, { "--bg-l": "10%" }],
+    ["dark", dark, {}],
   ] as const)("%s", (name, tokens, extra) => {
     const scope = { "--app-hue": HUE, ...extra };
-    // Dark `--bg` is `var(--bg-wall)`, which the host supplies at runtime, so
-    // the measurable app surfaces are the card and the recessed track.
+    // The blueprint layer owns the page, the card and the recessed track; the
+    // card and the track are the two the ink ramp is hardest against.
     const surfaces = ["--bg-elev", "--bg-sunken"]
       .map((key) => resolve(tokens[key] ?? "", scope))
       .filter(measurable);
@@ -288,15 +306,12 @@ describe("blueprint token contrast floors", () => {
     });
 
     test(`${name}: semantic states clear the BODY floor on card and track`, () => {
-      // Same law as the shell grid above, re-measured off the OTHER emitter:
-      // the app ramp has its own `--bg-l` (10%, not 5%) and its own state
-      // literals, so a floor held on one emitter says nothing about the other.
-      // Blueprint apps paint these on 10–13.7px prose — `tasks` `.flag.high`
-      // 12px, `agenda` `.badge[data-tone=warn]` 10px on a `--warning` wash,
-      // `docs` `.custodyChip` 12.8px, `tally`'s `--pos`/`--neg` aliases.
-      // The floors are asserted on the shipped default hue for the same reason
-      // the ink ramp above is; a retuned `--app-hue` moves these surfaces by
-      // under 0.15 in ratio, inside the 0.3 margin the solve carries.
+      // Same law as the shell grid above, re-measured off the OTHER emitter.
+      // The two emitters now share one surface ramp, which is exactly why this
+      // must keep being measured separately: the moment one of them re-tunes a
+      // surface, a floor held on the other says nothing. Blueprint apps paint
+      // these on 11–13.7px prose — `tasks` `.flag.high` 12px, `agenda`
+      // `.badge[data-tone=warn]` on a `--warning` wash, `docs` `.custodyChip`.
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
         expect(tokens[token], `blueprint ${name} ${token}`).toBeDefined();
@@ -339,16 +354,16 @@ describe("blueprint token contrast floors", () => {
       }
     });
 
-    test(`${name}: the filled destructive button carries its ink`, () => {
-      // `.kit-btn.primary.danger` again — kit.css is shared, so the app ramp
-      // has to satisfy the same pairing with ITS `--danger` and `--text-inv`.
+    // The filled destructive button is retired (see the shell grid above) —
+    // kit.css is shared, so nothing app-surface-specific to pin here either.
+
+    test(`${name}: the status line's determinate fill carries its ink on the app surface`, () => {
+      const fill = resolve(tokens["--text"] ?? "", scope);
+      const track = resolve(tokens["--bg-elev"] ?? "", scope);
       expect(
-        contrastRatio(
-          resolve(tokens["--text-inv"] ?? "", scope),
-          resolve(tokens["--danger"] ?? "", scope)
-        ),
-        `blueprint ${name} .kit-btn.primary.danger`
-      ).toBeGreaterThanOrEqual(AA_BODY);
+        contrastRatio(fill, track),
+        `blueprint ${name} .kit-status-line-fill on .kit-status-line-track`
+      ).toBeGreaterThanOrEqual(AA_LARGE);
     });
 
     test(`${name}: the app-surface text ramp stays ordered`, () => {
@@ -362,68 +377,40 @@ describe("blueprint token contrast floors", () => {
     });
   });
 
-  // ── The filled primary button, across every accent an app can claim ──────
+  // ── The one filled action, which is INK ────────────────────────────────
   //
-  // `.kit-btn.primary` paints `--accent-deep` under `--text-inv`, and an app
-  // moves `--accent`/`--app-identity` to any of the eight palette hues. One fixed
-  // ink cannot serve all of them (amber wants dark ink, violet wants light),
-  // and CSS has no shipped way to choose one — so the FILL is solved instead,
-  // per theme, and this grid is the proof. Both rungs shipped below AA before
-  // #686 F3: 3.16:1 light, 1.98:1 dark at the worst hue.
-  describe("the filled accent rung carries its ink at every hue", () => {
-    const ACCENTS = { ...palette, "brand (shell accent)": BRAND };
-    const AA_HOVER_FLOOR = AA_BODY;
-    // Above 11:1 the fill has stopped reading as its hue and started reading
-    // as black — the failure mode of "just darken it until it passes".
-    const RECOGNISABLE = 11;
+  // This grid used to walk eight accent hues, because an app could retune the
+  // product accent and one fixed ink could not serve all of them. The Binding
+  // Layer removed the choice at the root: the accent IS the ink, so what has
+  // to be proved is different and much sharper — the fill carries its ink, the
+  // HOVER never walks back toward that ink, and the fill is still findable
+  // against the card behind it.
+  describe("the filled ink action carries its ink", () => {
+    test.each([
+      ["light", light],
+      ["dark", dark],
+    ] as const)("%s", (_theme, tokens) => {
+      const fill = evalColorMix(resolve(tokens["--accent-fill"] ?? "", {}));
+      const ink = evalColorMix(resolve(tokens["--text-inv"] ?? "", {}));
+      const hover = evalColorMix(
+        resolve(tokens["--accent-deep-hover"] ?? "", {})
+      );
+      const card = evalColorMix(resolve(tokens["--bg-elev"] ?? "", {}));
 
-    /** The `--app-hue` an app running this accent would declare. */
-    const hueOf = (hex: string): string =>
-      String(Math.round(rgbToHsl(parseColor(hex).rgb)[0]));
-
-    describe.each([
-      ["light", light, {}],
-      ["dark", dark, { "--bg-l": "10%" }],
-    ] as const)("%s", (theme, tokens, extra) => {
-      test.each(Object.entries(ACCENTS))(`${theme}: %s`, (_name, accentHex) => {
-        const scope = {
-          "--app-hue": hueOf(accentHex),
-          "--app-identity": accentHex,
-          ...extra,
-        };
-        const fill = evalColorMix(
-          resolve(tokens["--accent-deep"] ?? "", scope)
-        );
-        const ink = evalColorMix(resolve(tokens["--text-inv"] ?? "", scope));
-        // `.kit-btn.primary:hover` — the fill stepped toward `--text`, i.e.
-        // away from the ink. Kept in step with kit/kit.css by hand; the
-        // point of measuring it is that a hover MUST NOT undo the fix.
-        const hover = evalColorMix(
-          `color-mix(in oklab, ${fill} 88%, ${evalColorMix(
-            resolve(tokens["--text"] ?? "", scope)
-          )})`
-        );
-
-        expect(contrastRatio(ink, fill), "rest").toBeGreaterThanOrEqual(
-          AA_BODY
-        );
-        expect(contrastRatio(ink, hover), "hover").toBeGreaterThanOrEqual(
-          AA_HOVER_FLOOR
-        );
-        // Hover moves away from the ink, never toward it.
-        expect(contrastRatio(ink, hover)).toBeGreaterThanOrEqual(
-          contrastRatio(ink, fill)
-        );
-        expect(contrastRatio(ink, fill), "still reads as its hue").toBeLessThan(
-          RECOGNISABLE
-        );
-        // And the button has to be findable on the surface behind it.
-        const card = evalColorMix(resolve(tokens["--bg-elev"] ?? "", scope));
-        expect(
-          contrastRatio(fill, card),
-          "fill vs card"
-        ).toBeGreaterThanOrEqual(AA_LARGE);
-      });
+      expect(contrastRatio(ink, fill), "rest").toBeGreaterThanOrEqual(AA_BODY);
+      // Hover moves AWAY from the ink, never toward it. A hover that reduces
+      // the label's contrast is the failure this pins, and with an ink fill it
+      // is the only remaining way to get it wrong.
+      expect(contrastRatio(ink, hover), "hover").toBeGreaterThanOrEqual(
+        contrastRatio(ink, fill)
+      );
+      expect(hover, "hover is a real step").not.toBe(fill);
+      expect(contrastRatio(fill, card), "fill vs card").toBeGreaterThanOrEqual(
+        AA_LARGE
+      );
+      // …and the fill is ink, not a hue. If a hue ever creeps back in here,
+      // every app identity colour silently stops meaning anything.
+      expect(fill).toBe(evalColorMix(resolve(tokens["--text"] ?? "", {})));
     });
   });
 
@@ -460,15 +447,15 @@ describe("blueprint token contrast floors", () => {
     };
 
     describe.each([
-      ["light", light, {}, ["--bg-elev", "--bg-sunken"]],
-      ["dark", dark, { "--bg-l": "10%" }, ["--bg-elev", "--bg-sunken"]],
-    ] as const)("%s", (theme, tokens, extra, surfaceNames) => {
-      const scope = { "--app-hue": HUE, ...extra };
+      ["light", light, palette, ["--bg-elev", "--bg-sunken"]],
+      ["dark", dark, paletteDark, ["--bg-elev", "--bg-sunken"]],
+    ] as const)("%s", (theme, tokens, ring, surfaceNames) => {
+      const scope = { "--app-hue": HUE };
       const surfaces = surfaceNames
         .map((key) => evalColorMix(resolve(tokens[key] ?? "", scope)))
         .filter(measurable);
 
-      test.each(Object.entries(palette))(
+      test.each(Object.entries(ring))(
         `${theme}: --c-%s-text clears AA on every surface it lands on`,
         (name, fillHex) => {
           const value = tokens[`--c-${name}-text`];
@@ -505,7 +492,7 @@ describe("blueprint token contrast floors", () => {
         // construction. That is a palette property, so the set that has to be
         // told apart is gated where it is chosen — see the `docs` app's
         // `kind-colours.test.ts` in packages/blueprints.)
-        for (const [name, fillHex] of Object.entries(palette)) {
+        for (const [name, fillHex] of Object.entries(ring)) {
           const ink = evalColorMix(
             resolve(tokens[`--c-${name}-text`] ?? "", scope)
           );
@@ -567,19 +554,30 @@ describe("blueprint token contrast floors", () => {
     });
   });
 
-  test("the default app hue is the brand hue", () => {
-    // 222 (ink-blue) was the pre-teal default; it tinted every unbranded app's
-    // greys, ink and shadows toward a second, competing brand.
+  test("an app that declares no identity inherits no hue", () => {
+    // `--app-hue` used to tint every unbranded app's greys, ink and shadows
+    // toward whatever identity it had declared, which is how the neutrals
+    // stopped being shared. It parameterises nothing now: the blueprint
+    // surface paints the system's literal paper, and the hue is only the
+    // app's slot on the identity wheel.
     expect(light["--app-hue"]).toBe(HUE);
+    expect(light["--app-identity"]).toBe("var(--text)");
+    expect(light["--app-identity-text"]).toBe("var(--text)");
+    expect(light["--bg-elev"]).not.toContain("var(--app-hue)");
+    expect(light["--text"]).not.toContain("var(--app-hue)");
   });
 });
 
 // ── The kit rules the grids above assume ───────────────────────────────────
 //
 // The token grids prove the PAIRINGS are legible; they cannot see which
-// pairing a stylesheet actually writes. `.kit-btn.primary.danger` inked a
-// `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
+// pairing a stylesheet actually writes. `.kit-btn.primary.danger` used to ink
+// a `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
 // light / 4.09:1 on dark, so the value grid passed while the button did not.
+// The filled destructive button is retired outright with the Binding Layer
+// flip (destructive is OUTLINED in `--net`/`--danger`, never a fill), so this
+// describe now pins that retirement plus the StatusLine determinate fill that
+// replaces it as the model of "report state in the ink ramp, not a hue".
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
     path.resolve(import.meta.dirname, "../kit/kit.css"),
@@ -594,13 +592,16 @@ describe("kit.css honours the ink contract for filled states", () => {
     return css.slice(open + 1, css.indexOf("}", open));
   }
 
-  test("the filled destructive button carries --text-inv, not --text", () => {
-    const body = ruleBody(".kit-btn.primary.danger,");
-    expect(body).toContain("background: var(--danger)");
-    expect(body).toContain("color: var(--text-inv)");
-    // `--text` is the SAME-side ink in both themes; on a mid-lightness red it
-    // is a WCAG 1.4.3 failure on BOTH ramps, which is the exact bug this pins.
-    expect(body).not.toMatch(/color:\s*var\(--text\)/u);
+  test("retires the filled destructive button — no danger fill remains", () => {
+    expect(css).not.toContain(".kit-btn.primary.danger");
+    expect(css).not.toContain("destructiveFilled");
+  });
+
+  test("the status line's determinate fill is ink, never a hue", () => {
+    const body = ruleBody(".kit-status-line-fill {");
+    expect(body).toContain("background: var(--text)");
+    expect(body).not.toMatch(/background:\s*var\(--danger\)/u);
+    expect(body).not.toMatch(/background:\s*var\(--accent/u);
   });
 });
 

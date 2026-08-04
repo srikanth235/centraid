@@ -11,6 +11,7 @@
   },
   "files": [
     "dist",
+    "fonts",
     "src",
     "kit"
   ],
@@ -26,6 +27,15 @@
     "./kit": {
       "types": "./dist/kit.d.ts",
       "default": "./dist/kit.js"
+    },
+    "./fonts": {
+      "types": "./dist/fonts.d.ts",
+      "default": "./dist/fonts.js"
+    },
+    "./font-faces": {
+      "types": "./dist/font-faces.d.ts",
+      "react-native": "./src/font-faces.ts",
+      "default": "./dist/font-faces.js"
     },
     "./color": {
       "types": "./dist/color.d.ts",
@@ -54,7 +64,11 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@centraid/blob-format": "workspace:*"
+    "@centraid/blob-format": "workspace:*",
+    "@fontsource/dm-mono": "5.2.5",
+    "@fontsource/instrument-sans": "5.2.5",
+    "@fontsource/instrument-serif": "5.2.5",
+    "@fontsource/source-serif-4": "5.2.5"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

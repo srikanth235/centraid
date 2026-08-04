@@ -19,10 +19,7 @@
   margin-bottom: 10px;
 }
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
   color: var(--text-soft);
 }
 .eyebrow.toneDanger {
@@ -32,8 +29,8 @@
   color: var(--accent-text);
 }
 .eyebrowCount {
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .hairline {
@@ -54,7 +51,7 @@
 .organizeSelect {
   position: absolute;
   top: 9px;
-  right: 44px;
+  inset-inline-end: 44px;
   max-width: 126px;
   min-height: 28px;
   border: 1px solid var(--line);

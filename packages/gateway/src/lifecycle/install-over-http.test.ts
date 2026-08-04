@@ -86,25 +86,26 @@ describe("install-over-http scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test("install registers a bundled app in place — no git, keeps its own id, grants declared scopes", async () => {
-    const res = await install("tasks");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      app: { id: string; name?: string; iconKey?: string; colorKey?: string };
-      installed: boolean;
-      alreadyInstalled: boolean;
-    };
-    // Keeps the blueprint's own id — no suggestCloneIdentityFrom minting.
-    expect(body.app.id).toBe("tasks");
-    expect(body.app.name).toBe("Tasks");
-    expect(body.installed).toBe(true);
-    expect(body.alreadyInstalled).toBe(false);
+  test("a fresh vault mounts with EVERY bundled app installed in place (#708)", async () => {
+    // The catalogue is retired: nobody asks for a first-party app, so mount is
+    // what puts it there. No install call runs anywhere in this test.
+    const ids = new Set((await listApps()).map((a) => a.id));
+    for (const id of [
+      "agenda",
+      "docs",
+      "locker",
+      "notes",
+      "people",
+      "photos",
+      "tally",
+      "tasks",
+    ])
+      expect(ids, `${id} installed at mount`).toContain(id);
 
-    // It surfaces in the listing union with metadata read from the shipped
-    // blueprint dir (name + hasIndex prove the resolver read the package, not
-    // an empty code store).
+    // Metadata comes from the shipped blueprint dir (name + hasIndex prove the
+    // resolver read the package, not an empty code store), and the app keeps
+    // the blueprint's own id — no suggestCloneIdentityFrom minting.
     const row = (await listApps()).find((a) => a.id === "tasks");
-    expect(row).toBeTruthy();
     expect(row!.name).toBe("Tasks");
     expect(row!.kind).toBe("app");
     expect(row!.hasIndex).toBe(true);
@@ -119,7 +120,8 @@ describe("install-over-http scenarios", () => {
     const vbody = (await versions.json()) as { versions: unknown[] };
     expect(vbody.versions).toHaveLength(0);
 
-    // The declared scopes were granted at install (installing IS the consent).
+    // The declared scopes were granted at mount — being installed IS the
+    // consent, and the Privacy ledger is where it is reviewed and revoked.
     const enrolled = (await vaultApps()).find((a) => a.name === "tasks");
     expect(enrolled).toBeTruthy();
     expect(enrolled!.origin).toBe("installed");
@@ -131,12 +133,53 @@ describe("install-over-http scenarios", () => {
     expect(scopeCount).toBeGreaterThan(0);
   });
 
-  test("install is idempotent — a second install returns the existing registration", async () => {
-    const first = await install("tasks");
-    expect(first.status).toBe(200);
-    const second = await install("tasks");
-    expect(second.status).toBe(200);
-    const body = (await second.json()) as { alreadyInstalled: boolean };
+  test("a mounted vault can seed its bundled apps — the demo plane reaches the shipped tree", async () => {
+    // Before #708 this was unreachable: the demo route scanned the git code
+    // store, bundled apps serve in place, so a vault owning every seedable app
+    // answered `{apps:[]}` and 404'd every seed request.
+    const listed = (await (
+      await fetch(`${handle.url}/centraid/_vault/demo`, { headers: auth() })
+    ).json()) as { apps: { appId: string; rows: number; seedable: boolean }[] };
+    const seedable = listed.apps.filter((a) => a.seedable).map((a) => a.appId);
+    expect(seedable).toContain("tasks");
+    for (const app of seedable)
+      expect(listed.apps.find((a) => a.appId === app)?.rows).toBe(0);
+
+    const seeded = await fetch(`${handle.url}/centraid/_vault/demo/tasks`, {
+      method: "POST",
+      headers: jsonAuth(),
+    });
+    expect(seeded.status).toBe(200);
+    const body = (await seeded.json()) as { ok: boolean; rows: number };
+    expect(body.ok).toBe(true);
+    expect(body.rows).toBeGreaterThan(0);
+
+    // And it is all reversible in ONE act — which is what makes seeding a
+    // personal vault an offer rather than something done to it.
+    const purged = await fetch(`${handle.url}/centraid/_vault/demo`, {
+      method: "DELETE",
+      headers: auth(),
+    });
+    expect(purged.status).toBe(200);
+    const after = (await (
+      await fetch(`${handle.url}/centraid/_vault/demo`, { headers: auth() })
+    ).json()) as { apps: { appId: string; rows: number }[] };
+    expect(after.apps.find((a) => a.appId === "tasks")?.rows).toBe(0);
+  }, 120_000);
+
+  test("install is idempotent — installing what mount already installed is a no-op", async () => {
+    const res = await install("tasks");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      app: { id: string; name?: string };
+      installed: boolean;
+      alreadyInstalled: boolean;
+    };
+    expect(body.app.id).toBe("tasks");
+    expect(body.app.name).toBe("Tasks");
+    expect(body.installed).toBe(true);
+    // Mount got there first — the route reports the existing registration
+    // rather than minting a second one.
     expect(body.alreadyInstalled).toBe(true);
 
     // Still exactly one row in the listing (no duplicate).
@@ -149,28 +192,36 @@ describe("install-over-http scenarios", () => {
     expect(res.status).toBe(404);
   });
 
-  test("the catalog reports per-vault install state", async () => {
-    const before = await fetch(`${handle.url}/centraid/_templates`, {
+  test("the catalog reports per-vault install state — true for every bundled app", async () => {
+    const res = await fetch(`${handle.url}/centraid/_templates`, {
       headers: auth(),
     });
-    const beforeRows = (await before.json()) as {
+    const rows = (await res.json()) as {
       id: string;
+      kind?: string;
       installed?: boolean;
     }[];
-    expect(beforeRows.find((t) => t.id === "tasks")?.installed).toBe(false);
+    // Every APP-kind row reads installed on a mounted vault (#708). The flag
+    // survives because it is still the gateway's own answer, and an audience
+    // vault this member was added to but which has not mounted yet can still
+    // say false — but on the vault you are looking at, it is always true.
+    const appRows = rows.filter((t) => (t.kind ?? "app") !== "automation");
+    expect(appRows.length).toBeGreaterThan(0);
+    for (const row of appRows)
+      expect(row.installed, `${row.id} install state`).toBe(true);
 
-    await install("tasks");
-
-    const after = await fetch(`${handle.url}/centraid/_templates`, {
+    // Uninstalling flips exactly that one row back, so the flag still MEANS
+    // something rather than being a constant the route forgot to compute.
+    const del = await fetch(`${handle.url}/centraid/_apps/tasks`, {
+      method: "DELETE",
       headers: auth(),
     });
-    const afterRows = (await after.json()) as {
-      id: string;
-      installed?: boolean;
-    }[];
-    expect(afterRows.find((t) => t.id === "tasks")?.installed).toBe(true);
-    // A non-installed bundled app still reads false.
-    expect(afterRows.find((t) => t.id === "notes")?.installed).toBe(false);
+    expect(del.status).toBe(200);
+    const after = (await (
+      await fetch(`${handle.url}/centraid/_templates`, { headers: auth() })
+    ).json()) as { id: string; installed?: boolean }[];
+    expect(after.find((t) => t.id === "tasks")?.installed).toBe(false);
+    expect(after.find((t) => t.id === "notes")?.installed).toBe(true);
   });
 
   test("the listing is a union — installed bundled app + code-store scaffold, no duplicates", async () => {

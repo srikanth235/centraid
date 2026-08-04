@@ -6,6 +6,7 @@ import {
   getGatewayBackupStatus,
   getUserPrefs,
   getLocalStorageUsage,
+  listGatewayDevices,
   pauseBackgroundWork,
   resumeBackgroundWork,
   runGatewayBackupNow,
@@ -236,6 +237,11 @@ export default function GatewayRoute({
           onExportRecoveryKit: (input) =>
             window.CentraidApi.exportGatewayRecoveryKit(input),
           onConfirmRecoveryKit: confirmGatewayRecoveryKit,
+          loadDevices: listGatewayDevices,
+          // No client-side restore flow exists yet (issue #708 A2 seam) —
+          // restore is still a gateway-side/CLI recovery act. Omitting
+          // `onRestore` renders the control disabled with that reason
+          // instead of hiding it.
         }}
         initialTab={initialTab}
         loadLocalUsage={getLocalStorageUsage}

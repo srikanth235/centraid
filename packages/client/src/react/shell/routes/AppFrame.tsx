@@ -103,12 +103,10 @@ export default function AppFrame({
   appId,
   accentColor,
   theme,
-  bgL,
 }: {
   appId: string;
   accentColor: string;
   theme: AppearancePrefs["theme"];
-  bgL: number;
 }): JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -126,10 +124,10 @@ export default function AppFrame({
   // commit-time effect (render stays free of ref writes); both readers are
   // async — the iframe `load` event and the resolve promise — so they always
   // observe the committed value.
-  const themeRef = useRef({ themeKind, bgL });
+  const themeRef = useRef({ themeKind });
   useEffect(() => {
-    themeRef.current = { themeKind, bgL };
-  }, [themeKind, bgL]);
+    themeRef.current = { themeKind };
+  }, [themeKind]);
 
   // Query-only app bundles use this shell-owned RPC for local reads, durable
   // intents and dependency invalidations. The bridge authenticates both the
@@ -165,7 +163,7 @@ export default function AppFrame({
       try {
         const t = themeRef.current;
         frame.contentWindow?.postMessage(
-          { type: "centraid:theme", theme: t.themeKind, bgL: t.bgL },
+          { type: "centraid:theme", theme: t.themeKind },
           appFramePostMessageOrigin(frame)
         );
       } catch {
@@ -179,7 +177,7 @@ export default function AppFrame({
         if (!alive) return;
         const t = themeRef.current;
         const qsep = url.includes("?") ? "&" : "?";
-        const themeQs = `theme=${t.themeKind}&bgL=${t.bgL}`;
+        const themeQs = `theme=${t.themeKind}`;
         const themedUrl = `${url}${qsep}${themeQs}`;
         if (isOpaqueAppTunnelUrl(themedUrl)) {
           const prepared = await prepareOpaqueAppDocument({
@@ -221,13 +219,13 @@ export default function AppFrame({
     if (!frame) return;
     try {
       frame.contentWindow?.postMessage(
-        { type: "centraid:theme", theme: themeKind, bgL },
+        { type: "centraid:theme", theme: themeKind },
         appFramePostMessageOrigin(frame)
       );
     } catch {
       /* noop */
     }
-  }, [themeKind, bgL]);
+  }, [themeKind]);
 
   return (
     <div

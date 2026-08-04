@@ -982,25 +982,89 @@ export async function markUserApp(
   }, app);
 }
 
-/** Wait for the home shell to be present. */
+/** Wait for the home shell to be present.
+ *
+ *  Post-#707/#708 the stem replaces the old sidebar, and Home is the content
+ *  springboard (or day-one first-moves) rather than the library shelf + filter
+ *  tabs. Wait past the "Reading your vault…" WorkingState so tests see the
+ *  graded treatment (springboard or first-run), not the loading skeleton.
+ */
 export async function waitForHome(page: Page): Promise<void> {
-  await page.locator("[data-sidebar]").waitFor({ state: "visible" });
-  const library = page.locator(
-    '[role="tablist"][aria-label="Filter your library by kind"]'
+  await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
+  const home = page.locator(
+    '[data-testid="home-springboard"], [data-testid="home-first-run"]'
   );
   try {
-    await library.waitFor({ state: "visible", timeout: 10_000 });
+    await home.first().waitFor({ state: "visible", timeout: 15_000 });
   } catch (error) {
     const body = (await page.locator("body").textContent())
       ?.replaceAll(/\s+/gu, " ")
       .slice(0, 500);
     throw new Error(
-      `home library did not render at ${page.url()}; shell text: ${body ?? ""}`,
+      `home springboard did not render at ${page.url()}; shell text: ${body ?? ""}`,
       {
         cause: error,
       }
     );
   }
+}
+
+/** Open the ⌘K / Ctrl+K command palette (stem Search, with keyboard fallback). */
+export async function openCommandPalette(page: Page): Promise<void> {
+  // Stem Search's accessible name is "Search" or "Search ⌘K" depending on host.
+  // Always .first() — other surfaces can also expose a Search control.
+  const search = page.getByRole("button", { name: /^Search/u });
+  if ((await search.count()) > 0) {
+    await search.first().click();
+  } else {
+    await page.keyboard.press("ControlOrMeta+k");
+  }
+  await page
+    .getByRole("dialog", { name: "Command palette" })
+    .waitFor({ state: "visible" });
+}
+
+/**
+ * The shell's one status line (#707) replaced toasts. Notes from `showToast` /
+ * `postStatus` land here as polite live-region text.
+ */
+export function statusLine(page: Page) {
+  return page.locator("output[aria-live='polite']").first();
+}
+
+/** Open an installed (or draft) app by its display name via the command palette.
+ *
+ *  Home no longer lists custom apps as library cards (#708) — the palette is
+ *  the durable open path for anything that is not a first-party springboard
+ *  tile. First-party apps also appear here under the Apps group.
+ */
+export async function openAppFromPalette(
+  page: Page,
+  appName: string
+): Promise<void> {
+  await openCommandPalette(page);
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.locator("input").fill(appName);
+  await palette
+    .getByRole("button")
+    .filter({ hasText: appName })
+    .first()
+    .click();
+}
+
+/** Start a new builder session with an initial prompt via the palette Create row. */
+export async function startBuilderFromPalette(
+  page: Page,
+  prompt: string
+): Promise<void> {
+  await openCommandPalette(page);
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.locator("input").fill(prompt);
+  // Curly quotes match paletteData's `Build “${trimmed}”` label.
+  await palette
+    .getByRole("button", { name: new RegExp(`Build [“"]${prompt}[”"]`, "u") })
+    .click();
+  await page.getByTestId("builder-body").waitFor({ state: "visible" });
 }
 
 /** How long a test waits for a well-behaved Electron shutdown before forcing it. */
@@ -1088,47 +1152,38 @@ const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   "Vault Atlas": "Data",
 };
 
-/**
- * Destinations that left the rail for the ⌘K palette (#667). The palette is
- * the complete index; Discover is the main one e2e still needs to reach.
- */
-const PALETTE_ONLY_NAV = new Set(["Discover"]);
-
-/** Open the command palette and run a navigation row by its visible label. */
-export async function gotoPaletteNav(page: Page, label: string): Promise<void> {
-  await page.keyboard.press("Meta+k");
-  const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.waitFor({ state: "visible" });
-  // Narrow first so the row is on-screen even when the full list is long.
-  await palette.getByRole("textbox").fill(label);
-  await palette.getByRole("button", { name: label, exact: true }).click();
-  await palette.waitFor({ state: "hidden" }).catch(() => undefined);
-}
-
-/** Click a sidebar nav item by its visible label (or open it via ⌘K when the
- *  rail no longer lists that destination). */
+/** Click a stem nav item by its visible label.
+ *
+ *  There is no palette-only fallback any more: Discover was the one
+ *  destination that needed it, and it retired with #708. Everything this
+ *  helper is asked for is a pinned launcher row. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  if (PALETTE_ONLY_NAV.has(label)) {
-    await gotoPaletteNav(page, label);
-    return;
-  }
   const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
   await page.getByRole("button", { name: railLabel, exact: true }).click();
 }
 
-/** The grid item for an app, keyed by its stable data-app-id anchor. */
+/** The grid item for an app, keyed by its stable data-app-id anchor.
+ *
+ *  Matches springboard content tiles, day-one first-moves, and library AppCards
+ *  (Starred / overview). Prefer `.first()` at the call site when both a move
+ *  and a tile could match during transitions.
+ */
 export function tile(page: Page, appId: string) {
   return page.locator(`[data-app-id="${appId}"]`);
 }
 
-/** Open an app tile (the clickable card surface). */
+/** Open an app from Home (springboard tile or first-move) by id. */
 export async function openTile(page: Page, appId: string): Promise<void> {
-  await tile(page, appId).getByTestId("app-tile").click();
+  // The springboard button IS the tile (data-testid="home-tile"); first-moves
+  // and AppCards also carry data-app-id. Click the anchor itself rather than
+  // requiring a nested app-tile child that Home no longer renders.
+  await tile(page, appId).first().click();
 }
 
 /** Open a tile's overflow (⋯) action menu. Located by accessible role/name so
  * it survives card restyles — the class churn in #230 is exactly what broke
- * the old `.cd-card-more` selector. */
+ * the old `.cd-card-more` selector. AppCards (Starred) still expose this;
+ * springboard tiles do not — use openAppFromPalette + Build for that path. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
   await tile(page, appId).getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menu").waitFor({ state: "visible" });

@@ -6,9 +6,9 @@
 }
 
 .root select {
-  min-height: 36px;
+  min-height: var(--h-control);
   border: 1px solid var(--line);
-  border-radius: var(--r-sm, 8px);
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text);
   padding: 0 var(--sp-2, 8px);

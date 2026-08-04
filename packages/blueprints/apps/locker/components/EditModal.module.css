@@ -19,7 +19,7 @@
 }
 .in.mono {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .typerow {
   display: flex;

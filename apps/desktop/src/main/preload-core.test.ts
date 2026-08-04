@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import * as designTokens from "@centraid/design";
+import { toFontFaceCss } from "@centraid/design/font-faces";
 
 import { Channel } from "./ipc-core.js";
 import type {
@@ -381,14 +382,17 @@ describe("CentraidApi leak containment", () => {
   });
 });
 
+/** The same relative base `preload.ts` passes for the file:// renderer. */
+const FONT_FACE_CSS = toFontFaceCss("fonts");
+
 describe("CentraidTokens", () => {
   it("exposes exactly the declared key set", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(Object.keys(exposed).sort()).toStrictEqual(EXPECTED_TOKEN_KEYS);
   });
 
   it("is JSON-cloneable apart from the pure tileFinish helper", () => {
-    const exposed = createCentraidTokens(designTokens) as Record<
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS) as Record<
       string,
       unknown
     >;
@@ -408,7 +412,7 @@ describe("CentraidTokens", () => {
   });
 
   it("copies list exports so the renderer cannot mutate the package's arrays", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(exposed.apps).not.toBe(designTokens.apps);
     expect(exposed.themePresets).not.toBe(designTokens.THEME_PRESETS);
     expect(exposed.apps).toStrictEqual([...designTokens.apps]);
@@ -416,12 +420,29 @@ describe("CentraidTokens", () => {
   });
 
   it("precomputes the token CSS the renderer injects", () => {
-    const exposed = createCentraidTokens(designTokens);
-    expect(exposed.cssText).toBe(designTokens.toCss());
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
+    expect(exposed.cssText).toBe(`${FONT_FACE_CSS}\n${designTokens.toCss()}`);
+  });
+
+  // The faces have to be DECLARED before the first `var(--font-sans)` lookup,
+  // and they have to point at the app's own bundle — a remote src would make
+  // the shell's typography depend on a network the desktop never promised.
+  it("declares the bundled faces ahead of the tokens, from relative paths", () => {
+    const { cssText } = createCentraidTokens(designTokens, FONT_FACE_CSS);
+    expect(cssText.indexOf("@font-face")).toBeLessThan(
+      cssText.indexOf("--font-sans")
+    );
+    const sources = [...cssText.matchAll(/src: url\((?<href>[^)]+)\)/gu)].map(
+      (match) => match.groups?.href
+    );
+    expect(sources).toHaveLength(10);
+    expect(
+      sources.filter((src) => src?.startsWith("fonts/") === true)
+    ).toHaveLength(10);
   });
 
   it("delegates tileFinish to the design-token implementation", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(exposed.tileFinish("#5B8DEF", "solid")).toStrictEqual(
       designTokens.tileFinish("#5B8DEF", "solid")
     );

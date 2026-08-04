@@ -2,15 +2,19 @@
 //
 // This module is deliberately independent of CSS.  Every value returned here
 // is concrete and ready for React Native; there is no var(), calc(),
-// color-mix(), stylesheet parser, or runtime override layer in the mobile
-// path.
+// color-mix(), oklch(), stylesheet parser, or runtime override layer in the
+// mobile path.
+//
+// `toNativeTheme` used to take an accent key, because an owner could retune
+// the product accent to one of five hues. The Binding Layer removed that
+// choice at the root: the accent is ink, so there is nothing to pick.
 
-import { spacing } from "./density";
-import { palette } from "./palette";
+import { DENSITY_TIERS, metrics, spacing } from "./density";
+import { paletteFor } from "./palette";
 import { radii } from "./radii";
 import { assertNativeColorRoleContract } from "./roles";
-import { ACCENT_PALETTE } from "./themes";
-import type { AccentKey } from "./themes";
+import { darkTheme, lightTheme } from "./themes";
+import type { Theme } from "./themes";
 import { nativeTypeStyle, typeForProfile } from "./typography";
 import type { TypeKey } from "./typography";
 
@@ -36,6 +40,8 @@ export interface NativeColors {
   line: string;
   lineStrong: string;
   lineSel: string;
+  link: string;
+  net: string;
   onAccent: string;
   focusRingColor: string;
   scrim: string;
@@ -50,6 +56,8 @@ export interface NativeColors {
   textInv: string;
   textSoft: string;
   warning: string;
+  /** The surface-tone axis, resolved. An app picks one; only `bg` moves. */
+  [key: `tone${string}`]: string;
   [key: `c${string}`]: string;
 }
 
@@ -58,9 +66,12 @@ export interface NativeTypeStyle {
   fontSize: number;
   lineHeight: number;
   weight: Type["weight"];
+  letterSpacing?: string;
+  textTransform?: "uppercase";
+  variantNumeric?: "tabular-nums";
 }
 
-export type NativeTypeKey = Exclude<TypeKey, "hero">;
+export type NativeTypeKey = TypeKey;
 
 type Type = (typeof import("./typography").type)[TypeKey];
 
@@ -69,26 +80,42 @@ export interface NativeTheme {
   colors: NativeColors;
   radii: typeof radii;
   spacing: typeof spacing;
+  metrics: typeof metrics;
+  density: typeof DENSITY_TIERS;
   type: Record<NativeTypeKey, NativeTypeStyle>;
   targetMin: { coarse: number; fine: number };
   durations: { one: number; two: number };
 }
 
-const shared = {
-  danger: "#B6322B",
-  success: "#267044",
-  warning: "#8C5E17",
-};
-
-function iconPalette(): Record<`c${string}`, string> {
+function identityRing(scheme: NativeScheme): Record<`c${string}`, string> {
   return Object.fromEntries(
-    Object.entries(palette).map(([key, value]) => [
+    Object.entries(paletteFor(scheme)).map(([key, value]) => [
       `c${key.slice(0, 1).toUpperCase()}${key.slice(1)}`,
       value,
     ])
   ) as Record<`c${string}`, string>;
 }
 
+function surfaceTones(theme: Theme): Record<`tone${string}`, string> {
+  // Resolved from the same table the CSS emitters read, so a tone can never
+  // mean one paper on the phone and another in the shell.
+  const tones = {
+    cool: theme.kind === "dark" ? "#0D0E0F" : "#FBFCFC",
+    mat: theme.kind === "dark" ? "#0A0A0A" : "#F0EFED",
+    neutral: theme.bg,
+    paper: theme.kind === "dark" ? "#12110E" : "#FCFBF8",
+    warm: theme.kind === "dark" ? "#131110" : "#FDFBF7",
+  };
+  return Object.fromEntries(
+    Object.entries(tones).map(([key, value]) => [
+      `tone${key.slice(0, 1).toUpperCase()}${key.slice(1)}`,
+      value,
+    ])
+  ) as Record<`tone${string}`, string>;
+}
+
+/** `rgba()` for an alpha wash of a hex — the concrete form of the emitters'
+ *  `color-mix(… N%, transparent)`, evaluated here rather than at render. */
 function rgbaHex(hex: string, alpha: number): string {
   const digits = hex.slice(1);
   const channels = [0, 2, 4].map((offset) =>
@@ -97,75 +124,71 @@ function rgbaHex(hex: string, alpha: number): string {
   return `rgba(${channels.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
 }
 
-function mixHex(from: string, toward: string, weight: number): string {
-  const channels = (hex: string) =>
+/** An opaque composite of `hex` at `alpha` over `over` — RN has no
+ *  `color-mix()`, and a wash that lands on an unknown surface is a wash whose
+ *  contrast nobody measured. */
+function mixOver(hex: string, over: string, alpha: number): string {
+  const channels = (value: string) =>
     [0, 2, 4].map((offset) =>
-      Number.parseInt(hex.slice(1).slice(offset, offset + 2), 16)
+      Number.parseInt(value.slice(1).slice(offset, offset + 2), 16)
     );
-  const first = channels(from);
-  const second = channels(toward);
-  return `#${first
+  const fg = channels(hex);
+  const bg = channels(over);
+  return `#${fg
     .map((channel, index) =>
-      Math.round(channel + ((second[index] ?? channel) - channel) * weight)
+      Math.round(channel * alpha + (bg[index] ?? channel) * (1 - alpha))
         .toString(16)
         .padStart(2, "0")
     )
     .join("")}`;
 }
 
-function colorsFor(scheme: NativeScheme, accentKey: AccentKey): NativeColors {
-  const dark = scheme === "dark";
-  const accent = ACCENT_PALETTE[accentKey];
+function colorsFor(scheme: NativeScheme): NativeColors {
+  const theme = scheme === "dark" ? darkTheme : lightTheme;
   const colors: NativeColors = {
-    ...iconPalette(),
-    ...shared,
-    accent: accent.accent,
-    accentDeep: dark ? accent.light : accent.deep,
-    accentFill: dark ? accent.light : accent.deep,
-    accentDeepHover: mixHex(
-      dark ? accent.light : accent.deep,
-      dark ? "#ECEEF2" : "#141820",
-      0.12
-    ),
-    accentLight: accent.light,
-    appIdentityText: dark ? accent.light : accent.text,
-    accentSoft: rgbaHex(accent.accent, dark ? 0.18 : 0.12),
-    accentText: dark ? accent.accent : accent.text,
-    bg: dark ? "#0D0D0D" : "#FCFCFC",
-    bgChrome: dark ? "#151515" : "#F4F5F7",
-    bgElev: dark ? "#1A1A1A" : "#FFFFFF",
-    bgHover: dark ? "#222222" : "#F1F3F5",
-    bgPress: dark ? "#2B2B2B" : "#E7EAED",
-    bgSel: rgbaHex(accent.accent, dark ? 0.2 : 0.12),
-    bgSunken: dark ? "#050505" : "#F0F1F3",
-    line: dark ? "rgba(220,230,245,.08)" : "rgba(20,22,27,.11)",
-    lineStrong: dark ? "rgba(220,230,245,.16)" : "rgba(20,22,27,.20)",
-    lineSel: rgbaHex(accent.accent, dark ? 0.52 : 0.42),
-    onAccent: "#141820",
-    focusRingColor: accent.accent,
-    scrim: dark ? "rgba(0,0,0,.72)" : "rgba(20,22,27,.52)",
-    shadowLg: dark
-      ? "0 30px 70px -24px rgba(0,0,0,.7)"
-      : "0 24px 48px -16px rgba(20,22,27,.14)",
-    shadowMd: dark
-      ? "0 12px 30px -14px rgba(0,0,0,.6)"
-      : "0 8px 24px -8px rgba(20,22,27,.09)",
-    shadowSm: dark ? "0 1px 0 rgba(0,0,0,.35)" : "0 1px 2px rgba(20,22,27,.07)",
-    text: dark ? "#ECEEF2" : "#14161B",
-    textDisabled: dark ? "#858A92" : "#9BA1AA",
-    textFaint: dark ? "#9AA0AA" : "#5F6672",
-    textGhost: dark ? "#727780" : "#8A909A",
-    textInv: dark ? "#141820" : "#F4F5F7",
-    textSoft: dark ? "#ADB2BA" : "#454A54",
+    ...identityRing(scheme),
+    ...surfaceTones(theme),
+    accent: theme.accent,
+    accentDeep: theme.accentDeep,
+    accentFill: theme.accentDeep,
+    accentDeepHover: theme.accentHover,
+    accentLight: theme.accentLight,
+    accentSoft: rgbaHex(theme.accent, 0.08),
+    accentText: theme.accentText,
+    appIdentityText: theme.text,
+    bg: theme.bg,
+    bgChrome: theme.sidebarBg,
+    bgElev: theme.bgElev,
+    bgHover: mixOver(theme.text, theme.bg, 0.05),
+    bgPress: mixOver(theme.text, theme.bg, 0.09),
+    bgSel: rgbaHex(theme.link, 0.12),
+    bgSunken: theme.bgSunken,
+    danger: theme.danger,
+    line: theme.line,
+    lineStrong: theme.lineStrong,
+    lineSel: rgbaHex(theme.link, 0.42),
+    link: theme.link,
+    net: theme.net,
+    onAccent: "#FDFDFC",
+    focusRingColor: theme.ring,
+    scrim: theme.scrim,
+    shadowLg: theme.shadowLg,
+    shadowMd: theme.shadowMd,
+    shadowSm: theme.shadowSm,
+    success: theme.success,
+    text: theme.text,
+    textDisabled: theme.textDisabled,
+    textFaint: theme.textFaint,
+    textGhost: theme.textGhost,
+    textInv: theme.textInv,
+    textSoft: theme.textSoft,
+    warning: theme.warning,
   };
   assertNativeColorRoleContract(colors);
   return colors;
 }
 
-export function toNativeTheme(
-  scheme: NativeScheme,
-  accentKey: AccentKey = "teal"
-): NativeTheme {
+export function toNativeTheme(scheme: NativeScheme): NativeTheme {
   const nativeType = Object.fromEntries(
     Object.entries(typeForProfile("native")).map(([key, value]) => {
       const lowered = nativeTypeStyle(value);
@@ -176,13 +199,24 @@ export function toNativeTheme(
           fontSize: lowered.size,
           lineHeight: lowered.lineHeight,
           weight: lowered.weight,
+          ...(lowered.letterSpacing === undefined
+            ? {}
+            : { letterSpacing: lowered.letterSpacing }),
+          ...(lowered.textTransform === undefined
+            ? {}
+            : { textTransform: lowered.textTransform }),
+          ...(lowered.variantNumeric === undefined
+            ? {}
+            : { variantNumeric: lowered.variantNumeric }),
         },
       ];
     })
   ) as Record<NativeTypeKey, NativeTypeStyle>;
   return {
-    colors: colorsFor(scheme, accentKey),
-    durations: { one: 120, two: 200 },
+    colors: colorsFor(scheme),
+    density: DENSITY_TIERS,
+    durations: { one: 140, two: 280 },
+    metrics,
     radii,
     scheme,
     spacing,

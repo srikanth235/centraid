@@ -146,6 +146,72 @@ describe("screens/PaletteScreen", () => {
       expect(rows(el)).toHaveLength(0);
     });
 
+    it("renders a group's icon marker with its identity hue (#708 §A point 2)", () => {
+      const el = mount(
+        makeProps({
+          buildGroups: () => [
+            {
+              group: "Notes",
+              icon: {
+                html: "<svg data-icon='Book'></svg>",
+                hue: "var(--c-slate)",
+              },
+              items: [
+                {
+                  label: "Trip notes",
+                  kind: "note",
+                  meta: "Aug 3",
+                  iconHtml: "<svg></svg>",
+                  variant: "action",
+                  run: appRun,
+                },
+              ],
+            },
+          ],
+        })
+      );
+      const groupIcon = el.querySelector(".groupIcon") as HTMLElement;
+      expect(groupIcon).toBeTruthy();
+      expect(groupIcon.style.getPropertyValue("--group-hue")).toBe(
+        "var(--c-slate)"
+      );
+      // Row anatomy (point 3): kind (MONO) + the NUMERIC meta both render.
+      expect(el.querySelector(".rowKind")?.textContent).toBe("note");
+      expect(el.querySelector(".rowMeta")?.textContent).toBe("Aug 3");
+    });
+
+    it("shows suggestion chips only while the query is empty, and a click fills the field without running or closing (#708 §A point 4)", () => {
+      const onClose = vi.fn<PaletteBridgeProps["onClose"]>();
+      const el = mount(
+        makeProps({
+          onClose,
+          suggestions: () => ["Alex Rivera", "Trip notes"],
+        })
+      );
+      const chip = () =>
+        [...el.querySelectorAll(".suggestionChip")] as HTMLButtonElement[];
+      expect(chip().map((c) => c.textContent)).toStrictEqual([
+        "Alex Rivera",
+        "Trip notes",
+      ]);
+
+      void act(() =>
+        chip()[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
+      const input = el.querySelector(".input") as HTMLInputElement;
+      expect(input.value).toBe("Alex Rivera");
+      expect(onClose).not.toHaveBeenCalled();
+      expect(buildRun).not.toHaveBeenCalled();
+
+      // Typing a query hides the chips — they're an empty-state affordance.
+      expect(chip()).toHaveLength(0);
+    });
+
+    it("shows no chips when the palette has no suggestions to offer", () => {
+      const el = mount(makeProps());
+      expect(el.querySelectorAll(".suggestionChip")).toHaveLength(0);
+    });
+
     it("closes on Escape and on backdrop click", () => {
       const props = makeProps();
       const el = mount(props);

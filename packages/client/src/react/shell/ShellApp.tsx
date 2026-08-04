@@ -14,15 +14,16 @@ import {
   canGoForward as canFwd,
   currentRoute,
   INITIAL_ROUTER,
-  routeKey,
   routerReducer,
 } from "./router.js";
 import ShellFrame from "./ShellFrame.js";
+import type { ShellFrameProps } from "./ShellFrame.js";
+import { Store } from "./store.js";
 import { useCompactLayout } from "./useCompactLayout.js";
 
-// The navigation surface handed to the sidebar + outlet render-props. It
-// exposes the current route and the history verbs, so callers dispatch
-// navigations without touching the reducer.
+// The navigation surface handed to the stem + outlet render-props. It exposes
+// the current route and the history verbs, so callers dispatch navigations
+// without touching the reducer.
 export interface ShellNav {
   route: ShellRoute;
   navigate: (route: ShellRoute) => void;
@@ -34,26 +35,50 @@ export interface ShellNav {
   canGoForward: boolean;
 }
 
+/**
+ * What a screen says in the app bar (issue #708, invariant 3).
+ *
+ * The brief models this as per-app configuration — a title, a meta line, and
+ * at most two actions, of which at most one is the filled ink. It is data
+ * rather than a context a screen writes into, because the bar renders in the
+ * frame ABOVE the outlet: a screen that set it from an effect would paint one
+ * frame with the previous route's title, which is the flicker the whole
+ * "chrome is persistent" invariant exists to prevent.
+ */
+export interface ShellAppBar {
+  /** The app's own title, in the display face. */
+  title?: string;
+  /** The line under it, in the numeric register. */
+  meta?: ReactNode;
+  /** The app's actions, trailing. Quiet first, the one commit control last. */
+  actions?: ReactNode;
+  /** Makes the title a control — see `ShellFrameProps.appTitleAction`. */
+  titleAction?: ShellFrameProps["appTitleAction"];
+}
+
 export interface ShellAppProps {
   /** Where the shell opens (usually `{ kind: 'home' }`). */
   initialRoute: ShellRoute;
-  /** Sidebar contents for the current route (gets the nav surface). */
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  /** The navigation stem for the current route (gets the nav surface). */
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** What the current route says in the app bar. A route that returns nothing
+   *  gets the bare frame bar (history + new app), which is what a full-bleed
+   *  surface drawing its own header wants. */
+  renderAppBar?: (nav: ShellNav) => ShellAppBar | undefined;
   /** The page body for the current route (the outlet). */
   renderScreen: (nav: ShellNav) => ReactNode;
   /** Routes that paint their own full window (app view, builder) and so
    *  bypass the chrome frame. Defaults to app + builder kinds. */
   isFullBleed?: (route: ShellRoute) => boolean;
-  /** New-app affordance in the collapsed titlebar. */
+  /** New-app affordance in the app bar. */
   onNewApp?: () => void;
-  sidebarOpen?: boolean;
-  onSidebarOpenChange?: (open: boolean) => void;
   /** Receives the current nav surface whenever it changes, so the App root can
    *  wire document-level shortcuts + external re-scope (gateway/vault change)
    *  against live navigation without owning the router. */
   onNavReady?: (nav: ShellNav) => void;
-  /** Persistent connection/sync state, including over full-bleed app covers. */
-  statusBanner?: ReactNode;
+  /** The one persistent status line. Full-bleed routes mount their own frame
+   *  and are handed the same node directly, so this is the framed case only. */
+  statusLine?: ReactNode;
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
@@ -62,7 +87,7 @@ const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
 /**
  * A real component boundary around a render-prop outlet (issue #659).
  *
- * `renderScreen(nav)` and `renderSidebar(nav)` were plain function calls, so
+ * `renderScreen(nav)` and `renderStem(nav)` were plain function calls, so
  * every re-render of the shell root rebuilt the whole route's element tree —
  * including for state the route does not read, like the 5s gateway heartbeat.
  * A function call has no boundary React can stop at; a memoized component does.
@@ -80,45 +105,50 @@ const Outlet = memo(
 );
 Outlet.displayName = "Outlet";
 
+/** Where the stem's open/closed preference lives. Persisted, because a member
+ *  who reclaims the band on a narrow window means it for more than one session. */
+const STEM_OPEN_KEY = "shell.stemOpen";
+
 export default function ShellApp({
   initialRoute,
-  renderSidebar,
+  renderStem,
+  renderAppBar,
   renderScreen,
   isFullBleed = DEFAULT_FULL_BLEED,
   onNewApp,
-  sidebarOpen: sidebarOpenProp,
-  onSidebarOpenChange,
   onNavReady,
-  statusBanner,
+  statusLine,
 }: ShellAppProps): JSX.Element {
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: "navigate", route: initialRoute })
   );
-  // Sidebar open state is controllable — the eventual App root owns it in
-  // prefs — but self-manages when the prop is omitted (tests, standalone).
-  const [localOpen, setLocalOpen] = useState(sidebarOpenProp ?? true);
-  const dockedOpen = sidebarOpenProp ?? localOpen;
-
-  // Compact keeps its OWN open state, deliberately not the persisted pref: a
-  // drawer is a transient thing you open, use, and dismiss, and letting those
-  // dismissals write through would mean a session on a phone silently
-  // collapses the rail the next time the desktop opens. The two never share a
-  // value — only the toggle verb.
+  // The stem can be reclaimed (⌘B), but it never becomes a DRAWER: hidden is a
+  // persisted preference, not a mode you fall into. Nothing dismisses it for
+  // you, nothing floats it over the content, and there is no scrim — the three
+  // affordances the pre-#707 three-zone sidebar needed and this one still does
+  // not. Compact ignores the preference entirely: the band is the navigation
+  // there, and a phone with no way to move is not a phone.
   const compact = useCompactLayout();
+  const [stemOpen, setStemOpen] = useState(() =>
+    Store.get<boolean>(STEM_OPEN_KEY, true)
+  );
+  const toggleStem = useCallback(() => {
+    setStemOpen((open) => {
+      Store.set(STEM_OPEN_KEY, !open);
+      return !open;
+    });
+  }, []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey) return;
+      if (event.key !== "b" && event.key !== "B") return;
+      event.preventDefault();
+      toggleStem();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [toggleStem]);
   const route = currentRoute(state) ?? initialRoute;
-  const currentKey = routeKey(route);
-
-  // The drawer remembers WHERE it was opened, so "navigating dismisses it"
-  // falls out of a comparison instead of an effect that fires after the new
-  // screen has already painted underneath it. Tapping a destination is the
-  // dismiss gesture — leaving the rail covering the page would make every
-  // trip a two-tap affair — and re-opening on the same page still works
-  // because the toggle re-stamps the key.
-  const [drawer, setDrawer] = useState({ open: false, at: currentKey });
-  const drawerOpen = drawer.open && drawer.at === currentKey;
-  // Above the breakpoint the drawer flag is simply not consulted, so leaving
-  // compact hands control back to the pref with no state to reconcile.
-  const sidebarOpen = compact ? drawerOpen : dockedOpen;
 
   const nav = useMemo<ShellNav>(
     () => ({
@@ -133,24 +163,6 @@ export default function ShellApp({
     [route, state]
   );
 
-  const toggleSidebar = useCallback(() => {
-    if (compact) {
-      setDrawer((d) => ({
-        open: !(d.open && d.at === currentKey),
-        at: currentKey,
-      }));
-      return;
-    }
-    const next = !dockedOpen;
-    if (onSidebarOpenChange) onSidebarOpenChange(next);
-    else setLocalOpen(next);
-  }, [compact, currentKey, dockedOpen, onSidebarOpenChange]);
-
-  const dismissSidebar = useCallback(
-    () => setDrawer((d) => ({ open: false, at: d.at })),
-    []
-  );
-
   useEffect(() => {
     onNavReady?.(nav);
   }, [nav, onNavReady]);
@@ -159,22 +171,22 @@ export default function ShellApp({
 
   // Full-bleed routes render their own window frame (app view / builder),
   // so the shell frame steps aside entirely.
-  if (isFullBleed(route))
-    return (
-      <>
-        {statusBanner}
-        {screen}
-      </>
-    );
+  if (isFullBleed(route)) return <>{screen}</>;
+
+  const bar = renderAppBar?.(nav);
 
   return (
     <ShellFrame
-      sidebarOpen={sidebarOpen}
       compact={compact}
-      onToggleSidebar={toggleSidebar}
-      onDismissSidebar={dismissSidebar}
-      sidebar={<Outlet nav={nav} render={renderSidebar} />}
-      statusBanner={statusBanner}
+      {...(compact ? {} : { onToggleStem: toggleStem, stemOpen })}
+      stem={<Outlet nav={nav} render={renderStem} />}
+      {...(bar?.title === undefined ? {} : { appTitle: bar.title })}
+      {...(bar?.meta === undefined ? {} : { appMeta: bar.meta })}
+      {...(bar?.actions === undefined ? {} : { titlebarRight: bar.actions })}
+      {...(bar?.titleAction === undefined
+        ? {}
+        : { appTitleAction: bar.titleAction })}
+      statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

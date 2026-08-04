@@ -674,5 +674,5 @@ const styles = StyleSheet.create({
   },
   taskMain: { flex: 1 },
   taskTitle: { fontFamily: family.sansMedium, fontSize: 15 },
-  title: { fontFamily: family.sansBold, fontSize: 28 },
+  title: { fontFamily: family.sansMedium, fontSize: 28 },
 });

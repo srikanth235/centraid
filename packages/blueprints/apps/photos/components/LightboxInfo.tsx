@@ -4,6 +4,11 @@ import { buildActivity } from "../activity.ts";
 import { restoreAsset } from "../assets-actions.ts";
 import { renderFaces } from "../faces.ts";
 import { custodyMeta, exifRows, toLocalInputValue } from "../format.ts";
+// Every command on this panel edits the OPEN asset, so each is addressed at
+// the scope that asset is shown from (issue #599) rather than the chip
+// selection — including the album/tag/place ones, whose collection ids are only
+// meaningful inside that same scope.
+import { CloseIcon } from "../icons.tsx";
 // The lightbox's right-side info panel (bottom sheet on phone): editable
 // caption, an EXIF-extended Details grid, the real editable place picker,
 // custody/backup status, People chips (faces), Album chips, free-form Tag
@@ -14,11 +19,7 @@ import { custodyMeta, exifRows, toLocalInputValue } from "../format.ts";
 // 500-line cap), not a behavior change.
 // CSS split: own bits in LightboxInfo.module.css; `.ph-faces` (faces.ts's
 // imperative host) + `lightbox-note`/`kit-*` stay global strings.
-import { armConfirm, toast } from "../kit.ts";
-// Every command on this panel edits the OPEN asset, so each is addressed at
-// the scope that asset is shown from (issue #599) rather than the chip
-// selection — including the album/tag/place ones, whose collection ids are only
-// meaningful inside that same scope.
+import { armConfirm, statusLine } from "../kit.ts";
 import { act, narrate } from "../outcomes.ts";
 import type { Album, Asset, CustodyMeta, Place } from "../types.ts";
 
@@ -93,7 +94,7 @@ export function LightboxInfo({
     <>
       <input
         type="text"
-        className={styles.captionInput}
+        className={`kit-input bare ${styles.captionInput}`}
         defaultValue={asset.title ?? ""}
         placeholder="Add a caption…"
         aria-label="Caption"
@@ -167,7 +168,7 @@ export function LightboxInfo({
             aria-label="Cancel"
             onClick={() => setPlaceEditorOpen(false)}
           >
-            ×
+            <CloseIcon size={14} />
           </button>
           {places.length === 0 ? (
             <p className={`kit-muted kit-small ${styles.placeEmpty}`}>
@@ -179,7 +180,7 @@ export function LightboxInfo({
       ) : (
         <button
           type="button"
-          className={styles.placeChip}
+          className={`kit-chip ${styles.placeChip}`}
           onClick={() => setPlaceEditorOpen(true)}
         >
           {asset.place?.name ?? "Add place"}
@@ -205,7 +206,10 @@ export function LightboxInfo({
                 <span className={styles.albumChoice} key={album.album_id}>
                   <button
                     type="button"
-                    className={styles.albumChip}
+                    // `quiet`: a selected chip takes an 8% ink wash, not the filled
+                    // ink variant — a panel can hold many selected albums and
+                    // "at most one filled element per view" is the rule.
+                    className={`kit-chip quiet ${styles.albumChip}`}
                     data-active={member ? "true" : "false"}
                     onClick={async () => {
                       const outcome = await act(
@@ -240,7 +244,7 @@ export function LightboxInfo({
                           asset.scope_id
                         );
                         if (narrate(outcome, noteRef.current)) {
-                          toast(
+                          statusLine(
                             `Cover updated for ${album.title ?? "the album"}.`
                           );
                           await refresh();
@@ -263,7 +267,7 @@ export function LightboxInfo({
           <button
             key={tag.tag_id}
             type="button"
-            className={styles.tagChipX}
+            className={`kit-chip ${styles.tagChipX}`}
             aria-label={`Remove tag ${tag.label}`}
             onClick={async () => {
               const outcome = await act(
@@ -315,7 +319,7 @@ export function LightboxInfo({
         ) : (
           <button
             type="button"
-            className={styles.tagChipNew}
+            className={`kit-chip ${styles.tagChipNew}`}
             onClick={() => setAddingTag(true)}
           >
             ＋ Tag
@@ -341,7 +345,7 @@ export function LightboxInfo({
 
       <button
         type="button"
-        className={styles.deleteLink}
+        className={`kit-btn destructive ${styles.deleteLink}`}
         onClick={async (e) => {
           if (!armConfirm(e.currentTarget, { armedLabel: "Delete photo?" }))
             return;
@@ -352,7 +356,7 @@ export function LightboxInfo({
           );
           if (narrate(outcome, noteRef.current)) {
             onClose();
-            toast("Moved to trash — it leaves every album it was in.", {
+            statusLine("Moved to trash — it leaves every album it was in.", {
               undoLabel: "Undo",
               onUndo: () =>
                 restoreAsset(asset.asset_id, refresh, {

@@ -41,10 +41,8 @@
   }
 }
 
-/* A shimmering block is decoration, and decoration that moves is a problem for
-   readers who asked the OS to stop motion. */
-@media (prefers-reduced-motion: reduce) {
-  .pageSkeletonRow::after {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule. `.pageSkeletonRow::after`'s base (unanimated) transform is
+   `translateX(-100%)` — fully outside the row's `overflow: hidden` bounds —
+   so once the global rule collapses the sheen's animation to a single
+   instant, it renders invisible rather than mid-shimmer. */

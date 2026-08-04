@@ -140,7 +140,7 @@
 }
 .pickPack {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -151,7 +151,7 @@
   padding: 6px 6px 3px;
   border-top: 0.5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -188,7 +188,7 @@
 }
 .pickCount {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
   flex: none;
@@ -227,7 +227,7 @@
 }
 .machineryTag {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -262,7 +262,7 @@
   opacity: 0.9;
 }
 .primaryBtn:disabled {
-  opacity: 0.4;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 .ghostBtn {
@@ -283,7 +283,7 @@
   color: var(--text);
 }
 .ghostBtn:disabled {
-  opacity: 0.45;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 .dangerBtn {
@@ -306,7 +306,7 @@
   background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
 .dangerBtn:disabled {
-  opacity: 0.4;
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 .iconBtn,
@@ -331,7 +331,7 @@
 }
 .iconBtn:disabled,
 .iconBtnDanger:disabled {
-  opacity: 0.35;
+  opacity: var(--o-disabled);
   cursor: not-allowed;
 }
 
@@ -394,7 +394,7 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
 }
@@ -432,7 +432,7 @@
   color: var(--text-faint);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   text-align: left;
 }
 .sortBtn:hover {
@@ -445,7 +445,7 @@
   letter-spacing: 0.02em;
 }
 .colBadge {
-  font-size: 8px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 1px 4px;
@@ -454,7 +454,7 @@
   background: var(--bg-sunken);
 }
 .sortArrow {
-  font-size: 8px;
+  font-size: var(--t-control-size);
   color: var(--accent);
 }
 .gridHeadActions {
@@ -524,7 +524,7 @@
   background: var(--bg-sunken);
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
 }
 
@@ -544,7 +544,7 @@
   color: var(--text);
 }
 .loadMore:disabled {
-  opacity: 0.5;
+  color: var(--text-disabled);
   cursor: default;
 }
 
@@ -618,7 +618,7 @@
   color: var(--danger);
 }
 .fieldType {
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   letter-spacing: 0.04em;
 }
@@ -670,7 +670,7 @@
 }
 .fkChosen {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   word-break: break-all;
 }
@@ -712,7 +712,7 @@
 }
 .fkHitId {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -827,12 +827,12 @@
 }
 .depVia {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .depBadge {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 1px 6px;

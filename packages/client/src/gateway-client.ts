@@ -195,9 +195,11 @@ export interface TemplateVaultScope {
   fieldMask?: string[];
 }
 
-/** A template's requested vault access, for the Discover install/consent sheet
- *  (issue #434). Read from the app-kind template's `app.json`; automations omit
- *  it. `why` is the owner-facing sentence; `scopes` are what it will touch. */
+/** A template's requested vault access (issue #434). Read from the app-kind
+ *  template's `app.json`; automations omit it. `why` is the owner-facing
+ *  sentence; `scopes` are what it will touch. The install/consent sheet that
+ *  rendered it retired with Discover (#708) — the standing surface for the same
+ *  question is now the Privacy grants ledger, which can also revoke. */
 export interface TemplateVaultDTO {
   purpose?: string;
   why?: string;
@@ -219,7 +221,8 @@ export interface TemplateMetaEntry {
   /**
    * Whether this bundled app is already installed in the addressed vault
    * (issue #434). Present only when the gateway resolves per-vault install
-   * state; the Discover gallery shows "Open" when true, "Install" otherwise.
+   * state. True for every bundled app on a mounted vault since #708 installs
+   * them all at mount.
    */
   installed?: boolean;
   /**

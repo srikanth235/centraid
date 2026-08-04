@@ -27,13 +27,13 @@ import rightPaneCss from "./rightPane.module.css";
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
 const SmartphoneIcon =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>';
+  '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>';
 const TabletIcon =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>';
+  '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>';
 const MonitorIcon =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+  '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
 const RefreshIcon =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>';
+  '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>';
 
 const APP_TABS: [Tab, string, string][] = [
   ["preview", "Preview", "Eye"],
@@ -85,13 +85,15 @@ function mountBuilderHistory(
 
 export interface BuilderShellProps extends UseBuilderInput {
   nav: ShellNav;
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** The frame's one status line — full-bleed hosts mount their own frame,
+   *  so they are handed the same node rather than inheriting it. */
+  statusLine?: ReactNode;
   prefs: AppearancePrefs;
-  onToggleSidebar: () => void;
 }
 
 export default function BuilderShell(props: BuilderShellProps): JSX.Element {
-  const { nav, renderSidebar, prefs, onToggleSidebar, ...builderInput } = props;
+  const { nav, renderStem, statusLine, ...builderInput } = props;
   const { showToast } = useShellActions();
   const vm = useBuilder(builderInput);
 
@@ -377,9 +379,8 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
 
   return (
     <ShellFrame
-      sidebarOpen={prefs.sidebarOpen}
-      onToggleSidebar={onToggleSidebar}
-      sidebar={renderSidebar(nav)}
+      stem={renderStem(nav)}
+      statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

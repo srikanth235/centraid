@@ -62,6 +62,17 @@ while IFS= read -r diff_line; do
             ;;
         '+'*)
             content="${diff_line#+}"
+            # The waiver is read from the RAW line, before the comment
+            # stripping below. The waiver's documented form is a trailing
+            # `/* governance: allow-no-hardcoded-colors <reason> */`, which is
+            # exactly what the stripper deletes — so matching it on the
+            # stripped text made the escape hatch unreachable on every line it
+            # was meant for.
+            waived=0
+            if printf '%s' "$content" \
+                | grep -q "governance: allow-no-hardcoded-colors"; then
+                waived=1
+            fi
             # Strip comment text before matching: issue references like `#686`
             # inside /* ... */ are valid 3-digit hex to the regex but are not
             # color declarations. Order matters on a single diff line with no
@@ -96,8 +107,7 @@ while IFS= read -r diff_line; do
             # the tripwire lets it through. (No \b: BSD sed lacks it.)
             content="$(printf '%s' "$content" | sed -E 's:(rgba?|hsla?)\([[:space:]]*var\(::g')"
             if printf '%s' "$content" | grep -qE "$PATTERN"; then
-                if ! printf '%s' "$content" \
-                    | grep -q "governance: allow-no-hardcoded-colors"; then
+                if [[ "$waived" -eq 0 ]]; then
                     literal=$(printf '%s' "$content" | grep -oE "$PATTERN" | head -1)
                     violation "$file:$line_no - hardcoded color '$literal' (use a var(--token) from @centraid/design; see packages/blueprints/src/token-purity-allowlist.ts)"
                 fi

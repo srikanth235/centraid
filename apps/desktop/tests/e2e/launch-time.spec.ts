@@ -9,6 +9,7 @@ import {
   closeApp,
   launchApp,
   makeEnv,
+  openAppFromPalette,
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
@@ -94,16 +95,15 @@ test("desktop cold launch — process start to a usable Home", async () => {
     const homeAt = Date.now();
 
     // tap → visual response: the first deliberate interaction on a booted
-    // shell. Measured separately from launch because a fast launch that then
-    // takes a second to acknowledge a click is not a fast app.
-    const tile = page
-      .locator('[data-app-id="launch-probe-app"] [data-testid="app-tile"]')
-      .first();
-    await tile.waitFor({ state: "visible" });
+    // shell. Custom apps are not Home springboard tiles (#708) — open via the
+    // stem Search / palette, which is the durable open path for installed
+    // non-first-party apps.
     const tapStarted = Date.now();
-    await tile.click();
+    await openAppFromPalette(page, "Launch probe");
     await page
-      .locator("[data-app-view], iframe[data-centraid-app], iframe[title]")
+      .locator(
+        '[data-testid="app-view"], iframe[data-centraid-app], iframe[title]'
+      )
       .first()
       .waitFor({ state: "attached", timeout: 30_000 });
     const tapRespondedAt = Date.now();

@@ -22,18 +22,36 @@ async function filesUnder(relative) {
 }
 
 test("shell announcements and destructive confirms keep their accessibility contract", async () => {
-  const [toast, undo, confirm] = await Promise.all([
-    source("packages/client/src/react/shell/toast.ts"),
-    source("packages/client/src/react/shell/undoToast.ts"),
+  // #707 Phase 3 retired the shell's `toast.ts`/`undoToast.ts` (a message
+  // that "appears somewhere else, covers something, and leaves before it can
+  // be re-read") in favour of `StatusLine.tsx`: one persistent `<output>`
+  // element that never leaves the DOM. `<output>` carries an IMPLICIT
+  // `role="status"` (no `setAttribute` call to grep for), so the pin moves
+  // from a runtime call to the element choice + the explicit `aria-live`.
+  const [statusLine, confirm] = await Promise.all([
+    source("packages/client/src/react/shell/StatusLine.tsx"),
     source("packages/client/src/react/shell/confirm.ts"),
   ]);
-  for (const announcer of [toast, undo]) {
-    assert.match(announcer, /setAttribute\("role", "status"\)/u);
-    assert.match(announcer, /setAttribute\("aria-live", "polite"\)/u);
-  }
+  assert.match(statusLine, /<output\b/u);
+  assert.match(statusLine, /aria-live="polite"/u);
   assert.match(confirm, /createElement\("dialog"\)/u);
   assert.match(confirm, /aria-modal/u);
   assert.match(confirm, /e\.key === "Enter" && !opts\.danger/u);
+});
+
+test("the blueprint kit's status line (toast's replacement) keeps its accessibility contract", async () => {
+  // #707 Phase 3: the floating `.kit-toast` stack is retired in favour of
+  // ONE persistent `<kit-status-line>`, updated in place — this pins the
+  // same role/aria-live contract the retired toast carried, on its
+  // replacement, so the CONTRACT strength never lapses across the rename.
+  const statusLine = await source("packages/design/kit/kit-status-line.js");
+  assert.match(statusLine, /setAttribute\("role", "status"\)/u);
+  assert.match(statusLine, /setAttribute\("aria-live", "polite"\)/u);
+  assert.doesNotMatch(
+    await source("packages/design/kit/elements.js"),
+    /kit-toast\.js/u,
+    "elements.js still registers the retired kit-toast component"
+  );
 });
 
 test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", async () => {
@@ -99,9 +117,10 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // Deleting the policy fails (1); dropping the spread at a call site fails (2).
   // The per-tier *values* (device-addressed bytes stay out of the disk cache,
   // gateway thumbnails keep it) are pinned by behaviour in
-  // apps/mobile/src/apps/photos/grid-image.test.ts, which can assert on the
-  // returned object rather than on source text.
-  const gridImage = await source("apps/mobile/src/apps/photos/grid-image.ts");
+  // apps/mobile/src/kit/media/grid-image.test.ts, which can assert on the
+  // returned object rather than on source text. (Moved under kit/media for the
+  // Home springboard shared media path in #708.)
+  const gridImage = await source("apps/mobile/src/kit/media/grid-image.ts");
   assert.match(
     gridImage,
     /cachePolicy: .*"memory-disk"/u,

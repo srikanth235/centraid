@@ -15,8 +15,15 @@ import {
   enableWebPushWake,
   syncWebNotifications,
 } from "../../../gateway-client-push.js";
-import { confirmVaultParked } from "../../../gateway-client-vault.js";
+import {
+  confirmVaultParked,
+  listAgents,
+  revokeVaultGrant,
+  vaultApps,
+} from "../../../gateway-client-vault.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
+import { groupGrantsByStore } from "../../screens/privacyStores.js";
+import type { StoreHolderDTO } from "../../screens/privacyStores.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { useCachedQuery } from "../queryCache.js";
@@ -41,15 +48,23 @@ interface Approvals {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
+  /** The store-ledger's raw ingredients (issue #708 A2) — kept as the wire
+   *  shapes here; `groupGrantsByStore` reshapes them at render time so a
+   *  revoke's optimistic edit (below) only has to splice one grant out of
+   *  one app/agent's list, not re-derive the whole grouping. */
+  apps: Awaited<ReturnType<typeof vaultApps>>;
+  agents: Awaited<ReturnType<typeof listAgents>>;
 }
 
 async function loadApprovals(reviewLimit: number): Promise<Approvals> {
-  const [notifications, grants, review] = await Promise.all([
+  const [notifications, grants, review, apps, agents] = await Promise.all([
     getNotifications(true),
     listOutboxGrants(),
     getReview(reviewLimit),
+    vaultApps(),
+    listAgents(),
   ]);
-  return { notifications, grants, review };
+  return { notifications, grants, review, apps, agents };
 }
 
 // React-owned Notifications route (issues #306/#308/#647) — the desktop UI over the
@@ -300,6 +315,45 @@ export default function ApprovalsRoute(): JSX.Element {
     });
   };
 
+  /**
+   * Revoke one store-ledger holder (issue #708 A2). The ledger's "switch"
+   * strikes the row through rather than removing it — that local
+   * revoked-state bookkeeping lives in `ApprovalsScreen`, so this handler's
+   * only job is the wire call plus splicing the grant out of `apps`/`agents`
+   * so a background revalidate doesn't resurrect it before the screen's own
+   * snapshot has taken over showing the struck-through row.
+   */
+  const handleRevokeStoreGrant = (holder: StoreHolderDTO): void => {
+    void runDecision(
+      holder.grantId,
+      async () => {
+        await revokeVaultGrant({ grantId: holder.grantId });
+        showToast(`Revoked ${holder.holderLabel}’s access.`);
+      },
+      (previous) => ({
+        ...previous,
+        apps: previous.apps.map((app) =>
+          app.appId === holder.holderId
+            ? {
+                ...app,
+                grants: app.grants.filter((g) => g.grantId !== holder.grantId),
+              }
+            : app
+        ),
+        agents: previous.agents.map((agent) =>
+          agent.agentId === holder.holderId
+            ? {
+                ...agent,
+                grants: agent.grants.filter(
+                  (g) => g.grantId !== holder.grantId
+                ),
+              }
+            : agent
+        ),
+      })
+    );
+  };
+
   const handleNoticeAction = (
     noticeId: string,
     action: "read" | "archive"
@@ -343,9 +397,10 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   }
 
-  const { notifications, grants, review } = state.data;
+  const { notifications, grants, review, apps, agents } = state.data;
   const blocking = notifications.decisions;
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
+  const storeGrants = groupGrantsByStore(apps, agents);
   // Truncated when the wire returned a full page at the current limit —
   // "See all" raises the cap in place (no separate audit-log screen).
   const activityTruncated =
@@ -358,6 +413,7 @@ export default function ApprovalsRoute(): JSX.Element {
         parked={blocking.parked.map(buildParkedRow)}
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
+        storeGrants={storeGrants}
         activity={activity}
         notices={notifications.notices.map((notice) => ({
           ...notice,
@@ -390,6 +446,7 @@ export default function ApprovalsRoute(): JSX.Element {
         onConfirmParked={handleConfirmParked}
         onDecideScopeRequest={handleDecideScopeRequest}
         onRevokeGrant={handleRevokeGrant}
+        onRevokeStoreGrant={handleRevokeStoreGrant}
         onReadNotice={(id) => handleNoticeAction(id, "read")}
         onArchiveNotice={(id) => handleNoticeAction(id, "archive")}
         onOpenNotice={(notice) => {

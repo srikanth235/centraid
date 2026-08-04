@@ -43,7 +43,7 @@ describe("demo routes", () => {
         ],
         purgeDemo,
       }),
-      { codeAppsDir: () => codeAppsDir }
+      { bundledAppDirs: () => new Map(), codeAppsDir: () => codeAppsDir }
     );
     const base = await serve(handler);
 
@@ -101,7 +101,7 @@ describe("demo routes", () => {
         demoStatus: () => [{ appId: "alpha", rows: 9 }],
         demoBridgeFor: () => bridge,
       }),
-      { codeAppsDir: () => codeAppsDir }
+      { bundledAppDirs: () => new Map(), codeAppsDir: () => codeAppsDir }
     );
     const base = await serve(handler);
 
@@ -156,6 +156,7 @@ describe("demo routes", () => {
 
   test("an unreadable code-app directory behaves as an empty gallery", async () => {
     const handler = makeDemoRouteHandler(fakeVaults(), {
+      bundledAppDirs: () => new Map(),
       codeAppsDir: () => "/definitely/missing/demo-apps",
     });
     const base = await serve(handler);
@@ -164,10 +165,43 @@ describe("demo routes", () => {
     await expect(listed.json()).resolves.toStrictEqual({ apps: [] });
   });
 
+  test("finds a BUNDLED app's generator, which lives outside the code store", async () => {
+    // The regression this whole dep exists for. Issue #434 made a bundled
+    // install serve in place and #708 made all eight installed by default, so
+    // scanning only the git store answered `{apps:[]}` and 404'd every POST on
+    // a vault that owned every seedable app there is.
+    const codeAppsDir = await tempDir("demo-routes-code-");
+    const bundledRoot = await tempDir("demo-routes-bundled-");
+    await writeSeed(bundledRoot, "tasks");
+    const handler = makeDemoRouteHandler(fakeVaults(), {
+      bundledAppDirs: () =>
+        new Map([["tasks", path.join(bundledRoot, "tasks")]]),
+      codeAppsDir: () => codeAppsDir,
+    });
+    const base = await serve(handler);
+
+    await expect(
+      (await fetch(`${base}/centraid/_vault/demo`)).json()
+    ).resolves.toStrictEqual({
+      apps: [{ appId: "tasks", rows: 0, seedable: true }],
+    });
+
+    mocks.runHandler.mockResolvedValueOnce({ ok: true, logs: [] });
+    const loaded = await fetch(`${base}/centraid/_vault/demo/tasks`, {
+      method: "POST",
+    });
+    expect(loaded.status).toBe(200);
+    // It ran the BUNDLED generator, not a code-store path that does not exist.
+    expect(mocks.runHandler.mock.calls[0]?.[0]).toMatchObject({
+      handlerFile: path.join(bundledRoot, "tasks", "seed.js"),
+    });
+  });
+
   test("decodes app ids and applies safe result, row, and error defaults", async () => {
     const codeAppsDir = await tempDir("demo-routes-defaults-");
     await writeSeed(codeAppsDir, "encoded app");
     const handler = makeDemoRouteHandler(fakeVaults(), {
+      bundledAppDirs: () => new Map(),
       codeAppsDir: () => codeAppsDir,
     });
     const base = await serve(handler);

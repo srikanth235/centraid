@@ -25,7 +25,7 @@ export const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
   },
-  createText: { color: "#fff", fontFamily: family.sansBold, fontSize: 14 },
+  createText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 14 },
   dialog: {
     borderRadius: 16,
     left: 28,
@@ -34,7 +34,7 @@ export const styles = StyleSheet.create({
     right: 28,
     top: "34%",
   },
-  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
+  dialogTitle: { fontFamily: family.sansMedium, fontSize: 19 },
   empty: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 15 },
   header: {
     alignItems: "center",
@@ -63,11 +63,11 @@ export const styles = StyleSheet.create({
   rowTitle: { fontFamily: family.sansMedium, fontSize: 14 },
   safe: { flex: 1 },
   section: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
+    fontFamily: family.monoMedium,
+    fontSize: 12.5,
     letterSpacing: 1,
     marginBottom: 4,
     marginTop: 24,
   },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
+  title: { fontFamily: family.sansMedium, fontSize: 18 },
 });

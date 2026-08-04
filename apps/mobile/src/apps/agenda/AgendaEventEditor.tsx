@@ -6,9 +6,9 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { family, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
-import type { AgendaEventModel } from "./recurrence";
 
 type Scope = "occurrence" | "future" | "series";
 
@@ -514,14 +514,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   label: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
+    fontFamily: family.monoMedium,
+    fontSize: 12.5,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   safe: { flex: 1 },
-  save: { fontFamily: family.sansBold, fontSize: 14 },
+  save: { fontFamily: family.sansMedium, fontSize: 14 },
   scope: {
     borderRadius: 999,
     minHeight: 34,
@@ -537,6 +537,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
   },
-  skipText: { fontFamily: family.sansBold, fontSize: 13 },
-  title: { fontFamily: family.sansBold, fontSize: 15 },
+  skipText: { fontFamily: family.sansMedium, fontSize: 13 },
+  title: { fontFamily: family.sansMedium, fontSize: 15 },
 });

@@ -91,7 +91,7 @@ export function ToolbarView({
             className={`kit-btn ${styles.pillBtn}`}
             onClick={onAddPhotos}
           >
-            Add photos
+            Add to this album
           </button>
         ) : null}
         {showNewAlbum ? (

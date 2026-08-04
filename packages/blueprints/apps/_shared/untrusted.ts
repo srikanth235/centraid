@@ -9,7 +9,10 @@ const SAFE_DATA_MEDIA =
   /^data:(?:image\/(?:avif|gif|jpeg|png|webp)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+);/iu;
 const SAFE_DATA_DOCUMENT =
   /^data:(?:application\/pdf|text\/plain|image\/(?:avif|gif|jpeg|png|webp)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+);/iu;
-const VAULT_BLOB_PATH = "/centraid/_vault/blobs/";
+/** The vault's own blob route. Exported so a caller deciding WHETHER a source
+ *  is paintable can ask the same question this module answers, rather than
+ *  re-spelling the path and drifting from it. */
+export const VAULT_BLOB_PATH = "/centraid/_vault/blobs/";
 
 /** Plain display content. JSX must render this as a text/attribute value. */
 export function displayText(value: unknown): string {

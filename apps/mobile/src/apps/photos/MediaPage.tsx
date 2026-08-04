@@ -19,13 +19,13 @@ import Animated, {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { imageSource, videoSource } from "../../kit/media/media-source";
 import {
   fullQualityAccess,
   LOAD_FULL_QUALITY_LABEL,
   LOAD_ORIGINAL_LABEL,
 } from "./full-quality-gate";
 import { buildZoomGesture } from "./lightbox-gestures";
-import { imageSource, videoSource } from "./media-source";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
 

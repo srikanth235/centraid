@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   background: color-mix(in oklab, var(--text) 30%, var(--scrim));
-  animation: kit-fade 0.2s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
 .editor {
   /* Paints above the sibling `.kit-modal-scrim` dismiss button. */
@@ -23,7 +23,7 @@
   flex-direction: column;
   background: var(--bg);
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -37,19 +37,29 @@
 }
 .editorTitle {
   font: var(--t-body-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .editorSave {
-  margin-left: auto;
+  margin-inline-start: auto;
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   flex-shrink: 0;
 }
+/* Reading register (DESIGN.md #1): the body copy column is capped at the
+   34em reading measure and centered, rather than stretching full-bleed to
+   the dialog's own width. */
 .editorBody {
   flex: 1;
   min-height: 0;
+  max-inline-size: 34em;
+  margin-inline: auto;
+  width: 100%;
   padding: var(--sp-4) 20px 20px;
 }
 .editorStatus {
@@ -57,18 +67,26 @@
   color: var(--text-faint);
   padding: var(--sp-3) 0;
 }
+/* Docs' declared primary register is READING (DESIGN.md's "one ramp, two
+   registers"), and this is the surface where the owner writes prose — so the
+   body takes `--t-reading` whole (serif, 19/33) rather than a hand-picked
+   14px mono. The measure is already capped at 34em by `.editorBody`. */
 .editorTextarea {
   width: 100%;
   height: 100%;
   resize: none;
-  font: var(--t-body);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.65;
+  font: var(--t-reading);
   color: var(--text);
   background: none;
   border: none;
   outline: none;
+}
+/* `outline: none` with no replacement leaves a keyboard user with no way to
+   see where they are; the ring is the token pair, drawn inset because the
+   textarea fills its scroll box edge to edge. */
+.editorTextarea:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
 }
 
 /* Full-bleed editor on a phone — same treatment notes/app.css's

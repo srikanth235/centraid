@@ -9,7 +9,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
   height: 100vh;
   background: var(--bg-elev);
 }
@@ -31,14 +31,13 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text-soft);
   flex-shrink: 0;
 }
 .listTitle {
   font: var(--t-title);
-  font-size: 18px;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,15 +45,16 @@
 }
 .listCount {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .search {
   position: relative;
 }
 .search svg {
   position: absolute;
-  left: 11px;
+  inset-inline-start: 11px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
@@ -62,12 +62,12 @@
 }
 .search input {
   width: 100%;
-  font: var(--t-body);
-  font-size: 13px;
+  font: var(--t-small);
   background: var(--bg-sunken);
   border: 1px solid transparent;
   border-radius: var(--r-md);
-  padding: var(--sp-2) var(--sp-3) var(--sp-2) 33px;
+  padding-block: var(--sp-2);
+  padding-inline: 33px var(--sp-3);
   outline: none;
 }
 .search input:focus {
@@ -86,11 +86,11 @@
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
-  padding: 9px 10px;
+  padding: var(--density-pad);
   border: none;
   background: none;
   border-radius: var(--r-md);
-  text-align: left;
+  text-align: start;
   color: var(--text);
 }
 .item:hover {
@@ -106,7 +106,7 @@
 .warnDot {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   flex-shrink: 0;
 }
 
@@ -121,5 +121,5 @@
   display: none;
 }
 :global(.locker.is-narrow) .listHead {
-  padding-right: 96px;
+  padding-inline-end: 96px;
 }

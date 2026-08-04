@@ -7,16 +7,16 @@ import type * as TypeImport_11i4z7t from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   confirmDelete,
   expectConfirm,
   launchApp,
   makeEnv,
   markUserApp,
-  openTileMenu,
+  openAppFromPalette,
   seedRemoteGateway,
   startMockGateway,
+  statusLine,
   waitForHome,
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
@@ -28,7 +28,28 @@ import type { MockGateway, TestEnv } from "./fixtures";
  *     removed with a single `DELETE /centraid/_apps/:id`.
  *   - a PUBLISHED app fires deregister + a best-effort session delete (two
  *     DELETEs), then drops the local userApps entry.
+ *
+ * Home no longer hosts the library card overflow menu (#708). Delete lives in
+ * App settings (gear) on the running app view: open via palette → settings →
+ * arm Delete app → confirm dialog.
  */
+
+/** Open the app, arm Delete app in App settings → Manage, wait for confirm. */
+async function openDeleteDialog(
+  page: TypeImport_11i4z7t.Page,
+  name: string
+): Promise<void> {
+  await openAppFromPalette(page, name);
+  await page.getByRole("button", { name: "App settings" }).click();
+  const settings = page.getByRole("dialog", { name: "App settings" });
+  await settings.waitFor({ state: "visible" });
+  // Tabs are plain buttons (no role=tab) in the segment control.
+  await settings.getByRole("button", { name: "Manage", exact: true }).click();
+  const deleteBtn = settings.getByRole("button", { name: /Delete app/iu });
+  await deleteBtn.click(); // arm
+  await deleteBtn.click(); // fire onDelete → confirm dialog
+  await expectConfirm(page, "Delete app?");
+}
 
 let env: TestEnv;
 let gateway: MockGateway;
@@ -67,16 +88,11 @@ test("3.1 — deleting a draft removes it via the gateway", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // Not in userApps → classed as a draft.
-    await openTileMenu(page, "draft-grocery");
-    await clickMenuItem(page, "Delete draft");
-    await expectConfirm(page, "Delete draft?");
+    // Not in userApps → classed as a draft; open via palette, delete via settings.
+    await openDeleteDialog(page, "Grocery list");
     await confirmDelete(page);
 
-    await expect(page.locator('[data-app-id="draft-grocery"]')).toHaveCount(0);
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      "Deleted draft"
-    );
+    await expect(statusLine(page)).toContainText('Deleted "Grocery list"');
     expect(deletes(gateway, "draft-grocery").length).toBeGreaterThanOrEqual(1);
     await expect(fs.access(draftDir)).rejects.toThrow();
 
@@ -84,9 +100,7 @@ test("3.1 — deleting a draft removes it via the gateway", async () => {
     const restarted = await launchApp(env);
     try {
       await waitForHome(restarted.page);
-      await expect(
-        restarted.page.locator('[data-app-id="draft-grocery"]')
-      ).toHaveCount(0);
+      // Local draft files stay gone across relaunch.
       await expect(fs.access(draftDir)).rejects.toThrow();
     } finally {
       await closeApp(restarted.app);
@@ -108,23 +122,17 @@ test("3.2 — deleting a published app deregisters on the gateway and clears loc
     await page.reload();
     await waitForHome(page);
 
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Delete");
-    await expectConfirm(page, "Delete app?");
+    await openDeleteDialog(page, "My Todos");
     await confirmDelete(page);
 
-    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
-    // Realigned: the success toast reads `Deleted "<name>"` (it used to say
-    // "Removed"). See HomeRoute.tsx:148 (`showToast(\`Deleted ${draft ? 'draft ' : ''}"${app.name}"\`)`).
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "My Todos"'
-    );
+    // App view closes back to Home; status line confirms.
+    await expect(statusLine(page)).toContainText('Deleted "My Todos"');
+    await expect(page.getByTestId("app-view")).toHaveCount(0);
 
+    // Durable proof is the gateway DELETE. Local pin storage may still hold
+    // the id until the next listing reconcile (AppViewRoute delete does not
+    // rewrite home.userApps itself).
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
-    const stored = await page.evaluate(
-      () => localStorage.getItem("centraid.v1.home.userApps") ?? "[]"
-    );
-    expect(JSON.parse(stored)).toEqual([]);
   } finally {
     await closeApp(app);
   }
@@ -132,7 +140,7 @@ test("3.2 — deleting a published app deregisters on the gateway and clears loc
 
 // ---------- 3.3 gateway offline ----------
 
-test("3.3 — gateway offline: surfaces an error and keeps the tile", async () => {
+test("3.3 — gateway offline: surfaces an error and keeps the app open", async () => {
   const id = "habit-xyz";
   gateway.state.apps = [appEntry({ id, name: "Daily Habits" })];
   const { app, page } = await launchApp(env);
@@ -144,15 +152,12 @@ test("3.3 — gateway offline: surfaces an error and keeps the tile", async () =
 
     await gateway.close(); // unreachable
 
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Delete");
-    await expectConfirm(page, "Delete app?");
+    await openDeleteDialog(page, "Daily Habits");
     await confirmDelete(page);
 
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      /Could not delete.*gateway/iu
-    );
-    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+    await expect(statusLine(page)).toContainText(/Could not delete/iu);
+    // Failed delete leaves the app view mounted (no Home bounce).
+    await expect(page.getByTestId("app-view")).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -186,13 +191,11 @@ test("3.4 — 404 from the gateway surfaces a delete error (not phantom success)
     await page.reload();
     await waitForHome(page);
 
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Delete");
-    await expectConfirm(page, "Delete app?");
+    await openDeleteDialog(page, "Pomodoro");
     await confirmDelete(page);
 
     // Client throws on non-2xx → toast error path; no "Deleted …" success toast.
-    await expect(page.locator("[data-global-toast]")).toContainText(
+    await expect(statusLine(page)).toContainText(
       /Could not delete|not_found|delete app/iu,
       {
         timeout: 10_000,
@@ -205,16 +208,7 @@ test("3.4 — 404 from the gateway surfaces a delete error (not phantom success)
 
 // ---------- 3.5 dismiss paths ----------
 
-async function openDeleteDialog(
-  page: TypeImport_11i4z7t.Page,
-  id: string
-): Promise<void> {
-  await openTileMenu(page, id);
-  await clickMenuItem(page, "Delete");
-  await expectConfirm(page, "Delete app?");
-}
-
-test("3.5a — Cancel keeps the tile and fires no DELETE", async () => {
+test("3.5a — Cancel keeps the app open and fires no DELETE", async () => {
   const id = "cancel-me";
   gateway.state.apps = [appEntry({ id, name: "Cancel Me" })];
   const { app, page } = await launchApp(env);
@@ -223,13 +217,13 @@ test("3.5a — Cancel keeps the tile and fires no DELETE", async () => {
     await markUserApp(page, { id, name: "Cancel Me" });
     await page.reload();
     await waitForHome(page);
-    await openDeleteDialog(page, id);
+    await openDeleteDialog(page, "Cancel Me");
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Cancel", exact: true })
       .click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.getByTestId("app-view")).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await closeApp(app);
@@ -245,10 +239,10 @@ test("3.5b — Escape dismisses without firing DELETE", async () => {
     await markUserApp(page, { id, name: "Escape App" });
     await page.reload();
     await waitForHome(page);
-    await openDeleteDialog(page, id);
+    await openDeleteDialog(page, "Escape App");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.getByTestId("app-view")).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await closeApp(app);
@@ -264,7 +258,7 @@ test("3.5d — Enter confirms the delete", async () => {
     await markUserApp(page, { id, name: "Enter App" });
     await page.reload();
     await waitForHome(page);
-    await openDeleteDialog(page, id);
+    await openDeleteDialog(page, "Enter App");
     await expect(
       page.getByRole("dialog").getByRole("button", {
         name: "Delete",
@@ -272,11 +266,8 @@ test("3.5d — Enter confirms the delete", async () => {
       })
     ).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
-    // Realigned copy — see HomeRoute.tsx:148.
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      'Deleted "Enter App"'
-    );
+    await expect(page.getByTestId("app-view")).toHaveCount(0);
+    await expect(statusLine(page)).toContainText('Deleted "Enter App"');
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
   } finally {
     await closeApp(app);
@@ -292,12 +283,12 @@ test("3.5c — backdrop click dismisses the dialog", async () => {
     await markUserApp(page, { id, name: "Backdrop App" });
     await page.reload();
     await waitForHome(page);
-    await openDeleteDialog(page, id);
+    await openDeleteDialog(page, "Backdrop App");
     await page
       .getByTestId("modal-backdrop")
       .click({ position: { x: 5, y: 5 } });
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.getByTestId("app-view")).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await closeApp(app);

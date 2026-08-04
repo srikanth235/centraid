@@ -41,6 +41,9 @@ export function PrimaryButton({
   onPress: () => void;
   colors: ThemeColors;
 }): React.JSX.Element {
+  // Disabled is a colour token on the leaf, not container opacity — opacity
+  // would dim the fill AND the label together and silently invalidate the
+  // label's own token-level contrast.
   return (
     <Pressable
       accessibilityRole="button"
@@ -49,10 +52,17 @@ export function PrimaryButton({
       onPress={onPress}
       style={[
         styles.primary,
-        { backgroundColor: colors.accent, opacity: disabled ? 0.55 : 1 },
+        {
+          backgroundColor: disabled ? colors.bgSunken : colors.accent,
+        },
       ]}
     >
-      <Text style={[styles.primaryText, { color: colors.textInv }]}>
+      <Text
+        style={[
+          styles.primaryText,
+          { color: disabled ? colors.textDisabled : colors.textInv },
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -149,7 +159,7 @@ const styles = StyleSheet.create({
   destination: { borderRadius: 11, borderWidth: 1, padding: 11 },
   destinationGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   field: { gap: 7 },
-  fieldLabel: { fontFamily: family.sansBold, fontSize: 12 },
+  fieldLabel: { fontFamily: family.sansMedium, fontSize: 12 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -168,21 +178,21 @@ const styles = StyleSheet.create({
   lineCard: { borderRadius: 14, borderWidth: 1, gap: 9, padding: 12 },
   lineKind: {
     fontFamily: family.monoMedium,
-    fontSize: 10,
+    fontSize: 13,
     textTransform: "uppercase",
   },
   multiline: { minHeight: 150, textAlignVertical: "top" },
   permission: { flex: 1, justifyContent: "center", padding: 28 },
   primary: { alignItems: "center", borderRadius: 12, padding: 14 },
-  primaryText: { fontFamily: family.sansBold, fontSize: 15 },
+  primaryText: { fontFamily: family.sansMedium, fontSize: 15 },
   safe: { flex: 1 },
   title: {
     flex: 1,
-    fontFamily: family.sansBold,
+    fontFamily: family.sansMedium,
     fontSize: 21,
     textAlign: "center",
   },
-  total: { fontFamily: family.sansBold, fontSize: 18 },
+  total: { fontFamily: family.sansMedium, fontSize: 18 },
 });
 
 export { styles as scanStyles };

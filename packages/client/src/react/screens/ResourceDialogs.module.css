@@ -44,12 +44,9 @@
 .dialogWide {
   width: min(660px, calc(100vw - 40px));
 }
-@media (prefers-reduced-motion: reduce) {
-  .backdrop,
-  .dialog {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.backdrop`/`.dialog`'s entrance
+   animation. */
 
 .head {
   display: flex;
@@ -172,7 +169,7 @@
 }
 .cmpPick {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -200,7 +197,7 @@
   color: var(--text-ghost);
   cursor: help;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
 }
 .cmpCell {
   display: flex;

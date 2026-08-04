@@ -4,7 +4,7 @@ import { fmtBytes } from "./format.ts";
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.tsx's own `data`/`refresh` plus logic.ts's own
 // `act`/`narrate`/`notice` (passed in, never re-implemented).
-import { isPendingOffsite, stageFileBytes, toast } from "./kit.ts";
+import { isPendingOffsite, stageFileBytes, statusLine } from "./kit.ts";
 import type { AppData, DriveDoc, VersionEntry } from "./types.ts";
 
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
@@ -94,7 +94,7 @@ export function createVersions({
       staged_sha: staged.sha256,
     });
     if (narrate(outcome)) {
-      toast(
+      statusLine(
         isPendingOffsite(staged)
           ? "Replaced locally · new version recorded · pending offsite."
           : "Replaced · new version recorded · receipted."
@@ -114,7 +114,7 @@ export function createVersions({
       content_id: contentId,
     });
     if (narrate(outcome)) {
-      toast("Restored that version · receipted.");
+      statusLine("Restored that version · receipted.");
       await refresh();
     }
   }

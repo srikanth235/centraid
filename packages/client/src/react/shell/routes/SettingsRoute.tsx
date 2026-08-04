@@ -188,6 +188,18 @@ export interface SettingsRouteProps {
    * a vault this device no longer reaches.
    */
   onDisconnectVault: (gatewayId: string) => Promise<boolean>;
+  /**
+   * The three acts the sidebar's account menu used to hold (#707 Decision §2).
+   *
+   * The stem carries the launcher and nothing else, so the account row went
+   * with the column. Each of these is something you do a handful of times, so
+   * they belong behind Settings — reachable from Home and from All apps —
+   * rather than standing in the navigation. They land on "This device", which
+   * is already the page about THIS browser's half of the pairing.
+   */
+  onPairDevice?: () => void;
+  onWhatsNew?: () => void;
+  onLogOut?: () => void;
 }
 
 export default function SettingsRoute({
@@ -196,6 +208,9 @@ export default function SettingsRoute({
   initialPage,
   onClose,
   onDisconnectVault,
+  onPairDevice,
+  onWhatsNew,
+  onLogOut,
 }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(() =>
     resolveSettingsPage(initialPage)
@@ -478,6 +493,9 @@ export default function SettingsRoute({
                   offlineCopy={thisDevice?.offlineCopy ?? false}
                   onOfflineCopy={changeOfflineCopy}
                   onForget={forgetThisDevice}
+                  {...(onPairDevice ? { onPairDevice } : {})}
+                  {...(onWhatsNew ? { onWhatsNew } : {})}
+                  {...(onLogOut ? { onLogOut } : {})}
                 />
               ) : page === "import" ? (
                 <ImportScreen {...importProps} />

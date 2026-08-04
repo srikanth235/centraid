@@ -1,30 +1,38 @@
-// Appearance prefs — the renderer-owned theme/accent settings, ported
-// out of the vanilla app.ts. Pure helpers here (validation + wire mapping +
-// the document side-effect); the React hook that owns the live value and the
-// gateway round-trip lives in useAppearance.ts.
+// Appearance prefs — the renderer-owned theme settings, ported out of the
+// vanilla app.ts. Pure helpers here (validation + wire mapping + the document
+// side-effect); the React hook that owns the live value and the gateway
+// round-trip lives in useAppearance.ts.
 //
-// PRECEDENCE (#608 group P). `applyPrefsToDocument` writes inline styles on
-// `<html>`, and an inline style outranks every `[data-theme='…']` block the
-// token generator emits. So anything written here unconditionally overrides
-// the theme that is supposedly being applied — which is why the dark ramp ran
-// at the pref layer's anchor whatever `darkTheme` declared, and why a theme's
-// own accent never rendered. A theme's values are the floor; `bgL` and `accent` go inline only
-// when the owner has actually chosen one, and are cleared when they have not.
+// The Binding Layer (#707) deleted the two colour overrides this module used
+// to write inline on `<html>`: the accent swatch (the shell now spends no hue
+// at all — `--accent` IS ink) and the `--bg-l` lightness anchor (the dark ramp
+// is literal surface tones, not one anchor plus `calc()`). An inline style
+// outranks every `[data-theme='…']` block, so a leftover override would
+// silently outrank the theme it is supposedly applying — which is exactly the
+// bug #608 group P fixed. Nothing colour-shaped is written here any more;
+// `applyPrefsToDocument` sets data attributes and lets the theme block win.
 import { themes } from "@centraid/design";
 
-import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import type {
-  AccentKey,
   AppearancePrefs,
   ThemeMode,
   ThemeName,
 } from "../../app-shell-context.js";
 
+/**
+ * `system`, not `dark`. A member who has never opened Settings should see the
+ * theme their machine is already in — and until this changed, first run could
+ * not be light on any device, which made the grammar matrix's own reference
+ * state for the threshold moment (`sh-light-first-run`) unreachable in the
+ * product. `themeMode` carries the intent; `theme` is only the resolved name,
+ * re-derived by `useAppearance` on mount and on every OS flip while the mode
+ * stays `system`, so the value read here at module load is a starting point
+ * and never the thing that goes stale.
+ */
 export const DEFAULT_PREFS: AppearancePrefs = {
   cardVariant: "outlined",
-  sidebarOpen: true,
-  theme: "dark",
-  themeMode: "dark",
+  theme: resolveThemeMode("system"),
+  themeMode: "system",
   tileVariant: "gradient",
 };
 
@@ -71,36 +79,13 @@ export function pickAppearance(
   ) {
     out.cardVariant = remote.cards;
   }
-  // An explicit lightness override, in percent. Absent (the default) leaves
-  // the dark ramp on the anchor `darkTheme` declares.
-  if (
-    typeof remote.bgL === "number" &&
-    Number.isFinite(remote.bgL) &&
-    remote.bgL >= 0 &&
-    remote.bgL <= 100
-  ) {
-    out.bgL = remote.bgL;
-  }
-  // The semantic accent key lives under `accentKey`; older gateways carried it
-  // in `accent` (pre-fix), so accept that as a fallback.
-  if (
-    typeof remote.accentKey === "string" &&
-    remote.accentKey in ACCENT_PALETTE
-  ) {
-    out.accent = remote.accentKey as AccentKey;
-  } else if (
-    typeof remote.accent === "string" &&
-    remote.accent in ACCENT_PALETTE
-  ) {
-    out.accent = remote.accent as AccentKey;
-  }
   return out;
 }
 
-/** Convert typed prefs back into the gateway wire shape (vanilla `toRemoteShape`).
- *  The accent key + its resolved hex swatches are both emitted: the key so a
- *  second device can restore the exact pick, the hexes for the runtime's
- *  CSS-var injection (the gateway has no knowledge of ACCENT_PALETTE). */
+/** Convert typed prefs back into the gateway wire shape (vanilla
+ *  `toRemoteShape`). Only the keys an owner can still set survive the Binding
+ *  Layer flip — a stored `accent`/`bgL` on an older gateway is simply never
+ *  read back (pickAppearance drops unknown keys), so no migration is owed. */
 export function toRemoteShape(
   patch: Partial<AppearancePrefs>
 ): Record<string, unknown> {
@@ -108,40 +93,16 @@ export function toRemoteShape(
   if (patch.themeMode !== undefined) out.themeMode = patch.themeMode;
   if (patch.theme !== undefined) out.theme = patch.theme;
   if (patch.cardVariant !== undefined) out.cards = patch.cardVariant;
-  if (patch.bgL !== undefined) out.bgL = patch.bgL;
-  if (patch.accent !== undefined) {
-    out.accentKey = patch.accent;
-    const swatch = ACCENT_PALETTE[patch.accent];
-    if (swatch) {
-      out.accent = swatch.accent;
-      out.accentLight = swatch.light;
-      out.accentDeep = swatch.deep;
-      out.accentText = swatch.text;
-      out.accentFill = swatch.deep;
-      out.accentDeepHover = swatch.deep;
-      out.accentSoft = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
-      out.bgSel = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
-      out.lineSel = `color-mix(in oklab, ${swatch.accent} 42%, transparent)`;
-    }
-  }
   return out;
 }
 
-function setOrClear(
-  html: HTMLElement,
-  prop: string,
-  value: string | undefined
-): void {
-  // Clearing matters as much as setting: an override that stops applying has
-  // to leave the inline style behind, or the theme block never wins again.
-  if (value === undefined) html.style.removeProperty(prop);
-  else html.style.setProperty(prop, value);
-}
-
-/** Write the prefs onto `<html>` as data-attrs + CSS vars — the shell's
- *  atmospheric ramp + accent. Symmetric with what the gateway bakes on first
- *  paint (vanilla `applyPrefs`, minus the iframe broadcast which is an
- *  iframe-host concern handled in R3). */
+/** Write the prefs onto `<html>` as data attributes. Symmetric with what the
+ *  gateway bakes on first paint (vanilla `applyPrefs`, minus the iframe
+ *  broadcast which is an iframe-host concern handled in R3).
+ *
+ *  Attributes only, never inline custom properties: the token layer owns every
+ *  colour, and an inline style here would outrank the `[data-theme='…']` block
+ *  it just selected. */
 export function applyPrefsToDocument(
   prefs: AppearancePrefs,
   doc: Document = document
@@ -149,85 +110,4 @@ export function applyPrefsToDocument(
   const html = doc.documentElement;
   html.dataset.theme = String(prefs.theme);
   html.dataset.cards = prefs.cardVariant;
-  setOrClear(
-    html,
-    "--bg-l",
-    prefs.bgL === undefined ? undefined : `${prefs.bgL}%`
-  );
-  const swatch =
-    prefs.accent === undefined ? undefined : ACCENT_PALETTE[prefs.accent];
-  setOrClear(html, "--accent", swatch?.accent);
-  setOrClear(html, "--accent-light", swatch?.light);
-  // `--accent-deep` is the FILLED rung, and the ink it carries (`--text-inv`)
-  // flips per theme — near-white on light, near-black on dark. So the override
-  // has to flip with it, exactly as `--accent-text` below does: the deepened
-  // shade under light ink, the lightened one under dark ink. Writing `deep`
-  // unconditionally put a dark fill under dark ink on the dark ramp (#686 F3).
-  setOrClear(
-    html,
-    "--accent-deep",
-    prefs.theme === "dark" ? swatch?.light : swatch?.deep
-  );
-  // The accent-as-TEXT rung has to move with the accent, or an owner who picks
-  // rose gets rose buttons and teal links. On the dark ramp a saturated accent
-  // is already legible on near-black, so only light needs the deepened shade —
-  // the same split the themes themselves declare.
-  setOrClear(
-    html,
-    "--accent-text",
-    prefs.theme === "dark" ? swatch?.accent : swatch?.text
-  );
-  const fill = prefs.theme === "dark" ? swatch?.light : swatch?.deep;
-  setOrClear(html, "--accent-fill", fill);
-  setOrClear(
-    html,
-    "--accent-deep-hover",
-    fill === undefined
-      ? undefined
-      : `color-mix(in oklab, ${fill} 88%, var(--text) 12%)`
-  );
-  setOrClear(
-    html,
-    "--accent-soft",
-    swatch === undefined
-      ? undefined
-      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
-  );
-  setOrClear(
-    html,
-    "--bg-sel",
-    swatch === undefined
-      ? undefined
-      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
-  );
-  setOrClear(
-    html,
-    "--line-sel",
-    swatch === undefined
-      ? undefined
-      : `color-mix(in oklab, ${swatch.accent} 42%, var(--line))`
-  );
-  setOrClear(html, "--focus-ring-color", swatch?.accent);
-}
-
-/**
- * The lightness anchor in effect, as a number — the owner's override if they
- * moved it, else whatever the active theme declares (`5%` on Centraid Dark;
- * light themes have no anchor and fall back to the blueprint dark default).
- * The iframe theme bridge sends a number, so it needs this resolved.
- */
-export function resolveBgL(prefs: AppearancePrefs): number {
-  if (prefs.bgL !== undefined) return prefs.bgL;
-  return parseAnchor(themes[prefs.theme]?.bgL);
-}
-
-/** The blueprint token layer's own dark anchor — the honest fallback when the
- *  active theme declares none (every light theme). */
-const BLUEPRINT_DARK_BG_L = 10;
-
-/** `'5%'` → `5`. Anything that is not a bare percentage falls back. */
-export function parseAnchor(declared: string | undefined): number {
-  const bare = (declared ?? "").replace("%", "").trim();
-  const n = Number(bare);
-  return bare !== "" && Number.isFinite(n) ? n : BLUEPRINT_DARK_BG_L;
 }

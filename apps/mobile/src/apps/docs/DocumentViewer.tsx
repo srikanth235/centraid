@@ -10,7 +10,7 @@ import { WebView } from "react-native-webview";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -167,14 +167,12 @@ export default function DocumentViewer({
       sourceVaultId: document.sourceVaultId,
       targetVaultId,
     });
-    showToast({
-      message:
-        result.reason ??
+    postStatus(
+      result.reason ??
         (result.status === "executed"
           ? "Document placed in the selected vault."
-          : "Document placement queued — it will resume when the gateway is reachable."),
-      tone: result.status === "executed" ? "accent" : "neutral",
-    });
+          : "Document placement queued — it will resume when the gateway is reachable.")
+    );
   };
   const share = async (): Promise<void> => {
     if (!document || !url) return;
@@ -332,7 +330,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   safe: { flex: 1 },
-  title: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
+  title: { flex: 1, fontFamily: family.sansMedium, fontSize: 15 },
   toolbar: {
     alignItems: "center",
     borderTopWidth: 1,

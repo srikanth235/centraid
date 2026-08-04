@@ -113,7 +113,7 @@
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   color: var(--text-ghost);
 }
@@ -172,14 +172,9 @@
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .legendRow {
-    animation: none;
-  }
-  .railSegment {
-    transition: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.legendRow`'s animation and
+   `.railSegment`'s transition. */
 
 .chip {
   width: 10px;

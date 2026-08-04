@@ -139,6 +139,46 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
   }
 }
 
+/**
+ * The document's OWN prose, when the bytes are already in hand client-side.
+ *
+ * A small text body never rewrites to a blob route (issue #296), so it rides
+ * along on `content_uri` as a `data:` URI — the same bytes the Download link
+ * hands the owner. Reading it costs no round trip and no consent beyond the
+ * read that produced the row, which is why the card and the quick look can
+ * show the real document instead of a decorative mock of one. Returns null
+ * for a non-text document, and for a text document whose bytes live behind a
+ * `blob:` route (that needs an async fetch, which the editor owns).
+ */
+export function inlineText(doc: DocFields): string | null {
+  if (!isTextEditable(doc)) return null;
+  const text = decodeDataUri(doc.content_uri);
+  return text && text.trim() ? text : null;
+}
+
+/**
+ * A prose excerpt of a markdown/plain-text body: the syntax characters are
+ * stripped so a card shows sentences rather than `## ` and `**`, and the
+ * result is a single soft-wrapped paragraph the reading register can set.
+ * Deliberately NOT a markdown renderer — a 104px thumbnail has no room for
+ * structure, and half-rendered structure is worse than none.
+ */
+export function textExcerpt(body: string, max = 220): string {
+  const plain = body
+    .replace(/^---\n[\s\S]*?\n---\n/u, "") // YAML front matter
+    .replace(/```[\s\S]*?```/gu, " ") // fenced code
+    .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ") // images
+    .replace(/\[(?<label>[^\]]*)\]\([^)]*\)/gu, "$<label>") // links → their text
+    .replace(/^\s{0,3}#{1,6}\s+/gmu, "") // ATX headings
+    .replace(/^\s{0,3}>\s?/gmu, "") // block quotes
+    .replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gmu, "") // list markers
+    .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gmu, " ") // thematic breaks
+    .replace(/[*_~`]/gu, "") // inline emphasis / code
+    .replace(/\s+/gu, " ")
+    .trim();
+  return plain.length > max ? `${plain.slice(0, max).trimEnd()}…` : plain;
+}
+
 export function loadable(uri: string | null | undefined): boolean {
   return safeDocumentUrl(uri) !== null;
 }

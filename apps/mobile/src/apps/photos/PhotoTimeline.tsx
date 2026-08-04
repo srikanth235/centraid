@@ -16,9 +16,9 @@ import { runOnJS } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
 import { family, useTheme } from "../../kit/theme";
-import { gridImageProps } from "./grid-image";
-import { imageSource } from "./media-source";
 import { addDragSelection } from "./timeline-model";
 import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 18,
   },
-  headerText: { fontFamily: family.sansBold, fontSize: 13 },
+  headerText: { fontFamily: family.sansMedium, fontSize: 13 },
   image: { borderRadius: 3, height: "100%", width: "100%" },
   monthHeader: {
     height: 52,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 8,
   },
-  monthText: { fontFamily: family.sansBold, fontSize: 20 },
+  monthText: { fontFamily: family.sansMedium, fontSize: 20 },
   rail: { borderRadius: 2, height: "100%", width: 3 },
   row: { flexDirection: "row", gap: 2, marginBottom: 2 },
   scrubber: {
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     right: 30,
     top: "46%",
   },
-  scrubText: { fontFamily: family.sansBold, fontSize: 12 },
+  scrubText: { fontFamily: family.sansMedium, fontSize: 12 },
   scopeBadge: {
     backgroundColor: "rgba(0,0,0,.56)",
     borderRadius: 999,
@@ -573,8 +573,8 @@ const styles = StyleSheet.create({
   },
   scopeBadgeText: {
     color: "#fff",
-    fontFamily: family.sansBold,
-    fontSize: 8,
+    fontFamily: family.sansMedium,
+    fontSize: 13,
   },
   selectDay: { fontFamily: family.sansMedium, fontSize: 12 },
   selection: {

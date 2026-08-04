@@ -16,7 +16,7 @@
 }
 .version {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-xl);
   overflow: hidden;
 }
 .versionCurrent {
@@ -31,14 +31,14 @@
   background: var(--bg-elev);
   border: none;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .versionBadge {
   font: var(--t-control);
   letter-spacing: 0.04em;
   color: var(--text-faint);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   padding: 2px var(--sp-1);
   flex-shrink: 0;
 }
@@ -54,15 +54,15 @@
   color: var(--text);
 }
 .versionSize {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
 }
 .versionTag {
   font: var(--t-control);
   color: var(--accent-text);
   border: 1px solid var(--accent-soft);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
   flex-shrink: 0;
 }
@@ -76,7 +76,8 @@
 .versionPreview {
   max-width: 100%;
   max-height: 220px;
-  border-radius: 8px;
+  /* Media content, not a UI container — content/thumbnails stay square. */
+  border-radius: var(--r-xs);
   object-fit: contain;
   background: var(--bg-sunken);
 }
@@ -84,7 +85,7 @@
   width: 100%;
   height: 220px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-xs);
 }
 .versionAudio {
   width: 100%;

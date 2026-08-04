@@ -230,7 +230,7 @@
   gap: 10px;
   margin: 0 0 10px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -288,7 +288,7 @@
   background: var(--bg-sunken);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
   transition: color 0.15s var(--ease);
@@ -298,7 +298,7 @@
   border-color: var(--accent);
 }
 .backBtn:disabled {
-  opacity: 0.4;
+  color: var(--text-disabled);
   cursor: default;
 }
 
@@ -366,7 +366,7 @@
 }
 .dFigK {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -411,7 +411,7 @@
 }
 .sampleMore {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   color: var(--text-ghost);
 }
@@ -433,7 +433,7 @@
   background: transparent;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     border-color 0.15s var(--ease),
@@ -445,7 +445,7 @@
   color: var(--text);
 }
 .chip[aria-pressed="false"] {
-  opacity: 0.55;
+  color: var(--text-faint);
 }
 .chip[aria-pressed="true"] {
   border-color: var(--accent);
@@ -463,7 +463,7 @@
 }
 .chipCount {
   color: var(--text-ghost);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
 }
 .roFoot {
@@ -529,7 +529,7 @@
 }
 .lgText {
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   line-height: 1.35;
 }
@@ -549,7 +549,7 @@
   border-radius: var(--r-xl, 14px);
   background: var(--bg-elev);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -615,7 +615,7 @@
 }
 .ringTick {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   fill: var(--text-ghost);
@@ -646,7 +646,7 @@
 }
 .sectorName {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   fill: var(--sector-c, var(--text-ghost));
@@ -745,13 +745,13 @@
 }
 .coreK {
   font-family: var(--font-mono);
-  font-size: 7px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.14em;
   fill: var(--text-ghost);
 }
 .coreCaption {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-faint);
   paint-order: stroke;
@@ -803,7 +803,7 @@
 }
 .nodeLabel {
   font-family: var(--font-mono);
-  font-size: 7.6px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-faint);
   paint-order: stroke;
@@ -819,7 +819,7 @@
   animation-delay: calc(var(--dly, 0ms) + 140ms);
 }
 .nodeLabelBig {
-  font-size: 9px;
+  font-size: var(--t-control-size);
   fill: var(--text-soft);
   opacity: 1;
 }
@@ -834,7 +834,7 @@
    second line under the friendly label, demoted so the human name still leads */
 .nodeSubLabel {
   font-family: var(--font-mono);
-  font-size: 5.6px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-ghost);
   paint-order: stroke;
@@ -861,28 +861,7 @@
   transition: opacity 0.2s var(--ease);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .edges,
-  .nodeBody,
-  .nodeHalo,
-  .nodeLabel,
-  .nodeSubLabel,
-  .nodeDim,
-  .chip,
-  .qChip,
-  .segBtn,
-  .backBtn {
-    transition-duration: 0.01ms;
-  }
-  .graticule,
-  .dial,
-  .coreBezel,
-  .coreGlow,
-  .ringGuideDashed,
-  .edge,
-  .nodeBody,
-  .nodeLabel,
-  .nodeSubLabel {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes every transition/animation duration
+   above (the 0.01ms non-zero override this file used to carry never actually
+   applied — the global rule's `!important` always won over it). */

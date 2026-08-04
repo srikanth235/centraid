@@ -1,4 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -224,6 +227,56 @@ describe("shell-session", () => {
         else Reflect.deleteProperty(navigator, "serviceWorker");
         localStorage.clear();
       }
+    });
+
+    test("sync() pulls the coordinator to the gateway head once a cursor exists", async () => {
+      const syncNow = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+      const coordinator = fakeCoordinator({
+        status: vi.fn<ShellReplicaCoordinator["status"]>().mockResolvedValue({
+          mode: "memory",
+          cursor: { epoch: "e", seq: 1 },
+          schemaEpoch: "schema",
+          coverage: "complete",
+        }),
+        syncNow,
+      });
+      const session = new ReplicaShellSession(
+        {
+          baseUrl: "http://127.0.0.1:49152",
+          gatewayId: "profile-home",
+          vaultId: "vault",
+        },
+        coordinator,
+        { eventTarget: new EventTarget(), isOnline: () => true }
+      );
+      await session.start(await coordinator.status());
+
+      await session.sync();
+
+      expect(syncNow).toHaveBeenCalledOnce();
+      await session.close();
+    });
+
+    test("sync() before the first fill defers to bootstrap rather than pulling", async () => {
+      const syncNow = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+      const coordinator = fakeCoordinator({ syncNow });
+      const session = new ReplicaShellSession(
+        {
+          baseUrl: "http://127.0.0.1:49152",
+          gatewayId: "profile-home",
+          vaultId: "vault",
+        },
+        coordinator,
+        // Offline, so the deferred bootstrap parks instead of fetching — the
+        // point here is only that a cursor-less replica never pulls changes.
+        { eventTarget: new EventTarget(), isOnline: () => false }
+      );
+      await session.start(await coordinator.status());
+
+      await session.sync();
+
+      expect(syncNow).not.toHaveBeenCalled();
+      await session.close();
     });
 
     test("closing for a gateway switch preserves remembered storage for a warm return", async () => {
@@ -743,6 +796,124 @@ describe("shell-session", () => {
       await session.flushIntents();
       expect(revoked).toHaveBeenCalledWith(session);
       expect(coordinator.purge).toHaveBeenCalledOnce();
+    });
+
+    test("a rebootstrap demanded mid-bootstrap runs after it, instead of being dropped", async () => {
+      let releaseBootstrap: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        releaseBootstrap = () => resolve();
+      });
+      const coordinator = fakeCoordinator({
+        bootstrap: vi
+          .fn<ShellReplicaCoordinator["bootstrap"]>()
+          .mockImplementationOnce(async () => {
+            await gate;
+            return { epoch: "epoch", seq: 7 };
+          })
+          .mockResolvedValue({ epoch: "epoch", seq: 8 }),
+      });
+      // A fresh Response per call: both bootstraps read the body.
+      const fetcher = vi.fn<ReplicaFetcher>().mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              vaultId: "vault",
+              schemaEpoch: "schema",
+              cursor: { epoch: "epoch", seq: 7 },
+              shapes: [],
+              rows: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+      );
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        coordinator,
+        { fetcher, eventTarget: new EventTarget(), isOnline: () => true }
+      );
+
+      const started = session.start({
+        mode: "memory",
+        cursor: null,
+        schemaEpoch: null,
+      });
+      await vi.waitFor(() =>
+        expect(coordinator.bootstrap).toHaveBeenCalledOnce()
+      );
+      // The gateway rejects the state this walk began from, while it walks.
+      session.requireBootstrap();
+      releaseBootstrap?.();
+      await started;
+
+      await vi.waitFor(() =>
+        expect(coordinator.bootstrap).toHaveBeenCalledTimes(2)
+      );
+      await session.close();
+    });
+  });
+  // The windowed-bootstrap `target` hands the coordinator's own methods to
+  // `runWindowedBootstrap`, which invokes them as `target.bootstrapBegin(...)`.
+  // A bare method reference therefore arrives with `this` bound to the object
+  // literal, and `bootstrapBegin` calls a private method on itself as its very
+  // first act — so detaching them threw `this.resetFeedGeneration is not a
+  // function` on any vault large enough to take the windowed path. Unit tests
+  // stayed green because nothing here drives a real windowed bootstrap; it
+  // surfaced only when the desktop Home springboard began reading the replica.
+  //
+  // This is a STRUCTURAL guard, not a behavioural one: a windowed-bootstrap
+  // fixture does not exist yet, so this pins the shape of the call site until
+  // one does.
+  describe("windowed bootstrap target", () => {
+    test("passes coordinator methods wrapped, never as detached references", () => {
+      const source = readFileSync(
+        path.join(import.meta.dirname, "shell-session.ts"),
+        "utf8"
+      );
+      const target = /target:\s*\{(?<body>[\s\S]*?)\n\s{8}\}/u.exec(source)
+        ?.groups?.body;
+      expect(target, "windowed-bootstrap target literal not found").toBeTypeOf(
+        "string"
+      );
+      // A bare `this.coordinator.foo!,` or `this.coordinator.foo,` entry is the
+      // regression; every method must be reached through an arrow that keeps
+      // the coordinator as the receiver.
+      expect(target).not.toMatch(/:\s*this\.coordinator\.\w+!?,/u);
+      expect(target).toMatch(/[=]>\s*this\.coordinator\.bootstrapBegin!\(/u);
+    });
+
+    // The second way this literal goes wrong, and the one the compiler cannot
+    // see: a function that accepts FEWER parameters than its target type is
+    // assignable in TypeScript, so a wrapper that quietly drops an argument
+    // typechecks. `bootstrapCommit(cursor, header, outcomes)` wrapped as
+    // `(cursor, header) => ...` compiled clean while discarding the intent
+    // outcomes reconciled against the page-1 cursor — every write in flight
+    // across a bootstrap was left unresolved with nothing to report it.
+    test("forwards every parameter each wrapper declares", () => {
+      const source = readFileSync(
+        path.join(import.meta.dirname, "shell-session.ts"),
+        "utf8"
+      );
+      const target = /target:\s*\{(?<body>[\s\S]*?)\n\s{8}\}/u.exec(source)
+        ?.groups?.body;
+      const wrappers = [
+        ...(target ?? "").matchAll(
+          /\((?<params>[^)]*)\)\s*=>\s*this\.coordinator\.(?<method>\w+)!?\((?<args>[^)]*)\)/gu
+        ),
+      ];
+      expect(wrappers.length).toBeGreaterThanOrEqual(5);
+      const names = (list: string): string[] =>
+        list
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
+      for (const wrapper of wrappers) {
+        const { args, method, params } = wrapper.groups!;
+        expect(
+          names(args!),
+          `${method} drops or reorders a parameter`
+        ).toStrictEqual(names(params!));
+      }
     });
   });
 });

@@ -93,7 +93,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 
 .pairForm {
@@ -200,7 +200,7 @@
 }
 .pairExpiry {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 @media (max-width: 620px) {

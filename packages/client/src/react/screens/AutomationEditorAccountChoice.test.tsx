@@ -367,19 +367,14 @@ describe("AutomationEditorAccountChoice", () => {
     expect(el.textContent).toContain("Use default (codex)");
     expect(el.textContent).toContain("Work ACP");
 
-    setSelectValue(
-      el.querySelector(
-        'select[aria-label="Automation runner"]'
-      ) as HTMLSelectElement,
-      "acp"
-    );
+    // The runner/model selects are named by their wrapping <label> ("Runner"
+    // / "Model") rather than a duplicate aria-label (#708 aria-label
+    // discipline — a control already named by visible text doesn't also get
+    // one), so they're picked up here by field order instead.
+    const agentPickerSelects = el.querySelectorAll("select");
+    setSelectValue(agentPickerSelects[0] as HTMLSelectElement, "acp");
     expect(el.textContent).toContain("Use default (acp-default)");
-    setSelectValue(
-      el.querySelector(
-        'select[aria-label="Automation model"]'
-      ) as HTMLSelectElement,
-      "acp-smart"
-    );
+    setSelectValue(agentPickerSelects[1] as HTMLSelectElement, "acp-smart");
 
     await act(async () =>
       button(el, "Create automation").dispatchEvent(

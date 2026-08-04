@@ -47,9 +47,11 @@ export interface InlineAppRouteProps {
   appId: string;
   loader: () => Promise<{ default: InlineAppModule }>;
   nav: ShellNav;
-  renderSidebar: (nav: ShellNav) => ReactNode;
+  renderStem: (nav: ShellNav) => ReactNode;
+  /** The frame's one status line — full-bleed hosts mount their own frame,
+   *  so they are handed the same node rather than inheriting it. */
+  statusLine?: ReactNode;
   prefs: AppearancePrefs;
-  onToggleSidebar: () => void;
 }
 
 const INLINE_SCOPE_CLASS = "centraid-inline-scope";
@@ -208,9 +210,16 @@ function InlineAppMount({
     };
   }, [descriptor.multiScope, installed, scopes]);
   const Root = descriptor.Root;
-  return (
-    <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />
+  // The ref MUST be stable. An inline arrow here is a new function every render,
+  // and React answers an identity change by detaching (`ref(null)`) and
+  // reattaching the SAME element — which ran the mount callback's teardown, and
+  // with it revoked every live blob: object URL, on every re-render of the app.
+  // Photos re-renders on each slot paint, so its grid went blank mid-load.
+  const rootRef = useCallback(
+    (el: HTMLElement | null) => onRootReady(el, descriptor),
+    [descriptor, onRootReady]
   );
+  return <Root rootRef={rootRef} />;
 }
 
 export default function InlineAppRoute({
@@ -218,9 +227,9 @@ export default function InlineAppRoute({
   appId,
   loader,
   nav,
-  renderSidebar,
+  renderStem,
+  statusLine,
   prefs,
-  onToggleSidebar,
 }: InlineAppRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
@@ -261,6 +270,16 @@ export default function InlineAppRoute({
 
   const onRootReady = useCallback(
     (el: HTMLElement | null, descriptor: InlineAppModule) => {
+      // The install is keyed to the ELEMENT, not to this callback. React hands
+      // `null` on every detach, and most detaches are NOT an unmount: a ref
+      // whose identity changed, or a Suspense boundary hiding and then
+      // re-revealing the very same subtree. Reading those as teardown revoked
+      // every live blob: object URL out from under still-mounted <img>s, which
+      // is what rendered the photo grid blank (ERR_FILE_NOT_FOUND on a revoked
+      // blob: URL). So a detach is ignored and only a DIFFERENT element
+      // replaces the install; the route's unmount effect below is what
+      // guarantees the URLs are still revoked exactly once.
+      if (el === null || el === appRootRef.current) return;
       if (askTeardown.current) {
         askTeardown.current();
         askTeardown.current = null;
@@ -270,7 +289,6 @@ export default function InlineAppRoute({
         blobTeardown.current = null;
       }
       appRootRef.current = el;
-      if (!el) return;
       el.classList.add(INLINE_SCOPE_CLASS);
       syncInlineProductAccent(el);
       for (const [k, v] of Object.entries(knobValues.current))
@@ -328,29 +346,24 @@ export default function InlineAppRoute({
     }
   };
 
+  // Code-store apps only: the panel gives a bundled app no danger zone at all
+  // (issue #708 — it reinstalls at every vault mount, so there is nothing an
+  // uninstall could durably mean).
   const deleteFlow = async (): Promise<void> => {
-    const ok = bundled
-      ? await confirm({
-          confirmLabel: "Uninstall",
-          danger: true,
-          title: `Uninstall ${app.name}?`,
-          message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
-        })
-      : await confirm({
-          confirmLabel: "Delete",
-          danger: true,
-          title: "Delete app?",
-          message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
-        });
+    const ok = await confirm({
+      confirmLabel: "Delete",
+      danger: true,
+      title: "Delete app?",
+      message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
+    });
     if (!ok) return;
     try {
       await deleteApp({ id: app.id });
-      showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
+      showToast(`Deleted "${app.name}"`);
       nav.navigate({ kind: "home" });
     } catch (error) {
-      const verb = bundled ? "uninstall" : "delete";
       showToast(
-        `Could not ${verb}: ${error instanceof Error ? error.message : String(error)}`
+        `Could not delete: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
@@ -436,9 +449,8 @@ export default function InlineAppRoute({
 
   return (
     <ShellFrame
-      sidebarOpen={prefs.sidebarOpen}
-      onToggleSidebar={onToggleSidebar}
-      sidebar={renderSidebar(nav)}
+      stem={renderStem(nav)}
+      statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

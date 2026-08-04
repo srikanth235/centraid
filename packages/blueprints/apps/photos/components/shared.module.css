@@ -4,9 +4,9 @@
    strip. */
 
 .sectionLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
   color: var(--text-faint);
   padding: 14px var(--sp-2) 6px;
 }

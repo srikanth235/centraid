@@ -37,7 +37,12 @@
   text-transform: capitalize;
 }
 
-.copy span,
+.copy span {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
 .done {
   color: var(--text-faint);
   font: var(--t-small);

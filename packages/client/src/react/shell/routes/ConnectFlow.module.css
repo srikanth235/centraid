@@ -350,12 +350,7 @@
   color: var(--text);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .methodCard,
-  .vaultRow {
-    transition: none;
-  }
-  .spinner[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule (`transition-duration`/`animation-duration` to 0), which
+   already covers `.methodCard`/`.vaultRow`'s transitions and
+   `.spinner[data-spin="true"]`'s animation. */

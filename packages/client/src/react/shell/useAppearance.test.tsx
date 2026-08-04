@@ -45,7 +45,15 @@ const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
+    set: (k: string, v: unknown) => {
+      store.set(k, v);
+    },
+    remove: (k: string) => {
+      store.delete(k);
+    },
+    removeByPrefix: (prefix: string) => {
+      for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+    },
   },
 }));
 
@@ -85,24 +93,24 @@ describe("useAppearance", () => {
 
   describe("useAppearance", () => {
     it("seeds from defaults + the Store cache and writes <html>", async () => {
-      store.set(CACHE_KEY, { accent: "rose" });
+      store.set(CACHE_KEY, { cardVariant: "flat" });
       await mount();
-      expect(ctl.prefs.accent).toBe("rose");
+      expect(ctl.prefs.cardVariant).toBe("flat");
       expect(document.documentElement.dataset.theme).toBe(ctl.prefs.theme);
+      expect(document.documentElement.dataset.cards).toBe("flat");
     });
 
     it("ignores a cache written in the pre-#608 shape", async () => {
       // The old shape persisted `bgL` and an accent on every save —
       // indistinguishable from an owner who chose them, and written inline
       // where they outranked the theme's own declarations. The bumped key
-      // starts the new shape clean instead of inheriting that.
+      // starts the new shape clean instead of inheriting that. #707 retired
+      // both keys outright, so neither may reach <html> by any route.
       store.set("appearance", { bgL: 5, accent: "rose", coolBlueCast: false });
       await mount();
-      expect(ctl.prefs.bgL).toBeUndefined();
-      expect(ctl.prefs.accent).toBeUndefined();
-      expect(document.documentElement.style.getPropertyValue("--bg-l")).toBe(
-        ""
-      );
+      const style = document.documentElement.style;
+      expect(style.getPropertyValue("--bg-l")).toBe("");
+      expect(style.getPropertyValue("--accent")).toBe("");
     });
 
     it("tracks the OS appearance while the mode is `system`", async () => {
@@ -126,12 +134,12 @@ describe("useAppearance", () => {
     it("setPrefs updates state, caches to Store, and mirrors to the gateway", async () => {
       await mount();
       await act(async () => {
-        ctl.setPrefs({ accent: "violet" });
+        ctl.setPrefs({ cardVariant: "elevated" });
       });
-      expect(ctl.prefs.accent).toBe("violet");
-      expect(store.get(CACHE_KEY)).toMatchObject({ accent: "violet" });
+      expect(ctl.prefs.cardVariant).toBe("elevated");
+      expect(store.get(CACHE_KEY)).toMatchObject({ cardVariant: "elevated" });
       expect(saveUserPrefs).toHaveBeenCalledWith(
-        expect.objectContaining({ accentKey: "violet" })
+        expect.objectContaining({ cards: "elevated" })
       );
     });
 

@@ -244,7 +244,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 5,
       paddingVertical: 1,
     },
-    badgeText: { color: "#fff", fontFamily: family.sansBold, fontSize: 11 },
+    badgeText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 11 },
     banner: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -256,7 +256,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 14,
     },
-    bannerAction: { ...t("small"), fontFamily: family.sansBold },
+    bannerAction: { ...t("small"), fontFamily: family.sansMedium },
     bannerCopy: { flex: 1 },
     bannerIcon: {
       alignItems: "center",
@@ -295,7 +295,7 @@ const makeStyles = (colors: ThemeColors) =>
     chipTitle: {
       ...t("small"),
       color: colors.text,
-      fontFamily: family.sansBold,
+      fontFamily: family.sansMedium,
     },
     dot: { borderRadius: 3, height: 6, width: 6 },
     pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },

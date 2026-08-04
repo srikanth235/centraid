@@ -15,11 +15,24 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo"]);
 // v0 baseline; lowering a bespoke value is welcome, adding one requires an
 // explicit review of the shared token contract instead of silently expanding
 // the exception surface.
+// 2026-08-03 (#708): re-measured over code with comments excluded. The old
+// numbers (hex 302, rgba 62, fontSize 315) counted prose too, and this repo
+// puts an issue anchor in every header — so `hex` carried ~109 units of
+// phantom slack the gate would have waved genuine hardcoded colours through.
+// (`hex` still counts the generated token module, which is where most of the
+// remaining 193 legitimately live.)
 export const MOBILE_DESIGN_BASELINE = Object.freeze({
-  hex: 601,
-  rgba: 158,
-  fontSize: 316,
+  hex: 193,
+  rgba: 62,
+  fontSize: 310,
 });
+
+/** Blank line and block comments, preserving offsets so nothing else shifts. */
+function blankComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
+    .replace(/\/\/[^\n]*/gu, (m) => " ".repeat(m.length));
+}
 
 const FORBIDDEN = [
   ["Feather dependency", /(?:Feather|@expo\/vector-icons)/u],
@@ -69,8 +82,15 @@ export function scanMobileDesign(root = ROOT) {
       if (pattern.test(source))
         findings.push(`${path.relative(root, file)}: ${label}`);
     }
+    // Count over CODE only. `#[0-9a-f]{3,8}` cannot tell `#4A67C8` from the
+    // issue reference `(#708)`, and this repo requires an issue anchor on
+    // every commit — so counting comments made the gate fire on the very
+    // cross-referencing the constitution mandates, which taught the wrong
+    // lesson twice over: it flagged prose as a design violation, and it let
+    // a genuine hardcoded colour hide inside a jump of eight false ones.
+    const code = blankComments(source);
     for (const [name, pattern] of Object.entries(literalPatterns)) {
-      counts[name] += (source.match(pattern) ?? []).length;
+      counts[name] += (code.match(pattern) ?? []).length;
     }
   }
 
@@ -95,7 +115,7 @@ export function scanMobileDesign(root = ROOT) {
     "lineSel",
     "focusRingColor",
     "textDisabled",
-    'export const durations = {"one":120,"two":200}',
+    'export const durations = {"one":140,"two":280}',
   ]) {
     if (!generatedSource.includes(required))
       findings.push(`${path.relative(root, generated)}: missing ${required}`);
