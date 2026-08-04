@@ -59,7 +59,12 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
     await expect(page.locator("iframe[data-centraid-app]")).toHaveCount(0);
     await page.keyboard.press("Meta+[");
     await waitForHome(page);
-    await expect(page.getByTestId("apps-grid")).toBeVisible();
+    // Home is the content springboard now (#708), not the library apps-grid.
+    await expect(
+      page.locator(
+        '[data-testid="home-springboard"], [data-testid="home-first-run"]'
+      )
+    ).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -384,11 +389,10 @@ test("10.3 — independent builder drafts coexist on disk and survive a full Ele
     const restarted = await launchApp(env);
     try {
       await waitForHome(restarted.page);
+      // Drafts no longer appear as Home library cards (#708); survive on disk
+      // and remain openable via the palette.
       await Promise.all(
         draftIds.map(async (id) => {
-          await expect(
-            restarted.page.locator(`[data-app-id="${id}"]`)
-          ).toBeVisible();
           await expect(
             fs.access(path.join(env.appsDir, id, "app.json"))
           ).resolves.toBeUndefined();

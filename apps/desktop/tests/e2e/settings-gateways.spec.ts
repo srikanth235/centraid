@@ -7,12 +7,11 @@ import type { Page } from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   launchApp,
   makeEnv,
   markUserApp,
-  openTileMenu,
+  openAppFromPalette,
   seedRemoteGateway,
   seedRemoteGatewayProfile,
   startMockGateway,
@@ -361,8 +360,8 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
       deadId
     );
     // No crash — the shell stays mounted even though the gateway is unreachable.
-    // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).
-    await expect(page.locator("[data-sidebar]")).toBeVisible();
+    // The stem (`nav[aria-label="Apps"]`) is the chrome root post-#707.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -379,8 +378,9 @@ test("14.2 — an auth failure on publish surfaces a token/Settings prompt", asy
     await markUserApp(page, { id, name: "Todoer" });
     await page.reload();
     await waitForHome(page);
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Edit with Centraid");
+    // Custom apps open via palette; Build is the titlebar entry to the builder.
+    await openAppFromPalette(page, "Todoer");
+    await page.getByRole("button", { name: "Build", exact: true }).click();
     await page.getByTestId("builder-body").waitFor({ state: "visible" });
 
     gateway.state.forceStatus = 401; // every call now rejects with auth_required

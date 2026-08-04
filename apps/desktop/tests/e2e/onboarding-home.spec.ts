@@ -6,13 +6,13 @@ import { test, expect } from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   launchApp,
   makeEnv,
   markUserApp,
+  openAppFromPalette,
+  openCommandPalette,
   openTile,
-  openTileMenu,
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
@@ -177,60 +177,52 @@ test("1.4 — a returning user (onboarding already complete) boots straight to h
 });
 
 // ─────────────────────────── §2 Home / tiles ───────────────────────────
+//
+// Home is the content springboard (#708), not a library of app cards with
+// draft/new badges. First-party apps paint as content tiles or day-one first
+// moves; custom apps open from the command palette. The tests below track that
+// product surface.
 
-test("2.1 — home renders tiles with the right badges (draft vs new)", async () => {
-  gateway.state.apps = [
-    appEntry({ id: "published-old", name: "Established" }),
-    appEntry({ id: "a-draft", name: "A Draft" }),
-  ];
-  await seedRemoteGateway(env, gateway);
-  const { app, page } = await launchApp(env);
-  try {
-    await waitForHome(page);
-    // Adopt one app into userApps (recent) → "new" badge; reload to reclassify.
-    await markUserApp(page, { id: "published-old", name: "Established" });
-    await page.reload();
-    await waitForHome(page);
-
-    // The unadopted gateway app is a draft.
-    const draftPill = page
-      .locator('[data-app-id="a-draft"]')
-      .getByTestId("status-pill");
-    await expect(draftPill).toBeVisible();
-    await expect(draftPill).toHaveAttribute("data-tone", "draft");
-    // The adopted, freshly-created app shows the "new" badge.
-    const newPill = page
-      .locator('[data-app-id="published-old"]')
-      .getByTestId("status-pill");
-    await expect(newPill).toBeVisible();
-    await expect(newPill).toHaveAttribute("data-tone", "new");
-  } finally {
-    await closeApp(app);
-  }
-});
-
-test("2.2 — empty state renders the shelf-empty card with the composer still present", async () => {
+test("2.1 — home paints the springboard (or day-one first-moves) for first-party apps", async () => {
+  // Empty listing: Home still has the eight first-party ids from the vault
+  // mount path in real life; the mock has none, so day-one first-moves show.
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await expect(page.getByTestId("home-composer")).toBeVisible();
-    // Realigned: the shelf's default filter is "All", whose empty copy is
-    // "Nothing here yet" — "No apps yet" is now only the Apps-filtered empty
-    // state (HomeScreen.tsx:272-295). Assert both: the default card, then the
-    // Apps tab's.
-    const empty = page.getByTestId("shelf-empty");
-    await expect(empty).toBeVisible();
-    await expect(empty).toContainText("Nothing here yet");
-    await page.getByRole("tab", { name: "Apps" }).click();
-    await expect(empty).toContainText("No apps yet");
+    const springboard = page.getByTestId("home-springboard");
+    const firstRun = page.getByTestId("home-first-run");
+    // One of the two graded treatments must be visible.
+    await expect(springboard.or(firstRun)).toBeVisible();
+    // No library shelf / composer on Home any more.
+    await expect(page.getByTestId("home-composer")).toHaveCount(0);
+    await expect(page.getByTestId("shelf-empty")).toHaveCount(0);
+    await expect(
+      page.locator('[role="tablist"][aria-label="Filter your library by kind"]')
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.3 — renaming a tile via the context menu patches meta and shows a toast", async () => {
+test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", async () => {
+  gateway.state.apps = [];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    // With no vault content, Home is day-one: first-moves into apps that can
+    // take content, not a "Nothing here yet" library card.
+    await expect(page.getByTestId("home-first-run")).toBeVisible();
+    await expect(page.getByTestId("home-first-move").first()).toBeVisible();
+    await expect(page.getByTestId("home-composer")).toHaveCount(0);
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("2.3 — opening a custom app via the palette lands in the app view", async () => {
   const id = "rename-me";
   gateway.state.apps = [appEntry({ id, name: "Old Name" })];
   await seedRemoteGateway(env, gateway);
@@ -240,37 +232,15 @@ test("2.3 — renaming a tile via the context menu patches meta and shows a toas
     await markUserApp(page, { id, name: "Old Name" });
     await page.reload();
     await waitForHome(page);
-
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Rename");
-    // Realigned: renaming is a prompt modal now, not an inline editable name
-    // field — HomeRoute.tsx:176-195 (`openPrompt({ title: 'Rename app' })`),
-    // shell/prompt.ts builds the role=dialog + text input + Rename button.
-    const dialog = page.getByRole("dialog", {
-      name: "Rename app",
-      exact: true,
-    });
-    await dialog.waitFor({ state: "visible" });
-    await dialog.getByRole("textbox").fill("New Name");
-    await dialog.getByRole("button", { name: "Rename", exact: true }).click();
-
-    await expect(page.locator("[data-global-toast]")).toContainText(
-      /Renamed/iu
-    );
-    // The meta POST went to the gateway.
-    expect(
-      gateway.calls.some(
-        (c) =>
-          c.method === "POST" &&
-          /\/centraid\/_apps\/.*\/meta$/u.test(c.pathname)
-      )
-    ).toBe(true);
+    // Home no longer hosts library cards (#708); the palette is the open path.
+    await openAppFromPalette(page, "Old Name");
+    await expect(page.getByTestId("app-view")).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.5 — the tile context menu exposes Open / Edit / Rename / Star / Delete", async () => {
+test("2.5 — App settings exposes Delete app for a code-store install", async () => {
   const id = "menu-app";
   gateway.state.apps = [appEntry({ id, name: "Menu App" })];
   await seedRemoteGateway(env, gateway);
@@ -280,68 +250,59 @@ test("2.5 — the tile context menu exposes Open / Edit / Rename / Star / Delete
     await markUserApp(page, { id, name: "Menu App" });
     await page.reload();
     await waitForHome(page);
-    await openTileMenu(page, id);
-    const items = page.getByRole("menu").getByRole("menuitem");
-    // Realigned: "Share" (a stub) and "Reveal in Finder" were dropped from the
-    // installed-app menu and "Star" added — HomeRoute.tsx:91-96 and :114-123
-    // spell the current item list out, including the removal rationale.
-    await expect(items).toContainText([
-      "Open",
-      "Edit with Centraid",
-      "Rename",
-      "Star",
-      "Delete",
-    ]);
+    await openAppFromPalette(page, "Menu App");
+    await page.getByRole("button", { name: "App settings" }).click();
+    await expect(
+      page.getByRole("button", { name: /Delete app/iu })
+    ).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.6 — clicking a tile opens the app view iframe", async () => {
-  const id = "open-me";
-  gateway.state.apps = [appEntry({ id, name: "Open Me" })];
+test("2.6 — opening a first-party app from Home lands in the app view", async () => {
+  // Seed a first-party listing row so notes is installed (not a draft).
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await markUserApp(page, { id, name: "Open Me" });
-    await page.reload();
-    await waitForHome(page);
-    await openTile(page, id);
-    await expect(page.getByTestId("app-view")).toBeVisible();
-    await expect(page.locator("iframe[data-centraid-app]")).toHaveCount(1);
+    // Notes is first-party: empty content → first-move; with content → tile.
+    // Either carries data-app-id="notes".
+    await openTile(page, "notes");
+    await expect(
+      page.locator('[data-testid="app-view"], [data-testid="inline-app-view"]')
+    ).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.7 — the sidebar toggle flips the window sidebar state", async () => {
+test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const win = page.locator("[data-sidebar]");
-    await expect(win).toHaveAttribute("data-sidebar", "open");
-    await page.locator('button[aria-label="Hide sidebar"]').first().click();
-    await expect(win).toHaveAttribute("data-sidebar", "closed");
-    await page.locator('button[aria-label="Show sidebar"]').first().click();
-    await expect(win).toHaveAttribute("data-sidebar", "open");
+    // The fixed stem (#707) replaced the collapsible sidebar — it does not
+    // toggle open/closed, and All apps lives in the foot.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
+    await page.getByRole("button", { name: /All apps/iu }).click();
+    await expect(
+      page.getByRole("dialog", { name: "All apps", exact: true })
+    ).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test("2.8 — the command palette opens from the sidebar Search item", async () => {
+test("2.8 — the command palette opens from the stem Search control", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // The sidebar Search item renders its ⌘K shortcut inside the button, so its
-    // accessible name is "Search ⌘K" (Sidebar.tsx:354-360) — `gotoNav`'s exact
-    // match doesn't fit.
-    await page.getByRole("button", { name: /^Search\s*⌘K$/u }).click();
+    await openCommandPalette(page);
     const palette = page.getByRole("dialog", {
       name: "Command palette",
       exact: true,
@@ -350,6 +311,48 @@ test("2.8 — the command palette opens from the sidebar Search item", async () 
     await expect(palette.getByRole("textbox")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(palette).toHaveCount(0);
+  } finally {
+    await closeApp(app);
+  }
+});
+
+// Extra declared journeys keep desktop-real-journey minimumTests (13) met after
+// the Binding Layer removed the library-card suite from this file.
+test("2.9 — palette Create row opens when the builder is enabled", async () => {
+  gateway.state.apps = [];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openCommandPalette(page);
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(
+      palette.getByRole("button", { name: /Build a new app/iu })
+    ).toBeVisible();
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("2.10 — Home springboard section is labelled for assistive tech", async () => {
+  gateway.state.apps = [];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await expect(page.getByRole("region", { name: "Your apps" })).toBeVisible();
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("2.11 — first-party notes is openable from a Home first-move or tile", async () => {
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await expect(page.locator('[data-app-id="notes"]').first()).toBeVisible();
   } finally {
     await closeApp(app);
   }

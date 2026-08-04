@@ -184,11 +184,10 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
           <span className={styles.readingStamp}>{body.at}</span>
         </div>
       );
-    default:
-      // `empty` never reaches here: a tile with nothing to show is partitioned
-      // out of the grid and becomes a first move instead (see
-      // `partitionHomeTiles`). Rendering an empty body would put the two
-      // treatments on screen at once.
+    case "empty":
+      // `empty` is partitioned out of the grid into first-moves (see
+      // `partitionHomeTiles`). Kept exhaustive so type-aware lint catches new
+      // body kinds; rendering an empty body would put both treatments on screen.
       return <div className={styles.body} />;
   }
 }
