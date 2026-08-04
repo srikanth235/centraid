@@ -9,6 +9,13 @@
   position: relative;
   display: flex;
 }
+/* The open/pressed ground for the kit icon button. Ink only — `--accent-soft`
+   is an 8% ink wash and `--accent-text` IS the ink since the Binding Layer
+   flip, so no hue lands on a control. */
+.toggle[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
 :global(.kit-popover).panel {
   position: absolute;
   top: calc(100% + 0.5rem);

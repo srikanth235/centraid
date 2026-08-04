@@ -215,9 +215,11 @@ export function SidebarView({
           </button>
         </div>
 
+        {/* THE one filled ink element in this view (DESIGN.md invariant 3):
+            the kit's `primary` button, not a hand-rolled fill. */}
         <button
           type="button"
-          className={styles.uploadBtn}
+          className={`kit-btn primary ${styles.uploadBtn}`}
           id="uploadBtn"
           onClick={onUpload}
         >
@@ -295,7 +297,7 @@ export function SidebarView({
                 <button
                   key={tag}
                   type="button"
-                  className={`kit-chip ${styles.tagChip}`}
+                  className={`kit-chip quiet ${styles.tagChip}`}
                   data-active={
                     selectedAlbum === `tag:${tag}` ? "true" : "false"
                   }

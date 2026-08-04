@@ -24,10 +24,6 @@
   background: var(--bg-sunken) center/cover no-repeat;
   box-shadow: var(--shadow-sm);
   padding: 0;
-  transition: transform var(--dur-1) var(--ease);
-}
-.memoryCard:hover {
-  transform: translateY(-2px);
 }
 .memoryScrim {
   position: absolute;

@@ -1,9 +1,8 @@
 /* The redesigned lightbox's React-owned classes. Authored camelCase (old
    `ph-lb-`/`ph-lightbox` prefixes dropped). The fixed `.lightbox` container
    (z-index 60) stays global (static index.html element / React root). The
-   filmstrip's placeholder shimmer moved here with its frame; it references the
-   global `@keyframes ph-shimmer` (kept in app.css alongside `.ph-tile-ph`) by
-   name, and the `is-placeholder`/`zoomable`/`zoomed` markers are `:global`
+   filmstrip's placeholder ground moved here with its frame (static, matching
+   `.kit-skeleton`), and the `is-placeholder`/`zoomable`/`zoomed` markers are `:global`
    (shared vocabulary set imperatively / as static strings). */
 
 .lightbox {
@@ -13,8 +12,12 @@
   display: flex;
   flex-direction: column;
   /* A theater stage, not a themed surface — same fixed dark backdrop as the
-     slideshow (z-index 65) it opens into, in both themes. */
-  background: hsl(var(--app-hue) 25% 4%);
+     slideshow (z-index 65) it opens into, in both themes. NEUTRAL: an identity
+     hue is a mark or a content accent, never a full-bleed ground. Still a
+     literal: `--scrim` is translucent (a veil over content) and the token layer
+     has no OPAQUE stage role. Pinned at functional:1 in
+     token-purity-allowlist.ts; the seam is recorded there. */
+  background: hsl(0 0% 4%); /* governance: allow-no-hardcoded-colors stage */
   color: var(--text-inv);
 }
 .topbar {
@@ -31,7 +34,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 8%, transparent);
   color: var(--text-inv);
   flex-shrink: 0;
@@ -95,7 +98,7 @@
   place-items: center;
   width: 5rem;
   height: 5rem;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 10%, transparent);
   color: color-mix(in oklab, var(--text-inv) 82%, transparent);
   font-size: var(--t-display-size);
@@ -134,7 +137,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--text-inv) 10%, transparent);
   color: var(--text-inv);
   z-index: 2;
@@ -221,21 +224,10 @@
   position: relative;
   overflow: hidden;
 }
+/* Static, like `.kit-skeleton` and `.ph-tile-ph` — see Chrome.module.css. */
 .frame:global(.is-placeholder)::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
-    var(--bg-sunken) 70%
-  );
-  background-size: 220% 100%;
-  animation: kit-shimmer 1.4s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .frame:global(.is-placeholder)::after {
-    animation: none;
-  }
+  background: var(--bg-sunken);
 }

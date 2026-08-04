@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { SparkleIcon } from "../icons.tsx";
+import { FacesIcon } from "../icons.tsx";
 // Face-proposer on-demand (issue #352 phase 3/4): a header icon-button +
 // popover that reads `enrichment-status` (enrich.policy for the photos
 // domain) on mount and either offers "Detect faces now" (fires
@@ -55,8 +55,17 @@ export function EnrichmentPanel() {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
         setOpen(false);
     }
+    // Escape closes it too — an away-click is a mouse gesture, and a popover a
+    // keyboard user can open but not dismiss is a trap.
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("click", onAway, true);
-    return () => document.removeEventListener("click", onAway, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onAway, true);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const tier = status?.tier ?? null;
@@ -66,15 +75,14 @@ export function EnrichmentPanel() {
     <div className={styles.wrap} ref={wrapRef}>
       <button
         type="button"
-        className="ph-header-icon-btn"
+        className={`kit-icon-btn ${styles.toggle}`}
         data-active={open ? "true" : "false"}
         aria-haspopup="true"
         aria-expanded={open ? "true" : "false"}
         aria-label="Face detection"
-        title="Face detection"
         onClick={() => setOpen((v) => !v)}
       >
-        <SparkleIcon />
+        <FacesIcon />
       </button>
       {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
           without it is `display:none`); the popover keeps its own away-click

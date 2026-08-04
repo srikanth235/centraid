@@ -16,7 +16,7 @@ import type { MouseEvent } from "react";
 import { assetKey } from "../asset-key.ts";
 import { restoreAsset, toggleFavorite } from "../assets-actions.ts";
 import { cls, dayKey, fmtDay, fmtMonth } from "../format.ts";
-import { CheckIcon, HeartIcon } from "../icons.tsx";
+import { CheckIcon, CloseIcon, HeartIcon } from "../icons.tsx";
 import { justify } from "../layout.ts";
 import type { JustifiedTile } from "../layout.ts";
 import { mountMedia } from "../media.ts";
@@ -142,7 +142,6 @@ function Tile({
           type="button"
           className={styles.tileRemove}
           disabled={!canWrite}
-          title="Remove from album"
           aria-label="Remove from album"
           onClick={async (e) => {
             e.stopPropagation();
@@ -154,7 +153,7 @@ function Tile({
             if (narrate(outcome)) await refresh();
           }}
         >
-          ×
+          <CloseIcon size={12} />
         </button>
       ) : null}
       {isTrash ? (

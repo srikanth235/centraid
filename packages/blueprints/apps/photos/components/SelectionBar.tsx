@@ -1,5 +1,6 @@
 import { useRef } from "react";
 
+import { CloseIcon } from "../icons.tsx";
 // The selection toolbar: count, "Add to album ▾" menu, Delete, exit. The
 // "Add to album ▾" menu's open/closed flag (`menuOpen`) is app.tsx state (it
 // drives an away-click listener added/removed in lockstep with it) — this
@@ -114,13 +115,15 @@ export function SelectionBarView({
       >
         Delete
       </button>
+      {/* `kit-icon-btn`, not a hand-rolled 40px round button, and a real glyph
+          rather than a literal "×" that an `aria-label` then has to override. */}
       <button
         type="button"
-        className={styles.close}
+        className="kit-icon-btn"
         aria-label="Exit selection"
         onClick={onExit}
       >
-        ×
+        <CloseIcon />
       </button>
     </>
   );

@@ -76,9 +76,9 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
   },
   "photos/Chrome.module.css": {
     hex: 0,
-    functional: 3,
+    functional: 1,
     fontFamily: 0,
-    customProps: ["--app-hue", "--app-identity", "--bg-wall"],
+    customProps: ["--app-hue", "--app-identity"],
   },
   "photos/components/Lightbox.module.css": {
     hex: 0,

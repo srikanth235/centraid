@@ -3,15 +3,16 @@
    keeps its media-specific selection, lightbox, slideshow, and picker rules.
 
    Token layer: the shell injects the GENERIC blueprint token layer onto this
-   same element via `.centraid-inline-scope` (hue 222, product teal `--accent`). Photos'
-   identity is violet (--app-hue 255) with a handful of app-specific tokens the
-   generic layer lacks (--ph-sidebar-w, --ph-tile-r*,
-   --custody-warn). Overriding just `--app-hue` retunes every generic neutral to
-   violet (they all read `hsl(var(--app-hue) …)`); `--app-identity` is re-pinned to a
-   LITERAL violet fallback so the Photos identity stays independent from the
-   product accent while the `--app-identity` swatch knob still wins. The fold doubles the
-   class (`.appRoot.appRoot` → 0,2,0) to beat the injected layer's `.centraid-
-   inline-scope` (0,1,0); dark/media variants add the theme ancestor.
+   same element via `.centraid-inline-scope`. Photos' identity is AMBER — hue 28,
+   `--c-amber` — which is the slot `apps.ts` assigns it on the Binding Layer's
+   identity wheel and what the shell's launcher tile already paints. (It read
+   violet/255 here until the Binding Layer close-out: the app out-shouted its
+   own icon in a hue that
+   belongs to People.) Since the Binding Layer flip `--app-hue` is ONLY the
+   wheel slot — the neutrals are the system's literal paper and no longer read
+   it (packages/design/src/blueprint.ts) — so the identity declaration is these
+   two lines and nothing else. The fold doubles the class (`.appRoot.appRoot` →
+   0,2,0) to beat the injected layer's `.centraid-inline-scope` (0,1,0).
 
    Positioning: the served component modules (Sidebar.module.css, the .selection-
    bar/.lightbox/.slideshow containers) position against the VIEWPORT (100vh,
@@ -26,31 +27,12 @@
 
 .appRoot.appRoot {
   color-scheme: light dark;
-  /* Violet identity — retunes every generic neutral (they read --app-hue). */
-  --app-hue: 255;
-  /* Keep Photos identity independent from the host's product accent. */
-  --app-identity: var(--c-violet);
+  /* Amber identity — the slot apps.ts assigns Photos on the identity wheel. */
+  --app-hue: 28;
+  --app-identity: var(--c-amber);
   --ph-sidebar-w: 250px;
   --ph-tile-r: 3px;
   --ph-tile-r-sel: 13px;
-  --custody-warn: var(--warning);
-}
-
-:global(:root[data-theme="dark"]) .appRoot.appRoot {
-  --custody-warn: var(--warning);
-  /* The generic dark layer sets `--bg: var(--bg-wall)`; wall.css (which would
-     define it) never loads inline, so pin a violet-dark backdrop here.
-     `--bg-l` is retired (Binding Layer dark surfaces are warm-tinted paper,
-     not a one-knob greyscale calc); 11% is its documented former default
-     (10%) plus the 1% lift this backdrop always applied. */
-  --bg-wall: hsl(var(--app-hue) 16% 11%);
-}
-
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .appRoot.appRoot {
-    --custody-warn: var(--warning);
-    --bg-wall: hsl(var(--app-hue) 16% 11%);
-  }
 }
 
 /* ---------- Base reset (app.css global remainder), scoped ---------- */
@@ -156,22 +138,15 @@
 .headerActions {
   composes: kit-app-tools from global;
 }
+/* Two `kit-icon-btn`s in one bordered group. The buttons themselves are the
+   kit's, at the kit's `--target-min` floor — the pair used to be hand-rolled
+   at 32×30px, under both `--h-control` (34px) and the 44px target floor. */
 .zoom {
   display: flex;
   padding: 2px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-elev);
-}
-.zoom :global(.ph-header-icon-btn) {
-  width: 32px;
-  height: 30px;
-  border: none;
-  background: none;
-  border-radius: var(--r-md);
-}
-.zoom :global(.ph-header-icon-btn):disabled {
-  opacity: var(--o-disabled);
 }
 .askMount {
   composes: kit-app-ask-mount from global;
@@ -220,7 +195,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--line-strong);
   background-color: var(--accent-soft);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 0.4rem 0.5rem 0.4rem 1rem;
   box-shadow: var(--shadow-lg);
 }
@@ -243,11 +218,24 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
-  background: hsl(var(--app-hue) 25% 4% / 0.97);
+  /* A theater stage, not a themed surface, and NEUTRAL: an identity hue is a
+     mark or a content accent, never a full-bleed ground (DESIGN.md, "What an
+     app may set for itself"). Still a literal because the token layer has no
+     opaque stage role — see the seam noted in token-purity-allowlist.ts. */
+  background: hsl(0 0% 4% / 0.97); /* governance: allow-no-hardcoded-colors */
   cursor: pointer;
 }
 .slideshow[hidden] {
   display: none;
+}
+/* `kit-viewer-nav` paints `color: var(--text)` — near-black ink on the LIGHT
+   ramp, which is invisible against this near-black stage. The stage is the
+   one surface in the app where the inverse ink is correct in both themes, so
+   the arrows take it here, exactly as Editor.module.css re-inks its `kit-btn`
+   children for the same backdrop. Reported upstream: the kit has no
+   on-a-dark-stage variant for this control. */
+.slideshow :global(.kit-viewer-nav) {
+  color: var(--text-inv);
 }
 /* kit-modal-back / kit-drop are global kit overlays (position:fixed); double the
    class to beat kit.css and re-scope to the pane. */
@@ -261,30 +249,12 @@
 }
 
 /* ---------- Global remainder OTHER code writes as plain strings ---------- */
-/* Header icon buttons — static (hamburger/zoom/slideshow) AND Enrichment.tsx's
-   face-proposer toggle (rendered as a literal string), so this vocabulary stays
-   global exactly as app.css keeps it. */
-:global(.ph-header-icon-btn) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  flex-shrink: 0;
-}
-:global(.ph-header-icon-btn):hover {
-  color: var(--text);
-  border-color: var(--line-strong);
-}
-:global(.ph-header-icon-btn)[data-active="true"] {
-  border-color: var(--line-sel);
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
+/* `.ph-header-icon-btn` is GONE (#708). It was a hand-rolled 36×36 icon button
+   — border, radius, fill, ink ramp, hover — standing next to `kit-icon-btn`,
+   whose own docstring names "photos' equivalents" as the debt it exists to
+   absorb. Every header control (hamburger, the zoom pair, slideshow, the
+   face-proposer toggle) is now `kit-icon-btn`; only the display toggles below
+   remain app-owned, because they are layout, not a control look. */
 :global(.ph-hamburger) {
   display: none;
 }
@@ -296,24 +266,18 @@
 }
 
 /* Tile media guts injected by media.ts as plain strings (React never renders
-   these) — the placeholder shimmer + its keyframe, which Timeline.module.css /
-   Lightbox.module.css also reference by name, so BOTH must live global here. */
+   these). The placeholder is a STATIC recessed ground, matching `.kit-skeleton`
+   — which the Binding Layer already de-shimmered — because "Loading is
+   determinate-only with static skeletons; a shimmer is attention-seeking about
+   work the product can simply describe" (DESIGN.md, Components). This app was
+   the last renderer still animating `kit-shimmer` on an infinite loop, and it
+   did it once per unpainted tile, i.e. across the whole grid at once. Dropping
+   the animation also drops the per-component `prefers-reduced-motion` block
+   that guarded it: motion is honoured in ONE global rule now. */
 :global(.ph-tile-ph) {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
-    var(--bg-sunken) 70%
-  );
-  background-size: 220% 100%;
-  animation: kit-shimmer 1.4s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  :global(.ph-tile-ph) {
-    animation: none;
-  }
+  background: var(--bg-sunken);
 }
 :global(.ph-tile-video-badge) {
   position: absolute;
@@ -327,7 +291,7 @@
 :global(.ph-tile-video-badge) svg {
   width: 42px;
   height: 42px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--scrim) 56%, transparent);
   padding: var(--sp-3);
   box-sizing: border-box;
@@ -344,7 +308,7 @@
 :global(.ph-tile-audio-badge) svg {
   width: 54px;
   height: 54px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: var(--sp-3);
   background: color-mix(in oklab, var(--bg-elev) 82%, transparent);
   box-shadow: var(--shadow-sm);

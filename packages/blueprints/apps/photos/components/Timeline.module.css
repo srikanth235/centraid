@@ -1,8 +1,8 @@
 /* The justified timeline's React-owned classes. Authored camelCase (old `ph-`
    prefix dropped). IMPORTANT: the tile's imperatively-injected media guts —
    `ph-tile-ph`, `ph-tile-video-badge`, `ph-tile-audio-badge`, `ph-tile-duration`
-   and the `is-placeholder` marker (all set by media.ts's fillTileMedia) — plus
-   the `ph-shimmer` keyframe STAY GLOBAL in app.css; they are string class names
+   and the `is-placeholder` marker (all set by media.ts's fillTileMedia)
+   STAY GLOBAL in app.css; they are string class names
    media.ts writes onto nodes React never sees. The `<img>`/`<video>` media.ts
    appends into `.tileMedia` are styled here as descendant selectors. */
 
@@ -110,7 +110,7 @@
   inset-inline-start: 7px;
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,7 +195,7 @@
   inset-inline-end: 36px;
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: none;
   background: color-mix(in oklab, var(--scrim) 56%, transparent);
   color: var(--text-inv);
@@ -240,7 +240,7 @@
   font: var(--t-small);
   font-size: var(--t-control-size);
   padding: var(--sp-1) var(--sp-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 .tileRestore:hover {
   background: color-mix(in oklab, var(--text-inv) 24%, transparent);

@@ -1283,6 +1283,8 @@ left alone (not this change set's surface).
 | claude-code-8ac80ba9-318-1785838528-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 32 | 13245 | 2521579 | 6864 | 20141 | 1.5153 | 14818 | 34704157 | 1692212233 | 5013815 |  |
 | claude-code-8ac80ba9-318-1785838600-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 2 | 661 | 162029 | 156 | 819 | 0.0891 | 14820 | 34704818 | 1692374262 | 5013971 |  |
 | claude-code-8ac80ba9-318-1785838692-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 8 | 4753 | 654342 | 1927 | 6688 | 0.4051 | 14828 | 34709571 | 1693028604 | 5015898 |  |
+| claude-code-8ac80ba9-318-1785838785-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 6 | 1280 | 498267 | 1674 | 2960 | 0.2990 | 14834 | 34710851 | 1693526871 | 5017572 |  |
+| claude-code-8ac80ba9-318-1785838954-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 34 | 19775 | 2935543 | 7824 | 27633 | 1.7871 | 14868 | 34730626 | 1696462414 | 5025396 |  |
 Recorded in `COSTS.md` by the commit hooks.
 
 ### Steering

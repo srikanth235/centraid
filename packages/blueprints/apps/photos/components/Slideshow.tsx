@@ -94,7 +94,6 @@ export function SlideshowView({
           type="button"
           className="kit-btn slideshow-exit"
           onClick={onClose}
-          aria-label="Close slideshow"
         >
           <CloseIcon size={14} /> Close
         </button>

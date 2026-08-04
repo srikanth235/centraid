@@ -4,19 +4,13 @@
    The custody tone class is picked via an explicit lookup map in the component
    (never a computed `styles['custody-' + tone]`). */
 
+/* Deltas on `kit-input bare`: the caption reads as a title, and it keeps its
+   underline instead of the bare variant's fully transparent frame. */
 .captionInput {
-  width: 100%;
   font: var(--t-body-strong);
-  color: var(--text);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 var(--sp-2);
-  outline: none;
+  border-bottom-color: var(--line);
+  padding-inline: 0;
   margin-bottom: var(--sp-4);
-}
-.captionInput:focus {
-  border-color: var(--line-strong);
 }
 .infoSectionLabel {
   font: var(--t-eyebrow);
@@ -53,7 +47,7 @@
   color: var(--accent-text);
 }
 .custodyWarn {
-  color: var(--custody-warn);
+  color: var(--warning);
 }
 .custodyDanger {
   color: var(--danger);
@@ -73,20 +67,10 @@
   flex: 1 1 100%;
   margin: 0.2rem 0 0;
 }
+/* Deltas on `kit-chip` — placement only. */
 .placeChip {
-  display: inline-flex;
   align-self: flex-start;
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--text-soft);
-  font: var(--t-small);
-  margin-bottom: 18px;
-}
-.placeChip:hover {
-  border-color: var(--line-strong);
-  color: var(--text);
+  margin-bottom: var(--sp-5);
 }
 .chipRow {
   display: flex;
@@ -98,27 +82,15 @@
   display: inline-flex;
   align-items: stretch;
 }
-.albumChip {
-  padding: 6px var(--sp-3);
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-small);
-}
-.albumChip[data-active="true"] {
-  border-color: var(--line-strong);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
-}
+/* Deltas on `kit-chip`: only the seam where the "set cover" tail joins on. */
 .albumChoice:has(.coverButton) .albumChip {
-  border-radius: 999px 0 0 999px;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
 }
 .coverButton {
   border: 1px solid var(--line-strong);
   border-inline-start: 0;
-  border-radius: 0 999px 999px 0;
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
   background: var(--accent-soft);
   color: var(--accent-text);
   font: var(--t-small);
@@ -129,21 +101,14 @@
   color: var(--text-faint);
   cursor: default;
 }
+/* Deltas on `kit-chip`: a tag is a literal string, so it takes the numeric
+   register's face the way every other label-of-record in this app does. */
 .tagChipX,
 .tagChipNew {
-  padding: var(--sp-1) 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-mono);
-}
-.tagChipNew:hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
+  font-family: var(--font-mono);
 }
 .tagInput {
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font: var(--t-control);
   padding: 0.25rem 0.7rem;
   width: 8rem;
@@ -161,7 +126,7 @@
 .activityDot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-fill);
   margin-top: var(--sp-1);
   flex-shrink: 0;
@@ -194,19 +159,11 @@
   border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
 }
+/* Deltas on `kit-btn destructive` — full-bleed placement. The outline+ink
+   pair is the kit's; a destructive control is never filled. */
 .deleteLink {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--danger);
-  font: var(--t-small);
-  padding: var(--sp-2);
   margin-top: var(--sp-1);
-}
-.deleteLink:hover {
-  border-color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 8%, transparent);
 }
 .note {
   font: var(--t-small);

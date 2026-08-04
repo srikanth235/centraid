@@ -11,10 +11,6 @@
   background: none;
   padding: 0;
   text-align: start;
-  transition: transform var(--dur-1) var(--ease);
-}
-.albumCard:hover {
-  transform: translateY(-2px);
 }
 .albumCardCover {
   display: block;
@@ -24,6 +20,9 @@
   background: var(--bg-sunken) center/cover no-repeat;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--line);
+}
+.albumCard:hover .albumCardCover {
+  border-color: var(--line-strong);
 }
 .albumCardName {
   display: block;

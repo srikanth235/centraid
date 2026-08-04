@@ -66,28 +66,15 @@
 .brandTag {
   composes: kit-app-brand-tag from global;
 }
+/* Layout only — the fill, ink, radius, height, focus ring and hover step all
+   come from `kit-btn primary`. The hand-rolled version carried its own
+   `--accent-deep` fill plus a `brightness()` hover and a `scale(0.99)` press,
+   both of which DESIGN.md rules out ("no scale-on-hover", one motion grammar). */
 .uploadBtn {
-  display: flex;
-  align-items: center;
+  width: 100%;
   justify-content: center;
   gap: var(--sp-2);
-  width: 100%;
-  padding: 10px 14px;
   margin-bottom: var(--sp-3);
-  border: none;
-  border-radius: var(--r-md);
-  background: var(--accent-deep);
-  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --text-inv (kit.css header contract, #686). */
-  color: var(--text-inv);
-  font: var(--t-body-strong);
-  box-shadow: var(--shadow-sm);
-}
-.uploadBtn:hover {
-  filter: brightness(1.07);
-}
-.uploadBtn:active {
-  transform: scale(0.99);
 }
 .nav {
   display: flex;
@@ -119,7 +106,7 @@
 .navItem[data-active="true"] {
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .navIcon {
   display: flex;
