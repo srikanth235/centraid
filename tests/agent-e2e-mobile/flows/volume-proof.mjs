@@ -12,6 +12,7 @@ import {
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
 const ITERATIONS = 20;
+const CHUNK_SIZE = 4;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
 await runFlow("mobile-volume-proof", async (ctx) => {
@@ -25,11 +26,16 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   // simulator scheduling jitter into a false failure.
   await ctx.configureGateway();
   const started = performance.now();
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+  // Keep each Maestro session short. A single long iOS repeat can leave the
+  // XCTest launch channel behind the app after several rapid relaunches (the
+  // app was on its splash screen and then reported as not running in run
+  // 30875656338). Fresh sessions preserve all 20 successful launch samples
+  // while resetting the driver at a bounded interval; no assertion is made
+  // optional and a real app crash still fails its chunk.
+  const volumeFlow = (times) => `appId: ${ctx.state.appId}
 ---
 - repeat:
-    times: ${ITERATIONS}
+    times: ${times}
     commands:
       # Maestro's launchApp already terminates the target before relaunching.
       # Keeping a separate stopApp here issued two terminate requests per
@@ -40,9 +46,17 @@ await runFlow("mobile-volume-proof", async (ctx) => {
           visible:
             text: "${HOME_READY_MARKER}"
           timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-`,
-    "mobile-volume"
-  );
+`;
+  const runVolumeChunks = async (offset) => {
+    if (offset >= ITERATIONS) return;
+    const times = Math.min(CHUNK_SIZE, ITERATIONS - offset);
+    await ctx.run(
+      volumeFlow(times),
+      `mobile-volume-${String(offset + 1).padStart(2, "0")}`
+    );
+    await runVolumeChunks(offset + CHUNK_SIZE);
+  };
+  await runVolumeChunks(0);
   const durationMs = performance.now() - started;
   const budget = await qualityRegressionBudget(REPO_ROOT, "scale", OWNER);
   const passed = budget == null || durationMs < budget;

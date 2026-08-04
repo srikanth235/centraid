@@ -243,6 +243,13 @@ accessibility zero-grey (15 cells).
   split. This removes shared simulator state from the concurrency boundary
   while preserving every flow owner for the nightly report.
 
+- **Bound the iOS volume-proof Maestro session.** Run 30875656338 showed the
+  app on its dev-client splash and then absent from XCTest during the fifth
+  warm relaunch, after the same 20-relaunch flow had passed on the prior run.
+  `volume-proof.mjs` now keeps the 20 required Home relaunches but executes
+  them in five four-launch Maestro sessions, resetting the iOS XCTest driver
+  between chunks without making any assertion optional.
+
 - **Invalidate native tunnel connections after post-open stream failures
   (30769334446).** `openBi()` can succeed briefly after the peer has stopped
   accepting streams, leaving later writes/reads to fail while the cached
@@ -427,3 +434,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785812506-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4101 | 0 | 489728 | 531 | 4632 | 0.1406 | 14848980 | 0 | 624316160 | 918082 | fix(ios): restore mobile test probes and list icon (#676) |
 | codex-019fc399-ba8-1785812605-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 10928 | 0 | 1164544 | 1211 | 12139 | 0.3366 | 14859908 | 0 | 625480704 | 919293 | fix(ios): restore mobile test probes and list icon (#676) |
 | codex-019fc399-ba8-1785814997-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 195907 | 0 | 24004608 | 24609 | 220516 | 6.8601 | 15055815 | 0 | 649485312 | 943902 | fix(ios): harden Tasks cover retry (#676) |
+| codex-019fc399-ba8-1785816868-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 227881 | 0 | 11495936 | 22029 | 249910 | 3.7741 | 15283696 | 0 | 660981248 | 965931 | fix(ios): bound volume proof sessions (#676) |
+| codex-019fc399-ba8-1785816954-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6900 | 0 | 697088 | 990 | 7890 | 0.2064 | 15290596 | 0 | 661678336 | 966921 | fix(ios): bound volume proof sessions (#676) |
