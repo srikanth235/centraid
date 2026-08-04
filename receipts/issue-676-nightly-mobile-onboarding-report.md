@@ -147,6 +147,13 @@ accessibility zero-grey (15 cells).
   budget so simulator scheduling does not turn a valid slow launch into a red
   volume cell.
 
+- **Use the shared operational wait for iOS cold-start samples.** Run
+  30865109450 paired successfully but its fifth warm-process launch exceeded
+  the old 30s Maestro assertion while the app was still starting. The generated
+  flow in `tests/agent-e2e-mobile/flows/cold-start.mjs` now uses
+  `FIRST_LAUNCH_TIMEOUT_MS` as the operational backstop; recorded median, p95,
+  and sustained-drift measurements remain the quality gate.
+
 - **Avoid duplicate iOS volume termination.** Run 30831790904 stopped the app
   during the eighth `mobile-volume-proof` sample immediately after the flow's
   explicit `stopApp` plus `launchApp` pair; the screenshot was the dev-client
@@ -377,3 +384,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785796611-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7954 | 0 | 665344 | 658 | 8612 | 0.1961 | 12736335 | 0 | 522521856 | 784528 | fix(ios): wait for lazy Settings route (#676) |
 | codex-019fc399-ba8-1785799828-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 308356 | 0 | 28658432 | 26692 | 335048 | 8.3359 | 13044691 | 0 | 551180288 | 811220 | docs(mobile): align onboarding journey notes (#676) |
 | codex-019fc399-ba8-1785799882-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20073 | 0 | 331776 | 1377 | 21450 | 0.1538 | 13064764 | 0 | 551512064 | 812597 | docs(mobile): align onboarding journey notes (#676) |
+| codex-019fc399-ba8-1785804509-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 702659 | 0 | 22420224 | 32817 | 735476 | 7.8540 | 13767423 | 0 | 573932288 | 845414 | fix(ios): use shared cold-start wait budget (#676) |
