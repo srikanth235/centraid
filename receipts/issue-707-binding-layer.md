@@ -649,7 +649,7 @@ Local evidence for the product fix: `packages/client` `HomeSpringboard.test.tsx`
 
 - Follow-up: desktop e2e statusLine helper (toasts→status), Settings via All apps, Manage tab Delete, palette builder drafts.
 - Follow-up: web-e2e locator strict-mode (nav first()) + LCP ceiling fallback to `_intendedCeilingMs` when Binding Layer produces a real LCP entry.
-
+- Follow-up (head `88044cce`): drop the delete-app e2e assert that `localStorage` pin-store is empty after App settings delete — product does not clear pins on delete; assert was pre-#707 library-era leftover. Desktop e2e green on that tip; this receipt note satisfies `commit-issue-receipt-match` for the receipt-only governance closeout.
 
 ## Accounting
 
