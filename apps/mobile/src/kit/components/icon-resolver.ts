@@ -35,6 +35,7 @@ const ALIASES: Record<string, IconName> = {
   image: "Image",
   info: "AlertCircle",
   layers: "Layers",
+  list: "List",
   maximize: "Maximize",
   menu: "Menu",
   "message-circle": "MessageCircle",

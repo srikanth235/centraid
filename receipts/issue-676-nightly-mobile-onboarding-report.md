@@ -120,6 +120,13 @@ accessibility zero-grey (15 cells).
   same run confirmed onboarding, volume, and cold-start journeys were green;
   only the scroll probe failed.
 
+- **Close the two iOS-only regressions found by run 30870200939.**
+  `apps/mobile/src/kit/components/icon-resolver.ts` now maps the Docs view
+  switch's `list` alias to the shared `List` glyph, with the contract covered
+  by `apps/mobile/src/kit/components/Icon.test.tsx`. `apps/mobile/App.tsx`
+  mounts a second probe inside `PhotosNavigator`, where a full-screen cover
+  places the root shell behind the active native controller.
+
 - **Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy.**
   Run 30794487113 reached
   and tapped `perf-frame-arm`, but iOS never exposed `perf-frame-sampling` after
@@ -410,3 +417,6 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785808170-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 91495 | 0 | 6327296 | 15895 | 107390 | 2.0490 | 14321483 | 0 | 594386176 | 891175 | test(ios): align merged CI evidence contracts (#676) |
 | codex-019fc399-ba8-1785808212-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9723 | 0 | 968192 | 783 | 10506 | 0.2781 | 14331206 | 0 | 595354368 | 891958 | test(ios): align merged CI evidence contracts (#676) |
 | codex-019fc399-ba8-1785808394-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 20952 | 0 | 3391488 | 2857 | 23809 | 0.9431 | 14352158 | 0 | 598745856 | 894815 | fix(ci): refresh merged native fingerprints (#676) |
+| codex-019fc399-ba8-1785812454-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 492721 | 0 | 25080576 | 22736 | 515457 | 7.8430 | 14844879 | 0 | 623826432 | 917551 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785812506-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4101 | 0 | 489728 | 531 | 4632 | 0.1406 | 14848980 | 0 | 624316160 | 918082 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785812605-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 10928 | 0 | 1164544 | 1211 | 12139 | 0.3366 | 14859908 | 0 | 625480704 | 919293 | fix(ios): restore mobile test probes and list icon (#676) |

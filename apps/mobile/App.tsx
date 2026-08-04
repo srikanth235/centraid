@@ -212,6 +212,9 @@ function PhotosNavigator(): React.JSX.Element {
         <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
         <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
       </PhotosStack.Navigator>
+      {/* A full-screen native-stack cover sits above the root shell, so the
+        root probe cannot be observed while Photos is presented. */}
+      <FrameProbe />
     </View>
   );
 }

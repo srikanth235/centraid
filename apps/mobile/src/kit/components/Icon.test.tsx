@@ -5,6 +5,7 @@ import { resolveIconName } from "./icon-resolver";
 describe("mobile icon adapter", () => {
   test("resolves navigation aliases to the shared semantic glyphs", () => {
     expect(resolveIconName("grid")).toBe("Grid");
+    expect(resolveIconName("list")).toBe("List");
     expect(resolveIconName("chevron-left")).toBe("ChevronLeft");
     expect(resolveIconName("cloud-off")).toBe("CloudOff");
   });
