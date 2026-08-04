@@ -586,11 +586,6 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            {/* Last child so its absolute readout sits above the navigator.
-              Renders nothing, installs nothing and schedules nothing outside a
-              `__DEV__` build that a probe has explicitly armed — see
-              src/kit/perf/FrameProbe.tsx. */}
-            <FrameProbe />
             <ToastHost />
           </View>
         </SafeAreaProvider>

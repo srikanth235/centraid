@@ -24,6 +24,7 @@ accessibility zero-grey (15 cells).
 - [x] Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy
 - [x] Grant iOS Photos permission before the frame-probe journey
 - [x] Keep the iOS frame-probe sampling marker visible to Maestro while sampling
+- [x] Give each active iOS native screen one unambiguous frame-probe target
 - [x] Fan iOS journeys out to isolated parallel suite runners from one cached app build
 - [x] Wait for the lazy Settings destination without retrying its closed drawer row
 
@@ -159,6 +160,15 @@ accessibility zero-grey (15 cells).
   XCTest to complete without delivering `Pressable.onPress`; the DEV marker is
   now fully opaque with a transparent background so it remains visually inert
   and physically tappable.
+
+- **Give each active iOS native screen one unambiguous frame-probe target; remove
+  the duplicate iOS frame-probe target.** Final parallel run 30879777545
+  tapped `perf-frame-arm` on Photos, but the corresponding `perf-frame-report`
+  never entered the visible XCTest hierarchy because the root probe and the
+  Photos-local probe shared the same selector while the full-screen native
+  controller was presented. The shell probe now lives in `Home`, while Photos
+  and People keep their own active-screen probes, leaving one target per
+  visible native surface.
 
 - **Use the measured iOS launch budget for volume proof.** The rerun of
   `mobile-volume-proof` reached its twentieth relaunch with the old 30s
@@ -445,3 +455,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785817638-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 56907 | 0 | 4671488 | 6025 | 62932 | 1.4005 | 15347503 | 0 | 666349824 | 972946 | fix(ios): retry native smoke driver flake (#676) |
 | codex-019fc399-ba8-1785819812-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 184167 | 0 | 21511424 | 17636 | 201803 | 6.1028 | 15531670 | 0 | 687861248 | 990582 | fix(ios): map Notes book icon (#676) |
 | codex-019fc399-ba8-1785819892-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6940 | 0 | 682240 | 509 | 7449 | 0.1955 | 15538610 | 0 | 688543488 | 991091 | fix(ios): map Notes book icon (#676) |
+| codex-019fc399-ba8-1785822555-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 275881 | 0 | 18227968 | 27309 | 303190 | 5.6563 | 15814491 | 0 | 706771456 | 1018400 | fix(ios): disambiguate frame probe targets (#676) |
+| codex-019fc399-ba8-1785822603-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 7879 | 0 | 1051904 | 759 | 8638 | 0.2941 | 15822370 | 0 | 707823360 | 1019159 | fix(ios): disambiguate frame probe targets (#676) |
