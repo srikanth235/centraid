@@ -50,8 +50,18 @@ describe("appearance prefs", () => {
     // `theme: 'monokai'` must degrade to DEFAULT_PREFS.theme with no error and
     // no migration step.
     expect(pickAppearance({ theme: "monokai" })).toStrictEqual({});
-    expect(DEFAULT_PREFS.theme).toBe("dark");
-    expect(DEFAULT_PREFS.themeMode).toBe("dark");
+  });
+
+  it("defaults to following the OS, not to dark", () => {
+    // A member who has never opened Settings gets the theme their machine is
+    // already in. While this was `dark`, first run could not be light on any
+    // device — which made the grammar matrix's `sh-light-first-run` reference
+    // state unreachable in the shipping product.
+    expect(DEFAULT_PREFS.themeMode).toBe("system");
+    // `theme` is only the RESOLVED name; `useAppearance` re-derives it on mount
+    // and on every OS flip while the mode stays `system`. Under a test
+    // environment with no `matchMedia`, resolving falls back to dark.
+    expect(["light", "dark"]).toContain(DEFAULT_PREFS.theme);
   });
 
   it("re-resolves the applied theme when the stored mode is `system`", () => {

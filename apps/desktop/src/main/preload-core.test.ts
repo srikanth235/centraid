@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import * as designTokens from "@centraid/design";
-import { toFontFaceCss } from "@centraid/design/fonts";
+import { toFontFaceCss } from "@centraid/design/font-faces";
 
 import { Channel } from "./ipc-core.js";
 import type {

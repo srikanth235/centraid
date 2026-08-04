@@ -129,7 +129,7 @@ export const metrics = {
   control: 34,
   row: 44,
   segmented: 28,
-  stem: 92,
+  stem: 240,
 } as const;
 
 export const density = {

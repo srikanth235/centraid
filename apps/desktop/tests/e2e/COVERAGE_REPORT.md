@@ -10,7 +10,7 @@ The canonical Playwright suite launches the real Electron app and uses an isolat
 | `onboarding-home.spec.ts` | onboarding and home | 10 |
 | `delete-app.spec.ts` | app deletion | 8 |
 | `builder.spec.ts` | builder create, preview, edit, code, logs | 6 |
-| `appview-templates-insights.spec.ts` | inline app route, Discover, Analytics | 6 |
+| `appview-templates-insights.spec.ts` | inline app route, automation templates, Analytics | 4 |
 | `automations.spec.ts` | automation list, lifecycle, and run viewer | 12 |
 | `settings-gateways.spec.ts` | appearance, agents, gateway switching, errors, shortcuts | 12 |
 

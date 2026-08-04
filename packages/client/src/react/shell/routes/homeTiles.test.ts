@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildHomeTiles,
   HOME_TILE_ORDER,
-  isFirstRun,
+  homeFirstMoves,
+  partitionHomeTiles,
   taskRows,
 } from "./homeTiles.js";
 import type { HomeTileContent } from "./homeTiles.js";
@@ -25,11 +26,23 @@ function bodyOf(content: HomeTileContent, id: string) {
 describe("shell/routes/homeTiles", () => {
   describe(buildHomeTiles, () => {
     it("shows one tile per installed first-party app, in springboard order", () => {
+      // Photos leads the grid: the mosaic is the body that needs area, so it
+      // takes the corner (see HOME_TILE_ORDER).
       const tiles = tilesOf({}, ["locker", "agenda", "photos"]);
       expect(tiles.map((tile) => tile.id)).toStrictEqual([
-        "agenda",
         "photos",
+        "agenda",
         "locker",
+      ]);
+    });
+
+    it("leads with the imagery and prose bodies, not the chips", () => {
+      // The regression this guards: two 1×1 checkbox/figure tiles in the
+      // top-left with the mosaic pushed right, which reads as a launcher.
+      expect([...HOME_TILE_ORDER].slice(0, 3)).toStrictEqual([
+        "photos",
+        "docs",
+        "notes",
       ]);
     });
 
@@ -63,25 +76,33 @@ describe("shell/routes/homeTiles", () => {
       expect(tile?.count).toBeNull();
     });
 
-    it("gives an app with no read result the designed empty body", () => {
-      expect(bodyOf({}, "docs")).toStrictEqual({
-        hint: "File a document to keep it versioned and restorable.",
-        kind: "empty",
-      });
+    it("marks an app with no read result empty, and carries no copy for it", () => {
+      // A bare marker. The invitation to fill this app lives once, in
+      // `homeFirstMoves` — a `hint` here would be its second spelling.
+      expect(bodyOf({}, "docs")).toStrictEqual({ kind: "empty" });
     });
   });
 
   describe("bodies are structurally distinct per app", () => {
     it("photos is a bounded mosaic with the remainder as +N", () => {
+      // Eight cells — the 4×2 grid the handoff draws on the large tile.
+      const thumbs = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+      expect(bodyOf({ photos: { thumbs, total: 30 } }, "photos")).toStrictEqual(
+        {
+          kind: "photos",
+          more: 22,
+          thumbs: ["a", "b", "c", "d", "e", "f", "g", "h"],
+        }
+      );
+    });
+
+    it("counts the remainder off what it SHOWS when there are fewer than eight", () => {
       expect(
-        bodyOf(
-          { photos: { thumbs: ["a", "b", "c", "d", "e"], total: 30 } },
-          "photos"
-        )
+        bodyOf({ photos: { thumbs: ["a", "b", "c"], total: 30 } }, "photos")
       ).toStrictEqual({
         kind: "photos",
-        more: 26,
-        thumbs: ["a", "b", "c", "d"],
+        more: 27,
+        thumbs: ["a", "b", "c"],
       });
     });
 
@@ -179,7 +200,7 @@ describe("shell/routes/homeTiles", () => {
     });
 
     it("docs falls back to the empty body when the newest row has no title", () => {
-      expect(bodyOf({ docs: { total: 3 } }, "docs")).toMatchObject({
+      expect(bodyOf({ docs: { total: 3 } }, "docs")).toStrictEqual({
         kind: "empty",
       });
     });
@@ -218,19 +239,63 @@ describe("shell/routes/homeTiles", () => {
     });
   });
 
-  describe(isFirstRun, () => {
-    it("is true only when every tile is empty", () => {
-      expect(isFirstRun(tilesOf({}))).toBe(true);
+  describe(partitionHomeTiles, () => {
+    it("keeps only the tiles that have something to show in the grid", () => {
+      const { live, idle } = partitionHomeTiles(
+        tilesOf({ locker: { compromised: 0, total: 1 } })
+      );
+      expect(live.map((t) => t.id)).toStrictEqual(["locker"]);
+      expect(idle.map((t) => t.id)).not.toContain("locker");
+      expect(idle.length).toBeGreaterThan(0);
     });
 
-    it("is false as soon as ONE app has content anywhere", () => {
-      expect(
-        isFirstRun(tilesOf({ locker: { compromised: 0, total: 1 } }))
-      ).toBe(false);
+    // The binary this replaces got BOTH ends wrong. With nothing anywhere it
+    // showed four dashed rectangles that opened empty apps; with one note
+    // anywhere it flipped and showed all eight tiles, seven of them
+    // apologising — which is the "eight apologies" the day-one treatment was
+    // written to prevent, arriving one note later.
+    it("puts everything on the idle side when the vault is empty", () => {
+      const { live, idle } = partitionHomeTiles(tilesOf({}));
+      expect(live).toStrictEqual([]);
+      expect(idle).toHaveLength(HOME_TILE_ORDER.length);
     });
 
-    it("is false with no tiles at all — that is not a first run, it is no apps", () => {
-      expect(isFirstRun([])).toBe(false);
+    it("survives an empty tile list — a vault mid-mount has neither side", () => {
+      expect(partitionHomeTiles([])).toStrictEqual({ idle: [], live: [] });
+    });
+  });
+
+  describe(homeFirstMoves, () => {
+    it("leads with connecting an account — one act that fills three tiles", () => {
+      const moves = homeFirstMoves(tilesOf({}));
+      expect(moves[0]?.id).toBe("connectors");
+      expect(moves[0]?.kind).toBe("connectors");
+      // Then what the day-one copy actually promises, in that order.
+      expect(moves.map((m) => m.id)).toStrictEqual([
+        "connectors",
+        "photos",
+        "docs",
+        "notes",
+      ]);
+    });
+
+    it("never offers a move for an app that already has content", () => {
+      const { idle } = partitionHomeTiles(
+        tilesOf({ photos: { thumbs: ["a"], total: 1 } })
+      );
+      expect(homeFirstMoves(idle).map((m) => m.id)).not.toContain("photos");
+    });
+
+    it("offers nothing at all once every app has content", () => {
+      expect(homeFirstMoves([])).toStrictEqual([]);
+    });
+
+    it("every move is a real door, and every one is verb-first", () => {
+      for (const move of homeFirstMoves(tilesOf({}), 99)) {
+        expect(move.label.length, `${move.id} label`).toBeGreaterThan(0);
+        expect(move.hint.length, `${move.id} hint`).toBeGreaterThan(0);
+        expect(["app", "connectors"]).toContain(move.kind);
+      }
     });
   });
 });

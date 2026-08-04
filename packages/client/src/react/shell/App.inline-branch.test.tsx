@@ -67,7 +67,15 @@ const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
+    set: (k: string, v: unknown) => {
+      store.set(k, v);
+    },
+    remove: (k: string) => {
+      store.delete(k);
+    },
+    removeByPrefix: (prefix: string) => {
+      for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+    },
   },
 }));
 

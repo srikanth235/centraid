@@ -15,7 +15,7 @@ The renderer is written as if it started life as a React app: every visual belon
 Reuse = components, not class strings:
 
 - **`Button` / `IconButton`** (`Button.tsx` + `Button.module.css`) — the one button system. Roots: `btn` (page scale, solid-ink default) and `chrome` (26px titlebar scale); variants `primary`/`soft`/`ghost`; `sm` compact size; `icon` for the 36px icon-only square. Imperative DOM builders (confirm/prompt/toast) import the same module and compose with `cx`.
-- **`AppCard`** + `AppCard.module.css` — the library tile family (card, head, icon plate, foot, hover actions toolbar, star flag) **including the rows layout**, keyed on the hosting grid's `data-layout='rows'`. Home and Discover compose richer tiles from this same module, so the tile is one implementation on every page.
+- **`AppCard`** + `AppCard.module.css` — the library tile family (card, head, icon plate, foot, hover actions toolbar, star flag) **including the rows layout**, keyed on the hosting grid's `data-layout='rows'`. Home and Starred compose richer tiles from this same module, so the tile is one implementation on every page.
 - **`StatusPill`** — the uppercase-mono `● live / new / draft` pill.
 - **`KindBadge`** — the APP / AUTOMATION classifier chip (carries its own rows-layout fixed-width rule via `--tile-row-badge-w`).
 - **`Icon`, `Logo`, `cx`, `tile-visual`** — as before.

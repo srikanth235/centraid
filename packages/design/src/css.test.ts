@@ -35,11 +35,29 @@ describe("shell CSS lowering", () => {
     expect(root).toContain("--h-control: 34px;");
     expect(root).toContain("--h-row: 44px;");
     expect(root).toContain("--h-segmented: 28px;");
-    expect(root).toContain("--w-stem: 92px;");
+    expect(root).toContain("--w-stem: 240px;");
     expect(root).toContain("--dur-1: 140ms;");
     expect(root).toContain("--dur-2: 280ms;");
     expect(root).toContain("--ease: cubic-bezier(0.3, 0, 0.4, 1);");
     expect(root).toContain("--ease-entry: cubic-bezier(0.2, 0.7, 0.2, 1);");
+  });
+
+  test("follows the OS until `data-theme` is stamped", () => {
+    // The un-stamped first paint has to be able to be LIGHT. While this block
+    // was missing, the shell's index.html hardcoded `data-theme="dark"` to
+    // avoid a light flash before the renderer read the member's prefs — and a
+    // hardcoded attribute always beats a preference, so "follow the system"
+    // could not be honoured at all. The blueprint sheet has emitted this pair
+    // since it shipped; this is the shell catching up.
+    const fallback = blockFor(":root:not([data-theme])");
+    expect(css).toContain("@media (prefers-color-scheme: dark) {");
+    expect(fallback).toContain(`--bg: ${themes.dark.bg};`);
+    expect(fallback).toContain(`--text: ${themes.dark.text};`);
+    // `:not([data-theme])` stops matching the moment the attribute exists, so
+    // an explicit pick — including `light` on a dark machine — still wins.
+    expect(blockFor("[data-theme='light']")).toContain(
+      `--bg: ${themes.light.bg};`
+    );
   });
 
   test("puts the tone and density axes on attributes, not on components", () => {

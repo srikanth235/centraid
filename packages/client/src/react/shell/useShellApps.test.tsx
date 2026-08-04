@@ -17,7 +17,15 @@ const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
+    set: (k: string, v: unknown) => {
+      store.set(k, v);
+    },
+    remove: (k: string) => {
+      store.delete(k);
+    },
+    removeByPrefix: (prefix: string) => {
+      for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+    },
   },
 }));
 
@@ -71,6 +79,13 @@ describe("useShellApps", () => {
       await Promise.resolve();
     });
   }
+  /** Tear the shell down so the next `mount()` is a genuine cold launch. */
+  async function unmount(): Promise<void> {
+    await act(async () => root?.unmount());
+    host?.remove();
+    root = null;
+    host = null;
+  }
 
   describe("useShellApps", () => {
     it("derives drafts from the listing, excluding pinned + automation entries", async () => {
@@ -85,6 +100,44 @@ describe("useShellApps", () => {
       await mount();
       expect(ctl.drafts.map((d) => d.id)).toStrictEqual(["wip"]);
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
+    });
+
+    it("treats a first-party listing row as INSTALLED, not as a draft", async () => {
+      // The #708 law. With no pin store at all — which is every vault now that
+      // the catalogue that wrote pins is retired — the eight bundled apps still
+      // have to arrive as installed apps. Classified as drafts they vanish
+      // entirely (the shell hides drafts while the builder is off), which is
+      // what left Home empty on a vault that owned all eight.
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
+        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
+      expect(ctl.drafts.map((d) => d.id)).toStrictEqual(["wip"]);
+    });
+
+    it("does not persist first-party rows into the pin store", async () => {
+      // They are DERIVED from the gateway on every pass. Writing them back
+      // would make them outlive the vault that has them.
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
+      expect(store.get("home.userApps")).toBeUndefined();
+    });
+
+    it("never lists a first-party app twice when a pin also names it", async () => {
+      store.set("home.userApps", [
+        { id: "photos", name: "Photos", iconKey: "Todo", color: "#1" },
+      ]);
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
     });
 
     it("prunes orphan pins whose app no longer exists on the gateway", async () => {
@@ -183,6 +236,93 @@ describe("useShellApps", () => {
       await act(async () => ctl.refresh());
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
       expect(ctl.drafts).toStrictEqual([]);
+    });
+
+    it("paints the last known installed set when the listing cannot be reached", async () => {
+      // The offline-launch bug: `listApps()` is the only source for what a
+      // vault HAS since #708, so a stopped gateway left Home with zero tiles
+      // and the day-one empty state — on a vault whose replica was fully
+      // synced, which is the one moment the offline copy exists for.
+      const api = (vaultId: string) => ({
+        getGatewayAuth: async () => ({ baseUrl: "", vaultId }),
+      });
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+        { id: "tasks", name: "Tasks", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
+
+      // A LAUNCH with the gateway down — not a refresh, which would still have
+      // the previous pass's lists in memory. Only the Store survives.
+      await unmount();
+      listApps.mockRejectedValue(new Error("offline"));
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
+      // Still a cache, never a pin: a real uninstall must not be undone by it.
+      expect(store.get("home.userApps")).toBeUndefined();
+    });
+
+    it("does not paint one vault's remembered set into another vault", async () => {
+      const api = (vaultId: string) => ({
+        getGatewayAuth: async () => ({ baseUrl: "", vaultId }),
+      });
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
+
+      // Vault B has never been listed, and offline it stays that way.
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("B");
+      listApps.mockRejectedValue(new Error("offline"));
+      await act(async () => ctl.refresh());
+      expect(ctl.userApps).toStrictEqual([]);
+    });
+
+    it("an unknown vault key changes nothing — it is not a vault", async () => {
+      // Offline both reads fail, so the key used to resolve to "", which
+      // compares unequal to every real vault id: the switch branch parked the
+      // member's pins and installed byVault[""] — an empty pin list, written
+      // back, on a launch that never reached the gateway.
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = {
+        getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
+      };
+      store.set("home.userApps", [
+        { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
+      ]);
+      listApps.mockResolvedValue([
+        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
+      ]);
+      await mount();
+      expect(store.get("home.userApps.vault")).toBe("A");
+
+      // The host bridge itself is unreachable now.
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = {
+        getGatewayAuth: async () => {
+          throw new Error("offline");
+        },
+      };
+      await act(async () => ctl.refresh());
+      expect((store.get("home.userApps") as UserAppMeta[]).map((a) => a.id)) //
+        .toStrictEqual(["notes"]);
+      expect(store.get("home.userApps.vault")).toBe("A");
+    });
+
+    it("forgets every remembered installed set when the shell re-scopes", async () => {
+      const { resetInstalledAppsCache } = await import("./useShellApps.js");
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = {
+        getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
+      };
+      listApps.mockResolvedValue([
+        { id: "photos", name: "Photos", kind: "app", hasIndex: true },
+      ]);
+      await mount();
+      expect(store.get("home.installedApps.byVault")).toBeDefined();
+      resetInstalledAppsCache();
+      expect(store.get("home.installedApps.byVault")).toBeUndefined();
     });
 
     it("setUserApps persists to the Store", async () => {

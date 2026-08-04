@@ -21,13 +21,21 @@ import type { ShellRoute } from "../../app-shell-context.js";
 // selection bar, and they never reach a control. `Home` deliberately declares
 // none — the launcher's own root is not an app, so it renders in `--text-soft`
 // (the brief's "Home — none").
+//
+// Discover is NOT in this list, and its absence is the point (issue #708). A
+// catalogue is a place you go to acquire what you do not have; every first-party
+// app now ships installed, so there was nothing left there to acquire. The
+// handoff's Home is two tiers — a springboard of content tiles and the All-apps
+// sheet — and neither is a store. Automation templates are a different thing and
+// keep their own gallery (`{ kind: "templates" }`, off the Automations overview):
+// those still clone into the vault's code store, so adopting one really is an
+// acquisition.
 
 /** Route-highlight key. One per destination the stem/sheet can select. */
 export type ShellPage =
   | "home"
   | "assistant"
   | "insights"
-  | "discover"
   | "starred"
   | "automations"
   | "connectors"
@@ -105,14 +113,6 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   },
   {
     colorKey: "ochre",
-    icon: "Compass",
-    id: "discover",
-    label: "Discover",
-    page: "discover",
-    route: { kind: "discover" },
-  },
-  {
-    colorKey: "ochre",
     icon: "Star",
     id: "starred",
     label: "Starred",
@@ -171,16 +171,31 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
 /**
  * The pin set a member starts with.
  *
- * Five, because the compact band is capped at five plus "More" and a first run
- * that immediately overflows into a sheet teaches the wrong shape. Home is not
- * listed: it is pinned by law (see `isPinned`), the way a browser cannot
- * unpin its own back button.
+ * This was four (plus Home), sized so the compact band never overflowed on
+ * first run. That optimised the wrong surface: the DESKTOP stem is where the
+ * launcher actually lives, it scrolls rather than caps, and trimming to the
+ * band's budget is what silently dropped Connectors, Devices, Data and
+ * Analytics out of the sidebar — four places that had standing rows before
+ * #707 and that a member has no reason to expect behind a sheet.
+ *
+ * Overflow on the band was never the failure it was treated as: `More` exists
+ * for exactly this, opens the same All-apps sheet, and the cap logic already
+ * handles it. So the default is now the full working set, and the band shows
+ * Home plus the first four with the rest behind `More`.
+ *
+ * Home is not listed: it is pinned by law (see `isPinned`), the way a browser
+ * cannot unpin its own back button.
  */
+/* Assistant is deliberately absent: #707 settled it as a PINNED APP, not a
+   standing launcher row — it is a thing you talk to, reachable from the app
+   surface and ⌘K, not one of the places the frame goes. */
 export const DEFAULT_PINS: readonly ShellPage[] = [
-  "assistant",
   "approvals",
   "automations",
-  "discover",
+  "connectors",
+  "insights",
+  "atlas",
+  "household",
 ];
 
 /** The compact band's hard cap, INCLUDING Home. A sixth slot would put every

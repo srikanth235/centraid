@@ -1,12 +1,16 @@
 import type { JSX, ReactNode } from "react";
 
+import { isWebHost } from "../host-platform.js";
 import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
 import {
   ArrowLeftGlyph,
   ArrowRightGlyph,
   ChatPanelClosedGlyph,
   ChatPanelOpenGlyph,
   PencilGlyph,
+  SidebarClosedGlyph,
+  SidebarOpenGlyph,
 } from "./glyphs.js";
 
 import chrome from "./chrome.module.css";
@@ -17,7 +21,7 @@ import chrome from "./chrome.module.css";
 //         |  content
 //         |  status line
 //
-// The stem is a fixed 92px (`--w-stem`) band on the LEADING edge; on compact
+// The stem is a fixed `--w-stem` band on the LEADING edge; on compact
 // the same element becomes the bottom band and the grid flips to two rows.
 // It never scrolls away and never changes width, so there is no collapse
 // toggle, no drawer, and no scrim over the content — the three affordances the
@@ -74,9 +78,6 @@ export function TbBtn(props: {
   );
 }
 
-const Spacer = (): JSX.Element => (
-  <span className={chrome.spacer} aria-hidden="true" />
-);
 const Flex = (): JSX.Element => <span className={chrome.flex} />;
 
 export interface ShellFrameProps {
@@ -89,6 +90,22 @@ export interface ShellFrameProps {
   appTitle?: string;
   /** The line under it, in the numeric register. */
   appMeta?: ReactNode;
+  /** Makes the title itself a control (issue #708). Home's title is the vault
+   *  name, and a vault name that names a CHOICE should be the thing you press
+   *  to change it — one switcher, at the size the brief already gives the
+   *  title, rather than a second identity row competing with it. */
+  appTitleAction?: {
+    onActivate: (anchor: DOMRect) => void;
+    /** What the control announces — the title alone does not say it switches. */
+    label: string;
+    /** Whether the anchored picker is open (a styling + `aria-expanded` hook). */
+    open?: boolean;
+    /** A ref CALLBACK, not a `RefObject`. A ref object reachable through a
+     *  plain props object makes react-compiler treat every read of that object
+     *  as a during-render ref access, and the whole component bails out of
+     *  compilation. A callback carries no `current` to read. */
+    anchorRef?: (el: HTMLButtonElement | null) => void;
+  };
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?: () => void;
@@ -107,11 +124,28 @@ export interface ShellFrameProps {
   onToggleChat?: () => void;
   /** Compact form factor — the stem becomes the bottom band. Layout only. */
   compact?: boolean;
+  /** Whether the stem column is showing. Undefined = no toggle at all, which
+   *  is what the compact band and every full-bleed host want. */
+  stemOpen?: boolean;
+  onToggleStem?: () => void;
 }
 
 export default function ShellFrame(props: ShellFrameProps): JSX.Element {
+  // The stem toggle leads the bar, ahead of history: it changes what the frame
+  // IS, and history changes what is in it. It is present in both states rather
+  // than only when the stem is hidden — a control that disappears once you use
+  // it makes the member hunt for the way back.
   const nav: ReactNode[] = [
-    <Spacer key="sp" />,
+    props.stemOpen === undefined ? null : (
+      <TbBtn
+        key="stem"
+        icon={props.stemOpen ? <SidebarOpenGlyph /> : <SidebarClosedGlyph />}
+        title={props.stemOpen ? "Hide sidebar" : "Show sidebar"}
+        shortcut="⌘B"
+        ariaLabel={props.stemOpen ? "Hide sidebar" : "Show sidebar"}
+        onClick={props.onToggleStem}
+      />
+    ),
     <TbBtn
       key="back"
       icon={<ArrowLeftGlyph />}
@@ -169,12 +203,37 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
   // otherwise look nothing alike — and the meta line under it is numeric, so
   // counts and times are mono and tabular without each screen remembering to
   // ask for it.
+  // Destructured, never read as `action.x` in the JSX below: handing a member
+  // expression to `ref=` marks its whole owning object as a ref for
+  // react-compiler, and every other read of that object then trips the
+  // "no refs during render" rule and bails this component out of compilation.
+  const { anchorRef, label, onActivate, open } = props.appTitleAction ?? {};
+  const title =
+    props.appTitle === undefined ? null : props.appTitleAction ? (
+      <button
+        ref={anchorRef}
+        className={cx(chrome.appTitle, chrome.appTitleBtn)}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open ? "true" : "false"}
+        aria-label={label}
+        data-open={open ? "true" : undefined}
+        onClick={(event) =>
+          onActivate?.(event.currentTarget.getBoundingClientRect())
+        }
+      >
+        <span className={chrome.appTitleText}>{props.appTitle}</span>
+        {/* The stepper a native `<select>` wears: decoration inside the one
+            control, not a second target at the trailing edge. */}
+        <Icon name="ChevronDown" size={15} strokeWidth={2.2} />
+      </button>
+    ) : (
+      <h1 className={chrome.appTitle}>{props.appTitle}</h1>
+    );
   const identity =
     props.appTitle === undefined && props.appMeta === undefined ? null : (
       <div className={chrome.appIdentity}>
-        {props.appTitle === undefined ? null : (
-          <h1 className={chrome.appTitle}>{props.appTitle}</h1>
-        )}
+        {title}
         {props.appMeta === undefined ? null : (
           <div className={chrome.appMeta}>{props.appMeta}</div>
         )}
@@ -207,12 +266,29 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     <div
       className={chrome.window}
       data-compact={props.compact ? "true" : undefined}
+      // The desktop window is `titleBarStyle: "hiddenInset"`, so macOS draws
+      // its close/minimise/zoom buttons INSIDE the client area at the leading
+      // top corner — which is the stem's corner. The stem reserves that strip
+      // rather than painting under it; on a browser host there is no such
+      // strip and reserving one would be dead space.
+      data-window-controls={isWebHost() ? undefined : "inset"}
+      // Hidden, not unmounted: the launcher keeps its scroll position and the
+      // switcher keeps its anchor, so ⌘⇧G still opens under the same control.
+      data-stem={props.stemOpen === false ? "hidden" : undefined}
     >
       {props.stem}
       <div className={chrome.main}>
         <div
           className={chrome.appBar}
           data-layout={props.titlebarCenter ? "grid" : "flat"}
+          // A bar carrying an app's identity LOCKUP is a HEADER, not a
+          // titlebar: the brief gives it the display face at 31px over a mono
+          // meta line, and that block needs the rhythm's larger steps around
+          // it to read as the top of a page rather than as window furniture.
+          // The trigger is the META line, not the title: a bar with a title
+          // and nothing under it is naming the screen, which is what a
+          // titlebar has always done, so it stays the tight strip.
+          data-identity={props.appMeta === undefined ? undefined : "true"}
         >
           {barContent}
         </div>

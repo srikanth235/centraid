@@ -75,6 +75,15 @@ export class ReplicaCoordinator {
   #feedAbort: AbortController | undefined;
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #feedGeneration = 0;
+  /**
+   * True between `bootstrapBegin` and `bootstrapCommit`. The walk owns the store
+   * across that span: `replica_bootstrap_progress` is the only proof a bootstrap
+   * is open, and anything that clears it mid-walk makes the next page or the
+   * commit fail with "No replica bootstrap is open".
+   */
+  #bootstrapOpen = false;
+  /** A rebootstrap demanded mid-walk, re-raised once the walk seals. */
+  #deferredRebootstrap: { detail: unknown } | undefined;
   #feedFailureSignature: string | undefined;
   #feedFailureCount = 0;
   #closed = false;
@@ -129,22 +138,41 @@ export class ReplicaCoordinator {
    */
   async bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void> {
     this.resetFeedGeneration();
-    await this.worker.bootstrapBegin(header);
+    // Claimed BEFORE the call is posted, not after it resolves. Store calls are
+    // ordered by when they are issued (the web store is a worker RPC queue), so
+    // a `requireRebootstrap` that has already posted its wipe posted it ahead of
+    // this begin and is harmless; every later one must be held off instead.
+    this.#bootstrapOpen = true;
+    await this.walkStep(() => this.worker.bootstrapBegin(header));
     this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
   }
 
   async bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<void> {
-    await this.worker.bootstrapPage(rows);
+    await this.walkStep(() => this.worker.bootstrapPage(rows));
     this.emitInvalidations([
       { shapeId: "*", entity: "*", source: "canonical" },
     ]);
   }
 
   async bootstrapPreview(cursor: ReplicaCursor): Promise<void> {
-    await this.worker.bootstrapPreview?.(cursor);
+    await this.walkStep(async () => this.worker.bootstrapPreview?.(cursor));
     this.emitInvalidations([
       { shapeId: "*", entity: "*", source: "canonical" },
     ]);
+  }
+
+  /**
+   * Run one step of an open windowed walk. A rejected step ends the walk — the
+   * driver will not reach `bootstrapCommit` — so the claim on the store is
+   * released. The error is rethrown untouched; this is bookkeeping, not rescue.
+   */
+  private async walkStep<T>(step: () => Promise<T>): Promise<T> {
+    try {
+      return await step();
+    } catch (error) {
+      this.#bootstrapOpen = false;
+      throw error;
+    }
   }
 
   /**
@@ -158,7 +186,10 @@ export class ReplicaCoordinator {
     outcomes: IntentOutcome[] = []
   ): Promise<ReplicaCursor> {
     const resolved = await this.intents.applyOutcomes(outcomes);
-    const committed = await this.worker.bootstrapCommit(cursor);
+    const committed = await this.walkStep(() =>
+      this.worker.bootstrapCommit(cursor)
+    );
+    this.#bootstrapOpen = false;
     await this.#feed?.setShapeIds(header.shapes.map((shape) => shape.shapeId));
     await this.#feed?.resume(committed);
     this.#onCursorAdvanced?.(committed, header.schemaEpoch);
@@ -166,6 +197,11 @@ export class ReplicaCoordinator {
       { shapeId: "*", entity: "*", source: "purge" },
       ...replicaIntentInvalidations(resolved),
     ]);
+    const deferred = this.#deferredRebootstrap;
+    if (deferred) {
+      this.#deferredRebootstrap = undefined;
+      await this.requireRebootstrap(deferred.detail);
+    }
     return committed;
   }
 
@@ -399,6 +435,98 @@ export class ReplicaCoordinator {
     }
   }
 
+  /**
+   * Pull the gateway's outstanding changes RIGHT NOW, resolving once the local
+   * cursor has caught up with whatever the gateway holds.
+   *
+   * The feed path above is push-driven: a sync starts when the SSE nudge
+   * lands, which can be moments AFTER the write that caused it resolved to its
+   * caller. A caller that has just finished a gateway-side write and is about
+   * to re-read (Home's sample seed is the case that forced this) needs the
+   * inverse — "the rows I know exist are readable locally" — so this pulls
+   * from the current cursor until a batch reports no further progress. It
+   * borrows the feed's single-flight slot so the two paths never apply
+   * batches concurrently.
+   *
+   * A replica with no cursor has nothing to advance — the bootstrap walk owns
+   * the first fill — and a coordinator without a puller is bootstrap-only;
+   * both resolve immediately.
+   */
+  async syncNow(): Promise<void> {
+    if (!this.#pullChanges || this.#closed) return;
+    // Ride out any in-flight feed sync first: the two would otherwise pull
+    // from the same cursor and post the same batch to the store twice.
+    await this.awaitFeedSyncIdle();
+    if (this.#closed) return;
+    const run = this.pullToHead();
+    this.#feedSync = run.then(
+      () => undefined,
+      () => undefined
+    );
+    try {
+      await run;
+    } finally {
+      this.#feedSync = undefined;
+      // A feed nudge that arrived while we pulled may point past where this
+      // stopped; hand the slot back to the push path rather than dropping it.
+      if (this.#feedTarget && !this.#feedRetryTimer) this.startFeedSync();
+    }
+  }
+
+  /** Chain behind the feed's single-flight slot until it is free. */
+  private async awaitFeedSyncIdle(): Promise<void> {
+    const inFlight = this.#feedSync;
+    if (!inFlight) return;
+    await inFlight;
+    return this.awaitFeedSyncIdle();
+  }
+
+  private async pullToHead(): Promise<void> {
+    const pullChanges = this.#pullChanges;
+    if (!pullChanges) return;
+    const generation = this.#feedGeneration;
+    const abort = new AbortController();
+    this.#feedAbort = abort;
+    const pullNextBatch = async (): Promise<void> => {
+      if (this.#closed || abort.signal.aborted) return;
+      const status = await this.worker.status();
+      if (!status.cursor) return;
+      let batch: ReplicaChangeBatch | undefined;
+      try {
+        batch = await pullChanges(status.cursor, abort.signal);
+      } catch (error) {
+        if (error instanceof ReplicaRebootstrapRequiredError) {
+          await this.requireRebootstrap(error);
+          return;
+        }
+        throw error;
+      }
+      if (!batch || abort.signal.aborted || generation !== this.#feedGeneration)
+        return;
+      if (!cursorAfter(batch.to, status.cursor)) {
+        // Already at the head. A stale feed target at or below it is done too.
+        this.clearReachedFeedTarget(status.cursor);
+        return;
+      }
+      let cursor: ReplicaCursor;
+      try {
+        cursor = await this.applyChanges(batch);
+      } catch (error) {
+        // `applyChanges` already turned a rebootstrap demand into wipe +
+        // demand; this catch-up ends either way and must not demand twice.
+        if (error instanceof ReplicaRebootstrapRequiredError) return;
+        throw error;
+      }
+      this.clearReachedFeedTarget(cursor);
+      if (batch.hasMore === true) return pullNextBatch();
+    };
+    try {
+      await pullNextBatch();
+    } finally {
+      if (this.#feedAbort === abort) this.#feedAbort = undefined;
+    }
+  }
+
   private clearReachedFeedTarget(cursor: ReplicaCursor): void {
     if (this.#feedTarget && !cursorAfter(this.#feedTarget, cursor)) {
       this.#feedTarget = undefined;
@@ -415,6 +543,17 @@ export class ReplicaCoordinator {
 
   private async requireRebootstrap(detail: unknown): Promise<void> {
     this.resetFeedGeneration();
+    if (this.#bootstrapOpen) {
+      // A windowed walk already owns the store. Wiping under it would delete
+      // `replica_bootstrap_progress` between two pages — the walk's next page or
+      // its commit would then throw "No replica bootstrap is open", killing a
+      // bootstrap that was about to rebuild the replica anyway. The wipe is also
+      // redundant here: `bootstrapBegin` cleared the store, and no cursor is
+      // published until commit, so nothing stale is readable meanwhile. Hold the
+      // demand and re-raise it once the walk seals.
+      this.#deferredRebootstrap = { detail };
+      return;
+    }
     await this.worker.wipe().catch(() => undefined);
     this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
     this.#onRebootstrapRequired?.(detail);

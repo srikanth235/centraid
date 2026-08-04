@@ -42,9 +42,9 @@ describe("shell/Stem", () => {
 
   describe(Stem, () => {
     it("holds the mark, Search, and the pinned launcher — and nothing else", () => {
-      // #707 invariant 1. The three-zone sidebar's recents ledger, vault
-      // identity, gateway alarm, update pill and account row all left; if any
-      // of them come back the stem has stopped being the stem.
+      // #707 invariant 1. The three-zone sidebar's recents ledger, gateway
+      // alarm and update pill all left for good; if any of them come back the
+      // stem has stopped being the stem.
       const el = render(<Stem {...stemProps} />);
       expect(el.querySelector(".stemMark")).not.toBeNull();
       expect(el.querySelector(".stemSearch")).not.toBeNull();
@@ -55,6 +55,38 @@ describe("shell/Stem", () => {
       ]);
       expect(el.textContent).not.toContain("Recents");
       expect(el.textContent).not.toContain("Gateway offline");
+    });
+
+    it("leads with New chat, above Search, and only on the desktop stem", () => {
+      // The assistant has no launcher row (#707 settled it as a pinned app),
+      // so the one thing it still needs from the band is the ACT of starting a
+      // turn. It sits above Search because it is the only action in a column
+      // of places — and the compact band has no room for either.
+      const onNewConversation = vi.fn<() => void>();
+      const el = render(
+        <Stem {...stemProps} onNewConversation={onNewConversation} />
+      );
+      const button = el.querySelector<HTMLButtonElement>(".stemNew");
+      expect(button).not.toBeNull();
+      expect(button?.textContent).toContain("New chat");
+      // Order is the point: DOCUMENT_POSITION_FOLLOWING means Search comes
+      // after it.
+      const search = el.querySelector(".stemSearch")!;
+      expect(
+        button!.compareDocumentPosition(search) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      act(() => button?.click());
+      expect(onNewConversation).toHaveBeenCalledOnce();
+      // Omitted renders nothing at all rather than a dead control.
+      expect(
+        render(<Stem {...stemProps} />).querySelector(".stemNew")
+      ).toBeNull();
+      expect(
+        render(
+          <Stem {...stemProps} compact onNewConversation={onNewConversation} />
+        ).querySelector(".stemNew")
+      ).toBeNull();
     });
 
     it("names itself for assistive tech without labelling every chip twice", () => {
@@ -102,6 +134,123 @@ describe("shell/Stem", () => {
       );
     });
 
+    describe("the head", () => {
+      const identity = {
+        gateway: "This Mac",
+        onActivate: () => {},
+        vault: "Srikanth",
+      };
+
+      it("names the vault and the gateway holding it, as ONE control", () => {
+        const onActivate = vi.fn<(anchor: DOMRect) => void>();
+        const el = render(
+          <Stem {...stemProps} identity={{ ...identity, onActivate }} />
+        );
+        const head = el.querySelector<HTMLButtonElement>(".stemIdentity")!;
+        expect(head.querySelector(".stemVault")?.textContent).toBe("Srikanth");
+        expect(head.querySelector(".stemGateway")?.textContent).toBe(
+          "This Mac"
+        );
+        // A menu control, so it says so — the chevron alone is decoration.
+        expect(head.getAttribute("aria-haspopup")).toBe("menu");
+        expect(head.getAttribute("aria-expanded")).toBe("false");
+        act(() => head.click());
+        expect(onActivate).toHaveBeenCalledOnce();
+      });
+
+      it("wears the VAULT's mark and hue, not the product's", () => {
+        const el = render(
+          <Stem
+            {...stemProps}
+            identity={{ ...identity, color: "#845922", icon: "Folder" }}
+          />
+        );
+        const chip = el.querySelector<HTMLElement>(".stemAvatarChip")!;
+        expect(chip.style.getPropertyValue("--chip-hue")).toBe("#845922");
+        expect(el.querySelector(".stemMark")).toBeNull();
+      });
+
+      it("derives a hue and falls back to a mark a vault has not chosen", () => {
+        // A stored icon key the registry does not have renders NOTHING, so it
+        // is narrowed rather than cast — an empty chip reads as a broken vault.
+        const el = render(
+          <Stem {...stemProps} identity={{ ...identity, icon: "NotAnIcon" }} />
+        );
+        const chip = el.querySelector<HTMLElement>(".stemAvatarChip")!;
+        expect(chip.style.getPropertyValue("--chip-hue")).not.toBe("");
+        expect(chip.querySelector("svg")).not.toBeNull();
+      });
+
+      it("falls back to the bare mark before the scopes resolve", () => {
+        // The stem paints on the first frame; a head that waits for a read
+        // would make the whole band pop in after it.
+        const el = render(<Stem {...stemProps} />);
+        expect(el.querySelector(".stemIdentity")).toBeNull();
+        expect(el.querySelector(".stemMark")).not.toBeNull();
+      });
+    });
+
+    describe("the foot", () => {
+      const account = { name: "Ada Lovelace", onMenu: () => {} };
+
+      it("stands the member's own name there, as the menu trigger", () => {
+        // Settings, Pair device, What's new and Log out live in ITS menu, the
+        // way they did before #707 — each is something you do a handful of
+        // times, and your own name is what is worth the standing row.
+        const onMenu = vi.fn<(anchor: DOMRect) => void>();
+        const el = render(
+          <Stem {...stemProps} account={{ ...account, onMenu }} />
+        );
+        const row = el.querySelector<HTMLButtonElement>(".stemAccount")!;
+        expect(row.getAttribute("aria-haspopup")).toBe("menu");
+        expect(row.getAttribute("aria-label")).toBe(
+          "Ada Lovelace. Account menu."
+        );
+        expect(row.querySelector(".stemAvatar")?.textContent).toBe("AL");
+        act(() => row.click());
+        expect(onMenu).toHaveBeenCalledOnce();
+      });
+
+      it("keeps All apps and the account row on separate selectors", () => {
+        // They share one rule and one shape; one click must never be both.
+        const onAllApps = vi.fn<() => void>();
+        const onMenu = vi.fn<(anchor: DOMRect) => void>();
+        const el = render(
+          <Stem
+            {...stemProps}
+            onAllApps={onAllApps}
+            account={{ ...account, onMenu }}
+          />
+        );
+        act(() => el.querySelector<HTMLButtonElement>(".stemAllApps")?.click());
+        expect(onAllApps).toHaveBeenCalledOnce();
+        expect(onMenu).not.toHaveBeenCalled();
+      });
+
+      it("renders no account row before the profile resolves", () => {
+        const el = render(<Stem {...stemProps} />);
+        expect(el.querySelector(".stemAccount")).toBeNull();
+        expect(el.querySelector(".stemAllApps")).not.toBeNull();
+      });
+    });
+
+    describe("the ledger", () => {
+      it("carries a route's own list under the launcher, desktop only", () => {
+        // #707 gave the assistant its ledger, which put a SECOND sidebar next
+        // to this one. One band holds the places you can go.
+        const ledger = <div data-testid="ledger">threads</div>;
+        const el = render(<Stem {...stemProps} ledger={ledger} />);
+        expect(
+          el.querySelector('.stemLedger [data-testid="ledger"]')
+        ).not.toBeNull();
+        act(() => root?.unmount());
+        host?.remove();
+        // The compact band is a row of tabs with nowhere to put a list.
+        const band = render(<Stem {...stemProps} ledger={ledger} compact />);
+        expect(band.querySelector(".stemLedger")).toBeNull();
+      });
+    });
+
     describe("as the compact band", () => {
       it("drops the mark and the Search column — the band is tabs only", () => {
         const el = render(<Stem {...stemProps} compact />);
@@ -123,7 +272,7 @@ describe("shell/Stem", () => {
               atlas: true,
               automations: true,
               connectors: true,
-              discover: true,
+              insights: true,
             }}
           />
         );

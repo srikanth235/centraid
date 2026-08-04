@@ -32,9 +32,43 @@
   outline-offset: 2px;
 }
 
+/* ── Sizes own GEOMETRY. Variants own COLOUR. ──────────────────────────────
+   Both are single-class selectors, so the cascade is decided by declaration
+   order alone: every size rule is declared HERE, above the variants, and every
+   variant rule below. A size that set a background would win over the variant
+   that follows it and silently unfill the one commit control in the frame —
+   which is exactly what `.chrome` used to do, with nothing in the type system
+   to catch it, because `size` and `variant` are independent props. */
+
+/* Titlebar scale — the segmented rung, which is also `.tbBtn`'s size, so every
+   control in an app bar is one height and the bar's own height never depends on
+   which route is carrying it. Below the 44px target floor on purpose: window
+   furniture is pointer-first chrome, and the compact form factor hands these
+   same actions to the app bar at full size instead. */
+.chrome {
+  font: var(--t-control);
+  gap: var(--sp-2);
+  height: var(--h-segmented);
+  min-height: var(--h-segmented);
+  min-width: var(--h-segmented);
+  padding: 0 var(--sp-3);
+}
+
+.sm {
+  min-height: var(--target-min, 44px);
+  padding: var(--sp-2) var(--sp-3);
+}
+
 .secondary {
   background: var(--bg-elev);
   color: var(--text);
+}
+
+/* The default action's paper AT TITLEBAR SCALE. It is a property of the
+   surface a chrome button sits on, not of the size, so it is scoped to the
+   variant it belongs to — `--bg-chrome` never reaches a primary. */
+.chrome.secondary {
+  background: var(--bg-chrome);
 }
 
 .primary {
@@ -84,25 +118,6 @@
   color: var(--text-inv);
 }
 
-.sm {
-  min-height: var(--target-min, 44px);
-  padding: var(--sp-2) var(--sp-3);
-}
-
-.chrome {
-  align-items: center;
-  background: var(--bg-chrome);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  display: inline-flex;
-  font: var(--t-control);
-  gap: var(--sp-2);
-  height: 32px;
-  justify-content: center;
-  min-width: 32px;
-  padding: 0 var(--sp-3);
-}
-
 .icon {
   background: transparent;
   border: 1px solid transparent;
@@ -132,6 +147,21 @@
   color: var(--text-disabled);
   cursor: not-allowed;
   opacity: 1;
+}
+
+/* A FILLED variant that cannot be pressed has to stop being filled. Recolouring
+   only the label leaves a full slab of commit-ink sitting there looking like
+   the thing to press — which is exactly how onboarding's Continue read while
+   it waited for a name, and how a refused commit reads while the shell is
+   offline. The fill recedes to the inert track and the ink to the disabled
+   rung: two leaf colour tokens, never a container opacity. Declared after the
+   shared block above because both selectors carry the same specificity. */
+.primary:disabled,
+.primary[aria-disabled="true"],
+.destructiveFilled:disabled,
+.destructiveFilled[aria-disabled="true"] {
+  background: var(--bg-sunken);
+  border-color: var(--line);
 }
 
 /* The reason a commit control refused, rendered inline right after the

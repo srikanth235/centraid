@@ -24,7 +24,6 @@ describe("the launcher model", () => {
         "home",
         "assistant",
         "insights",
-        "discover",
         "starred",
         "automations",
         "connectors",
@@ -37,6 +36,18 @@ describe("the launcher model", () => {
       ])
     );
     expect(ids).toHaveLength(new Set(ids).size);
+  });
+
+  it("has no catalogue destination — first-party apps are not acquired", () => {
+    // Discover was a place you went to get what you did not have. Every bundled
+    // app is installed at vault mount (#708), so there was nothing left to get:
+    // Home's springboard opens on all eight, and the All-apps sheet arranges
+    // them. Automation templates keep their own gallery — adopting one clones
+    // into the code store, which really is an acquisition — but it is a detail
+    // route off Automations, not a standing launcher row.
+    expect(LAUNCHER_DESTINATIONS.some((d) => d.label === "Discover")).toBe(
+      false
+    );
   });
 
   it("gives Home no identity hue — the launcher's root is not an app", () => {
@@ -56,9 +67,26 @@ describe("the launcher model", () => {
     expect(isPinned({}, "connectors")).toBe(false);
   });
 
-  it("ships a default pin set the compact band can actually hold", () => {
-    // Home is pinned by law and takes one of the five slots.
-    expect(DEFAULT_PINS.length + 1).toBeLessThanOrEqual(BAND_MAX_ITEMS);
+  it("ships every standing destination pinned, and lets the band overflow", () => {
+    // This used to assert the default set FIT the band (`length + 1 <=
+    // BAND_MAX_ITEMS`), which is what trimmed Connectors, Devices, Data and
+    // Analytics out of the desktop stem — the band's budget deciding the
+    // sidebar's contents. The stem scrolls and has no cap; the band's overflow
+    // goes behind `More`, which is what `More` is for.
+    for (const id of [
+      "connectors",
+      "household",
+      "atlas",
+      "insights",
+    ] as const) {
+      expect(DEFAULT_PINS).toContain(id);
+    }
+    // The band still obeys its own cap — it just reaches it now.
+    const band = bandDestinations(pinsOf(...DEFAULT_PINS));
+    expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
+    expect(band.overflow).toBeGreaterThan(0);
+    // Nothing is lost: shown + overflow accounts for every pin, Home included.
+    expect(band.items.length + band.overflow).toBe(DEFAULT_PINS.length + 1);
   });
 
   it("orders the stem by the model, not by recency", () => {
@@ -81,32 +109,22 @@ describe("the launcher model", () => {
     });
 
     it("never exceeds five slots, and reports what More is holding", () => {
-      const band = bandDestinations(
-        pinsOf(
-          "assistant",
-          "approvals",
-          "automations",
-          "connectors",
-          "discover",
-          "starred"
-        )
+      const pins = pinsOf(
+        "assistant",
+        "approvals",
+        "automations",
+        "connectors",
+        "insights",
+        "starred"
       );
+      const band = bandDestinations(pins);
       // Four apps plus More: a sixth tab would put every target under 44px,
       // which stops being a tap target.
       expect(band.items).toHaveLength(BAND_MAX_ITEMS - 1);
       expect(band.overflow).toBe(3);
       // Nothing is dropped — overflow accounts for every pinned destination.
       expect(band.items.length + band.overflow).toBe(
-        pinnedDestinations(
-          pinsOf(
-            "assistant",
-            "approvals",
-            "automations",
-            "connectors",
-            "discover",
-            "starred"
-          )
-        ).length
+        pinnedDestinations(pins).length
       );
     });
 

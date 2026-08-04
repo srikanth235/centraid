@@ -36,8 +36,18 @@ export const metrics = {
   /** A segmented control, the one control allowed to sit under 34px because
    *  its segments are not individually the primary target. */
   segmented: 28,
-  /** The navigation stem. Never themed, never scrolled away, never resized. */
-  stem: 92,
+  /**
+   * The navigation stem. Never themed, never scrolled away, never resized.
+   *
+   * 240 rather than the 92 the first Binding Layer cut shipped: at 92 the
+   * launcher is a column of chips with a caption under each, so the vault you
+   * are in and the gateway holding it had nowhere to live and were pushed into
+   * Home's app bar — where they are only true on one route. The invariant was
+   * always the RESERVATION (one band, one width, never themed, mirrors under
+   * RTL), not the number; widening it lets identity sit at the head and
+   * Settings at the foot, which is where a member reaches for them.
+   */
+  stem: 240,
 } as const;
 
 export type MetricKey = keyof typeof metrics;

@@ -241,7 +241,7 @@ export function CaptureOverlay({
               setText(event.target.value);
               setPreview(undefined);
             }}
-            placeholder="Remind me to call Priya, spent ₹450 on lunch, meeting tomorrow at 9…"
+            placeholder="Remind me to call Maya, spent $18 on lunch, meeting tomorrow at 9…"
           />
         </label>
         <button

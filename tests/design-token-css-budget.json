@@ -8,30 +8,6 @@
   "packages/blueprints/apps/agenda/components/WeekView.module.css": {
     "rawFontSize": 2
   },
-  "packages/blueprints/apps/docs/Chrome.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/docs/components/BulkBar.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/docs/components/Details.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/docs/components/Editor.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/docs/components/Grid.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/docs/components/List.module.css": {
-    "rawFontSize": 2
-  },
-  "packages/blueprints/apps/docs/components/QuickLook.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/docs/components/shared.module.css": {
-    "rawFontSize": 2
-  },
   "packages/blueprints/apps/locker/components/Detail.module.css": {
     "rawFontSize": 1
   },
@@ -48,9 +24,6 @@
     "rawFontSize": 2
   },
   "packages/blueprints/apps/people/components/List.module.css": {
-    "rawFontSize": 1
-  },
-  "packages/blueprints/apps/photos/components/Slideshow.module.css": {
     "rawFontSize": 1
   },
   "packages/blueprints/apps/tally/Chrome.module.css": {
@@ -136,17 +109,10 @@
     "rawFontSize": 5,
     "rawRadius": 1
   },
-  "packages/client/src/react/screens/DiscoverScreen.module.css": {
-    "rawFontSize": 4
-  },
   "packages/client/src/react/screens/GatewayScreen.module.css": {
     "rawFontSize": 15,
     "rawFontWeight": 1,
     "rawRadius": 1
-  },
-  "packages/client/src/react/screens/HomeScreen.module.css": {
-    "rawFontSize": 4,
-    "rawRadius": 3
   },
   "packages/client/src/react/screens/HouseholdScreen.module.css": {
     "rawFontSize": 2,
@@ -165,10 +131,6 @@
     "rawFontSize": 3,
     "rawRadius": 1
   },
-  "packages/client/src/react/screens/OnboardingScreen.module.css": {
-    "rawFontSize": 6,
-    "rawRadius": 3
-  },
   "packages/client/src/react/screens/PaletteScreen.module.css": {
     "rawFontSize": 4,
     "rawRadius": 3
@@ -177,8 +139,8 @@
     "rawFontSize": 1
   },
   "packages/client/src/react/screens/RecoverScreen.module.css": {
-    "rawFontSize": 7,
-    "rawRadius": 5
+    "rawFontSize": 6,
+    "rawRadius": 4
   },
   "packages/client/src/react/screens/ResourceDialogs.module.css": {
     "rawFontSize": 3,
@@ -238,9 +200,6 @@
   "packages/client/src/react/shell/gatewaySwitcher.module.css": {
     "rawFontSize": 1
   },
-  "packages/client/src/react/shell/routes/AppInfoModal.module.css": {
-    "rawRadius": 2
-  },
   "packages/client/src/react/shell/routes/AppViewRoute.module.css": {
     "rawFontSize": 1,
     "rawRadius": 1
@@ -296,9 +255,6 @@
     "literalFontFamily": 1,
     "rawFontSize": 4,
     "rawRadius": 7
-  },
-  "packages/client/src/react/shell/templatePreview.module.css": {
-    "rawFontSize": 1
   },
   "packages/client/src/react/shell/webhookReveal.module.css": {
     "rawFontSize": 1,

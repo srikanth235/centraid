@@ -19,10 +19,20 @@ import type {
   ThemeName,
 } from "../../app-shell-context.js";
 
+/**
+ * `system`, not `dark`. A member who has never opened Settings should see the
+ * theme their machine is already in — and until this changed, first run could
+ * not be light on any device, which made the grammar matrix's own reference
+ * state for the threshold moment (`sh-light-first-run`) unreachable in the
+ * product. `themeMode` carries the intent; `theme` is only the resolved name,
+ * re-derived by `useAppearance` on mount and on every OS flip while the mode
+ * stays `system`, so the value read here at module load is a starting point
+ * and never the thing that goes stale.
+ */
 export const DEFAULT_PREFS: AppearancePrefs = {
   cardVariant: "outlined",
-  theme: "dark",
-  themeMode: "dark",
+  theme: resolveThemeMode("system"),
+  themeMode: "system",
   tileVariant: "gradient",
 };
 

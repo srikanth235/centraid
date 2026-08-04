@@ -1,8 +1,8 @@
 /* Library tile ("RefinedAppTile") — the app/automation card shared by the
-   Home shelf, Discover grid, and the `<AppCard>` primitive. A vertical card:
+   Home shelf, the Starred grid, and the `<AppCard>` primitive. A vertical card:
    gradient icon plate w/ status dot, name, 2-line blurb, state-aware foot
    strip. Shared sizing/tone values come from the `--tile-*` design tokens so
-   Home and Discover tiles resolve identically.
+   Home and Starred tiles resolve identically.
 
    `.wrap` is the grid item; it hosts the card and sibling hover affordances
    (the `.actions` toolbar, the `.starFlag`) so we don't nest a button inside
@@ -285,7 +285,7 @@
 
 /* ── Rows layout ────────────────────────────────────────────────────────
    When the hosting grid carries `data-layout='rows'` (the Tiles | Rows
-   toggle on Home/Discover), each card flattens into a horizontal strip:
+   toggle on Home/Starred), each card flattens into a horizontal strip:
    glyph plate · name/blurb (grows) · meta/foot pinned right. The hover
    toolbar re-pins to the vertically-centred right edge; the card reserves
    right padding so the foot never sits under it. */

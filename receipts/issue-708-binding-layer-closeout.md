@@ -1286,6 +1286,7 @@ left alone (not this change set's surface).
 | claude-code-8ac80ba9-318-1785838785-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 6 | 1280 | 498267 | 1674 | 2960 | 0.2990 | 14834 | 34710851 | 1693526871 | 5017572 |  |
 | claude-code-8ac80ba9-318-1785838954-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 34 | 19775 | 2935543 | 7824 | 27633 | 1.7871 | 14868 | 34730626 | 1696462414 | 5025396 |  |
 | claude-code-8ac80ba9-318-1785839036-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 4 | 2150 | 356586 | 992 | 3146 | 0.2166 | 14872 | 34732776 | 1696819000 | 5026388 |  |
+| claude-code-8ac80ba9-318-1785839129-1 | claude-code | 8ac80ba9-318d-4598-a125-4ad8b77bda7d | #708 | claude-opus-5 | 6 | 1763 | 538627 | 1280 | 3049 | 0.3124 | 14878 | 34734539 | 1697357627 | 5027668 |  |
 Recorded in `COSTS.md` by the commit hooks.
 
 ### Steering

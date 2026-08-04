@@ -98,32 +98,24 @@ export default function AppViewRoute({
     }
   };
 
-  // For a bundled install this is an Uninstall (revoke access, data stays); for
-  // a code-store app it's a Delete (wipe local files). The `deleteApp` wire is
-  // the same — for a bundled id it deregisters + revokes without a git delete.
+  // Code-store apps only: the panel gives a bundled app no danger zone at all
+  // (issue #708 — it reinstalls at every vault mount, so there is nothing an
+  // uninstall could durably mean).
   const deleteFlow = async (): Promise<void> => {
-    const ok = bundled
-      ? await confirm({
-          confirmLabel: "Uninstall",
-          danger: true,
-          title: `Uninstall ${app.name}?`,
-          message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
-        })
-      : await confirm({
-          confirmLabel: "Delete",
-          danger: true,
-          title: "Delete app?",
-          message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
-        });
+    const ok = await confirm({
+      confirmLabel: "Delete",
+      danger: true,
+      title: "Delete app?",
+      message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
+    });
     if (!ok) return;
     try {
       await deleteApp({ id: app.id });
-      showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
+      showToast(`Deleted "${app.name}"`);
       nav.navigate({ kind: "home" });
     } catch (error) {
-      const verb = bundled ? "uninstall" : "delete";
       showToast(
-        `Could not ${verb}: ${error instanceof Error ? error.message : String(error)}`
+        `Could not delete: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };

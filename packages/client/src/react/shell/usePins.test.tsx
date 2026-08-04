@@ -12,7 +12,15 @@ const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
+    set: (k: string, v: unknown) => {
+      store.set(k, v);
+    },
+    remove: (k: string) => {
+      store.delete(k);
+    },
+    removeByPrefix: (prefix: string) => {
+      for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+    },
   },
 }));
 
@@ -70,10 +78,13 @@ describe(usePins, () => {
     // Absent means unpinned, so the blob stays the size of the member's actual
     // choices — and a destination added in a later build is simply not in it.
     mount();
-    act(() => ctl.togglePin("assistant"));
-    expect(ctl.isPinned("assistant")).toBe(false);
+    // A destination that IS in the default set — `assistant` left it when #707's
+    // "the assistant is a pinned app, not a place" landed in the defaults, and
+    // toggling an unpinned one would pin it rather than exercise the delete.
+    act(() => ctl.togglePin("automations"));
+    expect(ctl.isPinned("automations")).toBe(false);
     expect(Object.keys(store.get("launcher.pins") as object)).not.toContain(
-      "assistant"
+      "automations"
     );
   });
 

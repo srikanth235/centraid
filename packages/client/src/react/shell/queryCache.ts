@@ -26,9 +26,126 @@
 // the commit, and restores the pre-edit value if the commit rejects. Callers
 // do not await-then-refetch — that is the pattern this replaces.
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { optimisticUpdate } from "./optimisticUpdate.js";
+import { Store } from "./store.js";
+
+// ── surviving a reload ──────────────────────────────────────────────────────
+//
+// Everything above this line lives in a module-level Map, which means it dies
+// with the JS context. Route away and back and the value is still there (that
+// is what #659 built, and it measures at ~17ms with no skeleton); RELOAD, or
+// reopen the installed PWA after the OS has evicted it, and every screen is
+// cold again — which is the one case a member actually experiences as "why is
+// this loading, I was just here".
+//
+// So a caller may ask for its value to be written through to the same
+// localStorage the shell already keeps pins and appearance in, and read back on
+// the next boot as an immediately-paintable value that revalidates behind
+// itself. Three rules make that safe rather than merely fast:
+//
+//   • OPT-IN per call site. A cached value can be anything — a note's first
+//     line, an event title, a person's name. Whether that may be written to
+//     unencrypted browser storage is a judgement about the CONTENT, so it is
+//     made where the content is known, never blanket-enabled here.
+//   • Vault-scoped and purged on re-scope. `resetQueryCache()` is the shell's
+//     "different vault, different world" hook; it now forgets the persisted
+//     copies too, so nothing from the previous vault can be painted into the
+//     next one.
+//   • Byte-capped. localStorage is a few megabytes for the whole origin and
+//     throws when full. A value over the cap is skipped and any older copy of
+//     it dropped, so one fat key cannot evict the shell's real preferences.
+
+const PERSIST_NAMESPACE = "queryCache.";
+
+/**
+ * Per-key ceiling for a persisted value.
+ *
+ * 64 KiB is far more than a screen's worth of text and far less than the
+ * origin's budget. It is also the guard against the failure this would
+ * otherwise invite: a value that has grown a data-URI thumbnail in it, which is
+ * megabytes and is exactly the kind of thing that fills the quota silently.
+ */
+const PERSIST_MAX_BYTES = 64 * 1024;
+
+/** Keys whose settled values are written through, each with the shaping step
+ *  that runs on the way to storage (`null` = write as-is). Registered by
+ *  `useCachedQuery`, read by `revalidateQuery`, so a refresh or a mutation
+ *  persists on the same terms as the first load. */
+const persisted = new Map<string, ((data: unknown) => unknown) | null>();
+
+interface PersistedRecord<T> {
+  at: number;
+  data: T;
+}
+
+function persistKey(key: string): string {
+  return `${PERSIST_NAMESPACE}${key}`;
+}
+
+/**
+ * Seed a key from its written-through copy, once, before anything renders.
+ *
+ * Only ever seeds a key that has never settled in THIS context, so it can never
+ * overwrite a fresher in-memory value — and it keeps the record's own timestamp
+ * as `settledAt`, so `staleAfterMs` measures the age of the data rather than the
+ * age of the page.
+ */
+function hydrateQuery<T>(
+  key: string,
+  shape: ((data: T) => T) | undefined
+): void {
+  persisted.set(key, (shape as (data: unknown) => unknown) ?? null);
+  const entry = entryFor<T>(key);
+  if (entry.state.status !== "loading" || entry.settledAt !== 0) return;
+  const record = readPersisted<T>(key);
+  if (!record) return;
+  entry.settledAt = record.at;
+  // `revalidating: true` on purpose: this value is a rendering of the last time
+  // we asked, and the ask is already on its way.
+  publish(entry, { status: "ready", data: record.data, revalidating: true });
+}
+
+function readPersisted<T>(key: string): PersistedRecord<T> | undefined {
+  const record = Store.get<PersistedRecord<T> | null>(persistKey(key), null);
+  return record && typeof record.at === "number" ? record : undefined;
+}
+
+function writePersisted<T>(key: string, value: T): void {
+  const shape = persisted.get(key);
+  const data = shape ? (shape(value) as T) : value;
+  // A loader that resolved with nothing. `JSON.stringify(undefined)` is
+  // `undefined`, not a string, so every byte check below would throw — and it
+  // would throw OUTSIDE the settle handler's try, killing the publish that
+  // follows and leaving the key stuck on its hydrated copy forever. There is
+  // nothing to remember, so any older copy goes and we stop here.
+  if (data === undefined) {
+    Store.remove(persistKey(key));
+    return;
+  }
+  let encoded: string;
+  try {
+    encoded = JSON.stringify(data);
+  } catch {
+    // Unserialisable (a cycle, a DOM node). Not an error — just not cacheable.
+    return;
+  }
+  if (encoded.length > PERSIST_MAX_BYTES) {
+    Store.remove(persistKey(key));
+    return;
+  }
+  Store.set(persistKey(key), {
+    at: Date.now(),
+    data,
+  } satisfies PersistedRecord<T>);
+}
 
 /**
  * A key's state. Discriminated so `status === "ready"` narrows `data`, and
@@ -94,6 +211,7 @@ export function revalidateQuery<T>(
     (data) => {
       entry.inFlight = null;
       entry.settledAt = Date.now();
+      if (persisted.has(key)) writePersisted(key, data);
       publish(entry, { status: "ready", data, revalidating: false });
     },
     (error: unknown) => {
@@ -172,15 +290,46 @@ export function resetQueryCache(prefix?: string): void {
     publish(entry, LOADING);
     if (entry.subscribers.size === 0) entries.delete(key);
   }
+  // The written-through copies go too, and they go by NAMESPACE rather than by
+  // iterating `entries`: a persisted value from a vault this session never
+  // opened has no entry here, and leaving it behind is exactly how the previous
+  // vault's rows would get painted into the next one.
+  Store.removeByPrefix(
+    prefix === undefined ? PERSIST_NAMESPACE : persistKey(prefix)
+  );
+  if (prefix === undefined) persisted.clear();
 }
 
-export interface CachedQueryOptions {
+export interface CachedQueryOptions<T = unknown> {
   /**
    * Skip the on-mount revalidation while the cached value is younger than
    * this. `0` (the default) always revalidates — stale-WHILE-revalidate, not
    * stale-instead-of.
    */
   staleAfterMs?: number;
+  /**
+   * Write settled values through to local storage, and paint from that copy on
+   * the next boot instead of starting cold.
+   *
+   * OPT-IN, and the opt-in is a statement about the VALUE: turning this on
+   * writes whatever this key holds into unencrypted browser storage, so only a
+   * call site that knows the shape may decide it. It still revalidates on
+   * mount — the persisted copy is what the member looks at while the fresh one
+   * arrives, never a substitute for asking.
+   */
+  persist?: boolean;
+  /**
+   * Shape the value on its way to storage. Runs only when `persist` is on.
+   *
+   * Required whenever a value holds something that cannot survive the context
+   * that made it. Home's springboard is the case that forced this: its photo
+   * mosaic carries `URL.createObjectURL` handles, which are bound to the
+   * document that created them, so a persisted copy would paint four broken
+   * images on the very boot it was supposed to make fast. Stripping them is
+   * honest — the tile keeps its count and reloads its own thumbnails — where
+   * writing them would be a cache that lies.
+   */
+  toPersisted?: (data: T) => T;
 }
 
 export interface CachedQuery<T> {
@@ -201,7 +350,7 @@ export interface CachedQuery<T> {
 export function useCachedQuery<T>(
   key: string | null,
   load: () => Promise<T>,
-  options: CachedQueryOptions = {}
+  options: CachedQueryOptions<T> = {}
 ): CachedQuery<T> {
   // The loader is re-read on every commit so an inline closure does not count
   // as a change — same rule useAsyncData established; the KEY is the identity.
@@ -210,6 +359,16 @@ export function useCachedQuery<T>(
     loadRef.current = load;
   });
   const run = useCallback((): Promise<T> => loadRef.current(), []);
+
+  // Before the first snapshot read, not in an effect: an effect runs after
+  // paint, which is one frame of skeleton — the exact frame this exists to
+  // remove. Idempotent and once per key, so a double render seeds nothing
+  // twice.
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  if (options.persist === true && key !== null && hydratedKey !== key) {
+    setHydratedKey(key);
+    hydrateQuery<T>(key, options.toPersisted);
+  }
 
   const subscribe = useCallback(
     (onChange: () => void) => {

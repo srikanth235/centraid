@@ -38,7 +38,6 @@ export function routeKey(route: ShellRoute): string {
         : "assistant";
     case "home":
     case "insights":
-    case "discover":
     case "starred":
     case "automations":
     case "connectors":

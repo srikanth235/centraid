@@ -85,8 +85,6 @@ declare global {
     openAppContext: (id: string, anchor: MenuAnchor) => void;
     /** Navigate to the Insights (usage analytics) page. */
     openInsights: () => void;
-    /** Navigate to the Discover (templates) page. */
-    openDiscover: () => void;
     /** Navigate to the Starred apps page. */
     openStarred: () => void;
     /** Navigate to the Automations page. */
@@ -147,7 +145,6 @@ declare global {
     | "home"
     | "assistant"
     | "insights"
-    | "discover"
     | "starred"
     | "automations"
     | "settings";

@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import { IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
+import Button from "../ui/Button.js";
 import { ErrorNote } from "./OnboardingErrorNote.js";
 
 import a11y from "../styles/a11y.module.css";
@@ -57,8 +58,12 @@ export function OnboardingIdentityStep({
 
   return (
     <>
+      {/* The blurred, 4.2s-pulsing ring around this disc retired with the
+          ink-on-paper flip: a glow is not a material this system has, and a
+          first-run screen that breathes at you is one that will not sit
+          still. What is left is the disc itself — the same round avatar the
+          stem foot and the roster will show them from here on. */}
       <div className={styles.avatarWrap}>
-        <span className={styles.avatarRing} aria-hidden="true" />
         <span
           className={styles.avatar}
           style={{ background: avatarColor }}
@@ -140,30 +145,20 @@ export function OnboardingIdentityStep({
             </small>
           </span>
         </label>
-        <button
-          type="button"
+        {/* The one primary (M15, `one-primary`) — filled INK, from the shared
+            button, not a slab in the member's chosen hue. The hue is theirs
+            to wear on the disc and the binding edge; the control that
+            commits looks the same for everyone.
+            The trailing chevron went with it: a filled primary that is the
+            only filled thing on the sheet does not need an arrow to say it
+            is the way forward. */}
+        <Button
           className={styles.cta}
+          label="Continue"
+          variant="primary"
           disabled={!ready}
-          data-state={submitting ? "submitting" : ready ? "ready" : "idle"}
           onClick={onContinue}
-        >
-          <span>Continue</span>
-          <span className={styles.ctaArrow}>
-            <svg
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </span>
-        </button>
+        />
         {/* Continue disables the moment the field is empty, and a disabled
             button explains nothing (UX-4). A quiet line says why — not a
             red validation error, because the field starts empty and being

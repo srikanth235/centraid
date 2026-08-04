@@ -117,9 +117,10 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // Deleting the policy fails (1); dropping the spread at a call site fails (2).
   // The per-tier *values* (device-addressed bytes stay out of the disk cache,
   // gateway thumbnails keep it) are pinned by behaviour in
-  // apps/mobile/src/apps/photos/grid-image.test.ts, which can assert on the
-  // returned object rather than on source text.
-  const gridImage = await source("apps/mobile/src/apps/photos/grid-image.ts");
+  // apps/mobile/src/kit/media/grid-image.test.ts, which can assert on the
+  // returned object rather than on source text. (Moved under kit/media for the
+  // Home springboard shared media path in #708.)
+  const gridImage = await source("apps/mobile/src/kit/media/grid-image.ts");
   assert.match(
     gridImage,
     /cachePolicy: .*"memory-disk"/u,

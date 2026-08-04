@@ -6,7 +6,7 @@ import type { IconName } from "@centraid/design";
 import { INTEGRATION_HUES } from "../format.js";
 import type {
   AutomationTemplatesBridgeProps,
-  DiscoverTemplate,
+  CatalogTemplate,
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
@@ -62,8 +62,8 @@ function TemplateCard({
   t,
   onOpen,
 }: {
-  t: DiscoverTemplate;
-  onOpen: (t: DiscoverTemplate) => void;
+  t: CatalogTemplate;
+  onOpen: (t: CatalogTemplate) => void;
 }): JSX.Element {
   const meta = TRIGGER_KIND_META[t.triggerKind ?? "cron"];
   return (

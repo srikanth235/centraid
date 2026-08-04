@@ -30,7 +30,14 @@ describe("typed native lowering", () => {
     expect(theme.radii.pill).toBe(999);
     expect(theme.metrics.control).toBe(34);
     expect(theme.metrics.row).toBe(44);
-    expect(theme.metrics.stem).toBe(92);
+    // 240, the Binding Layer's reserved navigation band (#707/#708). This
+    // asserted 92 — the width of the rail the stem replaced — and went on
+    // passing because the mobile suite was resolving `@centraid/design` through
+    // a `dist/` built before that change. It only failed once that dist was
+    // rebuilt, so the number here was pinning a stale artefact rather than the
+    // shared source. Mobile draws no stem, but it lowers the same metrics table,
+    // and the whole point of the table is that one number means one thing.
+    expect(theme.metrics.stem).toBe(240);
     expect(theme.density.comfortable.row).toBe(44);
     expect(theme.density.dense.row).toBe(34);
     expect(theme.targetMin).toStrictEqual({ coarse: 48, fine: 32 });

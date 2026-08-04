@@ -7,7 +7,7 @@
 // list already IS Home's grid; Search / Settings / Assistant live in the dock;
 // Approvals / Automations live in the attention line. So this drawer only adds
 // the vault identity header and two short sections (GO TO / SYSTEM). Desktop-only
-// rows with no mobile destination (Insights, Discover, Starred, Vault Atlas,
+// rows with no mobile destination (Insights, Starred, Vault Atlas,
 // Chats, Backups) are intentionally omitted rather than rendered as dead links.
 //
 // Mechanics mirror the Photos drawer (src/apps/photos/PhotosDrawer.tsx): a

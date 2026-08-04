@@ -8,7 +8,10 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-import styles from "./RecoverScreen.module.css";
+// The chooser is step ZERO of onboarding, so it wears onboarding's sheet. It
+// used to borrow RecoverScreen's module, which is how the product's first
+// screen and its second screen ended up looking like two different apps.
+import styles from "./OnboardingScreen.module.css";
 
 /**
  * First run branches on PLATFORM, not on gateway state (issue #603).
@@ -62,12 +65,10 @@ export default function FirstRunGate({
       data-mounted="true"
       data-testid="first-run-choice"
     >
-      <div className={styles.stageBg} aria-hidden="true" />
-      <div className={styles.stageGlow} aria-hidden="true" />
-      <div className={styles.card} data-theme="dark">
+      <div className={styles.card}>
         <div className={styles.eyebrow}>
           <span className={styles.eyebrowDot} aria-hidden="true" />
-          CENTRAID
+          Centraid
         </div>
         <h1 className={styles.title}>
           Welcome to <em>Centraid</em>.

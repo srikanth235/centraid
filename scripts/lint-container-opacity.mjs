@@ -53,9 +53,15 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 // it ratchets).
 //
 // 2026-08-03 — measured via `node scripts/lint-container-opacity.mjs`.
+// 2026-08-04 — client 25 → 21: the onboarding migration retired the glow blob,
+// the pulsing avatar ring and the faded "working" line, all of which expressed
+// something (depth, liveness, quiet) by dimming a container.
+// 2026-08-04 — blueprints 6 → 5: the docs "+ New" chevron's resting 0.85 fade
+// went with the hand-rolled button it decorated; the kit primary carries one
+// ink for the whole control.
 const BUDGETS = {
-  "packages/client/src": 25,
-  "packages/blueprints": 6,
+  "packages/client/src": 21,
+  "packages/blueprints": 5,
   "packages/design/kit": 12,
 };
 

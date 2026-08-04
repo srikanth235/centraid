@@ -444,36 +444,47 @@ export default function AppSettingsPanel(
               onClick={onReveal}
             />
           </div>
-          <div className={styles.settingsDanger}>
-            <div className={styles.settingsDangerLabel}>Danger zone</div>
-            <button
-              type="button"
-              className={cx(styles.settingsMenuItem, styles.settingsDangerItem)}
-              data-danger="true"
-              data-armed={deleteArmed ? "true" : undefined}
-              onClick={() => (deleteArmed ? onDelete() : setDeleteArmed(true))}
-            >
-              <span className={styles.settingsMenuIcon}>
-                <Icon name="Trash" size={13} />
-              </span>
-              <span className={styles.settingsMenuText}>
-                <span className={styles.settingsMenuLabel}>
-                  {bundled ? "Uninstall app" : "Delete app"}
-                </span>
-                <span className={styles.settingsMenuSub}>
-                  {bundled
-                    ? "Revokes its access. Your data stays in your vault."
-                    : "Removes the app, its data, and its scheduled automations."}
-                </span>
-              </span>
-              <span
-                className={styles.settingsConfirmPill}
-                hidden={!deleteArmed}
+          {/* A first-party app has no danger zone (issue #708). It is installed
+              at vault mount and reinstalled at every mount after that, so an
+              Uninstall here would undo itself on the next gateway start — and a
+              verb that quietly reverses is worse than no verb. The question it
+              was really asked to answer, "what can this app reach?", is answered
+              where it belongs: the Vault tab beside this one, per grant, with a
+              revoke that stays revoked. Code-store apps keep Delete; they are
+              the member's own, and nothing reinstates them. */}
+          {bundled ? null : (
+            <div className={styles.settingsDanger}>
+              <div className={styles.settingsDangerLabel}>Danger zone</div>
+              <button
+                type="button"
+                className={cx(
+                  styles.settingsMenuItem,
+                  styles.settingsDangerItem
+                )}
+                data-danger="true"
+                data-armed={deleteArmed ? "true" : undefined}
+                onClick={() =>
+                  deleteArmed ? onDelete() : setDeleteArmed(true)
+                }
               >
-                click to confirm
-              </span>
-            </button>
-          </div>
+                <span className={styles.settingsMenuIcon}>
+                  <Icon name="Trash" size={13} />
+                </span>
+                <span className={styles.settingsMenuText}>
+                  <span className={styles.settingsMenuLabel}>Delete app</span>
+                  <span className={styles.settingsMenuSub}>
+                    Removes the app, its data, and its scheduled automations.
+                  </span>
+                </span>
+                <span
+                  className={styles.settingsConfirmPill}
+                  hidden={!deleteArmed}
+                >
+                  click to confirm
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </dialog>
     </>

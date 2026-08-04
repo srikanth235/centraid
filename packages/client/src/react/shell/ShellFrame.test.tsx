@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -41,14 +44,45 @@ describe("shell/ShellFrame", () => {
       );
     });
 
-    it("offers no way to hide the stem — it never scrolls away", () => {
-      // #707 invariant 1. The three-zone sidebar's collapse toggle, its drawer
-      // and its scrim are all gone; a frame that can hide its own navigation
-      // cannot promise "always the same distance from the reading edge".
+    it("seams the bar off from the content on every route", () => {
+      // Including the routes that name nothing. A boundary that showed up only
+      // where there is a title would read as a rendering difference.
+      const css = readFileSync(
+        path.join(import.meta.dirname, "chrome.module.css"),
+        "utf8"
+      );
+      const rule = /\n\.appBar \{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
+      expect(rule, ".appBar rule not found").toBeTypeOf("string");
+      expect(rule!).toMatch(/border-block-end:\s*1px solid var\(--line\)/u);
+    });
+
+    it("offers the stem toggle only to a host that owns the state", () => {
+      // A frame with no `stemOpen` is a host that cannot answer the question —
+      // the compact band and the full-bleed windows. Drawing a dead toggle
+      // there would be worse than drawing none.
       const el = render(<ShellFrame {...base} />);
       expect(el.querySelector('[aria-label="Hide sidebar"]')).toBeNull();
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
+    });
+
+    it("hides the stem without unmounting it, and never behind a scrim", () => {
+      const onToggleStem = vi.fn<() => void>();
+      const el = render(
+        <ShellFrame {...base} stemOpen={false} onToggleStem={onToggleStem} />
+      );
+      // Hidden, not unmounted: the launcher keeps its scroll position and the
+      // vault switcher keeps a box to anchor to.
+      expect(el.querySelector('[data-testid="stem"]')).not.toBeNull();
+      expect(el.querySelector<HTMLElement>(".window")?.dataset.stem).toBe(
+        "hidden"
+      );
+      // Never a drawer: no scrim over the content, in either state.
       expect(el.querySelector(".scrim")).toBeNull();
+      const toggle = el.querySelector<HTMLButtonElement>(
+        '[aria-label="Show sidebar"]'
+      )!;
+      act(() => toggle.click());
+      expect(onToggleStem).toHaveBeenCalledOnce();
     });
 
     it("marks the frame compact so the stem becomes the bottom band", () => {
@@ -76,6 +110,64 @@ describe("shell/ShellFrame", () => {
       expect(el.querySelector(".appMeta")?.textContent).toBe("1,904 photos");
       // The title is the app's heading, not a decorative string.
       expect(el.querySelector("h1")).not.toBeNull();
+    });
+
+    it("grows the bar into a header only for the full identity lockup", () => {
+      // The trigger is the META line, not the title. A title with nothing
+      // under it is naming the screen, which is what a titlebar has always
+      // done — 31px of window furniture would crowd the content below it.
+      const bare = render(<ShellFrame {...base} />);
+      expect(
+        bare.querySelector<HTMLElement>(".appBar")?.dataset.identity
+      ).toBeUndefined();
+      act(() => root?.unmount());
+      host?.remove();
+      const named = render(<ShellFrame {...base} appTitle="Photos" />);
+      expect(
+        named.querySelector<HTMLElement>(".appBar")?.dataset.identity
+      ).toBeUndefined();
+      act(() => root?.unmount());
+      host?.remove();
+      const lockup = render(
+        <ShellFrame {...base} appTitle="Photos" appMeta="1,204 photos" />
+      );
+      expect(
+        lockup.querySelector<HTMLElement>(".appBar")?.dataset.identity
+      ).toBe("true");
+    });
+
+    it("makes the title the switcher when the route hands it an action", () => {
+      const onActivate = vi.fn<(anchor: DOMRect) => void>();
+      const el = render(
+        <ShellFrame
+          {...base}
+          appTitle="Srikanth's vault"
+          appMeta="This Mac"
+          appTitleAction={{
+            label: "Srikanth's vault on This Mac. Switch vault.",
+            onActivate,
+            open: true,
+          }}
+        />
+      );
+      const title = el.querySelector<HTMLButtonElement>("button.appTitle")!;
+      // Still the title: same class, same display face, same string.
+      expect(title.textContent).toContain("Srikanth's vault");
+      expect(title.getAttribute("aria-expanded")).toBe("true");
+      expect(title.getAttribute("aria-label")).toBe(
+        "Srikanth's vault on This Mac. Switch vault."
+      );
+      // A route that names no action gets a heading, never a dead button.
+      expect(el.querySelector("h1")).toBeNull();
+      act(() => title.click());
+      expect(onActivate).toHaveBeenCalledOnce();
+      // Anchored to the title's own box, so the popover opens under the name
+      // it is switching (jsdom hands back a plain rect, not a DOMRect).
+      expect(onActivate.mock.calls[0]![0]).toMatchObject({
+        bottom: expect.any(Number),
+        left: expect.any(Number),
+        width: expect.any(Number),
+      });
     });
 
     it("omits the identity block entirely when the route names nothing", () => {

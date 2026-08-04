@@ -15,18 +15,28 @@ import { apps, formatRelativeTime, identityInitials } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
 import { formatCurrencyMinor } from "../../../capture.js";
+import { HOME_FIRST_MOVE_COPY } from "../../../home-copy.js";
 
 /**
- * Springboard order. Not alphabetical and not install order: it runs from the
- * apps whose content changes hourly (agenda, tasks) to the ones that are a
- * standing library (locker), so the top of the grid is the part worth a glance.
+ * Springboard order, taken from the handoff's own tile list rather than from a
+ * freshness rule. It leads with the two bodies that carry IMAGERY and PROSE —
+ * the mosaic and the reading register — and only then runs the small chips.
+ *
+ * The order this replaces sorted by how often an app's content changes (agenda
+ * and tasks first, the standing library last), which is a sound rule and the
+ * wrong one here. It put two 1×1 chips in the top-left and pushed the mosaic to
+ * the right, so the first thing the eye met on Home was a checkbox list. The
+ * mosaic is the only body that needs area to be itself; giving it the corner is
+ * what makes the grid read as a page with a subject instead of a launcher with
+ * a picture in it. Freshness still decides what is IN a tile — it just no
+ * longer decides where the tile sits.
  */
 export const HOME_TILE_ORDER = [
+  "photos",
+  "docs",
+  "notes",
   "agenda",
   "tasks",
-  "photos",
-  "notes",
-  "docs",
   "people",
   "tally",
   "locker",
@@ -83,9 +93,8 @@ export interface HomeTileTaskRow {
 }
 
 /**
- * The structurally distinct tile bodies. `empty` is the DESIGNED empty body —
- * a dashed placeholder with what-to-do copy, not a blank tile and not a
- * skeleton (a skeleton means "still loading", which is a different state).
+ * The structurally distinct tile bodies. `empty` is the one that never renders:
+ * it is how a tile says it has not earned the grid yet.
  */
 export type HomeTileBody =
   /** Thumbnail mosaic, bleeding to the tile edge. */
@@ -104,7 +113,12 @@ export type HomeTileBody =
   | { kind: "locker"; chip: string; tone: "ok" | "warn" }
   /** The most recent note's first line, in the reading register. */
   | { kind: "notes"; line: string; at: string }
-  | { kind: "empty"; hint: string };
+  /** Nothing to show. A MARKER, not a rendering: `partitionHomeTiles` reads it
+   *  to keep this app out of the grid entirely, and the invitation to fill it
+   *  lives once, in `homeFirstMoves`. It used to carry what-to-do copy for a
+   *  dashed in-grid tile — two spellings of one state, which is the drift
+   *  `home-copy.ts` exists to prevent. */
+  | { kind: "empty" };
 
 export interface HomeTileModel {
   id: HomeTileAppId;
@@ -140,19 +154,6 @@ export interface HomeTileContent {
   notes?: { total: number; line?: string; at?: string };
 }
 
-/** What-to-do copy for an app that has nothing in it yet. One sentence, an
- *  instruction rather than an apology — the tile is still a door. */
-const EMPTY_HINT: Record<HomeTileAppId, string> = {
-  agenda: "Add your first event to see what's next here.",
-  docs: "File a document to keep it versioned and restorable.",
-  locker: "Save a password to keep it behind the lock.",
-  notes: "Write a note — the newest one shows up here.",
-  people: "Add someone you want to stay in touch with.",
-  photos: "Add photos and the newest ones appear here.",
-  tally: "Log a shared expense to start a balance.",
-  tasks: "Add a task and it lands on this tile.",
-};
-
 const COUNT_LABEL: Record<HomeTileAppId, string> = {
   agenda: "events",
   docs: "documents",
@@ -164,8 +165,16 @@ const COUNT_LABEL: Record<HomeTileAppId, string> = {
   tasks: "open tasks",
 };
 
-/** The four thumbnails a mosaic shows; the rest becomes a "+N". */
-const MOSAIC = 4;
+/**
+ * Thumbnails a mosaic shows; the rest becomes a "+N".
+ *
+ * EIGHT, matching the handoff: the mosaic is four columns by two rows on the
+ * 2×2 tile, and it is the one body that gets worse as it shrinks. Four cells
+ * in that area read as four big crops of nothing in particular; eight read as
+ * a camera roll, which is the claim the tile is making. Compact keeps the four
+ * columns and drops to a single row when `large` flattens to 2×1.
+ */
+const MOSAIC = 8;
 /** Faces before the overlap stops reading as a stack. */
 const FACES = 4;
 /** Task rows that fit above the tile's baseline without clamping to one line. */
@@ -201,7 +210,7 @@ function bodyFor(
   content: HomeTileContent,
   now: number
 ): HomeTileBody {
-  const empty: HomeTileBody = { hint: EMPTY_HINT[id], kind: "empty" };
+  const empty: HomeTileBody = { kind: "empty" };
   if (id === "photos") {
     const photos = content.photos;
     if (!photos || photos.total === 0) return empty;
@@ -291,8 +300,14 @@ function countFor(id: HomeTileAppId, content: HomeTileContent): number | null {
 
 /**
  * The springboard's tiles: one per INSTALLED first-party app, in springboard
- * order. An app the vault does not have is not a tile — Home shows what you
- * have, and Discover is where you get more.
+ * order.
+ *
+ * Since #708 every bundled app is installed at vault mount, so in practice this
+ * is all eight, every time. The filter stays because it states the rule the grid
+ * actually obeys — a tile is a door into an app this vault HAS — and because an
+ * audience vault mid-mount, or a release that ships a ninth app to a gateway
+ * that has not restarted, is a real state that must render a shorter grid rather
+ * than a broken tile.
  */
 export function buildHomeTiles(input: {
   installedIds: readonly string[];
@@ -320,11 +335,106 @@ export function buildHomeTiles(input: {
 }
 
 /**
- * First run is "the vault has no content ANYWHERE" — not "a read is still in
- * flight". A springboard of eight designed empty bodies is eight apologies;
- * one piece of what-to-do copy with dashed placeholders is an instruction. The
- * caller must therefore only ask this once its reads have settled.
+ * Split the springboard into the tiles that have earned the grid and the apps
+ * that have not.
+ *
+ * This replaces `isFirstRun`, which was a BINARY over the same information and
+ * got both ends wrong. With nothing anywhere it produced one sentence over four
+ * dashed rectangles; with one note anywhere it flipped and produced all eight
+ * tiles, seven of them apologising — the "eight apologies" the day-one treatment
+ * exists to prevent, arriving one note later. A vault fills up gradually, so the
+ * surface has to be graded too: a tile is in the grid when it has something to
+ * show, and everything else becomes an INVITATION rather than an absence.
+ *
+ * `live` keeps springboard order, so a tile does not move when its neighbour
+ * fills — Home grows into itself rather than re-laying out under the reader.
+ *
+ * The caller must only ask once its reads have settled: an unanswered read is
+ * "still looking", which is a different sentence from "there is nothing".
  */
-export function isFirstRun(tiles: readonly HomeTileModel[]): boolean {
-  return tiles.length > 0 && tiles.every((tile) => tile.body.kind === "empty");
+export function partitionHomeTiles(tiles: readonly HomeTileModel[]): {
+  live: readonly HomeTileModel[];
+  idle: readonly HomeTileModel[];
+} {
+  return {
+    idle: tiles.filter((tile) => tile.body.kind === "empty"),
+    live: tiles.filter((tile) => tile.body.kind !== "empty"),
+  };
+}
+
+/** One thing a member can do that will actually put something on this page. */
+export interface HomeFirstMove {
+  /** App id, or `connectors` for the one move that is not an app. */
+  id: string;
+  label: string;
+  hint: string;
+  iconKey: AppMetaResolved["iconKey"];
+  colorKey: AppMetaResolved["colorKey"];
+  /** Where selecting it goes — an app surface, or the Connectors page. */
+  kind: "app" | "connectors";
+}
+
+/**
+ * Leverage order, which is not springboard order.
+ *
+ * `connectors` leads because it is the only move whose result is bigger than the
+ * act: mail, calendar and contacts arrive on their own afterwards, so one
+ * decision fills three tiles. Photos and Docs come next because they are what
+ * the day-one copy actually promises ("bring your photographs and documents
+ * in"), and the rest follow by how quickly they pay back a single action.
+ */
+const FIRST_MOVE_ORDER = [
+  "connectors",
+  "photos",
+  "docs",
+  "notes",
+  "agenda",
+  "tasks",
+  "people",
+  "tally",
+  "locker",
+] as const;
+
+/** Connectors is not an app, so it carries no entry in the app registry. */
+const CONNECTORS_MOVE = {
+  colorKey: "teal",
+  iconKey: "Plug",
+} as const satisfies Pick<HomeFirstMove, "colorKey" | "iconKey">;
+
+/**
+ * The first moves to offer, given the apps that are still empty.
+ *
+ * Every move lands somewhere that can TAKE content. The placeholders these
+ * replace opened the empty app they were named after, which is a dead end
+ * wearing an invitation — you arrive at the same emptiness one click deeper,
+ * with no more idea what to do than before.
+ */
+export function homeFirstMoves(
+  idle: readonly HomeTileModel[],
+  limit = 4
+): readonly HomeFirstMove[] {
+  const idleIds = new Set<string>(idle.map((tile) => tile.id));
+  return FIRST_MOVE_ORDER.flatMap<HomeFirstMove>((id) => {
+    const copy = HOME_FIRST_MOVE_COPY[id];
+    if (!copy) return [];
+    if (id === "connectors") {
+      // Offered while ANY app is empty: the accounts it connects fill several
+      // of them, so it is never the wrong suggestion while the page is thin.
+      return idle.length === 0
+        ? []
+        : [{ ...CONNECTORS_MOVE, ...copy, id, kind: "connectors" }];
+    }
+    if (!idleIds.has(id)) return [];
+    const meta = apps.find((app) => app.id === id);
+    if (!meta) return [];
+    return [
+      {
+        ...copy,
+        colorKey: meta.colorKey,
+        iconKey: meta.iconKey,
+        id,
+        kind: "app",
+      },
+    ];
+  }).slice(0, limit);
 }

@@ -22,12 +22,12 @@ import {
 import au from "../styles/automation.module.css";
 import cardCss from "../ui/AppCard.module.css";
 import styles from "./AutomationsOverviewScreen.module.css";
-import homeCss from "./HomeScreen.module.css";
+import gridCss from "./LibraryCards.module.css";
 
 // Automations overview (Automations UI revamp — see
 // receipts/issue-387-automations-ui-revamp.md; chat-thread redesign,
 // receipts/issue-539-automations-chat-thread.md): a grid of automation tiles
-// that mirrors the Home shelf (same `appsGrid`/AppCard family) — each tile
+// that reuses the library card family (same `appsGrid`/AppCard) — each tile
 // shows the automation's glyph, name, most-recent-run blurb, status + trigger,
 // and last-run foot, with attention/failed tiles surfaced first and given a
 // restrained danger accent. A secondary date-grouped recent-runs feed sits
@@ -67,7 +67,7 @@ function StatusPill({
   );
 }
 
-/** Automation tile — mirrors HomeScreen's `AutoCard` (issue #539 chat-thread
+/** Automation tile — mirrors the library `AutoCard` (issue #539 chat-thread
  *  redesign): a gallery card with a glyph plate, name + last-run blurb, a
  *  status/trigger meta strip, and a kind-badge/last-run foot. Attention or a
  *  failed last run gives the tile a restrained danger-tinted accent + badge —
@@ -504,7 +504,7 @@ export default function AutomationsOverviewScreen({
               </div>
             ) : (
               <div
-                className={cx(homeCss.appsGrid, homeCss.appsGridSmall)}
+                className={cx(gridCss.appsGrid, gridCss.appsGridSmall)}
                 data-testid="apps-grid"
               >
                 {visibleRows.map((row) => (

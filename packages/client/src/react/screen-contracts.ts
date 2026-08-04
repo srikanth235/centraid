@@ -10,15 +10,15 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
-import type { TileVariant } from "@centraid/design";
-
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
 // The bridge is intentionally self-contained — it must not import the vanilla
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
-// `DiscoverTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
+// `CatalogTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
 // field so the vanilla side's `TemplateEntry` values pass through unchanged.
-export interface DiscoverTemplate {
+// It was `DiscoverTemplate` until Discover was retired (issue #708); the shape
+// outlived the page because the automation gallery renders the same card.
+export interface CatalogTemplate {
   id: string;
   name: string;
   desc: string;
@@ -26,37 +26,17 @@ export interface DiscoverTemplate {
   iconKey: string;
   version: string;
   kind?: "app" | "automation";
-  /** App-kind template already installed in the addressed vault (issue #434) —
-   *  the card shows Open instead of Install. */
-  installed?: boolean;
-  /** Requested vault access, for the install/consent sheet (issue #434). */
-  vault?: {
-    purpose?: string;
-    why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
-  };
+  /* `installed` and `vault` are deliberately NOT mirrored: they existed for the
+     install/consent sheet, and the only screen that still renders this card is
+     the automation gallery, where adopting a template is a clone rather than an
+     install. The wire type (`TemplateEntry`) keeps both — the gateway still
+     sends them — but a screen contract that carries fields no screen reads is
+     how a retired flow keeps looking alive. */
   emoji?: string;
   category?: string;
   triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
   integrations?: readonly string[];
-}
-
-/** Right-click anchor passed back to the shell's template context menu. */
-export interface DiscoverMenuAnchor {
-  kind: "point";
-  x: number;
-  y: number;
-}
-
-/** Everything the React Discover screen needs from the vanilla shell. */
-export interface DiscoverBridgeProps {
-  appTemplates: readonly DiscoverTemplate[];
-  automationTemplates: readonly DiscoverTemplate[];
-  tileVariant: TileVariant;
-  onOpenTemplate: (t: DiscoverTemplate) => void;
-  onOpenAutomationTemplate: (t: DiscoverTemplate) => void;
-  onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }
 
 // ── Insights (#514 transparency rewrite) ────────────────────────────────────
@@ -226,11 +206,11 @@ export interface VaultBridgeProps {
 
 // ── Automation templates gallery ────────────────────────────────────────────
 export interface AutomationTemplatesBridgeProps {
-  templates: readonly DiscoverTemplate[];
+  templates: readonly CatalogTemplate[];
   /** Subtitle under the self-painted "Templates" header (issue: automations UX pass). */
   subtitle?: string;
   /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
-  onPreview: (t: DiscoverTemplate) => void;
+  onPreview: (t: CatalogTemplate) => void;
   /** "Start from scratch" → the conversational automation builder. */
   onStartFromScratch: () => void;
 }
@@ -1182,25 +1162,6 @@ export interface HomeAutoItemDTO {
   footTimeLabel: string;
   footOk: boolean;
   starred: boolean;
-}
-export interface HomeBridgeProps {
-  /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
-   *  "What should we build?" composer hero + its suggestions don't render and
-   *  the empty states drop their "describe an app" build prompt. */
-  builderEnabled: boolean;
-  suggestions: string[];
-  dateLabel: string;
-  appItems: HomeAppItemDTO[];
-  automationItems: HomeAutoItemDTO[];
-  counts: { all: number; apps: number; automations: number };
-  attention: number;
-  onBuild: (prompt: string) => void;
-  onOpenApp: (id: string) => void;
-  onEnterDraft: (id: string) => void;
-  onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
-  onOpenAutomation: (ref: string) => void;
-  onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
-  onBrowseTemplates: () => void;
 }
 
 // ── Automation run-viewer (SSE, live) ───────────────────────────────────────

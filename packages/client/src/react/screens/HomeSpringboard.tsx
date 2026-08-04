@@ -11,16 +11,36 @@
 // facts about the vault, not about a preferences page.
 import type { JSX } from "react";
 
-import { iconChipRadius } from "@centraid/design";
+import { iconChipRadius, identityColor } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import {
   HOME_FIRST_RUN_BODY,
-  HOME_FIRST_RUN_PLACEHOLDERS,
   HOME_FIRST_RUN_TITLE,
-  HOME_SEARCH_EVERYTHING,
+  HOME_SAMPLE_CLEAR,
+  HOME_SAMPLE_FILLING,
+  HOME_SAMPLE_FILLING_APP,
+  HOME_SAMPLE_FILLING_CATCH_UP,
+  HOME_SAMPLE_FILLING_UNIT,
+  HOME_SAMPLE_LOADED_BODY,
+  HOME_SAMPLE_LOADED_TITLE,
+  HOME_SAMPLE_OFFER_HINT,
+  HOME_SAMPLE_OFFER_LABEL,
+  HOME_SAMPLE_OFFER_LEAD,
+  HOME_START_LEAD,
+  HOME_START_TITLE,
 } from "../../home-copy.js";
-import type { HomeTileBody, HomeTileModel } from "../shell/routes/homeTiles.js";
+import type { HomeSampleProgress } from "../shell/routes/homeSample.js";
+import {
+  homeFirstMoves,
+  partitionHomeTiles,
+} from "../shell/routes/homeTiles.js";
+import type {
+  HomeFirstMove,
+  HomeTileBody,
+  HomeTileModel,
+} from "../shell/routes/homeTiles.js";
+import Button from "../ui/Button.js";
 import { Icon } from "../ui/index.js";
 import { DevicesDisagree, OutOfRoom, WorkingState } from "../ui/states.js";
 import type { DevicesDisagreeProps, OutOfRoomProps } from "../ui/states.js";
@@ -42,7 +62,12 @@ function Mark({
   iconKey: IconName;
   colorKey: string;
   size: number;
-  className: string;
+  /* `string | undefined`, not `string`: a CSS-module lookup is an index read,
+     and the desktop's React program checks it as one. A required `string` here
+     type-errors at every call site under that program while passing under the
+     client's — which is how this went unnoticed until the desktop typecheck
+     ran (see docs/traps/worktrees.md on per-program drift). */
+  className: string | undefined;
 }): JSX.Element {
   return (
     <span
@@ -98,8 +123,17 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
       return (
         <div className={styles.body}>
           <div className={styles.faces}>
+            {/* Coloured, because a person is the subject here — the same rule
+                (and the same deriver) as the stem's account avatar. A row of
+                grey pills reads as another table; the handoff's faces read as
+                people, which is the whole argument for the tile. */}
             {body.faces.map((face) => (
-              <span className={styles.face} key={face.name} title={face.name}>
+              <span
+                className={styles.face}
+                key={face.name}
+                style={{ background: identityColor(face.name) }}
+                title={face.name}
+              >
                 {face.initials}
               </span>
             ))}
@@ -151,14 +185,11 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
         </div>
       );
     default:
-      // The DESIGNED empty body: dashed, with what-to-do copy. Not a skeleton
-      // (that would say "still loading") and not a blank (that would say
-      // nothing at all).
-      return (
-        <div className={styles.body}>
-          <span className={styles.emptyBody}>{body.hint}</span>
-        </div>
-      );
+      // `empty` never reaches here: a tile with nothing to show is partitioned
+      // out of the grid and becomes a first move instead (see
+      // `partitionHomeTiles`). Rendering an empty body would put the two
+      // treatments on screen at once.
+      return <div className={styles.body} />;
   }
 }
 
@@ -203,47 +234,76 @@ function Tile({
 }
 
 /**
- * First run — the vault has no content ANYWHERE. Eight empty tiles would be
- * eight apologies; one instruction with dashed placeholders is a door.
+ * One first move — a door into somewhere that can actually take content.
  *
- * The copy is the brief's, verbatim, out of the shared constants — mobile draws
- * the same two sentences from the same module, because one state may not have
- * two spellings.
- *
- * FOUR placeholders, not one per installed app: they are a picture of what Home
- * becomes, not an inventory of what you own.
+ * Dashed, because a dashed border reads as "not filled in yet" where a solid one
+ * reads as "this is the finished thing, and it is empty". The geometry, the mark
+ * and the type are the tile's own, so a move becoming a tile is a FILL rather
+ * than a re-layout.
  */
-function FirstRun({
-  tiles,
-  onOpen,
+function FirstMove({
+  move,
+  onPick,
+  compact,
 }: {
-  tiles: readonly HomeTileModel[];
-  onOpen: (id: string) => void;
+  move: HomeFirstMove;
+  onPick: (move: HomeFirstMove) => void;
+  /** The band under a populated grid: label only, one row tall. */
+  compact?: boolean;
+}): JSX.Element {
+  return (
+    <li>
+      <button
+        type="button"
+        className={styles.move}
+        data-app-id={move.id}
+        data-compact={compact ? "true" : undefined}
+        data-testid="home-first-move"
+        onClick={() => onPick(move)}
+      >
+        <Mark
+          className={styles.moveMark}
+          colorKey={move.colorKey}
+          iconKey={move.iconKey}
+          size={FIRST_RUN_MARK}
+        />
+        <span className={styles.moveText}>
+          <span className={styles.moveLabel}>{move.label}</span>
+          {compact ? null : (
+            <span className={styles.moveHint}>{move.hint}</span>
+          )}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Day one — the vault has no content ANYWHERE.
+ *
+ * The copy is the brief's, verbatim, out of the shared constants (mobile draws
+ * the same two sentences from the same module, because one state may not have
+ * two spellings). What sits under it changed: the four dashed rectangles used to
+ * open the empty app they were named after, which is a dead end wearing an
+ * invitation. They are now the four things that actually put something on this
+ * page — and the copy finally offers what it promises, since "bring your
+ * photographs and documents in" now has a control that does it.
+ */
+function DayOne({
+  moves,
+  onPick,
+}: {
+  moves: readonly HomeFirstMove[];
+  onPick: (move: HomeFirstMove) => void;
 }): JSX.Element {
   return (
     <section className={styles.firstRun} data-testid="home-first-run">
       <h2 className={styles.firstRunTitle}>{HOME_FIRST_RUN_TITLE}</h2>
       <p className={styles.firstRunBody}>{HOME_FIRST_RUN_BODY}</p>
-      <ul className={styles.firstRunSteps}>
-        {tiles.slice(0, HOME_FIRST_RUN_PLACEHOLDERS).map((tile) => (
-          <li key={tile.id}>
-            <button
-              type="button"
-              className={styles.firstRunStep}
-              data-app-id={tile.id}
-              onClick={() => onOpen(tile.id)}
-            >
-              <Mark
-                className={styles.firstRunMark}
-                colorKey={tile.colorKey}
-                iconKey={tile.iconKey}
-                size={FIRST_RUN_MARK}
-              />
-              <span>
-                {(tile.body.kind === "empty" && tile.body.hint) || tile.name}
-              </span>
-            </button>
-          </li>
+      <p className={styles.startLead}>{HOME_START_LEAD}</p>
+      <ul className={styles.moves}>
+        {moves.map((move) => (
+          <FirstMove key={move.id} move={move} onPick={onPick} />
         ))}
       </ul>
     </section>
@@ -251,82 +311,232 @@ function FirstRun({
 }
 
 /**
- * Home's own cross-app search entry point — the third of the brief's three
- * (⌘K anywhere, the stem's Search control, "Search everything" on Home).
+ * The start band — what the apps with nothing in them become once at least one
+ * app HAS something.
  *
- * It opens the SAME palette the other two do rather than owning any search of
- * its own: three doors, one room. A bounded control because an action may not
- * be bare text, and it sits above the grid because "find the thing" outranks
- * "browse the apps" on the screen you land on.
+ * Three, not all of them: the band is a nudge under a page that is already
+ * working, and a nudge as tall as the grid stops being one.
  */
-function SearchEverything({ onSearch }: { onSearch: () => void }): JSX.Element {
+function StartBand({
+  moves,
+  onPick,
+}: {
+  moves: readonly HomeFirstMove[];
+  onPick: (move: HomeFirstMove) => void;
+}): JSX.Element {
   return (
-    <button
-      type="button"
-      className={styles.searchEverything}
-      data-testid="home-search-everything"
-      onClick={onSearch}
-    >
-      <span className={styles.searchIcon} aria-hidden="true">
-        <Icon name="Search" size={15} />
-      </span>
-      <span>{HOME_SEARCH_EVERYTHING}</span>
-      <span className={styles.searchKbd} aria-hidden="true">
-        ⌘K
-      </span>
-    </button>
+    <section className={styles.startBand} data-testid="home-start-band">
+      <h2 className={styles.startTitle}>{HOME_START_TITLE}</h2>
+      <ul className={styles.moves}>
+        {moves.map((move) => (
+          <FirstMove key={move.id} move={move} onPick={onPick} compact />
+        ))}
+      </ul>
+    </section>
   );
 }
 
+/**
+ * The sample offer.
+ *
+ * It sits BELOW the real first moves, behind a rule, phrased as a question
+ * rather than a step — because ordering is an argument. Putting "fill it with
+ * fake data" above "connect your account" would tell a member the demo matters
+ * more than their own archive, on the one screen where that claim is being
+ * made for the first time.
+ *
+ * The hint is not a caption; it is the disclosure, and it is placed where a
+ * disclosure belongs — BEFORE the control, not underneath it as an apology.
+ * Three facts, in the order they matter: the content is invented, nothing
+ * leaves the device, one tap undoes it.
+ *
+ * Pressing REPLACES the control with the working state rather than disabling
+ * it in place. The fill takes about ten seconds — seven generators, of which
+ * the photo one is ten uploads — and a disabled button wearing a fixed
+ * sentence is the exact shape of a surface that has hung. The working state is
+ * the designed answer and it already exists (`ui/states.tsx`): the act named
+ * as a sentence, the exact counts beside it, a proportional rule under both,
+ * and no spinner anywhere. Home keeps working behind it, which is why this is
+ * a block in the offer rather than an overlay over the page.
+ */
+function SampleOffer({
+  seed,
+  filling,
+}: {
+  seed: () => void;
+  filling: HomeSampleProgress | null;
+}): JSX.Element {
+  return (
+    <section className={styles.offer} data-testid="home-sample-offer">
+      <p className={styles.offerLead}>{HOME_SAMPLE_OFFER_LEAD}</p>
+      <p className={styles.offerHint}>{HOME_SAMPLE_OFFER_HINT}</p>
+      {filling ? (
+        <WorkingState
+          className={styles.offerProgress}
+          label={fillLabel(filling)}
+          progress={{
+            done: filling.done,
+            total: filling.total,
+            unit: HOME_SAMPLE_FILLING_UNIT,
+          }}
+        />
+      ) : (
+        <Button
+          className={styles.offerAction}
+          label={HOME_SAMPLE_OFFER_LABEL}
+          variant="secondary"
+          onClick={seed}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * The fill's sentence for one moment of it.
+ *
+ * No app named means the generators are done and the run is on its closing
+ * replica catch-up — the step that would otherwise read as the bar arriving at
+ * the end and Home staying empty for another beat.
+ */
+function fillLabel(progress: HomeSampleProgress): string {
+  if (progress.appId === undefined) return HOME_SAMPLE_FILLING_CATCH_UP;
+  return HOME_SAMPLE_FILLING_APP[progress.appId] ?? HOME_SAMPLE_FILLING;
+}
+
+/**
+ * What Home says while the sample is loaded.
+ *
+ * ONE line, at vault level, in the same band as "out of room" and "two devices
+ * disagree" — because "some of what you are looking at is not yours" is a fact
+ * about the vault, exactly like those. Deliberately NOT a badge per tile: eight
+ * badges is the eight-apologies failure again, and it would make the sample
+ * feel like damage rather than a demo.
+ */
+function SampleLoaded({
+  clear,
+  clearing,
+}: {
+  clear: () => void;
+  clearing: boolean;
+}): JSX.Element {
+  return (
+    <section className={styles.sampleNote} data-testid="home-sample-note">
+      <span className={styles.sampleMark} aria-hidden="true">
+        <Icon name="Eye" size={13} strokeWidth={2} />
+      </span>
+      <span className={styles.sampleText}>
+        <span className={styles.sampleTitle}>{HOME_SAMPLE_LOADED_TITLE}</span>
+        <span className={styles.sampleBody}>{HOME_SAMPLE_LOADED_BODY}</span>
+      </span>
+      <Button
+        className={styles.sampleAction}
+        label={clearing ? "Clearing…" : HOME_SAMPLE_CLEAR}
+        variant="secondary"
+        disabled={clearing}
+        onClick={clear}
+      />
+    </section>
+  );
+}
+
+/** Moves shown beneath a populated grid. Fewer than day one's four — a nudge as
+ *  tall as the grid it sits under stops being a nudge. */
+const BAND_MOVES = 3;
+
 export interface HomeSpringboardProps {
   tiles: readonly HomeTileModel[];
-  /** True only once the reads have SETTLED and found nothing anywhere. */
-  firstRun: boolean;
   /** The reads are still in flight: static skeletons, never a spinner. */
   loading: boolean;
   onOpen: (id: string) => void;
-  /** Opens the ⌘K palette. Home's "Search everything" is a third door onto it,
-   *  never a second search. */
-  onSearch: () => void;
+  /** The one first move that is not an app surface. */
+  onConnect: () => void;
   /** Vault-level conditions, wired to their real signals by the route. */
   outOfRoom?: OutOfRoomProps;
   conflicts?: readonly DevicesDisagreeProps[];
+  /** The sample: offerable when the vault ships scenarios, present when loaded. */
+  sample?: {
+    canSeed: boolean;
+    loaded: boolean;
+    /** Where the fill has got to, or null when no fill is running. Not a
+     *  boolean: "it is filling" is not a thing this screen can usefully say. */
+    filling: HomeSampleProgress | null;
+    clearing: boolean;
+    onSeed: () => void;
+    onClear: () => void;
+  };
+  /** True for the one render after a seed lands — the grid arrives staggered
+   *  ONCE, as the payoff for pressing, and never again on a routine revisit. */
+  justFilled?: boolean;
 }
 
 export default function HomeSpringboard({
   tiles,
-  firstRun,
   loading,
   onOpen,
-  onSearch,
+  onConnect,
   outOfRoom,
   conflicts,
+  sample,
+  justFilled = false,
 }: HomeSpringboardProps): JSX.Element {
+  // Graded, not binary (issue #708). A tile earns the grid by having something
+  // to show; everything else becomes an invitation. So Home is never a wall of
+  // apologies, and it FILLS IN — the same page, one tile richer — rather than
+  // switching between two unrelated layouts at the first piece of content.
+  const { live, idle } = partitionHomeTiles(tiles);
+  const dayOne = live.length === 0;
+  const moves = homeFirstMoves(idle, dayOne ? undefined : BAND_MOVES);
+  const pick = (move: HomeFirstMove): void =>
+    move.kind === "connectors" ? onConnect() : onOpen(move.id);
+  const offer =
+    sample?.canSeed === true && !sample.loaded ? (
+      <SampleOffer seed={sample.onSeed} filling={sample.filling} />
+    ) : null;
   return (
     <section className={styles.section} aria-label="Your apps">
-      {outOfRoom || (conflicts?.length ?? 0) > 0 ? (
+      {outOfRoom || (conflicts?.length ?? 0) > 0 || sample?.loaded ? (
         <div className={styles.conditions}>
+          {/* First, because it changes how everything under it should be read. */}
+          {sample?.loaded ? (
+            <SampleLoaded clear={sample.onClear} clearing={sample.clearing} />
+          ) : null}
           {outOfRoom ? <OutOfRoom {...outOfRoom} /> : null}
           {conflicts?.map((conflict) => (
             <DevicesDisagree key={conflict.subject} {...conflict} />
           ))}
         </div>
       ) : null}
-      {/* Above every treatment, including first run and loading: search is the
-          one thing that works before the grid has anything to say. */}
-      <SearchEverything onSearch={onSearch} />
       {loading ? (
         // The springboard stays mounted and the app stays usable; only the
         // tiles that have nothing yet show placeholder rows.
         <WorkingState label="Reading your vault…" skeletonRows={3} />
-      ) : firstRun ? (
-        <FirstRun tiles={tiles} onOpen={onOpen} />
+      ) : dayOne ? (
+        <>
+          <DayOne moves={moves} onPick={pick} />
+          {offer}
+        </>
       ) : (
-        <div className={styles.springboard} data-testid="home-springboard">
-          {tiles.map((tile) => (
-            <Tile key={tile.id} tile={tile} onOpen={onOpen} />
-          ))}
-        </div>
+        <>
+          <div
+            className={styles.springboard}
+            data-filled={justFilled ? "true" : undefined}
+            data-testid="home-springboard"
+          >
+            {live.map((tile) => (
+              <Tile key={tile.id} tile={tile} onOpen={onOpen} />
+            ))}
+          </div>
+          {moves.length > 0 ? <StartBand moves={moves} onPick={pick} /> : null}
+          {/* The offer belongs to BOTH treatments (issue #708). It used to hang
+              off day one alone, which quietly made it unreachable: a vault has
+              a People row for its own owner the moment it exists, so one live
+              tile ends day one before the member has added anything — and
+              clearing the sample then left them with no way back to it. The
+              condition that matters is "there is something to seed and it is
+              not seeded", not which layout Home happens to be drawing. */}
+          {offer}
+        </>
       )}
     </section>
   );

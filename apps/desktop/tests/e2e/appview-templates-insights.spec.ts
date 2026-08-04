@@ -19,7 +19,7 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §7 App view + in-app chat, §10 Templates / Discover, §11 Insights. */
+/** §7 App view + in-app chat, §10 automation templates + drafts, §11 Insights. */
 
 let env: TestEnv;
 let gateway: MockGateway;
@@ -238,44 +238,17 @@ test.skip("7.4 — the copilot past-chats history lists prior sessions and filte
   }
 });
 
-// ─────────────────────────── §10 Discover / templates ───────────────────────────
-
-test("10.1 — Discover renders template cards", async () => {
-  gateway.state.templates = [
-    {
-      id: "habit",
-      name: "Habit Tracker",
-      desc: "Track habits",
-      colorKey: "violet",
-      iconKey: "Todo",
-      version: "1",
-    },
-    {
-      id: "journal",
-      name: "Journal",
-      desc: "Daily journal",
-      colorKey: "teal",
-      iconKey: "Todo",
-      version: "1",
-    },
-  ];
-  const { app, page } = await launchApp(env);
-  try {
-    await waitForHome(page);
-    await gotoNav(page, "Discover");
-    await expect(
-      page.getByRole("button", { name: /Habit Tracker/u })
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: /Journal/u })).toBeVisible();
-  } finally {
-    await closeApp(app);
-  }
-});
+// ────────────────────── §10 Automation templates / drafts ──────────────────────
+//
+// Discover retired with #708 — every first-party app ships installed, so the
+// only catalogue left is the automation gallery, reached from Automations →
+// Browse templates. Its cases (10.1 "renders template cards", 10.4 "empty
+// Discover") went with the page; adoption is covered by 10.2 below.
 
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      // Automation Discover intentionally exposes only the v0 curated IDs.
+      // The gallery intentionally exposes only the v0 curated IDs.
       // Keep this fixture on that public catalog contract; a made-up id is
       // correctly filtered out before the card reaches the page.
       id: "obligation-extractor",
@@ -304,7 +277,10 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     await launchApp(env);
   try {
     await waitForHome(launched.page);
-    await gotoNav(launched.page, "Discover");
+    await gotoNav(launched.page, "Automations");
+    await launched.page
+      .getByRole("button", { name: "Browse templates" })
+      .click();
     await launched.page.getByRole("button", { name: /Daily Digest/u }).click();
     await launched.page
       .getByRole("dialog", { name: "Daily Digest template" })
@@ -322,12 +298,15 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
-    // Cloning must NOT consume the source template — it stays installable in
-    // Discover until the user publishes (the invariant the retired agent-e2e
+    // Cloning must NOT consume the source template — it stays adoptable in the
+    // gallery until the user publishes (the invariant the retired agent-e2e
     // flows owned: "template tile disappeared after clone — expected templates
     // to remain available until publish"). Adopt navigates to the new thread,
-    // so return to Discover and assert the Daily Digest card is still listed.
-    await gotoNav(launched.page, "Discover");
+    // so return to the gallery and assert the Daily Digest card is still listed.
+    await gotoNav(launched.page, "Automations");
+    await launched.page
+      .getByRole("button", { name: "Browse templates" })
+      .click();
     await expect(
       launched.page.getByRole("button", { name: /Daily Digest/u })
     ).toBeVisible();
@@ -420,18 +399,6 @@ test("10.3 — independent builder drafts coexist on disk and survive a full Ele
     }
   } finally {
     await closeApp(launched.app).catch(() => undefined);
-  }
-});
-
-test("10.4 — empty Discover renders without cards", async () => {
-  gateway.state.templates = [];
-  const { app, page } = await launchApp(env);
-  try {
-    await waitForHome(page);
-    await gotoNav(page, "Discover");
-    await expect(page.getByText("Nothing to install yet.")).toBeVisible();
-  } finally {
-    await closeApp(app);
   }
 });
 

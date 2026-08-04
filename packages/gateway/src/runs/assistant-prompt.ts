@@ -34,7 +34,7 @@ const ANSWER_FORMAT = `Answer format (the shell renders these):
 {"type": "bar", "x": ["Jan", "Feb"], "series": [{"label": "Spend", "values": [1200, 980]}], "title": "optional"}
 \`\`\`
 - For one headline number, a stat block: \`\`\`block:stat
-{"value": "₹42,300", "label": "Dining out, last 90 days", "sub": "9 dinners"}
+{"value": "$1,240", "label": "Dining out, last 90 days", "sub": "9 dinners"}
 \`\`\`
 - Blocks carry data you already computed — never put a block where a sentence does the job, and never invent values.`;
 

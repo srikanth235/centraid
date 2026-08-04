@@ -22,12 +22,15 @@ import {
   syncWebDueNotifications,
   syncWebNotifications,
 } from "../../gateway-client.js";
+import { HOME_SEARCH_EVERYTHING } from "../../home-copy.js";
 import { isWebHost } from "../host-platform.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
+import Button from "../ui/Button.js";
 import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
 import AllAppsSheet from "./AllAppsSheet.js";
+import { ambientStatusFor } from "./ambientStatus.js";
 import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
 import {
   commitAvailabilityFor,
@@ -46,13 +49,13 @@ import {
   openGatewaySwitcher,
   updateGatewaySwitcherRows,
 } from "./gatewaySwitcher.js";
-import IdentityHead from "./IdentityHead.js";
 import type { LauncherDestination, ShellPage } from "./launcherModel.js";
 import { openPrompt } from "./prompt.js";
 import { resetQueryCache } from "./queryCache.js";
 import ApprovalsRoute from "./routes/ApprovalsRoute.js";
 import AppViewRoute from "./routes/AppViewRoute.js";
 import type { AssistantConversationEntry } from "./routes/AssistantConversations.js";
+import AssistantConversations from "./routes/AssistantConversations.js";
 import AssistantRoute from "./routes/AssistantRoute.js";
 import AtlasRoute from "./routes/AtlasRoute.js";
 import AutomationEditorRoute from "./routes/AutomationEditorRoute.js";
@@ -67,7 +70,6 @@ import {
   conversationScope,
   conversationScopes,
 } from "./routes/conversationScopes.js";
-import DiscoverRoute from "./routes/DiscoverRoute.js";
 import GatewayRoute from "./routes/GatewayRoute.js";
 import HomeRoute from "./routes/HomeRoute.js";
 import HouseholdRoute from "./routes/HouseholdRoute.js";
@@ -92,7 +94,7 @@ import StorageRoute from "./routes/StorageRoute.js";
 import TemplatesRoute from "./routes/TemplatesRoute.js";
 import TestConnectionModal from "./routes/TestConnectionModal.js";
 import ShellApp from "./ShellApp.js";
-import type { ShellNav } from "./ShellApp.js";
+import type { ShellAppBar, ShellNav } from "./ShellApp.js";
 import { PageEmpty } from "./status.js";
 import { postStatus, showUndoStatus } from "./statusChannel.js";
 import StatusLine from "./StatusLine.js";
@@ -106,7 +108,7 @@ import { useCompactLayout } from "./useCompactLayout.js";
 import { useGatewayStatus } from "./useGatewayRuntime.js";
 import { useMemberScopes } from "./useMemberScopes.js";
 import { usePins } from "./usePins.js";
-import { useShellApps } from "./useShellApps.js";
+import { resetInstalledAppsCache, useShellApps } from "./useShellApps.js";
 import { useStarred } from "./useStarred.js";
 import {
   relaunchToUpdate,
@@ -155,7 +157,6 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
     case "home":
     case "assistant":
     case "insights":
-    case "discover":
     case "starred":
     case "automations":
     case "connectors":
@@ -236,7 +237,11 @@ export function SettingsRouteRedirect({
 // app-*.ts modules. NOT yet wired to #root while that work continues.
 export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
-  const { userApps, drafts, refresh, setUserApps, mutateApps } = useShellApps();
+  // `mutateApps` is deliberately NOT taken: its only caller was Home's app
+  // context menu (App info / Rename / Uninstall), which left with the
+  // springboard rewrite. The hook keeps it because the optimistic
+  // rename/uninstall path (#659) is what re-homing those actions will need.
+  const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const assistantConversations = useAssistantConversations();
   // Conversations mid-undo-window after a delete — optimistically hidden from
   // the ledger until the grace timer commits or the reader undoes (§3).
@@ -491,7 +496,6 @@ export default function App(): JSX.Element {
         ),
       openCapture: () => setCaptureOpen(true),
       openSearch: () => setPaletteOpen(true),
-      openDiscover: go({ kind: "discover" }),
       openStarred: go({ kind: "starred" }),
       openAutomations: go({ kind: "automations" }),
       openConnectors: go({ kind: "connectors" }),
@@ -537,6 +541,9 @@ export default function App(): JSX.Element {
       // the shell holds describes the OLD one, and showing a stale row from it
       // is a correctness bug, not a slow refresh (issue #659).
       resetQueryCache();
+      // Including the remembered installed set — an offline launch right after
+      // a switch must not paint the previous vault's grid.
+      resetInstalledAppsCache();
       void refresh();
       navRef.current?.navigate({ kind: "home" });
     };
@@ -560,7 +567,6 @@ export default function App(): JSX.Element {
       // The gateway switcher is a body-portalled overlay outside React's tree —
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeGatewaySwitcher();
-      switcherActionRef.current = null;
     };
   }, [refresh]);
 
@@ -781,86 +787,87 @@ export default function App(): JSX.Element {
     ]
   );
 
-  // The vault identity control, wired once and rendered in the two places the
-  // Binding Layer puts it (#707 Decision §2): the app bar, beside what you are
-  // looking at, and Home, where you choose what to look at next. It names the
-  // active vault and gateway and opens the switcher (#608, #665), which lists
-  // VAULTS ONLY, flattened across every registered gateway: a gateway is
-  // transport, so picking a vault hosted by another one switches both pointers
-  // in a single click. Explicit creation targets and conversation pins remain
-  // stronger keys.
-  const renderVaultIdentity = useCallback(
-    (nav: ShellNav): JSX.Element => {
+  // The vault switcher, wired once. It lists VAULTS ONLY (#608, #665),
+  // flattened across every registered gateway: a gateway is transport, so
+  // picking a vault hosted by another one switches both pointers in a single
+  // click. Explicit creation targets and conversation pins remain stronger
+  // keys.
+  //
+  // It has one trigger, and that trigger is Home's TITLE (#708). The brief's
+  // app bar is a display-face title over a mono meta line, and on Home the
+  // title names the vault — so the name you would press to change is already
+  // standing there at the size the brief gives it. A separate identity row
+  // under the bar was a second answer to the question the title had already
+  // asked.
+  const openVaultSwitcher = useCallback(
+    (anchor: DOMRect): void => {
       const activeGatewayId = memberScopes.gatewayId ?? "";
-      const openGatewayPicker = (anchor: DOMRect): void => {
-        setGatewaySwitcherOpen(true);
-        // Paint instantly from whatever a prior open cached, then probe every
-        // registered gateway concurrently and patch rows in place as each
-        // settles (stale-while-revalidate).
-        openGatewaySwitcher({
-          anchor,
-          activeGatewayId,
-          scopes: memberScopes.scopes.map((scope) => ({
-            id: scope.id,
-            label: scope.label,
-            role: scope.role,
-            isActive: scope.id === memberScopes.active?.id,
-          })),
-          rows: getCachedGatewayRows(activeGatewayId),
-          onSelectVault: (gatewayId, vaultId) => {
-            void (async () => {
-              try {
-                // Atomic from the owner's side: a vault on another gateway
-                // needs the transport moved first, then the vault pointer —
-                // never one without the other.
-                if (gatewayId !== activeGatewayId)
-                  await window.CentraidApi.setActiveGateway({ id: gatewayId });
-                await window.CentraidApi.setActiveVault({ vaultId });
-              } catch (error) {
-                postStatus(`Couldn't switch vault: ${errMsg(error)}`);
-              }
-            })();
-          },
-          onAddGateway: () => setAddGatewayOpen(true),
-          onClose: () => setGatewaySwitcherOpen(false),
-        });
-        void openGatewayRegistry(
-          activeGatewayId,
-          updateGatewaySwitcherRows
-        ).then(updateGatewaySwitcherRows);
-      };
-      switcherActionRef.current = () => {
-        const button = switcherButtonRef.current;
-        if (button) openGatewayPicker(button.getBoundingClientRect());
-      };
-      return (
-        <IdentityHead
-          {...(memberScopes.active
-            ? {
-                vault: {
-                  name: memberScopes.active.label,
-                  color: memberScopes.active.color ?? "#4E68DD",
-                  icon: memberScopes.active.icon ?? "Sparkle",
-                },
-              }
-            : {})}
-          gatewayLabel={
-            memberScopes.loading
-              ? "—"
-              : (memberScopes.gatewayKind === "local"
-                  ? "This Mac"
-                  : memberScopes.gatewayLabel) || "This Mac"
-          }
-          onOpenHousehold={() => nav.navigate({ kind: "household" })}
-          onSwitchGateway={openGatewayPicker}
-          switcherOpen={gatewaySwitcherOpen}
-          switcherButtonRef={switcherButtonRef}
-          scheme={themes[prefs.theme]?.kind ?? "dark"}
-        />
+      setGatewaySwitcherOpen(true);
+      // Paint instantly from whatever a prior open cached, then probe every
+      // registered gateway concurrently and patch rows in place as each
+      // settles (stale-while-revalidate).
+      openGatewaySwitcher({
+        anchor,
+        activeGatewayId,
+        scopes: memberScopes.scopes.map((scope) => ({
+          id: scope.id,
+          label: scope.label,
+          role: scope.role,
+          isActive: scope.id === memberScopes.active?.id,
+        })),
+        rows: getCachedGatewayRows(activeGatewayId),
+        onSelectVault: (gatewayId, vaultId) => {
+          void (async () => {
+            try {
+              // Atomic from the owner's side: a vault on another gateway
+              // needs the transport moved first, then the vault pointer —
+              // never one without the other.
+              if (gatewayId !== activeGatewayId)
+                await window.CentraidApi.setActiveGateway({ id: gatewayId });
+              await window.CentraidApi.setActiveVault({ vaultId });
+            } catch (error) {
+              postStatus(`Couldn't switch vault: ${errMsg(error)}`);
+            }
+          })();
+        },
+        onAddGateway: () => setAddGatewayOpen(true),
+        onClose: () => setGatewaySwitcherOpen(false),
+      });
+      void openGatewayRegistry(activeGatewayId, updateGatewaySwitcherRows).then(
+        updateGatewaySwitcherRows
       );
     },
-    [memberScopes, gatewaySwitcherOpen, prefs.theme]
+    [memberScopes]
   );
+
+  // ⌘⇧G reaches the same one switcher through its own trigger, so the keyboard
+  // path and the pointer path open the popover anchored to the same control.
+  // A ref callback rather than the ref object itself — see `StemIdentity`.
+  // Stable, so the stem does not detach and re-attach the anchor every render.
+  const setSwitcherButton = useCallback((el: HTMLButtonElement | null) => {
+    switcherButtonRef.current = el;
+  }, []);
+
+  useEffect(() => {
+    switcherActionRef.current = () => {
+      const button = switcherButtonRef.current;
+      if (button) openVaultSwitcher(button.getBoundingClientRect());
+    };
+    // This effect OWNS the ref. It used to be re-armed as a side effect of
+    // rendering the identity row, which healed itself on every paint; an
+    // effect that runs only when the switcher changes does not, so nothing
+    // else may null it out from a cleanup of its own.
+    return () => {
+      switcherActionRef.current = null;
+    };
+  }, [openVaultSwitcher]);
+
+  /** The gateway in the member's own words — the bar's meta line on Home. */
+  const gatewayLabel = memberScopes.loading
+    ? "—"
+    : (memberScopes.gatewayKind === "local"
+        ? "This Mac"
+        : memberScopes.gatewayLabel) || "This Mac";
   // The assistant's conversation ledger. It was the sidebar's Recents zone
   // until #707; the stem holds the launcher and nothing else, so the ledger
   // moved into the assistant surface as app content and this is where its data
@@ -901,12 +908,17 @@ export default function App(): JSX.Element {
   // foot button), and the Notifications badge count + unread dot — the
   // Binding Layer bans badge counts and red dots outright, so the number
   // becomes a sentence in the numeric register instead of a mark on a nav row.
-  const ambientStatus = useMemo(() => {
-    if (blockingCount > 0)
-      return `${blockingCount} ${blockingCount === 1 ? "decision" : "decisions"} waiting on you`;
-    if (notificationsCounts.hasUnreadNotices) return "New notices to read";
-    return gatewayStatus === "up" ? "Synced" : "Ready";
-  }, [blockingCount, notificationsCounts.hasUnreadNotices, gatewayStatus]);
+  // The sentence itself lives in `ambientStatus.ts` — the shell composes the
+  // line, it does not own the wording rule.
+  const ambientStatus = useMemo(
+    () =>
+      ambientStatusFor({
+        blockingCount,
+        gatewayStatus,
+        hasUnreadNotices: notificationsCounts.hasUnreadNotices,
+      }),
+    [blockingCount, notificationsCounts.hasUnreadNotices, gatewayStatus]
+  );
 
   // A newer build on disk used to be a pill pinned above the account row. It
   // is news, not a place, so it says so once on the line and offers the one
@@ -938,14 +950,74 @@ export default function App(): JSX.Element {
     [ambientStatus, gatewayStatus]
   );
 
-  // The stem. Pinned destinations, the Search control, the product mark —
-  // nothing else (#707, invariant 1). Every destination the launcher does not
-  // show is still one tap away in the All-apps sheet, which is exactly what
-  // lets the stem stay short.
+  // The foot's account menu. Settings, Pair device, What's new and Log out are
+  // each a handful-of-times act, so they live behind the member's own name
+  // rather than each taking a standing row — the arrangement the sidebar had
+  // before #707. The menu matches the row's width and opens upward, so it reads
+  // as the band opening rather than a popover floating inside it.
+  const stemAccount = useMemo(
+    () => ({
+      // Empty while the member still carries the placeholder label.
+      name: account?.name?.trim() || "You",
+      ...(account?.avatarColor ? { color: account.avatarColor } : {}),
+      onMenu: (anchor: DOMRect): void => {
+        openMenu(
+          [
+            { icon: "Settings", id: "settings", label: "Settings" },
+            { icon: "Phone", id: "pair", label: "Pair device" },
+            { icon: "Gift", id: "whats-new", label: "What's new" },
+            ...(account
+              ? ([
+                  "sep" as const,
+                  {
+                    danger: true,
+                    icon: "ArrowRight",
+                    id: "logout",
+                    label: "Log out",
+                  },
+                ] as const)
+              : []),
+          ],
+          { kind: "rect", rect: anchor },
+          (id) => {
+            if (id === "settings") setSettingsPage("");
+            if (id === "pair") setPairDeviceOpen(true);
+            if (id === "whats-new") setWhatsNewOpen(true);
+            if (id === "logout") logOut();
+          },
+          { matchAnchorWidth: true }
+        );
+      },
+    }),
+    [account, logOut]
+  );
+
+  // The stem (#707, invariant 1): the vault switcher, Search, the pinned
+  // launcher, and a foot of All apps + Settings. Every destination the launcher
+  // does not show is still one tap away in the All-apps sheet, which is what
+  // lets the launcher itself stay short.
+  //
+  // The identity head is the switcher's ONLY anchor, so ⌘⇧G aims here too — see
+  // the effect that owns `switcherActionRef`.
   const renderStem = useCallback(
     (nav: ShellNav) => (
       <Stem
         pins={pins}
+        identity={{
+          gateway: gatewayLabel,
+          onActivate: openVaultSwitcher,
+          open: gatewaySwitcherOpen,
+          anchorRef: setSwitcherButton,
+          vault: memberScopes.active?.label ?? "Your vault",
+          // The vault's own mark and hue, so two vaults are told apart in the
+          // one place that names which of them you are in.
+          ...(memberScopes.active?.icon
+            ? { icon: memberScopes.active.icon }
+            : {}),
+          ...(memberScopes.active?.color
+            ? { color: memberScopes.active.color }
+            : {}),
+        }}
         activePage={activePageFor(nav.route)}
         scheme={themes[prefs.theme]?.kind ?? "dark"}
         compact={compact}
@@ -957,11 +1029,86 @@ export default function App(): JSX.Element {
           else nav.navigate(destination.route);
         }}
         onSearch={() => setPaletteOpen(true)}
+        // Navigating to the assistant with no conversation id IS "start a new
+        // one" — the same call the ledger's own New chat makes, so the two
+        // entry points cannot drift into two different meanings of new.
+        onNewConversation={() => nav.navigate({ kind: "assistant" })}
         onAllApps={() => setAllAppsOpen(true)}
+        {...(account ? { account: stemAccount } : {})}
+        // Only while you are IN the assistant. A ledger that stood on every
+        // route would be a third zone in the band; one that appears with the
+        // surface it belongs to is the surface's own navigation, in the one
+        // column this window has for navigation.
+        {...(nav.route.kind === "assistant"
+          ? {
+              ledger: (
+                <AssistantConversations
+                  conversations={assistantLedger}
+                  {...(nav.route.conversationId
+                    ? { activeConversationId: nav.route.conversationId }
+                    : {})}
+                  onSelect={(id) =>
+                    nav.navigate({ kind: "assistant", conversationId: id })
+                  }
+                  onNewChat={() => nav.navigate({ kind: "assistant" })}
+                  onDelete={deleteAssistantConversation}
+                  onMenu={conversationMenu}
+                />
+              ),
+            }
+          : {})}
       />
     ),
-    [pins, prefs.theme, compact, hasCommandKey]
+    [
+      pins,
+      prefs.theme,
+      compact,
+      hasCommandKey,
+      gatewayLabel,
+      gatewaySwitcherOpen,
+      // The whole scope, not three fields: react-compiler infers the object
+      // here (three optional reads of one object) and refuses to preserve a
+      // memo whose declared deps are narrower than what it inferred.
+      memberScopes.active,
+      openVaultSwitcher,
+      setSwitcherButton,
+      assistantLedger,
+      conversationMenu,
+      deleteAssistantConversation,
+      account,
+      stemAccount,
+    ]
   );
+
+  // The app bar (#708, invariant 3). The brief gives every screen a title in
+  // the display face, a meta line in the numeric register, and at most two
+  // actions of which at most one is the filled ink.
+  //
+  // Home's bar names the screen, not the vault: the vault is at the head of the
+  // stem, true on every route, and saying it twice on one screen would make the
+  // reader check whether the two are the same thing. ONE action, and it is the
+  // filled ink — "Search everything" is the third and last entry onto the ONE
+  // palette (⌘K and the stem's Search control are the others), and finding a
+  // thing is the verb Home exists for. All apps lives in the stem's foot.
+  const renderAppBar = useCallback((nav: ShellNav): ShellAppBar | undefined => {
+    if (nav.route.kind !== "home") return undefined;
+    return {
+      title: "Home",
+      actions: (
+        // Titlebar scale, so Home's bar is exactly as tall as the bar on a
+        // route that only navigates. `size="chrome"` used to unfill a primary
+        // — the size class set its own background after the variant rules —
+        // which is why this carried variant alone; that cascade is fixed and
+        // guarded, so the commit keeps its ink at the smaller size.
+        <Button
+          label={HOME_SEARCH_EVERYTHING}
+          onClick={() => setPaletteOpen(true)}
+          size="chrome"
+          variant="primary"
+        />
+      ),
+    };
+  }, []);
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {
@@ -971,26 +1118,15 @@ export default function App(): JSX.Element {
       const visibleDrafts = builderEnabled ? drafts : NO_DRAFTS;
       switch (nav.route.kind) {
         case "home":
-          return (
-            <HomeRoute
-              userApps={userApps}
-              drafts={visibleDrafts}
-              tileVariant={prefs.tileVariant}
-              isStarred={isStarred}
-              toggleStar={toggleStar}
-              mutateApps={mutateApps}
-              vaultIdentity={renderVaultIdentity(nav)}
-              onOpenSettings={() => setSettingsPage("")}
-              onOpenAllApps={() => setAllAppsOpen(true)}
-            />
-          );
+          return <HomeRoute userApps={userApps} drafts={visibleDrafts} />;
         case "assistant":
-          // The conversation ledger travels with the assistant now (#707
-          // Decision §2) — it is the assistant's own content, not chrome.
+          // The ledger lives in the stem on desktop — one column of navigation
+          // per window. Compact has no stem to put it in (the band is a row of
+          // tabs), so there it stays the route's own disclosure.
           return (
             <AssistantRoute
               conversationId={nav.route.conversationId}
-              conversations={assistantLedger}
+              {...(compact ? { conversations: assistantLedger } : {})}
               onNewChat={() => nav.navigate({ kind: "assistant" })}
               onSelectConversation={(id) =>
                 nav.navigate({ kind: "assistant", conversationId: id })
@@ -1049,14 +1185,6 @@ export default function App(): JSX.Element {
             <RunViewRoute
               automationId={nav.route.automationId}
               runId={nav.route.runId}
-            />
-          );
-        case "discover":
-          return (
-            <DiscoverRoute
-              userApps={userApps}
-              setUserApps={setUserApps}
-              refreshApps={refresh}
             />
           );
         case "templates":
@@ -1155,17 +1283,15 @@ export default function App(): JSX.Element {
       prefs,
       isStarred,
       toggleStar,
-      refresh,
       setUserApps,
       renderStem,
-      renderVaultIdentity,
       statusLine,
       assistantLedger,
       deleteAssistantConversation,
       conversationMenu,
+      compact,
       gatewaysRefreshKey,
       removeGatewayConnection,
-      mutateApps,
     ]
   );
 
@@ -1242,6 +1368,7 @@ export default function App(): JSX.Element {
       <ShellApp
         initialRoute={initialShellRoute}
         renderStem={renderStem}
+        renderAppBar={renderAppBar}
         statusLine={statusLine}
         onNavReady={(nav) => {
           navRef.current = nav;

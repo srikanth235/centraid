@@ -124,9 +124,10 @@
   padding: 0;
 }
 
-/* Loading-skeleton container — the fleet grid itself now reuses Home's
-   `appsGrid`/`appsGridSmall` tile grid (imported as `homeCss`) so it lines up
-   1:1 with the Home shelf; only the skeleton keeps this bordered box. */
+/* Loading-skeleton container — the fleet grid itself reuses the library
+   card grid's `appsGrid`/`appsGridSmall` (imported as `gridCss`) so an
+   automation tile lines up 1:1 with the same card on Starred; only the
+   skeleton keeps this bordered box. */
 .fleet {
   display: flex;
   flex-direction: column;
@@ -137,8 +138,8 @@
 }
 
 /* Automation tile — the AppCard-family card (`cardCss.wrap/card/small`) with
-   a couple of local hooks: the status/trigger meta strip (mirrors HomeScreen's
-   `appCardMeta`) and a restrained danger accent when the automation needs
+   a couple of local hooks: the status/trigger meta strip (mirrors the library
+   card's `appCardMeta`) and a restrained danger accent when the automation needs
    attention or failed its last run. */
 .cardMeta {
   display: flex;

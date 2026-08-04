@@ -4,7 +4,7 @@
    cross-combinated and every combinator has to stay in one scope:
 
      .window      the frame grid — stem column + main column
-     .stem        invariant 1: the 92px launcher band (bottom band on compact)
+     .stem        invariant 1: the `--w-stem` launcher band (bottom on compact)
      .appBar      the per-app bar: title (display face) + meta (numeric) + nav
      .main        content
      .statusLine  invariant 5: the ONE persistent feedback line
@@ -35,6 +35,18 @@
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "stem main";
 }
+/* Hidden stem: the column collapses to nothing and the main column takes the
+   whole frame. `visibility: hidden` rather than `display: none` on the band
+   itself keeps its subtree measurable, so the vault switcher's anchor survives
+   a collapse and ⌘⇧G still lands somewhere sane. */
+.window[data-stem="hidden"]:not([data-compact="true"]) {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+.window[data-stem="hidden"] .stem {
+  visibility: hidden;
+  overflow: hidden;
+}
+
 /* Compact: the same stem element becomes the bottom band, so the IA can never
    drift between the two form factors — there is one component, one item model,
    and one stylesheet. */
@@ -53,12 +65,19 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding-block: var(--sp-5) var(--sp-3);
+  padding-block: var(--sp-3);
+  padding-inline: var(--sp-3);
   /* The seam between the stem and the app. The stem is never themed by an
      app, so this hairline is the only thing it declares about the surface
      beside it. */
   border-inline-end: 1px solid var(--line);
   background: var(--bg);
+}
+/* macOS draws the traffic lights at (16, 16) of the client area — see the
+   `data-window-controls` note in ShellFrame.tsx. 44px clears the 16px inset
+   plus the 20px buttons with the rhythm's own step left over. */
+.window[data-window-controls="inset"] .stem:not([data-compact="true"]) {
+  padding-block-start: 44px;
 }
 .stem[data-compact="true"] {
   flex-direction: row;
@@ -73,42 +92,159 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   /* The mark is INK. The shell spends no hue. */
   color: var(--accent);
-  margin-block-end: var(--sp-5);
+}
+/* The mark standing alone — before the scopes resolve, and in the tests. It
+   carries the head's own bottom margin only when there is no head around it. */
+.stem > .stemMark {
+  margin-block: var(--sp-2) var(--sp-4);
+  padding-inline: var(--sp-2);
+  justify-content: flex-start;
+}
+
+/* ── The head: which vault, on which gateway ─────────────────────────────────
+   A fact that is true on EVERY route, so it lives in the band that is present
+   on every route rather than in one screen's app bar. It is a control, not a
+   caption: the whole row opens the switcher. */
+.stemIdentity {
+  -webkit-app-region: no-drag;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  inline-size: 100%;
+  min-block-size: var(--h-row);
+  margin-block-end: var(--sp-4);
+  padding-inline: var(--sp-2);
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: background var(--dur-1) var(--ease);
+}
+.stemIdentity:hover,
+.stemIdentity[data-open="true"] {
+  background: var(--bg-hover);
+}
+.stemIdentity:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* The VAULT's mark, tinted in the vault's own hue at the shared chip share
+   (13% light / 20% dark, from the design package). The one place in the band
+   that carries identity — the launcher's chips carry the APPS'. */
+.stemAvatarChip {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
+    var(--bg)
+  );
+  color: var(--chip-hue, var(--text-soft));
+}
+
+.stemIdentityText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stemVault,
+.stemGateway {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stemVault {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.stemGateway {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
 
 /* The Search control is ALWAYS rendered, on every host. An installed PWA
    cannot claim ⌘K — the browser has it — so the control is the guarantee and
    the hint is the extra. */
-.stemSearch {
+/* The one ACTION in a band of places, so it leads and it is the only thing up
+   here wearing a fill. Raised paper rather than commit ink: starting a turn
+   writes nothing, and the filled-ink primary means "this commits" everywhere
+   else in the product — spending it here would make the loudest control in the
+   frame the one with the least consequence. Same height and radius as Search
+   directly below it, so the two read as one stack rather than two systems. */
+.stemNew {
+  flex: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-2);
   inline-size: 100%;
-  padding-block: 0 var(--sp-3);
-  background: transparent;
-  border: 0;
+  block-size: var(--h-control);
+  margin-block-end: var(--sp-2);
+  padding-inline: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text);
   cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
 }
-.stemSearchGlyph {
+.stemNew:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-sel);
+}
+.stemNew:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.stemNewLabel {
+  font: var(--t-small-strong);
+}
+
+.stemSearch {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: center;
-  block-size: var(--h-segmented);
+  justify-content: space-between;
+  gap: var(--sp-2);
+  inline-size: 100%;
+  block-size: var(--h-control);
+  margin-block-end: var(--sp-4);
   padding-inline: var(--sp-3);
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  font: var(--t-small-strong);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.stemSearch:hover {
+  border-color: var(--line-strong);
+}
+.stemSearch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.stemSearchGlyph {
+  font: var(--t-control);
   color: var(--text-soft);
-  transition:
-    color var(--dur-1) var(--ease),
-    border-color var(--dur-1) var(--ease);
+  transition: color var(--dur-1) var(--ease);
 }
 .stemSearch:hover .stemSearchGlyph {
   color: var(--text);
-  border-color: var(--line-strong);
 }
 .stemSearchKbd {
   font: var(--t-mono);
@@ -124,6 +260,9 @@
   /* The desktop stem scrolls instead of capping, so a member who pins ten
      destinations keeps all ten. */
   scrollbar-width: none;
+  /* Holds the seam off the last row once the list is long enough that the
+     foot's auto margin has collapsed to nothing. */
+  padding-block-end: var(--sp-3);
 }
 .launchList::-webkit-scrollbar {
   inline-size: 0;
@@ -135,6 +274,7 @@
 }
 
 .launchItem {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -162,6 +302,27 @@
   outline: none;
   box-shadow: var(--focus-ring);
   border-radius: var(--r-md);
+}
+/* Desktop: a ROW — chip then label, reading order, one 44px target per line.
+   The stacked chip-over-caption form is the compact band's, and stays there. */
+.stem:not([data-compact="true"]) .launchItem {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  padding-block: var(--sp-1);
+  padding-inline: var(--sp-2);
+  border-radius: var(--r-md);
+  text-align: start;
+}
+.stem:not([data-compact="true"]) .launchItem[data-active="true"] {
+  background: var(--bg-elev);
+}
+/* With a ledger below it the launcher is fixed content, not the scroll region
+   — it is short, and the list under it is the part that grows. */
+.stem:not([data-compact="true"]):has(.stemLedger) .launchList {
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
 /* The chip's container styling is CONSTANT — same tint, same radius, selected
@@ -219,27 +380,112 @@
 .launchItem[data-active="true"] .launchBar {
   background: var(--chip-hue, var(--text-soft));
 }
+/* On the row form the selection bar stands the other way up, against the
+   reading edge — the same 2px in the same hue, rotated with the layout. */
+.stem:not([data-compact="true"]) .launchBar {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  inline-size: 2px;
+  block-size: 18px;
+  margin-block-start: 0;
+}
 
-/* The way into every unpinned destination, standing rather than hidden behind
-   a gesture. On compact this is the band's "More" instead. */
-.stemAllApps {
+/* A route's own list under the launcher (the assistant's conversations). It
+   takes the leftover height and scrolls, so the launcher above it never gets
+   pushed off; the hairline is the same seam the bar and the band draw. */
+.stemLedger {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  margin-block-start: var(--sp-3);
+  padding-block-start: var(--sp-2);
+  border-block-start: 1px solid var(--line);
+}
+.stemLedger::-webkit-scrollbar {
+  inline-size: 0;
+}
+
+/* ── The foot ────────────────────────────────────────────────────────────────
+   All apps is the way into every unpinned destination, standing rather than
+   hidden behind a gesture (on compact it is the band's "More" instead), and
+   Settings is where you change the frame rather than a place inside it. Both
+   are quiet: the foot is the least-visited end of the band. */
+.stemFoot {
   flex: none;
-  margin-block-start: var(--sp-2);
-  padding-block: var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  /* PINNED to the bottom of the band, not stacked under the launcher. `auto`
+     rather than a fixed margin because the launcher sizes to its content: with
+     five pins the foot used to float in the middle of an empty column, and the
+     member's own name is the one row that has to be in the same place in every
+     window regardless of how many destinations are pinned. When the list is
+     long enough to fill the band the auto margin resolves to 0 and the list's
+     own end padding keeps the seam off the last row. */
+  margin-block-start: auto;
+  padding-block-start: var(--sp-2);
+  border-block-start: 1px solid var(--line);
+}
+/* Two classes, one rule: they are the same control, and each needs a selector
+   of its own so a click on one is never a click on both. */
+.stemAllApps,
+.stemAccount {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: var(--h-row);
+  padding-inline: var(--sp-2);
+  text-align: start;
   background: transparent;
   border: 0;
+  border-radius: var(--r-md);
   cursor: pointer;
-  font: var(--t-control);
   color: var(--text-soft);
   transition: color var(--dur-1) var(--ease);
 }
-.stemAllApps:hover {
+.stemAllApps:hover,
+.stemAccount:hover {
   color: var(--text);
+  background: var(--bg-hover);
 }
-.stemAllApps:focus-visible {
+.stemAllApps:focus-visible,
+.stemAccount:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-  border-radius: var(--r-md);
+}
+/* Identity, so it carries a hue where the rest of the shell carries none —
+   the avatar is the one place a PERSON is the subject, and `identityColor`
+   derives it from the name rather than the shell picking. */
+.stemAvatar {
+  flex: none;
+  inline-size: var(--h-segmented);
+  block-size: var(--h-segmented);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  font: var(--t-control);
+  color: var(--text-inv);
+}
+/* The shortcut, in the numeric register like every other machine string. */
+.stemAccountMeta {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+
+/* A navigation label is never tertiary text, in the foot as in the launcher. */
+.stemFootLabel {
+  flex: 1;
+  font: var(--t-control);
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── The main column ────────────────────────────────────────────────────── */
@@ -260,6 +506,12 @@
 .appBar {
   -webkit-app-region: drag;
   user-select: none;
+  /* The seam between the frame's own furniture and the app's content — the
+     same hairline the stem draws down its trailing edge, so the bar and the
+     band bound the content with one rule rather than two treatments. It is
+     unconditional: a seam that appeared only on the routes that happen to
+     have a title would read as a rendering difference, not a boundary. */
+  border-block-end: 1px solid var(--line);
   flex: none;
   display: flex;
   align-items: center;
@@ -271,6 +523,22 @@
   z-index: 4;
   overflow: visible;
 }
+/* The bar as a page header (the brief's app bar). Bottom-aligned, because the
+   title's baseline and the actions' baseline are the line the eye reads across;
+   centring a 31px display title against a 34px control puts neither on it. The
+   larger block padding is the rhythm's `xl`/`l` pair, which is what separates a
+   header from the strip of window furniture the bar is on every other route. */
+.appBar[data-identity="true"] {
+  align-items: flex-end;
+  gap: var(--sp-4);
+  padding-block: var(--sp-5) var(--sp-4);
+}
+.appBar[data-identity="true"] .tbBtnWrap {
+  /* The history arrows keep the title's baseline company instead of floating
+     at the top of a bar that is now three times their height. */
+  margin-block-end: 3px;
+}
+
 /* Grid layout — the Builder lines the bar's two cells up with the columns of
    the body below it. The cells own their own inline padding so col 1's
    trailing edge meets col 2's leading edge with no gutter. */
@@ -307,17 +575,61 @@
   margin-inline-start: var(--sp-3);
   text-align: start;
 }
-/* The display face on every app title — the one signature that carries the
-   product across surfaces that otherwise look nothing alike. */
+/* Two registers, one class.
+   In the HEADER lockup (title over a meta line) the title is the display face
+   at 31px — the signature that carries the product across surfaces that look
+   nothing alike.
+   Alone in the titlebar it is FURNITURE, and it takes the same 13/500 rung as
+   the launcher's selected row: the stem says "Home" and the bar says "Home",
+   one word at one weight in two places. At the title rung it was nearly twice
+   the size of anything else in a 44px bar — a caption shouting over the
+   controls beside it. */
 .appTitle {
   margin: 0;
-  font: var(--t-display);
-  letter-spacing: var(--t-display-tracking);
+  font: var(--t-small-strong);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.appBar[data-identity="true"] .appTitle {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+}
+/* The title as a control. It keeps the display face and the title's own type —
+   a switcher that shrank its label to control size would be admitting the
+   title is somewhere else. The shell owns no hue, so the only state it shows
+   is ink and a hairline, and the chevron is the affordance. */
+.appTitleBtn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  max-inline-size: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+.appTitleBtn:hover,
+.appTitleBtn[data-open="true"] {
+  color: var(--text);
+}
+.appTitleBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-md);
+}
+.appTitleText {
+  color: var(--text);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Numerics are mono and tabular in every app, without exception. */
 .appMeta {
   margin-block-start: 5px;
@@ -326,18 +638,17 @@
   color: var(--text-soft);
 }
 
-/* Reserve space for the real macOS traffic lights (Electron paints them at
-   x=16, y=16 under titleBarStyle "hiddenInset"). */
-.spacer {
-  inline-size: 64px;
-  block-size: 1px;
-  flex: 0 0 auto;
-  display: inline-block;
+/* With the stem hidden, the macOS traffic lights land on the app bar instead —
+   the strip has to be reserved by whichever column is at the leading edge, and
+   collapsing the stem hands that job back here. 80px clears the 16px inset plus
+   the three 20px buttons; the bar's own 16px padding is inside that number, so
+   this replaces it rather than adding to it. */
+.window[data-window-controls="inset"][data-stem="hidden"] .appBar {
+  padding-inline-start: 80px;
 }
-.window[data-compact="true"] .spacer {
-  /* No traffic lights on a touch host — reclaim the reservation. */
-  display: none;
-}
+
+/* The bar itself is a drag region, so everything inside it that is a target
+   has to opt back out. */
 .appBar button,
 .appBar .tbBtnWrap,
 /* The app-name contenteditable inside the builder bar must accept clicks
@@ -353,8 +664,11 @@
   display: inline-flex;
 }
 .tbBtn {
-  inline-size: 26px;
-  block-size: 26px;
+  /* The segmented rung, shared with Button's `chrome` size — one height for
+     every control an app bar can carry, so the bar does not change height
+     between a route that only navigates and a route that also acts. */
+  inline-size: var(--h-segmented);
+  block-size: var(--h-segmented);
   border-radius: var(--r-md);
   border: none;
   background: transparent;

@@ -22,7 +22,14 @@ function readerOf(rows: Rows): HomeTileReader {
     read: vi.fn<HomeTileReader["read"]>(async (_appId, request) => {
       const found = rows[request.entity];
       if (!found) throw new Error(`no shape for ${request.entity}`);
-      return { rows: found.map((values) => ({ values })) };
+      // The excerpt reads address ONE content item by id; the stub applies the
+      // eq clauses the way the coordinator would.
+      const matched = found.filter((values) =>
+        (request.where ?? []).every(
+          (clause) => values[clause.column] === clause.value
+        )
+      );
+      return { rows: matched.map((values) => ({ values })) };
     }),
   };
 }
@@ -42,13 +49,27 @@ describe("shell/routes/homeTileContent", () => {
   it("takes agenda and the tally figure from the brief the shell already has", async () => {
     const content = await loadHomeTileContent({
       brief: BRIEF,
-      reader: readerOf({}),
+      reader: readerOf({ "tally.expense": [{ id: "x1" }] }),
     });
     expect(content.agenda).toStrictEqual({ events: BRIEF.events, total: 1 });
     expect(content.tally).toStrictEqual({
       balanceMinor: 2_500,
       currency: "USD",
     });
+  });
+
+  it("has no tally at all when the ledger is empty, whatever the balance says", async () => {
+    // A balance of zero is indistinguishable from a ledger nobody has used, and
+    // the brief carries no count. Treating it as content gave an untouched
+    // vault a live "0.00 · All settled" tile — which claims a settlement that
+    // never happened AND, because one live tile means Home is no longer day
+    // one, deleted the entire what-to-do treatment the moment the brief
+    // settled.
+    const content = await loadHomeTileContent({
+      brief: { ...BRIEF, balanceMinor: 0 },
+      reader: readerOf({ "tally.expense": [] }),
+    });
+    expect(content.tally).toBeUndefined();
   });
 
   it("returns nothing at all for an app whose read is refused", async () => {
@@ -174,5 +195,220 @@ describe("shell/routes/homeTileContent", () => {
       reader: readerOf({}),
     });
     expect(content.photos).toStrictEqual({ thumbs: [], total: 3 });
+  });
+
+  it("never sends a purpose on a replica read — it selects the SHAPE, not the reason", async () => {
+    // `ReplicaShellSession.resolveShapeId` filters the catalog by
+    // `shape.purpose === purpose`, so a descriptive value ("home-springboard")
+    // matches no shape and every read throws. Each read here is `.catch()`-ed,
+    // so the failure was silent and Home simply stayed empty over a full vault.
+    const reader = readerOf({ "knowledge.note": [{ title: "n" }] });
+    await loadHomeTileContent({ reader });
+    expect(vi.mocked(reader.read).mock.calls.length).toBeGreaterThan(0);
+    for (const [, request] of vi.mocked(reader.read).mock.calls)
+      expect(request.purpose).toBeUndefined();
+  });
+
+  it("paints the ORIGINAL when a photo has no thumb derivative yet", async () => {
+    // Every freshly imported photo is in this state until the gateway's preview
+    // backstop runs: `resolveServableBlob` answers `no-variant` → 404, which the
+    // authorizer reports as null. Without the fallback the mosaic renders blank
+    // on a library that plainly has pictures in it.
+    const { authorizeBlobUrl } = await import("../../blueprints/blob-auth.js");
+    vi.mocked(authorizeBlobUrl).mockImplementation(async (pathname: string) =>
+      pathname.includes("variant=thumb") ? null : `blob:${pathname}`
+    );
+    const content = await loadHomeTileContent({
+      reader: readerOf({
+        "core.content_item": [{ content_id: "c1", content_uri: "blob:sha" }],
+        "media.media_asset": [
+          { asset_id: "a1", captured_at: "2026-08-01", content_id: "c1" },
+        ],
+      }),
+    });
+    expect(content.photos).toStrictEqual({
+      thumbs: ["blob:/centraid/_vault/blobs/c1"],
+      total: 1,
+    });
+  });
+
+  it("decodes the doc's inline markdown body into a stripped, word-cut excerpt", async () => {
+    // `mintContentFromDataUri` keeps text/* bytes INLINE in `content_uri` (the
+    // FTS feed), so a seeded markdown document decodes without a blob fetch.
+    // The heading is dropped (the tile already shows the title, and the seeded
+    // bodies open with `# <title>`), list/emphasis/link markers are stripped,
+    // and the cut lands on a word with an ellipsis.
+    const body =
+      "# New lease\n\nThe **landlord** agreed to the [terms](https://example.test) " +
+      "we sent over, including the longer notice period and the repainting of " +
+      "the hallway before the first of the month arrives.\n\n- deposit\n- keys\n";
+    const content = await loadHomeTileContent({
+      reader: readerOf({
+        "core.content_item": [
+          {
+            content_id: "c-doc",
+            content_uri: `data:text/markdown;charset=utf-8,${encodeURIComponent(body)}`,
+            media_type: "text/markdown",
+          },
+        ],
+        "core.document": [
+          {
+            current_content_id: "c-doc",
+            document_id: "d1",
+            title: "New lease",
+            updated_at: "2026-07-01",
+          },
+        ],
+      }),
+    });
+    expect(content.docs).toStrictEqual({
+      excerpt:
+        "The landlord agreed to the terms we sent over, including the longer " +
+        "notice period and the repainting of the hallway before the first of " +
+        "the month arrives.…",
+      title: "New lease",
+      total: 1,
+    });
+  });
+
+  it("fetches a CAS-held text body through the authorized blob route", async () => {
+    // The staged-upload path spills even text bytes to the CAS, so the excerpt
+    // has to travel the same authorize-then-fetch road as the photo mosaic.
+    // jsdom leaves `URL.revokeObjectURL` unimplemented, so it is installed
+    // rather than spied on, and removed again in the finally.
+    const revoke = vi.fn<(url: string) => void>();
+    const hadRevoke = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revoke,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        expect(url).toBe("blob:/centraid/_vault/blobs/c-doc");
+        return { text: async () => "Uploaded prose, safe in the vault." };
+      })
+    );
+    try {
+      const content = await loadHomeTileContent({
+        reader: readerOf({
+          "core.content_item": [
+            {
+              content_id: "c-doc",
+              content_uri: "blob:sha256-abc",
+              media_type: "text/plain",
+            },
+          ],
+          "core.document": [
+            {
+              current_content_id: "c-doc",
+              document_id: "d1",
+              title: "Upload",
+              updated_at: "2026-07-01",
+            },
+          ],
+        }),
+      });
+      expect(content.docs).toStrictEqual({
+        excerpt: "Uploaded prose, safe in the vault.",
+        title: "Upload",
+        total: 1,
+      });
+      // The object URL's lifecycle is the caller's; the tile must not leak it.
+      expect(revoke).toHaveBeenCalledWith("blob:/centraid/_vault/blobs/c-doc");
+    } finally {
+      vi.unstubAllGlobals();
+      if (hadRevoke) Object.defineProperty(URL, "revokeObjectURL", hadRevoke);
+      else Reflect.deleteProperty(URL, "revokeObjectURL");
+    }
+  });
+
+  it("stays title-only for a binary body and for a refused blob fetch", async () => {
+    const { authorizeBlobUrl } = await import("../../blueprints/blob-auth.js");
+    vi.mocked(authorizeBlobUrl).mockResolvedValue(null);
+    const rowsFor = (mediaType: string): Rows => ({
+      "core.content_item": [
+        {
+          content_id: "c-doc",
+          content_uri: "blob:sha256-abc",
+          media_type: mediaType,
+        },
+      ],
+      "core.document": [
+        {
+          current_content_id: "c-doc",
+          document_id: "d1",
+          title: "Scan of the deed",
+          updated_at: "2026-07-01",
+        },
+      ],
+    });
+    // A PDF's bytes are not prose: no fetch is even attempted.
+    const binary = await loadHomeTileContent({
+      reader: readerOf(rowsFor("application/pdf")),
+    });
+    expect(binary.docs).toStrictEqual({ title: "Scan of the deed", total: 1 });
+    // A text body whose blob read is refused degrades the same way.
+    const refused = await loadHomeTileContent({
+      reader: readerOf(rowsFor("text/plain")),
+    });
+    expect(refused.docs).toStrictEqual({ title: "Scan of the deed", total: 1 });
+  });
+
+  it("reads the note's true first line, keeping a heading's text", async () => {
+    // A note that opens `# Groceries` opens with the word "Groceries" — the
+    // heading is not repeated anywhere on the tile the way the doc title is,
+    // so its text IS the first line.
+    const content = await loadHomeTileContent({
+      reader: readerOf({
+        "core.content_item": [
+          {
+            content_id: "c-note",
+            content_uri: `data:text/markdown;charset=utf-8,${encodeURIComponent("# Groceries for the week\n\n- milk\n- eggs\n")}`,
+            media_type: "text/markdown",
+          },
+        ],
+        "knowledge.note": [
+          {
+            body_content_id: "c-note",
+            note_id: "n1",
+            title: "Stale title after edits",
+            updated_at: "2026-08-01",
+          },
+        ],
+      }),
+    });
+    expect(content.notes).toStrictEqual({
+      at: "2026-08-01",
+      line: "Groceries for the week",
+      total: 1,
+    });
+  });
+
+  it("falls back to the note's title when its body is unreadable", async () => {
+    const content = await loadHomeTileContent({
+      reader: readerOf({
+        "core.content_item": [
+          {
+            content_id: "c-note",
+            content_uri: "blob:sha256-abc",
+            media_type: "image/png",
+          },
+        ],
+        "knowledge.note": [
+          {
+            body_content_id: "c-note",
+            note_id: "n1",
+            title: "Reading list",
+            updated_at: "2026-08-01",
+          },
+        ],
+      }),
+    });
+    expect(content.notes).toStrictEqual({
+      at: "2026-08-01",
+      line: "Reading list",
+      total: 1,
+    });
   });
 });

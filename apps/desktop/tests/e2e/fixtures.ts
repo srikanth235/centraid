@@ -1088,30 +1088,12 @@ const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   "Vault Atlas": "Data",
 };
 
-/**
- * Destinations that left the rail for the ⌘K palette (#667). The palette is
- * the complete index; Discover is the main one e2e still needs to reach.
- */
-const PALETTE_ONLY_NAV = new Set(["Discover"]);
-
-/** Open the command palette and run a navigation row by its visible label. */
-export async function gotoPaletteNav(page: Page, label: string): Promise<void> {
-  await page.keyboard.press("Meta+k");
-  const palette = page.getByRole("dialog", { name: "Command palette" });
-  await palette.waitFor({ state: "visible" });
-  // Narrow first so the row is on-screen even when the full list is long.
-  await palette.getByRole("textbox").fill(label);
-  await palette.getByRole("button", { name: label, exact: true }).click();
-  await palette.waitFor({ state: "hidden" }).catch(() => undefined);
-}
-
-/** Click a sidebar nav item by its visible label (or open it via ⌘K when the
- *  rail no longer lists that destination). */
+/** Click a stem nav item by its visible label.
+ *
+ *  There is no palette-only fallback any more: Discover was the one
+ *  destination that needed it, and it retired with #708. Everything this
+ *  helper is asked for is a pinned launcher row. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  if (PALETTE_ONLY_NAV.has(label)) {
-    await gotoPaletteNav(page, label);
-    return;
-  }
   const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
   await page.getByRole("button", { name: railLabel, exact: true }).click();
 }

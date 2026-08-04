@@ -24,12 +24,29 @@ import type { HomeTileContent, HomeTileTaskRow } from "./homeTiles.js";
 export interface HomeTileReader {
   read: (
     appId: string,
-    request: { entity: string; limit?: number; purpose?: string }
+    request: {
+      entity: string;
+      limit?: number;
+      purpose?: string;
+      where?: { column: string; op: "eq"; value: string }[];
+    }
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
 
-/** Why the shell is reading — the grant ledger records a purpose per read. */
-const PURPOSE = "home-springboard";
+// TRAP (issue #708): `purpose` on a replica read is NOT an audit label — it is
+// a SHAPE SELECTOR. `ReplicaShellSession.resolveShapeId` filters the catalog by
+// `shape.purpose === purpose`, so a value the catalog has never heard of
+// matches no shape and the read throws `No offline shape for <app>/<entity>`.
+// This module used to pass "home-springboard", describing why the shell was
+// reading, and every one of the seven reads below threw — silently, because
+// each is `.catch()`-ed so one app's missing grant cannot blank the other
+// tiles. The visible result was a Home that stayed empty no matter how much
+// content the vault held: Agenda and the tally figure survived only because
+// they come from the brief instead.
+//
+// Omitting it lets the session apply `DEFAULT_REPLICA_PURPOSE`, which is what
+// the shapes are actually registered under and what the palette (the other
+// shell-side reader, `paletteEntitySearch.ts`) has always relied on.
 
 /** Deliberately small windows: a tile shows a handful of rows, and Home is the
  *  most re-entered route in the shell. */
@@ -58,7 +75,7 @@ async function rowsOf(
   entity: string,
   limit: number
 ): Promise<readonly { values: Record<string, unknown> }[]> {
-  const result = await reader.read(appId, { entity, limit, purpose: PURPOSE });
+  const result = await reader.read(appId, { entity, limit });
   return result.rows.filter((row) => isLive(row.values));
 }
 
@@ -67,6 +84,15 @@ async function rowsOf(
  * the same test the Photos app's own `srcOf` applies before it builds a blob
  * route; the `?variant=thumb` derivative is what the grid renders, so the tile
  * asks for exactly the bytes Photos would.
+ *
+ * ...and falls back to the ORIGINAL when that derivative does not exist yet
+ * (issue #708). `resolveServableBlob` answers `no-variant` → 404 for a photo
+ * whose thumb the preview backstop has not generated, which is the state EVERY
+ * photo is in for a while after it is imported. The mosaic rendered blank on a
+ * library of ten pictures for exactly this reason. The fallback is the Photos
+ * grid's own behaviour for small images (its `THUMB_EDGE` ceiling paints the
+ * original directly), and it is the owner reading their own bytes on their own
+ * device — not the derivatives-only agent egress surface.
  */
 async function photoThumbs(
   reader: HomeTileReader
@@ -93,11 +119,18 @@ async function photoThumbs(
     .sort(byRecency("captured_at"))
     .map((row) => text(row.values.content_id))
     .filter((id) => uriById.get(id)?.startsWith("blob:") === true)
-    .slice(0, 4);
+    // Eight, because the mosaic is 4×2 on the large tile (see `MOSAIC` in
+    // homeTiles.ts). Authorizing more than the grid can show would be paid for
+    // in blob fetches nobody sees.
+    .slice(0, 8);
   const urls = await Promise.all(
-    newest.map((id) =>
-      authorizeBlobUrl(`${BLOB_PREFIX}/${id}?variant=thumb`).catch(() => null)
-    )
+    newest.map(async (id) => {
+      const thumb = await authorizeBlobUrl(
+        `${BLOB_PREFIX}/${id}?variant=thumb`
+      ).catch(() => null);
+      if (thumb !== null) return thumb;
+      return authorizeBlobUrl(`${BLOB_PREFIX}/${id}`).catch(() => null);
+    })
   );
   return {
     thumbs: urls.filter((url): url is string => url !== null),
@@ -147,18 +180,168 @@ async function lockerState(
   };
 }
 
+/**
+ * How many expenses the ledger actually holds.
+ *
+ * The brief carries a BALANCE and no count, and a balance of zero is
+ * indistinguishable from a ledger that has never been used — which is how an
+ * untouched vault grew a live "₹0.00 · All settled" tile. Worse than cosmetic:
+ * a live tile made Home stop being day one, so the whole what-to-do treatment
+ * disappeared the moment the brief settled, and "All settled" claims a
+ * settlement that never happened. The count is the thing that says whether
+ * there is a ledger at all, so the tile reads the rows.
+ */
+async function tallyCount(reader: HomeTileReader): Promise<number> {
+  return (await rowsOf(reader, "tally", "tally.expense", WINDOW.faces)).length;
+}
+
+/** Longest excerpt the reading-register body can use: the tile clamps at three
+ *  lines of serif, and a longer string is paid for in decode work nobody sees. */
+const EXCERPT_MAX = 160;
+
+/** Media types whose bytes decode to prose. `mintContentFromDataUri` keeps
+ *  `text/*` INLINE in the row (the FTS feed) and spills everything else to the
+ *  CAS, so this test is also the split between the two decode branches below —
+ *  except the staged-upload path, which lands even text in the CAS. */
+function isProse(mediaType: string): boolean {
+  return mediaType.startsWith("text/") || mediaType === "application/markdown";
+}
+
+/** Decode a `data:` URI's payload to text, or "" for anything unreadable. */
+function dataUriText(uri: string): string {
+  const comma = uri.indexOf(",");
+  if (comma === -1) return "";
+  const meta = uri.slice(0, comma);
+  const payload = uri.slice(comma + 1);
+  try {
+    if (!meta.includes(";base64")) return decodeURIComponent(payload);
+    // `atob` yields latin1 code units; the bytes are UTF-8, so re-decode them.
+    const bytes = Uint8Array.from(
+      atob(payload),
+      (ch) => ch.codePointAt(0) ?? 0
+    );
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+/** Fetch a CAS-held text body the way `photoThumbs` fetches image bytes: the
+ *  owner reading their own bytes through the authed blob route. Any refusal is
+ *  "", which degrades the tile to today's title-only body. */
+async function blobText(contentId: string): Promise<string> {
+  const url = await authorizeBlobUrl(`${BLOB_PREFIX}/${contentId}`).catch(
+    () => null
+  );
+  if (url === null) return "";
+  try {
+    return await (await fetch(url)).text();
+  } catch {
+    return "";
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Markdown, reduced to plain prose lines.
+ *
+ * Not a parser — the tile needs a sentence, not a document model. Fenced code
+ * is dropped whole; heading LINES are dropped when asked (the doc tile already
+ * shows the title, and the seeded bodies open with a `# <title>` heading that
+ * would otherwise repeat it word for word); list, quote, emphasis and link
+ * markers are stripped so their text reads as the prose it is.
+ */
+function markdownProseLines(
+  raw: string,
+  options: { dropHeadings: boolean }
+): string[] {
+  const lines: string[] = [];
+  let fenced = false;
+  for (const line of raw.split(/\r?\n/u)) {
+    if (/^\s*(?:```|~~~)/u.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    const heading = /^\s*#{1,6}\s+/u.test(line);
+    if (heading && options.dropHeadings) continue;
+    const prose = text(
+      line
+        .replace(/^\s*#{1,6}\s+/u, "")
+        .replace(/^\s*>\s?/u, "")
+        .replace(/^\s*(?:[-*+]|\d+[.)])\s+/u, "")
+        .replace(/!\[(?<alt>[^\]]*)\]\([^)]*\)/gu, "$<alt>")
+        .replace(/\[(?<label>[^\]]*)\]\([^)]*\)/gu, "$<label>")
+        .replace(/[`*_~]+/gu, "")
+    );
+    if (prose !== "") lines.push(prose);
+  }
+  return lines;
+}
+
+/** Tile-sized cut, on a word, with an ellipsis only when something was lost. */
+function clipToExcerpt(prose: string): string {
+  if (prose.length <= EXCERPT_MAX) return prose;
+  const cut = prose.slice(0, EXCERPT_MAX + 1);
+  const space = cut.lastIndexOf(" ");
+  return `${cut.slice(0, space > 0 ? space : EXCERPT_MAX).trimEnd()}…`;
+}
+
+/**
+ * The prose behind ONE content item, as stripped lines — or [] whenever any
+ * link in the chain is missing: no row, a non-text media type, an undecodable
+ * payload. [] is the seam's designed fallback (title-only body), so a binary
+ * PDF and a refused blob fetch land on exactly today's rendering.
+ */
+async function contentProse(
+  reader: HomeTileReader,
+  appId: string,
+  contentId: string,
+  options: { dropHeadings: boolean }
+): Promise<string[]> {
+  if (contentId === "") return [];
+  const result = await reader.read(appId, {
+    entity: "core.content_item",
+    limit: 1,
+    where: [{ column: "content_id", op: "eq", value: contentId }],
+  });
+  const values = result.rows[0]?.values;
+  if (!values || !isProse(text(values.media_type))) return [];
+  const uri = typeof values.content_uri === "string" ? values.content_uri : "";
+  const raw = uri.startsWith("data:")
+    ? dataUriText(uri)
+    : uri.startsWith("blob:")
+      ? await blobText(contentId)
+      : "";
+  return markdownProseLines(raw, options);
+}
+
 async function newestDoc(
   reader: HomeTileReader
 ): Promise<{ total: number; title?: string; excerpt?: string }> {
   const rows = await rowsOf(reader, "docs", "core.document", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
+  if (!newest) return { total: rows.length };
+  // The document's prose lives in its content item's bytes
+  // (`current_content_id`), not in a column — this is the read that closes the
+  // seam the tile used to record here in prose. Settled independently: a
+  // missing shape, a binary media type or a refused blob fetch must degrade to
+  // the title-only body, never blank the tile.
+  const excerpt = clipToExcerpt(
+    (
+      await contentProse(
+        reader,
+        "docs",
+        text(newest.values.current_content_id),
+        { dropHeadings: true }
+      ).catch(() => [])
+    ).join(" ")
+  );
   return {
     total: rows.length,
-    // SEAM: a document's prose lives in its content item's BYTES, not in a
-    // column, so the excerpt would need a blob fetch (and a decode per media
-    // type) the springboard has no business doing. The reading-register body
-    // renders with the title alone until a read path exposes the excerpt.
-    ...(newest ? { title: text(newest.values.title) } : {}),
+    ...(excerpt === "" ? {} : { excerpt }),
+    title: text(newest.values.title),
   };
 }
 
@@ -167,15 +350,25 @@ async function newestNote(
 ): Promise<{ total: number; line?: string; at?: string }> {
   const rows = await rowsOf(reader, "notes", "knowledge.note", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
+  if (!newest) return { total: rows.length };
+  // Same seam, same read path as Docs: `knowledge_note.body_content_id` points
+  // at bytes, and the body's true first line is what the tile promises. The
+  // title stays as the fallback — it IS the note's first line in every path
+  // that creates one, so a missing or binary body reads exactly as before.
+  // Headings are KEPT here: a note that opens with `# Groceries` opens with
+  // the word "Groceries", and that heading is not repeated anywhere on the
+  // tile the way the doc title is.
+  const [first] = await contentProse(
+    reader,
+    "notes",
+    text(newest.values.body_content_id),
+    { dropHeadings: false }
+  ).catch(() => []);
+  const line = clipToExcerpt(first ?? "") || text(newest.values.title);
   return {
     total: rows.length,
-    // SEAM (same shape as Docs): `knowledge_note.body_content_id` points at
-    // bytes, so the note's true first LINE is not readable here. The title is
-    // the note's own first line in every path that creates one, so it stands in
-    // the reading register until the body is reachable.
-    ...(newest
-      ? { at: text(newest.values.updated_at), line: text(newest.values.title) }
-      : {}),
+    at: text(newest.values.updated_at),
+    line,
   };
 }
 
@@ -189,20 +382,26 @@ export async function loadHomeTileContent(input: {
   brief?: DailyBrief | undefined;
 }): Promise<HomeTileContent> {
   const brief = input.brief;
-  const [photos, people, tasks, locker, docs, notes] = await Promise.all([
-    photoThumbs(input.reader).catch(() => undefined),
-    peopleFaces(input.reader).catch(() => undefined),
-    taskBoard(input.reader).catch(() => undefined),
-    lockerState(input.reader).catch(() => undefined),
-    newestDoc(input.reader).catch(() => undefined),
-    newestNote(input.reader).catch(() => undefined),
-  ]);
+  const [photos, people, tasks, locker, docs, notes, expenses] =
+    await Promise.all([
+      photoThumbs(input.reader).catch(() => undefined),
+      peopleFaces(input.reader).catch(() => undefined),
+      taskBoard(input.reader).catch(() => undefined),
+      lockerState(input.reader).catch(() => undefined),
+      newestDoc(input.reader).catch(() => undefined),
+      newestNote(input.reader).catch(() => undefined),
+      tallyCount(input.reader).catch(() => 0),
+    ]);
   return {
     // The brief already expanded recurrences for today's window; re-deriving
     // them from raw `core.event` rows here would be a second, worse copy.
     ...(brief
+      ? { agenda: { events: brief.events, total: brief.events.length } }
+      : {}),
+    // The figure comes from the brief; whether there is a figure to show at all
+    // comes from the rows (see `tallyCount`).
+    ...(brief && expenses > 0
       ? {
-          agenda: { events: brief.events, total: brief.events.length },
           tally: {
             balanceMinor: brief.balanceMinor,
             currency: brief.currency,

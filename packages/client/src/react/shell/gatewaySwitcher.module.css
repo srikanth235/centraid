@@ -5,8 +5,9 @@
    `overflow: hidden`).
 
    Radii, ink ramp, and the `--dur-1`/`--ease` micro-transitions match the
-   trigger in IdentityHead.module.css, so the popover reads as the row
-   unfolding rather than a second surface with its own opinions. Logical
+   trigger — the app bar's title control in chrome.module.css — so the popover
+   reads as the title unfolding rather than a second surface with its own
+   opinions. Logical
    properties throughout (inline/block), matching chrome.module.css. */
 
 @keyframes gsPop {
@@ -93,8 +94,7 @@
    nothing to list yet: present (so the vault does not silently vanish) but
    visibly not a thing to click. A disabled row recolours its leaves —
    container opacity composites every descendant and invalidates the
-   contrast each token was solved for (matches IdentityHead.module.css's
-   `.head:disabled` treatment). */
+   contrast each token was solved for. */
 .row[data-selectable="false"] {
   cursor: default;
 }

@@ -41,6 +41,16 @@
   .tile[data-size="large"] {
     grid-row: span 1;
   }
+
+  /* One row of four when large flattens — the columns stay, so the mosaic
+     keeps its proportion instead of becoming four tall slivers. */
+  .mosaic {
+    grid-template-rows: 1fr;
+  }
+
+  .mosaicCell:nth-child(n + 5) {
+    display: none;
+  }
 }
 
 .tile {
@@ -119,7 +129,10 @@
 .mosaic {
   display: grid;
   gap: 2px;
-  grid-template-columns: 1fr 1fr;
+  /* Four columns by two rows, per the handoff: on the 2×2 tile this is the
+     difference between a camera roll and four large crops of nothing. */
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(4, 1fr);
   grid-template-rows: 1fr 1fr;
   /* The one body with no padding at all: the photo grid disappears behind the
      imagery, which is the whole character of the app. */
@@ -222,22 +235,23 @@
   padding-block-start: var(--sp-1);
 }
 
+/* The hue arrives inline from `identityColor` — this is identity, the one
+   place the shell carries a person's colour (same rule as the stem avatar). */
 .face {
   align-items: center;
-  background: var(--bg-sunken);
-  block-size: 38px;
-  border: 2px solid var(--bg-elev);
+  block-size: 30px;
+  border: 1.5px solid var(--bg-elev);
   border-radius: var(--r-pill);
-  color: var(--text-soft);
+  color: var(--text-inv);
   display: flex;
   font: var(--t-small-strong);
-  inline-size: 38px;
+  inline-size: 30px;
   justify-content: center;
 }
 
 .face + .face {
   /* Logical, so the stack mirrors under RTL along with everything else. */
-  margin-inline-start: -12px;
+  margin-inline-start: -7px;
 }
 
 .facesMore {
@@ -327,31 +341,23 @@
   color: var(--warning);
 }
 
-/* ── the designed empty body ──────────────────────────────────────────── */
+/* ── day one ──────────────────────────────────────────────────────────────
 
-.emptyBody {
-  align-items: center;
-  /* DASHED, so "nothing here yet" is legible as a placeholder rather than as
-     a tile that failed to load. */
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-md);
-  color: var(--text-faint);
-  display: flex;
-  flex: 1 1 auto;
-  font: var(--t-small);
-  padding: var(--sp-3);
-  text-wrap: balance;
-}
+   The vault has no content ANYWHERE: the lead sentence, then the first moves —
+   not eight tiles apologising in a grid.
 
-/* ── first run: one instruction, not eight apologies ──────────────────── */
+   NO card around it. It was a dashed box with `--sp-6` of its own padding
+   INSIDE the page gutter, so day one's text started ~40px from the edge while
+   Notifications, Automations and every other screen start at the gutter — Home,
+   the one screen a member sees first, was the one screen indented differently.
+   The box earned none of that: the moves below are already dashed, which is
+   where "not filled in yet" actually means something, and a second dashed
+   rectangle around them says nothing except that a rectangle is possible. */
 
 .firstRun {
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-lg);
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding: var(--sp-6);
 }
 
 .firstRunTitle {
@@ -369,28 +375,87 @@
   max-inline-size: 62ch;
 }
 
-.firstRunSteps {
+/* ── first moves ──────────────────────────────────────────────────────────
+
+   The doors under the day-one copy, and under a thin grid. These replace the
+   dashed placeholders that opened the empty app they were named after: same
+   dashes, same marks, but each one now lands somewhere that can take content.
+
+   The dashes are load-bearing. A dashed border reads as "not filled in yet"
+   where a solid one reads as "this is the finished thing, and it is empty" —
+   and it is the only visual difference from a real tile, so a move becoming a
+   tile is a fill rather than a re-layout. */
+
+.startLead {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: var(--sp-3) 0 0;
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.moves {
   display: grid;
   gap: var(--sp-2);
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   list-style: none;
   margin: var(--sp-2) 0 0;
   padding: 0;
 }
 
-.firstRunStep {
+.move {
   align-items: center;
+  background: transparent;
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-md);
-  color: var(--text-soft);
+  cursor: pointer;
   display: flex;
-  font: var(--t-small);
-  gap: var(--sp-2);
-  min-block-size: var(--h-row);
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: 56px;
+  padding: var(--sp-3);
+  text-align: start;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+/* The band under a populated grid: label only, one row tall. */
+.move[data-compact="true"] {
+  min-block-size: var(--h-control);
   padding: var(--sp-2) var(--sp-3);
 }
 
-.firstRunMark {
+.move:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-sel);
+}
+
+.move:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.moveText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* A verb, at the weight the rest of the shell gives an actionable name. */
+.moveLabel {
+  color: var(--text);
+  font: var(--t-small-strong);
+}
+
+/* What it becomes — the reason to press it, never an apology for the emptiness. */
+.moveHint {
+  color: var(--text-faint);
+  font: var(--t-small);
+}
+
+.moveMark {
   block-size: 22px;
   color: var(--text-inv);
   display: grid;
@@ -399,49 +464,194 @@
   place-items: center;
 }
 
-/* ── "Search everything" — Home's door onto the ⌘K palette ────────────── */
+/* ── the sample offer ─────────────────────────────────────────────────────
 
-/* A BOUNDED control, not bare text: an action needs an edge, and mobile has no
-   hover to make a bare word look like one. It opens the same palette ⌘K and the
-   stem's Search control open — three entry points, one search. */
-.searchEverything {
-  align-items: center;
+   Under the real first moves and behind a rule. Ordering is an argument: an
+   offer of invented data placed ABOVE "connect your account" would tell a
+   member the demo matters more than their own archive, on the exact screen
+   where the opposite claim is being made for the first time.
+
+   No dashes here. Dashes mean "a thing that will be filled in", and this is not
+   one of the tiles — it is an aside about them. */
+
+.offer {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-5);
+  padding-block-start: var(--sp-4);
+}
+
+.offerLead {
+  color: var(--text);
+  font: var(--t-body-strong);
+  margin: 0;
+}
+
+/* The disclosure, and it sits BEFORE the control rather than under it as an
+   apology: what the sample is, where it stays, and how it goes away. */
+.offerHint {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: var(--sp-1) 0 var(--sp-3);
+  max-inline-size: 62ch;
+}
+
+.offerAction {
+  /* Secondary, never the filled ink. The filled control means "this commits",
+     and the one commit on this page is bringing in your OWN things. */
+  inline-size: auto;
+}
+
+/* The working state that stands in for the control while the sample loads.
+   Held to the disclosure's measure so the label, the counts and the rule line
+   up with the sentence that talked the member into pressing, instead of
+   striping the full width of Home. */
+.offerProgress {
+  max-inline-size: 62ch;
+}
+
+/* ── the sample notice ────────────────────────────────────────────────────
+
+   Sits in the conditions band with "out of room" and "two devices disagree",
+   because "some of what you are looking at is not yours" is the same KIND of
+   fact: about the vault, not about a preferences page.
+
+   Ruled on its leading edge rather than filled or tinted. A warning colour
+   would say something went wrong; nothing has. */
+
+.sampleNote {
+  align-items: flex-start;
   background: var(--bg-elev);
   border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--text-soft);
   border-radius: var(--r-md);
-  color: var(--text-soft);
-  cursor: pointer;
   display: flex;
-  font: var(--t-control);
-  gap: var(--sp-2);
-  inline-size: 100%;
-  margin-block-end: var(--sp-3);
-  min-block-size: var(--h-control);
-  padding: 0 var(--sp-3);
-  text-align: start;
-  transition: border-color var(--dur-1) var(--ease);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
 }
 
-.searchEverything:hover {
-  border-color: var(--line-strong);
-  color: var(--text);
-}
-
-.searchEverything:focus-visible {
-  outline: 2px solid var(--focus-ring-color);
-  outline-offset: 2px;
-}
-
-.searchIcon {
+.sampleMark {
   align-items: center;
+  block-size: 22px;
+  color: var(--text-soft);
   display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  inline-size: 22px;
+}
+
+.sampleText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.sampleTitle {
+  color: var(--text);
+  font: var(--t-small-strong);
+}
+
+.sampleBody {
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+
+.sampleAction {
   flex: 0 0 auto;
 }
 
-.searchKbd {
+/* Compact: the action drops under the text rather than squeezing it to a
+   column of single words. */
+@media (max-width: 720px) {
+  .sampleNote {
+    flex-wrap: wrap;
+  }
+
+  .sampleAction {
+    inline-size: 100%;
+  }
+}
+
+/* ── the fill ─────────────────────────────────────────────────────────────
+
+   The one orchestrated moment on this screen, and it happens ONCE: the render
+   right after a seed lands. Home stops being an instruction and becomes an
+   archive, tile by tile, in springboard order — so the eye follows the same
+   path it will use every day afterwards.
+
+   Not on a routine revisit. A grid that re-animates every time you come back
+   stops being a moment and becomes a tax. Duration goes to zero under the
+   global reduced-motion rule, and the tiles simply appear. */
+
+@keyframes tileFill {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.springboard[data-filled="true"] .tile {
+  animation: tileFill var(--dur-2) var(--ease-entry) both;
+}
+
+/* The stagger is positional, so it lives in CSS rather than as an inline
+   custom property on every tile. That is not a style preference: the tile
+   carries NO inline style at all, because inline style on a tile is how a hue
+   would eventually get onto one, and `HomeSpringboard.test.tsx` guards exactly
+   that. 45ms apart — enough to read as a sequence, short enough that the last
+   tile is not still arriving after the reader has started using the first. */
+.springboard[data-filled="true"] .tile:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(6) {
+  animation-delay: 225ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(7) {
+  animation-delay: 270ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(n + 8) {
+  animation-delay: 315ms;
+}
+
+/* ── the start band ───────────────────────────────────────────────────────
+
+   Sits under a grid that is already working, so it is quieter than day one:
+   no display serif, no paragraph, and a rule to separate it from the content
+   above rather than a second card competing with it. */
+
+.startBand {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-5);
+  padding-block-start: var(--sp-4);
+}
+
+.startTitle {
   color: var(--text-faint);
-  font: var(--t-mono);
-  margin-inline-start: auto;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: 0;
+  text-transform: var(--t-eyebrow-transform);
 }
 
 /* ── the vault-level conditions band ──────────────────────────────────── */

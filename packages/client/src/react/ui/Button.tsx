@@ -83,8 +83,13 @@ export default function Button({
     <>
       <button
         type="button"
+        // `.btn` is the base on EVERY size, including chrome. It used to be
+        // swapped out for `.chrome`, which meant a titlebar button silently
+        // lost the shared hover, press and focus-ring rules keyed on `.btn` —
+        // a control with no visible focus ring is a keyboard dead end.
         className={cx(
-          size === "chrome" ? styles.chrome : styles.btn,
+          styles.btn,
+          size === "chrome" && styles.chrome,
           size === "sm" && styles.sm,
           VARIANT_CLASS[variant],
           className

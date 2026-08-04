@@ -192,7 +192,7 @@ export default function CaptureScreen({
             setText(value);
             setPreview(undefined);
           }}
-          placeholder="Remind me to call Priya…"
+          placeholder="Remind me to call Maya…"
           placeholderTextColor={colors.textFaint}
           style={[
             styles.editor,

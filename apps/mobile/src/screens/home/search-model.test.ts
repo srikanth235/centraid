@@ -90,7 +90,10 @@ describe(selectSearchRecents, () => {
 
 describe(formatSearchMeta, () => {
   it("formats an ISO instant as a short month + day", () => {
-    expect(formatSearchMeta("2026-08-03T12:00:00.000Z")).toMatch(/Aug\s*3/u);
+    // Host locale may put day before or after month ("Aug 3" vs "3 Aug").
+    expect(formatSearchMeta("2026-08-03T12:00:00.000Z")).toMatch(
+      /(?:Aug\s*3|3\s*Aug)/u
+    );
   });
 
   it("returns undefined for missing or unparseable input", () => {

@@ -109,34 +109,3 @@ function lastRunByRef(
     if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
   return lastByRef;
 }
-
-/** Count automations whose most recent run failed (the "needs attention" badge). */
-export function attentionCount(
-  rows: readonly CentraidAutomationRow[],
-  entries: readonly AutomationFeedEntry[]
-): number {
-  const lastByRef = lastRunByRef(entries);
-  let attention = 0;
-  for (const r of rows) {
-    const last = lastByRef.get(r.ref);
-    if (last && !last.run.ok) attention += 1;
-  }
-  return attention;
-}
-
-/** The hero eyebrow date, e.g. "TUESDAY · 19 MAY". */
-export function heroDateLabel(): string {
-  const d = new Date();
-  const weekday = d
-    .toLocaleDateString("en-US", { weekday: "long" })
-    .toUpperCase();
-  const month = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-  return `${weekday} · ${d.getDate()} ${month}`;
-}
-
-export const HERO_SUGGESTIONS = [
-  "Habit tracker",
-  "Weekly review",
-  "Inbox digest",
-  "Invoice filer",
-];

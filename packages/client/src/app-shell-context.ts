@@ -51,7 +51,6 @@ export type ShellRoute =
   // own conversation ledger or a resumed session. See AssistantRoute.tsx.
   | { kind: "assistant"; conversationId?: string }
   | { kind: "insights" }
-  | { kind: "discover" }
   | { kind: "starred" }
   | { kind: "automations" }
   // Vault data-source connections (Gmail, GitHub, …) — a launcher
@@ -78,7 +77,7 @@ export type ShellRoute =
   | { kind: "templates" }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a
-  // template gallery entry (Discover/Templates "Use template" for an
+  // template gallery entry (the automation gallery's "Use template" for an
   // automation). `watchEntity` (a logical entity KIND, `schema.table`) seeds a
   // create-mode data trigger watching that kind — the per-app "Automate this
   // data" deep-link (issue #446 follow-up 1). Like `templateId`, it only shapes
@@ -117,8 +116,9 @@ export interface GatewaySummary {
 // Renderer-side mirror of @centraid/blueprints' `TemplateMeta`. We don't
 // import the package here — the IPC layer carries plain JSON. `kind` splits
 // the catalog into the home Templates shelf (kind: 'app') and the Automations
-// gallery (kind: 'automation'); the unified clone path handles both. Shared
-// across app.ts (cards/templates), app-automations.ts, and app-discover.ts.
+// gallery (kind: 'automation'); the unified clone path handles both. The 'app'
+// half is read-only since #708 — it names which ids are BUNDLED, and every
+// bundled app is already installed.
 export interface TemplateEntry {
   id: string;
   name: string;
@@ -128,9 +128,13 @@ export interface TemplateEntry {
   version: string;
   kind?: "app" | "automation";
   /** Whether this app-kind template is already installed in the addressed
-   *  vault (issue #434). Drives Install vs Open in Discover. */
+   *  vault (issue #434). Always true for a mounted vault since #708 installs
+   *  every bundled app at mount; kept because it is the gateway's own answer
+   *  and an unmounted audience vault can still say `false`. */
   installed?: boolean;
-  /** Requested vault access, for the install/consent sheet (issue #434). */
+  /** Requested vault access as the gateway declares it (issue #434). Read by
+   *  the Privacy grants ledger; the install/consent sheet that used to render
+   *  it retired with Discover (#708), since nothing asks to install any more. */
   vault?: TemplateVaultBlock;
   // automation-only display fields:
   emoji?: string;
@@ -140,8 +144,8 @@ export interface TemplateEntry {
   integrations?: readonly string[];
 }
 
-/** A template's requested vault access (issue #434) — the consent surface the
- *  install sheet renders. Mirrors the gateway's `TemplateVaultDTO`. */
+/** A template's requested vault access (issue #434) — what the app declares it
+ *  will touch. Mirrors the gateway's `TemplateVaultDTO`. */
 export interface TemplateVaultBlock {
   purpose?: string;
   why?: string;
