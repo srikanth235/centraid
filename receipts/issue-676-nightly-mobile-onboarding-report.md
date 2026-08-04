@@ -127,6 +127,12 @@ accessibility zero-grey (15 cells).
   mounts a second probe inside `PhotosNavigator`, where a full-screen cover
   places the root shell behind the active native controller.
 
+- **Make the Tasks cover retry destination-aware.**
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` now gives the Tasks
+  marker a short accessibility-settle window and conditionally re-taps only
+  while the launcher source remains present, so a successful cover transition
+  cannot be followed by a tap against a closed Home hierarchy.
+
 - **Keep the iOS frame-probe sampling/report nodes in the XCTest hierarchy.**
   Run 30794487113 reached
   and tapped `perf-frame-arm`, but iOS never exposed `perf-frame-sampling` after
@@ -420,3 +426,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785812454-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 492721 | 0 | 25080576 | 22736 | 515457 | 7.8430 | 14844879 | 0 | 623826432 | 917551 | fix(ios): restore mobile test probes and list icon (#676) |
 | codex-019fc399-ba8-1785812506-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 4101 | 0 | 489728 | 531 | 4632 | 0.1406 | 14848980 | 0 | 624316160 | 918082 | fix(ios): restore mobile test probes and list icon (#676) |
 | codex-019fc399-ba8-1785812605-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 10928 | 0 | 1164544 | 1211 | 12139 | 0.3366 | 14859908 | 0 | 625480704 | 919293 | fix(ios): restore mobile test probes and list icon (#676) |
+| codex-019fc399-ba8-1785814997-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 195907 | 0 | 24004608 | 24609 | 220516 | 6.8601 | 15055815 | 0 | 649485312 | 943902 | fix(ios): harden Tasks cover retry (#676) |

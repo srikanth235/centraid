@@ -27,14 +27,22 @@ function retryLauncherTileCommands(open, destination) {
     retryTapIfNoChange: true
 - waitForAnimationToEnd:
     timeout: 3000
+- extendedWaitUntil:
+    visible: "${destination}"
+    timeout: 5000
+    optional: true
 - repeat:
     times: 2
     while:
       notVisible: "${destination}"
     commands:
-      - tapOn:
-          text: "${open}"
-          retryTapIfNoChange: true
+      - runFlow:
+          when:
+            visible: "${open}"
+          commands:
+            - tapOn:
+                text: "${open}"
+                retryTapIfNoChange: true
       - waitForAnimationToEnd:
           timeout: 3000`;
 }
