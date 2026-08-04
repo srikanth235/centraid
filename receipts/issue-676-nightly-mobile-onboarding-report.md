@@ -250,6 +250,12 @@ accessibility zero-grey (15 cells).
   them in five four-launch Maestro sessions, resetting the iOS XCTest driver
   between chunks without making any assertion optional.
 
+- **Retry the final iOS native smoke after a driver-channel flake.** The same
+  run completed all native covers and Settings, then lost the localhost XCTest
+  driver while starting the final post-restart Home assertion. The native flow
+  now retries only that final iOS smoke with a fresh Maestro session; the Home
+  marker remains required and Android keeps its single-attempt behavior.
+
 - **Invalidate native tunnel connections after post-open stream failures
   (30769334446).** `openBi()` can succeed briefly after the peer has stopped
   accepting streams, leaving later writes/reads to fail while the cached
@@ -436,3 +442,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785814997-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 195907 | 0 | 24004608 | 24609 | 220516 | 6.8601 | 15055815 | 0 | 649485312 | 943902 | fix(ios): harden Tasks cover retry (#676) |
 | codex-019fc399-ba8-1785816868-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 227881 | 0 | 11495936 | 22029 | 249910 | 3.7741 | 15283696 | 0 | 660981248 | 965931 | fix(ios): bound volume proof sessions (#676) |
 | codex-019fc399-ba8-1785816954-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 6900 | 0 | 697088 | 990 | 7890 | 0.2064 | 15290596 | 0 | 661678336 | 966921 | fix(ios): bound volume proof sessions (#676) |
+| codex-019fc399-ba8-1785817638-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 56907 | 0 | 4671488 | 6025 | 62932 | 1.4005 | 15347503 | 0 | 666349824 | 972946 | fix(ios): retry native smoke driver flake (#676) |

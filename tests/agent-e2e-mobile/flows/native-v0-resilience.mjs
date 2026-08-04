@@ -201,16 +201,26 @@ ${openCommands}
   await visitNext(0);
 
   await ctx.restart();
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+  const afterForceKillYaml = `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
-`,
-    "after-force-kill"
-  );
+`;
+  try {
+    await ctx.run(afterForceKillYaml, "after-force-kill");
+  } catch (error) {
+    // A long native journey can lose Maestro's XCTest driver between chunks;
+    // run 30875656338 refused the final session's localhost driver connection
+    // after every cover had already passed. Retry only this post-restart smoke
+    // with a fresh driver; a missing Home marker still fails the retry.
+    if (ctx.state.platform !== "ios") throw error;
+    ctx.note(
+      "iOS post-restart control channel failed; retrying the Home smoke"
+    );
+    await ctx.run(afterForceKillYaml, "after-force-kill-retry");
+  }
   ctx.note(
     "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
   );
