@@ -11,6 +11,7 @@ const ALIASES: Record<string, IconName> = {
   "bar-chart-2": "BarChart2",
   "battery-charging": "BatteryCharging",
   bell: "Bell",
+  "book-open": "BookOpen",
   bookmark: "Bookmark",
   check: "Check",
   "chevron-down": "ChevronDown",
