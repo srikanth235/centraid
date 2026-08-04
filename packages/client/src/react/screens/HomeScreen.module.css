@@ -16,7 +16,7 @@
 }
 .hero h1 {
   margin: 0;
-  font: var(--t-display-1);
+  font: var(--t-hero);
   font-size: 44px;
   letter-spacing: -0.03em;
   color: var(--text);
@@ -46,7 +46,7 @@
   background: transparent;
   color: var(--text);
   font: var(--t-body);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   line-height: 1.45;
 }
 .composerInput::placeholder {
@@ -75,7 +75,7 @@
   border-radius: 999px;
   border: 0.5px solid var(--line);
   font: var(--t-small);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   background: color-mix(in srgb, var(--text) 3%, transparent);
 }
@@ -88,7 +88,7 @@
   color: var(--text-ghost);
   letter-spacing: 0;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .composerSend {
@@ -129,9 +129,9 @@
 }
 .heroDate {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-faint);
 }
 .heroComposerWrap {
@@ -162,7 +162,7 @@
 .briefHead h2 {
   margin: 2px 0 0;
   color: var(--text);
-  font: var(--t-heading);
+  font: var(--t-title);
 }
 .briefEyebrow,
 .briefDate {
@@ -190,7 +190,7 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .briefFact:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .briefFact strong,
@@ -200,7 +200,7 @@
 }
 .briefFact strong {
   margin: 7px 0 4px;
-  font: var(--t-heading);
+  font: var(--t-title);
 }
 .briefFactLabel,
 .briefFactDetail {
@@ -225,9 +225,9 @@
   /* The library shelf runs wider than the centered hero so the tile grid sits
      4-up on a roomy window (matching the gallery spec); it reflows to 3/2 as
      the pane narrows. Shares its envelope with Discover's .cd-disc-wrap. */
-  max-width: var(--lib-shelf-max);
+  max-width: var(--tile-shelf-max);
   margin: 40px auto 0;
-  padding: 0 var(--lib-shelf-pad-x);
+  padding: 0 var(--tile-shelf-pad-x);
   box-sizing: border-box;
 }
 .hsec:last-child {
@@ -353,10 +353,10 @@
 .shelfEmptyTitle {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text);
 }
 .shelfEmptySub {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
   max-width: 360px;

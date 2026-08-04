@@ -5,7 +5,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import OutboxDecisionCard from "../components/OutboxDecisionCard";
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
+import { Text } from "../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -301,7 +301,7 @@ function renderBody(input: {
           <Button
             label="Open Settings"
             icon="Settings"
-            variant="soft"
+            variant="secondary"
             onPress={openSettings}
           />
         </View>
@@ -426,7 +426,7 @@ function renderBody(input: {
               <View style={styles.cardActions}>
                 <Button
                   label={busy === row.connectionId ? "Opening…" : "Reconnect"}
-                  variant="soft"
+                  variant="secondary"
                   disabled={busy === row.connectionId}
                   onPress={() => void reconnectConnection(row.connectionId)}
                   style={styles.cardBtn}
@@ -492,7 +492,7 @@ function DecisionCard(props: {
         <Button
           label="Deny"
           icon="X"
-          variant="soft"
+          variant="secondary"
           disabled={props.busy}
           onPress={() => void props.onDeny()}
           style={props.styles.cardBtn}
@@ -531,7 +531,7 @@ function NoticeCard(props: {
           {row.readAt === null ? (
             <Button
               label="Mark read"
-              variant="soft"
+              variant="secondary"
               disabled={props.busy}
               onPress={() => void props.onRead()}
               style={styles.cardBtn}
@@ -539,7 +539,7 @@ function NoticeCard(props: {
           ) : null}
           <Button
             label="Archive"
-            variant="soft"
+            variant="secondary"
             disabled={props.busy}
             onPress={() => void props.onArchive()}
             style={styles.cardBtn}

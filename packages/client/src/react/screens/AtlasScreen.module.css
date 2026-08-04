@@ -1,4 +1,4 @@
-/* The Vault Atlas (issue var(--text) Part B) — co-located styles for AtlasScreen.tsx
+/* The Vault Atlas (issue #441 Part B) — co-located styles for AtlasScreen.tsx
    and the two placeholder tabs. This file owns the page frame: head, the
    underline tab strip (shared vocabulary with the Gateway page), the Kinds
    loading/error lines, and the "coming in this PR" empty state the Relations
@@ -37,7 +37,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -45,8 +45,8 @@
 }
 .headMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -63,7 +63,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 10px 4px 9px;
@@ -74,8 +74,8 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    border-color 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 .tab:first-child {
   margin-left: 0;
@@ -92,7 +92,7 @@
 .loading,
 .error {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   padding: 24px 4px;
 }
@@ -109,7 +109,7 @@
   gap: 12px;
   padding: 56px 24px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-sunken);
 }
 .comingSoonIcon {

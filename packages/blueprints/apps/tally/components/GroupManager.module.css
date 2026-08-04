@@ -1,7 +1,7 @@
 .card {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xl);
   margin-bottom: 18px;
   padding: 14px;
 }
@@ -11,7 +11,7 @@
   display: flex;
   gap: 10px;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 
 .heading h3 {
@@ -22,7 +22,7 @@
 .rename,
 .add {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 .rename input,
@@ -34,7 +34,7 @@
   flex: 1;
   font: var(--t-body);
   min-width: 0;
-  padding: 8px 10px;
+  padding: var(--sp-2) 10px;
 }
 
 .members {

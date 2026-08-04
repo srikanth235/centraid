@@ -3,7 +3,7 @@
 }
 .asstH {
   margin: 12px 0 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--text);
 }
 .asstUl {
@@ -66,9 +66,9 @@
 }
 .asstRich code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   background: var(--bg-sunken);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 1px 4px;
 }
 .asstRef {
@@ -80,7 +80,7 @@
   border-radius: 999px;
   padding: 0 7px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   cursor: default;
 }
@@ -94,7 +94,7 @@
 .asstTableWrap {
   overflow-x: auto;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .asstTable {
   width: 100%;
@@ -119,35 +119,35 @@
   border-bottom: 0;
 }
 .asstCaption {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding: 6px 2px 0;
 }
 .asstStat {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 12px 16px;
   width: fit-content;
   min-width: 180px;
   background: var(--bg-elev);
 }
 .asstStatValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 24px;
   color: var(--text);
 }
 .asstStatLabel {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   margin-top: 2px;
 }
 .asstStatSub {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .asstChart {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 12px 14px 8px;
   background: var(--bg-elev);
 }
@@ -171,7 +171,7 @@
 .asstChartLegend {
   display: flex;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   padding-top: 6px;
 }
@@ -185,7 +185,7 @@
   top: 6px;
   right: 6px;
   border: 0.5px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text-faint);
   font-family: var(--font-mono);

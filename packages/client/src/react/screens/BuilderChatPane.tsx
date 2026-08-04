@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { formatBytes } from "../../format.js";
 import type {
   BuilderAttachmentRef,
   BuilderChatBridgeProps,
@@ -35,12 +36,6 @@ interface PendingBuilderAttachment {
   ref?: BuilderAttachmentRef;
 }
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export default function BuilderChatPane({
   onReady,

@@ -52,7 +52,7 @@
 }
 .heading {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 24px;
   letter-spacing: -0.025em;
@@ -100,7 +100,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   cursor: pointer;
 }
 .retry:hover {
@@ -127,15 +127,15 @@
 }
 .date {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   margin-bottom: 2px;
 }
 .title {
   margin: 0;
-  font-family: var(--font-mono);
-  font-weight: 650;
-  font-size: 16px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -151,29 +151,29 @@
   color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 6%, transparent);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 .installed {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: white;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 .pre {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text);
   background: color-mix(in oklab, var(--c-amber) 26%, transparent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 2px 7px;
 }
 
 .emptyNotes {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 
@@ -185,8 +185,8 @@
 }
 .notes h4 {
   margin: 14px 0 6px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--t-control-size);
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--text-soft) 85%, transparent);
@@ -206,13 +206,13 @@
 }
 .notes strong {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 .notes code {
   font-family: var(--font-mono);
   font-size: 0.9em;
   background: color-mix(in oklab, var(--text) 7%, transparent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
 }
 .notes a {

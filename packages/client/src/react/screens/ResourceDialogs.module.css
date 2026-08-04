@@ -1,4 +1,4 @@
-/* Dialogs for the Resource card (issue var(--text) follow-up): the "Compare modes"
+/* Dialogs for the Resource card (issue #528 follow-up): the "Compare modes"
    table and the "How we sized this" details sheet. Self-contained overlay
    chrome — the client has no shared <Modal> component, only the fixed-position
    idiom (styles/modal.module.css, VaultModal.module.css). We keep our own so
@@ -67,15 +67,15 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-mono);
-  font-weight: 650;
+  font-family: var(--font-sans);
+  font-weight: 600;
   font-size: 16.5px;
   letter-spacing: -0.015em;
   color: var(--text);
 }
 .sub {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -134,7 +134,7 @@
   display: grid;
   grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr));
   column-gap: 2px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .cmpHeadCell {
   padding: 0 2px 4px;
@@ -161,11 +161,11 @@
 }
 /* The radio is invisible, so the label carries the focus ring. */
 .cmpMode:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .cmpName {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   color: var(--text-soft);
   letter-spacing: -0.01em;
@@ -210,7 +210,7 @@
   padding: 9px 4px;
   border-top: 0.5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
@@ -239,10 +239,10 @@
 @media (max-width: 520px) {
   .cmp {
     grid-template-columns: 1fr repeat(4, minmax(46px, 1fr));
-    font-size: 11px;
+    font-size: var(--t-control-size);
   }
   .cmpCell,
   .cmpName {
-    font-size: 11px;
+    font-size: var(--t-control-size);
   }
 }

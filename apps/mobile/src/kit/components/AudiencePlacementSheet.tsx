@@ -1,9 +1,11 @@
 import React from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../replica/ReplicaProvider";
 import { family, radii, useTheme } from "../theme";
+import { Text } from "./NativeText";
+import { showToast } from "./Toast";
 
 export default function AudiencePlacementSheet({
   visible,
@@ -36,17 +38,18 @@ export default function AudiencePlacementSheet({
         targetVaultId,
       });
       onClose();
-      Alert.alert(
-        result.status === "executed" ? `${noun} shared` : "Share queued",
-        result.status === "executed"
-          ? "The audience copy is independent and its access receipt is saved."
-          : "This will sync automatically when the gateway reconnects."
-      );
+      showToast({
+        message:
+          result.status === "executed"
+            ? `${noun} shared — the audience copy and access receipt are saved.`
+            : `${noun} share queued — it will sync when the gateway reconnects.`,
+        tone: result.status === "executed" ? "accent" : "neutral",
+      });
     } catch (error) {
-      Alert.alert(
-        "Could not share",
-        error instanceof Error ? error.message : String(error)
-      );
+      showToast({
+        message: `Could not share: ${error instanceof Error ? error.message : String(error)}`,
+        tone: "danger",
+      });
     }
   };
   return (
@@ -114,7 +117,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 8,
   },
-  title: { fontFamily: family.displayBold, fontSize: 25 },
+  title: { fontFamily: family.sansBold, fontSize: 25 },
   copy: { marginTop: 5, maxWidth: 300, lineHeight: 20 },
   row: {
     minHeight: 58,

@@ -22,4 +22,5 @@ export * from "./store-core.js";
 export * from "./storage-manifest.js";
 export * from "./types.js";
 export * from "./windowed-bootstrap.js";
+export * from "./write-helpers.js";
 export * from "./worker-client.js";

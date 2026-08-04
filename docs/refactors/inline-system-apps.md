@@ -1,6 +1,6 @@
 # Inline system apps — iframe reserved for builder, app-scoped RPC, token-plane retirement
 
-**Issue:** #505 **Status:** in-progress **Owner session:** claude/centraid-issue-505-b4d50f
+**Issue:** #505 **Status:** done **Owner session:** claude/centraid-issue-505-b4d50f
 
 ## Goal
 
@@ -68,6 +68,7 @@ Notes settled by this inventory (issue open questions 2 and 3):
 | 2026-07-22 | Phases 2+3 landed: shell services + Tasks inline pilot | — | One wave (knip). Browser-verified: zero iframes, PWA-origin chunks only, write via replica intent dispatch, full offline render with gateway down. check:pr green |
 | 2026-07-22 | Phase 4 landed: all 8 apps inline | — | 7 parallel Opus conversions (agenda tally people notes docs locker photos), each browser-smoked sequentially. New shared service: `inline-blob-images` authorizer (vault media inline). Defects fixed in-wave: narrow-drawer mount flash (notes/docs/locker), photos remount crash + blob paint. Iframe path now builder-only. Per-package suites green in isolation; full check:pr deferred to end of migration (user direction) |
 | 2026-07-22 | Phases 5+6 landed: app-scoped RPC + docs write-back | — | `_tool/centraid_*` deleted, no dual routes: `POST /centraid/<app>/actions/<a>`, `POST /centraid/<app>/queries/<q>`, `GET /centraid/<app>/_describe`. Behavior-identical dispatch; describe became GET; cross-app web-session now 401 at authorizer. ARCHITECTURE render-paths section, CSP trap scoped served-only, glossary rows, protocol.md RPC table. app-engine 498 / gateway 827 / client 1073 / extension 44 green |
+| 2026-08-01 | Status rechecked | — | All eight bundled apps remain registered in `inlineApps.ts`; the old tool shim is absent from the router; builder preview remains the served iframe path. |
 
 ## Rejected alternatives
 

@@ -16,12 +16,15 @@ import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
+import { assertNoOpenNightlyQualityIssues } from "./nightly-quality-blockers.mjs";
 import { buildSurfaceMatrix, defaultShipSurfaceIds } from "./surfaces.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const args = new Set(process.argv.slice(2));
 const allowDirty = args.has("--allow-dirty");
 const skipCheck = args.has("--skip-check");
+
+assertNoOpenNightlyQualityIssues();
 
 function sh(cmd) {
   return execSync(cmd, { cwd: root, encoding: "utf8" });

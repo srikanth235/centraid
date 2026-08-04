@@ -15,7 +15,7 @@
 .head {
   margin: 0;
   font: var(--t-title);
-  letter-spacing: var(--tracking-h);
+  letter-spacing: -0.01em;
 }
 .grid {
   flex: 1;
@@ -23,7 +23,7 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: 3px;
+  gap: var(--sp-1);
   align-content: start;
 }
 .empty {
@@ -55,7 +55,7 @@
   outline-offset: -2px;
 }
 .tile[aria-pressed="true"] {
-  outline: 3px solid var(--_accent);
+  outline: 3px solid var(--accent);
   outline-offset: -3px;
   border-radius: var(--ph-tile-r-sel);
 }
@@ -68,7 +68,9 @@
   height: 1.25rem;
   border-radius: 50%;
   background: var(--accent-deep);
-  color: var(--on-accent);
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -83,6 +85,6 @@
 .count {
   margin-right: auto;
   color: var(--text-soft);
-  font-family: var(--mono);
-  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: var(--t-small-size);
 }

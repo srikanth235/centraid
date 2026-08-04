@@ -1,17 +1,11 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -158,10 +152,10 @@ export default function PhotosSearch({
     >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="search" size={17} color={colors.textSoft} />
+          <Icon name="search" size={17} color={colors.textSoft} />
           <TextInput
             autoFocus
             value={term}
@@ -188,7 +182,7 @@ export default function PhotosSearch({
           <Text
             style={[
               styles.chipText,
-              { color: favoriteOnly ? colors.onAccent : colors.textSoft },
+              { color: favoriteOnly ? colors.textInv : colors.textSoft },
             ]}
           >
             Favorites
@@ -204,7 +198,7 @@ export default function PhotosSearch({
           <Text
             style={[
               styles.chipText,
-              { color: videoOnly ? colors.onAccent : colors.textSoft },
+              { color: videoOnly ? colors.textInv : colors.textSoft },
             ]}
           >
             Videos
@@ -391,7 +385,7 @@ function FilterChip({
       <Text
         style={[
           styles.chipText,
-          { color: active ? colors.onAccent : colors.textSoft },
+          { color: active ? colors.textInv : colors.textSoft },
         ]}
       >
         {label}

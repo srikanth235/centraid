@@ -644,6 +644,7 @@ export interface ReplicaRowWire {
   entity: string;
   rowId: string;
   values: Record<string, unknown>;
+  rowVersion?: number;
   oversizedFields?: string[];
 }
 
@@ -671,6 +672,7 @@ export function shapeReplicaRow(
     entity,
     rowId,
     values,
+    ...(row.rowVersion === undefined ? {} : { rowVersion: row.rowVersion }),
     ...(oversizedFields.length > 0 ? { oversizedFields } : {}),
   };
 }

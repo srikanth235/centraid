@@ -19,20 +19,20 @@
   margin-bottom: 10px;
 }
 .eyebrow {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-soft);
 }
 .eyebrow.toneDanger {
   color: var(--danger);
 }
 .eyebrow.toneAccent {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .eyebrowCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-faint);
 }
@@ -58,7 +58,7 @@
   max-width: 126px;
   min-height: 28px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-small);

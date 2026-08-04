@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListRef } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
@@ -11,17 +10,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
 import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import { gridImageProps } from "./grid-image";
 import { imageSource } from "./media-source";
@@ -280,7 +274,7 @@ const AssetCell = memo(
           ) : null}
           {asset.backupState !== "backed-up" &&
           asset.backupState !== "remote-only" ? (
-            <Feather name="cloud" size={14} color="#fff" />
+            <Icon name="cloud" size={14} color="#fff" />
           ) : null}
         </View>
         {asset.scopeLabels?.length ? (
@@ -542,7 +536,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 8,
   },
-  monthText: { fontFamily: family.displayBold, fontSize: 20 },
+  monthText: { fontFamily: family.sansBold, fontSize: 20 },
   rail: { borderRadius: 2, height: "100%", width: 3 },
   row: { flexDirection: "row", gap: 2, marginBottom: 2 },
   scrubber: {

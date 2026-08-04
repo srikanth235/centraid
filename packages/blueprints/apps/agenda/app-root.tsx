@@ -37,7 +37,6 @@ import {
   readFailed,
   subscribeReadUpdates,
   wireAttachInput,
-  wireThemeToggle,
 } from "./kit.ts";
 import type { ReadSubscription } from "./kit.ts";
 import { createLogic } from "./logic.ts";
@@ -128,7 +127,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Data-load bookkeeping (the served app's module-level `let`s → refs so the
   // stable `load` closure keeps its own persistent state across calls).
@@ -422,9 +420,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     [logic, openEventDetail, visibleEvents]
   );
 
-  // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
+  // ---- chrome wiring: attach input, doorbell, focus, keys, width ----
   useEffect(() => {
-    if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
     const attachInput = byId("attachInput") as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
@@ -629,9 +626,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onSearchKeyDown={onSearchKeyDown}
         searchRef={(el) => {
           searchInputRef.current = el;
-        }}
-        themeButtonRef={(el) => {
-          themeBtnRef.current = el;
         }}
         sidebarMini={
           <MiniMonth

@@ -6,7 +6,7 @@
    .centraid-inline-scope), so this file references those directly and never
    loads tokens.css/wall.css. The tally-SPECIFIC tokens that app.css's :root
    added on top of that layer (money colours --pos/--neg, the accent-derived
-   --accs/--accd/--accd-fg, and the --t-strong/--tk-* aliases the reused
+   --accs/--accd/--accd-fg and the --tk-* aliases the reused
    component CSS modules read) are NOT in the shared layer, so they are folded
    in here on .shell (trap #3). */
 
@@ -15,12 +15,11 @@
   /* Tally-specific tokens folded from app.css :root (light). The shared
      blueprint layer supplies everything else; these are the app's own palette
      add-ons the reused components/*.module.css reference. */
-  --pos: #0fa678;
-  --neg: #e2603a;
-  --accs: color-mix(in oklab, var(--_accent) 13%, transparent);
-  --accd: color-mix(in oklab, var(--_accent) 90%, #04150f);
+  --pos: var(--success);
+  --neg: var(--danger);
+  --accs: var(--accent-soft);
+  --accd: var(--accent-deep);
   --accd-fg: var(--accd);
-  --t-strong: 600 0.855rem/1.4 var(--font-sans);
   --tk-h: -0.01em;
   --tk-eye: 0.09em;
   --app-side-width: 260px;
@@ -30,43 +29,30 @@
   --app-brand-radius: 9px;
   --app-brand-background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, #fff),
-    var(--accd)
+    color-mix(in oklab, var(--app-identity) 78%, var(--text-inv)),
+    var(--app-identity)
   );
-  --app-brand-font: var(--t-strong);
+  --app-brand-font: var(--t-body-strong);
   --app-side-foot-padding: 14px;
   --app-topbar-padding: 14px 22px;
-  --app-scrim-background: rgba(14, 30, 26, 0.4);
+  --app-scrim-background: var(--scrim);
 }
 
 .shell.shell :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
-/* Dark overrides for the folded tally tokens — mirrors app.css's dark block.
-   Emitted for both the explicit [data-theme='dark'] and the standalone
-   prefers-color-scheme fallback, the same two-selector shape the token layer
-   uses. */
-:global(:root[data-theme="dark"]) .shell {
-  --accd: color-mix(in oklab, var(--_accent) 78%, hsl(185 40% 8%));
-  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  --neg: #f0805a;
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .shell {
-    --accd: color-mix(in oklab, var(--_accent) 78%, hsl(185 40% 8%));
-    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
-    --neg: #f0805a;
-  }
-}
+/* No dark block: --pos/--neg/--accs/--accd now alias --success/--danger/
+   --accent-soft/--accent-deep, each of which already carries its own dark
+   ramp from the blueprint token layer (#686). */
 
 /* Knob: appFont swaps the body/UI face between sans and mono. The host sets
    data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
    :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
    that wrapper. */
 :global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--mono);
+  --font-sans: var(--font-mono);
 }
 
 /* ---------- Sidebar shell ---------- */
@@ -106,8 +92,8 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: #fff;
-  font: var(--t-strong);
+  color: var(--text-inv);
+  font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   margin-bottom: 14px;
 }
@@ -123,10 +109,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 8px 8px;
+  padding: var(--sp-4) var(--sp-2) var(--sp-2);
 }
 .seclabel span {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
@@ -136,7 +122,7 @@
   height: 22px;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--text-faint);
   display: flex;
   align-items: center;
@@ -153,7 +139,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 4px 2px;
+  padding: var(--sp-2) var(--sp-1) 2px;
   color: var(--text-faint);
 }
 .consent svg {
@@ -189,18 +175,18 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 .headAv {
   width: 42px;
   height: 42px;
-  border-radius: 11px;
+  border-radius: var(--r-md);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: #fff;
+  color: var(--text-inv);
 }
 .title {
   font: var(--t-title);
@@ -237,7 +223,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
-  padding: 8px 14px 8px 34px;
+  padding: var(--sp-2) 14px var(--sp-2) 34px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
@@ -246,7 +232,7 @@
   color: var(--text-faint);
 }
 .search input:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .iconbtn {
@@ -278,7 +264,7 @@
   border: 1px solid var(--line);
   background: var(--bg-elev);
   border-radius: var(--r-md);
-  padding: 12px 16px 12px 34px;
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) 34px;
   margin: 14px 22px 0;
   font: var(--t-small);
   color: var(--text-soft);
@@ -292,7 +278,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--_accent);
+  background: var(--app-identity);
   box-shadow: 0 0 0 3px var(--accs);
 }
 .banner strong {
@@ -320,13 +306,13 @@
 /* The kit modal heading cap (app.css kept this global, keyed on the kit class);
    modals render inside .shell, so re-express it here as a scoped global rule. */
 :global(.kit-modal) h2 {
-  margin: 0 0 16px;
+  margin: 0 0 var(--sp-4);
   font: var(--t-title);
   font-size: 20px;
 }
 /* The title face on kit avatars — the one Tally touch app.css kept global. */
 :global(.kit-avatar) {
-  font-family: var(--font-title);
+  font-family: var(--font-sans);
 }
 
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell.
@@ -341,10 +327,10 @@
   composes: kit-app-side-open from global;
 }
 .shell.isNarrow .topbar {
-  padding: 12px 14px;
+  padding: var(--sp-3) 14px;
 }
 .shell.isNarrow .scroll {
-  padding: 16px 14px;
+  padding: var(--sp-4) 14px;
 }
 .shell.isNarrow .search {
   display: none;

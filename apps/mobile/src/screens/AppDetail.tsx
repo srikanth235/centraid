@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ActivityIndicator,
   BackHandler,
@@ -24,6 +23,7 @@ import type {
 
 import AppHeader from "../kit/components/AppHeader";
 import Button from "../kit/components/Button";
+import { Text } from "../kit/components/NativeText";
 import { spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { dispatch } from "../lib/bridge/dispatch";
@@ -266,7 +266,7 @@ function ErrorState({
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyMsg}>{message}</Text>
       <View style={styles.emptyAction}>
-        <Button label={actionLabel} onPress={onAction} variant="soft" />
+        <Button label={actionLabel} onPress={onAction} variant="secondary" />
       </View>
     </View>
   );

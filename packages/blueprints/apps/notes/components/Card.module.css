@@ -12,9 +12,9 @@
   break-inside: avoid;
   margin-bottom: 14px;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
-  padding: 16px 16px 13px;
+  padding: var(--sp-4) var(--sp-4) 13px;
   cursor: pointer;
   transition:
     border-color 0.16s var(--ease),
@@ -24,7 +24,7 @@
    the pin button. It carries the card's radius so its focus outline follows the
    rounded corner the article always had. */
 .cardOpen {
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
 }
 .card:hover,
 .card:has(.cardOpen:focus-visible) {
@@ -38,7 +38,7 @@
 .cardHead {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .cardTitle {
   flex: 1;
@@ -69,7 +69,7 @@
     color 0.15s var(--ease);
 }
 .pinBtn.pinned {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   opacity: 1;
 }
 .cardPreview {
@@ -103,27 +103,27 @@
   transition: width 0.3s var(--ease);
 }
 .progressLabel {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
 .cardMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-top: 11px;
 }
 .cardNotebook {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
 .cardWhen {
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
@@ -134,10 +134,10 @@
 .cardTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 2px 0 8px;
+  gap: var(--sp-1);
+  margin: 2px 0 var(--sp-2);
 }
 .cardTags .tagChipStatic {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px var(--sp-2);
 }

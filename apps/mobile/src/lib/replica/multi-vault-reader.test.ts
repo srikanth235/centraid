@@ -370,6 +370,45 @@ describe(MultiVaultReplicaReader, () => {
     reader.close();
   });
 
+  test("reports partial coverage and a conservative cursor when one scope is empty", async () => {
+    const root = tempDirSync("centraid-partial-mounted-");
+    const ready = path.join(root, "ready.db");
+    const empty = path.join(root, "empty.db");
+    seed(ready, "ready", "r");
+    const emptyStore = new ReplicaSqliteStore(
+      new NodeSqliteDriver(empty),
+      "empty"
+    );
+    emptyStore.close();
+
+    const reader = new MultiVaultReplicaReader(
+      new NodeSqliteDriver(path.join(root, "mounted.db")),
+      [
+        {
+          vaultId: "ready",
+          label: "Ready",
+          role: "write",
+          databaseName: ready,
+        },
+        {
+          vaultId: "empty",
+          label: "Empty",
+          role: "read",
+          databaseName: empty,
+        },
+      ]
+    );
+
+    const result = await reader.read("docs", {
+      entity: "core.document",
+      limit: 100,
+    });
+    expect(result.rows).toHaveLength(1);
+    expect(result.coverage).toBe("partial");
+    expect(result.cursor).toStrictEqual({ epoch: "mounted", seq: 0 });
+    reader.close();
+  });
+
   test("holds the 50k-item ten-year cold-read and local-search budgets", async () => {
     const root = tempDirSync("centraid-household-");
     const fixtureScopes = [

@@ -1,4 +1,4 @@
-/* Kinds tab — the periodic table of the ontology (issue var(--text) B1). Co-located
+/* Kinds tab — the periodic table of the ontology (issue #441 B1). Co-located
    with AtlasKindsTab.tsx. A census sentence up top, then one grid section per
    ontology pack where every kind holds a permanent cell (populated cells carry
    a count + write-pulse sparkline; empty kinds are dashed ghosts), and a
@@ -19,8 +19,8 @@
 }
 .censusSentence {
   margin: 0;
-  font: var(--t-h2);
-  font-family: var(--font-mono);
+  font: var(--t-title);
+  font-family: var(--font-sans);
   color: var(--text-soft);
   max-width: 62ch;
 }
@@ -61,8 +61,8 @@
   color: var(--text-faint);
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    background 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
 .metricOption[data-active="true"] {
   color: var(--text);
@@ -70,7 +70,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .metricOption:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .metricOption:has(:disabled) {
@@ -88,7 +88,7 @@
   background: var(--bg-elev);
   color: var(--text-faint);
   cursor: pointer;
-  transition: color 0.15s var(--ease, ease);
+  transition: color 0.15s var(--ease);
 }
 .refresh:hover {
   color: var(--text);
@@ -124,8 +124,8 @@
 }
 .packMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -155,8 +155,8 @@
   color: var(--text);
   cursor: pointer;
   transition:
-    border-color 0.15s var(--ease, ease),
-    transform 0.1s var(--ease, ease);
+    border-color 0.15s var(--ease),
+    transform 0.1s var(--ease);
 }
 .card:hover {
   border-color: var(--accent);
@@ -174,7 +174,7 @@
   border-color: var(--line-strong);
 }
 .cardLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.25;
@@ -184,7 +184,7 @@
   margin-top: auto;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -200,7 +200,7 @@
   margin-top: auto;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -240,7 +240,7 @@
   color: var(--text-faint);
   cursor: pointer;
   border-top: 0.5px solid var(--line);
-  transition: color 0.15s var(--ease, ease);
+  transition: color 0.15s var(--ease);
 }
 .machineryToggle:hover {
   color: var(--text);
@@ -251,8 +251,8 @@
 }
 .machineryMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -266,7 +266,7 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 6px 10px;
@@ -286,7 +286,7 @@
 .machineryPack {
   color: var(--text-ghost);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
 }
 .numCol {
   text-align: right;

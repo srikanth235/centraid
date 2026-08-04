@@ -780,6 +780,7 @@ jobs:
           path: |
             artifacts/perf
             artifacts/scale
+            artifacts/year3-cache
           key: quality-history-${{ runner.os }}-${{ github.run_id }}
           restore-keys: quality-history-${{ runner.os }}-
       - run: sudo apt-get update && sudo apt-get install -y strace
@@ -789,6 +790,8 @@ jobs:
         run: bun run test:perf
       - id: scale
         continue-on-error: true
+        env:
+          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: bun run test:scale
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -823,7 +826,9 @@ jobs:
           turbo-cache: "true"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: artifacts/scale
+          path: |
+            artifacts/scale
+            artifacts/year3-cache
           key: quality-history-restore-${{ runner.os }}-${{ github.run_id }}
           restore-keys: quality-history-restore-${{ runner.os }}-
       - run: bun run build
@@ -835,6 +840,7 @@ jobs:
       - name: Restore a 10 GiB year-3 vault
         env:
           CENTRAID_SCALE_RESTORE_GIB: "10"
+          CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

@@ -215,7 +215,6 @@ vi.mock(
   () =>
     ({
       family: {
-        displayBold: "display",
         monoMedium: "mono-medium",
         monoRegular: "mono",
         sansBold: "sans-bold",
@@ -229,7 +228,7 @@ vi.mock(
   import("../lib/profile"),
   () =>
     ({
-      BRAND_TEAL: "#22a78f",
+      BRAND: "#22a78f",
       PROFILE_COLORS: ["#22a78f", "#4e68dd", "#e55772"],
       initialsOf: (name: string) =>
         name.trim() ? name.trim().slice(0, 1).toUpperCase() : "·",

@@ -20,6 +20,7 @@ import { renameSync, rmSync } from "node:fs";
 import type { VaultDb } from "../db.js";
 import { readBlobStoreSettings } from "../db.js";
 import { payloadAad } from "../ingest/staging.js";
+import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import {
   SEALED_COLUMNS,
   SEALED_PAYLOAD_FIELDS,
@@ -103,7 +104,9 @@ export function resealVaultKey(
   let resealedCells = 0;
   let resealedStaged = 0;
   db.vault.exec("BEGIN");
+  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
+    replicaCommit = beginReplicaCommit(db.vault);
     // Live band: every sealed column of every entity — canonical (static
     // registry) AND ext-band (declared in consent_app_ext, issue #298 item 9).
     for (const entity of sealedEntities(db)) {
@@ -161,6 +164,7 @@ export function resealVaultKey(
     }
     // The stamped fingerprint flips with the data, in the same transaction.
     stampSealKeyFingerprint(db.vault, newKey);
+    endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
   } catch (error) {
     db.vault.exec("ROLLBACK");

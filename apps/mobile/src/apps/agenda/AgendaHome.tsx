@@ -1,19 +1,13 @@
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useMemo, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -108,10 +102,11 @@ export default function AgendaHome({
 
   const create = async (input: AgendaCreateInput): Promise<boolean> => {
     if (!session || !calendarId) {
-      Alert.alert(
-        "Calendar unavailable",
-        "Sync a calendar before creating an event."
-      );
+      showToast({
+        message:
+          "Calendar unavailable — sync a calendar before creating an event.",
+        tone: "danger",
+      });
       return false;
     }
     const rowId = `optimistic-${Date.now()}`;
@@ -214,20 +209,20 @@ export default function AgendaHome({
             accessibilityLabel="Search events"
             onPress={() => setSearchOpen((open) => !open)}
           >
-            <Feather name="search" size={21} color={colors.text} />
+            <Icon name="search" size={21} color={colors.text} />
           </Pressable>
           <Pressable
             accessibilityLabel="Create event"
             onPress={() => setCreateOpen(true)}
           >
-            <Feather name="plus" size={24} color={colors.accent} />
+            <Icon name="plus" size={24} color={colors.accent} />
           </Pressable>
         </View>
       </View>
       <ReplicaStatusBar />
       {searchOpen ? (
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="search" size={16} color={colors.textSoft} />
+          <Icon name="search" size={16} color={colors.textSoft} />
           <TextInput
             autoFocus
             value={query}
@@ -242,7 +237,7 @@ export default function AgendaHome({
               setSearchOpen(false);
             }}
           >
-            <Feather name="x" size={17} color={colors.textSoft} />
+            <Icon name="x" size={17} color={colors.textSoft} />
           </Pressable>
         </View>
       ) : null}
@@ -278,10 +273,10 @@ export default function AgendaHome({
         </Pressable>
         <View style={styles.navArrows}>
           <Pressable onPress={() => move(-1)}>
-            <Feather name="chevron-left" size={22} color={colors.textSoft} />
+            <Icon name="chevron-left" size={22} color={colors.textSoft} />
           </Pressable>
           <Pressable onPress={() => move(1)}>
-            <Feather name="chevron-right" size={22} color={colors.textSoft} />
+            <Icon name="chevron-right" size={22} color={colors.textSoft} />
           </Pressable>
         </View>
         <Text style={[styles.rangeTitle, { color: colors.text }]}>
@@ -328,7 +323,7 @@ export default function AgendaHome({
                   {String(calendar.name ?? "Calendar")}
                 </Text>
                 {shown ? (
-                  <Feather name="check" size={12} color={colors.accent} />
+                  <Icon name="check" size={12} color={colors.accent} />
                 ) : null}
               </Pressable>
             );
@@ -458,7 +453,7 @@ const EventRow = memo(
           {event.isRecurrenceInstance ? " · repeating" : ""}
         </Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.textFaint} />
+      <Icon name="chevron-right" size={18} color={colors.textFaint} />
     </Pressable>
   )
 );

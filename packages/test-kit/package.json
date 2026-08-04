@@ -15,6 +15,7 @@
     "./temp-dir": "./src/temp-dir.ts",
     "./vault": "./src/vault.ts",
     "./volume-fixture": "./src/volume-fixture.ts",
+    "./year3-vault": "./src/year3-vault.ts",
     "./fast-check": "./src/fast-check.ts"
   },
   "scripts": {

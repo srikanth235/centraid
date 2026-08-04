@@ -20,6 +20,11 @@ import { icons, toBlueprintCss } from "@centraid/design";
  * Returns the ordered list of prompt blocks to splice in below the
  * `authoring-centraid-apps` skill. Each block is a single string starting with
  * its `###` heading so it renders cleanly in the system prompt.
+ *
+ * The prose rationale behind everything these blocks assert — the "field
+ * notebook" point of view, the token-contract-as-OS model, and the
+ * type/colour/spacing/motion rules — is the root `DESIGN.md`. Read it
+ * before changing what is grounded here.
  */
 export function buildUiGroundingBlocks(): string[] {
   return [
@@ -52,11 +57,12 @@ function renderDesignTokensBlock(): string {
     "",
     "**Rules:**",
     "",
-    "- App identity: set `--app-hue` (drives the whole neutral ramp — ink, lines, surfaces, shadows) and `--accent` (one of the palette vars `--c-amber`/`--c-forest`/`--c-indigo`/`--c-ochre`/`--c-rose`/`--c-slate`/`--c-teal`/`--c-violet`) in your app.css `:root`. Everything else derives.",
+    "- App identity: set `--app-hue` (drives the whole neutral ramp — ink, lines, surfaces, shadows) and `--app-identity` (one of the palette vars `--c-amber`/`--c-forest`/`--c-indigo`/`--c-ochre`/`--c-rose`/`--c-slate`/`--c-teal`/`--c-violet`) in your app.css `:root`. The product `--accent` is fixed Centraid teal for actions and selection. Everything else derives.",
     "- Colors: `var(--accent)`, `var(--accent-soft)`, `var(--accent-deep)`, `var(--text)`, `var(--text-soft)`, `var(--text-faint)`, `var(--text-inv)`, `var(--bg)`, `var(--bg-elev)`, `var(--bg-sunken)`, `var(--line)`, `var(--line-strong)`, `var(--danger)`. **Never** write `#hexcodes` or `rgb()` literals for foreground/background/border.",
-    "- Accent indirection: paint with `var(--_accent)` (resolves the appColor knob over `--accent`) wherever the accent shows; `--sel`/`--selb` for selection tint/border.",
-    "- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-card)`, `var(--r-pill)` — do not pick px values by feel.",
-    "- Type: `font: var(--t-title|--t-body|--t-body-strong|--t-small|--t-tiny|--t-mono)` shorthands; mono (`var(--mono)`) for counts, dates, metadata.",
+    "- Accent indirection: paint actions with `var(--accent)` and selection with `var(--bg-sel)`/`var(--line-sel)`; paint identity marks with `var(--app-identity)`. Use `--accent-soft`/`--line-strong` only where the recipe calls for an accent wash or separation.",
+    "- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-xl)`, `var(--r-pill)` — do not pick px values by feel.",
+    "- Spacing: `var(--sp-1)`…`var(--sp-7)` = 4 · 8 · 12 · 16 · 24 · 32 · 48px. **Every** padding, margin, and gap comes off this scale — never pick a px or rem gutter by feel. A gutter that is not on a rung is a bug, not a nuance.",
+    "- Type: `font: var(--t-title|--t-body|--t-body-strong|--t-small|--t-control|--t-mono)` shorthands; mono (`var(--font-mono)`) for counts, dates, metadata. **Never write `font-size:`** — and note a `font` shorthand also RESETS `font-family`, so follow it with `font-family: inherit;` wherever the app-font knob must keep flowing down.",
     "- Theme: light/dark flips by `data-theme` on `<html>` — the generated token baseline handles BOTH the explicit attribute and the `prefers-color-scheme` fallback; never write your own dark-theme token blocks. The inline live-settings bridge in the scaffolded `index.html` keeps theme in sync with the shell — do not delete it or move it after the stylesheets.",
     "- Fonts: inherit from `<body>` (`var(--font-sans)` system stack). Don't load web fonts.",
     "",
@@ -128,19 +134,50 @@ function renderIconSetBlock(): string {
 }
 
 /**
- * `### Component primitives` — copy-pasteable HTML/CSS for the
- * recurring patterns (header, primary button, input, list row, empty
- * state, loading, error). Models follow examples vastly better than
- * rules, so this is intentionally concrete; the matching utility
- * classes are present in the scaffold's `app.css`.
+ * `### Component primitives` — copy-pasteable HTML for the recurring
+ * patterns. There is exactly ONE component vocabulary (issue #686 A3):
+ * the `.kit-*` classes from `packages/design/kit/kit.css`, which the
+ * app-engine serves to every app surface through its shared-asset
+ * fallback (the scaffold's `index.html` links `./kit.css`). The scaffold's
+ * `app.css` no longer ships a parallel `.primary` / `.ghost` / `.del` /
+ * `.muted` set — it keeps layout scaffolding only.
+ *
+ * Models follow examples vastly better than rules, so this stays concrete.
  */
 function renderComponentPrimitivesBlock(): string {
   return [
-    "### Component primitives",
+    "### Component primitives — one vocabulary: `.kit-*`",
     "",
-    "Reuse these shapes verbatim. The scaffold's `app.css` already styles every",
-    "class below — when you add new UI, prefer composing these over inventing",
-    "new visual primitives.",
+    "`kit.css` is served to **every** app surface (the scaffold's `index.html`",
+    "links `./kit.css`; the runtime resolves it from the one shared kit dir). Its",
+    "`.kit-*` classes are the component layer — buttons, inputs, chips, banners,",
+    "empty states, toasts, skeletons. **Never hand-roll a second button or input**",
+    "style, and never invent a `.primary` / `.ghost` / `.muted` class of your own;",
+    "that vocabulary was removed.",
+    "",
+    "The scaffold's `app.css` styles only **layout scaffolding** the kit has no",
+    "class for: `.head`, `.add-bar`, `.list`, `.row`, `.row-text`, `.surface`",
+    "(generic card), `.loading`, `.error`, `.circle` (round toggle). Compose kit",
+    "components inside those.",
+    "",
+    "| Need | Class |",
+    "| --- | --- |",
+    "| Button (secondary/default) | `.kit-btn` |",
+    "| The ONE primary action | `.kit-btn primary` |",
+    "| Destructive button | `.kit-btn danger` |",
+    "| Quiet icon button (row delete, close) | `.kit-icon-btn` (add `danger`) |",
+    "| Unstyled clickable wrapper | `.kit-plain-btn` |",
+    "| Text input / textarea / select | `.kit-input` (`.kit-input bare` inline) |",
+    "| Search field | `.kit-search` |",
+    "| Filter / toggle pill | `.kit-chip` (`.kit-chip quiet`) |",
+    "| Segmented control | `.kit-seg` (`.kit-seg stretch`) |",
+    "| Inline notice / consent banner | `.kit-banner` (`.kit-banner notice`) |",
+    "| Zero state | `.kit-empty` + `.kit-empty-icon` / `.kit-empty-title` / `.kit-empty-sub` |",
+    "| Zero state inside a card | `.kit-empty-card` |",
+    "| Loading placeholder | `.kit-skeleton` |",
+    "| Secondary / tertiary text | `.kit-muted` / `.kit-small` |",
+    "| Page footer meta | `.kit-foot` |",
+    "| Transient confirmation | `.kit-toasts` / `.kit-toast` |",
     "",
     "**Page shell**",
     "",
@@ -148,7 +185,7 @@ function renderComponentPrimitivesBlock(): string {
     "<main>",
     '  <header class="head">',
     "    <h1>Your app</h1>",
-    '    <p class="muted">Short tagline or count</p>',
+    '    <p class="kit-muted">Short tagline or count</p>',
     "  </header>",
     "  <!-- content -->",
     "</main>",
@@ -158,8 +195,8 @@ function renderComponentPrimitivesBlock(): string {
     "",
     "```html",
     '<form class="add-bar" autocomplete="off">',
-    '  <input type="text" name="title" placeholder="Add something…" enterkeyhint="done" />',
-    '  <button type="submit" class="primary">Add</button>',
+    '  <input class="kit-input" type="text" name="title" placeholder="Add something…" enterkeyhint="done" />',
+    '  <button type="submit" class="kit-btn primary">Add</button>',
     "</form>",
     "```",
     "",
@@ -172,7 +209,7 @@ function renderComponentPrimitivesBlock(): string {
     '      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12l2 2 4-4M14 6l4 4-8 8-3-3" /></svg>',
     "    </button>",
     '    <span class="row-text">Row label</span>',
-    '    <button class="del" aria-label="Delete">',
+    '    <button class="kit-icon-btn danger" aria-label="Delete">',
     '      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" /></svg>',
     "    </button>",
     "  </div>",
@@ -182,14 +219,21 @@ function renderComponentPrimitivesBlock(): string {
     "**Empty / loading / error states (the triad — see UX rules below)**",
     "",
     "```html",
-    '<p class="empty" hidden>Nothing here yet. Add one above.</p>',
+    '<div class="kit-empty" hidden>',
+    '  <p class="kit-empty-title">Nothing here yet</p>',
+    '  <p class="kit-empty-sub">Add one above.</p>',
+    "</div>",
     '<p class="loading" hidden>Loading…</p>',
-    '<p class="error" role="alert" hidden>Something went wrong. <button class="link" type="button">Retry</button></p>',
+    '<p class="error" role="alert" hidden>Something went wrong. <button class="kit-btn" type="button">Retry</button></p>',
     "```",
     "",
-    '**Secondary / quiet button** — same shape as `.primary`, swap to `class="ghost"` (transparent bg, `var(--text-soft)` text).',
+    '**Card / surface** — wrap in `<div class="surface">` for an elevated panel; the scaffold styles it with `background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-xl); padding: var(--sp-4);`.',
     "",
-    '**Card / surface** — wrap in `<div class="surface">` for an elevated panel; the scaffold styles it with `background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-card);`.',
+    "**Cascade trap.** `index.html` loads `app.css` **before** `kit.css`, so a rule",
+    "of yours at equal specificity (`.kit-btn { … }`) always loses. To adjust a kit",
+    "component, use a compound selector — `.kit-btn.my-variant`, or",
+    "`.my-panel .kit-input` — which outranks kit.css on specificity no matter the",
+    "order. Never reach for `!important`.",
   ].join("\n");
 }
 
@@ -212,8 +256,8 @@ function renderUxRulesBlock(): string {
     "",
     "**State triad.** Every async list or fetch view must render *all three*:",
     "",
-    '- **Empty** — the natural zero state ("Nothing here yet. Add one above."), styled with `.empty`.',
-    "- **Loading** — a short `Loading…` or skeleton; show within 150ms, never silence.",
+    '- **Empty** — the natural zero state ("Nothing here yet. Add one above."), rendered with `.kit-empty` + `.kit-empty-title` / `.kit-empty-sub`.',
+    "- **Loading** — a short `Loading…` (`.loading`) or a `.kit-skeleton` placeholder; show within 150ms, never silence.",
     '- **Error** — `role="alert"` with a retry affordance; render with `.error`.',
     "",
     "Toggle these via `hidden` so a screen reader doesn't announce all three at once.",
@@ -235,7 +279,7 @@ function renderUxRulesBlock(): string {
     "",
     '**Forms.** Always `<label for="...">` (or `aria-label`); `autocomplete=`, `enterkeyhint=`, and `inputmode=` set appropriately. Disabled submit until the input has content.',
     "",
-    "**CSS discipline.** No `!important`. No deep selectors (`> > >`). No inline styles unless dynamic. No `font-family` overrides — the system stack from the scaffold is the contract.",
+    "**CSS discipline.** No `!important`. No deep selectors (`> > >`). No inline styles unless dynamic. No `font-family` overrides — the system stack from the scaffold is the contract. No hardcoded colours, radii, spacing, or font sizes: if a value has no token, you are reaching for a value the design system did not intend. Compose `.kit-*` components; add only layout glue of your own.",
     "",
     "**Visual feedback (preview snapshot).** The desktop shell keeps a fresh PNG",
     "of the live preview iframe at `./.preview/snapshot.png` (cwd-relative — it",
@@ -267,8 +311,9 @@ function renderExemplarsBlock(): string {
     "package examples and do not imply a separately served React runtime.",
     "",
     "Keep the scaffold loading/error/denied states, subscribe with",
-    "`window.centraid.onChange(refresh)`, and use kit.css classes through normal",
-    "`class` attributes. The component-primitives block above captures the",
-    "load-bearing visual patterns.",
+    "`window.centraid.onChange(refresh)`, and reach for a `.kit-*` class through a",
+    "normal `class` attribute before writing any component CSS of your own. The",
+    "component-primitives block above is the whole vocabulary; app.css is for",
+    "layout only.",
   ].join("\n");
 }

@@ -19,7 +19,7 @@
   background: transparent;
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   display: flex;
   align-items: center;
@@ -61,21 +61,21 @@
 }
 .stageHead h2 {
   margin: 0 0 4px 0;
-  font-size: 20px;
+  font-size: var(--t-title-size);
   font-weight: 600;
   color: var(--text);
 }
 .stageHead p {
   margin: 0;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .refreshBtn {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   padding: 6px 12px;
 }
 .refreshBtn svg {
@@ -87,7 +87,7 @@
   border: 1px dashed var(--line);
   border-radius: 12px;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   text-align: center;
 }
 .emptyQuiet {
@@ -97,8 +97,8 @@
 .empty code {
   background: var(--bg-sunken);
   padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: var(--r-sm);
+  font-size: var(--t-mono-size);
 }
 .statGrid {
   margin-top: 24px;
@@ -123,7 +123,7 @@
 }
 .statValue.statMono {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
 }
 .statValue.statMuted {
@@ -135,7 +135,7 @@
 }
 .statSub {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .logs {
@@ -151,7 +151,7 @@
 }
 .logsChip {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -175,7 +175,7 @@
   border: 1px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   outline: none;
 }
 .logsList {
@@ -192,7 +192,7 @@
   align-items: baseline;
   gap: 8px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-family: var(--font-mono);
   border-bottom: 1px solid var(--line);
 }
@@ -261,14 +261,14 @@
 .automationName {
   font-weight: 600;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .automationCron {
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-faint);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--bg-sunken);
 }
 .automationToggle {
@@ -276,7 +276,7 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 .automationToggleText {
@@ -294,17 +294,17 @@
   gap: 6px;
 }
 .automationMetaItem {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--bg-sunken);
   font-family: var(--font-mono);
 }
 .automationMetaFaint {
   color: var(--text-faint);
   background: transparent;
-  font-family: var(--font-mono);
+  font-family: inherit;
 }
 .automationActions {
   display: flex;
@@ -315,7 +315,7 @@
   font-size: 11.5px;
   margin-left: auto;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-family: var(--font-mono);
 }
 .automationResult[data-ok="true"] {
@@ -357,7 +357,7 @@
   top: 8px;
   bottom: 8px;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--r-xs);
   background: var(--accent);
 }
 .railItem[data-active="true"] svg {
@@ -395,7 +395,7 @@
 .sectionLabel {
   margin: 26px 0 12px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -405,7 +405,7 @@
   align-items: center;
   gap: 14px;
   padding: 16px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 1px solid var(--line);
   background: var(--bg-elev);
 }
@@ -427,7 +427,7 @@
 }
 .heroTile[data-status="live"] {
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .heroTile svg {
   display: block;
@@ -458,17 +458,17 @@
   align-items: center;
   gap: 7px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .hero[data-live="false"] .heroEyebrow {
   color: var(--text-faint);
 }
 .heroUrl {
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -513,7 +513,7 @@
 }
 .feed {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -540,7 +540,7 @@
   display: grid;
   place-items: center;
   background: hsla(101 28% 42% / 0.14);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .feedTile svg {
   display: block;
@@ -553,19 +553,19 @@
   min-width: 0;
 }
 .feedTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
 .feedLive {
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest);
+  color: var(--c-forest-text);
 }
 .feedWhen {
   flex: none;
@@ -599,7 +599,7 @@
   box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
 }
 .statValue.statMid {
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;

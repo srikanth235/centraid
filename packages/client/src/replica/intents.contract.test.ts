@@ -1,9 +1,29 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
 
 describe(IntentQueue, () => {
+  test("uses injected digest and initializes optional collections", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-options",
+      digest: async () => "injected-digest",
+    });
+
+    await expect(
+      queue.enqueue({
+        appId: "agenda",
+        action: "create",
+        input: { title: "A" },
+      })
+    ).resolves.toMatchObject({
+      intentId: "intent-options",
+      payloadHash: "injected-digest",
+      optimistic: [],
+      dependencies: [],
+    });
+  });
+
   test("retries with the same id and removes the overlay only after canonical outcome", async () => {
     const queue = new IntentQueue(new MemoryIntentStore(), {
       idFactory: () => "intent-1",
@@ -136,6 +156,7 @@ describe(IntentQueue, () => {
         payloadHash: queued.payloadHash,
         state: "queued",
         attempts: 1,
+        reason: "recovered after reload",
       }),
     ]);
     await expect(recovered.claimNext()).resolves.toMatchObject({
@@ -144,5 +165,119 @@ describe(IntentQueue, () => {
       state: "sending",
       attempts: 2,
     });
+  });
+
+  test("retains structured terminal conflicts after scrubbing the queued input", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-conflict",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "edit",
+      input: { title: "offline" },
+    });
+    await queue.claimNext();
+    const conflict = {
+      shapeId: "shape-agenda",
+      entity: "core.event",
+      rowId: "event-1",
+      expectedVersion: 4,
+      actualVersion: 5,
+    };
+    const [settled] = await queue.applyOutcomes([
+      {
+        intentId: "intent-conflict",
+        status: "conflict",
+        reason: "canonical row changed",
+        conflict,
+      },
+    ]);
+
+    expect(settled).toMatchObject({ state: "failed" });
+    await expect(queue.list()).resolves.toStrictEqual([]);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(queue.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-conflict",
+        status: "conflict",
+        conflict,
+      },
+    ]);
+  });
+
+  test("returns a settled transition with an explicit awaiting-change reason reset", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-awaiting-change",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "create",
+      input: { title: "A" },
+    });
+    await queue.claimNext();
+
+    await expect(
+      queue.awaitingChange("intent-awaiting-change")
+    ).resolves.toMatchObject({
+      state: "awaiting-change",
+      reason: undefined,
+    });
+  });
+
+  test("ignores outcomes for intents no longer present", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore());
+
+    await expect(
+      queue.applyOutcomes([{ intentId: "already-purged", status: "executed" }])
+    ).resolves.toStrictEqual([]);
+    await expect(queue.list()).resolves.toStrictEqual([]);
+  });
+
+  test("applies optimistic overlay filters independently", async () => {
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-filters",
+    });
+    await queue.enqueue({
+      appId: "agenda",
+      action: "create",
+      input: { title: "A" },
+      optimistic: [
+        {
+          op: "delete",
+          shapeId: "shape-agenda",
+          entity: "core.task",
+          rowId: "task-1",
+        },
+        {
+          op: "delete",
+          shapeId: "shape-notes",
+          entity: "core.task",
+          rowId: "task-2",
+        },
+        {
+          op: "delete",
+          shapeId: "shape-agenda",
+          entity: "knowledge.note",
+          rowId: "note-1",
+        },
+      ],
+    });
+
+    await expect(queue.overlayMutations("shape-agenda")).resolves.toMatchObject(
+      [{ rowId: "task-1" }, { rowId: "note-1" }]
+    );
+    await expect(
+      queue.overlayMutations(undefined, "core.task")
+    ).resolves.toMatchObject([{ rowId: "task-1" }, { rowId: "task-2" }]);
+  });
+
+  test("delegates close to the durable store", () => {
+    const store = new MemoryIntentStore();
+    const close = vi.spyOn(store, "close");
+    const queue = new IntentQueue(store);
+
+    queue.close();
+
+    expect(close).toHaveBeenCalledOnce();
   });
 });

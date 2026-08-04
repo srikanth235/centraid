@@ -1,6 +1,10 @@
-import { ReplicaProtocolError } from "@centraid/client/replica/native";
+import {
+  buildIntentOutcome,
+  ReplicaProtocolError,
+} from "@centraid/client/replica/native";
 import type {
   IntentRecordStore,
+  IntentOutcome,
   IntentState,
   NewStoredIntent,
   ReplicaIntent,
@@ -29,6 +33,11 @@ const DDL = `
     reason TEXT,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS replica_intent_outcome (
+    intent_id TEXT PRIMARY KEY,
+    settled_at TEXT NOT NULL,
+    record_json TEXT NOT NULL
+  );
 `;
 
 interface StoredIntentRow {
@@ -37,7 +46,7 @@ interface StoredIntentRow {
 
 export interface NativeIntentAttention {
   intentId: string;
-  status: "denied" | "failed";
+  status: "denied" | "failed" | "conflict";
   appId: string;
   action: string;
   reason?: string;
@@ -46,7 +55,7 @@ export interface NativeIntentAttention {
 
 interface AttentionRow {
   intent_id: string;
-  status: "denied" | "failed";
+  status: "denied" | "failed" | "conflict";
   app_id: string;
   action: string;
   reason: string | null;
@@ -144,7 +153,12 @@ export class SqliteIntentStore implements IntentRecordStore {
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
       const settled = this.applyPatch(intentId, allowed, patch, "settle");
-      if (settled.state === "denied" || settled.state === "failed") {
+      if (
+        settled.state === "denied" ||
+        settled.state === "failed" ||
+        settled.conflict !== undefined
+      ) {
+        const attentionStatus = settled.conflict ? "conflict" : settled.state;
         this.driver.run(
           `INSERT INTO replica_intent_attention
              (intent_id, status, app_id, action, reason, created_at)
@@ -153,7 +167,7 @@ export class SqliteIntentStore implements IntentRecordStore {
              status = excluded.status, reason = excluded.reason`,
           [
             settled.intentId,
-            settled.state,
+            attentionStatus,
             settled.appId,
             settled.action,
             settled.reason ?? null,
@@ -161,6 +175,19 @@ export class SqliteIntentStore implements IntentRecordStore {
           ]
         );
       }
+      const outcome = buildIntentOutcome(settled);
+      this.driver.run(
+        `INSERT INTO replica_intent_outcome(intent_id, settled_at, record_json)
+         VALUES (?, ?, ?)
+         ON CONFLICT(intent_id) DO UPDATE SET
+           settled_at = excluded.settled_at,
+           record_json = excluded.record_json`,
+        [
+          outcome.intentId,
+          outcome.settledAt ?? new Date().toISOString(),
+          stringify(outcome),
+        ]
+      );
       this.driver.run("DELETE FROM replica_intent_outbox WHERE intent_id = ?", [
         intentId,
       ]);
@@ -168,11 +195,24 @@ export class SqliteIntentStore implements IntentRecordStore {
     });
   }
 
+  async listSettled(limit = 500): Promise<IntentOutcome[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5_000)
+      throw new ReplicaProtocolError("Settled outcome limit is invalid");
+    return this.driver
+      .all<{ record_json: string }>(
+        `SELECT record_json FROM replica_intent_outcome
+          ORDER BY settled_at DESC, intent_id DESC LIMIT ?`,
+        [limit]
+      )
+      .map((row) => parseOutcome(row.record_json));
+  }
+
   async clear(): Promise<void> {
     this.transaction(() => {
       this.driver.run("DELETE FROM replica_intent_outbox", []);
       this.driver.run("DELETE FROM replica_intent_meta", []);
       this.driver.run("DELETE FROM replica_intent_attention", []);
+      this.driver.run("DELETE FROM replica_intent_outcome", []);
       return undefined;
     });
   }
@@ -285,10 +325,14 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function stringify(record: ReplicaIntent): string {
+function stringify(record: ReplicaIntent | IntentOutcome): string {
   return JSON.stringify(record);
 }
 
 function parseIntent(json: string): ReplicaIntent {
   return JSON.parse(json) as ReplicaIntent;
+}
+
+function parseOutcome(json: string): IntentOutcome {
+  return JSON.parse(json) as IntentOutcome;
 }

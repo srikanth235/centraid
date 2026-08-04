@@ -23,7 +23,7 @@
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
   white-space: nowrap;
   transition: background 140ms;
@@ -52,7 +52,7 @@
 }
 .note {
   color: var(--text-faint, var(--scrim));
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   padding: 2px 0 8px;
 }

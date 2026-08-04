@@ -8,9 +8,9 @@
    these rules via `:global(...)`. */
 
 .col {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 .col.name {
@@ -55,7 +55,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   transition: background 0.1s;
@@ -65,7 +65,7 @@
    over the neighbouring rows. */
 .rowOpen:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--selb);
+  box-shadow: inset 0 0 0 2px var(--line-strong);
 }
 .row:last-child {
   border-bottom: none;
@@ -74,7 +74,7 @@
   background: var(--bg-sunken);
 }
 .row[data-selected="true"] {
-  background: var(--sel);
+  background: var(--accent-soft);
 }
 .badge {
   position: relative;
@@ -96,9 +96,7 @@
   object-fit: cover;
 }
 .badge span {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 9px;
+  font: var(--t-control);
   letter-spacing: 0.04em;
 }
 .rowMain {
@@ -121,8 +119,7 @@
   max-width: 100%;
 }
 .rowMeta {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   color: var(--text-faint);
   margin-top: 2px;
 }
@@ -139,21 +136,19 @@
 }
 .cell.size {
   width: 70px;
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   text-align: right;
 }
 .cell.added {
   width: 88px;
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   /* Flex (not the shared .cell's plain nowrap+ellipsis) so the trailing
      custody dot (issue #352 phase 4) sits beside the date instead of
      getting clipped by the cell's own text-overflow. */
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 .cell.purge {
   color: var(--danger);

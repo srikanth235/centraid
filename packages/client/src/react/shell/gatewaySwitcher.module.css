@@ -1,4 +1,4 @@
-/* Sidebar vault switcher popover (issues var(--text), var(--text), var(--text)). One flat list of
+/* Sidebar vault switcher popover (issues #599, #608, #665). One flat list of
    vaults across every registered gateway — the Gateways section moved to
    Settings → Gateways. Body-portalled by gatewaySwitcher.ts, same mechanics as
    contextMenu.module.css (the sidebar column clips `overflow: hidden`).
@@ -32,7 +32,7 @@
   max-height: min(70vh, 560px);
   overflow-y: auto;
   padding: 6px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   box-shadow: var(--shadow-lg);
@@ -63,7 +63,7 @@
   width: 100%;
   padding: 7px 7px 7px 8px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   cursor: pointer;
   background: transparent;
   text-align: left;
@@ -167,13 +167,13 @@
   width: 100%;
   padding: 8px 8px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   cursor: pointer;
   background: transparent;
   color: var(--text);
   text-align: left;
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   transition:
     background 140ms ease-out,

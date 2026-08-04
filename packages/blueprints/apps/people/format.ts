@@ -1,25 +1,18 @@
+import { identityColor } from "@centraid/design";
+
+import type { AppData, Reminder } from "./types.ts";
+
 // Formatting + identity/status helpers — pure functions of their arguments
 // (verbatim mapping from the People prototype), plus `data.lists` lookups
 // (`listName`) that take `data` as a plain argument rather than a closure.
 // None hold or mutate app state. Split out of app.tsx so the orchestrator and
 // every component (Sidebar/Grid/List/Details/Journal/Activity) can call these
 // directly instead of threading them all as props.
-import type { AppData, Reminder } from "./types.ts";
+export { IDENTITY_COLORS as PALETTE } from "@centraid/design";
 
 // The per-contact palette (prototype). Avatar hues come from here or a name
 // hash; a list's chrome dot hashes its id into the same eight colours so a
 // list is always the same colour.
-export const PALETTE = [
-  "#7C5BD9",
-  "#2EA098",
-  "#4E68DD",
-  "#E89A3C",
-  "#5C8A4E",
-  "#E0567A",
-  "#B47B3F",
-  "#5C677D",
-];
-
 const DAY = 86400000;
 
 /** The minimal cadence-bearing shape `daysSince`/`statusOf` need — every
@@ -144,22 +137,14 @@ export function daysSinceIso(iso: string | null | undefined): number {
 }
 
 // ---------- Identity helpers ----------
-
-export function hashInt(s: string | null | undefined): number {
-  let n = 0;
-  const str = String(s ?? "");
-  for (let i = 0; i < str.length; i += 1)
-    n = (n * 31 + str.charCodeAt(i)) >>> 0;
-  return n;
-}
 // Avatar hue: honour a stored colour, else derive from the name hash.
 export function avatarColor(p: CadencePerson): string {
-  return p.avatar_color || PALETTE[hashInt(p.name) % PALETTE.length]!;
+  return p.avatar_color || identityColor(p.name ?? "");
 }
 // List chrome dot: deterministic from the list id.
 export function listColor(listId: string | null | undefined): string {
   if (listId == null) return "var(--text-faint)";
-  return PALETTE[hashInt(listId) % PALETTE.length]!;
+  return identityColor(listId);
 }
 export function listName(data: AppData, id: string | null): string {
   if (id == null) return "—";
@@ -181,7 +166,7 @@ export function statusOf(p: CadencePerson): Status {
   const over = days >= cad;
   const due = !over && days >= cad * 0.72;
   if (over) return { key: "overdue", label: "overdue", color: "var(--danger)" };
-  if (due) return { key: "due", label: "due soon", color: "var(--c-family)" };
+  if (due) return { key: "due", label: "due soon", color: "var(--warning)" };
   return { key: "ok", label: "on track", color: "var(--success)" };
 }
 

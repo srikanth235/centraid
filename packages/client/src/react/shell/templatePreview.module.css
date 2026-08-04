@@ -7,7 +7,7 @@
 .tmplPreviewIcon {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   display: grid;
   place-items: center;
   color: var(--text);
@@ -18,8 +18,8 @@
 }
 .tmplPreviewEyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   margin-bottom: 2px;
@@ -28,7 +28,7 @@
   margin: 0;
 }
 .tmplPreviewNote {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   background: color-mix(in oklab, var(--text) 4%, transparent);
   border-radius: var(--r-sm);
@@ -36,7 +36,7 @@
   line-height: 1.5;
 }
 
-/* Consent surface (issue var(--text)): what the app will be able to touch, rendered
+/* Consent surface (issue #434): what the app will be able to touch, rendered
    from its app.json vault block as owner-facing sentences before install. */
 .tmplAccess {
   display: flex;
@@ -55,7 +55,7 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-ghost);
 }
 .tmplAccessRow {
@@ -65,13 +65,13 @@
 }
 .tmplAccessVerb {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--t-control-size);
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text);
   min-width: 78px;
 }
 .tmplAccessItems {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   line-height: 1.5;
 }

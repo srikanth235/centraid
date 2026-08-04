@@ -6,7 +6,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 11px;
+  padding: var(--sp-2) var(--sp-3);
   border: none;
   background: none;
   border-radius: 8px;
@@ -20,5 +20,5 @@
 .menuSep {
   height: 1px;
   background: var(--line);
-  margin: 5px 8px;
+  margin: var(--sp-1) var(--sp-2);
 }

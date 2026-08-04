@@ -1,7 +1,11 @@
-// React Native error boundary (issue #468 K1) — class component required.
 import React, { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { Appearance, View, Pressable, StyleSheet } from "react-native";
+
+import { toNativeTheme } from "@centraid/design";
+
+// React Native error boundary (issue #468 K1) — class component required.
+import { Text } from "./kit/components/NativeText";
 
 interface Props {
   children: ReactNode;
@@ -32,18 +36,30 @@ export default class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
+    const scheme = Appearance.getColorScheme() === "dark" ? "dark" : "light";
+    const { colors, radii } = toNativeTheme(scheme);
     return (
-      <View style={styles.wrap} accessibilityRole="alert">
-        <Text style={styles.title}>Something went wrong</Text>
-        <Text style={styles.body}>
+      <View
+        style={[styles.wrap, { backgroundColor: colors.bg }]}
+        accessibilityRole="alert"
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          Something went wrong
+        </Text>
+        <Text style={[styles.body, { color: colors.textSoft }]}>
           {error.message || "An unexpected error stopped this view."}
         </Text>
         <Pressable
           onPress={this.handleReset}
-          style={styles.button}
+          style={[
+            styles.button,
+            { backgroundColor: colors.accentFill, borderRadius: radii.md },
+          ]}
           accessibilityRole="button"
         >
-          <Text style={styles.buttonText}>Try again</Text>
+          <Text style={[styles.buttonText, { color: colors.textInv }]}>
+            Try again
+          </Text>
         </Pressable>
       </View>
     );
@@ -55,29 +71,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#111317",
   },
   title: {
-    color: "#e8e9ec",
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 8,
   },
   body: {
-    color: "#a8adb8",
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 16,
   },
   button: {
     alignSelf: "flex-start",
-    backgroundColor: "#3EC8B4",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
   },
   buttonText: {
-    color: "#111",
     fontWeight: "600",
     fontSize: 13,
   },

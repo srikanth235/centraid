@@ -32,7 +32,7 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 
 | Name | Command | Default bind | Notes |
 | --- | --- | --- | --- |
-| **desktop** | `bun run dev:desktop` | Electron window; gateway loopback (often ephemeral until H4) | Embeds gateway today; H1 targets detached |
+| **desktop** | `bun run dev:desktop` | Electron window; detached local gateway on `127.0.0.1:17832` by default | Set `CENTRAID_EMBEDDED_GATEWAY=1` only for the in-process test/E2E path |
 | **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
 | **mobile** | `bun run dev:mobile` | Metro **8081** | Pair with a ticket minted in desktop Household → Devices |
 | **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Shared` + `Personal` (#603); `centraid-gateway pair` mints a device ticket |
@@ -51,7 +51,7 @@ The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client concer
 
 ## Preview the web app in a browser against an existing vault
 
-The desktop app runs its gateway **in-process**, so a fresh browser origin served by a standalone gateway lands on onboarding rather than your data. Web onboarding is **ticket-only** since issue #603 — there is no "This Mac" card and no founding probe in a browser tab, because a browser cannot start a gateway. The supported (and only) way to reach an existing vault from a browser is **pair a device**, exactly like a phone or a second desktop:
+The desktop app controls a local gateway, detached by default so it survives the window. A fresh browser origin served by a standalone gateway still lands on onboarding rather than your data. Web onboarding is **ticket-only** since issue #603 — there is no "This Mac" card and no founding probe in a browser tab, because a browser cannot start a gateway. The supported (and only) way to reach an existing vault from a browser is **pair a device**, exactly like a phone or a second desktop:
 
 1. **Serve the existing vault.** Point a gateway at the data dir that already has the vault. Desktop's lives at `~/Library/Application Support/@centraid/desktop/gateways/local`.
 

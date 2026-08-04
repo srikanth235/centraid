@@ -24,12 +24,12 @@
 }
 .title {
   margin: 0;
-  font: var(--t-h2);
+  font: var(--t-title);
   color: var(--text);
 }
 .subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.45;
   color: var(--text-faint);
   max-width: 42rem;
@@ -60,7 +60,7 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -77,7 +77,7 @@
 }
 .sectionLabel {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -111,7 +111,7 @@
   text-align: left;
   padding: 14px 16px;
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   font: inherit;
   color: var(--text);
@@ -138,7 +138,7 @@
   flex: none;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   background: var(--text);
@@ -192,7 +192,7 @@
   color: var(--text);
 }
 .tileMeta {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -202,7 +202,7 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--success);
@@ -213,7 +213,7 @@
   display: flex;
   flex-direction: column;
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -256,21 +256,21 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken, var(--bg-elev));
   border: 0.5px solid var(--line);
 }
 .syncTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
 }
 .syncMeta {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .healthBlock {
   margin: 10px 0 4px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 
@@ -280,16 +280,16 @@
   gap: 4px;
   margin: 0 0 14px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken, var(--bg-elev));
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   line-height: 1.4;
 }
 .authKindBanner strong {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--t-mono-size);
+  font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
 }
@@ -305,12 +305,12 @@
   flex: none;
   font-family: var(--font-mono);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   padding: 3px 6px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
 }
 
@@ -344,29 +344,29 @@
   gap: 2px;
 }
 .rowName {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rowAuthNote {
-  font-size: 11px;
-  color: var(--c-amber);
+  font-size: var(--t-control-size);
+  color: var(--c-amber-text);
 }
 
 .healthLabel {
   flex: none;
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--conn-health, var(--text-faint));
@@ -374,8 +374,9 @@
 .healthLabel[data-health="ok"] {
   --conn-health: var(--success);
 }
+/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
 .healthLabel[data-health="needs-auth"] {
-  --conn-health: var(--c-amber);
+  --conn-health: var(--c-amber-text);
 }
 .healthLabel[data-health="paused"] {
   --conn-health: var(--text-faint);
@@ -394,8 +395,8 @@
 .emptyNote {
   padding: 18px 16px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: 14px;
-  font-size: 13px;
+  border-radius: var(--r-xl);
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
 }
@@ -437,12 +438,12 @@
 .sheetTitle {
   margin: 0;
   font-size: 17px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 .sheetTag {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .sheetClose {
@@ -480,7 +481,7 @@
 }
 .aboutHead {
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
   color: var(--text-faint);
   border-bottom: 0.5px solid var(--line);
@@ -511,12 +512,12 @@
   gap: 2px;
 }
 .aboutTitle {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .aboutDesc {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -552,7 +553,7 @@
 .wizardLabel {
   display: block;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -566,7 +567,7 @@
   color: var(--text-ghost);
 }
 .wizardHint[data-tone="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .textInput {
   width: 100%;
@@ -575,7 +576,7 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -603,7 +604,7 @@
   border: 0.5px solid var(--line);
   border-radius: 9px;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
 }
 .scopeOption input {
@@ -627,7 +628,7 @@
 .manualHandoff {
   margin-top: 12px;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .manualHandoff summary {
   cursor: pointer;
@@ -660,7 +661,7 @@
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   cursor: pointer;
   padding: 2px 0;
 }
@@ -673,7 +674,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -711,6 +712,6 @@
   font-weight: 600;
 }
 .pickerSub {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }

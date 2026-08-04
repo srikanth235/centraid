@@ -42,6 +42,8 @@ export async function createReplicaCoordinator(
             options.indexedDbFactory ?? globalThis.indexedDB
           )
         : new MemoryIntentStore());
+    const intentDurability =
+      store instanceof MemoryIntentStore ? "memory" : "durable";
     const intents = new IntentQueue(store, {
       ...(options.idFactory ? { idFactory: options.idFactory } : {}),
       ...(options.digest ? { digest: options.digest } : {}),
@@ -56,7 +58,7 @@ export async function createReplicaCoordinator(
     }
     return {
       replica: new ReplicaCoordinator(client, intents, options),
-      status,
+      status: { ...status, intentDurability },
     };
   } catch (error) {
     await client.close().catch(() => undefined);

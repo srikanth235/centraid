@@ -59,9 +59,9 @@ export default class ErrorBoundary extends Component<
           maxWidth: 480,
           margin: "10vh auto",
           fontFamily: "var(--font-sans, system-ui, sans-serif)",
-          color: "var(--text, #e8e9ec)",
-          background: "var(--bg-elevated, #1a1d24)",
-          border: "1px solid var(--line, #2a2e38)",
+          color: "var(--text)",
+          background: "var(--bg-elev)",
+          border: "1px solid var(--line)",
           borderRadius: 12,
         }}
       >
@@ -71,7 +71,7 @@ export default class ErrorBoundary extends Component<
             margin: 0,
             fontSize: 14,
             lineHeight: 1.5,
-            color: "var(--text-soft, #a8adb8)",
+            color: "var(--text-soft)",
           }}
         >
           {error.message || "An unexpected error stopped this view."}
@@ -84,8 +84,8 @@ export default class ErrorBoundary extends Component<
             padding: "8px 14px",
             fontSize: 13,
             fontWeight: 500,
-            color: "var(--bg, #111)",
-            background: "var(--accent, #3EC8B4)",
+            color: "var(--text-inv)",
+            background: "var(--accent-fill)",
             border: "none",
             borderRadius: 8,
             cursor: "pointer",

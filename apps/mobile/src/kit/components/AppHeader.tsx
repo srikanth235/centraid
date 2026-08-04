@@ -1,11 +1,12 @@
 import React, { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
 
 import type { IconName } from "@centraid/design";
 
 import { radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
+import { Text } from "./NativeText";
 
 export interface AppHeaderProps {
   title: string;
@@ -73,7 +74,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: 32,
     },
-    subtitle: { ...t("tiny"), color: colors.textFaint, marginTop: 2 },
+    subtitle: { ...t("control"), color: colors.textFaint, marginTop: 2 },
     title: { ...t("bodyStrong"), color: colors.text },
     titleWrap: { flex: 1, minWidth: 0 },
   });

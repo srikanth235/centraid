@@ -1,6 +1,6 @@
 /* First-run onboarding — the fullscreen welcome view that owns `#root` until
    the user personalizes their profile. Co-located with OnboardingScreen.tsx
-   (issue var(--text), Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
+   (issue #325, Phase 4 CSS refactor); classes are scoped by Vite CSS Modules,
    so the old `cd-onb-*` global prefix is gone — the file name is the namespace.
 
    Sets a deliberate first-impression tone — the rest of the chrome is dense
@@ -19,7 +19,7 @@
   background: var(--text);
   overflow: hidden;
   isolation: isolate;
-  /* System UI stack (issue var(--text) K11) — no webfont network load. */
+  /* System UI stack (issue #468 K11) — no webfont network load. */
   font-family: var(--font-sans);
   color: var(--text);
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -205,7 +205,7 @@
   place-items: center;
   color: white;
   font-family: var(--font-sans);
-  font-size: 28px;
+  font-size: var(--t-display-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   user-select: none;
@@ -233,7 +233,7 @@
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--text) 50%, transparent);
   margin-top: 8px;
@@ -248,13 +248,13 @@
   height: 46px;
   padding: 0 14px;
   font: inherit;
-  font-size: 16px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   letter-spacing: -0.005em;
   color: var(--text);
   background: color-mix(in srgb, white 4%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   outline: none;
   transition:
     border-color 160ms,
@@ -321,7 +321,7 @@
   margin-top: 10px;
   padding: 11px 12px;
   border: 0.5px solid color-mix(in srgb, white 12%, transparent);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, white 4%, transparent);
   color: inherit;
   font-size: 12.5px;
@@ -406,7 +406,7 @@
 .error {
   margin-top: 12px;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   border-radius: 8px;
   background: color-mix(in srgb, var(--text) 18%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--text) 50%, transparent);
@@ -427,31 +427,31 @@
 }
 .errorDetail > summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: color-mix(in srgb, currentColor 70%, transparent);
 }
 .errorDetailText {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
   word-break: break-word;
   color: color-mix(in srgb, currentColor 78%, transparent);
 }
 
-/* Why the CTA is disabled, said once and quietly (issue var(--text) UX-4). Shares
+/* Why the CTA is disabled, said once and quietly (issue #603 UX-4). Shares
    `.keychainNote`'s register deliberately — this is a heads-up, not a
    validation error, so it must not read louder than the note beneath it.
    Dimmed from the card's own ink rather than a fresh hex, so the
    design-token ratchet stays where it is. */
 .hint {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: color-mix(in srgb, currentColor 60%, transparent);
 }
 
-/* "Back" to the desktop first-run chooser (issue var(--text)) — a quiet text link,
+/* "Back" to the desktop first-run chooser (issue #603) — a quiet text link,
    deliberately not competing with the primary CTA above it. */
 .backBtn {
   display: block;
@@ -478,7 +478,7 @@
    var(--text)): the dialog should be expected, not spooky. */
 .keychainNote {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: color-mix(in srgb, var(--text) 70%, transparent);
 }

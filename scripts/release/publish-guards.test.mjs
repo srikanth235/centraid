@@ -12,6 +12,11 @@ import { beforeAll, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import {
+  assertNoOpenNightlyQualityIssues,
+  parseOpenNightlyIssues,
+} from "./nightly-quality-blockers.mjs";
+
 /**
  * Guard tests for the release publish/prepare halves (issue #656 Layer 1F).
  *
@@ -66,7 +71,35 @@ const isolatedEnv = {
   GIT_AUTHOR_EMAIL: "fixture@example.invalid",
   GIT_COMMITTER_NAME: "fixture",
   GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+  CENTRAID_NIGHTLY_QUALITY_ISSUES: "[]",
 };
+
+describe("nightly release blocker", () => {
+  test("parses only actionable open issue rows", () => {
+    expect(
+      parseOpenNightlyIssues(
+        JSON.stringify([
+          { number: 9, title: "nightly red", url: "https://example.test/9" },
+          { number: "bad", title: "ignored", url: "https://example.test/x" },
+        ])
+      )
+    ).toStrictEqual([
+      { number: 9, title: "nightly red", url: "https://example.test/9" },
+    ]);
+  });
+
+  test("blocks release preparation when a nightly red issue is open", () => {
+    expect(() =>
+      assertNoOpenNightlyQualityIssues(() => ({
+        status: 0,
+        stdout: JSON.stringify([
+          { number: 9, title: "nightly red", url: "https://example.test/9" },
+        ]),
+        stderr: "",
+      }))
+    ).toThrow(/release blocked.*#9/iu);
+  });
+});
 
 /**
  * Build a synthetic monorepo root that the release scripts can run against.

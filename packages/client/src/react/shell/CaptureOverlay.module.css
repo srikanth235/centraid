@@ -8,10 +8,19 @@
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: var(--accent);
-  color: var(--on-accent);
+  color: var(--text-inv);
   box-shadow: 0 12px 32px color-mix(in srgb, var(--text) 20%, transparent);
   font: 600 14px var(--font-sans);
   cursor: pointer;
+}
+
+/* The assistant composer owns the lower edge on compact desktop widths. Keep
+   this global action above it so the Send button remains the hit target when
+   the shell is narrower than the composer's 920px measure. */
+@media (max-width: 1100px) {
+  .launcher {
+    bottom: 82px;
+  }
 }
 
 .dialog {
@@ -44,7 +53,7 @@
 .head h2 {
   flex: 1;
   margin: 0;
-  font: 600 20px var(--font-display, var(--font-sans));
+  font: 600 20px var(--font-sans, var(--font-sans));
 }
 
 .head button,
@@ -52,7 +61,7 @@
 .kinds button {
   min-height: 38px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -70,7 +79,7 @@
   display: grid;
   gap: 7px;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
 }
 
@@ -80,7 +89,7 @@
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   padding: 10px 12px;
@@ -97,7 +106,8 @@
 .foot button:focus-visible,
 .kinds button:focus-visible,
 .launcher:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 52%, transparent);
+  outline: 3px solid
+    color-mix(in srgb, var(--focus-ring-color) 52%, transparent);
   outline-offset: 2px;
 }
 
@@ -111,14 +121,14 @@
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 13%, var(--bg));
   color: var(--accent);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .hint,
 .status {
   margin: 0;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.45;
 }
 
@@ -129,7 +139,7 @@
 
 .scanPanel h3 {
   margin: 0;
-  font: 600 17px var(--font-display, var(--font-sans));
+  font: 600 17px var(--font-sans, var(--font-sans));
 }
 
 .participants {
@@ -138,13 +148,13 @@
   gap: 10px 16px;
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   color: var(--text-soft);
 }
 
 .participants legend {
   padding-inline: 5px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 600;
 }
 
@@ -188,7 +198,7 @@
 .foot .primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--on-accent);
+  color: var(--text-inv);
   padding-inline: 18px;
 }
 

@@ -8,11 +8,12 @@
 import { palette } from "../palette";
 import {
   ACCENT_DEEP,
+  ACCENT_DEEP_DARK,
   ACCENT_LIGHT,
-  ACCENT_MIDNIGHT,
   ACCENT_TEXT_LIGHT,
   BRAND,
   DANGER,
+  DANGER_DARK,
   SUCCESS,
   SUCCESS_LIGHT,
   WARNING,
@@ -25,15 +26,12 @@ export const lightTheme: Theme = {
   accent: BRAND,
   accentDeep: ACCENT_DEEP,
   accentLight: ACCENT_LIGHT,
-  accentMidnight: ACCENT_MIDNIGHT,
   accentText: ACCENT_TEXT_LIGHT,
   bg: "#FCFCFC",
   bgApp: "#FFFFFF",
   bgElev: "#FFFFFF",
   bgSunken: "#F0F1F3",
   bgWall: "#FCFCFC",
-  bezel: "#14181F",
-  bezelInner: "#1f242d",
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,24,32,.04) 23px 24px), " +
@@ -73,9 +71,14 @@ export const lightTheme: Theme = {
 export const darkTheme: Theme = {
   kind: "dark",
   accent: BRAND,
-  accentDeep: ACCENT_DEEP,
+  // "Deep" is a role, not a direction: it is the accent AS A FILL, and the ink
+  // it carries (`--text-inv`) is near-black here, so this ramp's filled rung
+  // is the LIGHT half of the pair. Deepening it instead would have put dark
+  // ink on a dark fill, and a fill dark enough for white ink cannot also clear
+  // 3:1 against a 5%-lightness surface — the two floors have no overlap on
+  // near-black. See `ACCENT_DEEP` in shared.ts.
+  accentDeep: ACCENT_DEEP_DARK,
   accentLight: ACCENT_LIGHT,
-  accentMidnight: ACCENT_MIDNIGHT,
   accentText: BRAND,
   // The ramp is neutral greyscale, and that is the only dark ramp there is
   // (#608). A hue/saturation "surface temperature" knob used to sit on top of
@@ -106,8 +109,6 @@ export const darkTheme: Theme = {
   sidebarBg:
     "linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 5%) / 0.92) 0%, " +
     "hsl(0 0% calc(var(--bg-l) + 2%) / 0.92) 100%)",
-  bezel: "#0a0d13",
-  bezelInner: "#14181F",
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), " +
@@ -129,6 +130,6 @@ export const darkTheme: Theme = {
   sidebarBlur: "blur(28px) saturate(180%)",
   sidebarDivider: "0.5px solid rgba(255,255,255,0.10)",
   success: SUCCESS,
-  danger: DANGER,
+  danger: DANGER_DARK,
   warning: WARNING,
 };

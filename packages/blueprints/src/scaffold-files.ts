@@ -230,7 +230,7 @@ root.innerHTML = \`
   <main>
     <header class="head">
       <h1>Your app</h1>
-      <p class="muted">Add queries and actions, then reshape this module to render them.</p>
+      <p class="kit-muted">Add queries and actions, then reshape this module to render them.</p>
     </header>
     <div id="consentBanner" class="kit-banner" hidden>
       <strong>No vault access yet.</strong>

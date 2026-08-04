@@ -5,6 +5,7 @@
 import { memo, useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import { formatBytes } from "../../format.js";
 import type { AsstAttachmentDTO, AsstMsgDTO } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
@@ -45,12 +46,6 @@ function ThumbDownGlyph(): JSX.Element {
       <path d="M17 14V3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3zm0 0l-4 7a2 2 0 0 1-2-2v-3H6a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 7 4h10" />
     </svg>
   );
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function formatTime(ms: number): string {

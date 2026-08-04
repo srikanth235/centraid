@@ -1,4 +1,4 @@
-/* The "handshake ladder" (issue var(--text)) — a vertical staged checklist with a
+/* The "handshake ladder" (issue #382) — a vertical staged checklist with a
    connecting rail. Each `.stage` staggers in via `animation-delay:
    calc(var(--stage-i) * 80ms)`; the rail is the `.ladder::before` line, its
    height driven by the same custom property on the last-passed stage so it
@@ -97,7 +97,7 @@
 }
 .label {
   font: var(--t-body);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }

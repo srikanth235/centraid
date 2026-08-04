@@ -107,6 +107,35 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     await expect(store.list()).resolves.toHaveLength(0);
   });
 
+  test("retains a structured conflict outcome after scrubbing the queued input", async () => {
+    const store = makeStore();
+    await store.add(newIntent());
+    await store.claimNext();
+    await store.settle("intent-1", ["sending"], {
+      state: "failed",
+      reason: "canonical row changed",
+      conflict: {
+        entity: "core.event",
+        rowId: "event-1",
+        expectedVersion: 4,
+        actualVersion: 5,
+      },
+    });
+    await expect(store.get("intent-1")).resolves.toBeUndefined();
+    await expect(store.listSettled()).resolves.toMatchObject([
+      {
+        intentId: "intent-1",
+        status: "conflict",
+        conflict: {
+          entity: "core.event",
+          rowId: "event-1",
+          expectedVersion: 4,
+          actualVersion: 5,
+        },
+      },
+    ]);
+  });
+
   test("list filters by state in createdOrder", async () => {
     const store = makeStore();
     await store.add(newIntent({ intentId: "a" }));

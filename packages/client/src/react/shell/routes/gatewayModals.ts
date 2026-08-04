@@ -13,6 +13,8 @@ export interface GatewayConnectSuccess {
   label: string;
   gatewayId: string;
   vaultId?: string;
+  /** Every vault enrolled by the redeemed ticket. */
+  vaultIds: string[];
 }
 export interface GatewayConnectFailure {
   ok: false;
@@ -57,6 +59,8 @@ function foldRedeemResult(
       label: res.vaultName || "your vault",
       ok: true,
       vaultId: res.vaultId,
+      // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
+      vaultIds: res.vaultIds ?? (res.vaultId ? [res.vaultId] : []),
     };
   }
   return { message: friendlyGatewayError(res.error, res.message), ok: false };

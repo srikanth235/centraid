@@ -8,11 +8,11 @@
   gap: 12px;
   padding: 14px;
   border: 0.5px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .pairLead {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -34,7 +34,7 @@
   gap: 4px;
 }
 .pairFieldLabel {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .pairSelect,
@@ -51,7 +51,8 @@
 }
 .pairSelect:focus-visible,
 .pairInput:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid
+    color-mix(in srgb, var(--focus-ring-color) 55%, transparent);
   outline-offset: 1px;
 }
 
@@ -62,7 +63,7 @@
   margin: 0;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .grantRow {
   display: flex;
@@ -166,7 +167,7 @@
   width: 176px;
   height: 176px;
   padding: 6px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--line);
   background: var(--text);
 }
@@ -174,7 +175,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text);
   background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));

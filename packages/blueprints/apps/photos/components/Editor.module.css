@@ -8,7 +8,7 @@
   flex-direction: column;
   gap: 0.6rem;
   width: min(34rem, 92vw);
-  color: var(--on-accent);
+  color: var(--text-inv);
 }
 .canvasWrap {
   position: relative;
@@ -23,15 +23,15 @@
   max-width: 100%;
   max-height: 62vh;
   object-fit: contain;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-sm);
   display: block;
   user-select: none;
   box-shadow: var(--shadow-lg);
 }
 .cropBox {
   position: absolute;
-  border: 2px dashed var(--on-accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  border: 2px dashed var(--text-inv);
+  box-shadow: 0 0 0 9999px color-mix(in oklab, var(--scrim) 76%, transparent);
   pointer-events: none;
 }
 .toolbar {
@@ -41,24 +41,26 @@
   gap: 0.5rem;
 }
 .toolbar :global(.kit-btn) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: var(--on-accent);
+  background: color-mix(in oklab, var(--text-inv) 8%, transparent);
+  border-color: color-mix(in oklab, var(--text-inv) 16%, transparent);
+  color: var(--text-inv);
 }
 .toolbar :global(.kit-btn):hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(in oklab, var(--text-inv) 16%, transparent);
 }
 .toolbar :global(.kit-btn.primary) {
   background: var(--accent-deep);
   border-color: transparent;
-  color: var(--on-accent);
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
 }
 .trashToggle {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 0.8rem;
+  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
+  font-size: var(--t-small-size);
   white-space: nowrap;
 }
 .spacer {
@@ -66,13 +68,13 @@
 }
 .note {
   min-height: 0;
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
 }
 .hint {
   margin: 0;
-  color: rgba(255, 255, 255, 0.55);
+  color: color-mix(in oklab, var(--text-inv) 55%, transparent);
 }
 .loadError {
   padding: 2rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
 }

@@ -1,3 +1,5 @@
+import { BRAND } from "@centraid/design";
+
 const PREFIX = "centraid.web.v1.";
 
 export interface WebConnection {
@@ -6,6 +8,8 @@ export interface WebConnection {
   /** Stable sovereign gateway EndpointId and connection identity. */
   endpointId?: string;
   vaultId?: string;
+  /** All vaults enrolled by the last ticket redemption; vaultId is the focus. */
+  vaultIds?: string[];
   label: string;
   displayName: string;
   avatarColor: string;
@@ -18,7 +22,7 @@ export interface WebConnection {
 const DEFAULT_CONNECTION: WebConnection = {
   label: "Web gateway",
   displayName: "Centraid",
-  avatarColor: "#6f5bf6",
+  avatarColor: BRAND,
   rememberDevice: false,
 };
 

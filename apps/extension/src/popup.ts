@@ -12,6 +12,19 @@ import type {
   PageCapture,
 } from "./types.js";
 
+function syncTheme(): void {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const apply = (): void => {
+    document.documentElement.dataset["theme"] = media.matches
+      ? "dark"
+      : "light";
+  };
+  apply();
+  media.addEventListener("change", apply);
+}
+
+syncTheme();
+
 async function send<T>(message: CompanionRequest): Promise<T> {
   const response = (await chrome.runtime.sendMessage(message)) as
     | PopupEnvelope<T>
@@ -86,7 +99,12 @@ async function render(): Promise<void> {
     locked: boolean;
     pairing?: {
       gatewayName?: string;
+      vaultId?: string;
       vaultName?: string;
+      vaults?: readonly {
+        vaultId: string;
+        vaultName?: string;
+      }[];
       grantProfile?: readonly CompanionModule[];
     };
   }>({ type: "status" });
@@ -94,7 +112,29 @@ async function render(): Promise<void> {
   byId("companion").hidden = !status.paired;
   if (!status.paired) return;
   byId("gateway").textContent = status.pairing?.gatewayName ?? "Paired gateway";
+  const pairingVaults =
+    status.pairing?.vaults ??
+    (status.pairing?.vaultId
+      ? [
+          {
+            vaultId: status.pairing.vaultId,
+            vaultName: status.pairing.vaultName,
+          },
+        ]
+      : []);
   byId("vault").textContent = status.pairing?.vaultName ?? "Personal vault";
+  const selector = byId<HTMLSelectElement>("vault-select");
+  selector.replaceChildren(
+    ...pairingVaults.map((vault) => {
+      const option = document.createElement("option");
+      option.value = vault.vaultId;
+      option.textContent = vault.vaultName ?? vault.vaultId;
+      option.selected = vault.vaultId === status.pairing?.vaultId;
+      return option;
+    })
+  );
+  selector.hidden = pairingVaults.length < 2;
+  selector.disabled = status.locked;
   byId<HTMLButtonElement>("lock").textContent = status.locked
     ? "Unlock"
     : "Lock";
@@ -120,6 +160,14 @@ async function render(): Promise<void> {
     setNotice(errorText(error), "error");
   }
 }
+
+byId<HTMLSelectElement>("vault-select").addEventListener("change", (event) => {
+  const vaultId = (event.currentTarget as HTMLSelectElement).value;
+  void send({ type: "select-vault", vaultId }).then(
+    () => render(),
+    (error) => setNotice(errorText(error), "error")
+  );
+});
 
 byId<HTMLFormElement>("pair-form").addEventListener("submit", (event) => {
   event.preventDefault();

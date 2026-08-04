@@ -6,8 +6,8 @@ Two hosts mount the same core:
 
 | Host | Paths come from | Loopback bearer | App-code backend |
 | --- | --- | --- | --- |
-| [`@centraid/desktop`](../../apps/desktop) embed | shared platform-default `dataDir` | per-launch host bearer (in-memory) | git store |
-| `centraid-gateway` CLI (this package) | the same platform default, a JSON config, or `--data-dir` | ephemeral per-boot host bearer | legacy tarball upload |
+| [`@centraid/desktop`](../../apps/desktop) controller | shared platform-default `dataDir` | per-launch host bearer (in-memory) | git store |
+| `centraid-gateway` CLI (this package) | the same platform default, a JSON config, or `--data-dir` | custody-derived loopback bearer; optional parent-supplied override | legacy tarball upload |
 
 No new wire protocol — every host serves the same `/centraid/*`, `/_centraid-conversations/*`, and `/_centraid-user/*` routes, so desktop and mobile clients reach any of them through their existing remote-gateway flow.
 
@@ -29,7 +29,7 @@ const handle = await serve({
 console.log(handle.url, handle.token);
 ```
 
-There is no bootstrap option to pass (issue #603 removed `initVaultName`). If `vaultDir` holds no vault, `buildGateway()` **auto-founds** two — `Shared` (created first, so it is the registry default) and `Personal` — synchronously at construction, and enrols the host device as `admin` on both. If it already holds vault directories, nothing is created and the data dir is left exactly as found; a directory that fails to mount still counts, so corruption can never make an existing gateway look fresh.
+There is no bootstrap option to pass (issue #603 removed `initVaultName`). If `vaultDir` holds no vault, `buildGateway()` **auto-founds** two — `Shared` (created first) and `Personal` (marked as the registry default) — synchronously at construction, and enrols the host device as `admin` on both. If it already holds vault directories, nothing is created and the data dir is left exactly as found; a directory that fails to mount still counts, so corruption can never make an existing gateway look fresh.
 
 `paths` is the only required option (see `GatewayPaths` in `src/paths.ts`); `vaultDir` is its required field. Post-#280 the vault is the unit — everything personal (apps, code, conversation ledger, run history) lives inside `<vaultDir>/<vaultId>/`; gateway-level preferences, enrollments, tickets, and backup/storage state live in `gateway.db`, while disposable catalogs live under `cache/`. There is no `identity.sqlite` or `analytics.sqlite`: the vault owner IS the user, and the run rollup is now the `run_summary` view inside each vault's `journal.db`. There is no `secrets` injection: the gateway is auth-agnostic about the coding agent — codex and Claude Code each own their own auth (`codex login` / `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git store backend (the desktop does); omit it for the legacy tarball-upload backend (what the standalone CLI below uses).
 
@@ -41,7 +41,7 @@ There is no bootstrap option to pass (issue #603 removed `initVaultName`). If `v
 centraid-gateway serve --data-dir /var/lib/centraid --port 8765
 
 # Mint a pair ticket from the running daemon. No --vault → the registry
-# default, which is `Shared`.
+# default, which is the owner's `Personal` vault.
 centraid-gateway pair --data-dir /var/lib/centraid
 centraid-gateway pair --data-dir /var/lib/centraid --vault <name>
 ```
@@ -105,7 +105,7 @@ Desktop, the CLI, and the OS service use this identical shape (see `daemonLayout
 
 Per [centraid#131](https://github.com/srikanth235/centraid/issues/131), the daemon ships intentionally narrow:
 
-- No shared admin token or per-device HTTP token. The loopback host bearer is ephemeral, while remote requests authenticate as real iroh EndpointId enrollments in a specific vault.
+- No shared admin token or per-device HTTP token. The loopback host bearer is custody-derived and stable for the gateway endpoint identity, while remote requests authenticate as real iroh EndpointId enrollments in a specific vault.
 - No direct/LAN URL transport or TLS terminator. Remote access is iroh-only.
 - No mDNS / Bonjour discovery; pair with a one-time ticket.
 - Single user. Multi-user identity is a larger design and lands separately.

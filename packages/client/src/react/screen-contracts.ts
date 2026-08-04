@@ -1389,6 +1389,10 @@ export interface AssistantSnapshot {
   canLoadEarlier?: boolean;
   /** A previous page is being fetched right now. */
   loadingEarlier?: boolean;
+  /** False while a persisted conversation's runner binding is loading. */
+  runnerReady?: boolean;
+  /** Changes when the screen must reload runner/model capability data. */
+  pickerRevision?: number;
 }
 /**
  * The composer's inline model picker (subsystem `assistant`, active runner

@@ -8,9 +8,9 @@
 .navItem {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--sp-3);
   width: 100%;
-  padding: 9px 11px;
+  padding: var(--sp-2) var(--sp-3);
   border: none;
   border-radius: 9px;
   font: var(--t-body);
@@ -30,12 +30,11 @@
 }
 .navItem[aria-current="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .navCount {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
   opacity: 0.6;
 }
 
@@ -45,7 +44,7 @@
   align-items: center;
 }
 .folder .navItem {
-  padding-right: 8px;
+  padding-right: var(--sp-2);
 }
 .folderTools {
   position: absolute;
@@ -67,7 +66,7 @@
   display: flex;
   gap: 6px;
   width: 100%;
-  padding: 4px 2px;
+  padding: var(--sp-1) 2px;
 }
 /* The input itself is kit.css's .kit-input.bare (transparent until focus). */
 .folderEdit button {
@@ -83,21 +82,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 .storageTop .lbl {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 .storageTop .val {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }
 .storageLabel {
   font: var(--t-small);
   color: var(--text-soft);
-  margin-top: 8px;
+  margin-top: var(--sp-2);
 }

@@ -41,6 +41,8 @@ export interface ReplicaSnapshotRow {
   entity: string;
   rowId: string;
   values: ReplicaRow;
+  /** Latest canonical change sequence for this row in the current epoch. */
+  rowVersion?: number;
   oversizedFields?: string[];
 }
 
@@ -65,10 +67,13 @@ export interface ReplicaSnapshot extends ReplicaBootstrapHeader {
 
 export interface ReplicaUpsertChange extends ReplicaSnapshotRow {
   op: "upsert";
+  commitId?: string;
 }
 
 export interface ReplicaDeleteChange {
   op: "delete";
+  commitId?: string;
+  rowVersion?: number;
   shapeId: string;
   entity: string;
   rowId: string;
@@ -76,13 +81,29 @@ export interface ReplicaDeleteChange {
 
 export type ReplicaChange = ReplicaUpsertChange | ReplicaDeleteChange;
 
-export type IntentOutcomeStatus = "executed" | "parked" | "denied" | "failed";
+export type IntentOutcomeStatus =
+  | "executed"
+  | "parked"
+  | "denied"
+  | "failed"
+  | "conflict";
+
+export interface ReplicaConflict {
+  shapeId?: string;
+  entity: string;
+  rowId: string;
+  expectedVersion: number;
+  actualVersion: number;
+}
 
 export interface IntentOutcome {
   intentId: string;
   status: IntentOutcomeStatus;
   reason?: string;
   output?: ReplicaValue;
+  conflict?: ReplicaConflict;
+  /** Durable local settlement time, when retained by an outbox journal. */
+  settledAt?: string;
 }
 
 export interface ReplicaChangeBatch {
@@ -92,6 +113,8 @@ export interface ReplicaChangeBatch {
   to: ReplicaCursor;
   changes: ReplicaChange[];
   outcomes?: IntentOutcome[];
+  /** True when another complete commit group remains after this page. */
+  hasMore?: boolean;
 }
 
 export type ReplicaFilterOperator =
@@ -152,18 +175,21 @@ export interface ReplicaRowEnvelope {
   values: ReplicaRow;
   oversizedFields: string[];
   hasUnavailableFields: boolean;
+  rowVersion?: number;
 }
 
 export interface ReplicaReadWireResult {
   rows: ReplicaRowEnvelope[];
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
+  coverage?: ReplicaCoverage;
 }
 
 export interface ReplicaSearchWireResult {
   rows: ReplicaRowEnvelope[];
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
+  coverage?: ReplicaCoverage;
 }
 
 export interface ReplicaReadResult {
@@ -171,6 +197,7 @@ export interface ReplicaReadResult {
   /** Local reads have no consent receipt; the cursor makes their origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
+  coverage?: ReplicaCoverage;
 }
 
 export interface ReplicaSearchResult {
@@ -178,9 +205,13 @@ export interface ReplicaSearchResult {
   /** Local searches have no consent receipt; the cursor makes their origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
+  coverage?: ReplicaCoverage;
 }
 
 export type ReplicaMode = "opfs-sahpool" | "memory" | "native";
+
+export type ReplicaCoverage = "partial" | "complete";
+export type ReplicaDurability = "durable" | "memory";
 
 export interface ReplicaWorkerOpenOptions {
   dbName: string;
@@ -194,6 +225,10 @@ export interface ReplicaStatus {
   mode: ReplicaMode;
   cursor: ReplicaCursor | null;
   schemaEpoch: string | null;
+  coverage?: ReplicaCoverage;
+  durability?: ReplicaDurability;
+  /** Durability of the intent outbox, which is a separate browser store. */
+  intentDurability?: ReplicaDurability;
 }
 
 export interface OptimisticUpsert {
@@ -224,7 +259,7 @@ export type IntentState =
 
 export interface ReplicaIntent {
   intentId: string;
-  /** SHA-256 of canonical {appId, action, input}; daemon verifies id reuse. */
+  /** SHA-256 of canonical {appId, action, input, baseVersions}; daemon verifies id reuse. */
   payloadHash: string;
   appId: string;
   action: string;
@@ -237,6 +272,16 @@ export interface ReplicaIntent {
   dependencies?: ReplicaDependency[];
   reason?: string;
   output?: ReplicaValue;
+  /** Optional optimistic concurrency preconditions captured by the app. */
+  baseVersions?: ReplicaBaseVersion[];
+  conflict?: ReplicaConflict;
+}
+
+export interface ReplicaBaseVersion {
+  shapeId?: string;
+  entity: string;
+  rowId: string;
+  version: number;
 }
 
 export interface EnqueueIntentInput {
@@ -246,6 +291,7 @@ export interface EnqueueIntentInput {
   input: ReplicaValue;
   optimistic?: OptimisticMutation[];
   dependencies?: ReplicaDependency[];
+  baseVersions?: ReplicaBaseVersion[];
 }
 
 export interface ReplicaInvalidation extends ReplicaDependency {

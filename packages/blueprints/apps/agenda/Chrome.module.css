@@ -1,15 +1,11 @@
 /* Agenda chrome shared by the served and inline routes (issue #505). Common
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary;
-   this module retains Agenda's variations. Design tokens (--text, --_accent,
-   --bg-elev, --line, --r-md, --t-title, --mono, …) are supplied by the shell
+   this module retains Agenda's variations. Design tokens (--text, --app-identity,
+   --bg-elev, --line, --r-md, --t-title, --font-mono, …) are supplied by the shell
    document (the scoped blueprint-token block InlineAppRoute injects), so this
    file references them directly.
 
-   Two things app.css carries at :root that the blueprint token layer does NOT,
-   yet agenda's component modules consume heavily (--accent-deep-fg ×10, --warn),
-   are folded in below under the app-root scope (`.root` == the host's
-   `.centraid-inline-scope` element) with the same light/dark variants app.css
-   defines. The day "+N more" popover (kit portals it to <body>, outside the
+   The day "+N more" popover (kit portals it to <body>, outside the
    inline scope) keeps its `ag-day-pop*` rules global; its ink/mono vars resolve
    from the shell's own :root token layer. */
 
@@ -21,19 +17,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* app.css :root escape hatches, absent from the blueprint token layer. */
-  --accent-deep-fg: var(--accent-deep);
-  --warning: #b06a12;
-}
-:global(:root[data-theme="dark"]) .root {
-  --warning: #e0a13c;
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .root {
-    --warning: #e0a13c;
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  }
 }
 
 /* app.css globals reused components (Sidebar/HeaderBar/the canvas views/the
@@ -43,11 +26,11 @@
   color: var(--text-soft);
 }
 .root :global(.small) {
-  font-size: 0.8rem;
+  font-size: var(--t-small-size);
 }
 .root :global(mark) {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -58,9 +41,9 @@
   border-radius: 3px;
 }
 .root :global(.ag-eyebrow-label) {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   margin: 18px 0 9px;
 }
@@ -95,7 +78,7 @@
 }
 .root :global(.ag-field-row) input:focus,
 .root :global(.ag-field-row) select:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 /* Schedule-view row title — also a global test selector the app-boot harness
@@ -123,7 +106,7 @@
   --app-drawer-width: 270px;
   --app-topbar-gap: 10px;
   --app-topbar-padding: 14px 22px;
-  letter-spacing: var(--tracking-body);
+  letter-spacing: normal;
 }
 
 /* ---- Sidebar ---- */
@@ -154,11 +137,13 @@
   gap: 9px;
   width: 100%;
   padding: 11px 14px;
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -170,7 +155,7 @@
   transform: scale(0.99);
 }
 .calsLabel {
-  padding: 16px 10px 8px;
+  padding: var(--sp-4) 10px var(--sp-2);
   margin: 0;
 }
 .sideFoot {
@@ -180,11 +165,11 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 2px 4px;
+  padding: 2px var(--sp-1);
   color: var(--text-faint);
 }
 .consentLine svg {
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 .consentLine span {
@@ -235,7 +220,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 22px 22px;
+  padding: var(--sp-4) 22px 22px;
   display: flex;
   flex-direction: column;
 }
@@ -251,12 +236,12 @@
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .canvas {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .topbar {
   flex-wrap: wrap;
@@ -285,9 +270,9 @@
   padding: 0.5rem;
 }
 :global(.ag-day-pop-title) {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
   padding: 0.3rem 0.5rem 0.5rem;
 }
@@ -311,8 +296,8 @@
 }
 :global(.ag-day-pop-time) {
   flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
 }
 :global(.ag-day-pop-text) {

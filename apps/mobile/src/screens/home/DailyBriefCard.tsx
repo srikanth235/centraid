@@ -1,6 +1,7 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
+import { Text } from "../../kit/components/NativeText";
 import { family, radii, useTheme } from "../../kit/theme";
 import type { DailyBrief } from "../../lib/daily-brief";
 
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   eyebrow: { fontFamily: family.monoMedium, fontSize: 10, letterSpacing: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: { paddingVertical: 5, width: "50%" },
-  value: { fontFamily: family.displayBold, fontSize: 19 },
+  value: { fontFamily: family.sansBold, fontSize: 19 },
   label: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 1 },
   timeline: { fontFamily: family.sansRegular, fontSize: 12, lineHeight: 18 },
 });

@@ -7,17 +7,18 @@
 // the decision — per photo, per session — about whether the phone should spend
 // cellular data getting there.
 
-import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import {
   fullQualityAccess,
   LOAD_FULL_QUALITY_LABEL,
@@ -83,7 +84,7 @@ function MeteredPlaceholder({
         onPress={onLoad}
         style={styles.originalButton}
       >
-        <Feather name="download" size={15} color="#fff" />
+        <Icon name="download" size={15} color="#fff" />
         <Text style={styles.liveText}>{LOAD_FULL_QUALITY_LABEL}</Text>
       </Pressable>
     </View>
@@ -193,7 +194,7 @@ export function MediaPage({
           style={styles.liveButton}
           onPress={() => setPlayingLive(true)}
         >
-          <Feather name="play" size={18} color="#fff" />
+          <Icon name="play" size={18} color="#fff" />
           <Text style={styles.liveText}>LIVE</Text>
         </Pressable>
       ) : null}
@@ -211,7 +212,7 @@ export function MediaPage({
             setQuality("original");
           }}
         >
-          <Feather name="maximize" size={15} color="#fff" />
+          <Icon name="maximize" size={15} color="#fff" />
           <Text style={styles.liveText}>
             {access === "granted"
               ? LOAD_ORIGINAL_LABEL

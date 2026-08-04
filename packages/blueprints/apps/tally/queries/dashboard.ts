@@ -13,7 +13,7 @@
  * access state.
  */
 
-const YOU_COLOR = "#0FA678";
+import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -115,38 +115,6 @@ export interface TallyData {
   obligations: ObligationRow[];
 }
 
-// A friend's avatar hue is no longer stored on the tally_friend row (issue
-// #441 A3 — one hue per party). Derive a stable one from the party id so the
-// same person always renders the same colour. (Kept in step with format.ts's
-// FRIEND_COLORS; inlined here to keep this server query free of the client
-// kit imports format.ts pulls in.)
-const FRIEND_COLORS = [
-  "#7C5BD9",
-  "#4E68DD",
-  "#E0567A",
-  "#E8923C",
-  "#2EA098",
-  "#3AA6B9",
-  "#57A55A",
-  "#D9536F",
-];
-function friendColor(partyId: string): string {
-  const id = String(partyId || "");
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return FRIEND_COLORS[h % FRIEND_COLORS.length]!;
-}
-
-function initials(name: string | undefined): string {
-  if (!name) return "?";
-  return name
-    .split(/\s+/u)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
-
 /** Pull every ground fact Tally needs and shape it for the compute helpers. */
 export async function loadTally(
   ctx: HandlerCtx,
@@ -238,7 +206,7 @@ export async function loadTally(
   }>;
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
   const colorByParty = new Map(
-    friends.map((f) => [f.party_id, friendColor(f.party_id)])
+    friends.map((f) => [f.party_id, identityColor(f.party_id)])
   );
 
   const people = new Map<string, ServerPerson>();
@@ -246,8 +214,8 @@ export async function loadTally(
     people.set(me, {
       party_id: me,
       name: "You",
-      color: YOU_COLOR,
-      initials: "You",
+      color: BRAND,
+      initials: identityInitials("You"),
       is_me: true,
     });
   for (const f of friends) {
@@ -255,8 +223,8 @@ export async function loadTally(
     people.set(f.party_id, {
       party_id: f.party_id,
       name,
-      color: colorByParty.get(f.party_id) || "#5C677D",
-      initials: initials(name),
+      color: colorByParty.get(f.party_id) || identityColor(f.party_id),
+      initials: identityInitials(name),
       is_me: false,
     });
   }
@@ -399,8 +367,8 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
     data.people.get(pid) || {
       party_id: pid,
       name: "Someone",
-      color: "#5C677D",
-      initials: "?",
+      color: identityColor(pid),
+      initials: identityInitials("Someone"),
       is_me: false,
     }
   );

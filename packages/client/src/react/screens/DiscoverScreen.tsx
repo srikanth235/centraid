@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { palette, tileFinish } from "@centraid/design";
+import { isIconName, palette, tileFinish } from "@centraid/design";
 import type { ColorHex, IconName } from "@centraid/design";
 
 import { INTEGRATION_HUES } from "../format.js";
@@ -126,6 +126,7 @@ function TemplateCard({
     (palette as Record<string, ColorHex>)[t.colorKey] ??
     ("#7C5BD9" as ColorHex);
   const finish = tileFinish(color, tileVariant);
+  const iconName = isIconName(t.iconKey) ? t.iconKey : "Sparkle";
   return (
     <button
       type="button"
@@ -146,7 +147,7 @@ function TemplateCard({
             color: finish.glyphColor,
           }}
         >
-          <Icon name={t.iconKey as IconName} size={21} strokeWidth={1.85} />
+          <Icon name={iconName as IconName} size={21} strokeWidth={1.85} />
         </div>
         <div className={styles.cardHead}>
           <div className={styles.cardName}>{t.name}</div>

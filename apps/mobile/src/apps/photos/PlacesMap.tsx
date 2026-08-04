@@ -1,9 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { family, useTheme } from "../../kit/theme";
@@ -74,7 +75,7 @@ export default function PlacesMap({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>Places</Text>
         <Text style={[styles.count, { color: colors.textSoft }]}>
@@ -135,5 +136,5 @@ const styles = StyleSheet.create({
   },
   map: { flex: 1 },
   safe: { flex: 1 },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
+  title: { fontFamily: family.sansBold, fontSize: 18 },
 });

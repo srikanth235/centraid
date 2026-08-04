@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px 8px;
+  padding: 0 var(--sp-1) var(--sp-2);
 }
 .miniLabel {
   font: var(--t-body-strong);
@@ -49,7 +49,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   font: var(--t-mono);
   font-size: 11px;
   background: none;
@@ -64,11 +64,13 @@
 }
 .miniDay[data-selected="true"] {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 .miniDay[data-today="true"] {
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-weight: 600;
 }
 .miniDot {
@@ -79,10 +81,10 @@
   width: 3px;
   height: 3px;
   border-radius: 999px;
-  background: var(--accent-deep-fg);
+  background: var(--accent-fill);
 }
 .miniDay[data-today="true"] .miniDot {
-  background: #fff;
+  background: var(--text-inv);
 }
 
 .cals {
@@ -95,7 +97,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--sp-2) 10px;
   border: none;
   border-radius: 8px;
   background: none;
@@ -109,13 +111,13 @@
 .calBox {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   border: 1.5px solid var(--line-strong);
-  color: #fff;
+  color: var(--text-inv);
 }
 .calBox[data-shown="true"] {
   border: none;
@@ -131,7 +133,7 @@
   color: var(--text-faint);
 }
 .calCount {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   opacity: 0.55;
 }

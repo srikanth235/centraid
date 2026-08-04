@@ -87,7 +87,7 @@ function DebtsSection({
     debts.length > 0 ? (
       <span
         style={{
-          fontFamily: "var(--mono)",
+          fontFamily: "var(--font-mono)",
           fontSize: "11px",
           textTransform: "none",
           letterSpacing: 0,
@@ -232,7 +232,7 @@ export function Sections({
         }}
       >
         <div>
-          <div style={{ font: "var(--t-strong)", fontSize: "13px" }}>
+          <div style={{ font: "var(--t-body-strong)", fontSize: "13px" }}>
             Keep in touch
           </div>
           <div
@@ -351,9 +351,11 @@ export function Sections({
                 aria-label="Reminder"
                 style={{
                   background: d.reminder_on
-                    ? "color-mix(in oklab, var(--_accent) 12%, transparent)"
+                    ? "color-mix(in oklab, var(--app-identity) 12%, transparent)"
                     : "color-mix(in oklab, var(--text) 5%, transparent)",
-                  color: d.reminder_on ? "var(--_accent)" : "var(--text-faint)",
+                  color: d.reminder_on
+                    ? "var(--app-identity)"
+                    : "var(--text-faint)",
                 }}
                 onClick={() => onToggleReminder(d.date_id)}
               >
@@ -447,11 +449,11 @@ export function Sections({
                   style={{
                     borderColor: given
                       ? "color-mix(in oklab, var(--success) 30%, transparent)"
-                      : "color-mix(in oklab, var(--c-family) 30%, transparent)",
+                      : "color-mix(in oklab, var(--warning) 30%, transparent)",
                     background: given
                       ? "color-mix(in oklab, var(--success) 14%, transparent)"
-                      : "color-mix(in oklab, var(--c-family) 14%, transparent)",
-                    color: given ? "var(--success)" : "var(--c-family)",
+                      : "color-mix(in oklab, var(--warning) 14%, transparent)",
+                    color: given ? "var(--success)" : "var(--warning)",
                   }}
                   onClick={() => onToggleGift(g.gift_id)}
                 >

@@ -1,6 +1,6 @@
 # template-gate
 
-**Goal:** the per-template mobile compatibility gate (issue #263). Every bundled UI template (kind `app` in `packages/blueprints/index.json`) must open and render inside the phone's WebView — the mobile shell is a viewer for published apps, so a template that renders on desktop but not on the phone is a regression this flow catches.
+**Goal:** the per-template mobile compatibility gate (issue #263). Every bundled UI template that uses the mobile WebView path (kind `app` in `packages/blueprints/index.json`) must open and render on the phone; the eight native apps are covered by the native resilience flow.
 
 **Setup:**
 
@@ -23,4 +23,4 @@
 
 **Cleanup:** every app this run installed is deleted (`DELETE /centraid/_apps/<id>`) in a `finally` block. Apps the vault already had — reported by `alreadyInstalled` — are left alone, so the flow never removes something it did not create.
 
-**Verdict:** PASS only when every template rendered. Per-template failures are collected (the flow keeps going so one broken template doesn't hide the rest) and listed in the FAIL verdict. Common causes: the declared gateway not running or reachable from the device, Settings input failing, or a template whose UI genuinely breaks in a mobile WebView — the thing this gate exists to catch.
+**Verdict:** PASS only when every gated WebView template rendered. Per-template failures are collected (the flow keeps going so one broken template doesn't hide the rest) and listed in the FAIL verdict. Common causes: the declared gateway not running or reachable from the device, Settings input failing, or a template whose UI genuinely breaks in a mobile WebView — the thing this gate exists to catch.

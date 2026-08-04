@@ -120,7 +120,7 @@ The release agent **asserts** classification from the changelog headings; it doe
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
 - **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `lane-release-gateway-npm.yml` job `build-native` (#511).
 - **Mobile beta:** TestFlight / Play internal track (`release.yml` → `lane-release-mobile.yml`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
-- **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). Gateway-embedded PWA remains LAN / always-on fallback. No beta tag ritual.
+- **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). The gateway-served PWA remains the LAN / always-on fallback. No beta tag ritual.
 
 ## D6 — Skills as shims
 

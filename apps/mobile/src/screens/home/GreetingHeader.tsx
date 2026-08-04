@@ -8,8 +8,9 @@
 // the "switch vault" affordance read as one thing.
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
+import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { firstNameOf, greetingFor, initialsOf } from "../../lib/profile";
@@ -71,7 +72,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     avatarInitial: {
       color: "#fff",
-      fontFamily: family.displayBold,
+      fontFamily: family.sansBold,
       fontSize: 17,
     },
     greeting: { flex: 1, paddingRight: 12 },

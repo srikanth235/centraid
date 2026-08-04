@@ -89,6 +89,52 @@ type Stream = (
   onEvent: (event: TurnStreamEvent) => void
 ) => Promise<{ ended: boolean }>;
 
+type ProviderStatus = Awaited<
+  ReturnType<typeof TypeImport_ym9bw8.loadProviders>
+>;
+
+function providerCard(
+  kind: string,
+  title = kind
+): ProviderStatus["cards"][number] {
+  return {
+    kind,
+    title,
+    accent: "#10b981",
+    subtitle: "ready",
+    connected: true,
+    sessionReady: true,
+    modelsLoading: false,
+    models: [],
+  };
+}
+
+function providerStatus(kinds: Array<[string, string?]>): ProviderStatus {
+  return {
+    selectedKind: "codex",
+    anyLoading: false,
+    savedModelByKind: {},
+    subsystemModelByKind: {},
+    defaultConfigPinsByKind: {},
+    subsystemConfigPinsByKind: {},
+    diagnosticsJson: "{}",
+    subsystemRunnerByKey: { assistant: "codex" },
+    subsystemRunnerLadders: {},
+    cards: kinds.map(([kind, title]) => providerCard(kind, title)),
+  };
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((_resolve) => {
+    resolve = _resolve;
+  });
+  return { promise, resolve };
+}
+
 /** Each entry is one turn attempt: the providers it must ask consent for. */
 function streamAskingFor(...consentPerAttempt: Array<string | null>): Stream {
   let attempt = 0;
@@ -132,12 +178,16 @@ function conversation(
   };
 }
 
-async function mount(): Promise<AssistantBridgeProps> {
+async function mount(conversationId?: string): Promise<AssistantBridgeProps> {
   container = document.createElement("div");
   document.body.appendChild(container);
   await act(async () => {
     root = createRoot(container as HTMLDivElement);
-    root.render(<AssistantRoute />);
+    root.render(
+      <AssistantRoute
+        {...(conversationId === undefined ? {} : { conversationId })}
+      />
+    );
   });
   if (!captured.props) throw new Error("assistant bridge was not captured");
   return captured.props;
@@ -176,27 +226,18 @@ describe("AssistantRoute suite", () => {
       .mockImplementation(streamAskingFor(null));
     api.uploadConversationAttachment.mockReset();
     providers.loadProviders.mockReset().mockResolvedValue({
-      selectedKind: "codex",
-      anyLoading: false,
-      savedModelByKind: {},
-      subsystemModelByKind: {},
-      defaultConfigPinsByKind: {},
-      subsystemConfigPinsByKind: {},
-      diagnosticsJson: "{}",
-      subsystemRunnerByKey: { assistant: "codex" },
-      subsystemRunnerLadders: {},
+      ...providerStatus([
+        ["codex", "Codex"],
+        ["claude-code", "Claude Code"],
+        ["copilot", "Copilot"],
+      ]),
       cards: [
         {
-          kind: "codex",
-          title: "Codex",
-          accent: "#10b981",
-          subtitle: "ready",
-          connected: true,
-          sessionReady: true,
-          modelsLoading: false,
-          models: [],
+          ...providerCard("codex", "Codex"),
           breakerStates: [{ failureClass: "quota", state: "open" }],
         },
+        providerCard("claude-code", "Claude Code"),
+        providerCard("copilot", "Copilot"),
       ],
     });
   });
@@ -273,8 +314,104 @@ describe("AssistantRoute suite", () => {
     it("carries breaker health in the runner hint, like the builder and automation pickers", async () => {
       const bridge = await mount();
       await expect(bridge.loadModelPicker()).resolves.toMatchObject({
-        runners: [{ kind: "codex", hint: "ready · quota open" }],
+        runners: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "codex",
+            hint: "ready · quota open",
+          }),
+        ]),
       });
+    });
+
+    it("puts the explicitly selected runner on the next turn", async () => {
+      const bridge = await mount();
+      await bridge.loadModelPicker();
+      await bridge.onSetRunner("claude-code");
+
+      await act(async () => {
+        bridge.onSend("which runner handled this?");
+        await Promise.resolve();
+      });
+
+      expect(api.streamAssistantTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.any(Function),
+        expect.anything()
+      );
+    });
+
+    it("keeps the latest overlapping runner switch", async () => {
+      const first = deferred<ProviderStatus>();
+      const second = deferred<ProviderStatus>();
+      providers.loadProviders
+        .mockReset()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const bridge = await mount();
+
+      const firstSwitch = bridge.onSetRunner("claude-code");
+      const secondSwitch = bridge.onSetRunner("copilot");
+      second.resolve(
+        providerStatus([
+          ["codex", "Codex"],
+          ["claude-code", "Claude Code"],
+          ["copilot", "Copilot"],
+        ])
+      );
+      await secondSwitch;
+      first.resolve(
+        providerStatus([
+          ["codex", "Codex"],
+          ["claude-code", "Claude Code"],
+          ["copilot", "Copilot"],
+        ])
+      );
+      await firstSwitch;
+
+      await act(async () => {
+        bridge.onSend("which runner won the race?");
+        await Promise.resolve();
+      });
+
+      expect(api.streamAssistantTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ runnerKind: "copilot" }),
+        expect.any(Function),
+        expect.anything()
+      );
+    });
+
+    it("does not let the initial picker load overwrite a persisted runner", async () => {
+      const transcript = deferred<
+        ReturnType<typeof conversation> & { messages: [] }
+      >();
+      api.loadConversation
+        .mockReset()
+        .mockReturnValueOnce(transcript.promise)
+        .mockResolvedValue({ ...conversation(), messages: [] });
+      const bridge = await mount("conversation-1");
+
+      // The status/default picker may resolve before the transcript's durable
+      // adapter binding. It must remain observational until that binding wins.
+      await bridge.loadModelPicker();
+      transcript.resolve({
+        ...conversation({ adapterKind: "claude-code" }),
+        messages: [],
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        bridge.onSend("use the persisted runner");
+        await Promise.resolve();
+      });
+
+      expect(api.streamAssistantTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ runnerKind: "claude-code" }),
+        expect.any(Function),
+        expect.anything()
+      );
     });
 
     it("refuses a relative scoped folder and keeps the shared list unchanged", async () => {

@@ -161,6 +161,8 @@ describe("sqlite-store", () => {
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
+          coverage: "partial",
+          durability: "durable",
         });
         expect(store.catalog()).toStrictEqual([]);
         // sqlite-wasm hands back null-prototype rows; spreading compares the
@@ -174,7 +176,7 @@ describe("sqlite-store", () => {
               returnValue: "resultRows",
             })
             .map((row) => ({ ...row }))
-        ).toStrictEqual([{ user_version: 5 }]);
+        ).toStrictEqual([{ user_version: 6 }]);
         expect(
           db
             .exec({
@@ -209,6 +211,8 @@ describe("sqlite-store", () => {
         expect(store.status()).toStrictEqual({
           cursor: { epoch: "replica-1", seq: 2 },
           schemaEpoch: "schema-1",
+          coverage: "complete",
+          durability: "durable",
         });
         expect(store.catalog()).toStrictEqual(snapshot().shapes);
       } finally {
@@ -563,6 +567,8 @@ describe("sqlite-store", () => {
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
+          coverage: "partial",
+          durability: "durable",
         });
       } finally {
         store.close();

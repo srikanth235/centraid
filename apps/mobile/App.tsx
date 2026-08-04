@@ -8,8 +8,6 @@ import JetBrainsMono_500Medium from "@expo-google-fonts/jetbrains-mono/500Medium
 import JetBrainsMono_600SemiBold from "@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf";
 import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf";
 import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
-import SpaceGrotesk_500Medium from "@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf";
-import SpaceGrotesk_600SemiBold from "@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
@@ -19,7 +17,7 @@ import { ShareIntentProvider } from "expo-share-intent";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect } from "react";
-import { Pressable, Text, View, useColorScheme } from "react-native";
+import { Pressable, View, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
@@ -30,6 +28,8 @@ import {
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
+import { Text } from "./src/kit/components/NativeText";
+import ToastHost from "./src/kit/components/Toast";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
@@ -40,9 +40,13 @@ import {
 import { AppLockProvider } from "./src/kit/security/AppLock";
 import {
   hydrateAppearance,
+  hydrateAccent,
   navThemeFor,
+  radii,
   resolveScheme,
   resolveTheme,
+  t,
+  useAccent,
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
@@ -208,7 +212,6 @@ function PhotosNavigator(): React.JSX.Element {
         <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
         <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
       </PhotosStack.Navigator>
-      <FrameProbe />
     </View>
   );
 }
@@ -284,11 +287,7 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
         paddingTop: insets.top + 10,
       }}
     >
-      <Text
-        style={{ color: "#fff", fontFamily: "Geist_500Medium", fontSize: 13 }}
-      >
-        {error}
-      </Text>
+      <Text style={{ ...t("small"), color: colors.textInv }}>{error}</Text>
     </View>
   );
 }
@@ -322,7 +321,7 @@ function ReplicaCompatibilityGate({
         style={{
           backgroundColor: colors.bgElev,
           borderColor: colors.lineStrong,
-          borderRadius: 20,
+          borderRadius: radii.lg,
           borderWidth: 1,
           maxWidth: 420,
           padding: 24,
@@ -331,19 +330,16 @@ function ReplicaCompatibilityGate({
       >
         <Text
           style={{
+            ...t("display"),
             color: colors.text,
-            fontFamily: "SpaceGrotesk_600SemiBold",
-            fontSize: 26,
           }}
         >
           {copy.title}
         </Text>
         <Text
           style={{
+            ...t("body"),
             color: colors.textSoft,
-            fontFamily: "Geist_400Regular",
-            fontSize: 16,
-            lineHeight: 23,
             marginTop: 10,
           }}
         >
@@ -360,7 +356,7 @@ function ReplicaCompatibilityGate({
           style={{
             alignItems: "center",
             backgroundColor: colors.accent,
-            borderRadius: 12,
+            borderRadius: radii.md,
             marginTop: 22,
             paddingHorizontal: 16,
             paddingVertical: 13,
@@ -368,9 +364,8 @@ function ReplicaCompatibilityGate({
         >
           <Text
             style={{
+              ...t("control"),
               color: colors.textInv,
-              fontFamily: "Geist_600SemiBold",
-              fontSize: 15,
             }}
           >
             {copy.action}
@@ -386,7 +381,8 @@ export default function App(): React.JSX.Element | null {
   // scheme here so the nav container theme + status bar follow it, matching the
   // per-screen `useTheme()` override (src/kit/theme/appearance.ts).
   const scheme = resolveScheme(useAppearance(), useColorScheme());
-  const { colors } = resolveTheme(scheme);
+  const accentKey = useAccent();
+  const { colors } = resolveTheme(scheme, accentKey);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   // The return tuple is deliberately dropped: nothing gates on it any more (see
@@ -399,8 +395,6 @@ export default function App(): React.JSX.Element | null {
     JetBrainsMono_400Regular,
     JetBrainsMono_500Medium,
     JetBrainsMono_600SemiBold,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_600SemiBold,
     PlayfairDisplay_600SemiBold,
     PlayfairDisplay_600SemiBold_Italic,
   });
@@ -410,6 +404,7 @@ export default function App(): React.JSX.Element | null {
     // the other: the appearance read must not sit behind the profile read, or
     // first paint waits on two round trips to AsyncStorage instead of one.
     void hydrateAppearance();
+    void hydrateAccent();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
     // expo-image ships with no ceiling on its in-memory bitmap cache, so a long
     // scroll through the photo grid otherwise holds every decoded thumbnail
@@ -467,7 +462,7 @@ export default function App(): React.JSX.Element | null {
                       <NavigationContainer
                         ref={rootNavigationRef}
                         linking={LINKING}
-                        theme={navThemeFor(scheme)}
+                        theme={navThemeFor(scheme, accentKey)}
                       >
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
@@ -588,6 +583,12 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
+            {/* Last child so its absolute readout sits above the navigator.
+              Renders nothing, installs nothing and schedules nothing outside a
+              `__DEV__` build that a probe has explicitly armed — see
+              src/kit/perf/FrameProbe.tsx. */}
+            <FrameProbe />
+            <ToastHost />
           </View>
         </SafeAreaProvider>
       </GestureHandlerRootView>

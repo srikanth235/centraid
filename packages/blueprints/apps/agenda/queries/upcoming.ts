@@ -189,6 +189,8 @@ const DEFAULT_EXPAND_MS = 120 * 24 * 60 * 60 * 1000;
 // and this read cannot be date-bounded (a series anchors in the past), so cap
 // the row count rather than walk the whole table.
 const RECURRING_ANCHOR_CAP = 1000;
+/** One visible range cannot make first paint read an unbounded event table. */
+const EVENT_WINDOW_CAP = 2000;
 
 // Global ceiling on materialized instances across ALL series for one read —
 // keeps a handful of dense rules from ballooning the payload.
@@ -387,7 +389,13 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     ];
     if (to) where.push({ column: "dtstart", op: "lt", value: to });
     const [events, recurring, calendars] = await Promise.all([
-      ctx.vault.read({ entity: "core.event", where, purpose }),
+      ctx.vault.read({
+        entity: "core.event",
+        where,
+        orderBy: { column: "dtstart", dir: "asc" },
+        limit: EVENT_WINDOW_CAP,
+        purpose,
+      }),
       ctx.vault.read({
         entity: "core.event",
         where: [

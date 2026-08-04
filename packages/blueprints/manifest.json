@@ -835,6 +835,7 @@
         "format.ts",
         "icons.ts",
         "index.html",
+        "kind-colours.test.ts",
         "logic.ts",
         "metadata.ts",
         "nav.ts",

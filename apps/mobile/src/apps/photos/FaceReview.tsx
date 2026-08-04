@@ -1,11 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import React, { memo, useCallback, useMemo } from "react";
 import {
   FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -13,6 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -154,7 +154,7 @@ export default function FaceReview({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>
           People review
@@ -195,7 +195,7 @@ export default function FaceReview({
                         { backgroundColor: colors.bgElev },
                       ]}
                     >
-                      <Feather name="user" size={22} color={colors.accent} />
+                      <Icon name="user" size={22} color={colors.accent} />
                     </View>
                     <Text
                       numberOfLines={1}
@@ -263,7 +263,7 @@ const FaceProposalRow = memo(
     return (
       <View style={[styles.row, { borderBottomColor: colors.line }]}>
         <View style={[styles.avatar, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="user" size={20} color={colors.accent} />
+          <Icon name="user" size={20} color={colors.accent} />
         </View>
         <View style={styles.copy}>
           <Text style={[styles.name, { color: colors.text }]}>
@@ -279,7 +279,7 @@ const FaceProposalRow = memo(
             accessibilityRole="button"
             onPress={() => onConfirm(regionId, partyId)}
           >
-            <Feather name="check" size={21} color="#2f9d6a" />
+            <Icon name="check" size={21} color="#2f9d6a" />
           </Pressable>
         ) : null}
         <Pressable
@@ -287,7 +287,7 @@ const FaceProposalRow = memo(
           accessibilityRole="button"
           onPress={() => onReject(regionId)}
         >
-          <Feather name="x" size={21} color={colors.danger} />
+          <Icon name="x" size={21} color={colors.danger} />
         </Pressable>
       </View>
     );
@@ -350,5 +350,5 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginTop: 18,
   },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
+  title: { fontFamily: family.sansBold, fontSize: 18 },
 });

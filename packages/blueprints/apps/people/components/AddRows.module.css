@@ -7,9 +7,9 @@
 .noteadd {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 12px;
-  border-radius: 11px;
+  gap: var(--sp-2);
+  padding: 6px 6px 6px var(--sp-3);
+  border-radius: var(--r-md);
   border: 1px dashed var(--line-strong);
 }
 .noteadd input,

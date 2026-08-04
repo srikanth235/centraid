@@ -23,15 +23,19 @@ import { preparedStatement } from "./sql-statement-cache.js";
 
 export interface ReplicaUpsertWire {
   op: "upsert";
+  commitId: string;
   shapeId: string;
   entity: string;
   rowId: string;
   values: Record<string, unknown>;
+  rowVersion?: number;
   oversizedFields?: string[];
 }
 
 export interface ReplicaDeleteWire {
   op: "delete";
+  commitId: string;
+  rowVersion: number;
   shapeId: string;
   entity: string;
   rowId: string;
@@ -41,8 +45,15 @@ export type ReplicaChangeWire = ReplicaUpsertWire | ReplicaDeleteWire;
 
 export interface ReplicaIntentOutcomeWire {
   intentId: string;
-  status: "parked" | "executed" | "denied" | "failed";
+  status: "parked" | "executed" | "denied" | "failed" | "conflict";
   reason?: string;
+  conflict?: {
+    shapeId?: string;
+    entity: string;
+    rowId: string;
+    expectedVersion: number;
+    actualVersion: number;
+  };
 }
 
 export interface ReplicaChangeBatchWire {
@@ -59,6 +70,7 @@ export interface ReplicaChangeBatchWire {
 
 export interface ReplicaDoorbellChange {
   seq: number;
+  commitId: string;
   entity: string;
   rowId: string;
   op: ReplicaChangeEntry["op"];
@@ -85,7 +97,13 @@ const SHAPE_CONTROL_ENTITIES = new Set([
   "consent.policy",
 ]);
 
-const WIRE_OUTCOMES = new Set(["parked", "executed", "denied", "failed"]);
+const WIRE_OUTCOMES = new Set([
+  "parked",
+  "executed",
+  "denied",
+  "failed",
+  "conflict",
+]);
 
 function outcomeWire(
   outcome: NonNullable<ReturnType<typeof readReplicaIntentOutcome>>
@@ -95,6 +113,7 @@ function outcomeWire(
     intentId: outcome.intentId,
     status: outcome.status as ReplicaIntentOutcomeWire["status"],
     ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+    ...(outcome.conflict === undefined ? {} : { conflict: outcome.conflict }),
   };
 }
 
@@ -302,8 +321,8 @@ export function projectReplicaPage(
         from: since,
         to: page.next,
         changes: [],
-        shapeIds,
         ...(page.hasMore ? { hasMore: true } : {}),
+        shapeIds,
       },
     });
     const sampledNow = new Date(nowMs).toISOString();
@@ -352,6 +371,7 @@ export function projectReplicaPage(
           .sort();
         doorbell.push({
           seq: raw.seq,
+          commitId: raw.commitId,
           entity: raw.entity,
           rowId: raw.rowId,
           op: raw.op,
@@ -399,9 +419,11 @@ export function projectReplicaPage(
         const rowId =
           shaped?.rowId ?? replicaWireRowId(shape, last.entity, last.rowId);
         const wire: ReplicaChangeWire = shaped
-          ? { op: "upsert", ...shaped }
+          ? { op: "upsert", commitId: last.commitId, ...shaped }
           : {
               op: "delete",
+              commitId: last.commitId,
+              rowVersion: last.seq,
               shapeId: shape.shapeId,
               entity: last.entity,
               rowId,
@@ -420,6 +442,7 @@ export function projectReplicaPage(
         const rowId = key.slice(0, key.lastIndexOf("\u0000"));
         doorbell.push({
           seq: last.seq,
+          commitId: last.commitId,
           entity: last.entity,
           rowId,
           op: wake.op,

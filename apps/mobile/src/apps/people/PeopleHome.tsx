@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
@@ -6,8 +5,6 @@ import {
   Pressable,
   ScrollView,
   Switch,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -16,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
+import { showToast } from "../../kit/components/Toast";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -219,22 +219,23 @@ export default function PeopleHome({
     const revisionId = String(output?.revision_id ?? "");
     resetChannel();
     if (duplicates > 0)
-      Alert.alert(
-        "Possible duplicate",
-        `This channel is also used by ${duplicates} other person${duplicates === 1 ? "" : "s"}. Review before merging.`
-      );
+      showToast({
+        message: `Possible duplicate — this channel is also used by ${duplicates} other person${duplicates === 1 ? "" : "s"}.`,
+        tone: "danger",
+      });
     else if (revisionId && channelId)
-      Alert.alert("Contact saved", "The previous value can be restored.", [
-        { text: "Done" },
-        {
-          text: "Undo",
+      showToast({
+        message: "Contact saved. The previous value can be restored.",
+        tone: "accent",
+        action: {
+          label: "Undo",
           onPress: () =>
             void write("undo-contact-channel", {
               channel_id: channelId,
               revision_id: revisionId,
             }),
         },
-      ]);
+      });
   };
   const deleteChannel = (channel: ReplicaRow): void => {
     Alert.alert("Delete contact channel?", String(channel.value ?? ""), [
@@ -250,17 +251,18 @@ export default function PeopleHome({
               nativeWriteOutput(result)?.revision_id ?? ""
             );
             if (!revisionId) return;
-            Alert.alert("Contact deleted", "You can restore it now.", [
-              { text: "Done" },
-              {
-                text: "Undo",
+            showToast({
+              message: "Contact deleted. You can restore it now.",
+              tone: "accent",
+              action: {
+                label: "Undo",
                 onPress: () =>
                   void write("undo-contact-channel", {
                     channel_id: String(channel.channel_id),
                     revision_id: revisionId,
                   }),
               },
-            ]);
+            });
           }),
       },
     ]);
@@ -283,10 +285,11 @@ export default function PeopleHome({
               if (!result) return;
               setSelectedId(String(target.party_id));
               closeMerge();
-              Alert.alert(
-                "People merged",
-                "The duplicate identity is gone; references now point at the survivor."
-              );
+              showToast({
+                message:
+                  "People merged — references now point at the survivor.",
+                tone: "accent",
+              });
             }),
         },
       ]
@@ -342,10 +345,13 @@ export default function PeopleHome({
           ]}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add person"
+          hitSlop={6}
           onPress={() => void addPerson()}
-          style={[styles.add, { backgroundColor: colors.accent }]}
+          style={[styles.add, { backgroundColor: colors.accentFill }]}
         >
-          <Feather name="user-plus" size={18} color={colors.bg} />
+          <Icon name="user-plus" size={18} color={colors.textInv} />
         </Pressable>
       </View>
       <View style={styles.body}>
@@ -426,7 +432,7 @@ export default function PeopleHome({
                       accessibilityLabel="Delete contact channel"
                       onPress={() => deleteChannel(channel)}
                     >
-                      <Feather name="trash-2" size={18} color={colors.danger} />
+                      <Icon name="trash-2" size={18} color={colors.danger} />
                     </Pressable>
                   </View>
                 );
@@ -474,10 +480,14 @@ export default function PeopleHome({
                   <Text style={{ color: colors.textSoft }}>Preferred</Text>
                   <Switch value={preferred} onValueChange={setPreferred} />
                   <Pressable
+                    accessibilityRole="button"
                     onPress={() => void saveChannel()}
-                    style={[styles.save, { backgroundColor: colors.accent }]}
+                    style={[
+                      styles.save,
+                      { backgroundColor: colors.accentFill },
+                    ]}
                   >
-                    <Text style={{ color: colors.bg }}>
+                    <Text style={{ color: colors.textInv }}>
                       {editingChannelId ? "Update" : "Add channel"}
                     </Text>
                   </Pressable>

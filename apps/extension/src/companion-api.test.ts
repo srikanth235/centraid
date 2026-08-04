@@ -47,6 +47,7 @@ vi.mock(import("./storage.js"), () => ({
           endpointId: "endpoint-1",
           enrollmentId: "enrollment-1",
           vaultId: "vault-1",
+          vaults: [{ vaultId: "vault-1", vaultName: "Personal" }],
           pairedAt: "2026-07-19T00:00:00.000Z",
           grantProfile: ["locker"] as const,
         }

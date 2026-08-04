@@ -22,8 +22,10 @@ export interface StoredReplicaRow {
   primary_key: string;
   columns_json: string;
   has_unavailable_fields: number;
+  server_version: number;
   cursor_epoch: string;
   cursor_seq: number;
+  coverage: "partial" | "complete";
 }
 
 export function storedSchema(
@@ -66,6 +68,7 @@ export function replicaEnvelope(
     },
     oversizedFields: parseStringArray(row.oversized_json),
     hasUnavailableFields: row.has_unavailable_fields === 1,
+    ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
   };
 }
 

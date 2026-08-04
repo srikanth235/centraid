@@ -2,39 +2,20 @@
    shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
    The shared design-token layer
    (--text, --bg, --line, --accent, --accent-deep, --shadow-sm/md/lg, the type
-   scale, --sel, --r-card …) is supplied by the shell (the scoped token block
+   scale, --accent-soft, --r-xl …) is supplied by the shell (the scoped token block
    InlineAppRoute
    injects under .centraid-inline-scope), so this file references those directly
-   and never loads tokens.css/wall.css. The one notes-SPECIFIC token app.css's
-   :root added on top of that layer — --accent-deep-fg, which the reused
-   components/*.module.css read — is NOT in the shared layer, so it is folded in
-   here on .shell (trap #3). */
+   and never loads tokens.css/wall.css. App-specific identity stays on the
+   shared `--app-identity` role; action ink stays on `--accent-text`. */
 
 .shell {
-  /* Notes-specific token folded from app.css :root (light). The shared blueprint
-     layer supplies everything else; this alias is the app's own — nav-active
-     labels/chips show accent-deep AS foreground on --accent-soft. */
-  --accent-deep-fg: var(--accent-deep);
-
   composes: kit-app-shell from global;
   --app-drawer-width: 270px;
 }
 
 .shell.shell :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
-}
-
-/* Dark override for the folded token — mirrors app.css's dark block, emitted for
-   both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
-   fallback (the same two-selector shape the token layer uses). */
-:global(:root[data-theme="dark"]) .shell {
-  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-}
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .shell {
-    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
-  }
 }
 
 /* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
@@ -48,7 +29,7 @@
   --font-sans: "New York", "Iowan Old Style", Georgia, Cambria, serif;
 }
 :global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--mono);
+  --font-sans: var(--font-mono);
 }
 
 /* ---------- Sidebar (static chrome; nav/notebooks/summary → Sidebar.module.css) ---------- */
@@ -84,7 +65,9 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
   transition: filter 0.14s var(--ease);
@@ -152,7 +135,7 @@
   display: flex;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
 }
 .viewToggle button {
@@ -162,13 +145,15 @@
   width: 32px;
   height: 30px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--text-faint);
 }
 .viewToggle button[aria-pressed="true"] {
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
 }
 .askMount {
   composes: kit-app-ask-mount from global;
@@ -186,7 +171,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 22px 48px;
+  padding: var(--sp-3) 22px var(--sp-7);
 }
 
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
@@ -206,12 +191,12 @@
 }
 .shell.isNarrow .topbar,
 .shell.isNarrow .scroll {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin-left: var(--sp-4);
+  margin-right: var(--sp-4);
 }
 .shell.isNarrow .topbar {
   flex-wrap: wrap;

@@ -1,6 +1,5 @@
-/*! governance: allow-repo-hygiene file-size-limit — one native Tasks cover keeps the offline replica projection and its receipted interaction surface together. */
-import { Feather } from "@expo/vector-icons";
 import React, { memo, useCallback, useMemo, useState } from "react";
+/*! governance: allow-repo-hygiene file-size-limit — one native Tasks cover keeps the offline replica projection and its receipted interaction surface together. */
 import {
   FlatList,
   Modal,
@@ -8,8 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
@@ -18,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -80,7 +79,7 @@ const DragTaskRow = memo(
       >
         <Pressable
           accessibilityRole="checkbox"
-          accessibilityState={{ checked: false }}
+          accessibilityState={{ checked: row.status === "completed" }}
           onPress={() => onToggle(row)}
           style={[styles.check, { borderColor: colors.accent }]}
         />
@@ -104,9 +103,9 @@ const DragTaskRow = memo(
           onPress={() => onMove(row)}
           style={styles.iconButton}
         >
-          <Feather name="folder" size={17} color={colors.textSoft} />
+          <Icon name="folder" size={17} color={colors.textSoft} />
         </Pressable>
-        <Feather name="menu" size={18} color={colors.textFaint} />
+        <Icon name="menu" size={18} color={colors.textFaint} />
       </View>
     );
   }
@@ -438,7 +437,7 @@ export default function TasksHome({
           onPress={() => void addTask()}
           style={[styles.add, { backgroundColor: colors.accent }]}
         >
-          <Feather name="plus" size={20} color={colors.bg} />
+          <Icon name="plus" size={20} color={colors.bg} />
         </Pressable>
       </View>
       <View style={styles.options}>
@@ -675,5 +674,5 @@ const styles = StyleSheet.create({
   },
   taskMain: { flex: 1 },
   taskTitle: { fontFamily: family.sansMedium, fontSize: 15 },
-  title: { fontFamily: family.displayBold, fontSize: 28 },
+  title: { fontFamily: family.sansBold, fontSize: 28 },
 });

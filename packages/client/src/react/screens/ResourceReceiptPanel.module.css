@@ -1,9 +1,9 @@
 /* Resource receipt panel — co-located styles for ResourceReceiptPanel.tsx
-   (issue var(--text) Phase C). Mirrors the Insights .panel card shell: a bordered
+   (issue #528 Phase C). Mirrors the Insights .panel card shell: a bordered
    elevated card with a header, label/value fact rows, and a quiet footnote.
    Measured actuals of the gateway host, shown beside the cost transparency. */
 .panel {
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   padding: 16px 18px 18px;
@@ -19,9 +19,9 @@
 }
 .head h2 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -34,15 +34,15 @@
 
 .intro {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
 
 .groupTitle {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-top: 4px;
@@ -67,7 +67,7 @@
   gap: 14px;
 }
 .label {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
 }
 .value {

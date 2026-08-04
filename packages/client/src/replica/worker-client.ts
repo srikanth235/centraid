@@ -164,6 +164,7 @@ export class ReplicaWorkerClient implements ReplicaStore {
         rows: result.rows.map((row) => guardReplicaRow(row, guard)),
         receiptId: `replica:${result.cursor.epoch}:${result.cursor.seq}`,
         dependency: result.dependency,
+        coverage: result.coverage,
       };
     } catch (error) {
       if (error instanceof OnlineOnlyError) guard.mark(error);

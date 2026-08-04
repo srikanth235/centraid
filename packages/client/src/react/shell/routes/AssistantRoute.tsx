@@ -1,5 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { JSX } from "react";
 
 import {
@@ -73,6 +79,25 @@ type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 const nowMs = (): number => Date.now();
 
 /**
+ * Keep bridge callbacks stable without letting them capture an old render.
+ * AssistantScreen memoizes transcript rows and uses the picker loader as an
+ * effect dependency, so passing a newly allocated closure on every streamed
+ * frame turns normal state updates into a full picker/transcript refresh.
+ */
+function useStableEvent<T extends (...args: never[]) => unknown>(
+  handler: T
+): T {
+  const handlerRef = useRef(handler);
+  useLayoutEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+  return useCallback(
+    (...args: Parameters<T>) => handlerRef.current(...args),
+    []
+  ) as T;
+}
+
+/**
  * Turns fetched per request (issue #659 G5). The gateway used to materialize an
  * entire thread — every turn, every item, every attachment — to render the last
  * screenful. This is the page; "Show earlier messages" walks backwards from
@@ -97,7 +122,7 @@ export default function AssistantRoute({
   const { showToast, replace, navigate, confirm, refreshAssistantThreads } =
     useShellActions();
   const m = useRef({
-    currentId: null as string | null,
+    currentId: (conversationId ?? null) as string | null,
     msgs: [] as AsstMsg[],
     pendingAttachments: [] as PendingAttachment[],
     busy: false,
@@ -105,6 +130,10 @@ export default function AssistantRoute({
     disposed: false,
     context: null as { used: number; size: number } | null,
     runnerKind: null as AgentRunnerKind | null,
+    /** A persisted conversation runner is unresolved while its transcript loads. */
+    runnerReady: conversationId === undefined,
+    /** Bumps whenever the screen must reload runner/model capabilities. */
+    pickerRevision: 0,
     selectedModel: "",
     selectedEffort: "",
     workspaceKind: "vault-data" as "vault-data" | "app" | "draft",
@@ -132,10 +161,14 @@ export default function AssistantRoute({
     : (pickedScope ?? memberScopes.primary?.id);
   // Render-visible mirror of `m.current.currentId !== null` — the slash-command
   // list gates Export/Rename on it, and render may not read the model ref.
-  const [hasThread, setHasThread] = useState(false);
+  const [hasThread, setHasThread] = useState(Boolean(conversationId));
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
   const modelPickerRunnerRef = useRef<AgentRunnerKind>("codex");
+  /** Invalidates overlapping picker loads and runner switches. */
+  const runnerRequestRef = useRef(0);
+  /** Invalidates duplicate/stale transcript loads, including StrictMode replays. */
+  const threadRequestRef = useRef(0);
   // Row identity + reference-stable DTOs for the transcript (issue #659).
   const projectionRef = useRef(createTranscriptProjection());
 
@@ -172,7 +205,21 @@ export default function AssistantRoute({
         : {}),
       canLoadEarlier: m.current.hasMore,
       loadingEarlier: m.current.loadingEarlier,
+      runnerReady: m.current.runnerReady,
+      pickerRevision: m.current.pickerRevision,
     };
+  };
+
+  const isCurrent = (id: string, request: number): boolean =>
+    !m.current.disposed &&
+    m.current.currentId === id &&
+    threadRequestRef.current === request;
+
+  const clearPendingAttachments = (): void => {
+    for (const attachment of m.current.pendingAttachments) {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    }
+    m.current.pendingAttachments = [];
   };
   // A streamed turn fires an event per token, and each one used to re-project
   // the whole transcript and re-render synchronously — hundreds of times more
@@ -196,7 +243,10 @@ export default function AssistantRoute({
   };
 
   /** Re-fetch the transcript so answers carry turn ids + retry pagers (#420). */
-  const reloadTranscript = async (id: string): Promise<void> => {
+  const reloadTranscript = async (
+    id: string,
+    request = threadRequestRef.current
+  ): Promise<void> => {
     try {
       // Re-request the coverage the reader currently has, not just the newest
       // page — otherwise finishing a turn would silently discard the older
@@ -207,8 +257,7 @@ export default function AssistantRoute({
         conversationScope(id),
         { turns: m.current.loadedTurns }
       );
-      if (m.current.disposed || m.current.currentId !== id || m.current.busy)
-        return;
+      if (!isCurrent(id, request) || m.current.busy) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
@@ -216,7 +265,11 @@ export default function AssistantRoute({
       m.current.hasMore = loaded.hasMore ?? false;
       m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
-      if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
+      if (loaded.adapterKind && loaded.adapterKind !== m.current.runnerKind) {
+        m.current.runnerKind = loaded.adapterKind;
+        m.current.pickerRevision += 1;
+        runnerRequestRef.current += 1;
+      }
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
         m.current.additionalDirectories = [
@@ -230,12 +283,14 @@ export default function AssistantRoute({
   };
 
   const selectThread = async (id: string | null): Promise<void> => {
+    const request = ++threadRequestRef.current;
+    runnerRequestRef.current += 1;
     m.current.abort?.abort();
     setBusy(false);
     setHasThread(id !== null);
     m.current.currentId = id;
     m.current.msgs = [];
-    m.current.pendingAttachments = [];
+    clearPendingAttachments();
     m.current.turnCount = 0;
     m.current.hasMore = false;
     m.current.oldestSeq = undefined;
@@ -243,6 +298,8 @@ export default function AssistantRoute({
     m.current.loadedTurns = TRANSCRIPT_PAGE_TURNS;
     m.current.context = null;
     m.current.runnerKind = null;
+    m.current.runnerReady = id === null;
+    m.current.pickerRevision += 1;
     m.current.workspaceKind = "vault-data";
     m.current.additionalDirectories = [];
     // A thread switch must clear the old transcript in this frame, not the
@@ -259,7 +316,7 @@ export default function AssistantRoute({
         conversationScope(id),
         { turns: TRANSCRIPT_PAGE_TURNS }
       );
-      if (m.current.disposed || m.current.currentId !== id) return;
+      if (!isCurrent(id, request)) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
@@ -267,7 +324,12 @@ export default function AssistantRoute({
       m.current.hasMore = loaded.hasMore ?? false;
       m.current.oldestSeq = loaded.oldestSeq;
       m.current.turnCount = loaded.turnCount;
-      if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
+      m.current.runnerKind = loaded.adapterKind ?? null;
+      m.current.runnerReady = true;
+      m.current.pickerRevision += 1;
+      // Any picker request started while the transcript was unresolved must
+      // not commit the status/default runner over this persisted binding.
+      runnerRequestRef.current += 1;
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
         m.current.additionalDirectories = [
@@ -275,12 +337,14 @@ export default function AssistantRoute({
         ];
       }
     } catch (error) {
-      if (m.current.disposed) return;
+      if (!isCurrent(id, request)) return;
       m.current.msgs = [
         { kind: "ai", text: `Failed to load: ${String(error)}`, error: true },
       ];
+      m.current.runnerReady = true;
+      m.current.pickerRevision += 1;
     }
-    pushSync();
+    if (isCurrent(id, request)) pushSync();
   };
 
   /**
@@ -297,6 +361,7 @@ export default function AssistantRoute({
    */
   const loadEarlier = (): void => {
     const id = m.current.currentId;
+    const request = threadRequestRef.current;
     const cursor = m.current.oldestSeq;
     if (!id || cursor === undefined || m.current.loadingEarlier) return;
     m.current.loadingEarlier = true;
@@ -309,7 +374,7 @@ export default function AssistantRoute({
           conversationScope(id),
           { turns: TRANSCRIPT_PAGE_TURNS, beforeSeq: cursor }
         );
-        if (m.current.disposed || m.current.currentId !== id) return;
+        if (!isCurrent(id, request)) return;
         const older = hydrateMessages(page.messages);
         // New objects in front, existing objects untouched.
         m.current.msgs = [...older, ...m.current.msgs];
@@ -319,12 +384,12 @@ export default function AssistantRoute({
         if (page.oldestSeq !== undefined) m.current.oldestSeq = page.oldestSeq;
         m.current.loadedTurns += TRANSCRIPT_PAGE_TURNS;
       } catch (error) {
-        if (m.current.disposed) return;
+        if (m.current.disposed || !isCurrent(id, request)) return;
         showToast(
           `Couldn't load earlier messages: ${error instanceof Error ? error.message : String(error)}`
         );
       } finally {
-        if (!m.current.disposed) {
+        if (isCurrent(id, request)) {
           m.current.loadingEarlier = false;
           pushSync();
         }
@@ -397,15 +462,14 @@ export default function AssistantRoute({
   // Composer model picker — reuses the Settings → Models → Agents data path.
   const pickerFromStatus = (
     status: Awaited<ReturnType<typeof loadProviders>>,
-    requestedRunner?: AgentRunnerKind | null
+    requestedRunner?: AgentRunnerKind | null,
+    commit = true
   ): AsstModelPickerDTO => {
     const runnerKind = resolveReportedRunnerKind(
       status,
       requestedRunner,
       "assistant"
     );
-    m.current.runnerKind = runnerKind;
-    modelPickerRunnerRef.current = runnerKind;
     const card = status.cards.find((c) => c.kind === runnerKind);
     const models = card?.modelConfigurable ? card.models : [];
     const defaultId = status.savedModelByKind[runnerKind] ?? "";
@@ -420,11 +484,17 @@ export default function AssistantRoute({
       status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
       effortOption?.currentValue ??
       "";
-    m.current.selectedModel =
+    const selectedModel =
       status.subsystemModelByKind[runnerKind]?.assistant ?? "";
-    m.current.selectedEffort =
+    const selectedEffort =
       status.subsystemConfigPinsByKind[runnerKind]?.assistant?.thought_level ??
       "";
+    if (commit) {
+      m.current.runnerKind = runnerKind;
+      modelPickerRunnerRef.current = runnerKind;
+      m.current.selectedModel = selectedModel;
+      m.current.selectedEffort = selectedEffort;
+    }
     return {
       runners: status.cards.map((runner) => ({
         kind: runner.kind,
@@ -452,20 +522,35 @@ export default function AssistantRoute({
       })),
       defaultModelName:
         defaultModel?.name ?? defaultModel?.id ?? "gateway default",
-      selectedModelId: m.current.selectedModel,
+      selectedModelId: selectedModel,
       efforts: effortOption?.values ?? [],
       defaultEffortName:
         effortOption?.values.find((value) => value.value === defaultEffort)
           ?.name ?? defaultEffort,
-      selectedEffortId: m.current.selectedEffort,
+      selectedEffortId: selectedEffort,
       supportsAdditionalDirectories: card?.additionalDirectories === true,
       supportsAttachments: card?.supportsAttachments === true,
       supportsContext: card?.supportsContext === true,
     };
   };
 
-  const loadModelPicker = async (): Promise<AsstModelPickerDTO> =>
-    pickerFromStatus(await loadProviders(), m.current.runnerKind);
+  const loadModelPickerNow = async (): Promise<AsstModelPickerDTO> => {
+    const runnerRequest = runnerRequestRef.current;
+    const threadRequest = threadRequestRef.current;
+    const requestedRunner = m.current.runnerKind;
+    const status = await loadProviders();
+    const canCommit =
+      !m.current.disposed &&
+      m.current.runnerReady &&
+      runnerRequestRef.current === runnerRequest &&
+      threadRequestRef.current === threadRequest;
+    return pickerFromStatus(
+      status,
+      canCommit ? requestedRunner : m.current.runnerKind,
+      canCommit
+    );
+  };
+  const loadModelPicker = useStableEvent(loadModelPickerNow);
 
   const setModel = (modelId: string): void => {
     m.current.selectedModel = modelId;
@@ -482,30 +567,52 @@ export default function AssistantRoute({
     );
   };
 
-  const setRunner = async (
+  const setRunnerNow = async (
     runnerKind: AgentRunnerKind
   ): Promise<AsstModelPickerDTO> => {
+    const runnerRequest = ++runnerRequestRef.current;
+    const threadRequest = threadRequestRef.current;
+    const conversationAtStart = m.current.currentId;
     const previous = m.current.runnerKind;
-    const status = await loadProviders({ refresh: true });
+    // The normal status route is backed by the gateway's capability cache. A
+    // switch should use that fast path; only an unknown/not-ready target needs
+    // the expensive all-runners refresh used by Settings diagnostics.
+    let status = await loadProviders();
     const target = status.cards.find((card) => card.kind === runnerKind);
     if (!target?.sessionReady) {
+      status = await loadProviders({ refresh: true });
+    }
+    const current =
+      !m.current.disposed &&
+      m.current.runnerReady &&
+      m.current.currentId === conversationAtStart &&
+      threadRequestRef.current === threadRequest &&
+      runnerRequestRef.current === runnerRequest;
+    if (!current) {
+      return pickerFromStatus(status, m.current.runnerKind, false);
+    }
+    const resolvedTarget = status.cards.find(
+      (card) => card.kind === runnerKind
+    );
+    if (!resolvedTarget?.sessionReady) {
       showToast(
-        target?.subtitle ??
+        resolvedTarget?.subtitle ??
           `${runnerKind} did not complete its session preflight.`
       );
       return pickerFromStatus(status, previous);
     }
-    m.current.runnerKind = runnerKind;
+    // Invalidate passive picker requests that began while this preflight was
+    // running before committing the user's explicit choice.
+    runnerRequestRef.current += 1;
     m.current.context = null;
-    if (!target.supportsAttachments) {
-      for (const attachment of m.current.pendingAttachments) {
-        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
-      }
-      m.current.pendingAttachments = [];
+    if (!resolvedTarget.supportsAttachments) {
+      clearPendingAttachments();
     }
+    const next = pickerFromStatus(status, runnerKind);
     push();
-    return pickerFromStatus(status, runnerKind);
+    return next;
   };
+  const setRunner = useStableEvent(setRunnerNow);
 
   const removePendingAttachment = (localId: string): void => {
     const gone = m.current.pendingAttachments.find(
@@ -537,6 +644,7 @@ export default function AssistantRoute({
   }): Promise<void> => {
     const conversationIdLocal = m.current.currentId;
     if (!conversationIdLocal) return;
+    const threadRequest = threadRequestRef.current;
     const baselineTurnCount = m.current.turnCount;
     if (opts.removeFromIndex !== undefined)
       m.current.msgs = m.current.msgs.slice(0, opts.removeFromIndex);
@@ -595,8 +703,7 @@ export default function AssistantRoute({
     let sawActivity = false;
 
     const onEvent = (event: TurnStreamEvent): void => {
-      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
-        return;
+      if (!isCurrent(conversationIdLocal, threadRequest)) return;
       if (event.type !== "error" && event.type !== "aborted")
         sawActivity = true;
       switch (event.type) {
@@ -770,8 +877,7 @@ export default function AssistantRoute({
         threw = error;
     }
 
-    if (m.current.disposed || m.current.currentId !== conversationIdLocal)
-      return;
+    if (!isCurrent(conversationIdLocal, threadRequest)) return;
     if (requiredProvider) {
       setBusy(false);
       const approved = await confirm({
@@ -779,8 +885,7 @@ export default function AssistantRoute({
         title: `Send to ${requiredProvider}?`,
         message: `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
       });
-      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
-        return;
+      if (!isCurrent(conversationIdLocal, threadRequest)) return;
       if (approved) {
         // Carry EVERY provider approved this attempt — a consent-gated failover
         // asks twice, and dropping the first approval loops forever (#567).
@@ -802,9 +907,11 @@ export default function AssistantRoute({
       }
       return;
     }
-    for (const msg of m.current.msgs) {
-      if (msg.kind === "thinking" && msg.streaming) msg.streaming = false;
-    }
+    m.current.msgs = m.current.msgs.map((msg) =>
+      msg.kind === "thinking" && msg.streaming
+        ? { ...msg, streaming: false }
+        : msg
+    );
     const aborted = m.current.abort?.signal.aborted ?? false;
     // A mid-turn drop: the stream carried activity then closed WITHOUT the
     // terminal `event: end` (or threw a network error). The backend finished the
@@ -836,14 +943,12 @@ export default function AssistantRoute({
             conversationIdLocal,
             conversationScope(conversationIdLocal)
           ),
-        isCancelled: () =>
-          m.current.disposed || m.current.currentId !== conversationIdLocal,
+        isCancelled: () => !isCurrent(conversationIdLocal, threadRequest),
       });
-      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
-        return;
+      if (!isCurrent(conversationIdLocal, threadRequest)) return;
       m.current.busy = false;
       if (settled) {
-        await reloadTranscript(conversationIdLocal);
+        await reloadTranscript(conversationIdLocal, threadRequest);
       } else {
         // Give up: drop the catch-up row and offer a one-tap resend (same key).
         m.current.msgs = m.current.msgs.filter(
@@ -896,7 +1001,8 @@ export default function AssistantRoute({
     pushSync();
     refreshAssistantThreads?.();
     // On a clean turn, re-fetch so answers gain turn ids + retry pagers.
-    if (!errored && !aborted) void reloadTranscript(conversationIdLocal);
+    if (!errored && !aborted)
+      void reloadTranscript(conversationIdLocal, threadRequest);
   };
 
   const submit = async (textArg?: string): Promise<void> => {
@@ -930,6 +1036,11 @@ export default function AssistantRoute({
             : "Could not start a conversation"
         );
         return;
+      }
+    }
+    for (const attachment of m.current.pendingAttachments) {
+      if (attachment.state === "ready" && attachment.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl);
       }
     }
     m.current.pendingAttachments = m.current.pendingAttachments.filter(
@@ -1009,17 +1120,30 @@ export default function AssistantRoute({
     const conversationIdLocal = m.current.currentId;
     if (!conversationIdLocal) return;
     let applied: "up" | "down" | null = null;
-    for (const msg of m.current.msgs) {
+    for (const [index, msg] of m.current.msgs.entries()) {
       if (msg.kind !== "ai") continue;
-      const attempt = msg.attempts?.find((a) => a.turnId === turnId);
-      if (attempt) {
-        attempt.feedback = attempt.feedback === value ? null : value;
-        applied = attempt.feedback;
+      const attemptIndex =
+        msg.attempts?.findIndex((attempt) => attempt.turnId === turnId) ?? -1;
+      const attempt = msg.attempts?.[attemptIndex];
+      if (attempt && attemptIndex >= 0) {
+        const feedback = attempt.feedback === value ? null : value;
+        m.current.msgs = [...m.current.msgs];
+        m.current.msgs[index] = {
+          ...msg,
+          attempts: msg.attempts?.map((candidate, candidateIndex) =>
+            candidateIndex === attemptIndex
+              ? { ...candidate, feedback }
+              : candidate
+          ),
+        };
+        applied = feedback;
         break;
       }
       if (msg.turnId === turnId) {
-        msg.feedback = msg.feedback === value ? null : value;
-        applied = msg.feedback ?? null;
+        const feedback = msg.feedback === value ? null : value;
+        m.current.msgs = [...m.current.msgs];
+        m.current.msgs[index] = { ...msg, feedback };
+        applied = feedback;
         break;
       }
     }
@@ -1056,7 +1180,13 @@ export default function AssistantRoute({
     model.disposed = false;
     return () => {
       model.disposed = true;
+      runnerRequestRef.current += 1;
+      threadRequestRef.current += 1;
       model.abort?.abort();
+      for (const attachment of model.pendingAttachments) {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      }
+      model.pendingAttachments = [];
       // A queued frame would land after the screen is gone.
       batch?.cancel();
     };
@@ -1158,6 +1288,76 @@ export default function AssistantRoute({
     }
   };
 
+  // Keep the screen bridge identity stable. The implementations below still
+  // update every render through useStableEvent, but AssistantScreen can now
+  // preserve memoized transcript rows and its picker effect across token
+  // frames and ordinary route state changes.
+  const screenOnReady = useStableEvent(
+    (update: (s: AssistantSnapshot) => void): void => {
+      updateRef.current = update;
+      update(buildSnapshot());
+    }
+  );
+  const screenOnSend = useStableEvent((text: string): void => {
+    void submit(text);
+  });
+  const screenOnStop = useStableEvent((): void => {
+    m.current.abort?.abort();
+    setBusy(false);
+  });
+  const screenOnLoadEarlier = useStableEvent(loadEarlier);
+  const screenOnAttachFiles = useStableEvent(attachFiles);
+  const screenOnRemovePendingAttachment = useStableEvent(
+    removePendingAttachment
+  );
+  const screenOnAddWorkspace = useStableEvent((): void => {
+    void openPrompt({
+      title: "Add a scoped workspace folder",
+      placeholder: "/absolute/path/to/folder",
+      confirmLabel: "Share folder",
+    }).then((directory) => {
+      const trimmed = directory?.trim() ?? "";
+      if (!trimmed) return;
+      // The gateway rejects a bad root with a 400 on the NEXT turn, which
+      // reads as a failed answer. Catch what we can name here (#567).
+      const rejection = rejectScopedDirectory(
+        trimmed,
+        m.current.additionalDirectories
+      );
+      if (rejection) {
+        showToast(rejection);
+        return;
+      }
+      m.current.additionalDirectories.push(trimmed);
+      push();
+    });
+  });
+  const screenOnRemoveWorkspace = useStableEvent((directory: string): void => {
+    m.current.additionalDirectories = m.current.additionalDirectories.filter(
+      (current) => current !== directory
+    );
+    push();
+  });
+  const screenHydrateRefs = useStableEvent(hydrateRefs);
+  const screenWireCodeCopy = useStableEvent(wireCodeCopy);
+  const screenLoadAttachmentImage = useStableEvent(loadAttachmentImage);
+  const screenOnCopyMessage = useStableEvent(copyMessage);
+  const screenOnFeedback = useStableEvent(setFeedback);
+  const screenOnRegenerate = useStableEvent(regenerate);
+  const screenOnRetryError = useStableEvent(retryError);
+  const screenOnPagerNav = useStableEvent(pagerNav);
+  const screenOnSetModel = useStableEvent(setModel);
+  const screenOnSetEffort = useStableEvent(setEffort);
+  const screenOnSetRunner = setRunner;
+  const screenOnSetWorkspaceKind = useStableEvent(
+    (workspaceKind: "vault-data" | "app" | "draft"): void => {
+      m.current.workspaceKind = workspaceKind;
+      push();
+    }
+  );
+  const screenSearchEntities = useStableEvent(searchEntities);
+  const screenRunSlash = useStableEvent(runSlash);
+
   return (
     <div className={mainScrollCss.hasWall}>
       {/* Which vault this conversation reads (issue #599). A picker while the
@@ -1176,67 +1376,31 @@ export default function AssistantRoute({
       ) : null}
       <AssistantScreen
         suggestions={starters}
-        searchEntities={searchEntities}
+        searchEntities={screenSearchEntities}
         slashCommands={slashCommands}
-        onRunSlash={runSlash}
+        onRunSlash={screenRunSlash}
         {...(conversationId ? { conversationId } : {})}
-        onReady={(update) => {
-          updateRef.current = update;
-          update(buildSnapshot());
-        }}
-        onSend={(text) => void submit(text)}
-        onStop={() => {
-          m.current.abort?.abort();
-          setBusy(false);
-        }}
-        onLoadEarlier={loadEarlier}
-        onAttachFiles={attachFiles}
-        onRemovePendingAttachment={removePendingAttachment}
-        onAddWorkspace={() => {
-          void openPrompt({
-            title: "Add a scoped workspace folder",
-            placeholder: "/absolute/path/to/folder",
-            confirmLabel: "Share folder",
-          }).then((directory) => {
-            const trimmed = directory?.trim() ?? "";
-            if (!trimmed) return;
-            // The gateway rejects a bad root with a 400 on the NEXT turn, which
-            // reads as a failed answer. Catch what we can name here (#567).
-            const rejection = rejectScopedDirectory(
-              trimmed,
-              m.current.additionalDirectories
-            );
-            if (rejection) {
-              showToast(rejection);
-              return;
-            }
-            m.current.additionalDirectories.push(trimmed);
-            push();
-          });
-        }}
-        onRemoveWorkspace={(directory) => {
-          m.current.additionalDirectories =
-            m.current.additionalDirectories.filter(
-              (current) => current !== directory
-            );
-          push();
-        }}
-        hydrateRefs={(node) => hydrateRefs(node)}
-        wireCodeCopy={(node) => wireCodeCopy(node)}
-        loadAttachmentImage={loadAttachmentImage}
-        onCopyMessage={copyMessage}
-        onFeedback={setFeedback}
-        onRegenerate={regenerate}
-        onRetryError={retryError}
-        onPagerNav={pagerNav}
+        onReady={screenOnReady}
+        onSend={screenOnSend}
+        onStop={screenOnStop}
+        onLoadEarlier={screenOnLoadEarlier}
+        onAttachFiles={screenOnAttachFiles}
+        onRemovePendingAttachment={screenOnRemovePendingAttachment}
+        onAddWorkspace={screenOnAddWorkspace}
+        onRemoveWorkspace={screenOnRemoveWorkspace}
+        hydrateRefs={screenHydrateRefs}
+        wireCodeCopy={screenWireCodeCopy}
+        loadAttachmentImage={screenLoadAttachmentImage}
+        onCopyMessage={screenOnCopyMessage}
+        onFeedback={screenOnFeedback}
+        onRegenerate={screenOnRegenerate}
+        onRetryError={screenOnRetryError}
+        onPagerNav={screenOnPagerNav}
         loadModelPicker={loadModelPicker}
-        onSetModel={setModel}
-        onSetEffort={setEffort}
-        onSetRunner={setRunner}
-        onSetWorkspaceKind={(workspaceKind) => {
-          m.current.workspaceKind = workspaceKind;
-          push();
-        }}
+        onSetModel={screenOnSetModel}
+        onSetEffort={screenOnSetEffort}
+        onSetRunner={screenOnSetRunner}
+        onSetWorkspaceKind={screenOnSetWorkspaceKind}
       />
     </div>
   );

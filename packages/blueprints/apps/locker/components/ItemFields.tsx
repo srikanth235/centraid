@@ -116,7 +116,7 @@ function OtpFieldRow({ seed }: { seed: string }) {
               cy="18"
               r="15"
               fill="none"
-              stroke="var(--_accent)"
+              stroke="var(--app-identity)"
               strokeWidth="3"
               strokeLinecap="round"
               strokeDasharray="94.2"

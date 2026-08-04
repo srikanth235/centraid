@@ -5,7 +5,8 @@
    they live here and are imported wherever needed. Authored camelCase; module
    hashing replaces the old `d-` prefix. The kit vocabulary they sit beside
    (`kit-chip`, `kit-btn`, `kit-icon-btn`) stays a global string at the call
-   sites. `--custody-warn`/`--accent-deep-fg` come from app.css's :root. */
+   action text comes from the shared `--accent-text` role; the custody warn tone
+   is the semantic `--warning` token. */
 
 /* The compact backup-status dot (Grid card + List row, via Shared's CustodyDot).
    The three tones are compound modifiers on the base dot. */
@@ -14,14 +15,14 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
-  margin-left: 5px;
+  margin-left: var(--sp-1);
   vertical-align: middle;
 }
 .custodyDot.custodyOk {
-  background: var(--accent-deep-fg);
+  background: var(--accent-fill);
 }
 .custodyDot.custodyWarn {
-  background: #c9922e;
+  background: var(--warning);
 }
 .custodyDot.custodyDanger {
   background: var(--danger);
@@ -39,16 +40,16 @@
 }
 .snippet mark {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border-radius: 3px;
   padding: 0 1px;
 }
 
 /* The vault-canonical star (issue #274) riding a Grid card or List row title. */
 .starInd {
-  color: var(--_accent);
+  color: var(--app-identity);
   font-size: 0.85em;
-  margin-left: 5px;
+  margin-left: var(--sp-1);
 }
 
 /* The play badge over a video thumbnail (Grid card, List row `.small`, Details
@@ -62,9 +63,10 @@
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  font-size: 0.8rem;
+  /* Darkens the thumbnail behind it — the scrim token, dialled down. */
+  background: color-mix(in oklab, var(--scrim) 81%, transparent);
+  color: var(--text-inv);
+  font-size: var(--t-small-size);
   padding-left: 2px;
   pointer-events: none;
 }
@@ -76,8 +78,7 @@
 
 /* Free-form label chip (Toolbar's TagChips + Details' Tags editor). */
 .tagChip {
-  font-family: var(--mono);
-  font-size: 11px;
+  font: var(--t-mono);
 }
 
 /* Drawer action/footer button pills (Details actions + footer, History
@@ -88,14 +89,14 @@
 .detailActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: var(--sp-2);
   margin: 18px 0;
 }
 .detailActions .detailBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: var(--sp-1);
 }
 .detailBtn {
   flex: 1;

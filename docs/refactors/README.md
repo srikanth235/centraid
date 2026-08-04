@@ -16,10 +16,10 @@ Small single-PR cleanups do not need a plan file — a receipt is enough.
 docs/refactors/<short-slug>.md
 ```
 
-Examples of plan-like docs already in tree (treat as examples; migrate here when actively executed):
+Examples of plan-like docs already in tree:
 
 - [docs/plans/gateway-low-end-and-rust-plane.md](../plans/gateway-low-end-and-rust-plane.md)
-- [docs/plans/skills-package-plan.md](../plans/skills-package-plan.md)
+- [inline-system-apps.md](inline-system-apps.md)
 
 `docs/plans/` remains valid for design/measurement records; **`docs/refactors/`** is for multi-session execution plans with a progress log.
 

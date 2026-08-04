@@ -105,5 +105,10 @@ export function resolveItemCost(opts: {
   if (estimated !== undefined) {
     return { costUsd: estimated, costSource: "estimated" };
   }
+  if (process.env.NODE_ENV === "test" && opts.model) {
+    throw new Error(
+      `priced inference model ${opts.model} has no pricing catalog entry`
+    );
+  }
   return {};
 }

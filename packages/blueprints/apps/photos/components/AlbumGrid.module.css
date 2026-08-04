@@ -4,7 +4,7 @@
 .albumGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 16px;
+  gap: var(--sp-4);
 }
 .albumCard {
   border: none;
@@ -20,7 +20,7 @@
   display: block;
   position: relative;
   aspect-ratio: 1;
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-sunken) center/cover no-repeat;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--line);
@@ -29,7 +29,7 @@
   display: block;
   font: var(--t-body-strong);
   font-size: 14px;
-  margin-top: 9px;
+  margin-top: var(--sp-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -46,16 +46,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: var(--sp-2);
   aspect-ratio: 1;
   border: 1.5px dashed var(--line-strong);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   color: var(--text-faint);
 }
 .albumCardNew:hover {
-  border-color: var(--_accent);
-  color: var(--accent-deep-fg);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 .albumCardNew span:last-child {
   font: var(--t-small);

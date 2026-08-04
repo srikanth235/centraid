@@ -1,11 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import { File } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
 // governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -13,6 +12,9 @@ import {
 
 import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
+import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -49,10 +51,6 @@ import {
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
-// The bottom-nav active tint is the ochre accent from the design (#B47B3F),
-// distinct from the theme's blue `accent` used elsewhere on this screen.
-const NAV_ACTIVE = "#B47B3F";
-
 type PhotosView = "photos" | "collections";
 
 // Icon-only destinations inside the glass pill — the mini-app's OWN sections and
@@ -64,7 +62,7 @@ type PhotosView = "photos" | "collections";
 // album creation are real routes, kept outside the section switcher.
 const PILL_ITEMS: Array<{
   key: string;
-  icon: keyof typeof Feather.glyphMap;
+  icon: string;
   label: string;
   view: PhotosView;
 }> = [
@@ -80,7 +78,7 @@ const PILL_ITEMS: Array<{
 export default function PhotosHome({
   navigation,
 }: PhotosScreenProps<"PhotosHome">): React.JSX.Element {
-  const { colors, scheme } = useTheme();
+  const { colors, radii, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
@@ -89,6 +87,10 @@ export default function PhotosHome({
   const [vaultsOpen, setVaultsOpen] = useState(false);
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    completed: number;
+    total: number;
+  }>();
   const [refreshing, setRefreshing] = useState(false);
   const collections = useReplicaQuery(
     "photos",
@@ -163,10 +165,11 @@ export default function PhotosHome({
 
   const backupSelection = async (): Promise<void> => {
     if (!session || !gatewayBase) {
-      Alert.alert(
-        "Desktop unavailable",
-        "Pair or reconnect a gateway before starting backup."
-      );
+      showToast({
+        message:
+          "Desktop unavailable — pair or reconnect a gateway before backup.",
+        tone: "danger",
+      });
       return;
     }
     const selected = timeline.assets.filter(
@@ -210,6 +213,7 @@ export default function PhotosHome({
           width: asset.width,
           height: asset.height,
           durationS: asset.durationS,
+          onProgress: setUploadProgress,
         });
         if (companion) {
           const companionFile = new File(companion);
@@ -225,6 +229,7 @@ export default function PhotosHome({
             kind: "video",
             capturedAt: asset.capturedAt,
             captureGroupId: `live:${asset.localId}`,
+            onProgress: setUploadProgress,
           });
         }
         return backupNext(index + 1);
@@ -233,22 +238,23 @@ export default function PhotosHome({
       // Anything still in iCloud stays selected so a retry is one tap.
       setSelection(inCloud);
       if (inCloud.size) {
-        Alert.alert(
-          "Some originals are in iCloud",
-          `${inCloud.size} of ${selected.length} selected items are ${IN_CLOUD_MESSAGE}, so their bytes never reached the vault. They are still selected — download the originals in the Photos app, then back up again.`
-        );
+        showToast({
+          message: `${inCloud.size} selected item${inCloud.size === 1 ? " is" : "s are"} ${IN_CLOUD_MESSAGE}; still selected for retry.`,
+          tone: "danger",
+        });
       } else {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
       }
     } catch (error) {
-      Alert.alert(
-        "Backup paused",
-        error instanceof Error ? error.message : String(error)
-      );
+      showToast({
+        message: `Backup paused: ${error instanceof Error ? error.message : String(error)}`,
+        tone: "danger",
+      });
     } finally {
       setBackingUp(false);
+      setUploadProgress(undefined);
     }
   };
 
@@ -338,20 +344,20 @@ export default function PhotosHome({
       {selecting ? (
         <View style={styles.header}>
           <Pressable onPress={() => setSelection(new Set())}>
-            <Feather name="x" size={23} color={colors.text} />
+            <Icon name="x" size={23} color={colors.text} />
           </Pressable>
           <Text style={[styles.selectionTitle, { color: colors.text }]}>
             {selection.size} selected
           </Text>
           <View style={styles.headerActions}>
             <Pressable onPress={addToAlbum}>
-              <Feather name="folder-plus" size={21} color={colors.accent} />
+              <Icon name="folder-plus" size={21} color={colors.accent} />
             </Pressable>
             <Pressable
               disabled={backingUp}
               onPress={() => void backupSelection()}
             >
-              <Feather name="upload-cloud" size={22} color={colors.accent} />
+              <Icon name="upload-cloud" size={22} color={colors.accent} />
             </Pressable>
           </View>
         </View>
@@ -363,7 +369,7 @@ export default function PhotosHome({
             onPress={() => setDrawerOpen(true)}
             style={styles.menuBtn}
           >
-            <Feather name="menu" size={23} color={colors.textSoft} />
+            <Icon name="menu" size={23} color={colors.textSoft} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -371,7 +377,7 @@ export default function PhotosHome({
             onPress={() => navigation.navigate("PhotosSearch")}
             style={[styles.searchPill, { backgroundColor: colors.bgSunken }]}
           >
-            <Feather name="search" size={17} color={colors.textFaint} />
+            <Icon name="search" size={17} color={colors.textFaint} />
             <Text
               style={[styles.searchPlaceholder, { color: colors.textFaint }]}
             >
@@ -383,11 +389,38 @@ export default function PhotosHome({
             onPress={() => navigation.navigate("PhotosSearch")}
             style={styles.sparkleBtn}
           >
-            <Feather name="star" size={22} color={colors.accent} />
+            <Icon name="star" size={22} color={colors.accent} />
           </Pressable>
         </View>
       )}
       <ReplicaStatusBar />
+      {backingUp && uploadProgress ? (
+        <View
+          accessibilityLabel={`Uploading ${uploadProgress.completed} of ${uploadProgress.total}`}
+          accessibilityRole="progressbar"
+          accessibilityValue={{
+            min: 0,
+            max: uploadProgress.total,
+            now: uploadProgress.completed,
+          }}
+          style={styles.uploadProgress}
+        >
+          <Text style={[styles.uploadProgressText, { color: colors.textSoft }]}>
+            Uploading {uploadProgress.completed} of {uploadProgress.total}
+          </Text>
+          <View style={[styles.uploadTrack, { backgroundColor: colors.line }]}>
+            <View
+              style={[
+                styles.uploadFill,
+                {
+                  backgroundColor: colors.accent,
+                  width: `${Math.round((uploadProgress.completed / Math.max(uploadProgress.total, 1)) * 100)}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      ) : null}
       <ReplicaStateCard
         connection={collections.connection}
         error={collections.error ?? timeline.error}
@@ -401,7 +434,7 @@ export default function PhotosHome({
           <>
             {hero && !selecting ? (
               <Pressable
-                style={styles.heroWrap}
+                style={[styles.heroWrap, { borderRadius: radii.xl }]}
                 onPress={() =>
                   navigation.navigate("PhotoLightbox", { assetId: hero.id })
                 }
@@ -413,19 +446,27 @@ export default function PhotosHome({
                   recyclingKey={hero.id}
                   style={styles.heroImage}
                 />
-                <View style={styles.heroShade} />
+                <View
+                  style={[styles.heroShade, { backgroundColor: colors.scrim }]}
+                />
                 <View
                   style={[
                     styles.memoryPill,
-                    { backgroundColor: "rgba(0,0,0,.32)" },
+                    { backgroundColor: colors.scrim, borderRadius: radii.pill },
                   ]}
                 >
-                  <Feather name="star" size={12} color="#fff" />
-                  <Text style={styles.memoryPillText}>Memory</Text>
+                  <Icon name="star" size={12} color={colors.textInv} />
+                  <Text
+                    style={[styles.memoryPillText, { color: colors.textInv }]}
+                  >
+                    Memory
+                  </Text>
                 </View>
                 <View style={styles.heroCopy}>
-                  <Text style={styles.heroEyebrow}>ON THIS DAY</Text>
-                  <Text style={styles.heroTitle}>
+                  <Text style={[styles.heroEyebrow, { color: colors.textInv }]}>
+                    ON THIS DAY
+                  </Text>
+                  <Text style={[styles.heroTitle, { color: colors.textInv }]}>
                     {yearsAgo > 0
                       ? `${yearsAgo} year${yearsAgo === 1 ? "" : "s"} ago`
                       : "Today"}
@@ -448,7 +489,7 @@ export default function PhotosHome({
                   </Text>
                 </View>
                 <View style={styles.protectedStatus}>
-                  <Feather name="shield" size={13} color={colors.accent} />
+                  <Icon name="shield" size={13} color={colors.accent} />
                   <Text
                     style={[styles.protectedText, { color: colors.accent }]}
                   >
@@ -466,7 +507,7 @@ export default function PhotosHome({
               </View>
             ) : timeline.sections.length === 0 ? (
               <View style={styles.center}>
-                <Feather name="image" size={40} color={colors.accent} />
+                <Icon name="image" size={40} color={colors.accent} />
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>
                   {collections.connection === "offline"
                     ? "No cached vault photos"
@@ -530,15 +571,15 @@ export default function PhotosHome({
                           active && {
                             backgroundColor:
                               scheme === "dark"
-                                ? "rgba(255,255,255,0.13)"
-                                : "#ffffff",
+                                ? colors.bgHover
+                                : colors.bgElev,
                           },
                         ]}
                       >
-                        <Feather
+                        <Icon
                           name={item.icon}
                           size={22}
-                          color={active ? NAV_ACTIVE : colors.textFaint}
+                          color={active ? colors.accent : colors.textFaint}
                         />
                       </View>
                     </Pressable>
@@ -555,11 +596,14 @@ export default function PhotosHome({
               onPress={() => navigation.navigate("PhotosLibrary")}
               style={({ pressed }) => [
                 styles.fab,
-                { backgroundColor: colors.text },
+                {
+                  backgroundColor: colors.accentFill,
+                  borderRadius: radii.pill,
+                },
                 pressed && styles.fabPressed,
               ]}
             >
-              <Feather name="plus" size={26} color={colors.bg} />
+              <Icon name="plus" size={26} color={colors.textInv} />
             </Pressable>
           </View>
         </View>
@@ -624,7 +668,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 28,
   },
-  emptyTitle: { fontFamily: family.displayBold, fontSize: 21, marginTop: 18 },
+  emptyTitle: { fontFamily: family.sansBold, fontSize: 21, marginTop: 18 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -635,7 +679,6 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", gap: 22 },
   heroCopy: { bottom: 15, left: 16, position: "absolute", right: 16 },
   heroEyebrow: {
-    color: "#fff",
     fontFamily: family.monoMedium,
     fontSize: 11,
     letterSpacing: 1,
@@ -644,17 +687,14 @@ const styles = StyleSheet.create({
   heroImage: { ...StyleSheet.absoluteFill },
   heroShade: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(10,14,24,.28)",
   },
   heroTitle: {
-    color: "#fff",
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 21,
     letterSpacing: -0.4,
     marginTop: 6,
   },
   heroWrap: {
-    borderRadius: 16,
     height: 176,
     marginBottom: 4,
     marginHorizontal: 16,
@@ -663,7 +703,6 @@ const styles = StyleSheet.create({
   },
   memoryPill: {
     alignItems: "center",
-    borderRadius: 999,
     flexDirection: "row",
     gap: 6,
     paddingHorizontal: 10,
@@ -673,7 +712,6 @@ const styles = StyleSheet.create({
     top: 11,
   },
   memoryPillText: {
-    color: "#fff",
     fontFamily: family.sansMedium,
     fontSize: 12,
   },
@@ -689,11 +727,9 @@ const styles = StyleSheet.create({
   // Detached primary-action disc, sized like the reference's "+" button.
   fab: {
     alignItems: "center",
-    borderRadius: 28,
     elevation: 8,
     height: 56,
     justifyContent: "center",
-    shadowColor: "#000",
     shadowOffset: { height: 6, width: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -744,6 +780,10 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
+  uploadFill: { borderRadius: 999, height: "100%" },
+  uploadProgress: { gap: 5, paddingHorizontal: 18, paddingVertical: 8 },
+  uploadProgressText: { fontFamily: family.monoRegular, fontSize: 11 },
+  uploadTrack: { borderRadius: 999, height: 5, overflow: "hidden" },
   sparkleBtn: {
     alignItems: "center",
     height: 44,
@@ -759,5 +799,5 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   timelineMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
-  timelineTitle: { fontFamily: family.displayBold, fontSize: 17 },
+  timelineTitle: { fontFamily: family.sansBold, fontSize: 17 },
 });

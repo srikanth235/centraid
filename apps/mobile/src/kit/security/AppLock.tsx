@@ -12,7 +12,6 @@ import {
   AppState,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +24,7 @@ import {
   enableAppLock,
 } from "../../lib/app-lock";
 import { clearSecureCache } from "../../lib/secure-storage";
+import { Text } from "../components/NativeText";
 import { family, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 
@@ -198,7 +198,7 @@ const makeStyles = (colors: ThemeColors) =>
     copy: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     eyebrow: {
-      ...t("tiny"),
+      ...t("control"),
       color: colors.textFaint,
       fontFamily: family.monoBold,
       letterSpacing: 1.2,

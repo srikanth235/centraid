@@ -67,7 +67,7 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[2],
       paddingVertical: spacing[1],
     },
-    statusText: { ...t("tiny"), color: colors.textSoft },
+    statusText: { ...t("control"), color: colors.textSoft },
     activityDot: {
       backgroundColor: colors.textFaint,
       borderRadius: 4,
@@ -144,7 +144,7 @@ export const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
     },
     selectionError: {
-      ...t("tiny"),
+      ...t("control"),
       color: colors.danger,
       paddingBottom: spacing[2],
     },

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, {
   useCallback,
@@ -8,9 +7,8 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   View,
-  Text,
-  TextInput,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -20,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
+import { Text, TextInput } from "../kit/components/NativeText";
 import { family, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -146,13 +145,24 @@ export default function SettingsScreen({
     runPair(pasteTicket);
   }, [pasteTicket, runPair]);
 
-  const onUnpair = useCallback((): void => {
+  const unpairNow = useCallback((): void => {
     void unpair().then(() => {
       setPaired(false);
       setDesktopName("");
       setTunnelStatus(undefined);
     });
   }, []);
+
+  const onUnpair = useCallback((): void => {
+    Alert.alert(
+      "Unpair this device?",
+      "The encrypted link will be removed from this phone. The gateway and its vaults stay intact.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Unpair", style: "destructive", onPress: unpairNow },
+      ]
+    );
+  }, [unpairNow]);
 
   const saveAdvanced = (): void => {
     setGatewayUrl(urlValue);
@@ -177,7 +187,7 @@ export default function SettingsScreen({
           hitSlop={10}
           onPress={() => navigation.getParent()?.goBack()}
         >
-          <Feather name="arrow-left" size={26} color={colors.text} />
+          <Icon name="arrow-left" size={26} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Settings</Text>
       </View>
@@ -209,7 +219,7 @@ export default function SettingsScreen({
                   <Button
                     label={pairing ? "Pairing…" : "Pair another"}
                     icon="Camera"
-                    variant="soft"
+                    variant="secondary"
                     onPress={() => setScanning(true)}
                     disabled={pairing}
                   />
@@ -217,7 +227,7 @@ export default function SettingsScreen({
                 <Button
                   label="Unpair"
                   icon="X"
-                  variant="soft"
+                  variant="secondary"
                   onPress={onUnpair}
                 />
               </View>
@@ -454,7 +464,7 @@ function PairScanner({
             Allow camera access to scan the pairing QR code. You can enable it
             in system settings.
           </Text>
-          <Button label="Back" variant="soft" onPress={onCancel} />
+          <Button label="Back" variant="secondary" onPress={onCancel} />
         </View>
       )}
     </SafeAreaView>

@@ -1,25 +1,20 @@
-/*! governance: allow-repo-hygiene file-size-limit — this native Tally cover keeps fixed-point currency input, offline ledger writes, and recurring occurrence controls together so their monetary invariants remain reviewable. */
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
-import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import HomeKey from "../../kit/components/HomeKey";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -32,55 +27,19 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, radii, useTheme } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
+import TallyExpenseRow from "./TallyExpenseRow";
+import { styles } from "./TallyHome.styles";
+import TallyRecurringTemplates from "./TallyRecurringTemplates";
 
 const asString = (value: unknown): string =>
   value == null ? "" : String(value);
 const cents = (value: string): number => Math.round(Number(value) * 100);
-const money = (minor: number, currency: string): string =>
-  formatCurrencyMinor(minor, currency);
 const convert = (original: number, scaled: number): number =>
   Number((BigInt(original) * BigInt(scaled) + 500_000n) / 1_000_000n);
 // `expense_id` is the primary key of tally.expense, unique across groups.
 const expenseKey = (row: ReplicaRow): string => asString(row.expense_id);
-
-// The group label is resolved by the screen and handed down as a string so the
-// row never has to reach into the groups/circles tables to render itself.
-const ExpenseRow = memo(
-  ({
-    row,
-    groupLabel,
-    currency,
-    colors,
-  }: {
-    row: ReplicaRow;
-    groupLabel: string;
-    currency: string;
-    colors: ReturnType<typeof useTheme>["colors"];
-  }): React.JSX.Element => (
-    <View
-      style={[
-        styles.expense,
-        { backgroundColor: colors.bgElev, borderColor: colors.line },
-      ]}
-    >
-      <View style={styles.expenseCopy}>
-        <Text style={[styles.personName, { color: colors.text }]}>
-          {asString(row.description)}
-        </Text>
-        <Text style={[styles.meta, { color: colors.textFaint }]}>
-          {groupLabel} · {asString(row.spent_on)}
-          {row.rate_source ? ` · ${asString(row.rate_source)}` : ""}
-        </Text>
-      </View>
-      <Text style={[styles.amount, { color: colors.text }]}>
-        {money(Number(row.amount_minor ?? 0), currency)}
-      </Text>
-    </View>
-  )
-);
-ExpenseRow.displayName = "ExpenseRow";
 
 export default function TallyHome({
   navigation,
@@ -186,7 +145,7 @@ export default function TallyHome({
   );
   const renderExpense = useCallback(
     ({ item }: ListRenderItemInfo<ReplicaRow>): React.JSX.Element => (
-      <ExpenseRow
+      <TallyExpenseRow
         row={item}
         groupLabel={groupNameById.get(asString(item.group_id)) ?? "Group"}
         currency={asString(item.settlement_currency) || baseCurrency}
@@ -300,32 +259,6 @@ export default function TallyHome({
     }
     setDescription("");
     setAmount("");
-  };
-  const upcomingStarts = (template: ReplicaRow): string[] => {
-    if (template.status !== "active") return [];
-    const from = new Date();
-    const rows = expandRecurrence({
-      rrule: asString(template.rrule),
-      start: asString(template.anchor_start),
-      rangeFrom: from.toISOString(),
-      rangeTo: new Date(from.getTime() + 370 * 86_400_000).toISOString(),
-      timeZone: asString(template.time_zone) || "UTC",
-      maxInstances: 8,
-    });
-    const exceptionRows = exceptions.rows.filter(
-      (row) => row.target_id === template.template_id
-    );
-    return rows
-      .filter(
-        (row) =>
-          !exceptionRows.some(
-            (exception) =>
-              exception.action === "skip" &&
-              exception.original_start === row.originalStart
-          )
-      )
-      .slice(0, 3)
-      .map((row) => row.originalStart);
   };
   const beginEdit = (
     template: ReplicaRow,
@@ -519,99 +452,13 @@ export default function TallyHome({
           </Pressable>
         </View>
       </View>
-      {templates.rows.length > 0 ? (
-        <ScrollView horizontal contentContainerStyle={styles.templates}>
-          {templates.rows.map((template) => {
-            const upcoming = upcomingStarts(template);
-            const next = upcoming[0];
-            return (
-              <View
-                key={asString(template.template_id)}
-                style={[
-                  styles.template,
-                  { backgroundColor: colors.bgElev, borderColor: colors.line },
-                ]}
-              >
-                <Text style={[styles.personName, { color: colors.text }]}>
-                  {asString(template.description)}
-                </Text>
-                <Text style={[styles.meta, { color: colors.textFaint }]}>
-                  {describeRecurrence(asString(template.rrule)) ??
-                    asString(template.rrule)}{" "}
-                  · {asString(template.original_currency)}
-                </Text>
-                <Text style={[styles.meta, { color: colors.textFaint }]}>
-                  {upcoming.length
-                    ? upcoming
-                        .map((start) => new Date(start).toLocaleDateString())
-                        .join(" · ")
-                    : asString(template.status)}
-                </Text>
-                <View style={styles.row}>
-                  <Pressable
-                    disabled={!next}
-                    onPress={() =>
-                      next &&
-                      void write("materialize-recurring-expense", {
-                        template_id: asString(template.template_id),
-                        original_start: next,
-                      })
-                    }
-                  >
-                    <Text style={{ color: colors.accent }}>Record</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={!next}
-                    onPress={() =>
-                      next &&
-                      void write("edit-recurring-expense-occurrence", {
-                        template_id: asString(template.template_id),
-                        original_start: next,
-                        scope: "occurrence",
-                        action: "skip",
-                      })
-                    }
-                  >
-                    <Text style={{ color: colors.danger }}>Skip</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={!next}
-                    onPress={() =>
-                      next && beginEdit(template, next, "occurrence")
-                    }
-                  >
-                    <Text style={{ color: colors.accent }}>Edit this</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={!next}
-                    onPress={() => next && beginEdit(template, next, "future")}
-                  >
-                    <Text style={{ color: colors.accent }}>Edit future</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={!next}
-                    onPress={() => next && beginEdit(template, next, "series")}
-                  >
-                    <Text style={{ color: colors.accent }}>Edit series</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() =>
-                      void write("edit-recurring-expense-occurrence", {
-                        template_id: asString(template.template_id),
-                        original_start: next ?? new Date().toISOString(),
-                        scope: "series",
-                        action: "skip",
-                      })
-                    }
-                  >
-                    <Text style={{ color: colors.danger }}>End</Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-      ) : null}
+      <TallyRecurringTemplates
+        templates={templates.rows}
+        exceptions={exceptions.rows}
+        colors={colors}
+        onWrite={write}
+        onBeginEdit={beginEdit}
+      />
       <FlatList
         data={expenseRows}
         keyExtractor={expenseKey}
@@ -699,80 +546,3 @@ export default function TallyHome({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  amount: { fontFamily: family.monoMedium, fontSize: 14 },
-  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
-  chips: {
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  code: {
-    borderRadius: 9,
-    borderWidth: 1,
-    fontFamily: family.monoMedium,
-    padding: 10,
-    width: 58,
-  },
-  empty: { padding: 28, textAlign: "center" },
-  expense: {
-    alignItems: "center",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    padding: 12,
-  },
-  expenseCopy: { flex: 1 },
-  form: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: 8,
-    margin: 12,
-    padding: 12,
-  },
-  groupInput: { borderRadius: 9, borderWidth: 1, minWidth: 100, padding: 8 },
-  header: { alignItems: "center", flexDirection: "row", gap: 12, padding: 16 },
-  input: {
-    borderRadius: 9,
-    borderWidth: 1,
-    flex: 1,
-    minWidth: 80,
-    padding: 10,
-  },
-  list: { gap: 8, padding: 12, paddingBottom: 80 },
-  meta: { fontFamily: family.sansRegular, fontSize: 12 },
-  modal: { borderRadius: radii.lg, gap: 12, margin: 24, padding: 18 },
-  modalBackdrop: {
-    backgroundColor: "rgba(0,0,0,.4)",
-    flex: 1,
-    justifyContent: "center",
-  },
-  personName: { fontFamily: family.sansMedium, fontSize: 14 },
-  row: { alignItems: "center", flexDirection: "row", gap: 8 },
-  safe: { flex: 1 },
-  share: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    marginHorizontal: 16,
-    padding: 10,
-  },
-  save: {
-    borderRadius: 10,
-    marginLeft: "auto",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  template: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: 7,
-    minWidth: 210,
-    padding: 11,
-  },
-  templates: { gap: 8, paddingHorizontal: 12, paddingVertical: 4 },
-  title: { fontFamily: family.displayBold, fontSize: 28 },
-});

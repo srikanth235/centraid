@@ -7,8 +7,8 @@
 .field {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 15px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 15px;
   border-bottom: 1px solid var(--line);
 }
 .field:last-child {
@@ -19,7 +19,7 @@
   min-width: 0;
 }
 .fieldK {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -33,7 +33,7 @@
   white-space: nowrap;
 }
 .fieldV.mono {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.02em;
 }
@@ -66,7 +66,7 @@
   width: 36px;
   height: 36px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text-soft);
   display: flex;
@@ -82,9 +82,9 @@
   border-color: color-mix(in oklab, var(--warning) 40%, transparent);
 }
 .note {
-  padding: 14px 16px;
+  padding: 14px var(--sp-4);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   font: var(--t-body);
   font-size: 14px;
@@ -99,7 +99,7 @@
   margin-top: 14px;
 }
 .tag {
-  padding: 4px 11px;
+  padding: var(--sp-1) 11px;
   border-radius: 999px;
   background: var(--bg-sunken);
   color: var(--text-soft);
@@ -120,7 +120,7 @@
   gap: 10px;
 }
 .otpCode {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 19px;
   letter-spacing: 0.14em;
   color: var(--accd-fg);

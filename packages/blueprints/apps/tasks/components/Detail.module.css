@@ -12,7 +12,7 @@
   z-index: 60;
   display: flex;
   justify-content: flex-end;
-  background: color-mix(in oklab, var(--text) 30%, rgba(10, 12, 16, 0.55));
+  background: var(--scrim);
   backdrop-filter: blur(2px);
   animation: kit-fade 0.18s ease;
 }
@@ -62,9 +62,9 @@
 .detailTitle {
   display: block;
   width: 100%;
-  font: var(--t-display, 600 20px/1.3 var(--font-title));
-  font-family: var(--font-title);
-  letter-spacing: var(--tracking-h);
+  font: var(--t-display, 600 20px/1.3 var(--font-sans));
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
   color: var(--text);
   background: none;
   border: none;
@@ -86,18 +86,18 @@
   margin-bottom: 14px;
 }
 .detailSeg {
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 /* The detail chips read in the metadata voice — mono, a notch smaller than
    kit-seg's default sans buttons. */
 .detailSeg > button {
-  font-family: var(--mono);
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-size: var(--t-mono-size);
   min-height: 1.9rem;
   padding: 0.25rem 0.6rem;
 }
 .detailDate {
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
 }
 .detailCols {
   display: flex;
@@ -109,13 +109,13 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 8px 0;
+  margin: var(--sp-2) 0;
 }
 .subtaskRow {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 4px;
+  padding: 6px var(--sp-1);
 }
 .subtaskTitle {
   flex: 1;
@@ -128,7 +128,7 @@
   text-decoration: line-through;
 }
 .subtaskAdd {
-  padding: 2px 4px;
+  padding: 2px var(--sp-1);
 }
 .subtaskDot {
   width: 16px;
@@ -159,7 +159,7 @@
 .activityItem {
   display: flex;
   gap: 11px;
-  padding-bottom: 12px;
+  padding-bottom: var(--sp-3);
 }
 .activityRail {
   width: 8px;
@@ -180,24 +180,24 @@
   margin-top: 2px;
 }
 .activityDate {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
 }
 .receiptChip {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9px;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
 }
 
 .detailAttach {
-  margin: 8px 0 10px;
+  margin: var(--sp-2) 0 10px;
 }
 .attachBtn {
-  margin-bottom: 4px;
+  margin-bottom: var(--sp-1);
 }
 
 .detailHint {
@@ -209,7 +209,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 8px 0 14px;
+  margin: var(--sp-2) 0 14px;
 }
 .tagRemove {
   display: inline-flex;
@@ -235,7 +235,7 @@
   font-size: 12px;
   border: 1px dashed var(--line);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: var(--sp-1) 10px;
   background: transparent;
   color: var(--text);
   min-width: 90px;
@@ -248,7 +248,7 @@
 
 .detailFoot {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   padding: 14px 18px;
   border-top: 1px solid var(--line);
   background: var(--bg-elev);

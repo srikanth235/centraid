@@ -10,11 +10,11 @@
   position: sticky;
   top: -2px;
   z-index: 3;
-  margin: 12px 0 0;
-  padding: 8px 0 6px;
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) 0 6px;
   font: var(--t-body-strong);
   font-size: 16px;
-  letter-spacing: var(--tracking-h);
+  letter-spacing: -0.01em;
   background: color-mix(in oklab, var(--bg) 92%, transparent);
   backdrop-filter: blur(6px);
 }
@@ -26,8 +26,8 @@
 }
 .row {
   display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-1);
   /* Timeline windowing without a virtualization lib: the browser skips
      layout/paint/decode for rows that are off-screen and remembers each row's
      real height once measured (the `auto` keyword), so scrolling a deep
@@ -89,10 +89,10 @@
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.32),
+    color-mix(in oklab, var(--scrim) 44%, transparent),
     transparent 26%,
     transparent 72%,
-    rgba(0, 0, 0, 0.28)
+    color-mix(in oklab, var(--scrim) 39%, transparent)
   );
   opacity: 0;
   transition: opacity 0.15s var(--ease);
@@ -115,9 +115,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--on-accent);
-  background: rgba(0, 0, 0, 0.18);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--text-inv);
+  background: color-mix(in oklab, var(--scrim) 25%, transparent);
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--scrim) 62%, transparent);
   padding: 0;
   opacity: 0;
   transition: opacity 0.15s var(--ease);
@@ -149,14 +149,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 2px 7px;
+  padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
   font: var(--t-small);
   font-size: 10.5px;
   line-height: 1.5;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   background: color-mix(in oklab, var(--accent-soft) 88%, transparent);
-  border: 1px solid color-mix(in oklab, var(--_accent) 30%, transparent);
+  border: 1px solid color-mix(in oklab, var(--app-identity) 30%, transparent);
   backdrop-filter: blur(6px);
   pointer-events: none;
   z-index: 2;
@@ -173,8 +173,10 @@
   border: none;
   background: none;
   padding: 0;
-  color: var(--on-accent);
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  color: var(--text-inv);
+  filter: drop-shadow(
+    0 1px 2px color-mix(in oklab, var(--scrim) 69%, transparent)
+  );
   opacity: 0;
   transition: opacity 0.15s var(--ease);
   z-index: 2;
@@ -196,8 +198,8 @@
   height: 22px;
   border-radius: 999px;
   border: none;
-  background: rgba(0, 0, 0, 0.4);
-  color: var(--on-accent);
+  background: color-mix(in oklab, var(--scrim) 56%, transparent);
+  color: var(--text-inv);
   font-size: 13px;
   line-height: 1;
   display: flex;
@@ -222,27 +224,27 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 9px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+  padding: var(--sp-2) var(--sp-2);
+  background: linear-gradient(to top, var(--scrim), transparent);
   z-index: 2;
 }
 .tilePurge {
   font: var(--t-mono);
   font-size: 9.5px;
-  color: rgba(255, 255, 255, 0.9);
+  color: color-mix(in oklab, var(--text-inv) 90%, transparent);
 }
 .tileRestore {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--on-accent);
+  border: 1px solid color-mix(in oklab, var(--text-inv) 40%, transparent);
+  background: color-mix(in oklab, var(--text-inv) 12%, transparent);
+  color: var(--text-inv);
   font: var(--t-small);
   font-size: 11px;
-  padding: 3px 9px;
+  padding: var(--sp-1) var(--sp-2);
   border-radius: 999px;
 }
 .tileRestore:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: color-mix(in oklab, var(--text-inv) 24%, transparent);
 }
 .foot {
-  margin-top: 12px;
+  margin-top: var(--sp-3);
 }

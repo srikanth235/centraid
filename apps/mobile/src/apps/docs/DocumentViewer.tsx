@@ -1,14 +1,16 @@
-import { Feather } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -165,13 +167,14 @@ export default function DocumentViewer({
       sourceVaultId: document.sourceVaultId,
       targetVaultId,
     });
-    Alert.alert(
-      result.status === "executed" ? "Placement complete" : "Placement queued",
-      result.reason ??
+    showToast({
+      message:
+        result.reason ??
         (result.status === "executed"
-          ? "The document is available in the selected vault."
-          : "It will resume automatically when the gateway is reachable.")
-    );
+          ? "Document placed in the selected vault."
+          : "Document placement queued — it will resume when the gateway is reachable."),
+      tone: result.status === "executed" ? "accent" : "neutral",
+    });
   };
   const share = async (): Promise<void> => {
     if (!document || !url) return;
@@ -196,7 +199,7 @@ export default function DocumentViewer({
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
-          <Feather name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
         <Text numberOfLines={1} style={[styles.title, { color: colors.text }]}>
           {document.title}
@@ -206,7 +209,7 @@ export default function DocumentViewer({
           accessibilityRole="button"
           onPress={() => void share()}
         >
-          <Feather name="share" size={21} color={colors.accent} />
+          <Icon name="share" size={21} color={colors.accent} />
         </Pressable>
       </View>
       <Viewer document={document} url={url} />
@@ -223,7 +226,7 @@ export default function DocumentViewer({
           disabled={document.canWrite !== true}
           onPress={() => void action(document.starred ? "unstar" : "star")}
         >
-          <Feather
+          <Icon
             name="star"
             size={21}
             color={
@@ -244,7 +247,7 @@ export default function DocumentViewer({
           accessibilityRole="button"
           onPress={() => setPlacementKind("add")}
         >
-          <Feather name="copy" size={20} color={colors.accent} />
+          <Icon name="copy" size={20} color={colors.accent} />
         </Pressable>
         <Pressable
           accessibilityLabel="Move document to another vault"
@@ -253,7 +256,7 @@ export default function DocumentViewer({
           disabled={document.canWrite !== true}
           onPress={() => setPlacementKind("move")}
         >
-          <Feather
+          <Icon
             name="folder-plus"
             size={20}
             color={
@@ -281,7 +284,7 @@ export default function DocumentViewer({
             )
           }
         >
-          <Feather
+          <Icon
             name="trash-2"
             size={20}
             color={

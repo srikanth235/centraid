@@ -81,7 +81,7 @@ export const styles = StyleSheet.create({
     width: 42,
   },
   sheetTitle: {
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 19,
     marginBottom: 10,
   },

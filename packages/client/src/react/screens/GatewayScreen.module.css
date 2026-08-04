@@ -60,7 +60,7 @@
 }
 .title h1 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 25px;
   letter-spacing: -0.02em;
@@ -68,8 +68,8 @@
 }
 .headMeta {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -94,7 +94,7 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 10px 4px 9px;
@@ -105,8 +105,8 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    border-color 0.15s var(--ease, ease);
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 .tab:first-child {
   margin-left: 0;
@@ -121,11 +121,11 @@
 .tabBadge {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 999px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
 }
 /* Overview lays itself out with `.grid`; the other tabs are a plain stack of
@@ -152,7 +152,7 @@
    top edge so the panel itself reads up/down at a glance. */
 .hero {
   position: relative;
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background:
     linear-gradient(
@@ -214,7 +214,7 @@
   border-radius: 999px;
   border: 1px solid var(--pulse);
   opacity: 0;
-  animation: orbRing 3.2s var(--ease, ease-out) infinite;
+  animation: orbRing 3.2s var(--ease) infinite;
 }
 .orb::after {
   animation-delay: 1.6s;
@@ -246,7 +246,7 @@
 }
 
 .statusWord {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 30px;
   line-height: 1.05;
@@ -258,7 +258,7 @@
 .statusSub {
   margin-top: 5px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   line-height: 1.45;
   color: var(--text-faint);
@@ -282,7 +282,7 @@
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 
 /* Gauge figures — mono numerals, hairline dividers between them. A grid of
@@ -306,7 +306,7 @@
 }
 .figureLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -318,7 +318,7 @@
 .figureValue {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 22px;
+  font-size: var(--t-title-size);
   letter-spacing: -0.01em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -348,7 +348,7 @@
 .beat {
   flex: 1 1 0;
   max-width: 7px;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--r-xs) var(--r-xs) 0 0;
 }
 .beat[data-ok="true"] {
   height: 100%;
@@ -398,7 +398,7 @@
   line-height: 1.5;
   color: var(--text-faint);
 }
-/* Segmented mode picker (issue var(--text) follow-up): a compact 4-cell tray, not a
+/* Segmented mode picker (issue #528 follow-up): a compact 4-cell tray, not a
    stack of full-width cards. Each cell is a plain styled button (no shell
    `.btn`, so no dark-on-dark inheritance), carrying the mode name + a mono
    preset hint (workers · memory). The full blurb lives on the title tooltip
@@ -437,7 +437,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .resourceModeBtn:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .resourceModeBtn:has(:disabled) {
@@ -452,7 +452,7 @@
     color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .resourceModeLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 12.5px;
   letter-spacing: -0.01em;
@@ -491,8 +491,8 @@
   gap: 7px;
   padding: 9px 10px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-soft);
   background: var(--bg-elev);
@@ -534,7 +534,7 @@
   color: var(--danger);
 }
 
-/* ── L0 pause background work (issue var(--text)) ──
+/* ── L0 pause background work (issue #528) ──
    A temporary override, set off from the mode controls above by a hairline
    rule and offered as one quiet, clearly-clickable chip. It was a bare ghost
    button before — transparent, borderless — which read as a caption, not a
@@ -551,8 +551,8 @@
   gap: 7px;
   padding: 8px 14px 8px 11px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-soft);
   background: var(--bg-elev);
@@ -614,7 +614,7 @@
   color: var(--text);
 }
 
-/* ── L1 budget summary (issue var(--text)) ──
+/* ── L1 budget summary (issue #528) ──
    The consequence of the mode choice, framed as one inset "here's what you
    get" unit directly under the mode picker — not a stack of loose text lines. */
 .resourceSummary {
@@ -628,7 +628,7 @@
   background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourceSummaryLine {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   line-height: 1.4;
   color: var(--text);
@@ -651,7 +651,7 @@
   color: var(--accent);
 }
 
-/* ── Power-context posture note (issue var(--text) Phase D) ── */
+/* ── Power-context posture note (issue #528 Phase D) ── */
 .resourcePosture {
   padding: 0 18px 12px;
 }
@@ -668,7 +668,7 @@
   color: var(--text-ghost);
 }
 
-/* ── L2 "how we sized this" disclosure (issue var(--text)) ── */
+/* ── L2 "how we sized this" disclosure (issue #528) ── */
 .resourceDetails {
   border-top: 0.5px solid var(--line);
 }
@@ -682,7 +682,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
@@ -705,8 +705,8 @@
 }
 .resourceDetailsGroupTitle {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
 }
@@ -721,7 +721,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .resourceDetailsRow dt {
   color: var(--text-faint);
@@ -731,12 +731,12 @@
 }
 .resourceDetailsValue {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text);
   text-align: right;
 }
 
-/* ── L3 "Tune" rung: advanced knobs (issue var(--text) Phase F) ── */
+/* ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ── */
 .resourceAdvanced {
   border-top: 0.5px solid var(--line);
 }
@@ -748,7 +748,7 @@
 }
 .resourceAdvancedLead {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -800,7 +800,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text);
 }
 .resourceKnobInput:disabled {
@@ -814,19 +814,19 @@
   color: var(--text-ghost);
 }
 .resourceKnobHelp {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
 .resourceKnobError {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--danger);
 }
 .resourceKnobWarn {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.4;
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .resourceKnobPending {
   font-family: var(--font-mono);
@@ -837,7 +837,7 @@
 
 /* Panel — shared card shell (Insights family). */
 .panel {
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -855,9 +855,9 @@
 }
 .panelHead h2 {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -951,7 +951,7 @@
   text-transform: uppercase;
   white-space: nowrap;
   margin-top: calc((var(--outage-line) - 12px) / 2);
-  color: var(--c-amber);
+  color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 14%, transparent);
   border-radius: var(--r-sm);
   padding: 2px 5px;
@@ -988,7 +988,7 @@
   gap: 16px;
 }
 .alertToggleLabel {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -1010,8 +1010,8 @@
   cursor: pointer;
   padding: 0;
   transition:
-    background 0.18s var(--ease, ease),
-    border-color 0.18s var(--ease, ease);
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease);
 }
 .switch[data-on] {
   background: var(--accent);
@@ -1032,21 +1032,21 @@
   box-shadow:
     0 0 0 1px var(--scrim),
     0 1px 2px var(--scrim);
-  transition: transform 0.18s var(--ease, ease);
+  transition: transform 0.18s var(--ease);
 }
 .switch[data-on] .switchThumb {
   transform: translateX(13.5px);
 }
 
 .alertAfter {
-  transition: opacity 0.18s var(--ease, ease);
+  transition: opacity 0.18s var(--ease);
 }
 .alertAfter[data-disabled] {
   opacity: 0.45;
 }
 .alertAfterLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1070,8 +1070,8 @@
   display: inline-flex;
   align-items: center;
   transition:
-    border-color 0.15s var(--ease, ease),
-    background 0.15s var(--ease, ease);
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
 .preset:hover:not(:disabled) {
   border-color: var(--accent);
@@ -1103,7 +1103,7 @@
 }
 .idRow dt {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);

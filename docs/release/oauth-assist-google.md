@@ -67,7 +67,7 @@ Record build SHA, date, gateway identity (non-secret label), client version, res
 | --- | --- | --- |
 | Desktop + remote gateway with no public DNS | Deep link completes; manual return link also completes; connection active |  |
 | PWA + remote gateway with no public DNS | Same-tab resume; paired Iroh transport re-dials; connection active |  |
-| Desktop + embedded local gateway | Assist regression passes; connection active |  |
+| Desktop + local gateway | Assist regression passes; connection active |  |
 | Browser-reachable gateway + BYO | Existing callback and direct refresh still pass |  |
 | Assist refresh | Worker `/refresh`; rotated token sealed before use |  |
 | Revoked grant | Connection becomes `needs-auth`; Reconnect with Centraid Assist is shown |  |

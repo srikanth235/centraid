@@ -7,8 +7,10 @@ import type { ExtTableSpec } from "../schema/ext.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import {
   appendReplicaChange,
+  beginReplicaCommit,
   bumpReplicaEpoch,
   currentReplicaLogState,
+  endReplicaCommit,
   initializeReplicaProtocol,
   pruneReplicaChanges,
   readReplicaChanges,
@@ -275,6 +277,24 @@ describe("change-log", () => {
     expect(() => parseReplicaCursor("not-a-cursor")).toThrow(/form/u);
   });
 
+  test("never splits one gateway commit across change pages", () => {
+    const { vault } = open();
+    vault.exec("BEGIN IMMEDIATE");
+    const commit = beginReplicaCommit(vault);
+    insertScheme(vault, "commit-a");
+    insertScheme(vault, "commit-b");
+    endReplicaCommit(vault, commit);
+    vault.exec("COMMIT");
+
+    const first = readReplicaChanges(vault, { limit: 1 });
+    expect(first.changes).toHaveLength(2);
+    expect(new Set(first.changes.map((change) => change.commitId)).size).toBe(
+      1
+    );
+    expect(first.hasMore).toBe(false);
+    expect(first.next).toStrictEqual(first.watermark);
+  });
+
   test("retention applies age then count while advancing through a deleted prefix", () => {
     const { vault } = open();
     const epoch = currentReplicaLogState(vault).epoch;
@@ -441,7 +461,7 @@ describe("change-log", () => {
       .run();
     const after = initializeReplicaProtocol(vault);
     expect(after.epoch).not.toBe(before.epoch);
-    expect(after.schemaEpoch).toBe(1);
+    expect(after.schemaEpoch).toBe(2);
     expect(after.epochReason).toBe("schema-change");
   });
 

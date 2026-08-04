@@ -15,6 +15,8 @@ import {
 } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import { identityColor } from "@centraid/design";
+
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Activity } from "./components/Activity.tsx";
@@ -34,7 +36,7 @@ import {
 } from "./components/Sidebar.tsx";
 import { StatusChips } from "./components/Toolbar.tsx";
 import { TrashCard } from "./components/TrashCard.tsx";
-import { avatarColor, hashInt, listName, PALETTE } from "./format.ts";
+import { avatarColor, listName } from "./format.ts";
 import { I } from "./icons.ts";
 import {
   closePopover,
@@ -44,7 +46,6 @@ import {
   onDataChange,
   onFocusRefresh,
   readFailed,
-  wireThemeToggle,
 } from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import type { AppData, AppState, Nav, Person, PersonList } from "./types.ts";
@@ -136,7 +137,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
-  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const newWrapRef = useRef<HTMLDivElement | null>(null);
   const dataRef = useRef<AppData>({ people: [], trash: [], lists: [] });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
@@ -331,9 +331,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     bump();
   }, []);
 
-  // ---- chrome wiring: theme, doorbell, focus, keys, click-outside, width ----
+  // ---- chrome wiring: doorbell, focus, keys, click-outside, width ----
   useEffect(() => {
-    if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
     const stopFocus = onFocusRefresh(() => void refresh());
 
@@ -630,9 +629,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       dp?.name ??
       data.people.find((p) => p.party_id === state.detailsId)?.name ??
       "";
-    const color = dp
-      ? avatarColor(dp)
-      : PALETTE[hashInt(nameGuess) % PALETTE.length]!;
+    const color = dp ? avatarColor(dp) : identityColor(nameGuess);
     details = (
       <Details
         key={`${state.detailsId}:${dp ? "loaded" : "loading"}`}
@@ -764,9 +761,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onSort={onSort}
         onSearchInput={applySearch}
         onSearchKeyDown={onSearchKeyDown}
-        themeButtonRef={(el) => {
-          themeBtnRef.current = el;
-        }}
         newWrapRef={(el) => {
           newWrapRef.current = el;
         }}

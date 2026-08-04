@@ -7,6 +7,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { identityColor } from "@centraid/design";
+
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import type { ChromeAvatar } from "./Chrome.tsx";
@@ -29,7 +31,6 @@ import {
   onDataChange,
   onFocusRefresh,
   readFailed,
-  wireThemeToggle,
 } from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import type {
@@ -103,7 +104,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const stateRef = useRef<AppState>(makeState());
   const dashRef = useRef<Dash>(makeDash());
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
-  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const viewSeqRef = useRef(0);
   const lastViewKeyRef = useRef("");
   const deniedRef = useRef<{ message: string } | null>(null);
@@ -244,9 +244,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     logicRef.current!.setNav(patch);
   }, []);
 
-  // ---- chrome wiring: theme toggle, doorbell, focus refresh, keys, width ----
+  // ---- chrome wiring: doorbell, focus refresh, keys, width ----
   useEffect(() => {
-    if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
     const stopDoorbell = onDataChange(CHANGE_TABLES, async () => {
       await refreshAll();
       stateRef.current.pendingExpenses = [];
@@ -346,14 +345,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     sub = `${n} match${n === 1 ? "" : "es"}`;
   } else if (state.view === "group" && state.viewData?.group) {
     const g = state.viewData.group;
-    avatar = { bg: g.color || "#0FA678", text: g.icon || "👥" };
+    avatar = { bg: g.color || identityColor(g.name), text: g.icon || "👥" };
     title = g.name;
     const n = state.viewData.members?.length ?? 0;
     sub = `${n} member${n === 1 ? "" : "s"}`;
     showSettle = true;
   } else if (state.view === "friend" && state.viewData?.friend) {
     const f = state.viewData.friend;
-    avatar = { bg: f.color || "#5C677D", text: f.initials };
+    avatar = { bg: f.color || identityColor(f.party_id), text: f.initials };
     title = f.name;
     const v = f.net_minor;
     sub =
@@ -562,9 +561,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onSettle={handleOpenSettle}
         onSearchInput={() => logic.applySearch()}
         onSearchKeyDown={onSearchKeyDown}
-        themeButtonRef={(el) => {
-          themeBtnRef.current = el;
-        }}
         smartNav={<SmartNav view={state.view} onSelect={navTo} />}
         groupsNav={
           <GroupsNav

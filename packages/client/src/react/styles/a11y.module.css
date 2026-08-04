@@ -1,4 +1,4 @@
-/* Shared accessibility primitives (issue var(--text) — full jsx-a11y profile).
+/* Shared accessibility primitives (issue #573 — full jsx-a11y profile).
    One copy, imported by every screen that swaps an ARIA role for the native
    element behind it. Screens compose these with their own local classes
    (`cx(a11y.plainBtn, styles.row)`) — never a bare string class. */

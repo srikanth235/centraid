@@ -1,17 +1,11 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -81,10 +75,11 @@ export default function DocsItemActions({
     optimistic: NativeOptimisticMutation[] = []
   ): Promise<void> => {
     if (!session || !sourceVaultId || !writable) {
-      Alert.alert(
-        "Read-only item",
-        "Choose the writable copy in its source vault to change it."
-      );
+      showToast({
+        message:
+          "Read-only item — choose the writable copy in its source vault.",
+        tone: "danger",
+      });
       return;
     }
     try {
@@ -363,7 +358,7 @@ function ActionRow({
   disabled = false,
   onPress,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: string;
   label: string;
   danger?: boolean;
   disabled?: boolean;
@@ -378,7 +373,7 @@ function ActionRow({
       onPress={onPress}
       style={[styles.action, { borderBottomColor: colors.line }]}
     >
-      <Feather
+      <Icon
         name={icon}
         size={18}
         color={
@@ -435,5 +430,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
   },
-  title: { fontFamily: family.displayBold, fontSize: 19, marginBottom: 4 },
+  title: { fontFamily: family.sansBold, fontSize: 19, marginBottom: 4 },
 });

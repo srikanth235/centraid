@@ -1,0 +1,13 @@
+# no-hardcoded-colors - blueprint app CSS consumes design tokens, never color literals.
+category: Design system
+recommended: true
+summary: |
+  Stylesheets under packages/blueprints/apps/**/*.module.css may not
+  introduce hex (`#fff`, `#0b0d12`) or functional (`rgb()`, `rgba()`,
+  `hsl()`, `hsla()`) color literals. Color is owned by packages/design and
+  reaches apps as `var(--token)`; a literal forks the palette and stops
+  tracking theme changes. The check fires only on ADDED lines, because the
+  pre-existing debt is already pinned file-by-file by the burn-down ratchet
+  in packages/blueprints/src/token-purity.test.ts.
+surface: repo-state
+hook: pre-commit

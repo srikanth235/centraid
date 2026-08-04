@@ -52,6 +52,76 @@ export async function fireRevisitTrigger(trigger, { cwd, readSource } = {}) {
 export async function validateMatrix(matrix, options = {}) {
   const errors = [];
   const warnings = [];
+  const qualities = Array.isArray(matrix.qualities) ? matrix.qualities : [];
+  if (Object.hasOwn(matrix, "qualities") && qualities.length !== 7)
+    errors.push(
+      `matrix must declare exactly seven user-facing qualities; got ${qualities.length}`
+    );
+  const qualityIds = new Set();
+  const gateIds = new Set();
+  const qualityFileChecks = [];
+  for (const quality of qualities) {
+    if (!quality?.id || qualityIds.has(quality.id))
+      errors.push(
+        `quality id is missing or duplicated: ${quality?.id ?? "(missing)"}`
+      );
+    qualityIds.add(quality?.id);
+    if (!quality?.weakestLink)
+      errors.push(
+        `quality ${quality?.id ?? "(missing)"} has no weakest-link sentence`
+      );
+    for (const gate of quality?.gates ?? []) {
+      if (!gate?.id || gateIds.has(gate.id))
+        errors.push(
+          `quality gate id is missing or duplicated: ${gate?.id ?? "(missing)"}`
+        );
+      gateIds.add(gate?.id);
+      const demonstratedRed = matrix.demonstratedRed?.[gate?.id];
+      if (
+        !demonstratedRed?.command ||
+        !demonstratedRed?.seed ||
+        !demonstratedRed?.failure
+      )
+        errors.push(
+          `quality gate ${gate?.id ?? "(missing)"} has no replayable demonstrated-red command, seed, and failure signature`
+        );
+      if (!gate?.evidence)
+        errors.push(
+          `quality gate ${gate?.id ?? "(missing)"} has no assertion-level evidence selector`
+        );
+      if (
+        !gate?.redLastDemonstrated ||
+        Number.isNaN(Date.parse(gate.redLastDemonstrated))
+      )
+        errors.push(
+          `quality gate ${gate?.id ?? "(missing)"} has no demonstrated-red date`
+        );
+      if (!["tighten-only", "waiver-gated", "none"].includes(gate?.governance))
+        errors.push(
+          `quality gate ${gate?.id ?? "(missing)"} has no knob governance`
+        );
+      if (options.checkFiles !== false)
+        qualityFileChecks.push(
+          ...[
+            ["owner", gate?.owner],
+            ["knob", gate?.knob?.split("#", 1)[0]],
+          ].map(async ([kind, target]) => {
+            if (!target)
+              return `quality gate ${gate?.id ?? "(missing)"} has no ${kind}`;
+            try {
+              await access(path.join(options.root ?? root, target));
+              return null;
+            } catch {
+              return `quality gate ${gate.id} ${kind} does not exist: ${target}`;
+            }
+          })
+        );
+    }
+  }
+  for (const id of Object.keys(matrix.demonstratedRed ?? {}))
+    if (!gateIds.has(id))
+      errors.push(`demonstrated-red evidence points at unknown gate ${id}`);
+  errors.push(...(await Promise.all(qualityFileChecks)).filter(Boolean));
   const dimensions = new Map(
     matrix.dimensions?.map((dimension) => [dimension.id, dimension])
   );

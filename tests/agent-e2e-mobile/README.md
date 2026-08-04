@@ -98,7 +98,7 @@ await runFlow("my-flow", async (ctx) => {
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
-    visible: { text: "Everything you build, in one place." }
+    visible: { text: "Your apps, ready" }
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: home
 `,
@@ -189,7 +189,7 @@ The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` 
 - **A passing step is not a working step.** Every one of these was green in CI while doing nothing, and all of them came from writing selectors out of the React source instead of off a running app. Drive the simulator and read `inspect_view_hierarchy` before you trust a selector:
   - _Matching is substring-based._ `tapOn: "http://127.0.0.1:18789"` matched the help paragraph that mentions the URL, not the input below it. The tap "COMPLETED", the `inputText` went nowhere, and Save persisted an empty string. Disambiguate with a relative anchor (`below: "Dev fallback for simulators.*"`).
   - _An off-screen element still matches._ Maestro matches elements hidden behind the tab bar. Home's "Pair desktop" button is one, so tapping it is a silent no-op. `scrollUntilVisible` with `visibilityPercentage: 100` before asserting or tapping.
-  - _Prefer a string unique to the target screen._ `assertVisible: "Settings"` passes on Home — the header gear, the tab, and the screen title are all "Settings". Assert "Gateway link" instead. Same trap for every tab label, which is on screen everywhere.
+  - _Prefer a string unique to the target screen._ `assertVisible: "Settings"` passes on Home — the header gear, the tab, and the screen title are all "Settings". Assert "Desktop link" instead. Same trap for every tab label, which is on screen everywhere.
   - _Route names are not labels._ Settings calls `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right in the source — but the tab renders as "Home" and no "Apps" string exists in the app at all.
   - _The keyboard covers the bottom of the screen._ `hideKeyboard` before tapping anything below an input (e.g. Save).
   - _The first `inputText` on a clean simulator raises iOS's keyboard onboarding sheet_ ("Type English and Dutch … Continue"), which covers the tab bar and swallows later taps. CI boots a fresh simulator every run, so it hits this every time — use `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.

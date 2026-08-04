@@ -1,7 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 
+import { formatBytes } from "@centraid/design";
+
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import type { useTheme } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
@@ -33,7 +36,7 @@ export function ListItem({
         }
       >
         <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="folder" size={20} color={colors.accent} />
+          <Icon name="folder" size={20} color={colors.accent} />
         </View>
         <View style={styles.copy}>
           <Text style={[styles.rowTitle, { color: colors.text }]}>
@@ -41,13 +44,13 @@ export function ListItem({
           </Text>
           <Text style={[styles.meta, { color: colors.textSoft }]}>Folder</Text>
         </View>
-        <Feather name="chevron-right" size={18} color={colors.textFaint} />
+        <Icon name="chevron-right" size={18} color={colors.textFaint} />
         <Pressable
           accessibilityLabel={`Actions for ${item.folder.name}`}
           hitSlop={10}
           onPress={() => onMenu(item)}
         >
-          <Feather name="more-vertical" size={19} color={colors.textSoft} />
+          <Icon name="more-vertical" size={19} color={colors.textSoft} />
         </Pressable>
       </Pressable>
     );
@@ -60,7 +63,7 @@ export function ListItem({
       }
     >
       <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-        <Feather
+        <Icon
           name={iconFor(item.document.mediaType)}
           size={20}
           color={colors.accent}
@@ -82,14 +85,14 @@ export function ListItem({
         </Text>
       </View>
       {item.document.starred ? (
-        <Feather name="star" size={16} color="#d99b18" />
+        <Icon name="star" size={16} color="#d99b18" />
       ) : null}
       <Pressable
         accessibilityLabel={`Actions for ${item.document.title}`}
         hitSlop={10}
         onPress={() => onMenu(item)}
       >
-        <Feather name="more-vertical" size={19} color={colors.textSoft} />
+        <Icon name="more-vertical" size={19} color={colors.textSoft} />
       </Pressable>
     </Pressable>
   );
@@ -125,10 +128,10 @@ export function GridItem({
         onPress={() => onMenu(item)}
         style={styles.gridMenu}
       >
-        <Feather name="more-vertical" size={18} color={colors.textSoft} />
+        <Icon name="more-vertical" size={18} color={colors.textSoft} />
       </Pressable>
       <View style={[styles.gridPreview, { backgroundColor: colors.bgSunken }]}>
-        <Feather
+        <Icon
           name={
             item.kind === "folder" ? "folder" : iconFor(item.document.mediaType)
           }
@@ -151,7 +154,7 @@ export function GridItem({
   );
 }
 
-const iconFor = (mime: string): React.ComponentProps<typeof Feather>["name"] =>
+const iconFor = (mime: string): string =>
   mime.includes("pdf")
     ? "file-text"
     : mime.startsWith("image/")
@@ -164,7 +167,3 @@ const iconFor = (mime: string): React.ComponentProps<typeof Feather>["name"] =>
 
 const formatType = (mime: string): string =>
   mime.split("/")[1]?.toUpperCase() || "FILE";
-const formatBytes = (bytes: number): string =>
-  bytes < 1024 ** 2
-    ? `${Math.ceil(bytes / 1024)} KB`
-    : `${(bytes / 1024 ** 2).toFixed(1)} MB`;

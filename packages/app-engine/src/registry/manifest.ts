@@ -67,6 +67,7 @@ export class ManifestError extends Error {
 export type JsonSchema = Record<string, unknown>;
 
 export type HandlerConfirmation = "none" | "required";
+export type AppActionSideEffect = "vault-write";
 
 export interface ManifestActionEntry {
   readonly name: string;
@@ -191,6 +192,8 @@ export interface Manifest {
    */
   readonly kind?: "app" | "automation";
   readonly description?: string;
+  /** Inherited side-effect class for every action; new classes require a runtime consent seam. */
+  readonly actionSideEffect?: AppActionSideEffect;
   readonly actions: readonly ManifestActionEntry[];
   readonly queries: readonly ManifestQueryEntry[];
   /** Per-app aesthetic knobs (font, width, radius, colour…). Optional. */
@@ -219,6 +222,7 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
     version: { type: "string", minLength: 1 },
     kind: { type: "string", enum: ["app", "automation"] },
     description: { type: "string" },
+    actionSideEffect: { type: "string", enum: ["vault-write"] },
     actions: {
       type: "array",
       items: {
@@ -531,6 +535,9 @@ export function validateManifest(raw: unknown): Manifest {
     ...(r.kind === "automation" || r.kind === "app" ? { kind: r.kind } : {}),
     ...(typeof r.description === "string"
       ? { description: r.description }
+      : {}),
+    ...(r.actionSideEffect === "vault-write"
+      ? { actionSideEffect: r.actionSideEffect }
       : {}),
     actions,
     queries,

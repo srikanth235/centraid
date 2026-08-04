@@ -1,23 +1,27 @@
-// Pure theme resolver — no React / React-Native imports, so it stays unit
-// testable in the node vitest env. `useTheme.ts` wraps this with
-// `useColorScheme()`; everything dark-mode actually needs is here.
+// Typed native theme resolver.  `tokens.generated.ts` is the checked-in
+// lowering of @centraid/design/src/native.ts; this module only selects the
+// already-concrete light or dark object.
 
 import type { Theme as NavigationTheme } from "@react-navigation/native";
 
+import type { AccentKey } from "@centraid/design";
+
 import {
-  lightPalette,
+  accentThemes,
   darkPalette,
+  durations,
+  fonts,
+  lightPalette,
   radii,
   spacing,
-  fonts,
+  targetMin,
+  type,
 } from "./tokens.generated";
 
 export type Scheme = "light" | "dark";
 
-// The generated palettes plus a mobile-only `textGhost` value for the home
-// pager dots and other non-text marks.
-export type ThemeColors = Record<keyof typeof lightPalette, string> & {
-  textGhost: string;
+export type ThemeColors = {
+  [Key in keyof typeof lightPalette]: string;
 };
 
 export interface ThemeValue {
@@ -26,73 +30,50 @@ export interface ThemeValue {
   radii: typeof radii;
   spacing: typeof spacing;
   fonts: typeof fonts;
+  type: typeof type;
+  targetMin: typeof targetMin;
+  durations: typeof durations;
 }
 
-// The "Centraid Mobile" design ships a warm, solar light theme — a parchment
-// cream canvas (its `screenBg` is #F1ECE1) rather than the shared kit's cool
-// near-white. That warmth is specific to the phone, so we override the light
-// ramp here (mobile-only) instead of touching the generated palette or the
-// shared tokens.css that desktop + web read. Backgrounds, lines and inks are
-// warmed to sit on the cream.
-//
-// The mobile design uses a single primary: brand teal for every tappable /
-// system affordance (buttons, links, the Automations tile, the Assistant FAB,
-// the launcher Home key). It replaces the generated indigo `accent` on both
-// schemes — desktop + web keep indigo. `danger` is unchanged. This is the same
-// teal as `BRAND_TEAL` in lib/profile.ts (the profile default), so out of the
-// box identity and actions read as one colour; personalising the profile colour
-// then only re-tints the avatar + greeting, not the app's controls.
-const BRAND_TEAL = "#128A78";
-
-const SOLAR_LIGHT: ThemeColors = {
-  ...lightPalette,
-  bg: "#f1ece1", // design screenBg — the solar cream canvas
-  bgElev: "#fbf8f1", // warm off-white, lifts cards above the canvas
-  bgSunken: "#e7dfcf", // deeper warm sand for search pills / inputs
-  text: "#231f18", // warm near-black
-  textSoft: "#645c4e",
-  textFaint: "#938a78",
-  line: "rgba(60, 48, 22, 0.1)",
-  lineStrong: "rgba(60, 48, 22, 0.18)",
-  textGhost: "rgba(35, 31, 24, 0.28)",
-  accent: BRAND_TEAL, // teal on cream carries white glyphs cleanly
-};
-
-const LIGHT_COLORS: ThemeColors = SOLAR_LIGHT;
-const DARK_COLORS: ThemeColors = {
-  ...darkPalette,
-  textGhost: "rgba(237, 239, 242, 0.28)",
-  accent: BRAND_TEAL, // same teal reads on the near-black ground (matches the greeting highlight)
-};
-
-// Frozen singletons per scheme so `colors` keeps a stable identity across
-// renders — lets screens `useMemo(makeStyles, [colors])` without thrash.
-const LIGHT: ThemeValue = {
-  scheme: "light",
-  colors: LIGHT_COLORS,
-  radii,
-  spacing,
-  fonts,
-};
-const DARK: ThemeValue = {
-  scheme: "dark",
-  colors: DARK_COLORS,
-  radii,
-  spacing,
-  fonts,
-};
-
-export function resolveTheme(scheme: Scheme | null | undefined): ThemeValue {
-  return scheme === "dark" ? DARK : LIGHT;
-}
-
-// React Navigation theme — feeds NavigationContainer so headers, card
-// backgrounds and default text follow the palette. Font weights map onto the
-// loaded Geist families (native can't combine fontFamily + fontWeight).
-function navTheme(t: ThemeValue): NavigationTheme {
-  const { colors } = t;
+function themeFor(scheme: Scheme, accentKey: AccentKey): ThemeValue {
+  const colors: ThemeColors =
+    accentKey === "teal"
+      ? scheme === "dark"
+        ? darkPalette
+        : lightPalette
+      : (accentThemes[accentKey]?.[scheme] ??
+        (scheme === "dark" ? darkPalette : lightPalette));
   return {
-    dark: t.scheme === "dark",
+    colors,
+    durations,
+    fonts,
+    radii,
+    scheme,
+    spacing,
+    targetMin,
+    type,
+  };
+}
+
+const CACHE = new Map<string, ThemeValue>();
+
+export function resolveTheme(
+  scheme: Scheme | null | undefined,
+  accentKey: AccentKey = "teal"
+): ThemeValue {
+  const resolvedScheme = scheme === "dark" ? "dark" : "light";
+  const cacheKey = `${resolvedScheme}:${accentKey}`;
+  const cached = CACHE.get(cacheKey);
+  if (cached) return cached;
+  const theme = themeFor(resolvedScheme, accentKey);
+  CACHE.set(cacheKey, theme);
+  return theme;
+}
+
+function navTheme(theme: ThemeValue): NavigationTheme {
+  const { colors } = theme;
+  return {
+    dark: theme.scheme === "dark",
     colors: {
       background: colors.bg,
       border: colors.line,
@@ -111,12 +92,15 @@ function navTheme(t: ThemeValue): NavigationTheme {
 }
 
 export const navThemes: Record<Scheme, NavigationTheme> = {
-  light: navTheme(LIGHT),
-  dark: navTheme(DARK),
+  dark: navTheme(resolveTheme("dark")),
+  light: navTheme(resolveTheme("light")),
 };
 
 export function navThemeFor(
-  scheme: Scheme | null | undefined
+  scheme: Scheme | null | undefined,
+  accentKey: AccentKey = "teal"
 ): NavigationTheme {
-  return scheme === "dark" ? navThemes.dark : navThemes.light;
+  if (accentKey === "teal")
+    return scheme === "dark" ? navThemes.dark : navThemes.light;
+  return navTheme(resolveTheme(scheme, accentKey));
 }

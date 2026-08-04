@@ -7,9 +7,8 @@
 // title, floating Home key. Both surfaces load independently (useInsights), so a
 // gateway serving one but not the other still shows what it has.
 
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -25,6 +24,8 @@ import Svg, {
 import { palette } from "@centraid/design";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -133,7 +134,7 @@ function Body({
   if (state.kind === "no-gateway") {
     return (
       <View style={styles.emptyWrap}>
-        <Feather name="bar-chart-2" size={30} color={colors.accent} />
+        <Icon name="bar-chart-2" size={30} color={colors.accent} />
         <Text style={styles.emptyTitle}>Not connected</Text>
         <Text style={styles.emptyCopy}>
           Connect your desktop to see your gateway health and usage here.
@@ -144,7 +145,7 @@ function Body({
   if (state.kind === "error") {
     return (
       <View style={styles.emptyWrap}>
-        <Feather name="alert-circle" size={30} color={colors.accent} />
+        <Icon name="alert-circle" size={30} color={colors.accent} />
         <Text style={styles.emptyTitle}>Could not load insights</Text>
         <Text style={styles.emptyCopy}>{state.message}</Text>
         <Text style={styles.emptyHint}>Pull to refresh to retry.</Text>
@@ -567,7 +568,7 @@ function Kpi({
   styles,
   colors,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: string;
   label: string;
   value: string;
   children: React.ReactNode;
@@ -577,7 +578,7 @@ function Kpi({
   return (
     <View style={styles.kpi}>
       <View style={styles.kpiLabel}>
-        <Feather name={icon} size={12} color={colors.textFaint} />
+        <Icon name={icon} size={12} color={colors.textFaint} />
         <Text style={styles.kpiLabelText}>{label}</Text>
       </View>
       <Text style={styles.kpiValue}>{value}</Text>

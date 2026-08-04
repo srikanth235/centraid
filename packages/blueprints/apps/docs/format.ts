@@ -60,20 +60,25 @@ export function purgeCountdown(iso: string | null | undefined): string {
 export function typeMeta(mediaType: string | null | undefined): TypeMeta {
   const t = String(mediaType ?? "").toLowerCase();
   if (t === "application/pdf")
-    return { label: "PDF", name: "PDF document", cat: "pdf", cv: "--c-pdf" };
+    return { label: "PDF", name: "PDF document", cat: "pdf", cv: "--kind-pdf" };
   if (t.startsWith("video/"))
-    return { label: "VID", name: "Video", cat: "media", cv: "--c-media" };
+    return { label: "VID", name: "Video", cat: "media", cv: "--kind-media" };
   if (t.startsWith("audio/"))
-    return { label: "AUD", name: "Audio", cat: "media", cv: "--c-media" };
+    return { label: "AUD", name: "Audio", cat: "media", cv: "--kind-media" };
   if (t.startsWith("image/"))
-    return { label: "IMG", name: "Image", cat: "image", cv: "--c-image" };
+    return { label: "IMG", name: "Image", cat: "image", cv: "--kind-image" };
   if (
     t.includes("spreadsheet") ||
     t === "application/vnd.ms-excel" ||
     t === "text/csv" ||
     t === "application/vnd.oasis.opendocument.spreadsheet"
   )
-    return { label: "XLS", name: "Spreadsheet", cat: "sheet", cv: "--c-sheet" };
+    return {
+      label: "XLS",
+      name: "Spreadsheet",
+      cat: "sheet",
+      cv: "--kind-sheet",
+    };
   if (
     t.includes("presentation") ||
     t === "application/vnd.ms-powerpoint" ||
@@ -83,7 +88,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
       label: "PPT",
       name: "Presentation",
       cat: "slide",
-      cv: "--c-slide",
+      cv: "--kind-slide",
     };
   if (
     t.includes("word") ||
@@ -92,7 +97,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
     t === "application/rtf" ||
     t.startsWith("text/")
   )
-    return { label: "DOC", name: "Document", cat: "doc", cv: "--c-doc" };
+    return { label: "DOC", name: "Document", cat: "doc", cv: "--kind-doc" };
   return { label: "FILE", name: "File", cat: "other", cv: "--text-faint" };
 }
 
@@ -158,8 +163,24 @@ export function isAudio(doc: DocFields): boolean {
 export function isMedia(doc: DocFields): boolean {
   return isVideo(doc) || isAudio(doc);
 }
+/**
+ * The FILL sibling of a kind's text rung (`--kind-pdf` → `--kind-pdf-fill`).
+ *
+ * `cv` is the kind as TEXT — a solved, deepened/lifted shade (see the two-rung
+ * note in Chrome.module.css). Painting a decorative bar or a tint with it makes
+ * the thumbnail read as a muddier version of its own label; worse, tinting a
+ * surface with the ink that lands on it walks the background toward the
+ * foreground and eats the contrast the solve just bought. Fills read the raw
+ * palette hue instead, which is what the palette is for.
+ */
+export function fillVar(cv: string): string {
+  return `${cv}-fill`;
+}
+
+/** A kind tint — always built from the FILL rung, never from the text one, so
+ *  a label painted `var(cv)` keeps its measured ratio on top of it. */
 export function tintBg(cv: string, pct: number): string {
-  return `color-mix(in oklab, var(${cv}) ${pct}%, transparent)`;
+  return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
 // The row list's empty-state copy, as plain data — one per nav/search/type

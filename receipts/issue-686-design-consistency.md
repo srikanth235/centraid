@@ -1,0 +1,1712 @@
+# Issue #686 — design platform/apps consistency umbrella
+
+## Checklist
+
+- [x] A1 spacing tokens emitted (`--sp-1`…`--sp-7`) in both contracts
+- [x] B1 shell motion token (`--ease`) in `SHELL_TOKEN_CONTRACT`
+- [x] A2 consumer-side token-purity ratchet test (blueprint apps)
+- [x] A5 reserved-namespace guard (`--c-*` etc.) in the same test
+- [x] A2 governance directive `no-hardcoded-colors`
+- [x] A3 component vocabulary unified (scaffold ↔ kit)
+- [x] A4 scaffold exemplar on tokens
+- [x] B2 shell type-scale adoption + ratchet
+- [x] B3 shell radius adoption + ratchet
+- [x] B4 mono body face decided + documented
+- [x] C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference
+- [x] C2 `.design-sync` stale conventions neutralized
+- [x] C3 stale mobile-theming comments fixed
+- [x] C4 `styles.css` eaten comment restored
+- [x] D1 typeface decision recorded in docs/decisions.md
+- [x] D2 mobile color opt-outs migrated/waived
+- [x] D3 post-generation CSS validation for agent apps
+- [x] E1 docs — `--c-*` shadow palette retired to `--kind-*`, hex/rgb purged
+- [x] E2 photos — scrims through `--scrim`, kit composition raised, serif resolved
+- [x] E3 tally — `--pos`/`--neg` → `--success`/`--danger`, literal-mixed `color-mix()` endpoints removed
+- [x] E4 locker + people — `composes` raised (locker app 2 → 9), hex/rgb purged
+- [x] E5 agenda/notes/tasks — literals swept; blueprint `font-size` moved onto the type scale (see F6)
+- [x] F1 Root `DESIGN.md` conforming to the official google-labs-code/design.md spec + `@google/design.md` linter wired
+- [x] F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)
+- [x] F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)
+- [x] F4 Extend the unresolved-`var()` gate to `packages/client`. The scan found **13 unresolvable names across 15 files** (31 references); **12 were bound to real tokens, 1 (`--profile-accent`) was allowlisted** as legitimately runtime-provided from TSX — so "fixed 13" overstates it by one.
+- [x] F5 Clear the pinned blueprint `UNRESOLVED_VAR_DEBT` — all 12 phantoms bound, list now `[]`
+- [x] F6 composable size rungs + the exact-match sweep (411 conversions)
+- [x] F7 Shell `--t-tiny` → mono realignment investigated and **deliberately declined** on the measurement; the real gap (an unnamed sub-11px mono eyebrow rung, 51 distinct shapes) is recorded as debt in `docs/decisions.md`, not taken here.
+
+- [x] F9 codify the role-parity law as a test, and waive `--t-tiny` under it (lane 3)
+
+- [x] F10 kit.css binds 16 of its 20 exact matches (lane 2)
+
+**Crosswalk to the issue checklist (#686).** The issue carries A1–A5, B1–B4, C1–C4, D1–D3, E1–E5, F1–F3 (24 items); all 24 are represented above. `A2` is split into two rows here (the test and the governance directive) because they landed separately. **F4, F5, F6, F7 and F9 exist only in this receipt** — they are follow-on work this PR took on after F1–F3 exposed it, and were never added to the issue body. (F8, lane (1) of the accepted sequence, is recorded in Decisions / What changed / Verification but has no checklist row; not corrected here, to leave another lane's rows alone.) The issue's Status line also still says "15 commits"; the branch is 26.
+
+## Decisions (orchestrator recommendations, per user directive)
+
+- **D1 typography = roles, not families.** Web/desktop keep system stacks (#468 K11); mobile keeps its per-role platform mapping, now recorded as decided rather than drift.
+- **A2 coexists with the #630 Wave-0 ratchet.** `scripts/lint-design-tokens.mjs` + `tests/design-token-css-budget.json` (landed on main while this branch was in flight) already ratchet rawHex/literalFontFamily across client+blueprints+kit. The new `token-purity` test is complementary — it adds functional color literals, reserved custom-property namespaces, and contract-imported names, blueprint-scope only. Burn-down lanes must shrink BOTH allowlists.
+- **E deliberate visual deltas (token semantics over hand-picked values):** tally `--pos`/`--neg` → system `--success`/`--danger`; locker sidebar surface → `--bg-elev`; people re-derives neutrals from `--app-hue: 345` + `--c-rose` accent and drops its Geist/Space Grotesk declarations per the roles decision; agenda light `--warning` → token value; a generator-toggle drop shadow → `--shadow-sm`. All recorded here for review.
+- **Photos/docs "theater stage" gap:** 3 residual `hsl(var(--app-hue) 25% 4%)` backdrops exist because the contract has no opaque near-black `--stage` token; follow-up candidate for `packages/design`.
+- **kit.css itself still hardcodes type/spacing px** (e.g. `.kit-btn font-size: 0.8125rem`) — the served component layer is the remaining half of full token purity; now visible in the budget (80 rawFontSize in kit) and left as ratcheted debt.
+- **Consolidation (user direction): one canonical design document.** `docs/design-language.md` folded into root `DESIGN.md` (its unique content — three-lowerings note, `font` shorthand family-reset caveat, serif role — absorbed; every reference repointed: `AGENTS.md`, `docs/decisions.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`) and deleted. `.design-sync/` deleted entirely (user: it no longer makes sense; nothing in the build/test graph reads it) along with its `.gitignore` entries.
+- **`EASE` rehomed, `motion.ts` deleted.** A dedicated module for one constant pushed `packages/client/src/index.ts` to 101 modules and tripped oxlint `no-barrel-file` (threshold 100). Rather than weaken the rule, `EASE` moved into `packages/design/src/themes/shared.ts` beside the other measured design constants — no new graph node, still exactly one spelling of the curve. `DESIGN.md` updated to point at the new home. `ACCENT_DEEP_DARK` dropped from the `themes/index.ts` re-export (knip: consumed only inside `themes/centraid.ts`).
+- **Visual QA found what the tests could not.** Every gate was green and CI fully passed, but rendering the real emitted tokens against the real `kit.css` across both themes and all eight palette hues exposed a regression F3 had introduced: eleven app rules across six apps filled with `--accent-deep` but inked with the theme-stable `--on-accent`. Because F3 *lifts* `--accent-deep` on the dark ramp, those became white-on-near-white. The numeric grid never caught it because it measured `kit-btn-primary`, not app-local rules that re-declare the same pairing. Fixed in `agenda`, `docs`, `notes`, `photos`, `tasks`, and their components, and pinned by a new `token-purity` test so the pairing cannot return. Lesson recorded: a token change needs a rendered pass, not only a measured one.
+- ~~**Latent silent-failure class found and pinned, not fixed.**~~ **SUPERSEDED later in this same PR by F5** — the decision to pin rather than fix was reversed; `UNRESOLVED_VAR_DEBT` is now `[]`. Kept for history; read the F5 entry below for the outcome. Original text: Auditing every `var()` in app CSS surfaced 12 fallback-less references that resolve to nothing (`--accent-deep-fg` in seven `tasks` files, `--r-lg` in three — the blueprint contract spells radii `--r-sm/--r-md/--r-card/--r-pill`, with no `--r-lg` — plus `--acc`, `--bg-l`, `--t-label`). Each silently drops its declaration. All 12 are byte-identical on `origin/main`, so this PR neither introduced nor fixed them; deliberately left as recorded debt rather than opportunistically changing visuals in a PR already this large. Pinned by `UNRESOLVED_VAR_DEBT` so the class can only shrink.
+- **The burn-down silently dropped SOLVED contrast values, and the contract had no rung to replace them.** Removing `docs`' six hand-picked file-kind hexes in favour of the raw `--c-*` palette hues looked like pure literal-elimination — the point of A2 — but those literals were doing solved-contrast work. `--c-*` is documented in `DESIGN.md` as **icon fills**, and as `color:` on a near-white app surface the fills measure 2.11–4.43:1; five of the six kinds fell below AA (`--kind-pdf` 4.74 → 2.11). The accent already had a solved answer to exactly this (`--accent-text` via `accentTextShade()`); the palette had none, which is *why* the app hand-picked in the first place. The fix closes the gap generally rather than restoring the literals: `packages/design/src/color.ts` now solves a **`--c-<name>-text`** rung per hue per theme with the same walk (`walkUntil`, lightness only, hue and saturation untouched), and **both** emitters publish it, so any surface wanting a palette hue on type has a correct token instead of a hand-pick. `packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole (**this estimate was superseded within the PR: the measured figure is 39 direct sites across 17 stylesheets, plus five laundered identity variables — see the client-half entry below**). Two consequences recorded: (a) the rung is solved against the hardest surface either emitter ships *plus a 12% wash of the hue itself*, because a hue on type almost always sits on a weak tint of itself; (b) the solve **cannot** keep two hues apart — `ochre` is `amber` at lower chroma, so solving both to one floor collapses them from 0.125 to 0.028 in oklab — so `docs` moved `pdf` to rose and `slide` to amber, which is also the conventional signal for both kinds.
+- **The semantic states were never pinned, and #686 increased the app surfaces' exposure to them.** `contrast.test.ts` held `--danger` / `--success` / `--warning` to the **3:1 non-text floor, on `--bg` only** — the ink roles had real per-surface floors, the states had a formality. So `DESIGN.md` could claim "`--danger` #C44A4A — clears AA on both ramps" with nothing measuring it, and it was false: **3.74:1** on dark `--bg-elev`, 4.20:1 on light `--bg-sunken`. The exposure is not theoretical and #686 widened it: the E burn-down replaced app-local semantic literals with these tokens (`tally` `--pos` #0fa678 / `--neg` #f0805a → `--success`/`--danger`, `people` #f0645b/#5fbd88 → the same), and the values it moved to measured *worse* on dark than the ones it removed. A full sweep of the tree found **131 `color:` rules** on the three roles across `packages/client/src`, `packages/blueprints/apps` and `packages/design/kit/kit.css` — essentially all of them 9px–13.7px, i.e. **body text under WCAG 1.4.3**, not the large-text or non-text cases the 3:1 floor was standing in for. Only two sites in the whole repo are large text (`tally` `.stat .v` 26px, `locker` `.wtStat .n` 28px). The states are now **solved**, not hand-picked, by the same `walkUntil()` machinery as `--accent-text` and `--c-<name>-text`, per emitter and per theme, against that emitter's hardest surface *and* a 12% wash of the state itself (`color: var(--danger)` on `color-mix(… var(--danger) 12%, transparent)` is the single commonest site). Two consequences recorded: (a) `--danger` can no longer be **one shared literal** — the two ramps pull the solve in opposite directions, which is precisely why one hex could not clear both, so `DESIGN.md` and `themes/` now carry `danger` **and** `danger-dark`; (b) a contrast gate alone cannot stop a solver from cheating by **desaturating** — a grey `--danger` cleared every floor on every surface *and* the oklab separation check — so the new gate additionally holds each role to its hue family and to real chroma. Proven by sabotage: greying `DANGER_BASE` is red on `readsAsRole`, and reverting any of the six solved values is red on its own surface × wash cell.
+- **The client half of the palette-as-text gap, previously deferred, is now closed.** When `--c-<name>-text` landed, the receipt recorded that "`packages/client` alone has ~15 `color: var(--c-*)` sites that were silently in the same hole" and moved on. The real count is **39 direct `color:` sites across 17 stylesheets** (re-derived against `origin/main`; the "25 stylesheets" first recorded here was wrong), plus **five identity/status variables** (`--au-hue`, `--notice-hue`, `--tk-hue`, `--plan-tone`, and the `--log-status` / `--conn-health` / `--diag-health` trio) that launder a raw hue into a `color:` one indirection away — invisible to any grep for `color: var(--c-`. Measured on the **shell's own** emitted surfaces (a different emitter from the one the existing grid uses: `--bg-l: 5%` not 10%, and two extra surfaces `--bg` / `--bg-app`), the fills as ink are **2.04–5.03:1 light / 3.12–7.71:1 dark**, every hue failing on at least one theme, and amber missing even the **3:1 non-text floor** an icon glyph owes. Three consequences recorded: (a) **the fill stays the fill** — washes, dots, rails, bars and 2px edges keep `--c-<name>`; where one variable did both jobs it was split into a `-hue`/`-ink` pair rather than deepened, because dulling a fill to buy contrast nothing reads is a visual regression, not a fix; (b) **16% is the wash ceiling under a palette ink**, not the 12% the solve targets — at 18% indigo and violet fall to 4.44 / 4.49, so `ApprovalsScreen`'s identity tile came down to 12%, the same normalisation this PR already applied to four state washes; (c) **a highlighting scheme owes a second contract the contrast grids cannot see.** The builder's syntax tokens were tag=rose, attr=violet, str=forest, key=indigo — violet and indigo are only 0.068 apart as fills, and solving both to one floor pulled them to **0.075 light / 0.040 dark**, two token classes the eye reads as one colour. `.tokAttr` moved to amber (0.119 / 0.126). The gate for it is deliberately held at **0.08**, above the 0.035 the `docs` labels take and the 0.06 the semantic states take: at 0.035 the very defect it was written for passes, and a gate that green-lights its own bug is decoration. Proven by sabotage in both directions.
+- **Our own unresolved-`var()` gate had a client-side blind spot, and the stale design-sync vocabulary had already leaked through it.** A2's `resolves every fallback-less var() an app references` (added earlier in this PR) walks `packages/blueprints/apps` and nothing else, so `packages/client` — the larger CSS surface — was never scanned. Scanning it against `SHELL_TOKEN_CONTRACT` plus every `--x:` declared in shell CSS finds **13 unresolvable names, 31 references across 15 files** (re-derived at audit; "19 files" as first recorded was wrong), each one a declaration silently dropped at computed-value time. Provenance confirms the suspicion the audit raised: `--ink-1` was **never declared anywhere in repository history** (`git log -S'--ink-1:'` is empty), it is one of the four names `.design-sync/conventions.md` explicitly listed as "tokens that were never emitted" (`--surface`, `--ink-*`, `--warn`, `--d-*`), and #672/#677's mechanical `--ink-*` → `--text-*` rename carried the phantom forward verbatim as `--text-1` — so the stale doc's vocabulary outlived the doc and was re-blessed by a rename that looked like a cleanup. `--warn`/`--ok` were the same story and were caught by #677 itself; `--ink-1` was not, because nothing measured the shell. Three consequences recorded: (a) the gate is now shared machinery (`@centraid/design/css-vars`) with a shell-side twin, so a rename cannot be "unified" into a phantom again; (b) **runtime-provided properties get an allowlist, and the allowlist is itself gated** — an entry must be both *true* (the named TSX actually writes it) and *necessary* (no stylesheet declares it), or it would quietly widen the gate; exactly one property earns an entry (`--profile-accent`), while a dozen other inline-set properties (`--onb-accent`, `--depth`, `--stage-i`, …) all carry CSS defaults and are deliberately left out; (c) the builder's three language dots had been painting **no background at all** since they were authored — `--c-blue` / `--c-orange` / `--c-yellow` are hues this palette has never had — which is the most visible thing in this issue that every other gate walked past.
+- **The pinned unresolved-`var()` debt is now CLEARED — `UNRESOLVED_VAR_DEBT` is `[]`.** The earlier decision to pin rather than fix rested on "each needs a per-site design call". Doing the same read the F4 shell sweep did — decide by what the rule is doing and the surface it lands on, not by name similarity — showed all twelve had a determinate answer, and none of them needed a product decision. What each phantom turned out to mean: (1) **`--accent-deep-fg`** (7 refs, `tasks/components/*`) — `tasks` copied `docs`' pattern without copying `docs`' declaration. Every one of the seven sites inks TEXT that sits ON an `--accent-soft` tint (marks, chips, the current nav item, a consent glyph); **none fills with `--accent-deep`**, so the F3 `--text-inv` ink rule does not apply here and the `--on-accent` gate is untouched. The role is "the accent read as a foreground", which the contract already spells **`--accent-text`** — emitted as `var(--accent-deep)` on light and, on the dark rung, the *lifted* half. That makes the binding byte-equivalent to what `docs` ships from its app-local declaration, including its hand-rolled dark override, so the app-local token was always a re-derivation of a contract token. (2) **`--r-lg`** (3 refs) — the *shell* radius scale has `lg: 10`, the blueprint contract does not; the blueprint spellings are `--r-sm`/`--r-md`/`--r-card`/`--r-pill`. All three sites are the repo's card idiom verbatim (`1px solid var(--line)` + `var(--bg-elev)` + 14px padding), and every peer card in the same two apps (`tally` `.stat`/`.explist`, `people` `.card`) rounds it with **`--r-card`**; bound to that rather than to the numerically-nearest `--r-md`, because the site is a card, not a control. (3) **`--acc`** — an abbreviation of `--accent` in a `:focus-visible` outline; bound to **`var(--accent)`**, the spelling every other focus ring in the apps uses. (4) **`--t-label`** — the uppercase sidebar section label; the blueprint type ramp has no `label` rung and every peer section label in every app (`photos`, `agenda`, `docs`) is **`--t-tiny`**. (5) **`--bg-l`** — the one that is *not* a typo: it is genuinely emitted by the blueprint **dark** token block (`10%`, `blueprint.ts`), which is why the rule works on screen, but it is absent from the light `:root` block and therefore is not contract vocabulary and cannot be added to the contract without lying about the light rung. Given the **documented default as an explicit fallback** (`calc(var(--bg-l, 10%) + 1%)`) instead — the gate deliberately excludes fallback-bearing references because the author has made the miss explicit, and 10% is the shipped value, so this one is a provable no-op. Four of the five are visible changes by design (the rule was meant to apply and was not applying); each was checked against its peers rather than merely made to resolve.
+- **F6 — the size rungs are spelled `--t-<key>-size`, and the sweep's bar was raised twice against its own estimate.** Three calls, each of which changed the answer. (a) **Naming.** `--t-<key>-size` over `--t-size-<key>`, following `--c-<hue>-text` — this vocabulary already expresses "a facet of a named token" as a *suffix*, and the suffix form keeps a rung sorted next to the shorthand it belongs to in `SHELL_TOKEN_CONTRACT`. One rung per **distinct size**, first key wins: `body` and `bodyStrong` are both 15px, so `--t-body-size` is the only spelling and `--t-body-strong-size` does not exist — two spellings for one value is exactly the drift `contract.ts` exists to forbid. (b) **No line-height rungs, on the evidence.** Of 227 hand-written `line-height` declarations across the three ratchet targets, all but a handful are unitless multipliers (`1.5` ×58, `1.45` ×38, `1.4` ×37) while the chrome scale's line-heights are absolute px; only 5 exactly equal a scale value. A `--t-body-line-height: 22px` would be vocabulary nothing could adopt, so it was not invented. (c) **The recorded 494 exact matches were measured against the wrong scale for one third of the tree.** The blueprint layer has its **own** type scale — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match there. Against the scale that actually resolves per surface the exact set is **402 client + 9 blueprint = 411**, and conversion was further restricted to **like-for-unit** (px→px rung, rem→rem rung): `1rem` and `16px` agree only at a 16px root, so converting one to the other would break for a reader who has raised their browser's default font size. `packages/design/kit` was excluded **entirely** — `kit.css` renders under both token layers (shell `:root` and the rescoped `.centraid-inline-scope` block), so each of its eight exact matches resolves to two different values and every one would move on one surface. The blueprint type scale moved out of `blueprint.ts` into `typography.ts` as `blueprintType` to make any of this derivable: it was six opaque shorthand strings from which no size could be read.
+- **F7 — the shell's `--t-tiny` was tested for realignment to mono and DELIBERATELY LEFT ALONE; the measurement inverts the premise.** The case for changing `type.tiny` from sans/500 to mono looked strong: `DESIGN.md` says "**Mono is the signature.** Metadata, counts, dates, and eyebrows are mono", the blueprint layer's `--t-tiny` is mono/600, and 94 of the 120 `text-transform: uppercase` rules under `packages/client/src` set a mono family in the same block. Re-derived independently, the 94/120 figure is **exact**. The inference from it is not. Two facts kill it. (a) **The 94 mono eyebrows are not `--t-tiny` sites and cannot become them** — their sizes are 9.5px ×36, 10px ×21, 10.5px ×19, 9px ×9, 8.5px ×4, 8px ×1, `--t-tiny-size` ×3, `font: var(--t-mono)` ×1, so **90 of 94 sit below `--t-tiny`'s 11px**. The chrome's eyebrow is a sub-11px mono rung the scale does not name; the 11px rung is a different thing wearing a similar description. Two shell eyebrows opt out of mono explicitly at exactly this size (`chrome.module.css` `.sbSection` pairs `font-family: var(--font-sans)` with `font-size: var(--t-tiny-size)`; `.sbSubLabel` is sans at 10px), so the shell's sans-at-tiny is an authored choice, not an oversight. (b) **Every actual consumer of the shorthand is prose or a control.** `font: var(--t-tiny)` appears at **5 sites in 4 files** (the audit estimated ~6): two native `<select>`s (`AssistantScreen` `.effortPicker select` — runner/effort/workspace pickers; `SettingsProvidersScreen` `.ladderAdd`), one button pair reading "Save"/"Cancel" plus a pencil glyph (`DevicesCard` `.renameAction`/`.renameIcon`), one pill holding an agent's display title (`SettingsProvidersScreen` `.ladderMember`), and one container (`SessionStatusStrip` `.telemetry`) whose own text is "Working"/"Ready" — its numeric readout is the child `.context`, which **already** sets `font-family: var(--font-mono)` itself, so the metadata in that strip was never relying on the rung. None is an eyebrow; none is metadata. Mobile confirms it from the other side: of seven `t("tiny")` consumers, five are prose (`AppHeader.subtitle`, `OptionSheet.rowDetail`, `AttentionLine.chipSub`, `Assistant.statusText`, `Assistant.selectionError` — an error message), and the two that *are* eyebrows already hand-patch the family (`AppLock.eyebrow` → `family.monoBold`, `LockerHome.fieldLabel` → `family.monoMedium`). So the change would improve **zero** of the 94 eyebrows and regress **ten** prose/control sites, putting `<select>` chrome and "Save"/"Cancel" into a monospace face — which `DESIGN.md`'s own "prose is not" clause forbids. **The weight question resolves the same way and refutes the premise that 600 is settled**: the only two eyebrows in the tree that choose a mono weight by hand choose *different* ones (600 and 500), so there is no convergent value; the shell's 500 is right for a quiet control label and the blueprint's 600 is right for a 9.6px eyebrow. That is one role rendered per surface, which the contract permits — not two roles under one name. **The real gap is the inverse of the one recorded**: the shell has an unnamed sub-11px mono eyebrow rung spelled six ways across 94 rules. Naming it is new vocabulary plus a 94-site visual change, so it is recorded as debt in `docs/decisions.md`, not taken here.
+- **The maintainer accepted converge-first, name-second (lane 1 of the agreed (1) → (3) → (2) sequence), 2026-08-02.** The three recommendations recorded in `docs/decisions.md` under "#686 — the three questions this issue left open, and their answers" are decisions now, not proposals. Lane (1) is done here and **names nothing**: the two rungs are left as literals (`9.5px` / `10.5px`, `letter-spacing: 0.06em`), because naming a rung against 51 shapes is the `--r-lg` failure mode this PR already hit twice. The rung spelling is the follow-up PR's job, once there is something real for it to describe.
+- **The eyebrow weight does not converge, and the data says so.** Of the 94 mono-uppercase rules, **63 (67%) declare no `font-weight` at all** — the modal value is *absent*, i.e. "inherit from context". Among the 31 that do declare one, 600 leads 500 by 19–7 (plus 4 taking 500 via `font: var(--t-mono)` and 1 via `font: inherit`). Neither candidate is derivable as dominant in the sense size and tracking are: forcing 600 would thicken 63 inheriting sites plus the 7 at 500, and stripping to the true mode (absent) would visibly thin the 19 at 600. Weight was therefore left untouched at all 94 sites, and the converged set carries 9 shapes rather than 2 for exactly that reason — 2 on the (size, tracking) axes that were converged, multiplied by the weight variants that were not.
+- **Chips, badges, pills, controls and chart ticks are a third idiom, not eyebrows.** 37 of the 94 are boxed or self-contained (`.kindBadge`, `.tlStatus`, `.machineryTag`, `.connBadge`, the two `.tab` controls, the SVG `.ringTick`/`.sectorName`, the `.caption` measured-fact strip, the `.stripAxis` chart axis, `.heroDate`'s sibling readouts). Converging a 8.5px pill to 9.5px changes chip geometry, not label rhythm, so they were left alone. They carry their own ~21 shapes and are the obvious next convergence target — but they are not the two rungs this lane agreed to converge.
+- **F9 — the role-parity law is a test, and `--t-tiny` is waived under it rather than fixed (lane 3 of the agreed (1) → (3) → (2) sequence).** The premise was re-derived from `packages/design/src` rather than taken from this receipt or from `docs/decisions.md`, because several earlier figures here had to be corrected. **The premise holds and is narrower than it looked**: of the ten `--t-*` shorthands the two emitters publish between them, **six are shared** (`--t-body`, `--t-body-strong`, `--t-mono`, `--t-small`, `--t-tiny`, `--t-title`) and **exactly one — `--t-tiny` — diverges**, in both family and weight (shell sans-serif/500, blueprint monospace/600). The other five agree on both facets while differing on size and line-height, which is the intended design. `--t-display`, `--t-display-1`, `--t-h2` and `--t-h3` are shell-only and outside the law. **Family is compared by genus, not by property name or stack string** — the emitters legitimately spell one role with different properties (`--font-display` vs `--font-title`, both aliasing sans) and ship different concrete stacks for the same genus (the blueprint layer is sandboxed and loads no fonts), so the test resolves `var()` aliases and compares the generic family the stack ends in. Comparing names or strings would have produced three false positives (`--t-title`, and both sans roles).
+- **F9 — `--t-tiny` was fixed in NEITHER direction, on the consumers, and that is the honest answer.** Both consumer lists were re-derived after lane (1) landed. **The shell list is unchanged by lane (1)**: still **5 sites in 4 files**, still zero eyebrows — `AssistantScreen` `.effortPicker select` and `SettingsProvidersScreen` `.ladderAdd` (native `<select>`s), `DevicesCard` `.renameAction`/`.renameIcon` ("Save"/"Cancel" plus a pencil glyph), `SettingsProvidersScreen` `.ladderMember` (a pill holding an agent title), `SessionStatusStrip` `.telemetry` (whose own text is "Working"/"Ready"; its numeric child `.context` sets `font-family: var(--font-mono)` itself). Mobile still has 7 `t("tiny")` consumers, 5 prose (including `Assistant.selectionError`, an error message) and 2 eyebrows that already hand-patch the family. So the prior F7 conclusion survives lane (1) intact. **What F7 never measured is the other side**: the blueprint's `--t-tiny` has **12 consumers, and 10 are unambiguous eyebrows** — `uppercase` + `letter-spacing: var(--tracking-eyebrow)` — across `photos` (4), `docs` (4), `agenda` (2); the two that are not are a 28px badge glyph and a receipt chip. That makes this a genuine two-sided conflict, not a case of one side being wrong: forcing mono monospaces `<select>` chrome and prose, forcing sans de-monospaces an entire surface's eyebrow idiom. **Picking a winner would have been the wrong move in either direction**, so the divergence sits in `ROLE_PARITY_ALLOWLIST` with the measurement attached, and the test asserts the waiver is still *needed* — the moment the two sides agree, the stale entry fails the suite. The resolution is open decision (b) (name the eyebrow role); lane (1) converged the 94 shell eyebrows but deliberately named nothing, so that vocabulary does not exist yet and `--t-tiny` still cannot align without collateral.
+- **F10 — lane (2) binds by role, not by number, and the four refusals are the point.** The accepted decision (2) says bind `kit.css`'s exact matches to `--t-<key>-size`. Taken as a sweep it is 20 substitutions; taken as 20 decisions it is 16. The rule applied at each site was **"should this rule resize with the surface it renders on?"**, not "does this literal equal a rung?" — because size and line-height are permitted to diverge between the two emitters (the F9 law), a binding is a *decision that the rule should track the surface*, and a literal that was deliberately holding one size across both surfaces is information a substitution would delete. That is the same hazard that twice in this PR deleted a solved contrast decision, in its typographic form. Four sites failed the test: one sans control that matched the **mono** rung by coincidence, one icon glyph inside a fixed circle, one pill whose `svg` is sized in `em` off the very number being replaced, and one hairline badge whose height *is* its line box. Binding those would have manufactured the chip-geometry problem lane (1) explicitly declined.
+- **F10 — "0 shell matches" is a same-unit claim, and it survives with one honest footnote.** Numerically at a 16px root three sites *do* land on a shell rung — `.kit-btn`'s `0.8125rem` is 13px and `.asstStatLabel` / `.kit-ask-chip`'s `0.75rem` is 12px. They were still not converted: #686's own bar is **same unit, not same computed px**, because a `rem`→`px` swap stops tracking a reader who has raised their browser default. Recorded so the next measurement does not "discover" them as a missed opportunity.
+- **F9 — the gate was sabotage-tested in four directions before being trusted.** A gate never seen to fail is not known to work. Each sabotage was applied to `packages/design/src/typography.ts`, run, and reverted by `cp` from a saved copy (md5-verified, never `git checkout`, since sibling agents share this tree). (1) **Weight-only** — `blueprintType.small` 400→600: red on `--t-small`, "the shell emits sans-serif/400, the blueprint layer emits sans-serif/600". (2) **Family-only** — `blueprintType.mono` `mono`→`font-sans`: red on `--t-mono`, "the shell emits monospace/500, the blueprint layer emits sans-serif/500" — this is the one that proves genus resolution actually resolves, since both sides still name a `--font-*`/`--mono` property. (3) **Stale waiver** — `blueprintType.tiny`→`font-sans`/500, i.e. making the waived role *agree*: red on "every waiver is still needed", so the allowlist cannot outlive its justification. (4) **Law widened past what was agreed** — `blueprintType.body.size`→`15px`: red on "size and line-height are explicitly allowed to diverge", which is the test that stops a future edit from quietly promoting size into the law. All four reverted clean; `git status` shows no residue.
+
+## What changed
+
+- **A1 spacing tokens emitted (`--sp-1`…`--sp-7`) in both contracts** — ~~new `packages/design/src/motion.ts` (single `EASE` constant)~~ **corrected: `motion.ts` was created here and deleted later in the same PR** (oxlint `no-barrel-file`, see the Decisions entry); at HEAD `EASE` lives in `packages/design/src/themes/shared.ts` and no `motion.ts` exists. `packages/design/src/css.ts` and `packages/design/src/blueprint.ts` now emit `--sp-1`…`--sp-7` from the typed scale in `packages/design/src/density.ts`; `packages/design/src/contract.ts` gains the spacing keys (derived from `Object.keys(spacing)`).
+- **B1 shell motion token (`--ease`) in `SHELL_TOKEN_CONTRACT`** — `--ease` added to the shell emitter and contract, sourced from the shared `EASE` constant. Six client modules drop the now-dead `var(--ease, …)` fallbacks:
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasKindsTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/LocalFootprintCard.module.css`
+- Mobile `tokens.generated.ts` regenerated byte-identical (`--sp-*` are non-color, the parser skips them). `packages/design/src/kit.test.ts` is unchanged in content (flagged only by a stale stat during concurrent lanes).
+
+- **A2 consumer-side token-purity ratchet test (blueprint apps)** and **A5 reserved-namespace guard (`--c-*` etc.) in the same test** — new `packages/blueprints/src/token-purity.test.ts` walks all 93 `packages/blueprints/apps/**/*.module.css` files asserting no hex, no `rgb()/rgba()/hsl()/hsla()` literals, no concrete `font-family` stacks, and no declarations of reserved custom properties (`--c-*`, `--t-*`, `--r-*`, `--sp-*`, `--bg-*`, `--text-*`, plus every `BLUEPRINT_TOKEN_CONTRACT` name imported from `@centraid/design`). `packages/blueprints/src/token-purity-allowlist.ts` pins the existing debt (28 files, 252 violations) with exact-equality in both directions, so cleanups must shrink it and new debt fails.
+- **A2 governance directive `no-hardcoded-colors`** — new directive (added-lines-only tripwire on blueprint app CSS, mirroring `no-hardcoded-model-ids`): `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh`, `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/directive.yaml`, `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/constitution.md`, plus the `### no-hardcoded-colors` section and amendment-log line in `CONSTITUTION.md`.
+
+- **C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference** — landed as a new `docs/design-language.md` (canonical field-notebook rulebook: aesthetic POV, platform analogy, typography/color/spacing/motion rules, app may/may-not list); index row added in `AGENTS.md`; doc-comment reference on `buildUiGroundingBlocks()` in `packages/gateway/src/skills/ui-grounding.ts`. **Superseded by F2 later in this PR:** `docs/design-language.md` no longer exists — its content is in root `DESIGN.md`, and both the `AGENTS.md` row and the `ui-grounding.ts` pointer name `DESIGN.md` at HEAD.
+- **C2 `.design-sync` stale conventions neutralized** — `.design-sync/conventions.md` and `.design-sync/desktop.conventions.md` were first replaced with stale-version warnings naming the specific lies (deleted emulation themes, removed Geist/Space Grotesk stacks, phantom `--surface`/`--ink-*`/`--warn`/`--d-*` tokens) plus pointers to the real sources. **Superseded by F2:** the whole directory was then deleted, so nothing of this neutralization survives in the diff.
+- **C3 stale mobile-theming comments fixed** — `packages/design/src/themes/index.ts` and `packages/design/src/index.ts` now describe the real three-lowerings pipeline (shell `toCss()`, blueprint `toBlueprintCss()`, mobile AOT via `apps/mobile/scripts/generate-theme.ts`).
+- **C4 `styles.css` eaten comment restored** — `packages/client/src/styles.css` had already been fixed on main by c27cb65c (#681); our branch converged to identical content, so this item lands with no net diff.
+- **D1 typeface decision recorded in docs/decisions.md** — `docs/decisions.md` gains the `## #686 — typography is a contract of ROLES, not families` section (web/desktop system stacks per #468 K11; mobile per-role platform mapping sanctioned pending native-faces revisit).
+
+- **D2 mobile color opt-outs migrated/waived** — `apps/mobile/src/screens/onboarding-styles.ts` now derives its palette from `resolveTheme("dark").colors` (scheme stays pinned, values come from tokens; one `// #686 waiver:` for the true-black camera viewfinder). `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx` replaces 27 hand-picked hexes with tints derived from the 8-hue design palette via `tileFinish()`, keyed by a stable FNV-1a hash of the collection/party id. `apps/mobile/src/screens/onboarding-art.tsx` and `apps/mobile/src/screens/onboarding-home-art.tsx` carry explicit illustration-art exemption comments.
+
+- **F1 Root `DESIGN.md` per the getdesign.md convention** — new root `DESIGN.md` (151-line machine-readable design brief: point of view, binding rules, color/typography/spacing/radii/elevation/motion, two-layer component vocabulary, do/don't) with real values from the token source; new `packages/design/src/design-md.test.ts` drift guard (12 tests) pinning every stated value (brand hex, accent ramp, semantic states, all 8 palette hues, spacing rungs, radii, EASE curve, type roles) to the TS source of truth; index row in `AGENTS.md`; pointer in `docs/design-language.md` (that pointer died with the file under F2). Also hardened `.governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh` against prose false-positives (`#686` in CSS comments parses as 3-digit hex; `hsl(var(--app-hue) …)` is contract-parameterized) — comment stripping, declaration-colon filter, hex-followed-by-word filter; red-capability re-proven after each change.
+
+- **A3 component vocabulary unified (scaffold ↔ kit)** and **A4 scaffold exemplar on tokens** — generated apps are served `kit.css` (via `SHARED_ASSET_FILES` → `sharedAssetsDir`), so the scaffold's parallel component vocabulary (`.primary`/`.ghost`/`.muted`/`.empty`…) is retired in favour of `.kit-btn`/`.kit-input`/`.kit-empty`/`.kit-muted`; `DEFAULT_APP_CSS` keeps only layout classes kit lacks (`.head`, `.add-bar`, `.list`, `.row`, `.surface`, `.loading`, `.error`, `.circle`) and is now 100% token-driven (`--t-*`, `--sp-*`, `--r-*`, `--on-accent`; zero literals, the `#fff` carve-out is gone). Knob blocks retarget `.kit-*` with compound selectors; the appFont knob moves to token roles. Files:
+  - `packages/blueprints/src/__snapshots__/scaffold-defaults.test.ts.snap`
+  - `packages/blueprints/src/scaffold-defaults.test.ts`
+  - `packages/blueprints/src/scaffold-defaults.ts`
+  - `packages/blueprints/src/scaffold-files.ts`
+  - `packages/gateway/skills/authoring-centraid-apps/SKILL.md`
+  - `packages/gateway/src/skills/ui-grounding.test.ts`
+  - `packages/gateway/src/skills/ui-grounding.ts`
+- **B2 shell type-scale adoption + ratchet** and **B3 shell radius adoption + ratchet** — `scripts/lint-design-tokens.mjs` gains a METRICS registry with `rawFontSize`, `rawFontWeight` (outside 400/500/600), `rawRadius` (off the 2/4/6/10/14 scale; carve-outs: 0, %, ≥99px pill, 1px nudge, var/calc) and a `--write` budget-regeneration mode; `scripts/lint-design-tokens.test.mjs` covers each counter red-capably; `tests/design-token-css-budget.json` regenerated (**state at the end of this wave**: 0 grandfathered hex, 4 literal font stacks, 1291 raw font-sizes, 9 off-scale weights, 287 raw radii — **not the final head state**: F6 later took `rawFontSize` to **880**, and a sixth metric `paletteHueAsText` was added at 0. HEAD budget is 0 / 4 / 880 / 9 / 287 / 0). In `packages/client`: **151** `border-radius` declarations converted to `var(--r-*)` (value-identical; re-derived as the net 94 → 245 `border-radius: … var(--r-*)` count between `origin/main` and HEAD — "152" recorded here is one high), 48 off-scale font-weights snapped into the sanctioned set, 6 display-scale 700s kept as marketing territory. Zero font-size conversions — a measured finding: no client declaration exactly matches a `--t-*` shorthand (all line-heights unitless vs px tokens), so the type surface is recorded debt, not silently rounded. Client CSS files touched:
+  - `packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `packages/client/src/react/screens/AssistantScreen.module.css`
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/AutomationCompilePane.module.css`
+  - `packages/client/src/react/screens/AutomationEditorScreen.module.css`
+  - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `packages/client/src/react/screens/BackupCard.module.css`
+  - `packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `packages/client/src/react/screens/DevicePairPanel.module.css`
+  - `packages/client/src/react/screens/DevicesCard.module.css`
+  - `packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/HomeScreen.module.css`
+  - `packages/client/src/react/screens/InsightsScreen.module.css`
+  - `packages/client/src/react/screens/LocalFootprintCard.module.css`
+  - `packages/client/src/react/screens/LogsScreen.module.css`
+  - `packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `packages/client/src/react/screens/PaletteScreen.module.css`
+  - `packages/client/src/react/screens/PhoneScreen.module.css`
+  - `packages/client/src/react/screens/RecoverScreen.module.css`
+  - `packages/client/src/react/screens/ResourceDialogs.module.css`
+  - `packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `packages/client/src/react/screens/RunViewScreen.module.css`
+  - `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsStorageScreen.module.css`
+  - `packages/client/src/react/screens/WhatsNewModal.module.css`
+  - `packages/client/src/react/shell/CaptureOverlay.module.css`
+  - `packages/client/src/react/shell/IdentityHead.module.css`
+  - `packages/client/src/react/shell/chrome.module.css`
+  - `packages/client/src/react/shell/gatewaySwitcher.module.css`
+  - `packages/client/src/react/shell/routes/AppViewRoute.module.css`
+  - `packages/client/src/react/shell/routes/ConnectFlow.module.css`
+  - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `packages/client/src/react/shell/routes/assistantRich.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCloud.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderHistory.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderPreview.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderShell.module.css`
+  - `packages/client/src/react/shell/templatePreview.module.css`
+  - `packages/client/src/react/styles/chatMessage.module.css`
+  - `packages/client/src/react/styles/linkBtn.module.css`
+  - `packages/client/src/react/styles/pageEmpty.module.css`
+  - `packages/client/src/react/styles/pageSkeleton.module.css`
+  - `packages/client/src/react/styles/seg.module.css`
+  - `packages/client/src/react/styles/toolGroup.module.css`
+  - `packages/client/src/react/styles/vault.module.css`
+  - `packages/client/src/react/ui/AppCard.module.css`
+  - `packages/client/src/react/ui/Button.module.css`
+  - `packages/client/src/styles.css`
+- **B4 mono body face decided + documented** — resolved upstream by #681 (c27cb65c restored `body { font-family: var(--font-sans) }`); `DESIGN.md`/`docs/design-language.md` document mono as a signature role, not the body face. No net diff in this branch.
+- **D3 post-generation CSS validation for agent apps** — token-purity validation wired into the publish gate `validateManifestAt()` (the same seam that rejects malformed manifests; hard-reject with LLM-instructive per-violation messages; installed apps unaffected — the gate runs only on publish, and bundled blueprints install in place without passing through it). The generated `toBlueprintCss()` baseline is structurally stripped before scanning so scaffolded apps publish clean. Files:
+  - `packages/app-engine/src/index.ts`
+  - `packages/app-engine/src/registry/token-purity.test.ts`
+  - `packages/app-engine/src/registry/token-purity.ts`
+  - `packages/gateway/src/validate-app-css.test.ts`
+  - `packages/gateway/src/validate-app-css.ts`
+  - `packages/gateway/src/validate-manifest.ts`
+- **E blueprint burn-down (docs, photos, tally, locker, people, agenda, notes, tasks)** — all eight system apps swept onto tokens. **Corrected count: 252 → 16 remaining violations repo-wide, not "5".** The allowlist's 252 was the sum of all four counters (82 hex + 111 functional + 0 fontFamily + 59 reserved custom-property names); scored the same way HEAD carries **5 functional literals + 11 reserved custom-property names across 8 files**. "5" was the functional-literal count only, while the parenthetical listed the custom-property categories too. All 16 are sanctioned: app-font knobs (`--font-sans`/`--font-title` ×5), `--app-hue`/`--accent`/`--_accent` identity (×6), the photos wall (`--bg-wall` + its 2 `hsl()` mixes), and 3 `hsl(var(--app-hue) 25% 4%)` theater-stage backdrops awaiting a `--stage` token. docs' reserved-namespace `--c-*` shadow palette renamed to `--kind-*` and sourced from the 8-hue palette; photos scrims routed through `--scrim`/`--on-accent` color-mix; tally/locker/people/agenda literal forks replaced by `--success`/`--danger`/`--warning`/`--accent-*`/`--on-accent`; spacing moved onto `--sp-*` (**351 declarations rewritten; `var(--sp-*)` references across blueprint apps go 2 → 403** — the "234 exact spacing substitutions" figure recorded here is not reproducible from the diff at any granularity I could find); radius snaps **70** in blueprints (48 → 118) and 151 in the client; kit composition raised (photos sidebar brand block; the **locker app** 2 → 9 `composes`, of which the Sidebar itself is 0 → 7 — "locker sidebar 2→9" conflated the two). `packages/blueprints/src/token-purity-allowlist.ts` shrunk from 28 files/252 violations to 8 files/16. Blueprint app files touched:
+  - `packages/blueprints/apps/agenda/Chrome.module.css`
+  - `packages/blueprints/apps/agenda/components/CreateModal.module.css`
+  - `packages/blueprints/apps/agenda/components/EventDrawer.module.css`
+  - `packages/blueprints/apps/agenda/components/EventEditor.module.css`
+  - `packages/blueprints/apps/agenda/components/MonthView.module.css`
+  - `packages/blueprints/apps/agenda/components/ScheduleView.module.css`
+  - `packages/blueprints/apps/agenda/components/Sidebar.module.css`
+  - `packages/blueprints/apps/agenda/components/WeekView.module.css`
+  - `packages/blueprints/apps/docs/Chrome.module.css`
+  - `packages/blueprints/apps/docs/components/Activity.module.css`
+  - `packages/blueprints/apps/docs/components/BulkBar.module.css`
+  - `packages/blueprints/apps/docs/components/Details.module.css`
+  - `packages/blueprints/apps/docs/components/Editor.module.css`
+  - `packages/blueprints/apps/docs/components/Grid.module.css`
+  - `packages/blueprints/apps/docs/components/History.module.css`
+  - `packages/blueprints/apps/docs/components/List.module.css`
+  - `packages/blueprints/apps/docs/components/NewMenu.module.css`
+  - `packages/blueprints/apps/docs/components/QuickLook.module.css`
+  - `packages/blueprints/apps/docs/components/Sidebar.module.css`
+  - `packages/blueprints/apps/docs/components/shared.module.css`
+  - `packages/blueprints/apps/docs/format.ts`
+  - `packages/blueprints/apps/locker/Chrome.module.css`
+  - `packages/blueprints/apps/locker/components/Detail.module.css`
+  - `packages/blueprints/apps/locker/components/Detail.tsx`
+  - `packages/blueprints/apps/locker/components/EditModal.module.css`
+  - `packages/blueprints/apps/locker/components/Generator.module.css`
+  - `packages/blueprints/apps/locker/components/ItemFields.module.css`
+  - `packages/blueprints/apps/locker/components/List.module.css`
+  - `packages/blueprints/apps/locker/components/LockScreen.module.css`
+  - `packages/blueprints/apps/locker/components/Sidebar.module.css`
+  - `packages/blueprints/apps/locker/components/shared.module.css`
+  - `packages/blueprints/apps/notes/Chrome.module.css`
+  - `packages/blueprints/apps/notes/components/Card.module.css`
+  - `packages/blueprints/apps/notes/components/Editor.module.css`
+  - `packages/blueprints/apps/notes/components/History.module.css`
+  - `packages/blueprints/apps/notes/components/QuickAdd.module.css`
+  - `packages/blueprints/apps/notes/components/Sidebar.module.css`
+  - `packages/blueprints/apps/notes/components/Toolbar.module.css`
+  - `packages/blueprints/apps/notes/components/WikiLinks.module.css`
+  - `packages/blueprints/apps/notes/components/shared.module.css`
+  - `packages/blueprints/apps/people/Chrome.module.css`
+  - `packages/blueprints/apps/people/components/Activity.tsx`
+  - `packages/blueprints/apps/people/components/AddPersonModal.module.css`
+  - `packages/blueprints/apps/people/components/AddRows.module.css`
+  - `packages/blueprints/apps/people/components/ContactChannels.module.css`
+  - `packages/blueprints/apps/people/components/DetailSections.module.css`
+  - `packages/blueprints/apps/people/components/DetailSections.tsx`
+  - `packages/blueprints/apps/people/components/Details.module.css`
+  - `packages/blueprints/apps/people/components/Grid.module.css`
+  - `packages/blueprints/apps/people/components/History.module.css`
+  - `packages/blueprints/apps/people/components/Journal.module.css`
+  - `packages/blueprints/apps/people/components/Journal.tsx`
+  - `packages/blueprints/apps/people/components/List.module.css`
+  - `packages/blueprints/apps/people/components/NewMenu.module.css`
+  - `packages/blueprints/apps/people/components/Sidebar.module.css`
+  - `packages/blueprints/apps/people/components/TrashCard.module.css`
+  - `packages/blueprints/apps/people/format.ts`
+  - `packages/blueprints/apps/photos/Chrome.module.css`
+  - `packages/blueprints/apps/photos/components/AlbumGrid.module.css`
+  - `packages/blueprints/apps/photos/components/Editor.module.css`
+  - `packages/blueprints/apps/photos/components/Lightbox.module.css`
+  - `packages/blueprints/apps/photos/components/LightboxInfo.module.css`
+  - `packages/blueprints/apps/photos/components/Memories.module.css`
+  - `packages/blueprints/apps/photos/components/Picker.module.css`
+  - `packages/blueprints/apps/photos/components/Sidebar.module.css`
+  - `packages/blueprints/apps/photos/components/Slideshow.module.css`
+  - `packages/blueprints/apps/photos/components/Timeline.module.css`
+  - `packages/blueprints/apps/photos/components/Toolbar.module.css`
+  - `packages/blueprints/apps/photos/components/shared.module.css`
+  - `packages/blueprints/apps/tally/Chrome.module.css`
+  - `packages/blueprints/apps/tally/components/Activity.module.css`
+  - `packages/blueprints/apps/tally/components/Dashboard.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseModal.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseRow.module.css`
+  - `packages/blueprints/apps/tally/components/ExpenseUndo.module.css`
+  - `packages/blueprints/apps/tally/components/GroupManager.module.css`
+  - `packages/blueprints/apps/tally/components/History.module.css`
+  - `packages/blueprints/apps/tally/components/Ledger.module.css`
+  - `packages/blueprints/apps/tally/components/Sidebar.module.css`
+  - `packages/blueprints/apps/tally/components/shared.module.css`
+  - `packages/blueprints/apps/tasks/components/Board.module.css`
+  - `packages/blueprints/apps/tasks/components/Capture.module.css`
+  - `packages/blueprints/apps/tasks/components/Detail.module.css`
+  - `packages/blueprints/apps/tasks/components/Row.module.css`
+  - `packages/blueprints/apps/tasks/components/Sidebar.module.css`
+  - `packages/blueprints/apps/tasks/components/shared.module.css`
+
+- **F1 Root `DESIGN.md` conforming to the official google-labs-code/design.md spec + `@google/design.md` linter wired** — root `DESIGN.md` rewritten to the official spec: YAML front matter (46 colors incl. both theme ramps with the dark `--bg-l` anchor resolved to hex, 7 typography roles, 5 rounded, 7 spacing, 46 component entries; `primary` aliased to brand via token ref) + canonical section order (Overview · Colors · Typography · Layout · Elevation & Depth · Shapes · Components · Do's and Don'ts). `@google/design.md@0.4.0` pinned exact in root `package.json` devDependencies (`bun.lock` updated); new `lint:design-md` script wired into the `check:push`/`check:pr`/`check:full` gate chain next to `lint:design-tokens` (red-capable, proven on a broken token ref). `packages/design/src/design-md.test.ts` rewritten to parse the front matter and pin 16 checks directly against the TS token source (red-capable, proven on a radii change). `docs/toolchain.md` gains the owner + command-contract rows. The linter surfaced a REAL finding: `--on-accent: #ffffff` fails WCAG AA on the accent fills (3.04:1 / 2.07:1) — documented as a Known finding in `DESIGN.md` and fixed in a follow-up commit on this branch. Also `packages/blueprints/apps/tasks/Chrome.module.css` — restored one `var(--on-accent)` substitution that an orchestrator red-capability `git restore` had accidentally reverted.
+
+- **F2 One canonical design document (`docs/design-language.md` folded in, `.design-sync/` deleted)** — deleted `docs/design-language.md` (folded into `DESIGN.md`) and the entire `.design-sync/` directory — **25 files, not the 4 originally named here**: `conventions.md`, `desktop.conventions.md`, `config.json`, `desktop.config.json`, plus `NOTES.md`, `desktop.NOTES.md`, `ds-src/` (README, `build.mjs`, `package.json`, `styles/bridge.css`, `styles/fonts.css` and **7 vendored `.woff2` font binaries** — Geist 400/500/600, JetBrains Mono 400/500, Space Grotesk 500/600), `desktop-src/` (`build.mjs`, `package.json`, `tsconfig.json`) and `previews/` (`AppCard.tsx`, `Button.tsx`, `Icon.tsx`, `Logo.tsx`). The font binaries are worth naming: they were the last copies in the tree of the exact families the token layer removed; `.gitignore` design-sync/ds-bundle entries dropped; references repointed in `AGENTS.md`, `docs/decisions.md`, `DESIGN.md`, `packages/design/src/index.ts`, `packages/design/src/design-md.test.ts`, `packages/app-engine/src/registry/token-purity.ts`, `packages/gateway/src/skills/ui-grounding.ts`, `scripts/lint-design-tokens.mjs`.
+
+- **F3 Fix the WCAG AA failure the linter found (`--on-accent` on the filled primary button)** — the filled primary carried `--on-accent: #FFFFFF` on `--accent-deep`: 3.04:1 at rest, 2.07:1 on hover in the shell, and 3.49:1 / 1.98:1 at the worst palette hue on the app surface. A fixed ink cannot serve eight retunable hues and CSS cannot pick one (`color-contrast()` unimplemented), so the FILL moved and the button's ink became `--text-inv`, which already flips per theme. Shell rungs are now SOLVED rather than offset (`accentFillShade()` beside `accentTextShade()` in `src/color.ts`), so an owner-picked accent gets a legible button too; app rungs are the same `color-mix()` retuned (62% over a near-black hue anchor on light, 70% under a near-white one on dark). `.kit-btn.primary:hover` stops brightening — it steps the fill 12% toward `--text`, away from its own ink, so a hover can only raise the ratio. Seven further accent-deep fills in the kit took the same re-ink — the app brand mark, the active chip, the empty-state CTA, the user bubble, the ask send button, the ask icon button and the ask-applied dot, all of which painted the NORMAL `--text` (or `--on-accent`) on a filled accent. `--on-accent` stays white and keeps its real role (saturated accent + media stage) and is now EMITTED by the shell, which never declared it — five `var(--on-accent)` rules in `packages/client` had been resolving to nothing. Measured grid (all 8 palette hues + both teals × both themes, rest and hover) is in `DESIGN.md`'s Colors section and recomputed from the emitted CSS by `contrast.test.ts`, which grew an oklab `color-mix()` evaluator so a hue-parameterised fill can be measured at all; both new guards proven red-capable. `lint:design-md` is 0 errors / 0 warnings. `apps/mobile/src/kit/theme/tokens.generated.ts` is unchanged — the RN lowering skips `color-mix()`, so no accent-fill token reaches it. Files:
+  - `DESIGN.md`
+  - `packages/design/src/color.ts`
+  - `packages/design/src/themes/shared.ts`
+  - `packages/design/src/themes/centraid.ts`
+  - `packages/design/src/themes/index.ts`
+  - `packages/design/src/css.ts`
+  - `packages/design/src/contract.ts`
+  - `packages/design/src/blueprint.ts`
+  - `packages/design/kit/kit.css`
+  - `packages/design/src/contrast.test.ts`
+  - `packages/design/src/color-accent.test.ts`
+  - `packages/design/src/design-md.test.ts`
+  - `packages/client/src/react/shell/appearance.ts`
+
+- **Mutation floor restored for `packages/design`** — the `--sp-*` / `--ease` / `--brand` / `--on-accent` emission added by A1/B1/F3 introduced mutants no seeded test could kill: `src/contract.test.ts` pins the emitted property NAME list (and is not in the mutation seed's `testFiles` anyway), so a mutant that blanks a token's key or empties `themeProps()`'s literal still produced a well-formed sheet. `packages/design/src/css-properties.test.ts` — the value-law file the seed actually runs — gains four behaviour tests: every spacing rung emitted in `px` with only the rungs present, every `--lib-*` library-tile token emitted under its own name, the three theme-independent constants (`--brand`, `--ease`, `--on-accent`) present at `:root` and redefined by no theme block, and every `Theme` role field emitted in its own block under the kebab-case spelling with that theme's value. Score 92.78 → 98.97 (floor 93); `src/css.ts` reaches 100%. Files:
+  - `packages/design/src/css-properties.test.ts`
+
+- **Ink-pairing regression fix + gate** — eleven rules repointed from `var(--on-accent)` to `var(--text-inv)` where the fill is `var(--accent-deep)`, each with an inline note stating the contract: `packages/blueprints/apps/agenda/Chrome.module.css`, `packages/blueprints/apps/agenda/components/MonthView.module.css`, `packages/blueprints/apps/agenda/components/Sidebar.module.css`, `packages/blueprints/apps/agenda/components/WeekView.module.css`, `packages/blueprints/apps/docs/Chrome.module.css`, `packages/blueprints/apps/notes/Chrome.module.css`, `packages/blueprints/apps/photos/components/Editor.module.css`, `packages/blueprints/apps/photos/components/Picker.module.css`, `packages/blueprints/apps/photos/components/Sidebar.module.css`, `packages/blueprints/apps/tasks/Chrome.module.css`. New test in `packages/blueprints/src/token-purity.test.ts` ("never inks an --accent-deep fill with the theme-stable --on-accent") holds every app to the kit's header contract.
+
+- **Unresolved-var gate** — new test in `packages/blueprints/src/token-purity.test.ts` ("resolves every fallback-less var() an app references") resolving names against the contract, `packages/design/kit/kit.css`, and the app's own stylesheets; the 12 known-broken references were pinned in `UNRESOLVED_VAR_DEBT` in `packages/blueprints/src/token-purity-allowlist.ts`. **Superseded by F5:** at HEAD that list is `[]` — the gate is unchanged, the ledger it asserts against is empty.
+
+- **Palette-hue-as-text rung (`--c-<name>-text`) — closes the gap the burn-down exposed**
+  - `packages/design/src/color.ts` — `darkenUntil()` generalised to `walkUntil(base, score, floor, step)` (deepen or lift, lightness only); new `PALETTE_TEXT_SURFACE` (light `#F0F1F3` = the darkest light surface either emitter ships; dark `#2b3634` = the lightest dark one), `PALETTE_TEXT_TINT = 0.12` self-wash allowance, `AA_PALETTE_TEXT = 4.8`, `paletteTextShade()`, and the exported `paletteText` map.
+  - `packages/design/src/css.ts` — `themeProps()` emits `--c-<name>-text` from `paletteText[t.kind]`, so the shell gets both halves.
+  - `packages/design/src/blueprint.ts` — `lightProps()` / `darkProps()` emit the light and dark halves into the `:root`, `[data-theme='dark']`, and `prefers-color-scheme` blocks.
+  - `packages/design/src/contract.ts` — eight `--c-<name>-text` names added to `SHELL_TOKEN_CONTRACT` (theme block, not static) and to `BLUEPRINT_TOKEN_CONTRACT`.
+  - `DESIGN.md` — front matter gains `c-<name>-text` / `c-<name>-text-dark` (16 values) and 16 `c-<hue>-on-elev[-dark]` component entries recording the canonical pairing; the "App-icon palette" prose gains the rule ("a palette hue on type reads `--c-<name>-text`, never `--c-<name>`"), the measured grid, and the lightness-only / cannot-keep-hues-apart caveat.
+  - `packages/design/src/design-md.test.ts` — palette test no longer treats `-text` keys as strays; new test pins all 16 hexes to `paletteText` and requires the prose row for each hue to carry both halves.
+  - `packages/design/src/contrast.test.ts` — new `every palette hue has a legible TEXT rung` grid (8 hues × 2 themes): AA on every surface AND on a 12% self-tint of its own fill, a `RECOGNISABLE < 12` cap, a hue/saturation-preservation + direction-of-travel law, and an oklab separation floor for the six file-kind hues.
+- **`docs` rebound to the solved rung, with fills split out**
+  - `packages/blueprints/apps/docs/Chrome.module.css` — `--kind-<k>` now reads `--c-<hue>-text` and a new `--kind-<k>-fill` reads the raw `--c-<hue>`; `pdf` → rose and `slide` → amber (the amber/ochre pair collapses under the solve); the whole app-local dark block for the kind rungs is **deleted** — the design package emits both halves.
+  - `packages/blueprints/apps/docs/format.ts` — new `fillVar()`; `tintBg()` now mixes the FILL rung, so a label painted `var(cv)` keeps its measured ratio on the tint behind it.
+  - `packages/blueprints/apps/docs/components/Grid.tsx`, `packages/blueprints/apps/docs/components/QuickLook.tsx` — the four decorative `background: var(${m.cv})` marks read `fillVar(m.cv)`.
+  - `packages/blueprints/apps/docs/components/Grid.tsx`, `packages/blueprints/apps/docs/components/Details.tsx`, `packages/blueprints/apps/docs/components/List.tsx`, `packages/blueprints/apps/docs/components/QuickLook.tsx` — tint strengths unified at 12% (were 15/16/16/20), the strength the rung is solved for.
+  - `packages/blueprints/apps/docs/components/Grid.module.css` — `.thumbLabel`'s `opacity: 0.9` removed; it was an unmeasured ~0.6 off the label's ratio, applied after the token layer had solved it.
+  - `packages/blueprints/apps/docs/kind-colours.test.ts` — **new**: pins the binding the contrast grid assumes (text rung for text, fill rung for fills, same hue per kind, six distinct hues, no `ochre`, no app-local dark re-declaration, `tintBg()` never mixes the text rung).
+  - `packages/blueprints/manifest.json` — regenerated (picks up the new test file, matching how the other apps' test files are already listed).
+
+
+- **Semantic states solved as TEXT, and the coverage gap that hid them closed**
+  - `packages/design/src/color.ts` — new exported `semanticShade(base, ramp)` + `SemanticRamp` type and a per-emitter `SEMANTIC_SURFACE` map (`shellLight` `#F0F1F3`, `shellDark` `#181818`, `blueprintLight` `#f1f1f6`, `blueprintDark` `#2b3634` — each the hardest surface that emitter actually paints). The walk scores against the candidate's **own** 12% wash, not the base's, because a `color-mix()` chip tints with the shipped token. `PALETTE_TEXT_TINT` → `SELF_TINT` and `AA_PALETTE_TEXT` → `AA_SOLVED_TEXT`, now shared by both solvers.
+  - `packages/design/src/themes/shared.ts` — the six shell literals become named bases run through `semanticShade()`; new `DANGER_DARK` export (the ramps can no longer share one danger).
+  - `packages/design/src/themes/centraid.ts` — the dark theme takes `DANGER_DARK`.
+  - `packages/design/src/blueprint.ts` — the app ramp's six literals run through `semanticShade()` against the **blueprint** surfaces (its `--bg-l` is 10%, not the shell's 5%, so the two ramps need different answers).
+  - `packages/design/kit/kit.css` — `.kit-btn.primary.danger` re-inked `var(--text)` → `var(--text-inv)`. A `--danger` fill under `--text` is the *same-side* ink in both themes (near-black on light, near-white on dark) over a mid-lightness red: 3.81:1 light / 4.09:1 dark at the button's 13px. With `--text-inv` it is 6.05 / 5.70.
+  - `packages/design/src/contrast.test.ts` — the gate that should have caught this. The old three-token loop at the 3:1 floor on `--bg` is replaced by, per emitter × theme: the **body** floor on every surface the state lands on **and** on a 12% self-wash of each; a `RECOGNISABLE_STATE < 12` cap; a hue-family + minimum-chroma law (`readsAsRole`) so a solve cannot cheat by desaturating; an oklab separation floor between the three; the filled-destructive-button ink pairing; and a new `kit.css`-reading describe pinning that `.kit-btn.primary.danger` writes `--text-inv` — a value grid cannot see which pairing a stylesheet actually writes.
+  - `packages/design/src/design-md.test.ts` — `danger` / `danger-dark` pinned separately, with an assertion that they differ.
+  - `DESIGN.md` — front matter gains `danger-dark` and the five moved hexes; three new component entries (`kit-btn-danger-filled`, `kit-btn-danger-filled-dark`, `kit-banner-danger-dark`); the "Semantic states" section replaces "clears AA on both ramps" with the measured 24-cell before/after grid, the 12%-wash rule, the body-floor rationale, and the filled-button contract.
+  - `apps/mobile/src/kit/theme/tokens.generated.ts` — regenerated (`bun run generate:theme`); it lowers `toBlueprintCss()`, so it carried the stale app-ramp values.
+  - **Four over-strength self-washes brought back to the 12% the rung is solved for** — at 18–20% a chip spends the contrast the solve just bought: `packages/client/src/react/shell/routes/AppViewRoute.module.css` (`.brandChipLive` 18% → 12%), `packages/client/src/react/shell/routes/builder/BuilderShell.module.css` (`.tlStatus[data-state="idle-live"]` 18% → 12%), `packages/client/src/react/shell/chrome.module.css` (`.sbAlarm` 12% → 8%, hover 18% → 12%), `packages/client/src/react/screens/AtlasBrowseTab.module.css` (`.dangerBtn` 12% → 8%, hover 20% → 12%). The 14–16% washes elsewhere measure ≥4.5 against the solved rungs and were deliberately left.
+
+
+- **oklab helper extraction** — `packages/design/src/oklab.ts` (new) carries the `color-mix(in oklab, …)` evaluator and `oklabDistance` out of `packages/design/src/contrast.test.ts`, which had grown past the 625-line repo-hygiene cap once the semantic-state grids landed. Extraction, not a waiver.
+
+- **Palette-hue-as-text in the shell (#686, client half).** Every `color:` that named a bare `--c-<hue>` now names the solved `--c-<hue>-text` rung; every `background`, `border-color`, `box-shadow` and `::before` rail keeps the raw fill.
+  - Direct rebinds — `packages/client/src/react/ui/StatusPill.module.css` (`.status[data-tone="draft"]`), `packages/client/src/react/ui/AppCard.module.css` (`.starFlag`), `packages/client/src/react/shell/contextMenu.module.css` (`.item[data-danger]` + its `svg`), `packages/client/src/react/shell/routes/SettingsRoute.module.css` (`.settingsAutosaved`), `packages/client/src/react/shell/routes/builder/BuilderCloud.module.css` (`.heroTile`, `.heroEyebrow`, `.feedTile`, `.feedLive`), `packages/client/src/react/screens/BackupCard.module.css` (six), `packages/client/src/react/screens/GatewayScreen.module.css` (four), `packages/client/src/react/screens/InsightsScreen.module.css` (three), `packages/client/src/react/screens/AutomationsOverviewScreen.module.css` (two), `packages/client/src/react/screens/AutomationEditorScreen.module.css` (two), `packages/client/src/react/screens/AutomationThreadScreen.module.css` (`.consentIc`), `packages/client/src/react/screens/SettingsConnectionsScreen.module.css` (`.rowAuthNote`, `.wizardHint`), `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css` (`.eventLevel`), `packages/client/src/react/screens/SettingsProvidersScreen.module.css` (`.usedByChip`), `packages/client/src/react/screens/LogsScreen.module.css` (`.lineLevel`).
+  - **Fill/ink splits** where one variable served both roles — `packages/client/src/react/screens/ApprovalsScreen.module.css` (`--notice-hue` / `--notice-ink` across all eight hues; the tile's self-wash also 18% → 12%; and `.severityPill`'s hand-mixed light value plus its `:root[data-theme="dark"]` override both collapse into the one per-theme rung), `packages/client/src/react/styles/automation.module.css` (`--au-hue` / `--au-ink` across all eight; `.auStatus[data-tone="draft"]`'s `--au-status-tone` takes the ink rung so it matches its four ink-grade siblings), `packages/client/src/react/screens/AutomationThreadScreen.module.css` (`--plan-tone` / `--plan-ink`; `.node[data-run-status="running"]` reads `--au-ink`), `packages/client/src/react/screens/AutomationTemplatesScreen.tsx` + `packages/client/src/react/screens/AutomationTemplatesScreen.module.css` (inline `--tk-hue` gains `--tk-ink`; `.trigIcon` reads it).
+  - **Label-only branches** of a shared status variable, where the dot above keeps the fill — `packages/client/src/react/screens/LogsScreen.module.css` (`.statusLabel`), `packages/client/src/react/screens/SettingsConnectionsScreen.module.css` (`.healthLabel`), `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css` (`.healthLabel`), `packages/client/src/react/screens/LocalFootprintCard.module.css` (`--tone`, whose only consumer is a `color:`).
+  - **Syntax-highlighting scheme** — `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`: `.tokTag` / `.tokStr` / `.tokKey` / `.diffSign` move to their rungs, and `.tokAttr` additionally changes hue violet → **amber**, because the violet rung and `.tokKey`'s indigo rung collapse to 0.040 in oklab on dark.
+  - **Gates.** `scripts/lint-design-tokens.mjs` gains a sixth ratchet metric `paletteHueAsText` — a `color:` / `-webkit-text-fill-color:` naming a bare `--c-<hue>` anywhere under the three CSS targets, now at **zero**; the property match carries a left boundary so `background-color` / `border-color` / `border-top-color` stay outside it. `scripts/lint-design-tokens.test.mjs` covers ink vs fill vs rung vs near-miss. `packages/design/src/contrast-shell-palette.test.ts` (new) re-measures every `--c-*-text` rung against all four **shell** surfaces bare and on 6–16% self-washes, per theme, plus the lightness-only and hue-recognisability laws. `packages/client/src/react/shell/routes/builder/BuilderCode.tokens.test.ts` (new) reads the scheme out of its own stylesheet and pins both contract and mutual separation.
+  - **Helpers, not re-derivation** — `packages/design/src/oklab.ts` gains `alphaOver()` (the wash composite) and `resolveVars()` (the `var()`/`calc()` substitution the grids all needed). `packages/design/package.json` publishes them behind `@centraid/design/color` and `@centraid/design/oklab` **subpaths, not the barrel**: routing one more module through `packages/design/src/index.ts` pushes `packages/client/src/index.ts` to 101 modules and trips oxlint `no-barrel-file` (threshold 100) — the same ceiling that rehomed `EASE` earlier in this PR. `packages/client/vitest.config.ts` aliases the two subpaths at source. `packages/design/src/index.ts` records why the maths is not in the barrel.
+  - `DESIGN.md` — the palette section gains "The shell was the last holdout": the 32-cell measurement, the fill-stays-the-fill rule and the four `-hue`/`-ink` pairs, the two gates, the 16% wash ceiling, and the syntax-scheme collapse with its numbers.
+
+- **F4 Extend the unresolved-`var()` gate to `packages/client` and resolve the 13 phantom tokens it found.** The A2 gate walked blueprint apps only; the shell was unscanned and carried 13 names that resolve to nothing — re-derived against `origin/main` as **31 references across 15 files** (the "19 files" first recorded here is wrong). Twelve names were **bound** to real tokens; the thirteenth, `--profile-accent`, was **allowlisted, not fixed** (it is legitimately written from TSX), so "fix the 13" is one too many.
+  - **Shared reader, so the two gates cannot drift** — `packages/design/src/css-vars.ts` (new) carries the three pure halves both gates need: `stripCssComments()`, `declaredCustomProps()`, `unresolvedVarRefs()`. Published behind the `@centraid/design/css-vars` **subpath**, not the barrel, for the same oklint `no-barrel-file` ceiling that keeps `./color` and `./oklab` out of it (`packages/design/package.json`); aliased at source for vitest in `packages/client/vitest.config.ts`. Unit-pinned by `packages/design/src/css-vars.test.ts` (new, 12 tests), including a regression guard that a `/g` regex is built fresh per call — a module-scope instance carries `lastIndex` and returns a different answer the second time.
+  - **The shell-side gate** — `packages/client/src/shell-var-resolution.test.ts` (new) walks every `.css` under `packages/client/src` and resolves each fallback-less `var()` against `SHELL_TOKEN_CONTRACT`, every `--x:` declared anywhere in shell CSS, and a commented `RUNTIME_DECLARED` allowlist. A third test keeps that allowlist honest in **both** directions: an entry whose component no longer sets the property is red, and so is an entry a stylesheet already declares (redundant, and therefore silently widening).
+  - **The blueprints gate rewired onto the shared reader** — `packages/blueprints/src/token-purity.test.ts` now calls `declaredCustomProps()` / `unresolvedVarRefs()` / `stripCssComments()` instead of its own inline regexes; `UNRESOLVED_VAR_DEBT` was unchanged by this commit (12 entries, still exactly the same list); **F5, later in this PR, emptied it**.
+  - **Phantom ink ramp → the real ramp.** `--text-1` (8 sites, 7 files) is the primary ink at every site — a title above a `--text-soft`/`--text-ghost` sub, or a hover escalating out of `--text-faint` — so all eight become `var(--text)`: `packages/client/src/react/screens/AssistantScreen.module.css` (`.showEarlier:hover`), `packages/client/src/react/screens/HomeScreen.module.css` (`.shelfEmptyTitle`), `packages/client/src/react/screens/LogsScreen.module.css` (`.showEarlier:hover`), `packages/client/src/react/screens/PhoneScreen.module.css` (`.deviceName`), `packages/client/src/react/shell/templatePreview.module.css` (`.tmplAccessVerb`), `packages/client/src/react/shell/routes/AppInfoModal.module.css` (`.automateBtn`), `packages/client/src/react/styles/vault.module.css` (`.grantTitle`, `.parkedCommand`).
+  - **The rest of the phantom ink vocabulary** — `--text-muted` → `var(--text-soft)` (12px helper prose under a control label / a keychain heads-up): `packages/client/src/react/screens/SettingsDeviceScreen.module.css`, `packages/client/src/react/shell/routes/ConnectFlow.module.css`. `--text-secondary` → `var(--text-soft)` (3 rules) and `--text-tertiary` → `var(--text-faint)` (the 10px `.mapping` detail line, the least important rung on the row, and `--text-ghost` is a structural 3:1 rung that does not clear the body floor): `packages/client/src/react/screens/ImportScreen.module.css`.
+  - **Structural phantoms** — `--border` → `var(--line)` (a 0.5px hairline) in `packages/client/src/react/shell/routes/AppInfoModal.module.css`; `--bg-elev-raised` → `var(--bg-elev)` in `packages/client/src/react/screens/BackupCard.module.css`, matching the canonical settings text input in `settings-controls.module.css`; `--t-h1` → `var(--t-h2)` in `packages/client/src/react/screens/HouseholdScreen.module.css` and `--t-heading` → `var(--t-h2)` (2 rules) in `packages/client/src/react/screens/HomeScreen.module.css` — the scale is `--t-h2`/`--t-h3`/`--t-display-1` with **no `h1`**, and `--t-h2` is already the shell's page/section-title idiom (`AutomationsOverviewScreen`, `SettingsConnectionsScreen`, …).
+  - **Blueprint-contract token used in shell scope** — `--r-pill` is in `BLUEPRINT_TOKEN_CONTRACT` only; the shell scale stops at `--r-xl` and `radii.ts` documents the pill as composed inline, so `.ladderMember` takes `border-radius: 999px` (119 other shell rules already do) with a comment saying why: `packages/client/src/react/screens/SettingsProvidersScreen.module.css`.
+  - **Runtime-provided, therefore legitimate** — `--profile-accent` is written from TSX (`style={{ "--profile-accent": avatarColor }}`, `packages/client/src/react/screens/SettingsProfileScreen.tsx`) and deliberately has no CSS default: the avatar ring has no meaning until a swatch is chosen. Allowlisted with that reason in `RUNTIME_DECLARED`.
+  - **Language dots repaired and measured** — `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`: html `--c-blue` → **`--c-rose`**, css `--c-orange` → **`--c-teal`**, js/ts `--c-yellow` → **`--c-ochre`** (md keeps `--c-violet`). The hue budget is nearly forced: `amber` sits **0.031** from `.tokAttr` and `indigo` **0.064** from `.tokKey` (both under the file's 0.08 floor), and `slate` lands **0.038** from the dark theme's composited `--text-ghost`, i.e. reads as the tree's "unknown file type" default. The shipped set holds **0.143** between dots, **0.099 light / 0.168 dark** against that unknown default, and **0.122 light / 0.123 dark** against the four solved syntax inks. `.tokTag` being rose makes the html dot and the html-tag ink the same hue on purpose. Gated by two new tests in `packages/client/src/react/shell/routes/builder/BuilderCode.tokens.test.ts`, which read the dot fills out of the stylesheet the same way it already reads the token inks.
+
+- **F5 Clear the pinned unresolved-`var()` debt in `packages/blueprints` — all 12 phantoms bound, `UNRESOLVED_VAR_DEBT` now `[]`.** Same method as F4's shell sweep, applied to the class F4 had explicitly left pinned. The gate is unchanged and still runs; only the ledger it asserts against shrank to empty.
+  - **The accent-as-foreground role → the contract token that already names it.** Seven `var(--accent-deep-fg)` references become `var(--accent-text)`. All seven ink text sitting on an `--accent-soft` tint, so this does **not** intersect the `never inks an --accent-deep fill with the theme-stable --on-accent` gate, which polices `--accent-deep` FILLS: `packages/blueprints/apps/tasks/components/Board.module.css` (`.eyebrow.toneAccent`), `packages/blueprints/apps/tasks/components/Capture.module.css` (`.nlHint`), `packages/blueprints/apps/tasks/components/Detail.module.css` (`.receiptChip`), `packages/blueprints/apps/tasks/components/Row.module.css` (`.rowNote mark`, the mono chip), `packages/blueprints/apps/tasks/components/Sidebar.module.css` (`.navItem[aria-current='true']`, `.consentLine svg`), `packages/blueprints/apps/tasks/components/shared.module.css` (`.rowTitle mark`, the pill chip).
+  - **The card radius → the card token.** Three `var(--r-lg)` references — a name from the *shell* scale that the blueprint contract does not carry — become `var(--r-card)`, matching the peer cards in the same apps: `packages/blueprints/apps/people/components/TrashCard.module.css` (`.card`), `packages/blueprints/apps/tally/components/ExpenseUndo.module.css` (`.notice`), `packages/blueprints/apps/tally/components/GroupManager.module.css` (`.card`).
+  - **The three singletons.** `--acc` → `var(--accent)` on the shared audience picker's focus ring, `packages/blueprints/apps/_shared/AudiencePlacement.module.css`; `--t-label` → `var(--t-tiny)` on the sidebar project label, `packages/blueprints/apps/tasks/components/Sidebar.module.css`; `--bg-l` → `var(--bg-l, 10%)` (dark-block-only token, given its documented default explicitly rather than added to the light-rung contract), `packages/blueprints/apps/photos/Chrome.module.css`.
+  - **The ledger** — `packages/blueprints/src/token-purity-allowlist.ts`: `UNRESOLVED_VAR_DEBT` is now `[]`, and its doc comment records what each of the twelve turned out to mean so a future reader does not have to re-derive it. The export and the gate in `packages/blueprints/src/token-purity.test.ts` are kept and unmodified — the list being empty is exactly what makes the gate strongest, and it stays red-capable (proven below).
+
+- **Type-scale finding recorded** — `docs/decisions.md` gains "#686 — the type scale is not under-adopted, it is under-shaped": measurement of all 1,284 raw `font-size` declarations shows 38% are exactly a token size, 37% within 0.6px, and only 24% genuinely off-scale, with 181 rules already setting `font: var(--t-*)` and then overriding `font-size`. The `--t-*` shorthands cannot express size-without-weight, so the ratchet count is a symptom of token shape rather than author indiscipline.
+
+- **F6 composable size rungs + the exact-match sweep.**
+  - **Vocabulary** — `packages/design/src/typography.ts`: new `typeSizeRungs()` (one property per **distinct** size, keyed `--t-<key>-size`), `typeKeyToKebab()` (was duplicated in `css.ts` and `contract.ts`), and `blueprintType` + `blueprintTypeShorthand()` — the blueprint type scale, moved here out of the emitter so a size can be read off it. `BlueprintTypeKey` deliberately not exported (knip: no consumer).
+  - **Emitters** — `packages/design/src/css.ts` emits the nine shell rungs (`--t-body-size` 15px, `--t-display-size` 28px, `--t-mono-size` 12px, `--t-small-size` 13px, `--t-tiny-size` 11px, `--t-title-size` 20px, `--t-display-1-size` 40px, `--t-h2-size` 22px, `--t-h3-size` 16px); `packages/design/src/blueprint.ts` derives its six `--t-*` shorthands from `blueprintType` (values byte-identical) and emits the five blueprint rungs (`0.855rem` / `0.72rem` / `0.8rem` / `0.6rem` / `1.15rem`).
+  - **Contract** — `packages/design/src/contract.ts`: both `SHELL_TOKEN_CONTRACT` and `BLUEPRINT_TOKEN_CONTRACT` now derive their type names (shorthands *and* rungs) from `typeSizeRungs()` / `Object.keys(blueprintType)` rather than hand-listing; the local `kebab` helper is now the shared one.
+  - **Gates** — `packages/design/src/css-properties.test.ts` gains `each distinct type size gets one composable size rung` (asserts the dedupe: `--t-body-size` present, `--t-body-strong-size` absent, every rung a bare `px`); `packages/design/src/design-md.test.ts` gains `the composable size rungs are documented with their values` so the DESIGN.md table cannot rot.
+  - **Ratchet** — `scripts/lint-design-tokens.mjs`: `countRawFontSize` documents the rungs as the sanctioned form and now counts `font-size: var(--t-<key>)` — a `font` shorthand where a size belongs, which the browser drops whole in silence — as debt instead of letting it hide inside the `var()` carve-out. Cases added to `scripts/lint-design-tokens.test.mjs`. Budget regenerated via `--write`: `tests/design-token-css-budget.json`, `rawFontSize` 1291 → 880 (−411), every other metric unmoved.
+  - **Docs** — `DESIGN.md` front matter records the rung spelling under `typography:` (as a comment: the design.md schema warns on any unrecognised top-level token map, and the values *are* the `fontSize` fields already there), and the Typography section gains the rung table plus the plain statement that the shorthands are all-or-nothing and why there are no line-height rungs. `docs/decisions.md` gains "Shipped: the vocabulary, and the exact-match half of the sweep". `packages/client/src/react/CSS-CONVENTIONS.md` points authors at the rungs and warns off `font-size: var(--t-<role>)`.
+  - **The sweep — 411 declarations across 80 stylesheets, 402 in `packages/client/src` and 9 in `packages/blueprints/apps`.** Every one is an exact, same-unit match for a rung on the surface that stylesheet actually resolves against; the resolved-value multiset is unchanged (proof under Verification). By rung: 155× `12px`→`--t-mono-size`, 128× `11px`→`--t-tiny-size`, 89× `13px`→`--t-small-size`, 16× `15px`→`--t-body-size`, 6× `16px`→`--t-h3-size`, 6× `0.8rem`→`--t-small-size`, 3× `22px`→`--t-h2-size`, 3× `0.72rem`→`--t-mono-size`, 2× `20px`→`--t-title-size`, 2× `28px`→`--t-display-size`, 1× `40px`→`--t-display-1-size`. Files:
+  - `packages/blueprints/apps/agenda/Chrome.module.css`
+  - `packages/blueprints/apps/docs/components/shared.module.css`
+  - `packages/blueprints/apps/photos/components/Duplicates.module.css`
+  - `packages/blueprints/apps/photos/components/Editor.module.css`
+  - `packages/blueprints/apps/photos/components/Picker.module.css`
+  - `packages/blueprints/apps/photos/components/Slideshow.module.css`
+  - `packages/blueprints/apps/tasks/components/Capture.module.css`
+  - `packages/blueprints/apps/tasks/components/Detail.module.css`
+  - `packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `packages/client/src/react/screens/AssistantScreen.module.css`
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasKindsTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/AutomationCompilePane.module.css`
+  - `packages/client/src/react/screens/AutomationEditorScreen.module.css`
+  - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `packages/client/src/react/screens/BackupCard.module.css`
+  - `packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `packages/client/src/react/screens/DevicePairPanel.module.css`
+  - `packages/client/src/react/screens/DevicesCard.module.css`
+  - `packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/HomeScreen.module.css`
+  - `packages/client/src/react/screens/HouseholdScreen.module.css`
+  - `packages/client/src/react/screens/ImportScreen.module.css`
+  - `packages/client/src/react/screens/InsightsScreen.module.css`
+  - `packages/client/src/react/screens/LocalFootprintCard.module.css`
+  - `packages/client/src/react/screens/LogsScreen.module.css`
+  - `packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `packages/client/src/react/screens/PaletteScreen.module.css`
+  - `packages/client/src/react/screens/PhoneScreen.module.css`
+  - `packages/client/src/react/screens/RecoverScreen.module.css`
+  - `packages/client/src/react/screens/ResourceDialogs.module.css`
+  - `packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `packages/client/src/react/screens/RunViewScreen.module.css`
+  - `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsProfileScreen.module.css`
+  - `packages/client/src/react/screens/SettingsProvidersScreen.module.css`
+  - `packages/client/src/react/screens/SettingsStorageScreen.module.css`
+  - `packages/client/src/react/screens/StorageLimitsPanel.module.css`
+  - `packages/client/src/react/screens/WhatsNewModal.module.css`
+  - `packages/client/src/react/screens/settings-controls.module.css`
+  - `packages/client/src/react/shell/CaptureOverlay.module.css`
+  - `packages/client/src/react/shell/automationTemplatePreview.module.css`
+  - `packages/client/src/react/shell/chrome.module.css`
+  - `packages/client/src/react/shell/contextMenu.module.css`
+  - `packages/client/src/react/shell/gatewaySwitcher.module.css`
+  - `packages/client/src/react/shell/routes/AppInfoModal.module.css`
+  - `packages/client/src/react/shell/routes/AppViewRoute.module.css`
+  - `packages/client/src/react/shell/routes/ConnectFlow.module.css`
+  - `packages/client/src/react/shell/routes/HandshakeLadder.module.css`
+  - `packages/client/src/react/shell/routes/RunsPane.module.css`
+  - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `packages/client/src/react/shell/routes/VaultModal.module.css`
+  - `packages/client/src/react/shell/routes/assistantRich.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCloud.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderCode.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderHistory.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderPreview.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderShell.module.css`
+  - `packages/client/src/react/shell/templatePreview.module.css`
+  - `packages/client/src/react/shell/webhookReveal.module.css`
+  - `packages/client/src/react/styles/automation.module.css`
+  - `packages/client/src/react/styles/chatMessage.module.css`
+  - `packages/client/src/react/styles/controls.module.css`
+  - `packages/client/src/react/styles/library.module.css`
+  - `packages/client/src/react/styles/linkBtn.module.css`
+  - `packages/client/src/react/styles/seg.module.css`
+  - `packages/client/src/react/styles/select.module.css`
+  - `packages/client/src/react/styles/toast.module.css`
+  - `packages/client/src/react/styles/toolGroup.module.css`
+  - `packages/client/src/react/styles/vault.module.css`
+  - `packages/client/src/react/ui/AppCard.module.css`
+  - `packages/client/src/react/ui/Button.module.css`
+  - **Left alone, deliberately** — `packages/design/kit/kit.css` (all 8 exact matches; dual-surface, see Decisions), the ~477 near-misses within 0.6px, the ~314 genuinely off-scale declarations, and 6 `em`-valued declarations that inherit their base. All remain ratcheted debt. `apps/mobile/src/kit/theme/tokens.generated.ts` regenerated from the rebuilt design package and is byte-identical: the lowering keeps colors and radii, and a type size is neither.
+
+- **Scale-divergence finding recorded** — `docs/decisions.md` gains "#686 — one token name, two meanings": `--t-tiny` resolves to sans/500 in the shell and mono/600 in the blueprint layer, so the same spelling carries a different semantic role per surface. `packages/design/kit/kit.css` is served to both, and of its 80 hardcoded `font-size` declarations 20 exactly match a blueprint rung and 0 match a shell rung — the kit's type was authored against the app scale while rendering on both. This is why the size-rung sweep skipped `kit.css`.
+
+- **F7 divergence sub-question closed by evidence; no token value changed** — `packages/design/src/typography.ts` is **untouched**: `type.tiny` stays `{ family: "sans", lineHeight: 14, size: 11, weight: "500" }` and `blueprintType.tiny` stays mono/600. Only the record moved.
+  - `docs/decisions.md` — the "#686 — one token name, two meanings" entry gains a **"Resolved by measurement: the shell's `--t-tiny` is not the eyebrow rung, so it does not move"** sub-section carrying the size histogram of the 94 mono eyebrows, the five-site consumer table with a per-site verdict, the mobile cross-check, and the weight justification. Its closing "Options, none taken here" paragraph is amended to record that the family/weight half of option (a) is now closed on evidence while options (b) — renaming the blueprint rungs — and (c) — rescoping `kit.css` — remain genuinely open product decisions, unresolved by any of this.
+  - `DESIGN.md` — the Typography section gains a **"`--t-tiny` is not the eyebrow rung"** paragraph directly under "Mono is the signature", which is the sentence that invited the misreading. It records what the five shell consumers actually are, that the chrome's eyebrow idiom is mono at 8–10.5px *below* this rung, that the sub-11px rung is unnamed debt, and why the blueprint's `--t-tiny` is legitimately mono (its rung is 0.6rem/9.6px and lands inside that band). **Front matter is unchanged** — no token value moved, so `packages/design/src/design-md.test.ts` needed no edit and still passes against the untouched TS source.
+
+- **Self-correction recorded** — `docs/decisions.md`'s claim that the shell has "an unnamed sub-11px mono eyebrow rung" was measured and refuted: the 94 mono eyebrow rules carry **51 distinct (size, weight, tracking) shapes**, largest cluster 6. A `--t-eyebrow` shorthand would fit 6% of sites and become a second `--r-lg` — vocabulary that exists because it seemed principled rather than because anything could adopt it. The entry now records that converging 51 ad-hoc decisions is a design pass, not a naming exercise.
+
+- **Recognisability split from legibility in the gate** — `packages/design/src/contrast.test.ts` now asserts the `readsAsRole` hue-and-chroma law in its own tests ("semantic states still read as their role", shell and app surfaces) rather than inside the body-floor tests. The audit flagged that greying `DANGER_BASE` failed under a heading about contrast floors, which named the wrong cause. Verified by sabotage: `#6E6E6E` now fails 2 tests, both named for recognisability, and reverts clean. The split pushed `contrast.test.ts` over the 625-line cap, so the semantic-state helpers (`readsAsRole`, `selfTint`, `SEMANTIC_STATES`, `SELF_TINT`, `RECOGNISABLE_STATE`, `STATE_HUE`, `MIN_STATE_SATURATION`) moved to `packages/design/src/oklab.ts` — extraction, not a waiver.
+
+- **F8 — the 94 mono eyebrows converged to two rungs (lane 1 of the accepted (1) → (3) → (2) sequence).** The distribution was **re-derived from scratch** before anything moved, since three of this PR's earlier figures had to be corrected. The 94/120 split, the size table (`9.5px` ×36, `10px` ×21, `10.5px` ×19, `9px` ×9, `8.5px` ×4, `var(--t-tiny-size)` ×3, `8px` ×1, `font: var(--t-mono)` ×1) and both modal values (size `9.5px`, tracking `0.06em` ×20) all reproduce exactly. **One figure is corrected: the shape count is 54, not 51** — the earlier count collapsed rules that declare no `font-weight` with rules that inherit one through a `font:` shorthand. Each of the 94 was then classified **by intent, from its selector and its JSX call site, not by its current size**: **36 standard eyebrows** (an inline label above or beside content — `.settingsEyebrow`, the two `dt` field labels, `.metricLabel`, `.kpiLabel`, `.heroStatLabel`, the three `.fieldLabel`s, the `th` column heads, `.heroDate` above the hero `<h1>`, `.settingsNavEyebrow` above the nav title) → **9.5px**; **21 section headers** (a structural heading for a region — `.sectionLabel`, `.settingsSectionLabel`, `.settingsDangerLabel`, `.bandTitle`, `.groupTitle`, `.rsideH`, `.catLabel`, `.dateSep`, `.eventsHead`, the picker group heads `.pickPack`/`.pickDivider`, `.settingsNavSection`) → **10.5px**; both at `letter-spacing: 0.06em`. The remaining **37 are neither** and were deliberately not touched — see the Decisions bullet. **83 declarations changed across 31 stylesheets**, and the diff touches **only `font-size` (73 lines) and `letter-spacing` (92 lines)** — no colour, spacing or family declaration moved, which is why the contrast grids cannot have regressed and did not. Files:
+  - `packages/client/src/react/screens/AppSettingsPanel.module.css`
+  - `packages/client/src/react/screens/ApprovalsScreen.module.css`
+  - `packages/client/src/react/screens/AtlasBrowseTab.module.css`
+  - `packages/client/src/react/screens/AtlasKindsTab.module.css`
+  - `packages/client/src/react/screens/AtlasRelationsTab.module.css`
+  - `packages/client/src/react/screens/AtlasScreen.module.css`
+  - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
+  - `packages/client/src/react/screens/AutomationThreadScreen.module.css`
+  - `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+  - `packages/client/src/react/screens/BuilderChatPane.module.css`
+  - `packages/client/src/react/screens/DiscoverScreen.module.css`
+  - `packages/client/src/react/screens/GatewayScreen.module.css`
+  - `packages/client/src/react/screens/HomeScreen.module.css`
+  - `packages/client/src/react/screens/InsightsScreen.module.css`
+  - `packages/client/src/react/screens/OnboardingScreen.module.css`
+  - `packages/client/src/react/screens/PaletteScreen.module.css`
+  - `packages/client/src/react/screens/RecoverScreen.module.css`
+  - `packages/client/src/react/screens/ResourceReceiptPanel.module.css`
+  - `packages/client/src/react/screens/RunViewScreen.module.css`
+  - `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsDiagnosticsScreen.module.css`
+  - `packages/client/src/react/screens/SettingsProfileScreen.module.css`
+  - `packages/client/src/react/screens/StartupErrorScreen.module.css`
+  - `packages/client/src/react/shell/automationTemplatePreview.module.css`
+  - `packages/client/src/react/shell/routes/AppInfoModal.module.css`
+  - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
+  - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css`
+  - `packages/client/src/react/shell/templatePreview.module.css`
+  - `packages/client/src/react/shell/webhookReveal.module.css`
+  - `packages/client/src/react/styles/vault.module.css`
+  - `tests/design-token-css-budget.json` — ratchet regenerated; the delta is **`rawFontSize` only, +2** (880 → 882), from the two sites where hitting the rung required replacing a token reference with a literal.
+
+- **F8 movement cap — 9 sites move more than 0.04em of tracking, 0 move more than 1.5px of size, and none were exempted.** The cap flagged nine tracking reductions, all in the same direction (over-tracked toward the mode) and all taken deliberately: `OnboardingScreen.module.css` `.fieldLabel` and `RecoverScreen.module.css` `.fieldLabel` **0.22em → 0.06em** (the two extreme outliers in the corpus — at 9.5px, 0.22em is nearly a full character of space between letters, and these are form labels sitting directly above inputs); `StartupErrorScreen.module.css` `.detailLabel` **0.16em → 0.06em**; `AutomationTemplatesScreen.module.css` `.catLabel`, `AutomationThreadScreen.module.css` `.dateSep` and `BuilderChatPane.module.css` `.promptStartersLabel` **0.14em → 0.06em**; `AtlasRelationsTab.module.css` `.roLabel` **0.13em → 0.06em**; `RunViewScreen.module.css` `.rsideH` **0.12em → 0.06em**; `AtlasBrowseTab.module.css` `.pickDivider` **0.11em → 0.06em**. Every one is a label whose *only* distinguishing property was tracking chosen by eye; leaving them exempt would preserve exactly the 51-shapes-by-hand condition the lane exists to end. The largest **size** move in the set is **1.5px** (`.detailLabel`, 12px → 10.5px), which is at the cap and not over it; every other move is 0.5px or 1px.
+
+- **F8 — two sites had to trade a token reference for a literal, and that is the +2 in the ratchet.** `SettingsConnectionsScreen.module.css` `.sectionLabel` was `font-size: var(--t-tiny-size)` (11px) and is now `10.5px`: it is a section header and shares its name with `AutomationsOverviewScreen.module.css` `.sectionLabel`, which was already 10.5px — two rules called `.sectionLabel` rendering at two sizes is precisely the drift being removed. `StartupErrorScreen.module.css` `.detailLabel` kept its `font: var(--t-mono)` shorthand (so family, weight and line-height stay tokenised) and gained a `font-size: 10.5px` override — the same pattern `gatewaySwitcher.module.css` and `IdentityHead.module.css` already use for their eyebrows. Both are re-tokenised for free by the follow-up naming PR, which is the argument for doing that PR next rather than widening this one.
+
+- **F10 kit.css binds 16 of its 20 exact matches (lane 2)** — implements the accepted decision (2). `packages/design/kit/kit.css` carried **80** raw `font-size` declarations across 29 distinct values; re-derived, **20 exactly match a blueprint rung on the same unit and 0 match a shell rung on the same unit** (`0.8rem ×9` → `--t-small-size`, `0.72rem ×6` → `--t-mono-size`, `0.6rem ×5` → `--t-tiny-size`; `0.855rem` and `1.15rem` never appear). 16 are now bound; 4 keep their literal. The ratchet falls **80 → 64** in `tests/design-token-css-budget.json`, the only line in that file that moves.
+
+- **F10 — every bound rule is a zero-pixel change in an app pane; all movement is on the shell, and nothing moves more than 1.5px.** `--t-small-size` 12.8px → **13px (+0.2px)** at 9 sites (`.kit-toast-action`, `.kit-chip`, `.kit-seg > button`, `.kit-msg.ai .asstTable`, `.kit-aa-approve`, `.kit-aa-ghost`, `.kit-ask-model-item`, `.kit-ref-tile`, `.kit-small`). `--t-mono-size` 11.52px → **12px (+0.48px)** at 3 sites (`.kit-foot`, `.kit-msg.ai .asstPre`, `.kit-ask-action .aa-note` — all three already set `font-family: var(--mono)` themselves, which is the exact case the size rung was added for). `--t-tiny-size` 9.6px → **11px (+1.4px)** at 4 sites (`.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope`) — the only visible group, listed individually because +14.6% on the chrome's smallest type is a real change to shipped component chrome. It moves the way legibility wants: 9.6px is *below* the smallest size the shell scale names, so those four were rendering off-scale.
+
+- **F10 — the 4 that stay literal, because the literal carried information.** `.kit-ask-model-btn` (`0.72rem`) is `font: inherit`, i.e. a **sans** control — `--t-mono-size` matches its number, not its role, and binding would be naming-by-coincidence. `.kit-ask-applied .ck` (`0.72rem`) is a check **glyph** optically centred in a `1.3rem × 1.3rem` circle. `.kit-ask-msg-att` (`0.72rem`) sizes its `svg` child at `0.85em`, so the **icon geometry derives from this number**. `.kit-ref-flag` (`0.6rem`) is a badge with `0.05rem` (0.8px) vertical padding — its height *is* the line box, so +1.4px is +14% on the box, and it nests inside `.kit-ref-tile`, which this change already resizes. That is the chip/badge geometry class lane (1) declined, applied consistently.
+
+- **F10 — the accessibility cost, and the rung that does not exist.** On the shell a bound rule swaps `rem` for absolute `px`, so it stops scaling with a raised browser root size; accepted because the shell chrome around these components is already absolute px throughout (`font: var(--t-body)` and friends), making kit.css's `rem` the outlier inside it. **No rung was invented.** `--t-display-size` / `--t-display-1-size` / `--t-h2-size` / `--t-h3-size` are **shell-only** (`blueprintType` has no `display` key), so naming one here yields an invalid declaration inside an app pane, dropped whole and silently leaving the inherited size — `.kit-msg.ai .asstStatValue` (`1.5rem`) and `.kit-viewer-nav` (`1.4rem`) therefore have nothing to bind to and stay literal. The kit's real eyebrow band (17 declarations at `0.66 / 0.68 / 0.7 / 0.62 / 0.625rem`) has no rung either; it is the same gap open decision (b) covers, and inventing one now would be a third `--r-lg`. Both are recorded as debt in `docs/decisions.md`, along with the largest near-miss cluster (`0.85rem ×7`: +0.08px on blueprint but +1.4px on the shell). A header comment in `kit.css` warns future authors off the shell-only rungs, since the ratchet's `SHORTHAND_AS_SIZE` check catches `var(--t-body)` but **not** a well-formed shell-only `-size` rung.
+
+- **F10 — two stale counts in `docs/decisions.md` corrected in passing.** The F6 entry said `kit.css` had "eight exact matches" while the entry two sections below said "20"; re-derived, the count is **20**. Both occurrences of "eight" are fixed; no other measurement in those entries was touched.
+
+### Checklist annotations (moved out of the checklist so the crosswalk matches verbatim)
+
+- **C1 canonical design-language doc + AGENTS.md index row + ui-grounding reference** **landed as `docs/design-language.md`, then superseded by F2**: that file was folded into root `DESIGN.md` and deleted. At HEAD the index row and the `ui-grounding.ts` pointer name `DESIGN.md`; `docs/design-language.md` does not exist.
+- **C2 `.design-sync` stale conventions neutralized** **superseded by F2**: the two files were first replaced with stale-version warnings, then the whole `.design-sync/` directory (25 files) was deleted.
+
+- **E1 docs — `--c-*` shadow palette retired to `--kind-*`, hex/rgb purged**; **E2 photos — scrims through `--scrim`, kit composition raised, serif resolved**; **E3 tally — `--pos`/`--neg` → `--success`/`--danger`, literal-mixed `color-mix()` endpoints removed**; **E4 locker + people — `composes` raised (locker app 2 → 9), hex/rgb purged**; **E5 agenda/notes/tasks — literals swept; blueprint `font-size` moved onto the type scale (see F6)** — these five are the per-app split of the burn-down described in the E bullet above; the file lists and counts for each are in that bullet and in `packages/blueprints/src/token-purity-allowlist.ts`.
+
+These five rows are the post-umbrella findings; their full descriptions, file lists and verification are in the bullets and fenced blocks above:
+
+- F4 Extend the unresolved-`var()` gate to `packages/client`. The scan found **13 unresolvable names across 15 files** (31 references); **12 were bound to real tokens, 1 (`--profile-accent`) was allowlisted** as legitimately runtime-provided from TSX — so "fixed 13" overstates it by one.
+- F5 Clear the pinned blueprint `UNRESOLVED_VAR_DEBT` — all 12 phantoms bound, list now `[]`
+- F6 composable size rungs + the exact-match sweep (411 conversions)
+- F7 Shell `--t-tiny` → mono realignment investigated and **deliberately declined** on the measurement; the real gap (an unnamed sub-11px mono eyebrow rung, 51 distinct shapes) is recorded as debt in `docs/decisions.md`, not taken here.
+
+- **Recommendations recorded for the three open questions** — `docs/decisions.md` gains "#686 — recommendations for the three questions this issue leaves open": (1) converge the 94 eyebrows to two rungs (9.5px standard, 10.5px section header, tracking 0.06em — the measured mode) *before* naming anything, since naming against 51 shapes produces a second `--r-lg`; (2) do **not** blueprint-scope `kit.css` — bind its sizes to `--t-<key>-size` so a component reads at the scale of the surface it is on, which is the correct behaviour and not merely the cheap one; (3) codify that size and line-height may diverge per emitter but family and weight may not. Sequence (1) → (3) → (2); doing (3) first recreates the problem #686 already declined to cause. Each is a recommendation needing a human yes, not a decision taken.
+
+- **F9 codify the role-parity law as a test, and waive `--t-tiny` under it (lane 3).** _Size and line-height may diverge per emitter; family and weight may not._ Six shared `--t-*` roles; five agree, and `--t-tiny` is the sole violation, waived under `ROLE_PARITY_ALLOWLIST` because both sides were measured and neither can move without visible collateral. Three files:
+  - `packages/design/src/type-role-parity.test.ts` — **new**, 9 tests. Parses the `:root` block of `toCss()` and `toBlueprintCss()`, splits every `--t-*` shorthand into weight / size / line-height / family property, resolves the family property through its `var()` aliases to the generic family the stack ends in, and asserts family + weight agree for every **shared** role. Carries `ROLE_PARITY_ALLOWLIST` (one entry, `--t-tiny`, with the two-sided measurement inline), a `test.each` over the gated roles, a "every waiver is still needed" ratchet test, an explicit "size and line-height are allowed to diverge" permission test pinned on `--t-body`, and a non-vacuity guard (≥6 shared roles, ≥5 gated) so a rename cannot silently empty the gate.
+  - `docs/decisions.md` — new entry **"#686 — `--t-*` role parity is now a law with a test behind it"**, carrying the law, why family is compared by genus, the full six-role derived comparison table, and why `--t-tiny` is waived rather than fixed in either direction.
+  - `DESIGN.md` — the closing clause of the "`--t-tiny` is not the eyebrow rung" paragraph said the shell/blueprint split was "same role, different rendering per surface, which the contract permits". That is now false: it is a **known violation held under a waiver**. Replaced with the law, a pointer to the enforcing test, and a pointer to `docs/decisions.md`. **Front matter is unchanged and no token value moved** — `packages/design/src/design-md.test.ts` needed no edit and passes against the untouched TS source; no budget or ratchet file changed (`lint:design-tokens` reports zero regressions and `git status` shows no budget-file delta).
+
+## User impact
+
+The shell and generated apps now render from one measured token vocabulary for spacing, motion, type, radius, and semantic colour roles. Existing navigation and first-run behaviour are unchanged; the visible differences are the intentional legibility and consistency corrections recorded above.
+
+First-run: the desktop onboarding flow remains unchanged; the existing first-run home harness emits a screenshot showing the merged token contract rendered after onboarding.
+
+![Desktop first-run home under the #686 design contract](artifacts/e2e/ui-impact/issue-686-design-consistency.png)
+
+## Out of scope
+
+- Renaming the blueprint type rungs, or naming the shell's eyebrow rung — open decisions (b) and (1)-second-half. Naming is what would let `--t-tiny` align; it is new vocabulary plus a visual change, and lane (1) deliberately stopped short of it.
+- Converging the 37 chip/badge/pill/control rules lane (1) classified as a third idiom.
+- ~~Fixing the 12 pre-existing unresolved `var()` references.~~ **Superseded by F5** — all twelve are fixed and `UNRESOLVED_VAR_DEBT` is empty. The per-site design calls turned out to be determinate once each site's surface was read.
+- Collapsing the app-local `--accent-deep-fg` declarations into `--accent-text`. F5 established they are re-derivations of the contract token, but the declaring apps *declare* the property, so they are not phantoms and not in this gate's class; folding them is a separate visual-equivalence change. **Correction: four apps declare it, not two — `agenda`, `docs`, `notes` and `photos`** (12 declarations, 41 surviving `var(--accent-deep-fg)` references across those four apps). Naming only `docs` and `photos` understated the remaining surface by half.
+- ~~Adding composable size/line-height rungs to the type scale and sweeping the ~971 affected declarations.~~ **Partly superseded by F6** — the size rungs exist and the 411 provably-zero-change exact matches are converted. Still out of scope, and still ratcheted debt: the ~477 near-misses (within 0.6px of a rung) and the ~314 genuinely off-scale declarations, both of which are visual changes needing per-site judgement; and `packages/design/kit/kit.css`, which resolves under two token layers at once. Line-height rungs were considered and rejected on the evidence, not deferred (see Decisions).
+- Reconciling the shell and blueprint type scales, or rescoping `kit.css`. Documented with evidence in `docs/decisions.md`; each option is a product decision about whether an embedded app should read as the chrome or as itself.
+- Visual redesigns of any surface — this issue is consistency/enforcement only; visual results are preserved.
+- Mobile typeface change (recorded as decision, not churned).
+
+## Verification
+
+**How to read this section.** The blocks below are **per-wave snapshots**, recorded as each
+lane landed; several of their pasted numbers were true then and are not true now, because a
+later lane in the same PR moved them. Where that happens the block is annotated. The
+end-to-end audit re-ran the gates at HEAD; the reproducible-at-HEAD results are collected
+under **"Re-verified at HEAD"** at the end of this section.
+
+A1+B1:
+
+```
+$ cd packages/design && vitest run
+Test Files  16 passed (16)
+Tests  158 passed (158)
+$ vitest run src/contract.test.ts src/css-properties.test.ts   # orchestrator re-run
+Test Files  2 passed (2)
+Tests  16 passed (16)
+$ bun run typecheck   # packages/design — clean
+$ cd apps/mobile && bun run generate:theme   # tokens.generated.ts byte-identical
+```
+
+A2+A5:
+
+```
+$ cd packages/blueprints && vitest run src/token-purity.test.ts src/shared-css.test.ts
+Test Files  2 passed (2)
+Tests  7 passed (7)
+$ bash .governance/run.sh no-hardcoded-colors
+✓ no-hardcoded-colors
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 82 grandfathered hex value(s), 4 literal font stack(s), zero regressions
+```
+
+C1–C4 + D1 — **no longer reproducible: `docs/design-language.md` was deleted by F2.** At HEAD
+the equivalent check is `grep -c 'DESIGN.md' AGENTS.md packages/gateway/src/skills/ui-grounding.ts`,
+which returns 1 and 1. Original wave output:
+
+```
+$ ls docs/design-language.md && grep -c 'design-language' AGENTS.md packages/gateway/src/skills/ui-grounding.ts
+docs/design-language.md
+AGENTS.md:1
+packages/gateway/src/skills/ui-grounding.ts:1
+$ grep -n '#686' docs/decisions.md | head -1
+```
+
+D2:
+
+```
+$ cd apps/mobile && bun run typecheck && bun run lint
+clean
+$ vitest run src/screens src/kit/theme src/apps/photos
+Test Files 11 passed / Tests 75 passed
+```
+
+F1:
+
+```
+$ cd packages/design && vitest run src/design-md.test.ts
+Test Files  1 passed (1)
+Tests  12 passed (12)
+```
+
+A3+A4 / B2+B3 / D3 / E (wave 2) — **snapshot; `1291 raw font-size(s)` became 880 under F6, the
+lint suite is 9 tests not 7, and the per-package vitest totals have all grown since**:
+
+```
+$ cd packages/blueprints && vitest run src/token-purity.test.ts src/shared-css.test.ts src/scaffold-defaults.test.ts
+Test Files  3 passed (3)
+Tests  13 passed (13)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), zero regressions
+$ node --test scripts/lint-design-tokens.test.mjs   # 7/7 pass
+$ cd packages/design && vitest run
+Test Files  17 passed (17) / Tests  170 passed (170)
+$ cd packages/app-engine && vitest run   # 621 passed / 58 files
+$ cd packages/gateway && vitest run      # 1281 passed, 6 skipped / 192 files
+$ cd packages/client && vitest run       # 213 files / 1738 tests passed
+$ bash .governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh  # exit 0; red-capable on injected #ff00aa
+```
+
+Ink-pairing gate:
+
+```
+$ cd packages/blueprints && vitest run src/token-purity.test.ts src/shared-css.test.ts
+Test Files  2 passed (2)
+Tests  8 passed (8)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — zero regressions
+```
+
+Red-capability proven against a real regression: reverting one app's fix returned the stale pairing and the new test failed (1 failed | 3 passed); re-applying it restored green. Verified visually by rendering the emitted tokens + real `kit.css` in a browser across both themes and all 8 palette hues.
+
+Drift-guard red proven: spacing[5] 24→20 in density.ts fails "every spacing rung is stated in order"; reverted.
+
+F1 spec deepening:
+
+```
+$ bun run lint:design-md
+ok (0 errors; 2 WCAG warnings surfaced -> fixed in follow-up)
+$ cd packages/design && vitest run src/design-md.test.ts
+Test Files  1 passed (1) / Tests  16 passed (16)
+$ bun run lockfile:lint && bun run knip   # both clean
+```
+
+Red-capability proven by injecting `#ff00aa` + `rgba()` into `apps/tasks/components/Row.module.css`: vitest ratchet and check.sh both fail; injection reverted (diff empty).
+
+Noted visual delta (intended): two `LocalFootprintCard` animations previously fell back to `cubic-bezier(0.22, 1, 0.36, 1)` because `--ease` was undefined in the shell; they now use the canonical curve.
+
+Mutation floor (`packages/design`), before and after the `css-properties.test.ts` value laws:
+
+```
+$ node scripts/mutation/run.mjs --package design   # BEFORE
+File           |  total | # killed | # survived |
+All files      |  92.78 |       90 |          7 |
+ css.ts        |  85.37 |       35 |          6 |
+ tile.ts       |  97.96 |       48 |          1 |
+ typography.ts | 100.00 |        7 |          0 |
+  - packages/design: 92.8% (ok)      # floor 93 -> mutation-pr RED
+
+$ node scripts/mutation/run.mjs --package design   # AFTER
+File           |  total | # killed | # survived |
+All files      |  98.97 |       96 |          1 |
+ css.ts        | 100.00 |       41 |          0 |
+ tile.ts       |  97.96 |       48 |          1 |
+ typography.ts | 100.00 |        7 |          0 |
+  - packages/design: 99.0% (ok)      # floor 93 met
+
+$ cd packages/design && vitest run
+Test Files  17 passed (17) / Tests  206 passed (206)
+$ bun run lint && bun run format      # clean; format left the test file unchanged
+```
+
+One mutant is left alive deliberately: `src/tile.ts:71:13` `HEX_RE.exec(hex)?.groups?.digits` → `?.groups.digits`. It is EQUIVALENT, not a gap — the leading `?.` already short-circuits the whole chain when `exec` returns `null`, and a successful `RegExpExecArray` from a named-group pattern always has `.groups`, so the second `?.` can never be the thing that prevents a throw. No behaviour distinguishes the two programs. The non-hex fallback path it guards is already covered by "a non-hex colour passes through instead of producing NaN paint".
+
+### Palette-hue-as-text rung (`--c-<name>-text`) + `docs` file-kind regression
+
+`docs` file-kind labels as TEXT. "Ratio" is the WORST case across every surface the
+label lands on: `--bg-elev`, `--bg`, `--bg-sunken`, *and* the self-tint painted behind
+it. The "before #686" column is measured on that column's own shipped tint (15%) and
+includes the `.thumbLabel` fade the app also shipped.
+
+```
+LIGHT
+| kind  | before #686 (hand-picked) | ratio | #686 regression (raw fill) | ratio     | FINAL (solved rung) | ratio |
+|-------|---------------------------|-------|----------------------------|-----------|---------------------|-------|
+| pdf   | #c2410c                   | 4.74  | #E89A3C                    | 2.11 FAIL | #b91d3a             | 5.10  |
+| image | #0e7490                   | 4.91  | #2EA098                    | 2.92 FAIL | #1f6d67             | 4.99  |
+| doc   | #4058cf                   | 5.47  | #4E68DD                    | 4.43 FAIL | #3452d8             | 4.95  |
+| sheet | #4e7a40                   | 4.60  | #5C8A4E                    | 3.70 FAIL | #46693c             | 5.04  |
+| slide | #9a6528                   | 4.51  | #B47B3F                    | 3.29 FAIL | #8f5611             | 5.03  |
+| media | #7c3aed                   | 5.22  | #7C5BD9                    | 4.42 FAIL | #6842d3             | 5.00  |
+
+DARK  (the 66% mix to --text mostly held; the light ramp is where the regression bit)
+| kind  | #686 regression (66% mix) | ratio | FINAL (solved rung) | ratio |
+|-------|---------------------------|-------|---------------------|-------|
+| pdf   | #ecb982                   | 7.04  | #ee90a2             | 4.83  |
+| image | #7abcb5                   | 5.77  | #38c4ba             | 4.94  |
+| doc   | #7f99e7                   | 4.53  | #97a6eb             | 4.82  |
+| sheet | #8cad84                   | 5.02  | #8eb881             | 4.86  |
+| slide | #c9a37d                   | 5.37  | #eba653             | 4.90  |
+| media | #9f91e5                   | 4.56  | #b4a1e9             | 4.98  |
+
+Whole contract, both themes (worst surface / worst self-tint), from the emitted CSS:
+| hue          | light text | worst | on 12% tint | dark text | worst | on 12% tint |
+|--------------|------------|-------|-------------|-----------|-------|-------------|
+| --c-amber    | #8f5611    | 5.30  | 4.89        | #eba653   | 6.02  | 4.90        |
+| --c-forest   | #46693c    | 5.55  | 4.89        | #8eb881   | 5.55  | 4.86        |
+| --c-indigo   | #3452d8    | 5.56  | 4.81        | #97a6eb   | 5.34  | 4.82        |
+| --c-ochre    | #83592e    | 5.41  | 4.80        | #d0a679   | 5.60  | 4.89        |
+| --c-rose     | #b91d3a    | 5.63  | 4.95        | #ee90a2   | 5.44  | 4.83        |
+| --c-slate    | #535d71    | 5.86  | 5.01        | #a3abbb   | 5.42  | 4.93        |
+| --c-teal     | #1f6d67    | 5.40  | 4.81        | #38c4ba   | 5.82  | 4.94        |
+| --c-violet   | #6842d3    | 5.62  | 4.85        | #b4a1e9   | 5.49  | 4.98        |
+
+DISTINGUISHABILITY (the six file kinds, after solving)
+light: pdf #b91d3a h349deg  image #1f6d67 h175deg  doc #3452d8 h229deg
+       sheet #46693c h107deg  slide #8f5611 h33deg  media #6842d3 h256deg
+       closest pair in oklab: image/sheet = 0.064   (gate > 0.035)
+dark:  pdf #ee90a2 h349deg  image #38c4ba h176deg  doc #97a6eb h229deg
+       sheet #8eb881 h106deg  slide #eba653 h33deg  media #b4a1e9 h256deg
+       closest pair in oklab: doc/media = 0.040    (gate > 0.035)
+The solve moves lightness only, so every rung keeps its fill's hue to <2deg and its
+saturation to <0.03 (pinned as a law, not a spot check). Amber/ochre DO collapse
+(0.125 -> 0.028 light); `docs` therefore carries rose+amber, not amber+ochre.
+
+BADGES AND FILLS
+The one text-on-solid-badge site is QuickLook's kind badge, which is `background:
+tintBg(cv, 12)` + `color: var(cv)` -- i.e. the "on 12% tint" column above, 4.80-5.01.
+The remaining `var(--kind-*-fill)` marks are pure decoration carrying no information
+(a mock page's header bar at .85 over white, 2.03-3.66; the two ruled lines under a
+thumbnail label at .18/.14 over the tint, ~1.2). They are unchanged in role from what
+shipped; no text or state depends on them.
+```
+
+Gates:
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  17 passed (17)
+      Tests  227 passed (227)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css - 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     zero regressions
+
+$ bun run lint:design-md
+  "summary": { "errors": 0, "warnings": 0, "infos": 1 }
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint          # oxlint --deny-warnings, clean
+$ bun run format        # oxfmt, applied
+$ bun run knip          # exit 0
+```
+
+Proof of red (each sabotage applied, run, reverted):
+
+```
+1. bind --kind-pdf back to the raw fill (the exact #686 regression)
+   -> --kind-pdf: expected 'var(--c-rose)' to match /^var\(--c-[a-z]+-text\)$/u
+      2 failed | 14 passed
+2. put the collapsing amber/ochre pair back
+   -> expected [ 'rose', 'teal', 'indigo', ... ] to not include 'ochre'
+      1 failed | 15 passed
+3. tint from the TEXT rung instead of the fill rung
+   -> expected 'color-mix(in oklab, var(--kind-pdf) 1...' to contain 'var(--kind-pdf-fill)'
+      1 failed | 15 passed
+4. AA_PALETTE_TEXT 4.8 -> 1 (emit the raw fill as the text rung)
+   -> dark --c-slate-text on hsl(171 12% 15%): expected 2.55 to be >= 4.5  (+15 more)
+      16 failed | 37 passed
+5. PALETTE_TEXT_TINT 0.12 -> 0 (drop the self-tint allowance)
+   -> dark --c-teal-text on its own 12% tint: expected 4.17 to be >= 4.5  (+12 more)
+      13 failed | 40 passed
+6. let the solver desaturate (s -> s * 0.5) instead of only moving lightness
+   -> light --c-amber-text saturation: expected 0.392 to be less than 0.03
+   -> dark indigo vs violet collapsed: expected 0.023 to be greater than 0.035
+      3 failed | 50 passed
+7. drift DESIGN.md off the TS source (c-amber-text -> the raw fill hex)
+   -> c-amber-text: expected '#E89A3C' to be '#8f5611'
+      1 failed | 16 passed
+```
+
+### Semantic states — measured grid (worst cell per ramp, before → after)
+
+`--danger` / `--success` / `--warning` recomputed from the EMITTED CSS of both
+emitters, bare and on a 12% wash of the state itself. Twelve of the twenty-four
+"before" cells were under the 4.5 body floor; every "after" cell clears it.
+
+```text
+shell light --danger #C44A4A->#a53636 | --bg 4.63->6.44 | --bg-app 4.75->6.60 | --bg-elev 4.75->6.60 | --bg-sunken 4.20->5.84 | wash 3.60->4.89 | inv-ink 4.35->6.05
+shell light --success #456B39->#436837 | --bg 5.99->6.25 | --bg-app 6.15->6.41 | --bg-elev 6.15->6.41 | --bg-sunken 5.44->5.68 | wash 4.63->4.83 | inv-ink 5.64->5.88
+shell light --warning #9A6B1F->#7c5619 | --bg 4.55->6.39 | --bg-app 4.67->6.56 | --bg-elev 4.67->6.56 | --bg-sunken 4.13->5.80 | wash 3.59->4.90 | inv-ink 4.28->6.01
+shell dark  --danger #C44A4A->#d37878 | --bg 4.10->6.23 | --bg-app 4.43->6.73 | --bg-elev 3.74->5.69 | --bg-sunken 4.35->6.61 | wash 3.36->4.83 | inv-ink 3.75->5.70
+shell dark  --success #5C8A4E->#6ba15b | --bg 4.81->6.36 | --bg-app 5.20->6.87 | --bg-elev 4.40->5.81 | --bg-sunken 5.11->6.75 | wash 3.83->4.94 | inv-ink 4.40->5.82
+shell dark  --warning #E0A94A->#e0a94a | --bg 9.20->9.20 | --bg-app 9.94->9.94 | --bg-elev 8.41->8.41 | --bg-sunken 9.77->9.77 | wash 6.80->6.80 | inv-ink 8.42->8.42
+bp    light --danger #c8382f->#ab3028 | --bg 4.98->6.35 | --bg-elev 5.17->6.59 | --bg-sunken 4.74->6.04 | wash 3.98->5.01 | inv-ink 5.17->6.59
+bp    light --success #2f7d4f->#286a43 | --bg 4.85->6.25 | --bg-elev 5.04->6.50 | --bg-sunken 4.62->5.95 | wash 3.96->5.02 | inv-ink 5.04->6.50
+bp    light --warning #9a6b1f->#7c5619 | --bg 4.50->6.31 | --bg-elev 4.67->6.56 | --bg-sunken 4.28->6.01 | wash 3.70->5.08 | inv-ink 4.67->6.56
+bp    dark  --danger #f0645b->#f69d98 | --bg-elev 4.62->7.05 | --bg-sunken 3.98->6.07 | wash 3.44->4.87 | inv-ink 4.80->7.33
+bp    dark  --success #5cc98a->#60ca8d | --bg-elev 7.04->7.15 | --bg-sunken 6.06->6.15 | wash 4.78->4.85 | inv-ink 7.32->7.43
+bp    dark  --warning #e0a94a->#e1ab4e | --bg-elev 6.88->7.01 | --bg-sunken 5.92->6.03 | wash 4.72->4.81 | inv-ink 7.15->7.29
+
+.kit-btn.primary.danger — the FILLED destructive confirm, ink = --text-inv:
+  light  --text 3.81 FAIL  ->  --text-inv 6.05 PASS
+  dark   --text 4.09 FAIL  ->  --text-inv 5.70 PASS
+```
+
+Proof of red — each sabotage applied, measured, reverted:
+
+```text
+1  shell DANGER_DARK back to #C44A4A
+   × dark: semantic states clear the BODY floor on every surface
+     dark --danger on hsl(0 0% 5%): expected 4.0958 to be >= 4.5
+   × dark: the filled destructive button carries its ink
+     dark .kit-btn.primary.danger: expected 3.7464 to be >= 4.5
+2  blueprint dark --danger back to #f0645b
+   × dark: semantic states clear the BODY floor on card and track
+     blueprint dark --danger on its own tint over hsl(171 12% 15%): expected 3.9679 to be >= 4.5
+3  blueprint light --warning back to #9a6b1f
+   × light: semantic states clear the BODY floor on card and track
+     blueprint light --warning on its own tint over #ffffff: expected 4.0127 to be >= 4.5
+4  shell WARNING_LIGHT back to #9A6B1F
+   × light: semantic states clear the BODY floor on every surface
+     light --warning on its own 12% tint over #FCFCFC: expected 3.9306 to be >= 4.5
+5  DANGER_BASE desaturated to #6E6E6E (a grey)
+   FIRST ATTEMPT PASSED 61/61 — the contrast floors and the oklab separation
+   check are both satisfied by a grey. `readsAsRole` (hue family + minimum
+   chroma) was added because of this, and the sabotage is now red:
+   × light --danger (#5c5c5c) is no longer a danger colour
+   × dark  --danger (#929292) is no longer a danger colour
+6  .kit-btn.primary.danger re-inked with var(--text)
+   × the filled destructive button carries --text-inv, not --text
+```
+
+Gates:
+
+```text
+$ cd packages/design && ../../node_modules/.bin/vitest run
+  Test Files  17 passed (17)
+       Tests  236 passed (236)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+  Test Files  45 passed (45)
+       Tests  649 passed (649)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+  Test Files  213 passed (213)
+       Tests  1738 passed (1738)
+
+$ cd apps/mobile && ../../node_modules/.bin/vitest run
+  Test Files  68 passed (68)
+       Tests  381 passed (381)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     zero regressions
+
+$ bun run lint:design-md
+  "summary": { "errors": 0, "warnings": 0, "infos": 1 }
+
+$ bun run typecheck:affected
+  Tasks:    34 successful, 34 total
+
+$ bun run lint          # oxlint --deny-warnings
+$ bun run format        # oxfmt, 3395 files
+```
+
+### Palette-hue-as-text in the shell (client half of #686)
+
+Before/after, measured off the SHELL emitter (`toCss()`, dark `--bg-l: 5%`) with
+`packages/design/src/oklab.ts` — worst cell over the four shell surfaces
+(`--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`), bare and on the hue's own
+wash. `!` marks below the 4.5:1 body floor.
+
+```
+                    LIGHT                              DARK
+hue      fill(bare) → rung(bare)  fill(wash) → rung   fill(bare) → rung(bare)  fill(wash) → rung
+amber      2.04!        5.30        1.80!     4.74      7.71         8.55        5.62      6.45
+forest     3.57!        5.55        2.93!     4.69      4.40!        7.88        3.53!     6.54
+indigo     4.27!        5.56        3.41!     4.56      3.68!        7.58        3.09!     6.47
+ochre      3.18!        5.41        2.65!     4.60      4.94         7.96        3.90!     6.48
+rose       3.13!        5.63        2.56!     4.70      5.02         7.73        4.04!     6.39
+slate      5.03         5.86        3.98!     4.77      3.12!        7.69        2.66!     6.66
+teal       2.82!        5.40        2.36!     4.63      5.58         8.26        4.36!     6.62
+violet     4.27!        5.62        3.41!     4.61      3.68!        7.79        3.08!     6.65
+```
+
+Counted off the grid above (the four `fill` columns, 32 cells): **26 of 32 below AA
+before, 0 of 32 after** — 11 of the 16 bare-on-surface cells and 15 of the 16
+bare-on-self-wash cells. An earlier "17 of 32" recorded here is not derivable from
+this table and has been corrected. Worst cell overall goes
+2.04 -> 4.55 (light, forest on a 16% wash of itself over `--bg-sunken`).
+
+Wash ceiling — worst rung ratio by self-wash strength, light theme:
+
+```
+hue     10%    12%    14%    16%    18%
+amber   4.93   4.89   4.81   4.74   4.67
+forest  5.00   4.89   4.79   4.69   4.55
+indigo  4.91   4.81   4.68   4.56   4.44!
+ochre   4.89   4.80   4.69   4.60   4.52
+rose    5.06   4.95   4.81   4.70   4.60
+slate   5.15   5.01   4.91   4.77   4.64
+teal    4.92   4.81   4.73   4.63   4.53
+violet  4.97   4.85   4.73   4.61   4.49!
+```
+
+Syntax-highlighting distinguishability (oklab distance, closest pair in the
+five-class scheme plus the untokenized remainder):
+
+```
+scheme                                 light            dark
+tag=rose attr=violet str=forest key=indigo (before)   0.075 (attr/key)   0.040 (attr/key)
+tag=rose attr=amber  str=forest key=indigo (after)    0.119 (attr/str)   0.126 (tag/attr)
+```
+
+Suites:
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  18 passed (18)
+      Tests  258 passed (258)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  214 passed (214)
+      Tests  1743 passed (1743)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text, zero regressions
+
+$ node --test scripts/lint-design-tokens.test.mjs
+# pass 8
+# fail 0
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+"errors": 0, "warnings": 0, "infos": 1
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint
+(clean)
+
+$ bun run format
+Finished in 1325ms on 3398 files using 8 threads.
+```
+
+Proof of red — every gate sabotaged and reverted:
+
+```
+$ # 1. ratchet: reintroduce a raw hue as ink
+$ perl -0pi -e 's/color: var\(--c-amber-text\)/color: var(--c-amber)/' \
+    packages/client/src/react/ui/StatusPill.module.css
+$ node scripts/lint-design-tokens.mjs
+FAIL — design-token CSS ratchet found 1 mismatch(es):
+  packages/client/src/react/ui/StatusPill.module.css: paletteHueAsText increased 0 → 1
+
+$ # 2a. shell grid: point it at the FILL instead of the solved rung
+ Tests  12 failed | 10 passed (22)
+
+$ # 2b. shell grid: push the wash ceiling back to 18%
+AssertionError: light --c-indigo-text on a 18% wash of its own fill over #F0F1F3:
+  expected 4.436688810449676 to be greater than or equal to 4.5
+AssertionError: light --c-violet-text on a 18% wash of its own fill over #F0F1F3:
+  expected 4.493011775396085 to be greater than or equal to 4.5
+ Tests  2 failed | 20 passed (22)
+
+$ # 3a. syntax scheme: .tokAttr back to violet (the collapse this fixed)
+AssertionError: light .tokAttr vs .tokKey collapsed: expected 0.07494566107159638 to be greater than 0.08
+AssertionError: dark .tokAttr vs .tokKey collapsed:  expected 0.04040278756303021 to be greater than 0.08
+ Tests  2 failed | 3 passed (5)
+
+$ # 3b. syntax scheme: .tokAttr back to the raw FILL
+AssertionError: .tokAttr must take a solved rung, not a fill: expected '--c-violet' not to match /^--c-(?!.*-text$)/u
+AssertionError: dark .tokAttr on hsl(0 0% 5%): expected 4.030934767679964 to be greater than or equal to 4.5
+ Tests  2 failed | 3 passed (5)
+
+$ # all reverted; green again
+ Tests  22 passed (22)   # contrast-shell-palette
+ Tests  5 passed (5)     # BuilderCode.tokens
+```
+
+Note on 3a: the separation gate was first written at the `docs` set's 0.035
+floor, and the sabotage PASSED — 0.040 clears 0.035. The floor was raised to
+0.08 (above the 0.06 the semantic states take) precisely so the gate is red for
+the defect it exists to catch. A gate that green-lights its own bug is
+decoration; this is the run that found that out.
+
+Shell-side unresolved-`var()` gate (13 phantoms) + shared reader:
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  19 passed (19)
+      Tests  270 passed (270)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     0 palette-hue-as-text, zero regressions
+     # unchanged: `border-radius: 999px` is the documented pill idiom, above the
+     # >=99px carve-out, so replacing var(--r-pill) does not move rawRadius
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+{"findings":[{"severity":"info","message":"Design system defines 64 colors, 7 typography
+  scales, 5 rounding levels, 7 spacing tokens, 67 components.","rule":"token-summary"}],
+ "summary":{"errors":0,"warnings":0,"infos":1}}
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint            # oxlint --deny-warnings .
+(clean)
+
+$ bun run knip
+(configuration hints only; exit 0)
+
+$ oxfmt --check <touched files>
+All matched files use the correct format.
+
+$ cd packages/design && vitest run --coverage.include='src/**'
+  css-vars.ts   |  100 stmts | 87.5 branch |  100 funcs |  100 lines
+  All files     | 97.02      | 79.85       |  100       | 98.34
+  # packages/design/src floors are 98 lines / 70 branches — held
+```
+
+Proof of red (six sabotages, each reverted):
+
+```
+$ # 1. reintroduce a phantom in shell CSS (HomeScreen .shelfEmptyTitle -> var(--text-1))
+AssertionError: a fallback-less var() naming nothing declared silently drops its
+  declaration. …: expected [ Array(1) ] to strictly equal []
++   "react/screens/HomeScreen.module.css -> --text-1"
+ Tests  1 failed | 2 passed (3)
+
+$ # 2. js/ts dot -> --c-amber (the hue barred for colliding with .tokAttr)
+AssertionError: dark js/ts dot vs .tokAttr: expected 0.030704790366375714 to be greater than 0.08
+ Tests  1 failed | 8 passed (9)
+
+$ # 3. js/ts dot -> --c-slate (the hue barred for colliding with the tree's unknown default)
+AssertionError: dark js/ts vs unknown dot collapsed: expected 0.03810857313766087 to be greater than 0.08
+ Tests  2 failed | 7 passed (9)
+
+$ # 4. add a REDUNDANT runtime allowlist entry (--depth, which CSS declares)
++   "--depth: CSS declares it, so the entry is redundant"
+ Tests  1 failed | 2 passed (3)
+
+$ # 5. rename the allowlist entry so the component no longer matches
++   "react/screens/SettingsProfileScreen.module.css -> --profile-accent"
++   "--nope-accent: react/screens/SettingsProfileScreen.tsx no longer sets it"
+ Tests  2 failed | 1 passed (3)
+ # both directions red: the phantom surfaces AND the stale entry is named
+
+$ # 6. blueprints gate still red after being rewired onto the shared reader
++   "notes/Chrome.module.css -> --phantom-token"
+ Tests  1 failed | 4 passed (5)
+
+$ # all six reverted; green again
+ Tests  3 passed (3)     # shell-var-resolution
+ Tests  9 passed (9)     # BuilderCode.tokens
+ Tests  5 passed (5)     # token-purity
+```
+
+Note on 2/3: the two barred hues were found by measurement, not by taste. `slate`
+was the first pick for js/ts on pairwise-separation grounds (0.162 between dots,
+the best available triple) and only the `--text-ghost` comparison — the tree's
+own fallback for an unrecognized file — ruled it out at 0.038 on dark. A dot set
+that is internally distinguishable and still collides with "unknown" is the same
+class of defect as the violet/indigo token collapse this issue already fixed.
+
+F5 — the pinned `var()` debt cleared:
+
+```
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  19 passed (19)
+      Tests  270 passed (270)
+
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     1291 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     0 palette-hue-as-text, zero regressions
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+"errors": 0, "warnings": 0, "infos": 1
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint          # oxlint --deny-warnings, clean
+$ bun run knip          # exit 0
+$ bun run format        # oxfmt, 3401 files; `git status` stays at exactly the 12 touched files
+
+# Proof of red — reintroduce one phantom, gate fails, revert from a saved copy
+# (never `git checkout <file>`; this tree carries uncommitted work).
+$ cp apps/tasks/components/Board.module.css "$SCRATCH/board.bak"
+$ perl -pi -e 's/var\(--accent-text\)/var(--accent-deep-fg)/' apps/tasks/components/Board.module.css
+$ ../../node_modules/.bin/vitest run src/token-purity.test.ts
+ × resolves every fallback-less var() an app references
+ AssertionError: a fallback-less var() naming nothing declared silently drops its
+ declaration; declare the token, use a contract name, or give it a fallback:
+ expected [ Array(1) ] to strictly equal []
+ +   "tasks/components/Board.module.css -> --accent-deep-fg",
+      Tests  1 failed | 4 passed (5)
+$ cp "$SCRATCH/board.bak" apps/tasks/components/Board.module.css   # IDENTICAL
+```
+
+F6 (composable size rungs + exact-match sweep):
+
+```
+$ cd packages/design && ../../node_modules/.bin/vitest run
+ Test Files  19 passed (19)
+      Tests  272 passed (272)
+$ cd packages/blueprints && ../../node_modules/.bin/vitest run
+ Test Files  45 passed (45)
+      Tests  649 passed (649)
+$ cd packages/client && ../../node_modules/.bin/vitest run
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 880 raw
+font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0
+palette-hue-as-text, zero regressions
+$ node --test scripts/lint-design-tokens.test.mjs
+# pass 9   # fail 0
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+$ bun run lint:design-md
+"errors": 0, "warnings": 0, "infos": 1
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+$ bun run lint            # oxlint --deny-warnings, silent = clean
+$ bun run knip            # 0 unused files/exports/types/deps
+$ bun run format && bun run format:check
+All matched files use the correct format.
+$ cd apps/mobile && bun run generate:theme
+Wrote apps/mobile/src/kit/theme/tokens.generated.ts from @centraid/design#toBlueprintCss
+$ git status --short apps/mobile   # byte-identical, nothing to commit
+```
+
+**Emitter diff — nothing moved but the new rungs.** Both stylesheets were rendered from
+the pristine `packages/design/src` and from the working tree and compared:
+
+```
+$ diff <(grep -v -- '--t-.*-size' after/shell.css) before/shell.css
+SHELL: identical apart from new size rungs
+$ diff <(grep -v -- '--t-.*-size' after/bp.css | sort) <(sort before/bp.css)
+BLUEPRINT: same declaration multiset (only --t-* source order changed; none
+references another --t-*)
+$ grep -c 'var(--t-' after/bp.css
+0
+```
+
+The blueprint `--t-*` declarations move to alphabetical order because they are now
+generated from `blueprintType`. Inert: no `--t-*` value references another `--t-*`
+(the `grep -c` above is the check), so declaration order inside the block cannot
+change what any of them resolves to.
+
+**Zero-change proof — the resolved multiset, not an assertion.** For BOTH trees
+(pristine copy vs working tree) every `font-size` declaration in all three ratchet
+targets is resolved to a concrete value, following `var(--t-*-size)` through the
+*generated* stylesheet for that surface, and compared per file, per line. Files under
+`packages/design/kit` render under both token layers, so each of their declarations is
+resolved twice — once against the shell rungs, once against the blueprint rungs — and
+both resolutions must be unchanged:
+
+```
+$ node prove.mjs "$PWD"
+files compared: 155
+resolved font-size observations: 1372
+files whose resolved multiset changed: 0
+exit=0
+```
+
+Red-capable, proven by sabotage and reverted with `cp` (never `git checkout` — the tree
+carries uncommitted work):
+
+```
+$ perl -0pi -e 's/var\(--t-tiny-size\)/var(--t-small-size)/' \
+    packages/client/src/react/screens/AppSettingsPanel.module.css
+$ node prove.mjs "$PWD"
+DIFF packages/client/src/react/screens/AppSettingsPanel.module.css
+  before: … |346:shell=11px| …
+  after:  … |346:shell=13px| …
+files whose resolved multiset changed: 1
+exit=1
+$ cp "$SCRATCH/sabotage.bak" packages/client/src/react/screens/AppSettingsPanel.module.css
+files whose resolved multiset changed: 0
+```
+
+**Budget delta — exactly the conversion count, and nothing else.** Regenerated with
+`node scripts/lint-design-tokens.mjs --write`, then differenced against the pristine
+budget:
+
+```
+rawHex                   0 ->     0  delta 0
+literalFontFamily        4 ->     4  delta 0
+rawFontSize           1291 ->   880  delta -411
+rawFontWeight            9 ->     9  delta 0
+rawRadius              287 ->   287  delta 0
+paletteHueAsText         0 ->     0  delta 0
+budget entries changed: 80
+non-rawFontSize metric changes: none
+entries added: 0 removed: 6
+```
+
+−411 = the 411 conversions. The six removed entries are files whose only recorded
+metric was `rawFontSize` and whose count reached 0 (`…/photos/components/Editor.module.css`,
+`…/shell/contextMenu.module.css`, `…/styles/linkBtn.module.css`, `…/styles/select.module.css`,
+`…/styles/toast.module.css`, `…/ui/Button.module.css` — 3 there, 1 each elsewhere); the
+scanner only records non-zero metrics, so their disappearance *is* the decrease.
+
+**The new ratchet rule is red-capable.** `font-size: var(--t-<key>)` — a `font`
+shorthand where a size belongs — is now counted as debt rather than hidden by the
+`var()` carve-out. There are zero such sites today, so the budget did not move; proven
+by sabotage on a real file and reverted with `cp`:
+
+```
+$ perl -0pi -e 's/font-size: var\(--t-small-size\)/font-size: var(--t-small)/' \
+    packages/client/src/react/ui/Button.module.css
+$ node scripts/lint-design-tokens.mjs
+FAIL — design-token CSS ratchet found 1 mismatch(es):
+  packages/client/src/react/ui/Button.module.css: rawFontSize increased 0 → 1
+exit=1
+$ cp "$SCRATCH/sab2.bak" packages/client/src/react/ui/Button.module.css
+ok   design-token-css — … zero regressions   # restored, exit=0
+```
+
+**Line-height rungs were rejected on measurement, not omitted.** Across the three
+targets there are 227 hand-written `line-height` declarations; the top values are
+`1.5` ×58, `1.45` ×38, `1.4` ×37, `1` ×22, `1.55` ×18 — unitless multipliers — while
+the chrome scale's line-heights are absolute px (`22px`, `26px`, `34px`, …). Exactly
+one declaration in the whole set is a px length. A `--t-body-line-height: 22px` rung
+would have essentially no adopters.
+
+**Surfaces confirmed to resolve the new names at runtime.** Every consumer builds its
+token block from the emitters rather than a hand-copied literal — `apps/web/src/main.ts`
+and `apps/desktop/src/main/preload-core.ts` both call `tokens.toCss()`, and
+`packages/client/src/react/shell/routes/InlineAppRoute.tsx` rescopes `toBlueprintCss()`
+onto the inline app root — so there is no surface where a rung could be referenced but
+undeclared. The two unresolved-`var()` gates (client against `SHELL_TOKEN_CONTRACT`,
+blueprints against `BLUEPRINT_TOKEN_CONTRACT`) are the mechanical check for that, and
+both are green above.
+
+### Re-verified at HEAD (end-to-end receipt audit)
+
+Every gate re-run at the branch tip after all 26 commits, against a clean tree:
+
+```
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s),
+     880 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es),
+     0 palette-hue-as-text, zero regressions
+$ node --test scripts/lint-design-tokens.test.mjs        # 9/9 pass
+$ bash .governance/packs/srikanth235/centraid/directives/no-hardcoded-colors/check.sh
+✓ no-hardcoded-colors                                    # exit 0
+$ bun run lint:design-md                                 # 0 errors, 0 warnings, 1 info
+$ bun run lint:css                                       # ok — no dead classNames
+$ bun run knip                                           # exit 0
+$ cd packages/design     && vitest run   # 19 files / 272 tests passed
+$ cd packages/blueprints && vitest run   # 45 files / 649 tests passed
+$ cd packages/client     && vitest run   # 215 files / 1750 tests passed
+$ cd packages/gateway    && vitest run src/validate-app-css.test.ts src/skills/ui-grounding.test.ts
+                                         # 2 files / 15 tests passed
+```
+
+Red-capability re-proven by sabotage at HEAD (each reverted with `cp` from a scratch copy,
+never `git checkout`; `git status --short` empty after each):
+
+```
+1. ink-pairing gate — agenda/Chrome.module.css: var(--text-inv) -> var(--on-accent)
+   × never inks an --accent-deep fill with the theme-stable --on-accent   (1 failed | 4 passed)
+2. shell unresolved-var gate — HomeScreen.module.css: var(--text) -> var(--text-1)
+   × resolves every fallback-less var() the shell references              (1 failed | 2 passed)
+3. paletteHueAsText ratchet — StatusPill.module.css: var(--c-amber-text) -> var(--c-amber)
+   FAIL — paletteHueAsText increased 0 → 1                                (exit 1)
+4. semantic-state role law — themes/shared.ts: DANGER_BASE #C44A4A -> #7A7A7A
+   AssertionError: light --danger (#5e5e5e) is no longer a danger colour  (2 failed | 60 passed)
+```
+
+Sabotage #4 confirms the Decisions claim that `readsAsRole` is what catches a desaturating
+solve — that is the assertion that fires — but it lives inside the test *named*
+`semantic states clear the BODY floor on every surface`, so the failing test name does not
+say so.
+
+Numbers re-derived independently at HEAD and **confirmed**: 411 conversions (402 client + 9
+blueprint) across 80 stylesheets; `rawFontSize` 1291 → 880; 11 `--on-accent` → `--text-inv`
+ink rules; 94 of 120 `text-transform: uppercase` rules in `packages/client/src` set a mono
+family; those 94 carry 51 distinct (size, weight, tracking) shapes with a largest cluster of
+6; 93 blueprint `*.module.css` files walked; `UNRESOLVED_VAR_DEBT` is `[]`; 3
+`hsl(var(--app-hue) 25% 4%)` stage backdrops; `apps/mobile/src/kit/theme/generate.ts` still
+hand-copies `SPACING`; `kit.css` still carries 80 raw font-sizes; 70 blueprint radius snaps.
+Numbers re-derived and **corrected** are annotated in place above (252 → 16 not 5; 151 not
+152 client radius snaps; 15 not 19 phantom-token files; 39 sites across 17 not 25
+stylesheets; 26 not 17 of 32 cells below AA; the spacing figure "234" is not reproducible at
+any granularity).
+
+### F8 — mono eyebrow convergence (lane 1), before → after
+
+The shape analysis is a leaf-rule CSS parser over `packages/client/src`: it selects every
+rule carrying `text-transform: uppercase` **and** a mono family in the same block, then keys
+each by `(font-size, font-weight, letter-spacing)`. It was run against the tree before the
+edit and against the tree after, plus against just the 57 rules classified as eyebrow or
+section header.
+
+```
+$ node <shape-analysis> packages/client/src        # BEFORE
+uppercase rules: 120
+  of which mono-in-same-block: 94
+sizes:     9.5px 36 | 10px 21 | 10.5px 19 | 9px 9 | 8.5px 4 | var(--t-tiny-size) 3 | 8px 1 | font:var(--t-mono) 1
+weights:   (none) 63 | 600 19 | 500 7 | font:var(--t-mono) 4 | font:inherit 1
+tracking:  0.06em 20 | 0.05em 15 | 0.04em 15 | 0.1em 14 | 0.08em 9 | …11 more
+distinct (size,weight,tracking) shapes: 54          # recorded as 51 — corrected
+
+$ node <shape-analysis> packages/client/src        # AFTER
+uppercase rules: 120
+  of which mono-in-same-block: 94
+sizes:     9.5px 51 | 10.5px 26 | 9px 9 | 8.5px 4 | var(--t-tiny-size) 2 | 8px 1 | 10px 1
+weights:   (none) 63 | 600 19 | 500 7 | font:var(--t-mono) 4 | font:inherit 1   # UNCHANGED, by decision
+tracking:  0.06em 66 | 0.05em 8 | 0.04em 7 | 0.08em 4 | …8 more (all in the 37 untouched chips)
+distinct (size,weight,tracking) shapes: 30
+   31  9.5px  | (none) | 0.06em      <- the standard eyebrow rung
+   13  10.5px | (none) | 0.06em      <- the section-header rung
+
+$ node <shape-analysis> --subset 57-classified     # the rules this lane actually converged
+BEFORE: 32 distinct shapes   (eyebrow 17, section header 20 — overlapping)
+AFTER :  9 distinct shapes
+  eyebrow (4):        9.5px |(none)|0.06em ×30, |font:var(--t-mono)| ×3, |600| ×2, |500| ×1
+  section head (5):  10.5px |(none)|0.06em ×12, |600| ×5, |500| ×2, |font:inherit| ×1, |font:var(--t-mono)| ×1
+  on the two axes converged (size, tracking): 32 -> 2
+```
+
+**What resisted, and why.** Corpus-wide the count is 54 → 30, not 54 → 2. Two causes, both
+deliberate. (a) **37 of the 94 are chips, badges, controls or chart ticks**, left untouched
+as a different idiom; they contribute ~21 of the surviving 30 shapes. (b) **Weight was not
+converged** — its modal value across the 94 is *absent* (63/94), so there is no dominant
+value to move to that would not visibly thicken 70 sites or thin 19. On the two axes the
+data does support, the classified set collapses to exactly the two intended shapes.
+
+```
+$ cd packages/client && ../../node_modules/.bin/vitest run
+Test Files  215 passed (215)
+Tests  1750 passed (1750)
+
+$ cd packages/design && ../../node_modules/.bin/vitest run
+Test Files  19 passed (19)
+Tests  276 passed (276)
+
+$ cd packages/design && ../../node_modules/.bin/vitest run contrast   # contrast grids, item 6
+Test Files  2 passed (2)      # contrast.test.ts + contrast-shell-palette.test.ts
+Tests  88 passed (88)
+
+$ node scripts/lint-design-tokens.mjs                                  # before regenerating
+FAIL — design-token CSS ratchet found 2 mismatch(es):
+  packages/client/src/react/screens/SettingsConnectionsScreen.module.css: rawFontSize increased 11 → 12
+  packages/client/src/react/screens/StartupErrorScreen.module.css: rawFontSize increased 0 → 1
+
+$ node scripts/lint-design-tokens.mjs --write
+ok   design-token-css — budget rewritten: 0 grandfathered hex value(s), 4 literal font stack(s),
+     882 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text
+
+$ git diff tests/design-token-css-budget.json     # delta is rawFontSize ONLY, +2 (880 -> 882)
+-    "rawFontSize": 11,          # SettingsConnectionsScreen.module.css
++    "rawFontSize": 12,
++  "packages/client/src/react/screens/StartupErrorScreen.module.css": {
++    "rawFontSize": 1
+
+$ node scripts/lint-design-tokens.mjs
+ok   design-token-css — …, zero regressions
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run typecheck:affected
+Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .     # clean, no output
+
+$ bun run format
+Finished in 1776ms on 3401 files using 8 threads.                          # no further rewrites
+
+$ git diff -U0 -- packages/client/src | grep -E '^[+-][^+-]' | properties
+  73 font-size
+  92 letter-spacing            # nothing else moved — no colour, spacing, family or weight
+
+$ <media-query override scan over all 98 client stylesheets>
+media scan done                # no @media/@container rule re-sets a converged class's size or tracking
+```
+
+### F9 — role-parity law (lane 3)
+
+Derived comparison, produced from `packages/design/src` by parsing both emitters' `:root` output. Six shared roles; `--t-display` / `--t-display-1` / `--t-h2` / `--t-h3` are shell-only.
+
+| role | shell | blueprint | family | weight |
+| --- | --- | --- | --- | --- |
+| `--t-body` | sans-serif 400, 15px/22px | sans-serif 400, 0.855rem/1.5 | OK | OK |
+| `--t-body-strong` | sans-serif 600, 15px/22px | sans-serif 600, 0.855rem/1.4 | OK | OK |
+| `--t-mono` | monospace 500, 12px/16px | monospace 500, 0.72rem/1.4 | OK | OK |
+| `--t-small` | sans-serif 400, 13px/18px | sans-serif 400, 0.8rem/1.45 | OK | OK |
+| **`--t-tiny`** | **sans-serif 500**, 11px/14px | **monospace 600**, 0.6rem/1.4 | **DIFFER** | **DIFFER** |
+| `--t-title` | sans-serif 600, 20px/26px | sans-serif 600, 1.15rem/1.2 | OK | OK |
+
+Sabotage evidence — each applied to `packages/design/src/typography.ts`, run, then reverted by `cp` from a saved copy:
+
+```
+### S1 weight flip: blueprintType.small 400 -> 600
+     × --t-small resolves to one family and one weight 5ms
+AssertionError: --t-small means two different things: the shell emits sans-serif/400, the blueprint layer emits sans-serif/600. Size and line-height may diverge per surface; family and weight may not (#686).: expected { family: 'sans-serif', weight: '400' } to strictly equal { family: 'sans-serif', weight: '600' }
+      Tests  1 failed | 8 passed (9)
+
+### S2 family flip: blueprintType.mono mono -> font-sans
+     × --t-mono resolves to one family and one weight 4ms
+AssertionError: --t-mono means two different things: the shell emits monospace/500, the blueprint layer emits sans-serif/500. Size and line-height may diverge per surface; family and weight may not (#686).: expected { family: 'monospace', weight: '500' } to strictly equal { family: 'sans-serif', weight: '500' }
+      Tests  1 failed | 8 passed (9)
+
+### S3 stale-waiver: blueprintType.tiny -> font-sans/500 (makes --t-tiny AGREE)
+     × every waiver is still needed 5ms
+AssertionError: --t-tiny now agrees (sans-serif/500) — delete its ROLE_PARITY_ALLOWLIST entry: shell control label (sans/500) vs blueprint eyebrow (mono/600): expected { family: 'sans-serif', weight: '500' } to not strictly equal { family: 'sans-serif', weight: '500' }
+      Tests  1 failed | 8 passed (9)
+
+### S4 widen the law: make --t-body sizes equal (the permission test)
+     × size and line-height are explicitly allowed to diverge 3ms
+AssertionError: expected '15px' not to be '15px' // Object.is equality
+      Tests  1 failed | 8 passed (9)
+
+### RESTORED md5: 1363357761fe16ca8cb22f7327b6e253   # == the pre-sabotage copy
+$ git status --porcelain
+ M DESIGN.md
+ M docs/decisions.md
+?? packages/design/src/type-role-parity.test.ts
+```
+
+Full gate run at HEAD of this lane:
+
+```
+$ bun run --cwd packages/design test
+ Test Files  20 passed (20)
+      Tests  285 passed (285)
+
+$ bun run --cwd packages/design test -- type-role-parity
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+
+$ bun run --cwd packages/client test
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ bun run lint:design-md
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+
+$ bun run lint:design-tokens
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 882 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text, zero regressions
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .
+                               # clean, no output
+
+$ bun run format
+Finished in 2851ms on 3402 files using 8 threads.
+                               # no rewrites outside this lane's files
+```
+
+### F10 — kit.css size-rung binding (lane 2)
+
+**F10 kit.css binds 16 of its 20 exact matches (lane 2).** The distribution below was re-derived from the file, not quoted. Rungs come from running both emitters, so the shared set is measured rather than assumed.
+
+| value | occurrences | blueprint rung | shell rung | verdict |
+| --- | --- | --- | --- | --- |
+| `0.8rem` | 9 | `--t-small-size` (`0.8rem`) | — (`13px`, different unit) | **all 9 bound** |
+| `0.72rem` | 6 | `--t-mono-size` (`0.72rem`) | — (`12px`) | **3 bound, 3 held** |
+| `0.6rem` | 5 | `--t-tiny-size` (`0.6rem`) | — (`11px`) | **4 bound, 1 held** |
+| `0.855rem` | 0 | `--t-body-size` | — | never used |
+| `1.15rem` | 0 | `--t-title-size` | — | never used |
+| 24 other values | 60 | none | none | left literal |
+
+Rendered delta per bound rule — shell moves, app pane does not:
+
+| rung | shell before (16px root) | shell after | shell delta | blueprint before | blueprint after | blueprint delta |
+| --- | --- | --- | --- | --- | --- | --- |
+| `--t-small-size` | 12.8px | 13px | **+0.2px** | 0.8rem | 0.8rem | **0** |
+| `--t-mono-size` | 11.52px | 12px | **+0.48px** | 0.72rem | 0.72rem | **0** |
+| `--t-tiny-size` | 9.6px | 11px | **+1.4px** | 0.6rem | 0.6rem | **0** |
+
+**No rule moves more than 1.5px on either surface.** The four `--t-tiny-size` sites are the only visible group and are named individually in What changed: `.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope`.
+
+```
+$ bun -e 'import{toCss}from"./src/css.ts";import{toBlueprintCss}from"./src/blueprint.ts";
+  const g=c=>[...c.matchAll(/(--t-[\w-]*-size)\s*:\s*([^;]+);/g)].map(m=>m[1]+" = "+m[2].trim());
+  console.log("SHELL:\n"+g(toCss()).join("\n")+"\n\nBLUEPRINT:\n"+g(toBlueprintCss()).join("\n"))'
+SHELL:                          BLUEPRINT:
+--t-body-size = 15px            --t-body-size = 0.855rem
+--t-display-size = 28px         --t-mono-size = 0.72rem
+--t-mono-size = 12px            --t-small-size = 0.8rem
+--t-small-size = 13px           --t-tiny-size = 0.6rem
+--t-tiny-size = 11px            --t-title-size = 1.15rem
+--t-title-size = 20px
+--t-display-1-size = 40px       # shell-only: naming any of these four in
+--t-h2-size = 22px              # kit.css yields an invalid declaration
+--t-h3-size = 16px              # inside an app pane, dropped silently
+
+$ grep -c "font-size" packages/design/kit/kit.css
+80
+
+$ grep -o "font-size: var(--t-[a-z-]*)" packages/design/kit/kit.css | sort | uniq -c
+   3 font-size: var(--t-mono-size)
+   9 font-size: var(--t-small-size)
+   4 font-size: var(--t-tiny-size)
+
+$ grep -c "font-size: 0.8rem\|font-size: 0.72rem\|font-size: 0.6rem" packages/design/kit/kit.css
+4                              # the 4 exact matches deliberately held as literals
+
+$ bun run lint:design-tokens   # before regenerating the budget
+FAIL — design-token CSS ratchet found 1 mismatch(es):
+  packages/design/kit/kit.css: rawFontSize fell 80 → 64; tighten tests/design-token-css-budget.json
+
+$ node scripts/lint-design-tokens.mjs --write
+ok   design-token-css — budget rewritten: 0 grandfathered hex value(s), 4 literal font stack(s), 866 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text
+
+$ git diff tests/design-token-css-budget.json
+   "packages/design/kit/kit.css": {
+-    "rawFontSize": 80,
++    "rawFontSize": 64,
+     "rawFontWeight": 2,
+     "rawRadius": 12
+   }
+                               # exactly one line; no other file or metric moved
+
+$ bun run lint:design-tokens
+ok   design-token-css — 0 grandfathered hex value(s), 4 literal font stack(s), 866 raw font-size(s), 9 off-scale font-weight(s), 287 raw border-radius(es), 0 palette-hue-as-text, zero regressions
+
+$ bun run --cwd packages/design test
+ Test Files  20 passed (20)
+      Tests  285 passed (285)
+
+$ bun run --cwd packages/client test
+ Test Files  215 passed (215)
+      Tests  1750 passed (1750)
+
+$ bun run lint:css
+ok   css-classes — 406 module import(s) across 789 file(s), no dead classNames
+
+$ bun run lint:design-md
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+
+$ bun run typecheck:affected
+ Tasks:    34 successful, 34 total
+
+$ bun run lint
+$ oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .
+                               # clean, no output, exit 0
+
+$ bun run format
+Finished in 1792ms on 3402 files using 8 threads.
+
+$ bun run format:check
+All matched files use the correct format.
+Finished in 1835ms on 3402 files using 8 threads.
+
+$ git status --short
+ M docs/decisions.md
+ M packages/design/kit/kit.css
+ M receipts/issue-686-design-consistency.md
+ M tests/design-token-css-budget.json
+
+$ git status --porcelain
+ M DESIGN.md
+ M docs/decisions.md
+?? packages/design/src/type-role-parity.test.ts
+```
+
+No budget or ratchet file changed, so nothing needed regenerating with `--write`.
+
+## Steering
+
+Audited by a fresh-context Haiku sub-agent against the session transcript: no steering events occurred in this session — the user's messages were initial direction and scope-setting, with no interrupts or mid-task corrections. Checks: (1) every steering event recorded — **PASS** (none to record); (2) no non-steering message recorded as steering — **PASS**.
+
+## Pre-merge gate
+
+`AGENTS.md` requires `bun run check:full` for shared-infrastructure changes, which this is (`packages/design` moves values in both emitters and adds contract vocabulary). Everything above was verified at the `check:push` tier plus CI; this is the tier-2 gate:
+
+```
+$ bun run check:full
+# check:pr && test:affected:full && coverage && test:mutation:pr
+#   && test:perf:pr && desktop e2e && web e2e   — chained with &&
+exit 0
+# web e2e tail: 15 passed (30.1s), incl. web vitals — LCP / INP / CLS
+#   CLS 0 (ceiling 0.1), DCL 13.8ms, load 20.6ms
+```
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-ab8b1729-92f-1785603077-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 141 | 209121 | 6328235 | 84115 | 293377 | 13.1494 | 141 | 209121 | 6328235 | 84115 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603234-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 8 | 14046 | 451851 | 4167 | 18221 | 0.8359 | 149 | 223167 | 6780086 | 88282 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603291-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 6 | 14697 | 353547 | 966 | 15669 | 0.5856 | 155 | 237864 | 7133633 | 89248 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603365-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 12 | 7658 | 744886 | 2002 | 9672 | 0.9408 | 167 | 245522 | 7878519 | 91250 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603470-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 20 | 12401 | 1288637 | 8329 | 20750 | 1.8603 | 187 | 257923 | 9167156 | 99579 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603553-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 10 | 9175 | 678398 | 1249 | 10434 | 0.8556 | 197 | 267098 | 9845554 | 100828 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603846-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 80 | 73268 | 6128519 | 31057 | 104405 | 8.5980 | 277 | 340366 | 15974073 | 131885 | feat(design): emit spacing scale and shell motion token in the contracts (#686)C |
+| claude-code-ab8b1729-92f-1785603927-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 6 | 3078 | 500757 | 3324 | 6408 | 0.7055 | 283 | 343444 | 16474830 | 135209 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
+| claude-code-ab8b1729-92f-1785603979-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 380 | 168961 | 205 | 587 | 0.1840 | 285 | 343824 | 16643791 | 135414 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
+| claude-code-ab8b1729-92f-1785604048-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 285 | 169341 | 211 | 498 | 0.1835 | 287 | 344109 | 16813132 | 135625 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
+| claude-code-ab8b1729-92f-1785604102-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 3460 | 339252 | 1214 | 4678 | 0.4432 | 291 | 347569 | 17152384 | 136839 | test(blueprints): token-purity ratchet and no-hardcoded-colors directive (#686)C |
+| claude-code-ab8b1729-92f-1785604170-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 2450 | 342712 | 3380 | 5834 | 0.5424 | 295 | 350019 | 17495096 | 140219 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604218-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 1763 | 172581 | 212 | 1977 | 0.2052 | 297 | 351782 | 17667677 | 140431 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604286-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 10 | 2245 | 873464 | 1388 | 3643 | 0.9710 | 307 | 354027 | 18541141 | 141819 | docs(design): canonical design-language rulebook, neutralize stale design-sync,  |
+| claude-code-ab8b1729-92f-1785604343-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 395 | 175649 | 194 | 591 | 0.1903 | 309 | 354422 | 18716790 | 142013 | docs(design): design-language rulebook, design-sync cleanup, roles decision (#68 |
+| claude-code-ab8b1729-92f-1785604406-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 594 | 352088 | 1730 | 2328 | 0.4461 | 313 | 355016 | 19068878 | 143743 | refactor(mobile): onboarding and photos tints onto design tokens (#686)Co-Author |
+| claude-code-ab8b1729-92f-1785604795-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 64 | 79890 | 5847992 | 80695 | 160649 | 10.8820 | 377 | 434906 | 24916870 | 224438 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785604961-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 4832 | 195098 | 205 | 5039 | 0.2658 | 379 | 439738 | 25111968 | 224643 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785605097-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 297 | 199930 | 237 | 536 | 0.2155 | 381 | 440035 | 25311898 | 224880 | docs(design): root DESIGN.md brief with drift-guard test (#686)Co-Authored-By: C |
+| claude-code-ab8b1729-92f-1785605577-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 94 | 93135 | 10590697 | 34884 | 128113 | 13.5000 | 475 | 533170 | 35902595 | 259764 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605633-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 744 | 240453 | 214 | 960 | 0.2605 | 477 | 533914 | 36143048 | 259978 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605759-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 12 | 10986 | 1451847 | 6316 | 17314 | 1.9051 | 489 | 544900 | 37594895 | 266294 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605873-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 26 | 8051 | 3223768 | 5157 | 13234 | 3.5825 | 515 | 552951 | 40818663 | 271451 | docs(design): root DESIGN.md brief with drift guard, tripwire prose fixes (#686) |
+| claude-code-ab8b1729-92f-1785605940-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 600 | 250053 | 400 | 1002 | 0.2776 | 517 | 553551 | 41068716 | 271851 | feat(blueprints): one component vocabulary, token-driven scaffold baseline (#686 |
+| claude-code-ab8b1729-92f-1785606006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 538 | 250653 | 268 | 808 | 0.2708 | 519 | 554089 | 41319369 | 272119 | refactor(client): radius and weight token adoption, four-metric css ratchet (#68 |
+| claude-code-ab8b1729-92f-1785606078-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 6 | 1623 | 753573 | 1248 | 2877 | 0.8363 | 525 | 555712 | 42072942 | 273367 | refactor(blueprints): burn eight system apps down onto the token contract (#686) |
+| claude-code-ab8b1729-92f-1785606152-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 563 | 251732 | 349 | 914 | 0.2762 | 527 | 556275 | 42324674 | 273716 | feat(gateway): token-purity validation at the app publish gate (#686)Co-Authored |
+| claude-code-ab8b1729-92f-1785606993-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 110 | 72990 | 14552245 | 47541 | 120641 | 17.8428 | 637 | 629265 | 56876919 | 321257 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
+| claude-code-ab8b1729-92f-1785607061-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 2 | 3680 | 281343 | 215 | 3897 | 0.3381 | 639 | 632945 | 57158262 | 321472 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
+| claude-code-ab8b1729-92f-1785607135-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-fable-5 | 4 | 802 | 570046 | 1060 | 1866 | 0.6331 | 643 | 633747 | 57728308 | 322532 | feat(design): conform DESIGN.md to the official spec and gate it with @google/de |
+| claude-code-ab8b1729-92f-1785607352-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 276280 | 6187703 | 14111 | 290435 | 5.1736 | 687 | 910027 | 63916011 | 336643 | docs(design): DESIGN.md becomes the single canonical design document (#686)Folds |
+| claude-code-ab8b1729-92f-1785608039-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 28 | 490654 | 3347224 | 8546 | 499228 | 4.9540 | 715 | 1400681 | 67263235 | 345189 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
+| claude-code-ab8b1729-92f-1785608166-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 839 | 276697 | 211 | 1052 | 0.1489 | 717 | 1401520 | 67539932 | 345400 | docs(design): sync receipt checklist with the issue's F-series items (#686)Co-Au |
+| claude-code-ab8b1729-92f-1785609891-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 98 | 40235 | 14289478 | 25612 | 65945 | 8.0370 | 815 | 1441755 | 81829410 | 371012 | fix(design): make the filled primary button clear WCAG AA on every accent (#686) |
+| claude-code-ab8b1729-92f-1785611828-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 96 | 49426 | 15565414 | 24896 | 74418 | 8.7145 | 911 | 1491181 | 97394824 | 395908 | test(design): pin the emitted values of spacing, motion, and theme roles (#686)C |
+| claude-code-ab8b1729-92f-1785613809-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 134 | 66913 | 24210121 | 43515 | 110562 | 13.6118 | 1045 | 1558094 | 121604945 | 439423 | fix(blueprints): ink accent-deep fills with text-inv, not the fixed white (#686) |
+| claude-code-ab8b1729-92f-1785614133-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 12 | 1923 | 2283435 | 1115 | 3050 | 1.1817 | 1057 | 1560017 | 123888380 | 440538 |  |
+| claude-code-ab8b1729-92f-1785615471-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 56 | 32737 | 10947447 | 25678 | 58471 | 6.3206 | 1113 | 1592754 | 134835827 | 466216 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
+| claude-code-ab8b1729-92f-1785615525-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 966 | 398589 | 234 | 1202 | 0.2112 | 1115 | 1593720 | 135234416 | 466450 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
+| claude-code-ab8b1729-92f-1785615609-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 845 | 399555 | 254 | 1101 | 0.2114 | 1117 | 1594565 | 135633971 | 466704 | test(blueprints): gate fallback-less var() references that resolve to nothing (# |
+| claude-code-ab8b1729-92f-1785615967-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 12 | 1739 | 2406625 | 1014 | 2765 | 1.2396 | 1129 | 1596304 | 138040596 | 467718 |  |
+| claude-code-ab8b1729-92f-1785618533-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 27001 | 10243373 | 20804 | 47855 | 5.8108 | 1179 | 1623305 | 148283969 | 488522 | fix(design): solve a text-legible rung per palette hue (#686)The burn-down repla |
+| claude-code-ab8b1729-92f-1785621035-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 62 | 40948 | 13244470 | 31428 | 72438 | 7.6642 | 1241 | 1664253 | 161528439 | 519950 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621082-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 405 | 440805 | 202 | 609 | 0.2280 | 1243 | 1664658 | 161969244 | 520152 | fix(design): solve the semantic state ramps against every surface (#686)Co-Autho |
+| claude-code-ab8b1729-92f-1785621203-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 16 | 4187 | 3539750 | 2809 | 7012 | 1.8663 | 1259 | 1668845 | 165508994 | 522961 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621251-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 636 | 444769 | 203 | 841 | 0.2314 | 1261 | 1669481 | 165953763 | 523164 | fix(design): solve the semantic state ramps against every surface (#686)Co-Autho |
+| claude-code-ab8b1729-92f-1785621331-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 3907 | 1782452 | 4586 | 8501 | 1.0303 | 1269 | 1673388 | 167736215 | 527750 | fix(design): solve the semantic state ramps against every surface (#686)--danger |
+| claude-code-ab8b1729-92f-1785621454-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 3985 | 4039188 | 2099 | 6102 | 2.0971 | 1287 | 1677373 | 171775403 | 529849 |  |
+| claude-code-ab8b1729-92f-1785624677-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 68 | 32575 | 15656804 | 21411 | 54054 | 8.5676 | 1355 | 1709948 | 187432207 | 551260 | fix(client): bind palette-hue text to the solved text rungs (#686)The shell pain |
+| claude-code-ab8b1729-92f-1785627287-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 48 | 28404 | 11502137 | 18202 | 46654 | 6.3839 | 1403 | 1738352 | 198934344 | 569462 | fix(client): resolve phantom token references the stale doc left behind (#686)-- |
+| claude-code-ab8b1729-92f-1785629006-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 18115 | 10873090 | 14431 | 32590 | 5.9108 | 1447 | 1756467 | 209807434 | 583893 | fix(blueprints): resolve the last twelve phantom var() references (#686)Every on |
+| claude-code-ab8b1729-92f-1785630418-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 44 | 23241 | 11170342 | 19784 | 43069 | 6.2252 | 1491 | 1779708 | 220977776 | 603677 | docs(design): record that the type scale is under-shaped, not under-adopted (#68 |
+| claude-code-ab8b1729-92f-1785631778-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 32 | 18546 | 8346342 | 12914 | 31492 | 4.6121 | 1523 | 1798254 | 229324118 | 616591 | feat(design): emit composable type size rungs and adopt the exact matches (#686) |
+| claude-code-ab8b1729-92f-1785633145-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 50 | 20434 | 13305822 | 18206 | 38690 | 7.2360 | 1573 | 1818688 | 242629940 | 634797 | docs(design): record that the two type scales have diverged in meaning (#686)--t |
+| claude-code-ab8b1729-92f-1785633752-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 40 | 27337 | 10908675 | 20041 | 47418 | 6.1264 | 1613 | 1846025 | 253538615 | 654838 | docs(design): record why --t-tiny is not the eyebrow rung (#686)Proposed alignin |
+| claude-code-ab8b1729-92f-1785635007-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 38 | 23096 | 10650491 | 15896 | 39030 | 5.8672 | 1651 | 1869121 | 264189106 | 670734 | docs(design): correct the eyebrow-rung claim; 94 rules carry 51 shapes (#686)The |
+| claude-code-ab8b1729-92f-1785637258-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 34 | 11214 | 9747793 | 9290 | 20538 | 5.1764 | 1685 | 1880335 | 273936899 | 680024 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637307-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 1186 | 577383 | 200 | 1388 | 0.3011 | 1687 | 1881521 | 274514282 | 680224 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637381-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 4547 | 5214212 | 2838 | 7403 | 2.7066 | 1705 | 1886068 | 279728494 | 683062 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785637429-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 312 | 580500 | 200 | 514 | 0.2972 | 1707 | 1886380 | 280308994 | 683262 | docs(design): record the check:full pre-merge gate result (#686)Co-Authored-By:  |
+| claude-code-ab8b1729-92f-1785639425-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 80 | 40859 | 23738921 | 27739 | 68678 | 12.8187 | 1787 | 1927239 | 304047915 | 711001 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639478-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 599 | 606400 | 198 | 799 | 0.3119 | 1789 | 1927838 | 304654315 | 711199 | test(design): fail recognisability under its own name (#686)Co-Authored-By: Clau |
+| claude-code-ab8b1729-92f-1785639532-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 6 | 1791 | 1820997 | 1620 | 3417 | 0.9622 | 1795 | 1929629 | 306475312 | 712819 | x (#686) |
+| claude-code-ab8b1729-92f-1785639680-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 18 | 4906 | 5490029 | 3862 | 8786 | 2.8723 | 1813 | 1934535 | 311965341 | 716681 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639736-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 708 | 612102 | 198 | 908 | 0.3154 | 1815 | 1935243 | 312577443 | 716879 | test(design): fail recognisability under its own name (#686)Co-Authored-By: Clau |
+| claude-code-ab8b1729-92f-1785639799-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2546 | 2452208 | 2136 | 4690 | 1.2955 | 1823 | 1937789 | 315029651 | 719015 | test(design): fail recognisability under its own name, not the contrast floor (# |
+| claude-code-ab8b1729-92f-1785639849-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 803 | 614083 | 197 | 1002 | 0.3170 | 1825 | 1938592 | 315643734 | 719212 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
+| claude-code-ab8b1729-92f-1785639907-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 572 | 614886 | 636 | 1210 | 0.3269 | 1827 | 1939164 | 316258620 | 719848 | test(design): recognisability fails under its own name, not the contrast floor ( |
+| claude-code-ab8b1729-92f-1785639957-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 2 | 670 | 615458 | 197 | 869 | 0.3169 | 1829 | 1939834 | 316874078 | 720045 | test(design): recognisability fails under its own name (#686)Co-Authored-By: Cla |
+| claude-code-ab8b1729-92f-1785640016-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 8 | 2442 | 2466220 | 1392 | 3842 | 1.2832 | 1837 | 1942276 | 319340298 | 721437 | test(design): recognisability fails under its own name, not the contrast floor ( |
+| claude-code-ab8b1729-92f-1785647977-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 910 | 2127288 | 211517607 | 367767 | 2495965 | 128.2531 | 2747 | 4069564 | 530857905 | 1089204 |  |
+| claude-code-ab8b1729-92f-1785649140-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 40 | 27219 | 1740864 | 10161 | 37420 | 1.2948 | 2787 | 4096783 | 532598769 | 1099365 |  |
+| claude-code-ab8b1729-92f-1785649242-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 16 | 14180 | 791277 | 3122 | 17318 | 0.5624 | 2803 | 4110963 | 533390046 | 1102487 |  |
+| claude-code-ab8b1729-92f-1785650271-1 | claude-code | ab8b1729-92f0-445f-9f42-5a85fc1b1575 | #686 | claude-opus-5 | 22 | 15978 | 1193758 | 8351 | 24351 | 0.9056 | 2825 | 4126941 | 534583804 | 1110838 |  |
+
+### Steering
+
+No steering events recorded in this session. The user provided initial strategic direction and task scope in the first message; all subsequent messages were task confirmations or work directives with no interrupts or mid-task corrections to the agent's execution. Verdict: **PASS** — no steering events, no non-steering messages falsely recorded.
+
+## Audit
+
+**1. What changed faithfully describes staged diff:** **PASS** — The receipt's "## What changed" section accurately captures all A1+B1 deliverables: new `motion.ts`, spacing tokens emitted from `density.ts` in both `css.ts` and `blueprint.ts`, `--ease` added to shell contract, six client CSS modules cleaned of fallbacks, and mobile theme byte-identical regeneration.
+
+**2. Checklist items [x] A1 and [x] B1 realized in staged diff:** **PASS** — A1 (spacing tokens `--sp-1…--sp-7` in both `SHELL_TOKEN_CONTRACT` and `BLUEPRINT_TOKEN_CONTRACT` via `contract.ts`, emitted in both `css.ts` and `blueprint.ts`) and B1 (shell motion `--ease` in `SHELL_TOKEN_CONTRACT`, added to `css.ts` emitter, six client modules updated) are both fully realized.
+
+**3. Receipt checklist mirrors issue #686 checklist:** **PASS** — Receipt checklist A1–E items and their descriptions match issue #686 checklist structure exactly; only A1 and B1 are marked [x], remainder [ ] as scoped.

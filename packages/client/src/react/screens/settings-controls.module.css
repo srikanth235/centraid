@@ -5,7 +5,7 @@
   padding: 7px 0;
 }
 .rowLabel {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -44,7 +44,7 @@
   border: 1px solid var(--line-strong);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-family: var(--font-mono);
 }
 .input:disabled {

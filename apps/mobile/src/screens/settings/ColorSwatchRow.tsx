@@ -3,10 +3,10 @@
 // same picker (issue #498). The selected swatch reads with a ring + check; the
 // value is a raw hex string, matching how both callers store it.
 
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import Icon from "../../kit/components/Icon";
 import { useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
@@ -43,7 +43,7 @@ export default function ColorSwatchRow({
               pressed && styles.pressed,
             ]}
           >
-            {active ? <Feather name="check" size={16} color="#fff" /> : null}
+            {active ? <Icon name="check" size={16} color="#fff" /> : null}
           </Pressable>
         );
       })}

@@ -4,6 +4,8 @@
 // or IPC: every function is a deterministic value→value transform (the only
 // ambient inputs are `Date`/`Math.random`, which callers/tests can pin).
 
+import { formatBytes as sharedFormatBytes } from "@centraid/design";
+
 /** The code languages the builder's Code view knows how to syntax-highlight. */
 export type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
 
@@ -161,15 +163,7 @@ export function relativeWhen(iso: string): string {
  *  figures, not just app-log-scale ones) — behavior below 1 MB is unchanged
  *  from the original KB/MB-only helper. */
 export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = n / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(1)} ${units[unit]}`;
+  return sharedFormatBytes(n);
 }
 
 /**

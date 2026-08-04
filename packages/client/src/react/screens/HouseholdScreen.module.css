@@ -1,4 +1,4 @@
-/* Household (issue var(--text), Decision 14) — the page that answers "who is in this
+/* Household (issue #599, Decision 14) — the page that answers "who is in this
    household, what hardware do they use, and which vaults do we have". It took
    the People & devices card off the Gateway page, which is now purely "is the
    gateway healthy". */
@@ -34,7 +34,7 @@
 }
 .title h1 {
   margin: 0;
-  font: var(--t-h1);
+  font: var(--t-title);
   color: var(--text);
 }
 .titleIcon {
@@ -64,7 +64,7 @@
 }
 .sectionHead h2 {
   margin: 0;
-  font: var(--t-h3);
+  font: var(--t-small-strong);
   color: var(--text);
 }
 .sectionMeta {
@@ -122,7 +122,7 @@
 .vaultRole {
   margin-top: 1px;
   font: var(--t-small);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .badge {

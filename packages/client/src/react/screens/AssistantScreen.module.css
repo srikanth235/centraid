@@ -80,7 +80,7 @@
   border-color: var(--accent);
 }
 .jumpToBottom:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -124,7 +124,7 @@
   background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .msgActionBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .msgActionBtn.feedbackOn {
@@ -164,7 +164,7 @@
   cursor: default;
 }
 .pagerLabel {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   min-width: 26px;
@@ -182,9 +182,9 @@
   max-width: 78%;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 14px 14px 4px 14px;
+  border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   white-space: pre-wrap;
 }
@@ -203,7 +203,7 @@
   gap: 7px;
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 5px 10px;
   font-size: 11.5px;
   color: var(--text-soft);
@@ -229,14 +229,14 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
-/* Runner notice row (issue var(--text), Wave 6) — e.g. dropped-PDF warning. */
+/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
 .notice {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   font-size: 12.5px;
   color: var(--text-faint);
@@ -246,14 +246,14 @@
 .notice[data-level="warn"] {
   color: var(--warning);
 }
-/* Offline hint beside a resend button (issue var(--text), Wave 6). */
+/* Offline hint beside a resend button (issue #420, Wave 6). */
 .offlineHint {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-/* Reconnect catch-up hint (issue var(--text), Wave 6). */
+/* Reconnect catch-up hint (issue #420, Wave 6). */
 .catchUp {
   display: flex;
   align-items: center;
@@ -264,9 +264,9 @@
 }
 .tools {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
 }
 .tools > summary {
@@ -292,7 +292,7 @@
   margin: 0;
 }
 .toolMeta {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   padding-top: 3px;
 }
@@ -350,7 +350,7 @@
     border-color 140ms ease;
 }
 
-/* Composer autocomplete popover (@-mentions + slash commands, issue var(--text)) —
+/* Composer autocomplete popover (@-mentions + slash commands, issue #420) —
    floats just above the composer, anchored to its top edge. */
 .acPopover {
   position: absolute;
@@ -379,7 +379,7 @@
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--t-small-size);
 }
 .acItem[data-active="true"] {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
@@ -396,12 +396,12 @@
 .acItemHint {
   flex: none;
   color: var(--text-ghost);
-  font-size: 11px;
+  font-size: var(--t-control-size);
 }
 .acEmpty {
   padding: 8px 10px;
   color: var(--text-ghost);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .composerRow:focus-within {
   border-color: var(--accent);
@@ -472,7 +472,7 @@
   background: color-mix(in oklab, var(--text) 7%, transparent);
 }
 .attachBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .send {
@@ -499,7 +499,7 @@
   transform: scale(0.94);
 }
 .send:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -515,7 +515,7 @@
   border-radius: var(--r-md);
   background: transparent;
   color: var(--text-faint);
-  font: var(--t-tiny);
+  font: var(--t-control);
   cursor: pointer;
 }
 .effortPicker select:hover {
@@ -523,7 +523,7 @@
   background: color-mix(in oklab, var(--text) 6%, transparent);
 }
 .effortPicker select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .srOnly {
@@ -562,7 +562,7 @@
   background: color-mix(in oklab, var(--text) 8%, transparent);
 }
 .modelBtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .modelBtn:disabled {
@@ -699,7 +699,7 @@
   background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .attachRemove:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 1px;
 }
 .attachSpinner {
@@ -722,12 +722,12 @@
   padding: 40px 20px;
 }
 .emptyTitle {
-  font-family: var(--font-mono);
-  font-size: 22px;
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
   color: var(--text);
 }
 .emptySub {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 .suggest {
@@ -744,7 +744,7 @@
   border-radius: 999px;
   padding: 7px 14px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
 }
 .suggestChip:hover {
@@ -752,13 +752,13 @@
   color: var(--text);
 }
 
-/* ── Reasoning row (issue var(--text), Wave 2) ─────────────────────────────────── */
+/* ── Reasoning row (issue #420, Wave 2) ─────────────────────────────────── */
 .msgThinking {
   align-items: stretch;
 }
 .thinking {
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in oklab, var(--text) 3%, transparent);
   padding: 2px 10px;
   font-size: 12.5px;
@@ -810,7 +810,7 @@
   }
 }
 
-/* ── Per-turn usage/cost (issue var(--text), Wave 2) ───────────────────────────── */
+/* ── Per-turn usage/cost (issue #420, Wave 2) ───────────────────────────── */
 .msgUsage {
   font-size: 10.5px;
   color: var(--text-ghost);
@@ -818,7 +818,7 @@
   cursor: default;
 }
 
-/* ── Image attachment thumbnails (issue var(--text), Wave 2) ───────────────────── */
+/* ── Image attachment thumbnails (issue #420, Wave 2) ───────────────────── */
 .msgAttachChipImage {
   padding: 0;
   overflow: hidden;
@@ -828,7 +828,7 @@
   max-width: 180px;
   max-height: 180px;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 .msgAttachThumb[data-loading="true"] {
   width: 96px;
@@ -842,12 +842,12 @@
   width: 26px;
   height: 26px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   flex: none;
 }
 
 /* "Show earlier messages" — the top edge of the mounted transcript window
-   (issue var(--text)). A real button, so it is reachable and operable by keyboard;
+   (issue #659). A real button, so it is reachable and operable by keyboard;
    the transcript above it is deferred, never discarded. */
 .showEarlier {
   align-self: center;
@@ -857,10 +857,10 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
 }
 
 .showEarlier:hover {
-  color: var(--text-1);
+  color: var(--text);
 }

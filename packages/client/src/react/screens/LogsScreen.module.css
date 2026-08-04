@@ -32,7 +32,7 @@
 .statusLabel {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--log-status, var(--text-faint));
@@ -40,13 +40,15 @@
 .statusLabel[data-status="live"] {
   --log-status: var(--success);
 }
+/* The dot above keeps the FILL; this label is 9.5px mono type, so its copy of
+   `--log-status` takes the ink rung. */
 .statusLabel[data-status="connecting"],
 .statusLabel[data-status="reconnecting"] {
-  --log-status: var(--c-amber);
+  --log-status: var(--c-amber-text);
 }
 .countLabel {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   margin-right: auto;
 }
@@ -68,7 +70,7 @@
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   outline: none;
 }
 .search:focus {
@@ -80,7 +82,7 @@
 
 .exportStatus {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 .exportStatus[data-tone="ok"] {
@@ -129,13 +131,13 @@
   flex: none;
   width: 44px;
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .lineLevel[data-level="warn"] {
-  color: var(--c-amber);
+  color: var(--c-amber-text);
 }
 .lineLevel[data-level="error"] {
   color: var(--danger);
@@ -167,7 +169,7 @@
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   cursor: pointer;
   box-shadow: 0 4px 14px var(--scrim);
 }
@@ -175,7 +177,7 @@
   background: color-mix(in oklab, var(--text) 8%, var(--bg-elev));
 }
 
-/* "Show N earlier lines" — the top edge of the rendered window (issue var(--text)).
+/* "Show N earlier lines" — the top edge of the rendered window (issue #659).
    The panel keeps only the newest lines mounted; this is how a reader walks
    back through the rest without two thousand rows in the DOM. */
 .showEarlier {
@@ -192,5 +194,5 @@
 }
 
 .showEarlier:hover {
-  color: var(--text-1);
+  color: var(--text);
 }

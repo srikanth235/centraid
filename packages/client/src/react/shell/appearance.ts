@@ -117,6 +117,11 @@ export function toRemoteShape(
       out.accentLight = swatch.light;
       out.accentDeep = swatch.deep;
       out.accentText = swatch.text;
+      out.accentFill = swatch.deep;
+      out.accentDeepHover = swatch.deep;
+      out.accentSoft = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
+      out.bgSel = `color-mix(in oklab, ${swatch.accent} 12%, transparent)`;
+      out.lineSel = `color-mix(in oklab, ${swatch.accent} 42%, transparent)`;
     }
   }
   return out;
@@ -153,7 +158,16 @@ export function applyPrefsToDocument(
     prefs.accent === undefined ? undefined : ACCENT_PALETTE[prefs.accent];
   setOrClear(html, "--accent", swatch?.accent);
   setOrClear(html, "--accent-light", swatch?.light);
-  setOrClear(html, "--accent-deep", swatch?.deep);
+  // `--accent-deep` is the FILLED rung, and the ink it carries (`--text-inv`)
+  // flips per theme — near-white on light, near-black on dark. So the override
+  // has to flip with it, exactly as `--accent-text` below does: the deepened
+  // shade under light ink, the lightened one under dark ink. Writing `deep`
+  // unconditionally put a dark fill under dark ink on the dark ramp (#686 F3).
+  setOrClear(
+    html,
+    "--accent-deep",
+    prefs.theme === "dark" ? swatch?.light : swatch?.deep
+  );
   // The accent-as-TEXT rung has to move with the accent, or an owner who picks
   // rose gets rose buttons and teal links. On the dark ramp a saturated accent
   // is already legible on near-black, so only light needs the deepened shade —
@@ -163,6 +177,37 @@ export function applyPrefsToDocument(
     "--accent-text",
     prefs.theme === "dark" ? swatch?.accent : swatch?.text
   );
+  const fill = prefs.theme === "dark" ? swatch?.light : swatch?.deep;
+  setOrClear(html, "--accent-fill", fill);
+  setOrClear(
+    html,
+    "--accent-deep-hover",
+    fill === undefined
+      ? undefined
+      : `color-mix(in oklab, ${fill} 88%, var(--text) 12%)`
+  );
+  setOrClear(
+    html,
+    "--accent-soft",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
+  );
+  setOrClear(
+    html,
+    "--bg-sel",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 12%, transparent)`
+  );
+  setOrClear(
+    html,
+    "--line-sel",
+    swatch === undefined
+      ? undefined
+      : `color-mix(in oklab, ${swatch.accent} 42%, var(--line))`
+  );
+  setOrClear(html, "--focus-ring-color", swatch?.accent);
 }
 
 /**

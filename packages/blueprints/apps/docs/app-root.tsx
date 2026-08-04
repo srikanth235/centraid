@@ -37,7 +37,6 @@ import {
   onFocusRefresh,
   readFailed,
   showSkeleton,
-  wireThemeToggle,
 } from "./kit.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";
@@ -128,7 +127,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const emptyRef = useRef<HTMLDivElement | null>(null);
   const skeletonRef = useRef<HTMLDivElement | null>(null);
@@ -409,9 +407,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // ---- chrome wiring: theme toggle, doorbell, focus, width, keys, drag/drop ----
+  // ---- chrome wiring: doorbell, focus, width, keys, drag/drop ----
   useEffect(() => {
-    if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
 
@@ -847,9 +844,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onUploadChange={onUploadChange}
         searchRef={(el) => {
           searchInputRef.current = el;
-        }}
-        themeButtonRef={(el) => {
-          themeBtnRef.current = el;
         }}
         uploadRef={(el) => {
           uploadRef.current = el;

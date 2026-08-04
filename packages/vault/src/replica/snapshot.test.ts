@@ -99,6 +99,28 @@ describe("snapshot", () => {
     ).toBeUndefined();
   });
 
+  test("attaches the current canonical row version to snapshot rows", () => {
+    db = openVaultDb();
+    db.vault
+      .prepare(
+        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+       VALUES ('scheme-versioned', 'urn:scheme-versioned', 'Before', '1')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `UPDATE core_concept_scheme SET title = 'After'
+          WHERE scheme_id = 'scheme-versioned'`
+      )
+      .run();
+
+    const row = readReplicaRows(db.vault, "core.concept_scheme").rows[0];
+    expect(row).toMatchObject({ rowId: "scheme-versioned", rowVersion: 2 });
+    expect(
+      readReplicaRow(db.vault, "core.concept_scheme", "scheme-versioned")
+    ).toMatchObject({ rowId: "scheme-versioned", rowVersion: 2 });
+  });
+
   test("snapshot reader returns rows pinned to the same reported watermark", () => {
     db = openVaultDb();
     db.vault

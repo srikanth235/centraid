@@ -10,7 +10,7 @@
  * any incompatible replica wire/trigger change bumps this value and rotates
  * every cursor. It is an invalidation number, not a migration ladder.
  */
-export const REPLICA_SCHEMA_EPOCH = 1;
+export const REPLICA_SCHEMA_EPOCH = 2;
 
 export const REPLICA_DDL = `
 CREATE TABLE IF NOT EXISTS replica_meta (
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS replica_meta (
   floor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (floor_seq >= 0),
   schema_epoch     INTEGER NOT NULL CHECK (schema_epoch >= 1),
   trigger_schema_version INTEGER NOT NULL DEFAULT 0 CHECK (trigger_schema_version >= 0),
+  active_commit_id TEXT,
   epoch_reason     TEXT NOT NULL DEFAULT 'created',
   epoch_started_at TEXT NOT NULL,
   updated_at       TEXT NOT NULL
@@ -44,6 +45,7 @@ VALUES (
 CREATE TABLE IF NOT EXISTS replica_change (
   seq             INTEGER PRIMARY KEY AUTOINCREMENT,
   epoch           TEXT NOT NULL,
+  commit_id       TEXT NOT NULL,
   entity          TEXT NOT NULL,
   row_id          TEXT NOT NULL,
   op              TEXT NOT NULL CHECK (op IN ('insert','update','delete')),
@@ -52,6 +54,8 @@ CREATE TABLE IF NOT EXISTS replica_change (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_seq
   ON replica_change(epoch, seq);
+CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_commit_seq
+  ON replica_change(epoch, commit_id, seq);
 CREATE INDEX IF NOT EXISTS idx_replica_change_latest_row
   ON replica_change(epoch, entity, row_id, seq DESC);
 CREATE INDEX IF NOT EXISTS idx_replica_change_changed_at
@@ -68,10 +72,11 @@ CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   action        TEXT NOT NULL,
   payload_hash  TEXT NOT NULL,
   status        TEXT NOT NULL CHECK (
-    status IN ('queued','sending','parked','executed','denied','failed')
+    status IN ('queued','sending','parked','executed','denied','failed','conflict')
   ),
   invocation_id TEXT,
   reason        TEXT,
+  conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 ) STRICT;

@@ -6,14 +6,18 @@
   max-width: 620px;
   margin: 0 auto 22px;
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: border-color 0.15s var(--ease);
 }
 .quickadd:focus-within {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+  border-color: color-mix(
+    in oklab,
+    var(--app-identity) 40%,
+    var(--line-strong)
+  );
 }
 .qaTitle {
   width: 100%;
@@ -22,7 +26,7 @@
   color: var(--text);
   background: none;
   border: none;
-  padding: 14px 16px 6px;
+  padding: 14px var(--sp-4) 6px;
   outline: none;
 }
 .qaTitle::placeholder {
@@ -38,7 +42,7 @@
   color: var(--text-soft);
   background: none;
   border: none;
-  padding: 0 16px 10px;
+  padding: 0 var(--sp-4) 10px;
   outline: none;
   resize: none;
   font-family: var(--font-sans);
@@ -49,8 +53,8 @@
 .qaActions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
   border-top: 1px solid var(--line);
 }
 .qaTarget {

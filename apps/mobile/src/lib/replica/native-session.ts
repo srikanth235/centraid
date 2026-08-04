@@ -11,15 +11,15 @@ import {
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
-  validateOptimisticMutation,
+  prepareReplicaWrite,
 } from "@centraid/client/replica/native";
 import type {
   EnqueueIntentInput,
   GatewayAuth,
   IntentOutcome,
-  OptimisticMutation,
   ReplicaChangeFeedAdapter,
   ReplicaCursor,
+  ReplicaBaseVersion,
   ReplicaDigest,
   ReplicaFetcher,
   ReplicaIdFactory,
@@ -33,6 +33,7 @@ import type {
   ReplicaSqliteDriver,
   ReplicaStatus,
   ReplicaValue,
+  ReplicaWriteMutationInput,
 } from "@centraid/client/replica/native";
 
 import { backoffSchedule } from "../backoff";
@@ -49,21 +50,14 @@ export type NativeSearchRequest = Omit<ReplicaSearchRequest, "shapeId"> & {
   shapeId?: string;
 };
 
-export type NativeOptimisticMutation =
-  | (Omit<Extract<OptimisticMutation, { op: "upsert" }>, "shapeId"> & {
-      shapeId?: string;
-      purpose?: string;
-    })
-  | (Omit<Extract<OptimisticMutation, { op: "delete" }>, "shapeId"> & {
-      shapeId?: string;
-      purpose?: string;
-    });
+export type NativeOptimisticMutation = ReplicaWriteMutationInput;
 
 export interface NativeWriteInput {
   action: string;
   input: ReplicaValue;
   optimistic?: NativeOptimisticMutation[];
   intentId?: string;
+  baseVersions?: ReplicaBaseVersion[];
 }
 
 export type NativeWriteResult =
@@ -246,7 +240,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     await this.#coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.#coordinator.catalog();
-    else if (this.#isConnected() && (await this.#isNetworkWorkAllowed())) {
+    if (
+      (status.coverage === "partial" ||
+        (status.cursor === null && status.coverage !== "complete")) &&
+      this.#isConnected() &&
+      (await this.#isNetworkWorkAllowed())
+    ) {
       const preview = new Promise<void>((resolve, reject) => {
         this.#previewReady = { resolve, reject };
       });
@@ -311,39 +310,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const optimistic = (input.optimistic ?? []).map((mutation) => {
-      const { purpose, shapeId, ...rest } = mutation;
-      return {
-        ...rest,
-        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
-      };
-    }) as OptimisticMutation[];
-    // Validate at enqueue time exactly as the web shell session does. The native
-    // write path never re-checked, so an invalid optimistic mutation (e.g. a
-    // synthetic __rowId column spread into the values) was silently dropped by
-    // applyOptimisticMutations and the edit simply never rendered. Reject loudly.
-    for (const mutation of optimistic) {
-      const shape = this.#catalog.find(
-        (candidate) => candidate.shapeId === mutation.shapeId
-      );
-      const schema = shape?.entities.find(
-        (candidate) => candidate.entity === mutation.entity
-      );
-      if (!schema) {
-        throw new ReplicaProtocolError(
-          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`
-        );
-      }
-      validateOptimisticMutation(mutation, schema);
-    }
-    const dependencies = this.#catalog
-      .filter((shape) => shape.appId === appId)
-      .flatMap((shape) =>
-        shape.entities.map((entity) => ({
-          shapeId: shape.shapeId,
-          entity: entity.entity,
-        }))
-      );
+    const { optimistic, dependencies } = prepareReplicaWrite(
+      appId,
+      input.optimistic,
+      this.#catalog,
+      this.resolveShapeId.bind(this)
+    );
     const intent = await this.#coordinator.enqueue({
       intentId: this.#intentIds.forWrite(
         appId,
@@ -356,6 +328,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input,
       optimistic,
       dependencies,
+      ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
     } satisfies EnqueueIntentInput);
     const settled = terminalResult(intent);
     if (settled) return settled;
@@ -496,8 +469,22 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const status = await this.#coordinator.status();
     if (!status.cursor) return false;
     const abort = new AbortController();
-    const batch = await this.pullChanges(status.cursor, abort.signal);
-    if (batch) await this.#coordinator.applyChanges(batch);
+    const started = Date.now();
+    let cursor = status.cursor;
+    let batches = 0;
+    while (cursor && batches < 32 && Date.now() - started < 5_000) {
+      // Each request must use the cursor returned by the previous apply;
+      // concurrent pulls would race and make the cursor merge ambiguous.
+      // oxlint-disable-next-line no-await-in-loop
+      const batch = await this.pullChanges(cursor, abort.signal);
+      if (!batch) break;
+      // oxlint-disable-next-line no-await-in-loop
+      const next = await this.#coordinator.applyChanges(batch);
+      batches += 1;
+      const progressed = next.epoch !== cursor.epoch || next.seq > cursor.seq;
+      cursor = next;
+      if (!progressed || !batch.hasMore) break;
+    }
     return true;
   }
 
@@ -842,9 +829,10 @@ function terminalResult(intent: ReplicaIntent): NativeWriteResult | undefined {
   }
   return {
     intentId: intent.intentId,
-    status: intent.state,
+    status: intent.conflict ? "conflict" : intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
     ...(intent.output === undefined ? {} : { output: intent.output }),
+    ...(intent.conflict === undefined ? {} : { conflict: intent.conflict }),
   };
 }
 

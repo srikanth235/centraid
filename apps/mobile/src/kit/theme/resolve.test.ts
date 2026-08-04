@@ -3,59 +3,52 @@ import { describe, expect, it } from "vitest";
 import { navThemeFor, navThemes, resolveTheme } from "./resolve";
 import { darkPalette, lightPalette } from "./tokens.generated";
 
-describe(resolveTheme, () => {
-  it("selects the palette by scheme", () => {
-    expect(resolveTheme("light").scheme).toBe("light");
-    expect(resolveTheme("dark").scheme).toBe("dark");
-    expect(resolveTheme("dark").colors.bg).toBe(darkPalette.bg);
-    expect(resolveTheme("dark").colors.bg).not.toBe(
-      resolveTheme("light").colors.bg
-    );
+describe("theme resolution", () => {
+  it("selects concrete palette by scheme", () => {
+    expect(resolveTheme("light").colors).toBe(lightPalette);
+    expect(resolveTheme("dark").colors).toBe(darkPalette);
+    expect(resolveTheme("dark").colors.bg).not.toBe(lightPalette.bg);
   });
 
-  it("applies the design’s warm solar light ramp (mobile-only override)", () => {
-    // Light mode overrides the shared cool palette with the "Centraid Mobile"
-    // design's parchment-cream canvas; it must NOT be the generated cool bg.
-    expect(resolveTheme("light").colors.bg).toBe("#f1ece1");
-    expect(resolveTheme("light").colors.bg).not.toBe(lightPalette.bg);
-    expect(resolveTheme("light").colors.text).toBe("#231f18");
-  });
-
-  it("defaults to light for null/undefined (no OS preference)", () => {
+  it("defaults to light and preserves stable singleton identity", () => {
     expect(resolveTheme(null).scheme).toBe("light");
     expect(resolveTheme(undefined).scheme).toBe("light");
-  });
-
-  it("derives ink4, which the kit tokens lack", () => {
-    expect(resolveTheme("light").colors.textGhost).toMatch(/^rgba\(/u);
-    expect(resolveTheme("dark").colors.textGhost).not.toBe(
-      resolveTheme("light").colors.textGhost
-    );
-  });
-
-  it("returns a stable colors identity per scheme (memo-friendly)", () => {
-    expect(resolveTheme("dark").colors).toBe(resolveTheme("dark").colors);
+    expect(resolveTheme("dark")).toBe(resolveTheme("dark"));
     expect(resolveTheme("light").colors).toBe(resolveTheme("light").colors);
   });
 
-  it("carries spacing, radii and fonts through", () => {
-    const t = resolveTheme("light");
-    expect(t.spacing[4]).toBe(16);
-    expect(t.radii.card).toBe(14);
-    expect(t.fonts.sans.regular).toBe("Geist_400Regular");
+  it("carries the shared spacing, radii, type and hit-target contract", () => {
+    const theme = resolveTheme("light");
+    expect(theme.spacing["4"]).toBe(16);
+    expect(theme.radii.md).toBe(6);
+    expect(theme.type.body.fontSize).toBe(17);
+    expect(theme.targetMin.coarse).toBe(48);
+    expect(theme.targetMin.fine).toBe(32);
+  });
+
+  it("applies the owner's product accent to native action roles", () => {
+    const violet = resolveTheme("light", "violet");
+    expect(violet.colors.accent).toBe("#7C5BD9");
+    expect(violet.colors.accent).not.toBe(lightPalette.accent);
+    expect(resolveTheme("dark", "ochre").colors.accent).toBe("#B47B3F");
   });
 });
 
-describe(navThemeFor, () => {
-  it("flips the dark flag and tracks the palette", () => {
+describe("navigation theme lowering", () => {
+  it("tracks the generated palette", () => {
     expect(navThemeFor("dark").dark).toBe(true);
     expect(navThemeFor("light").dark).toBe(false);
     expect(navThemeFor("dark").colors.background).toBe(darkPalette.bg);
-    expect(navThemeFor("light").colors.text).toBe("#231f18");
+    expect(navThemeFor("light").colors.text).toBe(lightPalette.text);
   });
 
-  it("maps nav fonts onto the loaded Geist families", () => {
+  it("maps navigation weights onto the loaded sans family", () => {
     expect(navThemes.light.fonts.regular.fontFamily).toBe("Geist_400Regular");
     expect(navThemes.dark.fonts.bold.fontFamily).toBe("Geist_600SemiBold");
+  });
+
+  it("uses the selected product accent for navigation actions", () => {
+    expect(navThemeFor("light", "rose").colors.primary).toBe("#E55772");
+    expect(navThemeFor("light", "rose").colors.notification).toBe("#E55772");
   });
 });

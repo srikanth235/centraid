@@ -26,16 +26,16 @@
 }
 .title {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 28px;
+  font-family: var(--font-sans);
+  font-size: var(--t-display-size);
   font-weight: 600;
   letter-spacing: -0.025em;
   color: var(--text);
 }
 .sub {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--t-body);
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -72,7 +72,7 @@
   background: none;
   outline: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .searchIn::placeholder {
@@ -89,10 +89,10 @@
 .segB {
   padding: 5px 13px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text-faint);
   cursor: pointer;
@@ -126,7 +126,7 @@
   border-radius: 999px;
   background: var(--bg-elev);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-soft);
   cursor: pointer;
   transition: border-color 0.14s ease;
@@ -155,13 +155,13 @@
   color: var(--text-ghost);
 }
 .emptyTitle {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 600;
   color: var(--text);
 }
 .emptyText {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   margin-bottom: 6px;
 }
@@ -186,7 +186,7 @@
   gap: 12px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   margin-bottom: 14px;
@@ -244,13 +244,13 @@
   background: color-mix(in srgb, var(--tk-hue, var(--accent)) 16%, transparent);
 }
 .name {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 15.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .desc {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -268,13 +268,13 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   letter-spacing: 0.01em;
   color: var(--text-faint);
 }
 .trigIcon {
   display: inline-flex;
-  color: var(--tk-hue, var(--accent));
+  color: var(--tk-ink, var(--accent));
 }
 .use {
   position: absolute;

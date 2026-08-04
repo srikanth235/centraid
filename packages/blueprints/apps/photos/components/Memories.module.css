@@ -6,9 +6,9 @@
 }
 .memoriesStrip {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-3);
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: var(--sp-1);
 }
 .memoriesStrip::-webkit-scrollbar {
   height: 0;
@@ -34,8 +34,8 @@
   inset: 0;
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.62),
-    rgba(0, 0, 0, 0.05) 55%,
+    color-mix(in oklab, var(--scrim) 86%, transparent),
+    color-mix(in oklab, var(--scrim) 7%, transparent) 55%,
     transparent
   );
 }
@@ -52,7 +52,7 @@
 .memoryTitle {
   font: var(--t-body-strong);
   font-size: 13px;
-  color: var(--on-accent);
+  color: var(--text-inv);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -61,5 +61,5 @@
 .memorySub {
   font: var(--t-mono);
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.8);
+  color: color-mix(in oklab, var(--text-inv) 80%, transparent);
 }

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,10 +6,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
+import { formatRelativeTime } from "@centraid/design";
+
+import Icon from "../components/Icon";
+import { Text } from "../components/NativeText";
 import { family, radii, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";
@@ -44,7 +46,9 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     if (reachability === "device-offline") return "Offline on this phone";
     if (reachability === "gateway-asleep") return "Gateway asleep";
     if (reachability === "syncing") return "Syncing recent changes…";
-    return newest ? `Updated ${relativeTime(newest)}` : "Available offline";
+    return newest
+      ? `Updated ${formatRelativeTime(newest)}`
+      : "Available offline";
   }, [newest, reachability]);
   const tint = reachability === "current" ? colors.accent : colors.danger;
   const action =
@@ -107,12 +111,12 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           <Text style={[styles.pendingText, { color: colors.text }]}>
             Pending changes {pending.length}
           </Text>
-          <Feather name="chevron-right" size={14} color={colors.textFaint} />
+          <Icon name="chevron-right" size={14} color={colors.textFaint} />
         </Pressable>
       </View>
       {bootstrapLabel ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="download-cloud" size={13} color={colors.accent} />
+          <Icon name="download-cloud" size={13} color={colors.accent} />
           <Text style={[styles.bootstrapText, { color: colors.textSoft }]}>
             {bootstrapLabel}
           </Text>
@@ -121,7 +125,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       {diverged ? (
         <View style={[styles.divergence, { backgroundColor: colors.bgSunken }]}>
           <View style={styles.divergenceHeading}>
-            <Feather name="alert-circle" size={14} color={colors.danger} />
+            <Icon name="alert-circle" size={14} color={colors.danger} />
             <Text style={[styles.divergenceText, { color: colors.textSoft }]}>
               Sources last updated at different times.
             </Text>
@@ -133,7 +137,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             >
               {scope.label}:{" "}
               {scope.updatedAt
-                ? `updated ${relativeTime(Date.parse(scope.updatedAt))}`
+                ? `updated ${formatRelativeTime(Date.parse(scope.updatedAt))}`
                 : "not updated yet"}
             </Text>
           ))}
@@ -156,7 +160,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
               </Text>
             </View>
             <Pressable onPress={() => setOpen(false)}>
-              <Feather name="x" size={24} color={colors.text} />
+              <Icon name="x" size={24} color={colors.text} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.list}>
@@ -236,7 +240,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
               >
                 {scope.label}:{" "}
                 {scope.updatedAt
-                  ? `updated ${relativeTime(Date.parse(scope.updatedAt))}`
+                  ? `updated ${formatRelativeTime(Date.parse(scope.updatedAt))}`
                   : "not updated yet"}
               </Text>
             ))}
@@ -245,14 +249,6 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       </Modal>
     </>
   );
-}
-
-function relativeTime(at: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - at) / 1_000));
-  if (seconds < 45) return "just now";
-  if (seconds < 3_600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3_600)}h ago`;
-  return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
 function humanStatus(status: string): string {

@@ -10,7 +10,6 @@
 // nearest real screen or surfaces an "on desktop" note, matching how the rest
 // of the Photos port handles desktop-only affordances.
 
-import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
   Animated,
@@ -18,20 +17,22 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import {
+  motionDuration,
+  useReducedMotion,
+} from "../../kit/hooks/useReducedMotion";
 import { family, useTheme } from "../../kit/theme";
 import { getProfileColor, getProfileName, initialsOf } from "../../lib/profile";
 import { getActiveVaultLink, subscribeVaultLinks } from "../../lib/vault-links";
 
 const PANEL_WIDTH = 288;
-// The green used by the design for the "On" backup badge.
-const ON_GREEN = "#5C8A4E";
-
 // A ~12%-alpha wash of a 6-hex colour for the accent pill; opaque palette hexes
 // get an alpha byte appended, anything else falls back to an elevated surface.
 function washFor(hex: string, fallback: string): string {
@@ -55,6 +56,7 @@ export default function PhotosDrawer({
   onSwitchVault,
 }: PhotosDrawerProps): React.JSX.Element {
   const { colors } = useTheme();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const name = getProfileName();
   const color = getProfileColor();
@@ -78,18 +80,18 @@ export default function PhotosDrawer({
     Animated.parallel([
       Animated.timing(slide, {
         toValue: 0,
-        duration: 260,
+        duration: motionDuration(260, reducedMotion),
         easing: Easing.bezier(0.2, 0.7, 0.2, 1),
         useNativeDriver: true,
       }),
       Animated.timing(fade, {
         toValue: 1,
-        duration: 200,
+        duration: motionDuration(200, reducedMotion),
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [visible, slide, fade]);
+  }, [fade, reducedMotion, slide, visible]);
 
   return (
     <Modal
@@ -164,7 +166,7 @@ export default function PhotosDrawer({
                   { backgroundColor: washFor(colors.accent, colors.bgElev) },
                 ]}
               >
-                <Feather name="chevrons-down" size={13} color={colors.accent} />
+                <Icon name="chevrons-down" size={13} color={colors.accent} />
                 <Text style={[styles.switchPillText, { color: colors.accent }]}>
                   Switch
                 </Text>
@@ -175,7 +177,7 @@ export default function PhotosDrawer({
               style={[styles.storageCard, { backgroundColor: colors.bgSunken }]}
             >
               <View style={styles.storageHead}>
-                <Feather name="cloud" size={20} color={colors.accent} />
+                <Icon name="cloud" size={20} color={colors.accent} />
                 <Text style={[styles.storageText, { color: colors.text }]}>
                   0.86 GB of 5 TB
                 </Text>
@@ -216,52 +218,51 @@ export default function PhotosDrawer({
             </Text>
 
             <View style={[styles.row, { borderBottomColor: colors.line }]}>
-              <Feather name="cloud" size={19} color={colors.textFaint} />
+              <Icon name="cloud" size={19} color={colors.textFaint} />
               <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Backup
               </Text>
               <View
-                style={[styles.onPill, { backgroundColor: `${ON_GREEN}24` }]}
+                style={[
+                  styles.onPill,
+                  { backgroundColor: `${colors.success}24` },
+                ]}
               >
-                <View style={[styles.onDot, { backgroundColor: ON_GREEN }]} />
-                <Text style={[styles.onText, { color: ON_GREEN }]}>On</Text>
+                <View
+                  style={[styles.onDot, { backgroundColor: colors.success }]}
+                />
+                <Text style={[styles.onText, { color: colors.success }]}>
+                  On
+                </Text>
               </View>
             </View>
 
             <Pressable style={[styles.row, { borderBottomColor: colors.line }]}>
-              <Feather name="smartphone" size={19} color={colors.textFaint} />
+              <Icon name="smartphone" size={19} color={colors.textFaint} />
               <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Free up vault on device
               </Text>
-              <Feather
-                name="chevron-right"
-                size={17}
-                color={colors.textGhost}
-              />
+              <Icon name="chevron-right" size={17} color={colors.textGhost} />
             </Pressable>
 
             <Pressable style={styles.row}>
-              <Feather name="shield" size={19} color={colors.textFaint} />
+              <Icon name="shield" size={19} color={colors.textFaint} />
               <Text style={[styles.rowLabel, { color: colors.text }]}>
                 Your data in Centraid
               </Text>
-              <Feather
-                name="chevron-right"
-                size={17}
-                color={colors.textGhost}
-              />
+              <Icon name="chevron-right" size={17} color={colors.textGhost} />
             </Pressable>
 
             <View style={[styles.divider, { backgroundColor: colors.line }]} />
 
             <Pressable style={styles.footerItem} onPress={onHome}>
-              <Feather name="home" size={17} color={colors.textSoft} />
+              <Icon name="home" size={17} color={colors.textSoft} />
               <Text style={[styles.footerLabel, { color: colors.text }]}>
                 Home
               </Text>
             </Pressable>
             <Pressable style={styles.footerItem} onPress={onSettings}>
-              <Feather name="settings" size={17} color={colors.textSoft} />
+              <Icon name="settings" size={17} color={colors.textSoft} />
               <Text style={[styles.footerLabel, { color: colors.text }]}>
                 Settings
               </Text>

@@ -19,7 +19,6 @@ import {
   onFocusRefresh,
   readFailed,
   wireAttachInput,
-  wireThemeToggle,
 } from "./kit.ts";
 import {
   buildWall,
@@ -95,7 +94,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const focusQuickAddRef = useRef<(() => void) | null>(null);
   const editorFlushRef = useRef<(() => Promise<void>) | null>(null);
   const consentRef = useRef<{ message: string } | null>(null);
@@ -224,9 +222,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     logic.applySearchInput("");
   }, [logic]);
 
-  // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
+  // ---- chrome wiring: attach input, doorbell, focus, keys, width ----
   useEffect(() => {
-    if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
     const attachInput = document.querySelector(
       "#attachInput"
     ) as HTMLInputElement | null;
@@ -367,9 +364,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onSelectView={selectView}
         searchRef={(el) => {
           searchInputRef.current = el;
-        }}
-        themeButtonRef={(el) => {
-          themeBtnRef.current = el;
         }}
         sidebarNav={
           <SidebarNav

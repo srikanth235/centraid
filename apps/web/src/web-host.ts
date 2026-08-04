@@ -243,13 +243,32 @@ export function installWebHost(): void {
             message: refusal || "Gateway rejected the pairing ticket.",
           };
         }
+        // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
         const next = saveConnection({
           endpointTicket: decoded.gw,
           endpointId: response.gatewayId,
           vaultId: response.vaultId,
+          // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
+          vaultIds: [
+            response.vaultId,
+            ...(response.vaultIds ?? []),
+            ...(response.vaults ?? []).map((vault) => vault.vaultId),
+          ].filter(
+            (vaultId, index, all): vaultId is string =>
+              typeof vaultId === "string" &&
+              vaultId.length > 0 &&
+              all.indexOf(vaultId) === index
+          ),
           label: response.gatewayName ?? "Web gateway",
           rememberDevice: input.rememberDevice ?? false,
         });
+        // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
+        const vaults = response.vaults ?? [
+          {
+            vaultId: response.vaultId,
+            ...(response.vaultName ? { vaultName: response.vaultName } : {}),
+          },
+        ];
         void syncIrohWakeConfiguration();
         if (input.rememberDevice !== true) purgeTunnelCaches();
         saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
@@ -269,12 +288,16 @@ export function installWebHost(): void {
           activeGatewayId: "web",
           ...(gatewayId ? { gatewayId } : {}),
           activeVaultId: response.vaultId,
+          vaultIds: next.vaultIds,
         });
         return {
           ok: true as const,
           gatewayId: response.gatewayId,
           vaultId: response.vaultId,
           vaultName: response.vaultName ?? decoded.vaultName ?? "Vault",
+          // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
+          vaultIds: next.vaultIds ?? [response.vaultId],
+          vaults,
         };
       } catch (error) {
         return {

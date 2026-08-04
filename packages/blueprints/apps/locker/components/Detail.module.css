@@ -22,7 +22,7 @@
   background: none;
   color: var(--text-soft);
   font: var(--t-small);
-  padding: 16px 16px 0;
+  padding: var(--sp-4) var(--sp-4) 0;
 }
 .emptyDetail {
   flex: 1;
@@ -42,24 +42,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
 }
 
 /* Watchtower */
 .wtStats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: var(--sp-3);
   margin-bottom: 22px;
 }
 .wtStat {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 15px;
 }
 .wtStat .n {
-  font: var(--font-title);
+  font: var(--font-sans);
   font-size: 28px;
   font-weight: 600;
 }
@@ -72,7 +72,7 @@
 .wtItem {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   padding: 11px 14px;
   border-bottom: 1px solid var(--line);
   width: 100%;
@@ -86,12 +86,12 @@
   background: var(--bg-sunken);
 }
 .wtBadge {
-  font: var(--t-tiny);
+  font: var(--t-control);
   font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 3px 8px;
-  border-radius: 5px;
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-sm);
 }
 
 /* Narrow-viewport (global state classes on #root). */

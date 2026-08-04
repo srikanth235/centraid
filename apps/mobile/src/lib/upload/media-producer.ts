@@ -33,6 +33,7 @@ export interface DeviceMediaInput {
    * camera-roll original is never deleted.
    */
   deleteSourceAfterSettle?: boolean;
+  onProgress?: (progress: { completed: number; total: number }) => void;
 }
 
 export interface BackupDocumentInput {
@@ -71,13 +72,18 @@ export interface ReceiptExpenseInput {
   }>;
 }
 
-function openQueue(gatewayBase: string): UploadQueue {
+function openQueue(
+  gatewayBase: string,
+  onProgress?: DeviceMediaInput["onProgress"]
+): UploadQueue {
   return UploadQueue.open({
     gatewayBaseUrl: gatewayBase,
     headers: authHeader,
     policy: nativeUploadPolicy(),
-    onProgress: ({ completed, total }) =>
-      UploadForegroundService.update(completed, total),
+    onProgress: ({ completed, total }) => {
+      UploadForegroundService.update(completed, total);
+      onProgress?.({ completed, total });
+    },
   });
 }
 
@@ -145,7 +151,7 @@ export async function backupDeviceMedia(
   gatewayBase: string,
   input: DeviceMediaInput
 ): Promise<string> {
-  const queue = openQueue(gatewayBase);
+  const queue = openQueue(gatewayBase, input.onProgress);
   try {
     // F11: address the bytes ONCE and probe the ledger. A sha the queue has
     // seen keeps the derivatives it was first enqueued with, so re-scanning a

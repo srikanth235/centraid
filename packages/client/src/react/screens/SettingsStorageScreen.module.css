@@ -1,5 +1,5 @@
 /* Settings → Storage. Mirrors SettingsConnectionsScreen.module.css's panel/
-   row/wizard shell (issue var(--text) §D4) — same list-of-rows + inline-expanding
+   row/wizard shell (issue #367 §D4) — same list-of-rows + inline-expanding
    add form anatomy, extended with kind/use badges, a test-result line, and
    the vault-attach section. */
 
@@ -33,14 +33,14 @@
   gap: 6px;
 }
 .rowName {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .rowSub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -50,7 +50,7 @@
 .kindBadge {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -69,12 +69,12 @@
   text-transform: uppercase;
   color: var(--text-ghost);
   border: 0.5px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 1.5px 5px;
 }
 
 .testResult {
-  font-size: 11px;
+  font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
 .testResult[data-ok="true"] {
@@ -114,7 +114,7 @@
   border-radius: 999px;
   border: none;
   background: none;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--text-faint);
   cursor: pointer;
 }
@@ -137,7 +137,7 @@
 .fieldLabel {
   display: block;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   color: var(--text);
 }
@@ -148,7 +148,7 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -212,7 +212,7 @@
 }
 /* The radio is invisible, so the label draws focus and disabled state. */
 .binaryOption:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
 }
 .binaryOption:has(:disabled) {
@@ -233,7 +233,7 @@
 
 .gateError {
   margin: -6px 0 8px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }

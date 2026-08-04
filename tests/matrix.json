@@ -1,6 +1,524 @@
 {
   "$schema": "./matrix.schema.json",
   "version": 1,
+  "demonstratedRed": {
+    "T1": {
+      "command": "bun run --cwd packages/gateway test -- recover.integration.test.ts",
+      "seed": "corrupt the recovery-kit integrity before the product restore",
+      "failure": "restore rejects the corrupt kit before swapping the vault"
+    },
+    "T2": {
+      "command": "bun run test:qualities -t 'T2/F1: classified writes park'",
+      "seed": "attempt a confirm-gated Locker purge",
+      "failure": "mutation remains present while the recorded invocation is proposed"
+    },
+    "T3": {
+      "command": "bun run test:qualities -t 'T3 sealed canary'",
+      "seed": "place a unique plaintext sentinel in every declared sealed column",
+      "failure": "any sentinel observed in an enumerated artifact fails with its surface name"
+    },
+    "T4": {
+      "command": "bun run test:qualities -t 'T4: boot-time route'",
+      "seed": "register /centraid/_new-surface without route metadata",
+      "failure": "gateway boot coverage throws for the unclassified prefix"
+    },
+    "A6": {
+      "command": "bun run scripts:test",
+      "seed": "publish-guards returns an open nightly restore/export failure issue",
+      "failure": "release preparation exits non-zero"
+    },
+    "F2": {
+      "command": "bun run --cwd packages/app-engine test -- model-pricing.test.ts",
+      "seed": "resolve an unknown model in strict test mode",
+      "failure": "pricing resolution throws instead of recording zero cost"
+    },
+    "C1": {
+      "command": "bun run scripts:test",
+      "seed": "validate-matrix removes a gate owner and adds malformed matrix data",
+      "failure": "matrix validation rejects the fixture"
+    },
+    "R1": {
+      "command": "bun run test:qualities -t 'SIGKILL at'",
+      "seed": "kill the child at each named subsystem fault point",
+      "failure": "the harness observes SIGKILL and verifies recovery invariants"
+    },
+    "R2": {
+      "command": "bun run test:qualities -t 'PWA IndexedDB and mobile SQLite'",
+      "seed": "drop the offline send and reset the first reconnect",
+      "failure": "only the retry crosses HTTP and duplicate replay must not add rows"
+    },
+    "R3": {
+      "command": "bun run test:qualities -t 'R3: every expected health component'",
+      "seed": "replace each expected production probe with its induced failure",
+      "failure": "every component must report error"
+    },
+    "P1": {
+      "command": "bun run perf:pr",
+      "seed": "set a route/cold-start ceiling below the observed serial p95",
+      "failure": "the named route identity exceeds its governed ceiling"
+    },
+    "P2": {
+      "command": "bun run test:qualities -t 'P2 first-paint'",
+      "seed": "set per-screen SQL/HTTP ceilings below observed counts",
+      "failure": "the screen name and exceeded counter are reported"
+    },
+    "P3": {
+      "command": "bun run test:qualities -t 'P3:'",
+      "seed": "add an unbounded growth-table query without a waiver",
+      "failure": "static enumeration rejects it and runtime SQL remains row-capped"
+    },
+    "U1-desktop": {
+      "command": "bun run --cwd apps/desktop test:e2e -- onboarding-home.spec.ts -g '1.2'",
+      "seed": "prevent fresh-vault onboarding from reaching usable Home",
+      "failure": "the required Home assertion and screenshot step fail"
+    },
+    "U1-web": {
+      "command": "bun run --cwd apps/web test:e2e -- web-pwa.spec.ts",
+      "seed": "withhold the first-run pairing/control session",
+      "failure": "the first usable PWA assertion fails"
+    },
+    "U1-mobile": {
+      "command": "node tests/agent-e2e-mobile/flows/home-loads.mjs",
+      "seed": "run the documented broken native onboarding flows in the mobile nightly harness",
+      "failure": "G2/G8/G9/G13/G14 remain explicit red/blocked evidence rather than green"
+    },
+    "U2": {
+      "command": "bun run test:qualities -t 'U2:'",
+      "seed": "add a forbidden user-facing ledger synonym outside the allowlist",
+      "failure": "the exact file/literal is rejected"
+    },
+    "U3": {
+      "command": "bun run scripts:test",
+      "seed": "validate-ui-receipt names a screenshot path with no changed e2e emitter",
+      "failure": "receipt validation reports the missing emitter"
+    },
+    "F1": {
+      "command": "bun run test:qualities -t 'F1: every runner'",
+      "seed": "omit one registered runner, tool, or trigger origin from persisted ledger rows",
+      "failure": "the missing registry identity fails coverage"
+    },
+    "F3": {
+      "command": "bun run test:qualities -t 'F3:'",
+      "seed": "insert a confirm-required capability beyond the rendered approvals set",
+      "failure": "SQL-enumerated and rendered capability sets diverge"
+    },
+    "L1": {
+      "command": "bun run --cwd packages/gateway test -- import-routes.test.ts",
+      "seed": "tamper with or incompletely reimport the portable archive",
+      "failure": "the HTTP round trip rejects before committing the fresh target"
+    },
+    "L2": {
+      "command": "bun run lint:schema-export",
+      "seed": "change the schema fingerprint without moving the portable export owner",
+      "failure": "the schema/export ratchet exits non-zero"
+    },
+    "D1": {
+      "command": "bun run --cwd packages/design test -- roles.test.ts",
+      "seed": "remove one profile lowering from the product role registry",
+      "failure": "the role registry reports the missing lowering before emit"
+    },
+    "D2": {
+      "command": "bun run --cwd packages/design test -- recipes.test.ts",
+      "seed": "delete one interaction recipe or omit a required state",
+      "failure": "the recipe inventory or state contract test fails"
+    },
+    "D3": {
+      "command": "bun run --cwd apps/mobile test -- generate.test.ts",
+      "seed": "introduce a CSS expression into the native lowering output",
+      "failure": "native theme generation rejects non-concrete values"
+    },
+    "D4": {
+      "command": "bun run lint:design-tokens",
+      "seed": "add a raw color, font, size, weight, or radius to a shipped CSS consumer",
+      "failure": "the design-token ratchet reports the exact consumer regression"
+    },
+    "D5": {
+      "command": "bun run --cwd packages/design test -- icons-contract.test.ts",
+      "seed": "point one shipped catalog entry at an unregistered icon key",
+      "failure": "the shared icon registry rejects the catalog drift"
+    },
+    "D6": {
+      "command": "bun run --cwd packages/design test -- format.test.ts",
+      "seed": "change the shared byte or relative-time formatter in one client lane",
+      "failure": "the canonical formatter contract fails before clients diverge"
+    },
+    "D7": {
+      "command": "bun run --cwd packages/design test -- css-properties.test.ts",
+      "seed": "emit a retired alias or omit a required shell/blueprint token",
+      "failure": "the profile contract parity test rejects the emitter drift"
+    }
+  },
+  "qualities": [
+    {
+      "id": "trust",
+      "name": "Trust / data safety",
+      "weakestLink": "Sealed egress and route authorization are enumeration-gated; the nightly product drill remains the slowest proof.",
+      "gates": [
+        {
+          "id": "T1",
+          "name": "erase → product-path restore",
+          "owner": "packages/gateway/src/backup/recover.integration.test.ts",
+          "evidence": "HTTP erase → blank-machine product recovery",
+          "lane": "restore-year3",
+          "wallClockCost": "high",
+          "knob": "tests/experience-budgets/gateway.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "T2",
+          "name": "consent invariant enumeration",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "F1: every runner, agent tool, and automation trigger persists through conversation/turn/item",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/matrix.json#qualities/trust",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "T3",
+          "name": "sealed-data leak canary",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "T3 sealed canary",
+          "lane": "vitest",
+          "wallClockCost": "medium",
+          "knob": "packages/vault/src/schema/sealed.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "T4",
+          "name": "authenticated surface enumeration",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "T4:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/gateway/src/routes/route-security.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "A6",
+          "name": "nightly red blocks release",
+          "owner": "scripts/release/publish-guards.test.mjs",
+          "evidence": "blocks release preparation when a nightly red issue is open",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "scripts/release/nightly-quality-blockers.mjs",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D1",
+          "name": "total product role lowering",
+          "owner": "packages/design/src/roles.test.ts",
+          "evidence": "every registered role has an explicit lowering",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/roles.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "correctness",
+      "name": "Correctness",
+      "weakestLink": "Schema/export and pricing completeness are fail-closed; mutation depth remains the broadest residual signal.",
+      "gates": [
+        {
+          "id": "F2",
+          "name": "runtime pricing coverage",
+          "owner": "packages/app-engine/src/model-pricing.test.ts",
+          "evidence": "F2 runtime pricing gate",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/app-engine/src/model-pricing.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "C1",
+          "name": "matrix evidence and mutation correctness",
+          "owner": "scripts/test-report/validate-matrix.test.mjs",
+          "evidence": "accepts a minimal well-formed matrix",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/matrix.json",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D2",
+          "name": "complete interaction recipe inventory",
+          "owner": "packages/design/src/recipes/recipes.test.ts",
+          "evidence": "publishes the complete 26-recipe inventory",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/recipes/index.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "reliability",
+      "name": "Reliability",
+      "weakestLink": "Named crash points, reconnect convergence, and expected health probes are enumerated; real-process drills stay nightly.",
+      "gates": [
+        {
+          "id": "R1",
+          "name": "kill-mid-write named fault points",
+          "owner": "tests/quality/kill-mid-write.integration.test.ts",
+          "evidence": "SIGKILL at",
+          "lane": "nightly",
+          "wallClockCost": "high",
+          "knob": "tests/quality/fault-points.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "R2",
+          "name": "offline/reconnect convergence",
+          "owner": "tests/quality/offline-reconnect.integration.test.ts",
+          "evidence": "PWA IndexedDB and mobile SQLite queues cross real HTTP and converge once after drops",
+          "lane": "vitest",
+          "wallClockCost": "medium",
+          "knob": "docs/mobile-offline.md",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "R3",
+          "name": "expected-component health drill",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "R3: every expected health component",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/gateway/src/serve/health-registry.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D3",
+          "name": "typed native theme lowering",
+          "owner": "apps/mobile/src/kit/theme/generate.test.ts",
+          "evidence": "returns concrete light and dark values",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "apps/mobile/src/kit/theme/generate.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "responsiveness",
+      "name": "Responsiveness",
+      "weakestLink": "Deterministic query-count and row-cap checks gate PRs while timing variance stays in nightly rig drift.",
+      "gates": [
+        {
+          "id": "P1",
+          "name": "core route and cold-start p95",
+          "owner": "tests/perf/gateway-request.perf.test.ts",
+          "evidence": "core route p95 and cold start",
+          "lane": "nightly",
+          "wallClockCost": "medium",
+          "knob": "tests/experience-budgets/gateway.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "P2",
+          "name": "first-paint query counts",
+          "owner": "tests/quality/first-paint-query-counts.test.ts",
+          "evidence": "P2 first-paint query counts",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/experience-budgets/client-query-counts.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "P3",
+          "name": "scale-honest SQL static + runtime",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "P3:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/quality/unbounded-query-waivers.json",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D4",
+          "name": "shipped CSS token ratchet",
+          "owner": "scripts/lint-design-tokens.mjs",
+          "evidence": "design-token CSS ratchet",
+          "lane": "check:pr",
+          "wallClockCost": "low",
+          "knob": "tests/design-token-css-budget.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "friction",
+      "name": "Low friction",
+      "weakestLink": "Desktop and web first-run are gated; mobile is explicitly grey until its documented broken flows are repaired.",
+      "gates": [
+        {
+          "id": "U1-desktop",
+          "name": "desktop first-run product journey",
+          "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
+          "evidence": "first run reaches a usable Home",
+          "lane": "pr-path + nightly",
+          "wallClockCost": "high",
+          "knob": "tests/suite-wall-clock.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "U1-web",
+          "name": "web first-run product journey",
+          "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
+          "evidence": "ticket onboarding",
+          "lane": "pr-path + nightly",
+          "wallClockCost": "high",
+          "knob": "tests/suite-wall-clock.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "U1-mobile",
+          "name": "mobile first-run product journey",
+          "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
+          "evidence": "mobile first-run complete",
+          "lane": "nightly",
+          "wallClockCost": "high",
+          "knob": "tests/suite-wall-clock.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01",
+          "blockedBy": "Documented G2/G8/G9/G13/G14 onboarding failures; deliberately grey, never counted as covered."
+        },
+        {
+          "id": "U2",
+          "name": "user-facing vocabulary",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "U2:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/quality/copy-allowlist.json",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "U3",
+          "name": "UI receipt evidence",
+          "owner": "scripts/validate-ui-receipt.test.mjs",
+          "evidence": "rejects screenshot paths without an e2e emitter",
+          "lane": "check:pr",
+          "wallClockCost": "low",
+          "knob": "scripts/validate-ui-receipt.mjs",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D5",
+          "name": "single icon registry",
+          "owner": "packages/design/src/icons-contract.test.ts",
+          "evidence": "single icon registry",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/icons.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "transparency",
+      "name": "Agent transparency",
+      "weakestLink": "Tool, trigger, ledger, pricing, and approval surfaces share enumerable sources instead of hand lists.",
+      "gates": [
+        {
+          "id": "F1",
+          "name": "ledger coverage enumeration",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "T2/F1:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "F3",
+          "name": "approvals surface completeness",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "F3:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/vault/src/schema/agent.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D6",
+          "name": "canonical cross-surface formatters",
+          "owner": "packages/design/src/format.test.ts",
+          "evidence": "canonical formatter contract",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/format.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "longevity",
+      "name": "Longevity",
+      "weakestLink": "Route-level export and schema completeness close the engine-only portability gap.",
+      "gates": [
+        {
+          "id": "L1",
+          "name": "HTTP export round trip",
+          "owner": "packages/gateway/src/routes/import-routes.test.ts",
+          "evidence": "HTTP export → staged reimport → HTTP re-export",
+          "lane": "nightly",
+          "wallClockCost": "medium",
+          "knob": "tests/experience-budgets/gateway.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "L2",
+          "name": "schema/export completeness ratchet",
+          "owner": "tests/quality/user-facing-qualities.test.ts",
+          "evidence": "L2:",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/vault/src/gateway/portable-export.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "D7",
+          "name": "profile contract parity",
+          "owner": "packages/design/src/css-properties.test.ts",
+          "evidence": "profile contract parity",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/design/src/contract.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-02"
+        }
+      ]
+    }
+  ],
   "legend": {
     "solid": "Owned proof exists and is in the intended lane",
     "partial": "Some proof exists, but the cell is incomplete or not continuously exercised",
@@ -85,16 +603,6 @@
       "glob": "packages/automation/src/**/*.ts",
       "contains": "COMPAT\\(",
       "trackingIssue": 656
-    },
-    "desktop.compat": {
-      "glob": "apps/desktop/src/**/*.ts",
-      "contains": "COMPAT\\(",
-      "trackingIssue": 656
-    },
-    "web.compat": {
-      "glob": "apps/web/src/**/*.ts",
-      "contains": "COMPAT\\(",
-      "trackingIssue": 656
     }
   },
   "workspaceSurfaces": {
@@ -177,9 +685,9 @@
     "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #656.",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
-    "desktop.compat": "Skip: no desktop settings/schema migration suite in v0; settings-merge contracts cover preserve-or-set durability of prefs.",
+    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #656.",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Skip: no web storage migration suite in v0; sw-version + webGatewayId contracts cover identity/version stability.",
+    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #656.",
     "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #656.",
     "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #656.",
     "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
@@ -612,7 +1120,10 @@
       "tier": "unit"
     },
     "desktop.offline": null,
-    "desktop.compat": null,
+    "desktop.compat": {
+      "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
+      "tier": "unit"
+    },
     "desktop.journey": {
       "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts",
       "tier": "e2e"
@@ -649,7 +1160,10 @@
       "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts",
       "tier": "e2e"
     },
-    "web.compat": null,
+    "web.compat": {
+      "owner": "apps/web/src/web-host.test.ts",
+      "tier": "unit"
+    },
     "web.journey": {
       "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
       "tier": "e2e"
@@ -1053,7 +1567,7 @@
         "scalability": "solid",
         "security": "partial",
         "offline": "skip",
-        "compat": "skip",
+        "compat": "partial",
         "journey": "solid",
         "accessibility": "partial"
       }
@@ -1070,7 +1584,7 @@
         "scalability": "solid",
         "security": "partial",
         "offline": "solid",
-        "compat": "skip",
+        "compat": "partial",
         "journey": "partial",
         "accessibility": "partial"
       }

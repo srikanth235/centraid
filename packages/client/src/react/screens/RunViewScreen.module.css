@@ -30,7 +30,7 @@
   margin: 0 0 18px;
   padding: 11px 14px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-sunken);
   color: var(--text-soft);
   font-size: 12.5px;
@@ -56,8 +56,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-family: var(--font-mono);
-  font-size: 20px;
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -99,13 +99,13 @@
 .logStatL {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin-bottom: 8px;
 }
 .logStatV {
-  font-size: 15px;
+  font-size: var(--t-body-size);
   font-weight: 600;
   color: var(--text);
 }
@@ -120,7 +120,7 @@
 }
 .logPanel {
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 4px 20px;
 }
@@ -178,7 +178,7 @@
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text-faint);
@@ -197,7 +197,7 @@
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
   white-space: pre-wrap;
@@ -267,7 +267,7 @@
   min-width: 0;
   margin-bottom: 12px;
   border: 0.5px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -323,7 +323,7 @@
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 .tlMeta {
@@ -345,7 +345,7 @@
   padding: 2px 13px 13px 34px;
 }
 .tlError {
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   line-height: 1.55;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -356,14 +356,14 @@
   white-space: pre-wrap;
 }
 .tlResponse {
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.6;
   color: var(--text);
   white-space: pre-wrap;
 }
 .tlStream {
   padding: 2px 13px 13px 34px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   line-height: 1.6;
   color: var(--text);
   white-space: pre-wrap;
@@ -409,7 +409,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   margin-bottom: 9px;
@@ -455,7 +455,7 @@
 .stepLabel {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
   margin: 8px 0 4px;
@@ -463,7 +463,7 @@
 .stepPre {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
   background: var(--bg-sunken);
@@ -526,7 +526,7 @@
   gap: 12px;
   padding: 16px;
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
 }
 .rsideCard {
@@ -537,8 +537,8 @@
 }
 .rsideH {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   padding: 12px 15px 9px;
@@ -549,7 +549,7 @@
   align-items: center;
   gap: 12px;
   padding: 7px 15px;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
 }
 .rsideRow:last-child {
   padding-bottom: 13px;

@@ -4,50 +4,30 @@
    they are written with `:global(...)` parents around the local `.side`/
    `.sideClose` targets. `.iconbtn` (theme toggle) comes from shared.module.css. */
 
+/* Geometry now comes from the kit shell vocabulary (#686); the locker-specific
+   width / padding / brand fill ride the documented --app-* knobs declared on
+   .appRoot in Chrome.module.css. */
 .side {
-  width: 230px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 14px 12px;
-  background: var(--bg-side);
-  border-right: 1px solid var(--line);
+  composes: kit-app-side from global;
   height: 100vh;
-  overflow: auto;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 6px 12px;
+  composes: kit-app-brand from global;
 }
 .brandMark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: linear-gradient(
-    160deg,
-    color-mix(in oklab, var(--_accent) 78%, #fff),
-    var(--accd)
-  );
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  composes: kit-app-brand-mark from global;
+  /* Kit's default mark ink is --text; this mark is an accent gradient, so it
+     needs inverse ink to stay legible. */
+  color: var(--text-inv);
 }
 .brandName {
-  font: var(--t-strong);
-  letter-spacing: -0.01em;
+  composes: kit-app-brand-name from global;
 }
 .brandTag {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--text-faint);
+  composes: kit-app-brand-tag from global;
 }
 .sideClose {
-  margin-left: auto;
-  display: none;
+  composes: kit-app-side-close from global;
   align-items: center;
   justify-content: center;
   width: 30px;
@@ -61,16 +41,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--sp-2);
   width: 100%;
   padding: 10px;
   border: none;
   border-radius: var(--r-md);
   background: var(--accd);
-  color: #fff;
-  font: var(--t-strong);
+  color: var(--text-inv);
+  font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .newbtn:hover {
   filter: brightness(1.06);
@@ -85,7 +65,7 @@
   align-items: center;
   gap: 11px;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--sp-2) 10px;
   border: none;
   border-radius: 8px;
   font: var(--t-body);
@@ -106,7 +86,7 @@
   white-space: nowrap;
 }
 .navItem .ct {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
 }
@@ -123,27 +103,26 @@
   color: var(--accd-fg);
 }
 .seclabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
   letter-spacing: var(--tk-eye);
   color: var(--text-faint);
-  padding: 14px 8px 6px;
+  padding: 14px var(--sp-2) 6px;
 }
 .sideFoot {
-  margin-top: auto;
-  padding-top: 12px;
+  composes: kit-app-side-foot from global;
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .lock {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--sp-2);
   padding: 9px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-small);

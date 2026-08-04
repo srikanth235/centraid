@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import { useNetworkState } from "expo-network";
@@ -11,12 +10,10 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
   Share,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -24,7 +21,10 @@ import type { ListRenderItemInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import Icon from "../../kit/components/Icon";
+import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
+import { showToast } from "../../kit/components/Toast";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -160,14 +160,15 @@ export default function PhotoLightbox({
       sourceVaultId,
       targetVaultId,
     });
-    Alert.alert(
-      result.status === "executed" ? "Placement complete" : "Placement queued",
-      result.status === "executed"
-        ? kind === "move"
-          ? "The target copy committed before the source was removed."
-          : "The photo is now available in both vaults."
-        : "This will resume automatically when the gateway is reachable."
-    );
+    showToast({
+      message:
+        result.status === "executed"
+          ? kind === "move"
+            ? "Placement complete — the target copy committed before the source was removed."
+            : "Placement complete — the photo is now available in both vaults."
+          : "Placement queued — it will resume when the gateway is reachable.",
+      tone: result.status === "executed" ? "accent" : "neutral",
+    });
   };
 
   const exportAsset = async (save: boolean): Promise<void> => {
@@ -197,12 +198,10 @@ export default function PhotoLightbox({
   /** Export never fails quietly: an iCloud-only original says exactly that. */
   const runExport = (save: boolean): void => {
     void exportAsset(save).catch((error: unknown) => {
-      Alert.alert(
-        error instanceof InCloudOriginalError
-          ? "Original is in iCloud"
-          : "Export failed",
-        error instanceof Error ? error.message : String(error)
-      );
+      showToast({
+        message: `${error instanceof InCloudOriginalError ? "Original is in iCloud" : "Export failed"}: ${error instanceof Error ? error.message : String(error)}`,
+        tone: "danger",
+      });
     });
   };
 
@@ -223,7 +222,7 @@ export default function PhotoLightbox({
             accessibilityRole="button"
             onPress={() => navigation.goBack()}
           >
-            <Feather name="chevron-down" size={28} color="#fff" />
+            <Icon name="chevron-down" size={28} color="#fff" />
           </Pressable>
           <Text numberOfLines={1} style={styles.counter}>
             {index + 1} of {assets.length}
@@ -233,7 +232,7 @@ export default function PhotoLightbox({
             accessibilityRole="button"
             onPress={() => setInfoOpen(true)}
           >
-            <Feather name="info" size={22} color="#fff" />
+            <Icon name="info" size={22} color="#fff" />
           </Pressable>
         </View>
         <ReplicaStatusBar />

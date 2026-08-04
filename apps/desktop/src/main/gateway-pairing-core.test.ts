@@ -111,13 +111,43 @@ describe(foldIrohPairResponse, () => {
       gatewayId: "gateway-endpoint",
       vaultId: "v1",
       vaultName: "Personal",
+      vaultIds: ["v1", "v2"],
+      vaults: [
+        {
+          enrollmentId: "enrollment-v1",
+          role: "write",
+          vaultId: "v1",
+          vaultName: "Personal",
+        },
+        {
+          enrollmentId: "enrollment-v2",
+          role: "read",
+          vaultId: "v2",
+          vaultName: "Family",
+        },
+      ],
       gatewayName: "Home",
     });
     expect(isFoldError(folded)).toBe(false);
     expect(folded).toStrictEqual({
       gatewayId: "gateway-endpoint",
       vaultId: "v1",
+      vaultIds: ["v1", "v2"],
       vaultName: "Personal",
+      vaults: [
+        {
+          enrollmentId: "enrollment-v1",
+          role: "write",
+          vaultId: "v1",
+          vaultName: "Personal",
+        },
+        {
+          enrollmentId: "enrollment-v2",
+          role: "read",
+          vaultId: "v2",
+          vaultName: "Family",
+        },
+      ],
       gatewayName: "Home",
     });
   });
@@ -131,7 +161,9 @@ describe(foldIrohPairResponse, () => {
     expect(folded).toStrictEqual({
       gatewayId: "gateway-endpoint",
       vaultId: "v1",
+      vaultIds: ["v1"],
       vaultName: "",
+      vaults: [],
     });
   });
 

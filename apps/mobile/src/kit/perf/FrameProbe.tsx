@@ -17,9 +17,10 @@
 
 import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
+import { Text } from "../components/NativeText";
 
 /**
  * `centraid://perf-frames?ms=4000` still arms one sample for manual use.

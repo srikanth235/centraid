@@ -1,3 +1,4 @@
+// #686: illustration art, exempt from token contract
 // Small marks for the first-run onboarding flow (screens/Onboarding). Split out
 // so the flow file stays under the repo file-size limit; these are pure,
 // stateless SVG glyphs with no onboarding logic in them. The flow's hero lives
@@ -6,12 +7,12 @@
 import React from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-import { BRAND_TEAL } from "../lib/profile";
+import { BRAND } from "../lib/profile";
 
 export function BrandMark({ size = 22 }: { size?: number }): React.JSX.Element {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x={0} y={0} width={24} height={24} rx={7} fill={BRAND_TEAL} />
+      <Rect x={0} y={0} width={24} height={24} rx={7} fill={BRAND} />
       <Circle cx={12} cy={12} r={7} stroke="#fff" strokeWidth={2} />
       <Circle cx={12} cy={12} r={2.2} fill="#fff" />
     </Svg>

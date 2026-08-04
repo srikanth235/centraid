@@ -7,7 +7,9 @@
 // mood pick or partial line survives a trip to another view and back.
 import { useRef, useState } from "react";
 
-import { fmtJournalDate, hashInt, PALETTE } from "../format.ts";
+import { identityColor } from "@centraid/design";
+
+import { fmtJournalDate } from "../format.ts";
 import type { JournalItem } from "../types.ts";
 import { KitAvatar } from "./Shared.tsx";
 
@@ -24,7 +26,7 @@ function JournalEntry({
   onOpenDetails: (id: string) => void;
 }) {
   if (j.kind === "auto") {
-    const color = j.avatar_color || PALETTE[hashInt(j.name) % PALETTE.length]!;
+    const color = j.avatar_color || identityColor(j.name ?? "");
     return (
       <div className={styles.entry}>
         <KitAvatar
@@ -79,7 +81,7 @@ export function Journal({
   return (
     <div className={shared.jWrap}>
       <div className={styles.compose}>
-        <div style={{ font: "var(--t-strong)", fontSize: "14px" }}>
+        <div style={{ font: "var(--t-body-strong)", fontSize: "14px" }}>
           How was today?
         </div>
         <div className={styles.moodrow}>

@@ -161,6 +161,7 @@
       }
     ]
   },
+  "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "create-note",

@@ -3,26 +3,40 @@
 // under the repo file-size limit, and a StyleSheet has no logic worth keeping
 // next to the steps it dresses.
 //
-// Onboarding is always dark, independent of the OS theme, so this palette is
-// literal rather than resolved — Settings' own ColorSwatchRow is the surface
-// that follows the OS scheme.
+// Onboarding is always dark, independent of the OS theme — Settings' own
+// ColorSwatchRow is the surface that follows the OS scheme. "Dark-fixed" means
+// we pin the *scheme*, not that we opt out of the token contract (#686): the
+// palette below is the resolved dark theme, so onboarding drifts with the
+// design system instead of against it.
 
 import { StyleSheet } from "react-native";
 
 import { family } from "../kit/theme";
-import { BRAND_TEAL } from "../lib/profile";
+// Straight from the pure resolver, not the theme barrel: this runs at module
+// scope, and the barrel drags in React/RN-only surface that screens' tests mock.
+import { resolveTheme } from "../kit/theme/resolve";
+
+const dark = resolveTheme("dark").colors;
+
+// #686 waiver: the one value the token contract has no answer for.
+// `viewfinder` must be true black — it is the hole the camera preview renders
+// into, and any tinted ground would show as a halo around the video frame.
+const WAIVED = {
+  viewfinder: "#000",
+} as const;
 
 export const C = {
-  bg: "#0b0e13",
-  panel: "rgba(255,255,255,.055)",
-  panelLine: "rgba(255,255,255,.12)",
-  fieldBg: "rgba(255,255,255,.06)",
-  fieldLine: "rgba(255,255,255,.14)",
-  text: "#ffffff",
-  textSoft: "rgba(255,255,255,.8)",
-  textFaint: "rgba(255,255,255,.55)",
-  textGhost: "rgba(255,255,255,.4)",
-  brand: BRAND_TEAL,
+  bg: dark.bg,
+  fieldBg: dark.bgElev,
+  fieldLine: dark.lineStrong,
+  text: dark.text,
+  textSoft: dark.textSoft,
+  textFaint: dark.textFaint,
+  textGhost: dark.textGhost,
+  /** Ink that sits on `brand` / on a profile swatch. */
+  onBrand: dark.textInv,
+  danger: dark.danger,
+  brand: dark.accent,
 };
 
 export const AVATAR = 52;
@@ -46,7 +60,11 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: AVATAR,
   },
-  avatarInitial: { color: "#fff", fontFamily: family.sansBold, fontSize: 19 },
+  avatarInitial: {
+    color: C.onBrand,
+    fontFamily: family.sansBold,
+    fontSize: 19,
+  },
   center: { alignItems: "center" },
   doneBadge: {
     alignItems: "center",
@@ -58,7 +76,7 @@ export const styles = StyleSheet.create({
     width: 76,
   },
   error: {
-    color: "#E88",
+    color: C.danger,
     fontFamily: family.sansRegular,
     fontSize: 13,
     marginTop: 14,
@@ -73,7 +91,7 @@ export const styles = StyleSheet.create({
   fieldGap: { marginTop: 20 },
   h1: {
     color: C.text,
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 31,
     letterSpacing: -0.8,
     lineHeight: 37,
@@ -136,7 +154,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 28,
   },
-  primaryLabel: { color: "#fff", fontFamily: family.sansBold, fontSize: 16 },
+  primaryLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 16 },
   safe: { backgroundColor: C.bg, flex: 1 },
   /** The pairing step's primary action — deliberately taller and heavier than
    *  `primary`, because it is the way in rather than one option among two. */
@@ -148,10 +166,10 @@ export const styles = StyleSheet.create({
     marginTop: 26,
     paddingVertical: 20,
   },
-  scanBtnLabel: { color: "#fff", fontFamily: family.sansBold, fontSize: 17 },
+  scanBtnLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 17 },
   scanFrame: {
     aspectRatio: 1,
-    backgroundColor: "#000",
+    backgroundColor: WAIVED.viewfinder,
     borderRadius: 22,
     marginTop: 8,
     overflow: "hidden",
@@ -171,7 +189,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: SWATCH,
   },
-  swatchMark: { color: "#fff", fontFamily: family.sansBold, fontSize: 14 },
+  swatchMark: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 14 },
   swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   textBtn: {
     alignItems: "center",

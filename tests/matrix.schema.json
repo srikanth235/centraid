@@ -3,6 +3,8 @@
   "type": "object",
   "required": [
     "version",
+    "demonstratedRed",
+    "qualities",
     "legend",
     "trackingIssues",
     "gaps",
@@ -15,6 +17,67 @@
   ],
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
+    "demonstratedRed": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["command", "seed", "failure"],
+        "additionalProperties": false,
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "seed": { "type": "string", "minLength": 1 },
+          "failure": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "qualities": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "weakestLink", "gates"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "weakestLink": { "type": "string", "minLength": 1 },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "owner",
+                "evidence",
+                "lane",
+                "wallClockCost",
+                "knob",
+                "governance",
+                "redLastDemonstrated"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "owner": { "type": "string", "minLength": 1 },
+                "evidence": { "type": "string", "minLength": 1 },
+                "lane": { "type": "string", "minLength": 1 },
+                "wallClockCost": { "type": "string", "minLength": 1 },
+                "knob": { "type": "string", "minLength": 1 },
+                "governance": {
+                  "enum": ["tighten-only", "waiver-gated", "none"]
+                },
+                "redLastDemonstrated": { "type": "string", "format": "date" },
+                "blockedBy": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
     "legend": { "type": "object" },
     "trackingIssues": {
       "type": "object",

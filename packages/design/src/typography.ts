@@ -1,79 +1,236 @@
-// Typography — font families + a small semantic type scale.
-// Two weights only across the chrome (400 + 500/600). No bold. Generous
-// line-height in body for AI prose readability.
+// Centraid's one semantic type scale.
 //
-// Primary stacks are system UI fonts only (issue #468 K11). No webfont
-// family names (Geist / Space Grotesk) as the first entry — clients that
-// still load optional branded faces can layer them locally without
-// forcing a network fetch for the chrome.
+// The values below are the product grammar.  Emitters may adapt units (the
+// blueprint surface uses rem), but they do not get to invent another scale.
+// Native uses the explicit delta on each role so React Native never has to
+// parse CSS or perform runtime arithmetic.
 
 export const fonts = {
-  display: "system-ui",
   mono: "ui-monospace",
   sans: "system-ui",
+  serif: "ui-serif",
 } as const;
 
 export type FontFamily = keyof typeof fonts;
 
-// Web fallback chains — emitted by `toCss()` as `--font-sans` /
-// `--font-display` / `--font-mono`.
 export const fontStacks = {
-  display:
-    'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  serif: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
 } as const satisfies Record<FontFamily, string>;
+
+export interface NativeDelta {
+  size: number;
+  lineHeight: number;
+}
 
 export interface TypeStyle {
   size: number;
-  /** px — mobile maps this straight into RN `TextStyle.lineHeight`. */
   lineHeight: number;
   family: FontFamily;
   weight: "400" | "500" | "600";
+  nativeDelta: NativeDelta;
 }
 
+export const NATIVE_DELTA_BY_FAMILY = {
+  mono: { lineHeight: 2, size: 1 },
+  sans: { lineHeight: 2, size: 2 },
+  serif: { lineHeight: 2, size: 2 },
+} as const satisfies Record<FontFamily, NativeDelta>;
+
+type TypeStyleSource = Omit<TypeStyle, "nativeDelta"> & {
+  nativeDelta?: NativeDelta;
+};
+
+const style = <T extends TypeStyleSource>(
+  value: T
+): Omit<T, "nativeDelta"> & { nativeDelta: NativeDelta } => ({
+  ...value,
+  nativeDelta: NATIVE_DELTA_BY_FAMILY[value.family],
+});
+
 export const type = {
-  body: { family: "sans", lineHeight: 22, size: 15, weight: "400" },
-  bodyStrong: { family: "sans", lineHeight: 22, size: 15, weight: "600" },
-  display: { family: "display", lineHeight: 34, size: 28, weight: "600" },
-  mono: { family: "mono", lineHeight: 16, size: 12, weight: "500" },
-  small: { family: "sans", lineHeight: 18, size: 13, weight: "400" },
-  tiny: { family: "sans", lineHeight: 14, size: 11, weight: "500" },
-  title: { family: "display", lineHeight: 26, size: 20, weight: "600" },
-} as const satisfies Record<string, TypeStyle>;
+  body: style({
+    family: "sans",
+    lineHeight: 22,
+    size: 15,
+    weight: "400",
+  }),
+  bodyStrong: style({
+    family: "sans",
+    lineHeight: 22,
+    size: 15,
+    weight: "600",
+  }),
+  control: style({
+    family: "sans",
+    lineHeight: 14,
+    size: 11,
+    weight: "500",
+  }),
+  display: style({
+    family: "sans",
+    lineHeight: 34,
+    size: 28,
+    weight: "600",
+  }),
+  eyebrow: style({
+    family: "mono",
+    lineHeight: 13,
+    size: 10,
+    weight: "600",
+  }),
+  greeting: style({
+    family: "serif",
+    lineHeight: 34,
+    size: 28,
+    weight: "600",
+  }),
+  hero: style({
+    family: "sans",
+    lineHeight: 44,
+    size: 40,
+    weight: "600",
+  }),
+  mono: style({
+    family: "mono",
+    lineHeight: 16,
+    size: 12,
+    weight: "500",
+  }),
+  small: style({
+    family: "sans",
+    lineHeight: 18,
+    size: 13,
+    weight: "400",
+  }),
+  smallStrong: style({
+    family: "sans",
+    lineHeight: 18,
+    size: 13,
+    weight: "600",
+  }),
+  title: style({
+    family: "sans",
+    lineHeight: 26,
+    size: 20,
+    weight: "600",
+  }),
+} as const;
 
 export type TypeKey = keyof typeof type;
 
-/** Marketing/hero styles — hero sections outside the chrome (onboarding,
- * day-1 home). Web-only (unitless line-heights, and the one place 700
- * appears; the chrome itself keeps to the two-weight rule). Emitted by
- * `toCss()` alongside the canonical scale; mobile does not consume these. */
-export interface MarketingTypeStyle {
-  size: number;
-  /** Unitless CSS line-height multiplier, e.g. `'1.2'`. */
-  lineHeight: `${number}`;
-  family: FontFamily;
-  weight: "400" | "500" | "600" | "700";
+/** The profile-specific support rule is data, not an emitter convention. */
+export const TYPE_PROFILE_SUPPORT = {
+  shell: [
+    "body",
+    "bodyStrong",
+    "control",
+    "display",
+    "eyebrow",
+    "greeting",
+    "hero",
+    "mono",
+    "small",
+    "smallStrong",
+    "title",
+  ],
+  blueprint: [
+    "body",
+    "bodyStrong",
+    "control",
+    "display",
+    "eyebrow",
+    "mono",
+    "small",
+    "smallStrong",
+    "title",
+  ],
+  native: [
+    "body",
+    "bodyStrong",
+    "control",
+    "display",
+    "eyebrow",
+    "greeting",
+    "mono",
+    "small",
+    "smallStrong",
+    "title",
+  ],
+} as const satisfies Record<string, readonly TypeKey[]>;
+
+export type TypeProfile = keyof typeof TYPE_PROFILE_SUPPORT;
+
+export function typeForProfile(profile: TypeProfile): Partial<typeof type> {
+  const supported = new Set<string>(TYPE_PROFILE_SUPPORT[profile]);
+  return Object.fromEntries(
+    Object.entries(type).filter(([key]) => supported.has(key))
+  ) as Partial<typeof type>;
 }
 
-export const marketingType = {
-  "display-1": {
-    family: "display",
-    lineHeight: "1.1",
-    size: 40,
-    weight: "700",
-  },
-  h2: { family: "display", lineHeight: "1.25", size: 22, weight: "600" },
-  h3: { family: "sans", lineHeight: "1.3", size: 16, weight: "600" },
-} as const satisfies Record<string, MarketingTypeStyle>;
+export function nativeTypeStyle(styleValue: TypeStyle): TypeStyle {
+  return {
+    ...styleValue,
+    lineHeight: styleValue.lineHeight + styleValue.nativeDelta.lineHeight,
+    size: styleValue.size + styleValue.nativeDelta.size,
+  };
+}
 
-export type MarketingTypeKey = keyof typeof marketingType;
+/** CSS `font` shorthand for one semantic style. */
+export function typeShorthand(styleValue: TypeStyle): string {
+  return `${styleValue.weight} ${styleValue.size}px/${styleValue.lineHeight}px var(--font-${styleValue.family})`;
+}
 
-/** CSS `font` shorthand for one type style, e.g. `600 20px/26px var(--font-display)`. */
-export function typeShorthand(style: TypeStyle | MarketingTypeStyle): string {
-  const lh =
-    typeof style.lineHeight === "number"
-      ? `${style.lineHeight}px`
-      : style.lineHeight;
-  return `${style.weight} ${style.size}px/${lh} var(--font-${style.family})`;
+/** Blueprint lowers the same values into host-relative units. */
+export interface BlueprintTypeStyle {
+  size: `${number}rem`;
+  lineHeight: `${number}`;
+  family: FontFamily;
+  weight: TypeStyle["weight"];
+}
+
+function toBlueprintStyle(styleValue: TypeStyle): BlueprintTypeStyle {
+  return {
+    family: styleValue.family,
+    lineHeight: `${styleValue.lineHeight / styleValue.size}`,
+    size: `${styleValue.size / 16}rem`,
+    weight: styleValue.weight,
+  };
+}
+
+export const blueprintType = Object.fromEntries(
+  Object.entries(typeForProfile("blueprint")).map(([key, value]) => [
+    key,
+    toBlueprintStyle(value as TypeStyle),
+  ])
+) as Record<Exclude<TypeKey, "greeting" | "hero">, BlueprintTypeStyle>;
+
+export function blueprintTypeShorthand(styleValue: BlueprintTypeStyle): string {
+  return `${styleValue.weight} ${styleValue.size}/${styleValue.lineHeight} var(--font-${styleValue.family})`;
+}
+
+/** camelCase role key → kebab-case custom-property suffix. */
+export function typeKeyToKebab(key: string): string {
+  return key
+    .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")
+    .toLowerCase();
+}
+
+/** Publish one size rung per distinct role size. */
+export function typeSizeRungs(
+  scale: Record<string, { size: number | `${number}rem` }>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const [key, styleValue] of Object.entries(scale)) {
+    const value =
+      typeof styleValue.size === "number"
+        ? `${styleValue.size}px`
+        : styleValue.size;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out[`--t-${typeKeyToKebab(key)}-size`] = value;
+  }
+  return out;
 }

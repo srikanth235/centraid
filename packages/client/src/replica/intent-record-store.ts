@@ -1,6 +1,20 @@
-import type { IntentState, ReplicaIntent } from "./types.js";
+import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export type NewStoredIntent = Omit<ReplicaIntent, "createdOrder">;
+
+/** Build the durable, app-visible result before the sensitive intent is scrubbed. */
+export function buildIntentOutcome(settled: ReplicaIntent): IntentOutcome {
+  return {
+    intentId: settled.intentId,
+    status: settled.conflict
+      ? "conflict"
+      : (settled.state as IntentOutcome["status"]),
+    ...(settled.reason === undefined ? {} : { reason: settled.reason }),
+    ...(settled.output === undefined ? {} : { output: settled.output }),
+    ...(settled.conflict === undefined ? {} : { conflict: settled.conflict }),
+    settledAt: new Date().toISOString(),
+  };
+}
 
 /**
  * Durable outbox contract for optimistic intents, satisfied by the browser's
@@ -23,6 +37,8 @@ export interface IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ) => Promise<ReplicaIntent>;
+  /** Terminal outcomes survive removal of the sensitive queued input. */
+  listSettled: (limit?: number) => Promise<IntentOutcome[]>;
   clear: () => Promise<void>;
   close: () => void;
   destroy: () => Promise<void>;

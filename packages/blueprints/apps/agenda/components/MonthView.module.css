@@ -15,14 +15,14 @@
   gap: 1px;
   background: var(--line);
   border: 1px solid var(--line);
-  border-radius: var(--r-card);
+  border-radius: var(--r-xl);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 .dow {
   background: var(--bg-elev);
   text-align: center;
-  padding: 8px 0 6px;
+  padding: var(--sp-2) 0 6px;
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
@@ -33,7 +33,7 @@
   /* Containing block for .dayOpen, the cell's stretched "propose here" button. */
   position: relative;
   background: var(--bg-elev);
-  padding: 4px 5px;
+  padding: var(--sp-1) 5px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -47,7 +47,7 @@
 /* The cell's own click target (the div is no longer focusable) — same ring the
    focusable cell drew, now on the button that covers it. */
 .dayOpen:focus-visible {
-  outline: 2px solid var(--_accent);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 .dayCell[data-outside="true"] {
@@ -69,11 +69,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
 }
 .dayCell[data-today="true"] .dayNum {
   background: var(--accent-deep);
-  color: #fff;
+  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
+     the theme-stable --text-inv (kit.css header contract, #686). */
+  color: var(--text-inv);
   font-weight: 600;
 }
 .dayPills {
@@ -83,7 +85,7 @@
   overflow: hidden;
 }
 .pill {
-  --ev-color: var(--_accent);
+  --ev-color: var(--app-identity);
   /* Above .dayOpen, the cell's stretched button (an earlier positioned
      sibling of .dayPills) — the pill keeps its own click. */
   position: relative;
@@ -98,7 +100,7 @@
   color: var(--text);
   background: none;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
   cursor: pointer;
 }
@@ -107,7 +109,7 @@
 }
 .pill[data-spans="true"] {
   background: var(--ev-color);
-  color: #fff;
+  color: var(--text-inv);
 }
 .pill[data-spans="true"]:hover {
   filter: brightness(1.08);
@@ -131,13 +133,13 @@
   text-align: left;
   padding: 1px 5px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--text-faint);
 }
 .more:hover {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
 }
 
 @media (max-width: 480px) {
@@ -152,7 +154,7 @@
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 50%;
-    background: var(--_accent);
+    background: var(--app-identity);
     margin-top: 2px;
   }
 }

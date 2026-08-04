@@ -1,7 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
+import Icon from "../components/Icon";
+import { Text } from "../components/NativeText";
 import type { ReplicaQueryConnection } from "../hooks/useReplicaQuery";
 import { family, radii, useTheme } from "../theme";
 
@@ -36,7 +37,7 @@ export default function ReplicaStateCard({
         { backgroundColor: colors.bgElev, borderColor: colors.line },
       ]}
     >
-      <Feather
+      <Icon
         name={unavailable ? "wifi-off" : "alert-circle"}
         size={28}
         color={colors.danger}
@@ -87,7 +88,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   title: {
-    fontFamily: family.displayBold,
+    fontFamily: family.sansBold,
     fontSize: 19,
     textAlign: "center",
   },

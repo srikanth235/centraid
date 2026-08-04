@@ -1,14 +1,21 @@
 import React, { useMemo } from "react";
-import { Pressable, View, Text, StyleSheet } from "react-native";
+import { Pressable, View, StyleSheet } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
-import type { IconName } from "@centraid/design";
+import { nativeButtonStyle } from "@centraid/design";
+import type { IconName, NativeButtonStyle } from "@centraid/design";
 
-import { radii, spacing, t, useTheme } from "../theme";
+import { spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
+import { Text } from "./NativeText";
 
-export type ButtonVariant = "primary" | "soft" | "ghost";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "quiet"
+  | "destructive"
+  | "destructiveFilled";
 
 export interface ButtonProps {
   label: string;
@@ -22,27 +29,33 @@ export interface ButtonProps {
 export default function Button({
   label,
   onPress,
-  variant = "primary",
+  variant = "secondary",
   icon,
   disabled,
   style,
 }: ButtonProps): React.JSX.Element {
   const isPrimary = variant === "primary";
-  const isSoft = variant === "soft";
-  const isGhost = variant === "ghost";
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isDestructive = variant === "destructive";
+  const isDestructiveFilled = variant === "destructiveFilled";
+  const { colors, radii, targetMin } = useTheme();
+  const styles = useMemo(() => {
+    const recipeStyle = nativeButtonStyle(variant, {
+      colors,
+      radii,
+      targetMin,
+    });
+    return makeStyles(colors, recipeStyle);
+  }, [colors, radii, targetMin, variant]);
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
+      hitSlop={{ bottom: 4, left: 4, right: 4, top: 4 }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
-        isPrimary && styles.primary,
-        isSoft && styles.soft,
-        isGhost && styles.ghost,
+        styles.variant,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
@@ -53,11 +66,25 @@ export default function Button({
           <Icon
             name={icon}
             size={14}
-            color={isPrimary ? colors.textInv : colors.text}
-            strokeWidth={isPrimary ? 2 : 1.75}
+            color={
+              disabled
+                ? colors.textDisabled
+                : isPrimary || isDestructiveFilled
+                  ? colors.textInv
+                  : isDestructive
+                    ? colors.danger
+                    : colors.text
+            }
           />
         ) : null}
-        <Text style={[styles.label, isPrimary && styles.labelPrimary]}>
+        <Text
+          style={[
+            styles.label,
+            (isPrimary || isDestructiveFilled) && styles.labelPrimary,
+            isDestructive && styles.labelDestructive,
+            disabled && styles.labelDisabled,
+          ]}
+        >
           {label}
         </Text>
       </View>
@@ -65,25 +92,29 @@ export default function Button({
   );
 }
 
-const makeStyles = (colors: ThemeColors) =>
+const makeStyles = (colors: ThemeColors, recipeStyle: NativeButtonStyle) =>
   StyleSheet.create({
     base: {
-      borderRadius: radii.md,
+      borderRadius: recipeStyle.borderRadius,
       borderWidth: 1,
+      minHeight: recipeStyle.minHeight,
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    disabled: { opacity: 0.4 },
-    ghost: { backgroundColor: "transparent", borderColor: "transparent" },
-    label: { ...t("small"), color: colors.text, fontWeight: "500" },
+    disabled: { borderColor: colors.lineStrong, opacity: 0.45 },
+    label: { ...t("smallStrong"), color: recipeStyle.color },
+    labelDestructive: { color: recipeStyle.color },
+    labelDisabled: { color: colors.textDisabled },
     labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
-    primary: { backgroundColor: colors.text, borderColor: colors.text },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: spacing[2],
       justifyContent: "center",
     },
-    soft: { backgroundColor: colors.bgElev, borderColor: colors.line },
+    variant: {
+      backgroundColor: recipeStyle.backgroundColor,
+      borderColor: recipeStyle.borderColor,
+    },
   });

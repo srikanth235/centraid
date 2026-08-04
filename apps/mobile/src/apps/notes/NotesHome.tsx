@@ -1,15 +1,12 @@
-/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its CommonMark draft, lifecycle actions, wikilink powerbox, and backlinks in one focus-contained editor so write outcomes cannot be silently orphaned. */
-import { Feather } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useState } from "react";
+/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its CommonMark draft, lifecycle actions, wikilink powerbox, and backlinks in one focus-contained editor so write outcomes cannot be silently orphaned. */
 import {
   Alert,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +15,9 @@ import { parseWikiLinks } from "@centraid/blueprints/apps/notes/commonmark";
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
+import { showToast } from "../../kit/components/Toast";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -203,10 +203,11 @@ export default function NotesHome({
   ): Promise<boolean> => {
     if (!session) return false;
     if (note && !note.canWrite) {
-      Alert.alert(
-        "Read-only note",
-        "Choose the writable copy in its source vault to change it."
-      );
+      showToast({
+        message:
+          "Read-only note — choose the writable copy in its source vault.",
+        tone: "danger",
+      });
       return false;
     }
     try {
@@ -232,10 +233,10 @@ export default function NotesHome({
   const save = async (): Promise<void> => {
     const cleanTitle = title.trim();
     if (!cleanTitle) {
-      Alert.alert(
-        "Add a title",
-        "A note needs a title before it can be saved."
-      );
+      showToast({
+        message: "Add a title before saving this note.",
+        tone: "danger",
+      });
       return;
     }
     const cleanBody = body || cleanTitle;
@@ -358,7 +359,7 @@ export default function NotesHome({
           onPress={createNote}
           style={styles.iconButton}
         >
-          <Feather name="plus" size={24} color={colors.accent} />
+          <Icon name="plus" size={24} color={colors.accent} />
         </Pressable>
       </View>
       <ReplicaStatusBar />
@@ -369,7 +370,7 @@ export default function NotesHome({
             { backgroundColor: colors.bgElev, borderColor: colors.line },
           ]}
         >
-          <Feather name="search" size={17} color={colors.textFaint} />
+          <Icon name="search" size={17} color={colors.textFaint} />
           <TextInput
             accessibilityLabel="Search notes"
             value={query}
@@ -387,7 +388,7 @@ export default function NotesHome({
           style={[
             styles.chip,
             {
-              backgroundColor: showTrash ? colors.accent : colors.bgElev,
+              backgroundColor: showTrash ? colors.accentFill : colors.bgElev,
               borderColor: colors.line,
             },
           ]}
@@ -395,7 +396,7 @@ export default function NotesHome({
           <Text
             style={[
               styles.chipText,
-              { color: showTrash ? colors.bg : colors.textSoft },
+              { color: showTrash ? colors.textInv : colors.textSoft },
             ]}
           >
             {showTrash ? "Notes" : "Trash"}
@@ -426,7 +427,7 @@ export default function NotesHome({
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather
+              <Icon
                 name={showTrash ? "trash-2" : "book-open"}
                 size={32}
                 color={colors.textFaint}
@@ -465,7 +466,7 @@ export default function NotesHome({
               onPress={closeEditor}
               style={styles.iconButton}
             >
-              <Feather name="x" size={23} color={colors.text} />
+              <Icon name="x" size={23} color={colors.text} />
             </Pressable>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               {creating
@@ -482,7 +483,7 @@ export default function NotesHome({
                 onPress={() => void togglePin()}
                 style={styles.iconButton}
               >
-                <Feather
+                <Icon
                   name="bookmark"
                   size={21}
                   color={selected.pinned ? colors.accent : colors.textFaint}
@@ -569,10 +570,10 @@ export default function NotesHome({
               <Pressable
                 accessibilityRole="button"
                 onPress={() => void lifecycle("restore-note")}
-                style={[styles.button, { backgroundColor: colors.accent }]}
+                style={[styles.button, { backgroundColor: colors.accentFill }]}
               >
-                <Feather name="rotate-ccw" size={17} color={colors.bg} />
-                <Text style={[styles.buttonText, { color: colors.bg }]}>
+                <Icon name="rotate-ccw" size={17} color={colors.textInv} />
+                <Text style={[styles.buttonText, { color: colors.textInv }]}>
                   Restore note
                 </Text>
               </Pressable>
@@ -588,7 +589,7 @@ export default function NotesHome({
                       { borderColor: colors.danger, borderWidth: 1 },
                     ]}
                   >
-                    <Feather name="trash-2" size={17} color={colors.danger} />
+                    <Icon name="trash-2" size={17} color={colors.danger} />
                     <Text style={[styles.buttonText, { color: colors.danger }]}>
                       Trash
                     </Text>
@@ -599,10 +600,10 @@ export default function NotesHome({
                   onPress={() => void save()}
                   style={[
                     styles.button,
-                    { backgroundColor: colors.accent, flex: 1 },
+                    { backgroundColor: colors.accentFill, flex: 1 },
                   ]}
                 >
-                  <Text style={[styles.buttonText, { color: colors.bg }]}>
+                  <Text style={[styles.buttonText, { color: colors.textInv }]}>
                     Save note
                   </Text>
                 </Pressable>
@@ -632,7 +633,7 @@ export default function NotesHome({
               onPress={() => setLinkToken(undefined)}
               style={styles.iconButton}
             >
-              <Feather name="x" size={23} color={colors.text} />
+              <Icon name="x" size={23} color={colors.text} />
             </Pressable>
           </View>
           <ScrollView style={styles.picker}>

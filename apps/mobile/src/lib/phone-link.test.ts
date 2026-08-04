@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { restartTunnel } from "./phone-link";
+import { normalizePairedVaults } from "./phone-link-core";
 import { parsePairingInput, parsePairQr } from "./phone-link-parse";
 
 const stopTunnel = vi.hoisted(() =>
@@ -159,5 +160,49 @@ describe(parsePairingInput, () => {
       code: "c",
     })}  \n`;
     expect(parsePairingInput(raw)?.kind).toBe("centraid-pair");
+  });
+});
+
+describe(normalizePairedVaults, () => {
+  it("keeps the primary vault first and preserves every vault grant", () => {
+    expect(
+      normalizePairedVaults({
+        vaultId: "personal",
+        vaultIds: ["family", "personal"],
+        vaults: [
+          {
+            enrollmentId: "family-enrollment",
+            role: "read",
+            vaultId: "family",
+            vaultName: "Family",
+          },
+          {
+            enrollmentId: "personal-enrollment",
+            role: "write",
+            vaultId: "personal",
+            vaultName: "Personal",
+          },
+        ],
+      })
+    ).toStrictEqual([
+      {
+        enrollmentId: "personal-enrollment",
+        role: "write",
+        vaultId: "personal",
+        vaultName: "Personal",
+      },
+      {
+        enrollmentId: "family-enrollment",
+        role: "read",
+        vaultId: "family",
+        vaultName: "Family",
+      },
+    ]);
+  });
+
+  it("accepts legacy primary-only responses", () => {
+    expect(normalizePairedVaults({ vaultId: "personal" })).toStrictEqual([
+      { vaultId: "personal" },
+    ]);
   });
 });

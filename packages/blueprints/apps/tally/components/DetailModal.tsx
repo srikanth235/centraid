@@ -59,7 +59,7 @@ export function DetailModal({
         </div>
         <div
           style={{
-            font: "var(--font-title)",
+            font: "var(--font-sans)",
             fontSize: "30px",
             fontWeight: 600,
             margin: "16px 0 4px",

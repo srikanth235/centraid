@@ -6,19 +6,19 @@
 
 .in {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg);
   outline: none;
   font: var(--t-body);
 }
 .in:focus {
-  border-color: var(--selb);
+  border-color: var(--line-strong);
   box-shadow: var(--focus-ring);
 }
 .in.mono {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 .typerow {
@@ -36,9 +36,9 @@
   grid-template-columns: auto 1fr;
   align-items: start;
   column-gap: 9px;
-  padding: 10px 12px;
+  padding: 10px var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   cursor: pointer;
 }
 .matchPolicy input {

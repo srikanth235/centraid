@@ -7,7 +7,6 @@
 // exports that reach the network or the served document are overridden to use
 // the shell's authenticated gateway client and appearance plane:
 //
-//   - `wireThemeToggle`  → drives the shell theme (not the served data-theme flip)
 //   - `renderAttachments`→ authorises `/_vault/blobs` bytes through the gateway
 //   - `stageFileBytes` / `stageDerivative`
 //                        → blob-CAS uploads through the authed gateway (relative
@@ -46,49 +45,6 @@ export * from "@centraid/design/kit/kit.js";
 // → kit-inline alias are unchanged.
 
 const LINKS_ROUTE = "/centraid/_vault/links";
-const SUN_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-const MOON_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
-
-function shellIsDark(): boolean {
-  const theme = document.documentElement.dataset.theme;
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return (
-    typeof matchMedia === "function" &&
-    matchMedia("(prefers-color-scheme: dark)").matches
-  );
-}
-
-/**
- * Inline theme toggle. Where the served kit flips `data-theme` directly, inline
- * apps live in the shell document, so the toggle drives the shell's appearance
- * pref: it flips `data-theme` for an instant, synchronous repaint AND persists
- * the choice through the host settings plane so it survives reload and matches
- * the shell's own theme control.
- */
-export function wireThemeToggle(
-  btn: HTMLElement,
-  { onChange }: { onChange?: (dark: boolean) => void } = {}
-): () => void {
-  const setIcon = (): void => {
-    btn.innerHTML = shellIsDark() ? SUN_SVG : MOON_SVG;
-  };
-  btn.addEventListener("click", () => {
-    const dark = !shellIsDark();
-    // Flip the shell document's theme for an instant, synchronous repaint of the
-    // inline app + the rest of the shell. Durable theme persistence is owned by
-    // the shell's own Settings appearance control (a single source of truth);
-    // this in-app toggle is the app-local affordance the served chrome shipped.
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    setIcon();
-    onChange?.(dark);
-  });
-  setIcon();
-  return setIcon;
-}
-
 type AttachmentLike = Attachment;
 
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();

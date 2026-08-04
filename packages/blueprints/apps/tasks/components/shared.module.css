@@ -8,9 +8,9 @@
 
 /* Metadata eyebrow label (Capture When/Flag, Detail sections, Sidebar Today). */
 .eyebrowLabel {
-  font: var(--t-tiny);
+  font: var(--t-control);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.09em;
   color: var(--text-faint);
 }
 
@@ -25,7 +25,7 @@
   gap: 11px;
   padding: 9px 10px;
   margin: 0 -10px;
-  border-radius: 10px;
+  border-radius: var(--r-md);
   cursor: pointer;
   transition: background 0.12s var(--ease);
 }
@@ -63,7 +63,7 @@
 }
 .rowTitle mark {
   background: var(--accent-soft);
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -71,7 +71,7 @@
 .due {
   flex-shrink: 0;
   align-self: center;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
@@ -107,7 +107,7 @@
   border-radius: 999px;
 }
 .circle:hover {
-  border-color: var(--_accent);
+  border-color: var(--accent);
 }
 .circle:active {
   transform: scale(0.92);
@@ -135,9 +135,9 @@
 .tagChip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
   font-size: 12px;
-  color: var(--accent-deep-fg);
+  color: var(--accent-text);
   background: var(--accent-soft);
   border-radius: 999px;
   padding: 3px 6px 3px 10px;

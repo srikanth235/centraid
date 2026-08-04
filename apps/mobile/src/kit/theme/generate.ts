@@ -1,341 +1,82 @@
-// Pure, dependency-free translation of `toBlueprintCss()` (a flat set of CSS
-// custom properties) into React-Native-shaped values.
-//
-// The CSS is authored for the browser: colors are `hsl(var(--app-hue) …)`
-// with `calc()` and `color-mix()`, radii are `px`/`rem`, and fonts are system
-// stacks. RN needs concrete `#rrggbb`/`rgba()` colors, unit-less numbers, and
-// the loaded @expo-google-fonts family names. This module does that lowering:
-//
-//   • resolves `var()` (with fallbacks) and simple `calc(a ± b%)`,
-//   • converts `hsl()` (space syntax, optional `/ alpha`) → hex / rgba,
-//   • keeps hex/rgba as-is,
-//   • skips anything that can't map cleanly (color-mix, gradients, box
-//     shadows, font shorthands, tracking) rather than emitting garbage.
-//
-// It is intentionally NOT a general CSS engine — the token CSS is flat custom
-// properties, so a handful of regexes cover it. `scripts/generate-theme.ts`
-// wraps these functions with file I/O; `generate.test.ts` exercises them.
+// Deterministic native code generation from @centraid/design's typed lowering.
+// There is intentionally no CSS parser or runtime resolver in this module.
 
-/** The three font roles the kit exposes, mapped to the loaded native families.
- *  The portable CSS uses system stacks; the native app DOES load Geist / Space Grotesk /
- *  JetBrains Mono, so we map the same three roles onto those families. Keep
- *  in sync with the `useFonts(...)` call in App.tsx. */
+import { ACCENT_PALETTE, toNativeTheme } from "@centraid/design";
+import type { AccentKey, NativeTheme } from "@centraid/design";
+
 const FONT_ROLES = {
+  mono: {
+    medium: "JetBrainsMono_500Medium",
+    regular: "JetBrainsMono_400Regular",
+    semibold: "JetBrainsMono_600SemiBold",
+  },
   sans: {
-    regular: "Geist_400Regular",
     medium: "Geist_500Medium",
+    regular: "Geist_400Regular",
     semibold: "Geist_600SemiBold",
   },
-  title: {
-    medium: "SpaceGrotesk_500Medium",
-    semibold: "SpaceGrotesk_600SemiBold",
-  },
-  mono: {
-    regular: "JetBrainsMono_400Regular",
-    medium: "JetBrainsMono_500Medium",
-    semibold: "JetBrainsMono_600SemiBold",
+  serif: {
+    semibold: "PlayfairDisplay_600SemiBold",
+    semiboldItalic: "PlayfairDisplay_600SemiBold_Italic",
   },
 } as const;
 
-// The portable token CSS has no spacing scale — spacing is a mobile concern the kit never
-// defined. Use the design system's regular density scale (see
-// packages/design/src/density.ts) so mobile matches everything else.
-const SPACING = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 48 } as const;
-
-// Dark `--bg` is `var(--bg-wall)`, which the browser host supplies at runtime
-// and the portable CSS never defines. Substitute a concrete dark wall derived from
-// the same hue/lightness knobs so the native theme has a real background.
-const BG_WALL_FALLBACK = "hsl(var(--app-hue) 12% var(--bg-l))";
-
-export interface TokenBlocks {
-  /** `:root { … }` — the light defaults. */
-  light: Record<string, string>;
-  /** `:root[data-theme='dark'] { … }` — dark overrides only. */
-  darkOverride: Record<string, string>;
-}
-
 export interface GeneratedTheme {
+  accentThemes: Record<
+    AccentKey,
+    { light: Record<string, string>; dark: Record<string, string> }
+  >;
   light: Record<string, string>;
   dark: Record<string, string>;
   radii: Record<string, number>;
-  spacing: typeof SPACING;
+  spacing: Record<string, number>;
   fonts: typeof FONT_ROLES;
+  type: NativeTheme["type"];
+  targetMin: NativeTheme["targetMin"];
+  durations: NativeTheme["durations"];
 }
 
-/** Extract the `--name: value;` pairs from a single `{ … }` block body. */
-function parseDeclarations(body: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const decl of body.split(";")) {
-    const m = /^\s*(?<name>--[\w-]+)\s*:\s*(?<value>.+?)\s*$/u.exec(decl);
-    const name = m?.groups?.name;
-    const value = m?.groups?.value;
-    if (name !== undefined && value !== undefined) out[name] = value.trim();
-  }
-  return out;
-}
-
-/** Pull the light `:root` and dark `:root[data-theme='dark']` blocks. The
- *  `prefers-color-scheme` media block is ignored — it duplicates the dark
- *  overrides, which we already read from the attribute selector. */
-export function parseTokensCss(css: string): TokenBlocks {
-  // `[^}]*` is safe: these blocks contain no nested braces.
-  const light = /:root\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
-  const dark = /:root\[data-theme=['"]dark['"]\]\s*\{(?<body>[^}]*)\}/u.exec(
-    css
-  )?.groups?.body;
-  return {
-    light: light === undefined ? {} : parseDeclarations(light),
-    darkOverride: dark === undefined ? {} : parseDeclarations(dark),
-  };
-}
-
-/** Index of the first top-level (paren-depth 0) comma, or -1. */
-function topLevelComma(s: string): number {
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    else if (ch === "," && depth === 0) return i;
-  }
-  return -1;
-}
-
-/** Recursively replace `var(--x[, fallback])` using `scope`, honoring the
- *  fallback (which may itself contain `var()`). Unresolved refs become ''. */
-function resolveVars(
-  input: string,
-  scope: Record<string, string>,
-  seen: Set<string>
-): string {
-  let s = input;
-  for (;;) {
-    const idx = s.indexOf("var(");
-    if (idx === -1) break;
-    // Match the paren that opens right after `var`.
-    let depth = 0;
-    let end = -1;
-    for (let k = idx + 3; k < s.length; k++) {
-      if (s[k] === "(") depth++;
-      else if (s[k] === ")") {
-        depth--;
-        if (depth === 0) {
-          end = k;
-          break;
-        }
-      }
-    }
-    if (end === -1) break; // malformed — leave as-is so it fails color parsing
-    const inner = s.slice(idx + 4, end);
-    const comma = topLevelComma(inner);
-    const name = (comma === -1 ? inner : inner.slice(0, comma)).trim();
-    const fallback = comma === -1 ? undefined : inner.slice(comma + 1).trim();
-
-    let replacement = "";
-    if (scope[name] !== undefined && !seen.has(name)) {
-      replacement = resolveVars(scope[name], scope, new Set([...seen, name]));
-    } else if (fallback !== undefined) {
-      replacement = resolveVars(fallback, scope, seen);
-    }
-    s = s.slice(0, idx) + replacement + s.slice(end + 1);
-  }
-  return s;
-}
-
-/** Evaluate simple `calc(a ± b)` where a/b are numbers with a shared unit
- *  (only `%` appears in the token source). Repeats until no `calc(` remains. */
-function evalCalc(input: string): string {
-  let s = input;
-  const re =
-    /calc\(\s*(?<left>-?[\d.]+)(?<leftUnit>%?)\s*(?<op>[+-])\s*(?<right>-?[\d.]+)(?<rightUnit>%?)\s*\)/u;
-  for (;;) {
-    const m = re.exec(s);
-    if (!m) break;
-    const g: Record<string, string | undefined> = m.groups ?? {};
-    const a = Number(g.left ?? "0");
-    const b = Number(g.right ?? "0");
-    const unit = g.leftUnit || g.rightUnit || "";
-    const val = g.op === "+" ? a + b : a - b;
-    s = s.slice(0, m.index) + `${val}${unit}` + s.slice(m.index + m[0].length);
-  }
-  return s;
-}
-
-/** Fully resolve a raw token value against a scope (vars then calc). */
-function resolveValue(raw: string, scope: Record<string, string>): string {
-  return evalCalc(resolveVars(raw, scope, new Set())).trim();
-}
-
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(n)));
-}
-
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const hp = (((h % 360) + 360) % 360) / 60;
-  const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hp < 1) [r, g] = [c, x];
-  else if (hp < 2) [r, g] = [x, c];
-  else if (hp < 3) [g, b] = [c, x];
-  else if (hp < 4) [g, b] = [x, c];
-  else if (hp < 5) [r, b] = [x, c];
-  else [r, b] = [c, x];
-  const m = l - c / 2;
-  return [
-    clampByte((r + m) * 255),
-    clampByte((g + m) * 255),
-    clampByte((b + m) * 255),
-  ];
-}
-
-function toHex(r: number, g: number, b: number): string {
-  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
-}
-
-function roundAlpha(a: number): number {
-  return Math.round(a * 1000) / 1000;
-}
-
-/** A resolved value → an RN color string, or null if it isn't a plain color
- *  RN can consume (color-mix, gradients, unresolved vars, etc. → null). */
-export function cssColorToRn(resolved: string): string | null {
-  const v = resolved.trim();
-  if (!v) return null;
-  if (/^#[0-9a-fA-F]{3}$/u.test(v)) {
-    return (
-      "#" +
-      v
-        .slice(1)
-        .replace(/./gu, (c) => c + c)
-        .toLowerCase()
-    );
-  }
-  if (/^#[0-9a-fA-F]{6}$/u.test(v)) return v.toLowerCase();
-  if (/^rgba?\([^)]*\)$/u.test(v)) return v;
-
-  const hsl = /^hsla?\(\s*(?<body>[^)]*)\)$/u.exec(v)?.groups?.body;
-  if (hsl !== undefined) {
-    const segments = hsl.split("/").map((p) => p.trim());
-    const parts = (segments[0] ?? "").split(/[\s,]+/u).filter(Boolean);
-    if (parts.length < 3) return null;
-    const h = Number(parts[0] ?? "");
-    const s = Number((parts[1] ?? "").replace(/%$/u, "")) / 100;
-    const l = Number((parts[2] ?? "").replace(/%$/u, "")) / 100;
-    if ([h, s, l].some((n) => Number.isNaN(n))) return null;
-    const alphaPart = segments[1];
-    const alpha =
-      alphaPart !== undefined && alphaPart !== "" ? Number(alphaPart) : 1;
-    const [r, g, b] = hslToRgb(h, s, l);
-    if (Number.isNaN(alpha) || alpha >= 1) return toHex(r, g, b);
-    return `rgba(${r}, ${g}, ${b}, ${roundAlpha(alpha)})`;
-  }
-  return null;
-}
-
-/** A resolved length (`14px`, `0.75rem`) → pixels, or null. rem = 16px. */
-export function cssLengthToPx(resolved: string): number | null {
-  const px = /^(?<value>-?[\d.]+)px$/u.exec(resolved.trim())?.groups?.value;
-  if (px !== undefined) return Number(px);
-  const rem = /^(?<value>-?[\d.]+)rem$/u.exec(resolved.trim())?.groups?.value;
-  if (rem !== undefined) return Number(rem) * 16;
-  return null;
-}
-
-/** `--text-soft` → `ink2`, `--bg-elev` → `bgElev`, `--on-accent` → `onAccent`. */
-function camelKey(name: string): string {
-  return name
-    .replace(/^--/u, "")
-    .replace(/-(?<char>[a-z0-9])/gu, (_, char: string) => char.toUpperCase());
-}
-
-/** `--r-card` → `card`, `--radius-sm` → `radiusSm` (drop the `r-` prefix). */
-function radiusKey(name: string): string {
-  return camelKey(name.replace(/^--r-/u, "--"));
-}
-
-// Internal (`--_accent`) and swatch (`--c-amber`) vars are excluded from the
-// neutral/semantic palette: the former is a plumbing alias, the latter are the
-// app-icon hues already owned by @centraid/design' `palette`.
-function isPaletteCandidate(name: string): boolean {
-  return !name.startsWith("--_") && !name.startsWith("--c-");
-}
-
-function isRadiusName(name: string): boolean {
-  return (
-    name.startsWith("--r-") ||
-    name === "--radius" ||
-    name.startsWith("--radius-")
+function colorRecord(theme: NativeTheme): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(theme.colors).map(([key, value]) => [key, value])
   );
 }
 
-export function buildTheme(css: string): GeneratedTheme {
-  const { light, darkOverride } = parseTokensCss(css);
-  const lightScope = light;
-  const darkScope: Record<string, string> = {
-    "--bg-wall": BG_WALL_FALLBACK,
-    ...light,
-    ...darkOverride,
-  };
-
-  const lightColors: Record<string, string> = {};
-  const radii: Record<string, number> = {};
-  // Preserve the source→key mapping so dark can re-resolve the same tokens.
-  const colorTokens: { name: string; key: string; lightValue: string }[] = [];
-
-  for (const name of Object.keys(light)) {
-    const raw = light[name];
-    if (raw === undefined) continue;
-    if (isRadiusName(name)) {
-      const px = cssLengthToPx(resolveValue(raw, lightScope));
-      if (px !== null) radii[radiusKey(name)] = px;
-      continue;
-    }
-    if (!isPaletteCandidate(name)) continue;
-    const color = cssColorToRn(resolveValue(raw, lightScope));
-    if (color !== null) {
-      const key = camelKey(name);
-      lightColors[key] = color;
-      colorTokens.push({ name, key, lightValue: color });
-    }
-  }
-
-  const darkColors: Record<string, string> = {};
-  for (const { name, key, lightValue } of colorTokens) {
-    const raw = darkScope[name] ?? light[name];
-    const color =
-      raw === undefined ? null : cssColorToRn(resolveValue(raw, darkScope));
-    // Fall back to the light value if a dark token resolves to something
-    // non-color (keeps light/dark key sets identical).
-    darkColors[key] = color ?? lightValue;
-  }
-
+export function buildTheme(): GeneratedTheme {
+  const light = toNativeTheme("light");
+  const dark = toNativeTheme("dark");
+  const accentThemes = Object.fromEntries(
+    Object.keys(ACCENT_PALETTE).map((accentKey) => [
+      accentKey,
+      {
+        dark: colorRecord(toNativeTheme("dark", accentKey as AccentKey)),
+        light: colorRecord(toNativeTheme("light", accentKey as AccentKey)),
+      },
+    ])
+  ) as GeneratedTheme["accentThemes"];
   return {
-    light: lightColors,
-    dark: darkColors,
-    radii,
-    spacing: SPACING,
+    accentThemes,
+    dark: colorRecord(dark),
+    durations: light.durations,
     fonts: FONT_ROLES,
+    light: colorRecord(light),
+    radii: { ...light.radii },
+    spacing: { ...light.spacing },
+    targetMin: light.targetMin,
+    type: light.type,
   };
 }
-
-// ---- Rendering ----
 
 function sortedEntries<T>(obj: Record<string, T>): [string, T][] {
   return Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-// Emit in the repo's formatter style (bare identifier keys, single-quoted
-// strings) so `bun run generate:theme` followed by `bun run format` is a
-// no-op — otherwise every regeneration would show a spurious quoting diff.
-function keyLiteral(k: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(k) ? k : `'${k}'`;
+function keyLiteral(key: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(key) ? key : `'${key}'`;
 }
 
-function stringLiteral(v: string): string {
-  return `'${v.replace(/\\/gu, "\\\\").replace(/'/gu, "\\'")}'`;
+function stringLiteral(value: string): string {
+  return `'${value.replace(/\\/gu, "\\\\").replace(/'/gu, "\\'")}'`;
 }
 
 function renderRecord(
@@ -344,28 +85,34 @@ function renderRecord(
 ): string {
   return sortedEntries(obj)
     .map(
-      ([k, v]) =>
-        `${indent}${keyLiteral(k)}: ${typeof v === "number" ? v : stringLiteral(v)},`
+      ([key, value]) =>
+        `${indent}${keyLiteral(key)}: ${typeof value === "number" ? value : stringLiteral(value)},`
     )
     .join("\n");
 }
 
-function renderFonts(indent: string): string {
-  const lines: string[] = [];
-  for (const [role, weights] of sortedEntries(
-    FONT_ROLES as unknown as Record<string, Record<string, string>>
-  )) {
-    lines.push(
-      `${indent}${role}: {`,
-      renderRecord(weights, indent + "  "),
-      `${indent}},`
-    );
-  }
-  return lines.join("\n");
+function renderNested<
+  T extends Record<string, Record<string, string | number>>,
+>(obj: T, indent: string): string {
+  return sortedEntries(obj)
+    .map(
+      ([key, value]) =>
+        `${indent}${key}: {\n${renderRecord(value, `${indent}  `)}\n${indent}},`
+    )
+    .join("\n");
 }
 
-/** Render the checked-in `tokens.generated.ts` source. Deterministic:
- *  every object has alphabetically sorted keys, so regeneration is diff-clean. */
+function renderType(type: NativeTheme["type"], indent: string): string {
+  return sortedEntries(
+    type as Record<string, NativeTheme["type"][keyof NativeTheme["type"]]>
+  )
+    .map(
+      ([key, value]) =>
+        `${indent}${key}: { family: ${stringLiteral(value.family)}, fontSize: ${value.fontSize}, lineHeight: ${value.lineHeight}, weight: ${stringLiteral(value.weight)} },`
+    )
+    .join("\n");
+}
+
 export function renderTokensModule(
   theme: GeneratedTheme,
   sourcePath: string
@@ -374,8 +121,8 @@ export function renderTokensModule(
 // Source: ${sourcePath}
 // Regenerate: bun run generate:theme
 //
-// React-Native theme tokens lowered from the canonical blueprint token source.
-// See src/theme/generate.ts for the translation rules.
+// Native values are lowered from @centraid/design/src/native.ts.  They are
+// concrete: no CSS parser, var(), calc(), color-mix(), or runtime overrides.
 
 export const lightPalette = {
 ${renderRecord(theme.light, "  ")}
@@ -385,16 +132,25 @@ export const darkPalette = {
 ${renderRecord(theme.dark, "  ")}
 } as const;
 
+export const accentThemes = ${JSON.stringify(theme.accentThemes, null, 2)} as const;
+
 export const radii = {
 ${renderRecord(theme.radii, "  ")}
 } as const;
 
 export const spacing = {
-${renderRecord(theme.spacing as unknown as Record<string, number>, "  ")}
+${renderRecord(theme.spacing, "  ")}
 } as const;
 
 export const fonts = {
-${renderFonts("  ")}
+${renderNested(theme.fonts as unknown as Record<string, Record<string, string>>, "  ")}
 } as const;
+
+export const type = {
+${renderType(theme.type, "  ")}
+} as const;
+
+export const targetMin = ${JSON.stringify(theme.targetMin)} as const;
+export const durations = ${JSON.stringify(theme.durations)} as const;
 `;
 }

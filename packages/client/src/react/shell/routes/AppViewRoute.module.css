@@ -42,13 +42,13 @@
   width: 20px;
   height: 20px;
   flex: none;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text);
 }
 .brandChipName {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
@@ -58,8 +58,10 @@
   align-items: center;
   gap: 4px;
   padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--success) 18%, transparent);
+  border-radius: var(--r-sm);
+  /* 12% is the self-wash strength `--success` is solved against
+     (packages/design/src/color.ts). At 18% the chip's own ink fell to 4.4:1. */
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -95,7 +97,7 @@
   color: var(--text-faint);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--t-mono-size);
   font-weight: 500;
   transition:
     background 120ms,

@@ -1,9 +1,9 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   padding: 14px;
 }

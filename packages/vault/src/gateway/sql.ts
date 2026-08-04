@@ -31,7 +31,7 @@ export interface VaultSqlRequest {
 export interface VaultSqlRows {
   columns: string[];
   rows: Record<string, unknown>[];
-  /** Rows the statement produced before the cap. */
+  /** Rows observed up to cap + 1; when truncated this is a lower bound. */
   totalRows: number;
   truncated: boolean;
   durationMs: number;
@@ -105,7 +105,14 @@ export function runReadOnlySql(
       registerContentTextFn(conn);
     }
     const started = Date.now();
-    const all = conn.prepare(sql).all() as Record<string, unknown>[];
+    // Put the cap in SQLite's execution plan, not after `.all()`: slicing a
+    // million-row result in JavaScript still pays the unbounded memory/time
+    // cost and defeats the agent-query guardrail. One look-ahead row preserves
+    // honest `truncated` reporting without materializing the full result.
+    const executable = /^\s*EXPLAIN\b/iu.test(sql)
+      ? sql
+      : `SELECT * FROM (${sql.replace(/;+\s*$/u, "")}) AS centraid_bounded_query LIMIT ${cap + 1}`;
+    const all = conn.prepare(executable).all() as Record<string, unknown>[];
     const durationMs = Date.now() - started;
     const rows = all.slice(0, cap);
     // Sealed cells are ciphertext at rest, so nothing here CAN leak — this

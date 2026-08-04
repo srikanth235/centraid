@@ -14,9 +14,24 @@ The four-scope cap is deliberate. It bounds file descriptors, query fan-out, rad
 
 Bootstrap asks for newest items first. Page one is committed as a crash-safe partial preview so the grid can paint while the canonical walk continues. The complete walk still commits at page one's cursor and replays the change log from there; this closes insert/delete holes created by reading different pages from different SQLite snapshots.
 
+Pairing can grant several vaults through one short-lived ticket. The gateway redeems that ticket atomically, while the phone records one `VaultLink` and one replica lifecycle per returned vault. The first grant is only the initial focus; all other granted vaults remain independently mountable and retain their own cursor, freshness, intent outbox, and revocation state.
+
+## Replica correctness and durability
+
+The replica wire has four invariants that every client observes:
+
+- A canonical SQLite write transaction gets one `commitId`. Delta pages extend through the end of that commit group, so a page boundary never exposes half of one transaction. Retention cutoffs use the same boundary rule.
+- Projected changes carry the row's canonical `rowVersion` when it is nonzero; an omitted version means version zero. Local application ignores an older upsert or delete when a newer version is already stored, which makes overlapping bootstrap convergence and reconnect replay safe.
+- Offline intents may carry `baseVersions`. The gateway compares those preconditions before dispatch, returns a structured conflict with expected and actual versions, and the client removes the optimistic overlay while retaining the conflict outcome for the activity/attention surface.
+- `coverage` and `durability` are explicit status/result fields. A partial preview is readable and searchable, but it is labeled partial and is never treated as a completed cold start; a memory fallback is labeled non-durable and cannot create a remembered replica identity.
+
+The browser intent store upgrades additively to its outcome journal: pending IndexedDB intents are preserved while the journal is added. Native SQLite uses the same settle-then-scrub contract. Settled outcomes retain status, reason, conflict details, and settlement time, but never the sensitive queued input. Foreground and background catch-up follow `hasMore` with a bounded sequential loop; an interrupted loop resumes from the last committed cursor.
+
 One gateway SSE connection multiplexes independent vault cursors. A frame never combines cursors or data across vaults. Foreground UI reports human states (`Offline on this phone`, `Gateway asleep`, `Syncing recent changes`, and `Updated …`) plus a timestamp for every source. Revocation produces a scoped tombstone: the local cursor and rows for that source are purged without affecting other mounted vaults.
 
 Freshness is stored independently per `(gateway, vault)` and advances only after that source successfully pulls or produces a cursor frame. Offline startup restores those values rather than stamping every source with launch time. Scoped revocation detaches the mounted database, purges that replica's rows/intents and cross-scope placement work, removes its pinned thumbnail pack, and deletes only that scope from the cached mount/freshness manifests.
+
+The aggregate multi-vault cursor is conservative: it is the minimum sequence across every mounted source, including a source that has no completed bootstrap yet. Any missing or partial source therefore keeps the aggregate result partial instead of allowing a fast source to make the mounted read plane look complete.
 
 Mobile reads `/centraid/_gateway/info` before constructing either foreground or background sessions. Both `multiVaultReplica` and `crossVaultPlacements` must be advertised. Missing flags produce one update wall instead of repeated multiplex/placement 404s; a successful judgment is cached for later offline cold starts.
 

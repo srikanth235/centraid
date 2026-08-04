@@ -1,11 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -13,6 +7,7 @@ import {
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
+import { Text } from "../../kit/components/NativeText";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -132,7 +127,7 @@ export default function GatewayAlerts(props: {
                       label="Mark read"
                       disabled={busy === row.noticeId}
                       onPress={() => update(row.noticeId, "read")}
-                      variant="soft"
+                      variant="secondary"
                       style={styles.button}
                     />
                   ) : null}
@@ -140,7 +135,7 @@ export default function GatewayAlerts(props: {
                     label="Archive"
                     disabled={busy === row.noticeId}
                     onPress={() => update(row.noticeId, "archive")}
-                    variant="soft"
+                    variant="secondary"
                     style={styles.button}
                   />
                 </View>

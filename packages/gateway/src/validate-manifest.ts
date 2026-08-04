@@ -11,6 +11,7 @@ import { ManifestError, parseAppManifest } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
 import { fileExists } from "./routes/route-helpers.js";
+import { validateAppCssAt } from "./validate-app-css.js";
 
 function findFirstInOrder<T, R>(
   values: readonly T[],
@@ -83,7 +84,11 @@ export async function validateManifestAt(
     const handlerError = await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
-  return undefined;
+  // Design token contract (issue #686 D3): app CSS must consume
+  // `packages/design`'s tokens, never restate them. Prompt grounding alone
+  // never held, so the publish gate enforces it — last, so structural manifest
+  // problems still surface first.
+  return validateAppCssAt(appDir);
 }
 
 /**

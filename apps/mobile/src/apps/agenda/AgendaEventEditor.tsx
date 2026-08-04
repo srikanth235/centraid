@@ -1,17 +1,11 @@
-import { Feather } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
+import Icon from "../../kit/components/Icon";
+import { Text, TextInput } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaEventModel } from "./recurrence";
@@ -104,6 +98,7 @@ export default function AgendaEventEditor({
     event.isRecurrenceInstance ? "occurrence" : "series"
   );
   const [saving, setSaving] = useState(false);
+  const [datePicker, setDatePicker] = useState<"start" | "end">();
   const isRecurring = Boolean(rrule);
   const originalStart = event.originalStart;
   const partyOptions = useMemo(
@@ -258,6 +253,45 @@ export default function AgendaEventEditor({
     </View>
   );
 
+  const dateField = (
+    label: string,
+    value: string,
+    kind: "start" | "end",
+    onChange: (next: string) => void
+  ): React.JSX.Element => {
+    const date = new Date(value);
+    const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    return (
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} date and time`}
+          onPress={() => setDatePicker(kind)}
+          style={[
+            styles.dateButton,
+            { borderColor: colors.lineStrong, backgroundColor: colors.bgElev },
+          ]}
+        >
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {safeDate.toLocaleString()}
+          </Text>
+        </Pressable>
+        {datePicker === kind ? (
+          <DateTimePicker
+            value={safeDate}
+            mode="datetime"
+            display="default"
+            onChange={(_, next) => {
+              setDatePicker(undefined);
+              if (next) onChange(next.toISOString());
+            }}
+          />
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -272,7 +306,7 @@ export default function AgendaEventEditor({
             accessibilityLabel="Close event editor"
             onPress={onClose}
           >
-            <Feather name="x" size={23} color={colors.text} />
+            <Icon name="x" size={23} color={colors.text} />
           </Pressable>
           <Text style={[styles.title, { color: colors.text }]}>Edit event</Text>
           <Pressable
@@ -320,8 +354,8 @@ export default function AgendaEventEditor({
           ) : null}
           {field("Title", summary, setSummary)}
           {field("Description", description, setDescription, true)}
-          {field("Start · ISO 8601", start, setStart)}
-          {field("End · ISO 8601", end, setEnd)}
+          {dateField("Start", start, "start", setStart)}
+          {dateField("End", end, "end", setEnd)}
           {field("Start timezone", startTz, setStartTz)}
           {field("End timezone", endTz, setEndTz)}
           <Text style={[styles.label, { color: colors.textSoft }]}>
@@ -454,6 +488,14 @@ export default function AgendaEventEditor({
 
 const styles = StyleSheet.create({
   content: { gap: 12, padding: 20, paddingBottom: 60 },
+  dateButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  dateText: { fontFamily: family.sansRegular, fontSize: 14 },
   field: { gap: 5 },
   header: {
     alignItems: "center",

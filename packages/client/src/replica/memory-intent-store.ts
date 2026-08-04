@@ -3,10 +3,12 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
-import type { IntentState, ReplicaIntent } from "./types.js";
+import { buildIntentOutcome } from "./intent-record-store.js";
+import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export class MemoryIntentStore implements IntentRecordStore {
   readonly #records = new Map<string, ReplicaIntent>();
+  readonly #outcomes = new Map<string, IntentOutcome>();
   #nextOrder = 1;
 
   async add(intent: NewStoredIntent): Promise<ReplicaIntent> {
@@ -90,11 +92,23 @@ export class MemoryIntentStore implements IntentRecordStore {
       createdOrder: existing.createdOrder,
     };
     this.#records.delete(intentId);
+    const outcome = buildIntentOutcome(settled);
+    this.#outcomes.set(intentId, outcome);
     return clone(settled);
+  }
+
+  async listSettled(limit = 500): Promise<IntentOutcome[]> {
+    return [...this.#outcomes.values()]
+      .sort((left, right) =>
+        (right.settledAt ?? "").localeCompare(left.settledAt ?? "")
+      )
+      .slice(0, limit)
+      .map(clone);
   }
 
   async clear(): Promise<void> {
     this.#records.clear();
+    this.#outcomes.clear();
     this.#nextOrder = 1;
   }
 

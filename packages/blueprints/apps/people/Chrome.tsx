@@ -34,7 +34,6 @@ export interface ChromeProps {
   onSort: () => void;
   onSearchInput: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  themeButtonRef: (el: HTMLButtonElement | null) => void;
   newWrapRef: (el: HTMLDivElement | null) => void;
   sidebarNav: ReactNode;
   sidebarLists: ReactNode;
@@ -52,7 +51,7 @@ export function Chrome(props: ChromeProps): ReactNode {
   // Callback refs come off `props` first: a ref read from the props object taints
   // every later `props.*` read for the React compiler ("cannot access refs during
   // render"), so they are destructured into plain locals here (#573).
-  const { newWrapRef, themeButtonRef } = props;
+  const { newWrapRef } = props;
 
   const shellClass = [
     styles.shell,
@@ -288,12 +287,6 @@ export function Chrome(props: ChromeProps): ReactNode {
                   </svg>
                 </button>
               </fieldset>
-              <button
-                ref={themeButtonRef}
-                type="button"
-                className={styles.themebtn}
-                aria-label="Toggle light/dark"
-              />
               <div className={styles.askMount} data-ask-mount />
             </div>
           </div>

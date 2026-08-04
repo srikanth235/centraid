@@ -3,7 +3,8 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "./intent-record-store.js";
-import type { IntentState, ReplicaIntent } from "./types.js";
+import { buildIntentOutcome } from "./intent-record-store.js";
+import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
 export { MemoryIntentStore } from "./memory-intent-store.js";
 export type {
@@ -13,7 +14,8 @@ export type {
 
 const INTENTS = "intents";
 const META = "meta";
-const INTENT_STORE_VERSION = 2;
+const OUTCOMES = "outcomes";
+const INTENT_STORE_VERSION = 3;
 const STATE_CREATED_ORDER = "stateCreatedOrder";
 
 interface IntentMeta {
@@ -35,17 +37,22 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     const request = factory.open(name, INTENT_STORE_VERSION);
     request.addEventListener("upgradeneeded", () => {
       const db = request.result;
-      // v0 has no migration contract. Rebuild this cache whenever its access
-      // pattern changes so no legacy full-history store survives an upgrade.
-      for (const storeName of Array.from(db.objectStoreNames)) {
-        db.deleteObjectStore(storeName);
-      }
-      const intents = db.createObjectStore(INTENTS, { keyPath: "intentId" });
-      intents.createIndex("createdOrder", "createdOrder", { unique: true });
-      intents.createIndex(STATE_CREATED_ORDER, ["state", "createdOrder"], {
-        unique: true,
-      });
-      db.createObjectStore(META, { keyPath: "key" });
+      // This is a durable outbox, not a disposable cache. Upgrade additively:
+      // pending records are valuable precisely when a browser reloads during
+      // a schema rollout, so never delete an existing store here.
+      const intents = db.objectStoreNames.contains(INTENTS)
+        ? request.transaction!.objectStore(INTENTS)
+        : db.createObjectStore(INTENTS, { keyPath: "intentId" });
+      if (!intents.indexNames.contains("createdOrder"))
+        intents.createIndex("createdOrder", "createdOrder", { unique: true });
+      if (!intents.indexNames.contains(STATE_CREATED_ORDER))
+        intents.createIndex(STATE_CREATED_ORDER, ["state", "createdOrder"], {
+          unique: true,
+        });
+      if (!db.objectStoreNames.contains(META))
+        db.createObjectStore(META, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(OUTCOMES))
+        db.createObjectStore(OUTCOMES, { keyPath: "intentId" });
     });
     const db = await requestResult(request);
     return new IndexedDbIntentStore(name, db, factory);
@@ -167,7 +174,7 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
-    const tx = this.db.transaction(INTENTS, "readwrite");
+    const tx = this.db.transaction([INTENTS, OUTCOMES], "readwrite");
     const store = tx.objectStore(INTENTS);
     const existing = (await requestResult(store.get(intentId))) as
       | ReplicaIntent
@@ -188,15 +195,37 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       intentId,
       createdOrder: existing.createdOrder,
     };
+    const outcome = buildIntentOutcome(settled);
+    // Outcome journaling and payload scrubbing share one transaction: a
+    // restart can observe either the queued intent or its terminal outcome,
+    // never a silently lost delivery.
+    tx.objectStore(OUTCOMES).put(clone(outcome));
     store.delete(intentId);
     await transactionDone(tx);
     return clone(settled);
   }
 
+  async listSettled(limit = 500): Promise<IntentOutcome[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5_000)
+      throw new ReplicaProtocolError("Settled outcome limit is invalid");
+    const tx = this.db.transaction(OUTCOMES, "readonly");
+    const values = (await requestResult(
+      tx.objectStore(OUTCOMES).getAll()
+    )) as IntentOutcome[];
+    await transactionDone(tx);
+    return values
+      .sort((left, right) =>
+        (right.settledAt ?? "").localeCompare(left.settledAt ?? "")
+      )
+      .slice(0, limit)
+      .map(clone);
+  }
+
   async clear(): Promise<void> {
-    const tx = this.db.transaction([INTENTS, META], "readwrite");
+    const tx = this.db.transaction([INTENTS, META, OUTCOMES], "readwrite");
     tx.objectStore(INTENTS).clear();
     tx.objectStore(META).clear();
+    tx.objectStore(OUTCOMES).clear();
     await transactionDone(tx);
   }
 

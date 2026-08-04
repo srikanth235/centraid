@@ -1,8 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
 import { Alert, Pressable, View } from "react-native";
 
+import Icon from "../../kit/components/Icon";
+import { useTheme } from "../../kit/theme";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
@@ -29,6 +30,7 @@ export function PhotoLightboxToolbar({
   onPlacement,
   onWrite,
 }: PhotoLightboxToolbarProps): React.JSX.Element {
+  const { colors } = useTheme();
   const writable = Boolean(
     asset.assetId && asset.sourceVaultId && asset.canWrite === true
   );
@@ -37,16 +39,22 @@ export function PhotoLightboxToolbar({
       <Pressable
         accessibilityLabel={slideshow ? "Pause slideshow" : "Play slideshow"}
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{ selected: slideshow }}
         onPress={onToggleSlideshow}
       >
-        <Feather name={slideshow ? "pause" : "play"} size={22} color="#fff" />
+        <Icon
+          name={slideshow ? "pause" : "play"}
+          size={22}
+          color={colors.textInv}
+        />
       </Pressable>
       <Pressable
         accessibilityLabel={
           asset.favorite ? "Remove from favorites" : "Add to favorites"
         }
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{ disabled: !writable, selected: asset.favorite }}
         onPress={() => {
           void Haptics.selectionAsync();
@@ -68,57 +76,68 @@ export function PhotoLightboxToolbar({
         }}
         disabled={!writable}
       >
-        <Feather
+        <Icon
           name="heart"
           size={23}
-          color={writable ? (asset.favorite ? "#ff625f" : "#fff") : "#777"}
+          color={
+            writable
+              ? asset.favorite
+                ? colors.danger
+                : colors.textInv
+              : colors.textGhost
+          }
         />
       </Pressable>
       <Pressable
         accessibilityLabel="Share photo"
         accessibilityRole="button"
+        hitSlop={8}
         onPress={() => onExport(false)}
       >
-        <Feather name="share" size={23} color="#fff" />
+        <Icon name="share" size={23} color={colors.textInv} />
       </Pressable>
       <Pressable
         accessibilityLabel="Add photo to another vault"
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{
           disabled: !asset.assetId || !asset.scopeIds?.length,
         }}
         disabled={!asset.assetId || !asset.scopeIds?.length}
         onPress={() => onPlacement("add")}
       >
-        <Feather name="copy" size={22} color="#fff" />
+        <Icon name="copy" size={22} color={colors.textInv} />
       </Pressable>
       <Pressable
         accessibilityLabel="Move photo to another vault"
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{
           disabled: !writable || !asset.scopeIds?.length,
         }}
         disabled={!writable || !asset.scopeIds?.length}
         onPress={() => onPlacement("move")}
       >
-        <Feather
+        <Icon
           name="folder-plus"
           size={22}
-          color={writable ? "#fff" : "#777"}
+          color={writable ? colors.textInv : colors.textGhost}
         />
       </Pressable>
       <Pressable
         accessibilityLabel="Export original photo"
         accessibilityRole="button"
+        hitSlop={8}
         onPress={() => onExport(true)}
       >
-        <Feather name="download" size={23} color="#fff" />
+        <Icon name="download" size={23} color={colors.textInv} />
       </Pressable>
       <Pressable
         accessibilityLabel={
           asset.archived ? "Unarchive photo" : "Archive photo"
         }
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{ disabled: !writable, selected: asset.archived }}
         disabled={!writable}
         onPress={() =>
@@ -141,11 +160,16 @@ export function PhotoLightboxToolbar({
           )
         }
       >
-        <Feather name="archive" size={23} color={writable ? "#fff" : "#777"} />
+        <Icon
+          name="archive"
+          size={23}
+          color={writable ? colors.textInv : colors.textGhost}
+        />
       </Pressable>
       <Pressable
         accessibilityLabel="Move photo to trash"
         accessibilityRole="button"
+        hitSlop={8}
         accessibilityState={{ disabled: !writable }}
         disabled={!writable}
         onPress={() =>
@@ -171,7 +195,11 @@ export function PhotoLightboxToolbar({
           )
         }
       >
-        <Feather name="trash-2" size={23} color={writable ? "#fff" : "#777"} />
+        <Icon
+          name="trash-2"
+          size={23}
+          color={writable ? colors.textInv : colors.textGhost}
+        />
       </Pressable>
     </View>
   );

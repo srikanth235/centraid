@@ -82,6 +82,7 @@
       }
     ]
   },
+  "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "add-item",
