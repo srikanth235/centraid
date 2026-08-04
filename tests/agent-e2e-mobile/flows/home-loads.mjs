@@ -2,11 +2,17 @@
 // scan-first onboarding entry point. Proves the harness loop end-to-end (sim
 // discovery, app-install check, ctx.run, screenshot capture, verdict.md).
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import {
   openPastePathCommands,
   waitForOnboardingConnectCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+
+const UI_IMPACT_SCREENSHOT =
+  "artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png";
 
 await runFlow("home-loads", async (ctx) => {
   // Since #603 a cleared client cannot bypass enrollment. #643/#644 made the
@@ -39,6 +45,20 @@ ${openPastePathCommands()}- assertVisible: "PAIRING CODE"
     );
     await ctx.run(freshHomeYaml, "home-fresh-retry");
   }
+
+  // Promote the safe, ticket-free Maestro capture into the standard UI-impact
+  // artifact root. The matrix runner uploads `artifacts/` from every suite, so
+  // this remains available even when the nightly report is assembled later.
+  const screenshot = async (destination) => {
+    const source = path.join(
+      ctx.state.screenshotsDir,
+      "scan-first-onboarding.png"
+    );
+    const target = path.resolve(destination);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(source, target);
+  };
+  await screenshot(UI_IMPACT_SCREENSHOT);
 
   ctx.note(
     "Fresh state rendered scan-first onboarding with paste behind the secondary control"

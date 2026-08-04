@@ -39,6 +39,9 @@ accessibility zero-grey (15 cells).
   `launch-time`, `cold-start`, `scroll-frames`. `scripts/test-report/report-signals.mjs`
   (and `scripts/test-report/report-signals.test.mjs`) prefer Playwright expected/passed
   over a co-located skip so one deliberate `test.skip` does not mark the whole owner skipped.
+- **Update the merged quality ratchet.** `tests/quality/classification-ratchet.json`
+  fingerprints the matrix additions and records the issue-676 mobile evidence-cell
+  deviation alongside the existing issue-599 approval.
 - **Wire accessibility contract evidence into nightly report generation.**
   `scripts/test-report/run-accessibility.mjs` runs the contract and writes
   `artifacts/e2e/accessibility-contract.json`; `package.json` `test:accessibility`
@@ -291,6 +294,19 @@ accessibility zero-grey (15 cells).
   contract to vitest — keeps the existing `node --test` contract intact.
 - Playwright owner status prefers any expected/passed test over a co-located
   skip so deliberate product-punt skips do not demote multi-test files.
+- Issue #599's existing compatibility-matrix regrade remains approved; Issue #676 extends the ratchet with mobile cold-start and scroll-frames evidence cells.
+
+## User impact
+
+Fresh mobile onboarding now presents the scan-first entry point, with the paste
+path still available as an explicit secondary action. The iOS test suites run in
+isolated matrix cells, so a slow or failing journey no longer serializes the
+other mobile journeys.
+
+First-run: a fresh mobile launch still reaches the same pairing and Home
+journey; the ticket-free scan-first screen is captured as UI-impact evidence.
+
+![Mobile scan-first onboarding](artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png)
 
 ## Verification
 
@@ -387,3 +403,5 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785804509-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 702659 | 0 | 22420224 | 32817 | 735476 | 7.8540 | 13767423 | 0 | 573932288 | 845414 | fix(ios): use shared cold-start wait budget (#676) |
 | codex-019fc399-ba8-1785807461-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 453275 | 0 | 13046016 | 28777 | 482052 | 4.8263 | 14220698 | 0 | 586978304 | 874191 | Merge main into fix/nightly-676-mobile-onboarding-report (#676) |
 | codex-019fc399-ba8-1785807552-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9290 | 0 | 1080576 | 1089 | 10379 | 0.3097 | 14229988 | 0 | 588058880 | 875280 | Merge main into fix/nightly-676-mobile-onboarding-report (#676) |
+| codex-019fc399-ba8-1785808170-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 91495 | 0 | 6327296 | 15895 | 107390 | 2.0490 | 14321483 | 0 | 594386176 | 891175 | test(ios): align merged CI evidence contracts (#676) |
+| codex-019fc399-ba8-1785808212-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 9723 | 0 | 968192 | 783 | 10506 | 0.2781 | 14331206 | 0 | 595354368 | 891958 | test(ios): align merged CI evidence contracts (#676) |

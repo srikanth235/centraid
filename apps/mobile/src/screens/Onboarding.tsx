@@ -187,7 +187,7 @@ function ConnectionStep({
   // without a per-keystroke onChangeText. hideKeyboard blurs the field, and
   // onBlur/onEndEditing copy nativeEvent.text into the ref before Connect.
   const codeRef = useRef("");
-  const codeInputRef = useRef<TextInput>(null);
+  const codeInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
