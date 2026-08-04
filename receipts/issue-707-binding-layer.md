@@ -627,10 +627,27 @@ CI run `30901194404` on head `7126ff85` failed five jobs. Fixes landed on this b
 | `client-e2e / desktop-e2e` | `waitForHome` still looked for the pre-#707 library tablist / `data-sidebar` | Stem + springboard anchors; palette open path; App settings delete |
 | `client-e2e / web-e2e` | Custom `web-e2e` app no longer on Home library cards | Open via command palette into `iframe[title="app"]` |
 
+**Changed files (CI closeout):**
+
+- `packages/client/src/react/screens/HomeSpringboard.tsx` — exhaustive `case "empty"`
+- `apps/desktop/tests/e2e/fixtures.ts` — `waitForHome`, palette helpers, openTile
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts` — springboard journeys (2.1–2.11)
+- `apps/desktop/tests/e2e/builder.spec.ts` — palette Create / Build entry
+- `apps/desktop/tests/e2e/delete-app.spec.ts` — App settings Delete path
+- `apps/desktop/tests/e2e/launch-time.spec.ts` — palette open for probe app
+- `apps/desktop/tests/e2e/settings-gateways.spec.ts` — stem chrome + Build entry
+- `apps/desktop/tests/e2e/appview-templates-insights.spec.ts` — home after back; draft survival on disk
+- `apps/web/tests/e2e/web-pwa.spec.ts` — palette open; stem wait
+- `apps/web/tests/e2e/perf-waterfall.spec.ts` — palette open; LCP ceiling fallback; stem wait
+- `tests/coverage-floors.json` — design lines 98→94 + approvedDeviation
+- `tests/mutation-floors.json` — design 93→71 + approvedDeviation
+- `tests/skips.json` — line refresh only (budget still 29)
+- `receipts/issue-707-binding-layer.md` — this Verification section
+
 Local evidence for the product fix: `packages/client` `HomeSpringboard.test.tsx` 31/31 green; oxlint switch-exhaustiveness clean on `HomeSpringboard.tsx`; floors ratchet reports ok with approved deviations.
 
-
 - Follow-up: web-e2e locator strict-mode (nav first()) + LCP ceiling fallback to `_intendedCeilingMs` when Binding Layer produces a real LCP entry.
+
 
 ## Accounting
 
