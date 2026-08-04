@@ -49,11 +49,47 @@ ${openPastePathCommands()}- assertVisible: "PAIRING CODE"
   // Promote the safe, ticket-free Maestro capture into the standard UI-impact
   // artifact root. The matrix runner uploads `artifacts/` from every suite, so
   // this remains available even when the nightly report is assembled later.
-  const screenshot = async (destination) => {
-    const source = path.join(
-      ctx.state.screenshotsDir,
-      "scan-first-onboarding.png"
+  const findScreenshot = async (filename) => {
+    const direct = path.join(ctx.state.screenshotsDir, filename);
+    try {
+      await fs.access(direct);
+      return direct;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+
+    // Android Maestro puts `takeScreenshot` output below --debug-output while
+    // iOS also mirrors it into the flow cwd. Keep the evidence contract
+    // platform-neutral by accepting either location.
+    const walk = async (directory) => {
+      let entries;
+      try {
+        entries = await fs.readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }
+      const directMatch = entries.find(
+        (entry) => entry.isFile() && entry.name === filename
+      );
+      if (directMatch) return path.join(directory, directMatch.name);
+
+      const nested = await Promise.all(
+        entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => walk(path.join(directory, entry.name)))
+      );
+      return nested.find(Boolean) ?? null;
+    };
+
+    const fallback = await walk(path.join(ctx.state.runDir, "maestro-debug"));
+    if (fallback) return fallback;
+    throw new Error(
+      `Maestro screenshot ${filename} was not found in ${ctx.state.runDir}`
     );
+  };
+  const screenshot = async (destination) => {
+    const source = await findScreenshot("scan-first-onboarding.png");
     const target = path.resolve(destination);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.copyFile(source, target);

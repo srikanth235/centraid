@@ -58,6 +58,13 @@ test("home-loads asserts the scan-first hierarchy before opening paste", () => {
   );
 });
 
+test("home-loads promotes Android Maestro debug screenshots", () => {
+  const flow = read(HOME_LOADS);
+  assert.match(flow, /maestro-debug/u);
+  assert.match(flow, /readdir\(directory, \{ withFileTypes: true \}\)/u);
+  assert.match(flow, /scan-first-onboarding\.png/u);
+});
+
 test("configureGateway opens paste, then submits with live Connect label", () => {
   const harness = read(HARNESS);
   const firstRun = read(FIRST_RUN);

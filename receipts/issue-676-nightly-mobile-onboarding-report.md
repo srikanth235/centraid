@@ -324,6 +324,12 @@ accessibility zero-grey (15 cells).
   `tests/agent-e2e-mobile/flows/scroll-frames.mjs` describe scan-first
   onboarding and the subtitle-based People arrival marker.
 
+- **Promote Android Maestro screenshots from debug output.**
+  `tests/agent-e2e-mobile/flows/home-loads.mjs` now accepts the direct iOS
+  screenshot path and recursively locates the equivalent Android capture under
+  `maestro-debug/`, while `scripts/mobile-onboarding-maestro-contract.test.mjs`
+  locks the cross-platform evidence contract down.
+
 ## Out of scope
 
 - Full local iOS/Android Maestro re-run (macOS runner / emulator not available
@@ -378,6 +384,18 @@ bun run --cwd packages/tunnel test:native
 bun run --cwd apps/mobile ci:android-native
 git diff --check
 # staged nightly honesty: unmappedEvidence=0 cellsMissing=0 exit 0
+```
+
+Final CI validation also ran the complete iOS matrix and Android journey. The
+iOS matrix passed after a focused retry of a transient pairing setup failure.
+The Android assertions all passed on the initial full run; its home-loads job
+then exposed the Android Maestro debug-output path mismatch while promoting
+the screenshot. The evidence-path patch above was validated locally with:
+
+```sh
+bun run format:check
+bun run lint:e2e-flows
+bun run scripts:test
 ```
 
 ## Steering
@@ -470,3 +488,4 @@ run-accessibility + e2e.yml, and structural/honesty proofs.
 | codex-019fc399-ba8-1785827032-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 30414 | 0 | 3391744 | 3585 | 33999 | 0.9777 | 16227840 | 0 | 746997504 | 1061315 | fix(ci): select individual ios suites (#676) -m governance: allow-toolchain-conf |
 | codex-019fc399-ba8-1785827322-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 37165 | 0 | 3442432 | 4230 | 41395 | 1.0170 | 16265005 | 0 | 750439936 | 1065545 | fix(ci): validate targeted ios matrix suites (#676) |
 | codex-019fc399-ba8-1785827429-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 11678 | 0 | 1547008 | 1284 | 12962 | 0.4352 | 16276683 | 0 | 751986944 | 1066829 | fix(ci): validate targeted ios matrix suites (#676) |
+| codex-019fc399-ba8-1785840977-1 | codex | 019fc399-ba80-7d93-b31c-9a406198fcb3 | #676 | gpt-5.6-luna | 1234970 | 0 | 70792192 | 98904 | 1333874 | 22.2690 | 17511653 | 0 | 822779136 | 1165733 | fix(e2e): promote Android Maestro screenshots from debug output (#676) |
