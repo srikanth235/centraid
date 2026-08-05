@@ -1522,7 +1522,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         case "step-next":
           lightbox.step(1);
           break;
-        default:
+        case null:
           break;
       }
     };

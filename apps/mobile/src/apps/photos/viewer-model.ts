@@ -487,7 +487,7 @@ export function originalStatus(
         placement,
         text: `Original on ${gatewayName} · loading it spends mobile data`,
       };
-    default:
+    case "on-gateway":
       return {
         action: LOAD_THE_ORIGINAL,
         placement,
