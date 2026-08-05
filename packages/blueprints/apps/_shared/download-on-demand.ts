@@ -103,10 +103,10 @@ function browserDeps(): DownloadOnDemandDeps {
  * (`media.ts`, `write-target.ts`).
  */
 export class DownloadOnDemand {
-  #url: string;
-  #deps: DownloadOnDemandDeps;
+  readonly #url: string;
+  readonly #deps: DownloadOnDemandDeps;
   #state: DownloadState = IDLE_STATE;
-  #listeners = new Set<(state: DownloadState) => void>();
+  readonly #listeners = new Set<(state: DownloadState) => void>();
   #generation = 0;
 
   constructor(url: string, deps: DownloadOnDemandDeps = browserDeps()) {

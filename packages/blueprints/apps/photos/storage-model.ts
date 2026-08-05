@@ -149,7 +149,7 @@ export function custodyFacts(scopes: readonly ScopeRollup[]): CustodyFacts {
     facts.onlyHere,
     facts.waiting,
     facts.missing,
-  ].reduce(sum, ZERO);
+  ].reduce((total, bucket) => sum(total, bucket), ZERO);
   return facts;
 }
 

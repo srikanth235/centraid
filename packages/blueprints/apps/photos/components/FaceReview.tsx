@@ -167,9 +167,7 @@ export function FaceReview({
         query: "face-queue",
       });
       setData(result ?? {});
-      setSessionStartTotal((prev) =>
-        prev == null ? (result?.unmatchedTotal ?? 0) : prev
-      );
+      setSessionStartTotal((prev) => prev ?? result?.unmatchedTotal ?? 0);
       // Land on the requested proposal exactly once (issue #711 review's
       // People-shelf routing) — found or not, this only ever fires on the
       // FIRST load: a region confirmed/rejected elsewhere before this loads
@@ -182,7 +180,7 @@ export function FaceReview({
         const index = (result?.queue ?? []).findIndex(
           (entry) => entry.region_id === focusRegionId
         );
-        setCursor(index >= 0 ? index : 0);
+        setCursor(Math.max(index, 0));
       } else {
         setCursor(0);
       }

@@ -102,7 +102,7 @@ export function ViewerBarActions({
             type="button"
             className={className}
             disabled={spec.disabled ?? false}
-            aria-pressed={spec.pressed === undefined ? undefined : spec.pressed}
+            aria-pressed={spec.pressed}
             aria-label={name}
             title={title}
             onClick={handleRun}
@@ -141,7 +141,7 @@ export function ViewerBottomBar({
             type="button"
             className={`${styles.bottomAction} ${spec.destructive ? styles.destructive : ""}`}
             disabled={spec.disabled ?? false}
-            aria-pressed={spec.pressed === undefined ? undefined : spec.pressed}
+            aria-pressed={spec.pressed}
             aria-label={name}
             title={spec.reason ?? name}
             onClick={handleRun}

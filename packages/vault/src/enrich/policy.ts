@@ -31,11 +31,11 @@ import type { EnrichTier } from "../host.js";
 export const ENRICH_DOMAINS = ["photos", "docs"] as const;
 export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 
-const TIERS: readonly string[] = ["off", "local", "model"];
+const TIERS = new Set(["off", "local", "model"]);
 
 /** Validation guard for a persisted string claiming to be a tier. */
 export function isEnrichTier(value: unknown): value is EnrichTier {
-  return typeof value === "string" && TIERS.includes(value);
+  return typeof value === "string" && TIERS.has(value);
 }
 
 /**

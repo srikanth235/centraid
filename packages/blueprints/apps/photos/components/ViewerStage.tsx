@@ -265,7 +265,7 @@ function VideoKindLabel({ asset }: { asset: Asset }) {
 export function Transport({ asset }: { asset: Asset }) {
   const kind = transportKind(asset);
   if (!kind || kind === "video") return null;
-  const duration = Number(asset.duration_s) > 0 ? Number(asset.duration_s) : 0;
+  const duration = Math.max(0, Number(asset.duration_s) || 0);
   const elapsed = 0;
   return (
     <div className={styles.transport}>

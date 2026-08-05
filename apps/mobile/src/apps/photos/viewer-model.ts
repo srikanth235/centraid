@@ -306,7 +306,8 @@ export function fitMedia(
   aspectRatio: number,
   box: { width: number; height: number }
 ): { width: number; height: number } {
-  if (!(aspectRatio > 0)) return { height: box.height, width: box.width };
+  if (Number.isNaN(aspectRatio) || aspectRatio <= 0)
+    return { height: box.height, width: box.width };
   const heightIfWidthBinds = box.width / aspectRatio;
   return heightIfWidthBinds <= box.height
     ? { height: Math.round(heightIfWidthBinds), width: Math.round(box.width) }
@@ -398,7 +399,7 @@ export function formatMediaClock(seconds: number): string {
  */
 function videoResolutionLabel(asset: { height?: number }): string | null {
   const height = Number(asset.height);
-  if (!(height > 0)) return null;
+  if (Number.isNaN(height) || height <= 0) return null;
   if (height >= 2160) return "4K";
   if (height >= 1440) return "1440p";
   if (height >= 1080) return "1080p";

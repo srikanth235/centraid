@@ -74,7 +74,7 @@ export function sharingFacts(input: {
   scopes: readonly InlineScope[];
   ownScopeId: string;
   /** The member's share-destination pointer, when the host names one. */
-  shareTargetId?: string | undefined;
+  shareTargetId?: string;
   truncated: boolean;
 }): SharingFacts {
   const counts = new Map<string, number>();

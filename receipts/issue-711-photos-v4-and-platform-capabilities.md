@@ -603,6 +603,7 @@ Listed in full because the receipt is the audit trace for a change set this wide
 - **#711 Atlas first-paint budget rebase: registering blob_custody_rollup adds one deterministic countRows query; the measured 124-statement baseline is approved.** The new custody rollup is a registered canonical table and the extra read is the cost of measuring that real table, not an unbounded query increase.
 - **#711 Photos v4 manifest classification rebase: the governed automation manifest changed with the PR's new Photos action surface; the reviewed fingerprint is intentionally updated.** The ratchet records the reviewed manifest bytes so future classification changes remain visible.
 - **Explicit file-size waivers are part of the review.** Six cohesive v4 surfaces remain above the repository's 625-line hygiene threshold: `AlbumDetail.tsx`, `PhotoLightbox.tsx`, `PhotosHome.tsx`, `PhotosLibrary.tsx`, `tile-model.ts`, and `gateway-client-vault.ts`. Each carries a first-ten-line `governance: allow-repo-hygiene file-size-limit #711` waiver; splitting these interaction/policy modules solely to satisfy the threshold would add structural churn without changing the reviewed behavior.
+- **SonarCloud reliability/maintainability findings are closed in-tree.** The v4 viewer and Photos paths now preserve NaN-safe guards while using Sonar-approved operators, readonly fields, nullish coalescing, `Math.max`, a `Set` membership guard, an explicit reduction callback, and a shallow album-position helper; no new-code issue is waived.
 
 ## Demonstrated red
 
@@ -694,3 +695,4 @@ No row-level ledger table is emitted here: the accounting rows require a verifie
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019fd2d3-c7e-1785952006-1 | codex | 019fd2d3-c7ed-7560-ad1d-fba528508aa1 | #711 | gpt-5.6-luna | 588178 | 0 | 28321024 | 62385 | 650563 | 9.4865 | 588178 | 0 | 28321024 | 62385 | fix(ci): restore PR gate invariants (#711) |
 | codex-019fd2d3-c7e-1785952320-1 | codex | 019fd2d3-c7ed-7560-ad1d-fba528508aa1 | #711 | gpt-5.6-luna | 53700 | 0 | 1323776 | 8063 | 61763 | 0.5861 | 641878 | 0 | 29644800 | 70448 | fix(ci): restore PR gate invariants (#711) |
+| codex-019fd2d3-c7e-1785952986-1 | codex | 019fd2d3-c7ed-7560-ad1d-fba528508aa1 | #711 | gpt-5.6-luna | 102302 | 0 | 6660608 | 13244 | 115546 | 2.1196 | 744180 | 0 | 36305408 | 83692 | fix(quality): close Sonar reliability findings (#711) |

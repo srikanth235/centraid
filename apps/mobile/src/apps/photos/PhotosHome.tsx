@@ -84,6 +84,14 @@ import { skeletonRows, skeletonTileCount } from "./skeleton-rows";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
+function albumEntryCount<T>(
+  rows: readonly T[],
+  albumId: string,
+  collectionId: (row: T) => unknown
+): number {
+  return rows.filter((row) => String(collectionId(row)) === albumId).length;
+}
+
 export default function PhotosHome({
   navigation,
   route,
@@ -272,9 +280,11 @@ export default function PhotosHome({
                 const albumId = String(album.collection_id);
                 const entryId = optimisticRowId("album-entry");
                 const position =
-                  entries.rows.filter(
-                    (row) => String(row.collection_id) === albumId
-                  ).length + index;
+                  albumEntryCount(
+                    entries.rows,
+                    albumId,
+                    (row) => row.collection_id
+                  ) + index;
                 // oxlint-disable-next-line no-await-in-loop
                 const result = await session.write("photos", {
                   action: "add-to-album",

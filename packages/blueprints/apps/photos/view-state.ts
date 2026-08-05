@@ -158,7 +158,7 @@ export function emptyStateView(input: EmptyStateInput): EmptyStateView {
  * which is the class of bug this file exists to close.
  */
 export function libraryReachability(input: {
-  hostStatus?: string | null | undefined;
+  hostStatus?: string | null;
   readFailed: boolean;
 }): "reachable" | "unreachable" {
   if (input.hostStatus === "down") return "unreachable";

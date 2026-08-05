@@ -137,7 +137,7 @@ export const TRANSPORT_LABELS: Readonly<Record<TransportKind, string>> = {
  */
 export function videoResolutionLabel(asset: Asset): string | null {
   const height = Number(asset.height);
-  if (!(height > 0)) return null;
+  if (Number.isNaN(height) || height <= 0) return null;
   if (height >= 2160) return "4K";
   if (height >= 1440) return "1440p";
   if (height >= 1080) return "1080p";
@@ -170,7 +170,7 @@ export function clock(seconds: number): string {
 
 /** A determinate track never divides by zero and never runs past its end. */
 export function trackFraction(elapsed: number, duration: number): number {
-  if (!(duration > 0)) return 0;
+  if (Number.isNaN(duration) || duration <= 0) return 0;
   return Math.max(0, Math.min(1, elapsed / duration));
 }
 
