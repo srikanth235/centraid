@@ -779,5 +779,11 @@
         { "value": "#E0567A", "label": "Rose" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": ["camera"],
+    "disabledOn": [],
+    "northStar": "splitwise"
+  }
 }

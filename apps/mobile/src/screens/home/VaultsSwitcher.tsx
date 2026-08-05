@@ -339,12 +339,7 @@ export default function VaultsSwitcher({
               ]}
             >
               <View style={styles.pairIcon}>
-                <Icon
-                  name="Bolt"
-                  size={18}
-                  color={colors.accent}
-                  strokeWidth={1.75}
-                />
+                <Icon name="Bolt" size={18} color={colors.accent} />
               </View>
               <View style={styles.rowMeta}>
                 <Text style={styles.pairTitle}>Pair another desktop</Text>
@@ -352,12 +347,7 @@ export default function VaultsSwitcher({
                   Scan a “Connect phone” code to add a gateway
                 </Text>
               </View>
-              <Icon
-                name="ChevronRight"
-                size={16}
-                color={colors.textGhost}
-                strokeWidth={1.75}
-              />
+              <Icon name="ChevronRight" size={16} color={colors.textGhost} />
             </Pressable>
           </ScrollView>
         </Animated.View>
@@ -386,12 +376,7 @@ function ActiveCard({
       ]}
     >
       <View style={[styles.emblem, { backgroundColor: tint }]}>
-        <Icon
-          name={iconOf(vault.icon)}
-          size={24}
-          color={colors.textInv}
-          strokeWidth={1.75}
-        />
+        <Icon name={iconOf(vault.icon)} size={24} color={colors.textInv} />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.activeName} numberOfLines={1}>
@@ -435,12 +420,7 @@ function VaultLinkRow({
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         <View style={[styles.dot, { backgroundColor: tint }]}>
-          <Icon
-            name={iconOf(vault.icon)}
-            size={16}
-            color={colors.textInv}
-            strokeWidth={1.75}
-          />
+          <Icon name={iconOf(vault.icon)} size={16} color={colors.textInv} />
         </View>
         <View style={styles.rowMeta}>
           <Text style={styles.rowName} numberOfLines={1}>
@@ -460,12 +440,7 @@ function VaultLinkRow({
         onPress={onForget}
         style={({ pressed }) => [styles.forget, pressed && styles.pressed]}
       >
-        <Icon
-          name="Trash"
-          size={17}
-          color={colors.textFaint}
-          strokeWidth={1.75}
-        />
+        <Icon name="Trash" size={17} color={colors.textFaint} />
       </Pressable>
     </View>
   );
@@ -499,12 +474,7 @@ function AddRow({
       ]}
     >
       <View style={[styles.dot, styles.dotHollow, { borderColor: tint }]}>
-        <Icon
-          name={iconOf(vault.icon)}
-          size={16}
-          color={tint}
-          strokeWidth={1.75}
-        />
+        <Icon name={iconOf(vault.icon)} size={16} color={tint} />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.rowName} numberOfLines={1}>
@@ -514,7 +484,7 @@ function AddRow({
           Not on this phone yet
         </Text>
       </View>
-      <Icon name="Plus" size={18} color={colors.accent} strokeWidth={2} />
+      <Icon name="Plus" size={18} color={colors.accent} />
     </Pressable>
   );
 }

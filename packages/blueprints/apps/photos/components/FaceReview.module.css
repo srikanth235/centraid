@@ -1,0 +1,196 @@
+/* Face review (v4 handoff 4305-4318). Paper and ink, one proposal at a time —
+   see EnrichmentConsent.module.css for the panel/facts idiom this mirrors.
+
+   Logical properties only (§18); real tokens throughout; nothing below 11px. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-inline-size: 40rem;
+  padding-block: var(--sp-3) var(--sp-5);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-block-end: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.heading {
+  margin: 0;
+  font: var(--t-title);
+  color: var(--text);
+}
+.headMeta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* The two tiles (4307): the face crop (aspect 1) and the source photograph
+   (aspect 1.5). Non-selectable — this is evidence for ONE decision, not a
+   grid, so neither tile carries Tile.module.css's selection/vault/kind/state
+   slots. */
+.tiles {
+  display: flex;
+  gap: var(--sp-2);
+}
+.tile {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  border-radius: var(--r-md);
+  background: var(--skel);
+}
+.cropImg {
+  position: absolute;
+  max-inline-size: none;
+  max-block-size: none;
+}
+.plainImg {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+.skel {
+  inline-size: 100%;
+  block-size: 100%;
+}
+.tileNote {
+  position: absolute;
+  inset-inline: 4px;
+  inset-block-end: 4px;
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  color: var(--on-stage);
+  background: color-mix(in oklab, var(--stage) 55%, transparent);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  max-inline-size: 62ch;
+}
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text-soft);
+}
+.title {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-title);
+  color: var(--text);
+}
+.body {
+  margin: 0 0 var(--sp-4);
+  font: var(--t-reading);
+  color: var(--text-soft);
+}
+.facts {
+  margin: 0 0 var(--sp-4);
+}
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.factLabel {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.wroteNote {
+  margin: var(--sp-2) 0 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* The three escape rows (4312-4315) — same ruled-row grammar as
+   Storage.module.css's `.row`, with a trailing action instead of a value. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: var(--sp-2) var(--sp-3);
+}
+.row + .row {
+  border-block-start: 1px solid var(--line);
+}
+.rowText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rowLabel {
+  font: var(--t-small);
+  color: var(--text);
+}
+.rowSub {
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  color: var(--text-faint);
+}
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-block-start: 1px solid var(--line);
+}
+
+/* The three-part progress note (4316/3966), mono. */
+.note {
+  margin: 0;
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}

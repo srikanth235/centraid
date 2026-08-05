@@ -12,6 +12,8 @@
 import { apps as BUILTIN_APPS } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
+import { SPRINGBOARD_ORDER } from "./tile-model";
+
 // Where a launcher tile goes when tapped. The three native kinds map onto the
 // nested cover navigators; `app` opens a remote app's WebView cover; `pair`
 // diverts an uninstalled gateway app to Settings (pairing) instead.
@@ -111,6 +113,57 @@ export function buildLauncherItems(
   }
 
   return items;
+}
+
+/**
+ * Apply the member's pin order to the grid (Tier 2: "pinning writes the home
+ * grid order").
+ *
+ * Pinned apps come first, in the order they were pinned; everything else keeps
+ * its catalog position behind them. An unpinned app is never HIDDEN — a
+ * launcher you can lose an app in is not a launcher — and a pinned id that no
+ * longer resolves to a listed app is simply skipped rather than repaired, so an
+ * app that is temporarily unlistable keeps its pin for when it comes back.
+ */
+/**
+ * Put the grid into springboard order (./tile-model#SPRINGBOARD_ORDER) before
+ * pins are applied.
+ *
+ * An app the order does not name — one the member built themselves — keeps its
+ * catalog position BEHIND the eight first-party tiles rather than being dropped
+ * or sorted to the front: the order is a statement about the shipped tiles, and
+ * it has no opinion about an app it has never seen.
+ */
+export function orderForSpringboard(
+  items: readonly LauncherItem[]
+): LauncherItem[] {
+  const rank = (item: LauncherItem): number => {
+    const at = SPRINGBOARD_ORDER.indexOf(item.meta.id);
+    return at < 0 ? SPRINGBOARD_ORDER.length : at;
+  };
+  // Index-tiebroken so the sort is stable across engines: two unranked apps
+  // keep their catalog order, and the same vault produces the same page on
+  // every launch.
+  return items
+    .map((item, at) => ({ at, item }))
+    .sort((a, b) => rank(a.item) - rank(b.item) || a.at - b.at)
+    .map((entry) => entry.item);
+}
+
+export function orderByPins(
+  items: readonly LauncherItem[],
+  pinnedIds: readonly string[]
+): LauncherItem[] {
+  const byId = new Map(items.map((item) => [item.meta.id, item]));
+  const pinned: LauncherItem[] = [];
+  const taken = new Set<string>();
+  for (const id of pinnedIds) {
+    const item = byId.get(id);
+    if (!item || taken.has(id)) continue;
+    taken.add(id);
+    pinned.push(item);
+  }
+  return [...pinned, ...items.filter((item) => !taken.has(item.meta.id))];
 }
 
 /** Case-insensitive name/description filter for the search overlay. */

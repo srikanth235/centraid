@@ -673,5 +673,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": [],
+    "disabledOn": [],
+    "northStar": "todoist"
+  }
 }

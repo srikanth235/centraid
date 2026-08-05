@@ -69,6 +69,16 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |
 
+## Seats and byte custody (blueprints, [blueprint-seats.md](blueprint-seats.md))
+
+| Term | Meaning |
+| --- | --- |
+| **seat** | A client's role in byte custody — `origin` (mobile: content born + cached here), `custodian` (desktop: gateway is local), `viewer` (web/PWA: meaning replicated, bytes on request). Orthogonal to `compact`: never branch custody on form factor or layout on seat. |
+| **byte-bearing / record-only** | The two blueprint classes. Record-only apps (tasks, agenda, people, tally) are rows the replica covers fully offline; byte-bearing apps (photos, docs; notes/locker via attachments) need the custody triple, backup engine, and pin/download engine. |
+| **custody triple** | `local-only` (device only — the danger state, tile line `on this device only`), `backed-up` (device + gateway), `remote-only` (gateway only, tile line `on the gateway`). Canonical shape: `apps/mobile/src/apps/photos/timeline-model.ts`. Web's `TileMediaState` is the paint pipeline, not a custody model. |
+| **origin act** | A frame-owned capture capability apps register into — camera, scanner, share-sheet-in, notifications, autofill. One door per capability, never per-app re-implementations. |
+| **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, …) so switching costs a member nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
+
 ## Members and roles (gateway, #599)
 
 The auth model has five layers (issue #599): **L0 custody** (the gateway box, landlord bearer, an exported backup recovery kit), **L1 authentication** (devices proving iroh EndpointIds — the only cryptographically provable layer), **L2 principals** (members and agents), **L3 authorization** (`(member, vault) → role`), **L4 attribution** (the journal records the acting member — and the agent when one acted — whenever a principal is known; scheduler-fired automations carry none). Keep the axes in separate words:

@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS enrich_request (
     ('previews','poster','pdfText','ocr','transcript','embedding')),
   contribution_variant TEXT CHECK (contribution_variant IN
     ('thumb','preview','poster','text','transcript','embedding','phash','thumbhash')),
+  -- CONSENT SCOPE: which enricher capability this request is FOR, matching
+  -- an automation manifest's enrich.capability ("faces", "captions", ...).
+  -- The problem it solves: the owner's on-demand ask used to be untagged, so
+  -- a face-detection consent handed the SAME queue row to every enabled
+  -- enricher — captioner, screenshot-extractor and the rest all treated one
+  -- member's "detect faces" as their cue. A tagged row is drained only by the
+  -- enricher that owns that capability.
+  -- NULL is reserved for the system signals (search-miss / on-view), which
+  -- are not consent and stay broadcast; the CHECK below makes an untagged
+  -- OWNER ask impossible rather than merely discouraged.
+  capability          TEXT CHECK (capability IS NULL
+    OR length(capability) BETWEEN 1 AND 64),
   requested_at        TEXT NOT NULL,
   drained_at          TEXT,
   lease_device_id     TEXT,
@@ -104,10 +116,22 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   lease_expires_at    TEXT,
   lease_attempts      INTEGER NOT NULL DEFAULT 0 CHECK (lease_attempts >= 0),
   CHECK ((lease_device_id IS NULL) = (lease_token IS NULL)),
-  CHECK ((lease_device_id IS NULL) = (lease_expires_at IS NULL))
+  CHECK ((lease_device_id IS NULL) = (lease_expires_at IS NULL)),
+  -- An owner-driven ask must name a SCOPE — either the enricher capability
+  -- it consents to (see capability, the app/automation lane) or the device
+  -- capability it is queued for (required_capability, the on-device lease
+  -- lane, which is already scoped by the work a device claims). An untagged
+  -- manual row is the shape that turned one consent into consent for every
+  -- enabled enricher, and it is now unrepresentable.
+  CHECK (reason <> 'manual'
+         OR capability IS NOT NULL
+         OR required_capability IS NOT NULL)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_open
   ON enrich_request(target_type, requested_at) WHERE drained_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_enrich_request_capability
+  ON enrich_request(capability, target_type, requested_at)
+  WHERE drained_at IS NULL AND capability IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_leaseable
   ON enrich_request(required_capability, lease_expires_at, requested_at)
   WHERE drained_at IS NULL AND required_capability IS NOT NULL;

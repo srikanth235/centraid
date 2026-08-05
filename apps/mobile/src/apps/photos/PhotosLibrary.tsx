@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit #711 Photos v4 library surface remains a cohesive interaction module.
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
 import type { ListRenderItemInfo } from "@shopify/flash-list";
@@ -5,7 +6,15 @@ import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  CLOUD_ANSWER,
+  deviceAnswerFor,
+  ENRICHMENT_DECLINED_NOTE,
+  ENRICHMENT_QUEUED_NOTE,
+  ENRICHMENT_REQUESTED_NOTE,
+  ENRICHMENT_ROW,
+} from "@centraid/blueprints/apps/photos/enrichment-consent";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
@@ -32,9 +41,11 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
+import EnrichmentConsent from "./EnrichmentConsent";
 import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
 import type { DeviceByteProbe } from "./free-up-space";
 import { styles } from "./PhotosLibrary.styles";
+import PhotosScreen from "./PhotosScreen";
 import type { PhotoAsset } from "./timeline-source";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -85,8 +96,8 @@ const AlbumCard = memo(
       >
         {String(album.name ?? "Album")}
       </Text>
-      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
-        {count} items
+      <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+        {count} {count === 1 ? "photograph" : "photographs"}
       </Text>
     </Pressable>
   )
@@ -125,6 +136,13 @@ export default function PhotosLibrary({
   const [pinsReady, setPinsReady] = useState(false);
   const [freeing, setFreeing] = useState(false);
   const [newAlbum, setNewAlbum] = useState(false);
+  // The consent question is a surface the member OPENS; `enrichAnswered`
+  // latches their answer so it is asked once and answered once.
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [enrichAnswered, setEnrichAnswered] = useState<
+    "device" | "declined" | null
+  >(null);
   const [title, setTitle] = useState("");
   useFocusEffect(
     useCallback(() => {
@@ -333,42 +351,68 @@ export default function PhotosLibrary({
       ]
     );
   };
-  const requestEnrichment = async (): Promise<void> => {
-    if (!session) return;
+  // ---- face detection: a consent moment, not a settings toggle ----
+  //
+  // THE LOAD-BEARING RULE. This row used to fire `request-enrichment` on a
+  // single tap. It now opens a question (EnrichmentConsent.tsx) and the write
+  // below is reachable from exactly ONE place: the `Run on this device`
+  // answer. Opening the surface, reading the policy, closing it and answering
+  // `Not now` all write nothing. The answer is latched so a double tap cannot
+  // answer twice.
+  //
+  // The tier comes from the replica's `enrich.policy` mirror; the shared
+  // `deviceAnswerFor` decides whether the on-device promise in Panel A is
+  // even true for this vault, so web and native cannot disagree about it.
+  const enrichPolicy = policies.rows.find((row) => row.domain === "photos");
+  const enrichTier = policies.loading
+    ? null
+    : ((enrichPolicy?.tier as string | undefined) ?? "off");
+  const deviceAnswer = deviceAnswerFor(enrichTier);
+  const runOnDevice = async (): Promise<void> => {
+    // Belt and braces: the button is already unavailable in both of these
+    // cases. A write this consequential does not rely on a disabled prop.
+    if (!session || enrichBusy || enrichAnswered) return;
+    if (!deviceAnswer.available) return;
+    setEnrichBusy(true);
     try {
       const result = await session.write("photos", {
         action: "request-enrichment",
-        input: {},
+        input: { entity_type: "media.media_asset" },
       });
-      surfaceWriteOutcome(result, {
-        queuedMessage:
-          "Enrichment will start automatically when the gateway reconnects.",
-      });
+      if (
+        surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })
+      ) {
+        setEnrichAnswered("device");
+        postStatus(ENRICHMENT_REQUESTED_NOTE);
+        setConsentOpen(false);
+      }
     } catch (error) {
-      surfaceWriteFailure(error, "Enrichment not requested");
+      surfaceWriteFailure(error, "Face detection was not asked for");
+    } finally {
+      setEnrichBusy(false);
     }
+  };
+  const declineEnrichment = (): void => {
+    setEnrichAnswered("declined");
+    postStatus(ENRICHMENT_DECLINED_NOTE);
+    setConsentOpen(false);
   };
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    // The band is the way out now (§F, proto:4953-4954), so the head carries
+    // NO back chevron: this surface is the band's `Library` destination, and a
+    // destination that also owns a back arrow gives a member two answers to
+    // "where does this go".
+    <PhotosScreen current="library">
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>Library</Text>
         <Pressable
           accessibilityLabel="Create album"
           accessibilityRole="button"
           onPress={() => setNewAlbum(true)}
+          style={styles.headerBtn}
         >
-          <Icon name="plus" size={23} color={colors.accent} />
+          <Icon name="plus" size={22} color={colors.text} />
         </Pressable>
       </View>
       <ReplicaStatusBar />
@@ -394,7 +438,7 @@ export default function PhotosLibrary({
         ListHeaderComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              YOUR LIBRARY
+              Your library
             </Text>
             <Pressable
               accessibilityLabel="Open favorite photos"
@@ -475,14 +519,14 @@ export default function PhotosLibrary({
               />
             </Pressable>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              ALBUMS
+              Albums
             </Text>
           </View>
         }
         ListFooterComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              BACKUP &amp; STORAGE
+              Backup &amp; storage
             </Text>
             <Pressable
               accessibilityLabel="Open backup health"
@@ -516,21 +560,44 @@ export default function PhotosLibrary({
                 colors={colors}
               />
             </Pressable>
+            {/* A way IN to a question, never the answer. This row used to
+                fire the enrichment write on a single tap — see the gate
+                above. It says what it opens, not what it would do. */}
             <Pressable
-              accessibilityLabel="Request photo enrichment"
+              accessibilityLabel="Read what face detection would do"
               accessibilityRole="button"
-              onPress={() => void requestEnrichment()}
+              onPress={() => setConsentOpen(true)}
             >
               <Row
                 icon="zap"
-                title="Enrichment"
-                meta={`${policies.rows.length} consent policies · request faces, places and metadata`}
+                title={ENRICHMENT_ROW.title}
+                meta={ENRICHMENT_ROW.meta}
                 colors={colors}
               />
             </Pressable>
           </View>
         }
       />
+      {/* The consent question. A full screen, not a sheet or an alert: it
+          carries two panels, nine facts and a note, and a member reads it
+          before answering. Closing it is NOT an answer — nothing is written
+          and it can be opened again. */}
+      <Modal
+        animationType="slide"
+        visible={consentOpen}
+        onRequestClose={() => setConsentOpen(false)}
+      >
+        <EnrichmentConsent
+          count={assets.length}
+          onDevice={deviceAnswer}
+          cloud={CLOUD_ANSWER}
+          busy={enrichBusy}
+          answered={enrichAnswered}
+          onRunOnDevice={() => void runOnDevice()}
+          onDecline={declineEnrichment}
+          onClose={() => setConsentOpen(false)}
+        />
+      </Modal>
       <Modal
         transparent
         animationType="fade"
@@ -540,14 +607,20 @@ export default function PhotosLibrary({
         <Pressable
           accessibilityLabel="Close create album dialog"
           accessibilityRole="button"
-          style={styles.backdrop}
+          style={[styles.backdrop, { backgroundColor: colors.scrim }]}
           onPress={() => setNewAlbum(false)}
         />
-        <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
+        <View
+          style={[
+            styles.dialog,
+            { backgroundColor: colors.bgElev, borderColor: colors.line },
+          ]}
+        >
           <Text style={[styles.dialogTitle, { color: colors.text }]}>
             New album
           </Text>
           <TextInput
+            accessibilityLabel="Album name"
             autoFocus
             value={title}
             onChangeText={setTitle}
@@ -558,17 +631,20 @@ export default function PhotosLibrary({
               { borderColor: colors.lineStrong, color: colors.text },
             ]}
           />
+          {/* The dialog's ONE filled element — the thing it exists to do. */}
           <Pressable
             accessibilityLabel="Create album"
             accessibilityRole="button"
-            style={[styles.create, { backgroundColor: colors.accent }]}
+            style={[styles.create, { backgroundColor: colors.accentFill }]}
             onPress={() => void createAlbum()}
           >
-            <Text style={styles.createText}>Create</Text>
+            <Text style={[styles.createText, { color: colors.textInv }]}>
+              Create
+            </Text>
           </Pressable>
         </View>
       </Modal>
-    </SafeAreaView>
+    </PhotosScreen>
   );
 }
 
@@ -585,14 +661,23 @@ function Row({
 }): React.JSX.Element {
   return (
     <View style={[styles.row, { borderBottomColor: colors.line }]}>
-      <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-        <Icon name={icon} size={18} color={colors.accent} />
+      {/* The row's mark is a quiet outlined tile, not a tinted fill: a page of
+          nine rows would otherwise carry nine filled elements (§18). */}
+      <View
+        style={[
+          styles.icon,
+          { backgroundColor: colors.bgSunken, borderColor: colors.line },
+        ]}
+      >
+        <Icon name={icon} size={19} color={colors.textSoft} />
       </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
-        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>{meta}</Text>
+        <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+          {meta}
+        </Text>
       </View>
-      <Icon name="chevron-right" size={18} color={colors.textFaint} />
+      <Icon name="chevron-right" size={18} color={colors.textGhost} />
     </View>
   );
 }

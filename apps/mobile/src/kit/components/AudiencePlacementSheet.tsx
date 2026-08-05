@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../replica/ReplicaProvider";
-import { family, radii, useTheme } from "../theme";
+import { borders, family, radii, useTheme } from "../theme";
 import { Text } from "./NativeText";
 import { postStatus } from "./status-line";
 
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   copy: { marginTop: 5, maxWidth: 300, lineHeight: 20 },
   row: {
     minHeight: 58,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     borderRadius: radii.md,
     paddingHorizontal: 16,
     flexDirection: "row",

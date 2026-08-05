@@ -897,5 +897,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["capture", "voice"],
+    "disabledOn": [],
+    "northStar": "apple-notes"
+  }
 }

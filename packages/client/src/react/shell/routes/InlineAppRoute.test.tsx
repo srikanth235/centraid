@@ -108,12 +108,19 @@ vi.mock(
 vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => ({
   useAppScopes: () => ({
     status: "ready",
-    data: [
-      {
-        scope: { id: "vault-own", label: "Library", canWrite: true },
-        identity: { gatewayId: "gw", vaultId: "vault-own" },
-      },
-    ],
+    data: {
+      scopes: [
+        {
+          scope: {
+            id: "vault-own",
+            label: "Library",
+            personal: true,
+            canWrite: true,
+          },
+          identity: { gatewayId: "gw", vaultId: "vault-own" },
+        },
+      ],
+    },
   }),
   scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
     scopes.map((entry) => entry.identity.vaultId).join(","),
@@ -368,6 +375,41 @@ describe("InlineAppRoute suite", () => {
       ).toBe("recovered");
       // The retry re-imported the descriptor (fresh chunk load path).
       expect(loader.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("refuses to mount Locker on the viewer seat (docs/blueprint-seats.md S5)", async () => {
+      // `seat()` (host-platform.ts) reads `window.CentraidIroh` as the
+      // synchronous first-paint web-host marker — installing it here is the
+      // same signal the real web shell installs before this bundle loads.
+      (window as unknown as { CentraidIroh?: unknown }).CentraidIroh = {};
+      const loader = vi.fn<() => Promise<{ default: InlineAppModule }>>(
+        async () => ({ default: makeApp(() => <div>should not mount</div>) })
+      );
+      try {
+        await mount(routeEl(loader, "locker"));
+        const refusal = host!.querySelector(
+          '[data-testid="inline-app-seat-refusal"]'
+        );
+        expect(refusal).toBeTruthy();
+        expect(refusal?.textContent ?? "").toMatch(/paired device/iu);
+        // The wall means "does not mount" — the app's lazy chunk is never
+        // even fetched, not merely hidden after mounting.
+        expect(loader).not.toHaveBeenCalled();
+      } finally {
+        delete (window as unknown as { CentraidIroh?: unknown }).CentraidIroh;
+      }
+    });
+
+    it("mounts Locker normally on the custodian seat (no viewer marker)", async () => {
+      delete (window as unknown as { CentraidIroh?: unknown }).CentraidIroh;
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return <div ref={rootRef} data-testid="locker-root" />;
+      }
+      await mount(routeEl(async () => ({ default: makeApp(Root) }), "locker"));
+      expect(
+        host!.querySelector('[data-testid="inline-app-seat-refusal"]')
+      ).toBeNull();
+      expect(host!.querySelector('[data-testid="locker-root"]')).toBeTruthy();
     });
   });
 });

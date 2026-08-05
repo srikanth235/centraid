@@ -134,6 +134,21 @@ const ROUTES: Record<string, Responder> = {
   "PUT /centraid/_vault/blob-store": (request) =>
     json({ blob_store: JSON.parse(String(request.body)).blob_store }),
 
+  // ── enrichment tier (the owner's per-domain consent, #352 / S9) ──
+  // The PUT echoes the MERGED state, not the patch: the real route reads the
+  // vault back after writing, and a client that rendered its own patch would
+  // show a tier the vault may never have accepted.
+  "GET /centraid/_vault/enrich": () =>
+    json({ enrich: { photos: "local", docs: "local" } }),
+  "PUT /centraid/_vault/enrich": (request) =>
+    json({
+      enrich: {
+        docs: "local",
+        photos: "local",
+        ...(JSON.parse(String(request.body)) as Record<string, unknown>),
+      },
+    }),
+
   // ── backup engine (#351 wave 4 / #436) ──
   "GET /centraid/_gateway/backup": () =>
     json({
@@ -293,6 +308,7 @@ export const members = await import("./gateway-client-members.js");
 export const capture = await import("./gateway-client-capture.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");
+export const vaultOwner = await import("./gateway-client-vault.js");
 const { resetGatewayAuthCache } = await import("./gateway-client-core.js");
 
 /** Registers the per-test reset. Call once at the top level of a test file. */

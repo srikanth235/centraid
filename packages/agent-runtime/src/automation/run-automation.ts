@@ -141,6 +141,12 @@ export interface RunAutomationOptions {
    * connector's connection credential resolves and injects per fire.
    */
   resolveConnection?: automation.ResolveConnection;
+  /**
+   * Enrichment-tier seam (privacy enforcement) — forwarded verbatim to the
+   * fire spine, which refuses any automation declaring `manifest.enrich`
+   * when this is absent or cannot answer. See `enrich-gate.ts`.
+   */
+  resolveEnrichPolicy?: automation.RunFireOptions["resolveEnrichPolicy"];
   /** Resolve each onFailure target's own automation pin. */
   resolveNestedRuntime?: (automationRef: string) => Promise<{
     runnerKind?: RunnerKind;
@@ -288,6 +294,9 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
           : { failureDepth: opts.failureDepth }),
         ...(opts.resolveConnection
           ? { resolveConnection: opts.resolveConnection }
+          : {}),
+        ...(opts.resolveEnrichPolicy
+          ? { resolveEnrichPolicy: opts.resolveEnrichPolicy }
           : {}),
         ...(opts.resolveNestedRuntime
           ? { resolveNestedRuntime: opts.resolveNestedRuntime }

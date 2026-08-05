@@ -1,0 +1,114 @@
+/* The scrub rail (v4 handoff §4.5). Logical properties throughout: the rail
+   sits on the TRAILING edge and mirrors under RTL, which `inset-inline-end`
+   does and `right` does not. */
+
+.rail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* ---- desktop / PWA: a 14px column with a hairline on its leading side ---- */
+
+.column {
+  width: 14px;
+  border-inline-start: 1px solid var(--line);
+}
+
+/* ---- phone: an OVERLAY, invisible except while the thumb is on it ---- */
+
+.phone {
+  width: 44px;
+  border-inline-start: none;
+  /* The grid keeps every pixel: only the thumb target below takes pointer
+     events back. */
+  pointer-events: none;
+  touch-action: none;
+}
+.phone .track {
+  pointer-events: auto;
+  touch-action: none;
+}
+/* Nothing of the phone rail is drawn at rest — the bubble is the whole of it. */
+.phone .tickMark,
+.phone .tickLabel {
+  display: none;
+}
+
+.track {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: 100%;
+  height: 100vh;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 2px;
+  padding-block: var(--sp-2);
+}
+
+.tick {
+  flex: 1 1 auto;
+  min-height: 8px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.tickMark {
+  display: block;
+  width: 3px;
+  height: 1px;
+  background: var(--line-strong);
+}
+.tick:hover .tickMark {
+  background: var(--text-faint);
+}
+.tickCurrent .tickMark {
+  width: 7px;
+  background: var(--text);
+}
+
+/* The label hangs on the rail's LEADING side, on paper, because 11.5px of
+   tabular mono does not fit inside 14px of column and the ramp has no smaller
+   rung to reach for (§18: nothing below 11px). */
+.tickLabel {
+  position: absolute;
+  inset-inline-end: calc(100% + var(--sp-1));
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  background: var(--bg);
+  padding-inline: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---- the phone's month bubble — `Aug 2026`, paper, 999px, hairline ---- */
+
+.bubble {
+  position: sticky;
+  top: 50%;
+  align-self: center;
+  inset-inline-end: 100%;
+  margin-inline-end: var(--sp-3);
+  height: max-content;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}

@@ -60,6 +60,9 @@ export const lightTheme: Theme = {
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
     "linear-gradient(180deg, #EAE9E6 0%, #E1E0DC 100%)",
+  // The ground a photo tile paints before its bytes arrive — deeper than
+  // `--bg-elev` (a card) because an absence is not a card.
+  skel: "#E4E3E0",
   // Measured against the page: text 18.1:1, soft 6.8:1, faint 5.2:1,
   // ghost 3.5:1 — and against the `mat` tone, the hardest surface in the
   // system: 16.0 / 6.0 / 4.6 / 3.1. `contrast.test.ts` re-measures both off
@@ -78,7 +81,13 @@ export const lightTheme: Theme = {
   link: LINK,
   net: NET,
   ring: RING,
-  scrim: "rgba(20,20,20,0.48)",
+  // The veil, at the handoff's own strength (v4 line 5101,
+  // `dark?'rgba(0,0,0,.62)':'rgba(26,24,21,.3)'`). Two corrections in one:
+  // the ALPHA was 0.48, half again as heavy as specified, and the TINT was
+  // the cool `20,20,20` ink rather than the warm `26,24,21` the ink-on-paper
+  // flip settled on. A veil is meant to say "the thing behind this is still
+  // there"; at 48% on a warm paper it read as a cold grey plate.
+  scrim: "rgba(26,24,21,0.3)",
   palette,
   shadowLg: "0 24px 48px -16px rgba(20,20,20,.16)",
   shadowMd: "0 8px 24px -8px rgba(20,20,20,.10)",
@@ -111,6 +120,7 @@ export const darkTheme: Theme = {
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), " +
     "var(--bg-wall)",
+  skel: "#1E1E1D",
   text: INK_RAMP.dark.text,
   textSoft: INK_RAMP.dark.soft,
   textFaint: INK_RAMP.dark.faint,
@@ -122,7 +132,9 @@ export const darkTheme: Theme = {
   link: LINK_DARK,
   net: NET_DARK,
   ring: RING_DARK,
-  scrim: "rgba(0,0,0,0.72)",
+  // 0.62, the handoff's dark value (v4 line 5101) — was 0.72, which on an
+  // already near-black page left almost nothing of the surface behind it.
+  scrim: "rgba(0,0,0,0.62)",
   palette: paletteDark,
   shadowLg: "0 30px 70px -24px rgba(0,0,0,.7)",
   shadowMd: "0 12px 30px -14px rgba(0,0,0,.6)",

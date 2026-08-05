@@ -40,7 +40,13 @@ const CONTENT: HomeTileContent = {
   },
   locker: { compromised: 1, total: 11 },
   notes: { at: "2026-08-03T09:00:00Z", line: "Reading list", total: 4 },
-  people: { names: ["Ada Lovelace", "Grace Hopper"], total: 2 },
+  people: {
+    directory: [
+      { id: "party-ada", name: "Ada Lovelace" },
+      { id: "party-grace", name: "Grace Hopper" },
+    ],
+    total: 2,
+  },
   photos: { thumbs: ["blob:a", "blob:b"], total: 1_204 },
   tally: { balanceMinor: 2_500, currency: "USD" },
   tasks: {

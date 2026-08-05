@@ -16,8 +16,8 @@ import type { TextStyle } from "react-native";
 
 import { type as nativeType } from "./tokens.generated";
 
-export { spacing, radii } from "@centraid/design";
-export { density, metrics } from "./tokens.generated";
+export { spacing, radii, borders } from "@centraid/design";
+export { density, metrics, pageMargin } from "./tokens.generated";
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.

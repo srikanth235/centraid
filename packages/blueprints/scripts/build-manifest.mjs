@@ -67,20 +67,30 @@ const templates = await Promise.all(
     // desktop doesn't need a second fetch — `resolveTemplates()` already
     // reads manifest.json, so this rides along for free.
     let appKnobs;
+    // The seats block (docs/blueprint-seats.md) rides along the same way —
+    // InlineAppRoute.tsx (packages/client) also can't import app.json
+    // directly, and this manifest is already the one thing it fetches.
+    let seats;
     try {
       const rawLocal = await fs.readFile(path.join(dir, "app.json"), "utf8");
       const parsed = JSON.parse(rawLocal);
       if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
+      if (parsed?.seats && typeof parsed.seats === "object")
+        seats = parsed.seats;
     } catch {
-      /* template has no parseable app.json or no knobs — fine, the popover
-       just shows manage actions */
+      /* template has no parseable app.json or no knobs/seats — fine, the
+       popover just shows manage actions and the app mounts unrestricted */
     }
     // `kind` is declared explicitly in index.json (`'automation'` for an
     // automation app); a normal UI app omits it and defaults to `'app'`.
     const kind = tmpl.kind ?? "app";
-    return appKnobs
-      ? { ...tmpl, kind, files, appKnobs }
-      : { ...tmpl, kind, files };
+    return {
+      ...tmpl,
+      kind,
+      files,
+      ...(appKnobs ? { appKnobs } : {}),
+      ...(seats ? { seats } : {}),
+    };
   })
 );
 enriched.templates.push(...templates.filter(Boolean));

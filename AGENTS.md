@@ -49,6 +49,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/sonarcloud.md](docs/sonarcloud.md) | SonarCloud Autoscan scope, silenced rules, Centraid profile/gate, apply script |
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
 | [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
+| [docs/blueprint-seats.md](docs/blueprint-seats.md) | Three seats (origin/custodian/viewer), byte-bearing vs record-only, custody triple, per-app north stars |
 | [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
 | [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
 | [docs/oauth-assist.md](docs/oauth-assist.md) | Assist code-courier architecture, privacy, scopes, BYO, reconnect |

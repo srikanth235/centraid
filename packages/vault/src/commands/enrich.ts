@@ -329,6 +329,12 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
       // or on-view signal.
       reason: { type: "string", enum: ["search-miss", "on-view", "manual"] },
       detail: { type: "string" },
+      // CONSENT SCOPE (see schema/enrich.ts `capability`): which enricher
+      // this ask is for. Required for `manual` — an owner's "detect faces
+      // now" must not read as consent for captioning, screenshot OCR and
+      // every other enabled enricher, which is exactly what an untagged row
+      // used to mean.
+      capability: { type: "string", minLength: 1, maxLength: 64 },
     },
   },
   outputSchema: {
@@ -354,12 +360,20 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
       entity_id?: string;
       reason: "search-miss" | "on-view" | "manual";
       detail?: string;
+      capability?: string;
     };
+    // The DDL enforces this too; refusing here buys the caller a sentence
+    // instead of a CHECK-constraint stack trace.
+    if (input.reason === "manual" && !input.capability)
+      throw new Error(
+        "enrich.request_enrichment: a 'manual' request must name the `capability` it is asking for — " +
+          "an untagged owner ask would enable every enricher, not the one the member consented to"
+      );
     const requestId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO enrich_request (request_id, target_type, target_id, reason, detail, requested_at, drained_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL)`
+        `INSERT INTO enrich_request (request_id, target_type, target_id, reason, detail, capability, requested_at, drained_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`
       )
       .run(
         requestId,
@@ -367,6 +381,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         input.entity_id ?? null,
         input.reason,
         input.detail ?? null,
+        input.capability ?? null,
         ctx.now
       );
     ctx.wrote("enrich.request", requestId);

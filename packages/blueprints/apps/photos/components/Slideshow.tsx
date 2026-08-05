@@ -1,17 +1,25 @@
-// Full-screen slideshow (issue #352 phase 3): auto-advances through the
-// PHOTO subset of the list it opened with (videos are skipped, both during
-// auto-advance and manual stepping — there is no reliable "finished playing"
-// signal to hang a 4s-default timer off without wiring per-asset <video>
-// event listeners, and a silently-autoplaying video would need its own
-// mute/sound decision this app doesn't otherwise make anywhere; open a video
-// from the grid/lightbox directly to play it). Space pauses/resumes, arrow
-// keys step manually (and reset the auto-advance clock), Escape exits.
-// CSS split: the fixed dark `.slideshow` container stays global (static
-// index.html element); this view's own bits live in Slideshow.module.css,
-// while `kit-viewer-nav`/`prev`/`next` are kit.css vocabulary (global).
+// The slideshow (v4 handoff §7.3) — A DIFFERENT MODE FROM THE VIEWER, not the
+// viewer with its chrome hidden.
+//
+// What it does not have is the point: no filmstrip, no info panel, no action
+// bar. One transport, a determinate position (`12` / `184`), and a status line
+// that says what leaving does — because the one thing a member wonders while a
+// slideshow runs is whether stopping loses their place. It does not: the
+// viewer keeps the photograph they stopped on, and this says so rather than
+// making them find out.
+//
+// It stands on the same STAGE as the viewer and the editor: `--stage` in both
+// themes, ink `--on-stage`, hairlines `--stage-line`. The wrapper below paints
+// it edge to edge inside the host container, so the stage covers the whole
+// frame here exactly as it does in the viewer.
+//
+// Videos are skipped, during auto-advance and manual stepping alike: there is
+// no reliable "finished playing" signal to hang the 4s timer off, and a
+// silently autoplaying video would need a mute/sound decision this app does
+// not otherwise make. Open a video from the grid or the viewer to play it.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FC } from "react";
 
+import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { isVideoAsset } from "../format.ts";
 import {
   ChevronLeftIcon,
@@ -23,6 +31,7 @@ import {
 import { isRenderableUri } from "../media.ts";
 import { scopeAttr } from "../scopes.ts";
 import type { Asset } from "../types.ts";
+import { assetRatio, SLIDESHOW_STATUS } from "../viewer.ts";
 
 import styles from "./Slideshow.module.css";
 
@@ -35,7 +44,9 @@ export function SlideshowView({
 }: {
   list: Asset[];
   startAssetId: string | null;
-  onClose: () => void;
+  /** Carries the photograph the run stopped on, so the viewer can reopen
+   *  there — which is what the status line promises (§7.3). */
+  onClose: (stoppedOn: Asset | null) => void;
 }) {
   const photos = list.filter(
     (a) => isRenderableUri(a.content_uri) && !isVideoAsset(a)
@@ -58,9 +69,16 @@ export function SlideshowView({
     [photos.length]
   );
 
-  // Re-arms the 4s clock on every idx/paused change — a manual step (arrow
-  // key or nav button) resets the wait, which is the behavior a slideshow
-  // remote would give you too.
+  // Escape and the Exit button agree on where the run stopped because both go
+  // through here, and it reads the CURRENT index off the render that closed —
+  // never a ref written during render, which React may discard.
+  const leave = useCallback(
+    () => onClose(photos[idx] ?? null),
+    [onClose, photos, idx]
+  );
+
+  // Re-arms the 4s clock on every idx/paused change — a manual step resets the
+  // wait, which is the behaviour a slideshow remote would give you too.
   useEffect(() => {
     if (paused || photos.length <= 1) return undefined;
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
@@ -70,7 +88,7 @@ export function SlideshowView({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        leave();
       } else if (e.key === " ") {
         e.preventDefault();
         setPaused((p) => !p);
@@ -82,79 +100,99 @@ export function SlideshowView({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, onClose]);
+  }, [step, leave]);
 
   if (photos.length === 0) {
     return (
-      <>
+      <div className={styles.stage}>
         <p className={styles.empty}>
-          No photos to show here — videos aren’t included in the slideshow.
+          Nothing here plays as a slideshow — a video is opened on its own, not
+          stepped through.
         </p>
-        <button
-          type="button"
-          className="kit-btn slideshow-exit"
-          onClick={onClose}
-        >
+        <button type="button" className={styles.exit} onClick={leave}>
           <CloseIcon size={14} /> Close
         </button>
-      </>
+      </div>
     );
   }
 
   const asset = photos[idx]!;
-  const navs: Array<[string, number, FC<{ size?: number }>, string]> = [
-    ["prev", -1, ChevronLeftIcon, "Previous photo"],
-    ["next", 1, ChevronRightIcon, "Next photo"],
-  ];
+  const src = safeMediaUrl(asset.content_uri);
   return (
-    <>
+    <div className={styles.stage}>
       {/* No backdrop-shield onClick on the image or the bar: `#slideshow`'s
           native close listener already gates on `e.target === e.currentTarget`
           (see slideshow.tsx), so a click on either never reached it. */}
-      <img
-        key={`${asset.scope_id ?? ""}:${asset.asset_id}`}
-        className={styles.image}
-        src={asset.content_uri ?? undefined}
-        alt={asset.title ?? "Photo"}
-        /* A slideshow steps through the merged list, so consecutive slides can
-           come from different scopes; each names its own (issue #599). */
-        data-scope={scopeAttr(asset.scope_id)}
-      />
-      {navs.map(([variant, delta, Glyph, name]) => (
-        <button
-          key={variant}
-          type="button"
-          className={`kit-viewer-nav ${variant}`}
-          aria-label={name}
-          onClick={(e) => {
-            e.stopPropagation();
-            step(delta);
-          }}
-        >
-          <Glyph size={22} />
-        </button>
-      ))}
-      <div className={styles.bar}>
-        <button
-          type="button"
-          className="kit-btn"
-          aria-pressed={paused ? "true" : "false"}
-          onClick={() => setPaused((p) => !p)}
-        >
-          {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
-          {paused ? "Play" : "Pause"}
-        </button>
-        <span className={styles.count}>
-          {idx + 1} / {photos.length}
-        </span>
-        <button
-          type="button"
-          className="kit-btn slideshow-exit"
-          onClick={onClose}
-        >
-          Exit
-        </button>
+      <div className={styles.mediaWrap}>
+        <img
+          key={`${asset.scope_id ?? ""}:${asset.asset_id}`}
+          className={styles.image}
+          style={{ aspectRatio: String(assetRatio(asset)) }}
+          src={src ?? undefined}
+          alt={displayText(asset.title ?? "Photograph")}
+          /* A run steps through the merged list, so consecutive slides can
+             come from different scopes; each names its own (issue #599). */
+          data-scope={scopeAttr(asset.scope_id)}
+        />
       </div>
-    </>
+      <button
+        type="button"
+        className={`${styles.nav} ${styles.navPrev}`}
+        aria-label="Previous photograph"
+        title="Previous photograph"
+        onClick={(e) => {
+          e.stopPropagation();
+          step(-1);
+        }}
+      >
+        <ChevronLeftIcon size={20} />
+      </button>
+      <button
+        type="button"
+        className={`${styles.nav} ${styles.navNext}`}
+        aria-label="Next photograph"
+        title="Next photograph"
+        onClick={(e) => {
+          e.stopPropagation();
+          step(1);
+        }}
+      >
+        <ChevronRightIcon size={20} />
+      </button>
+
+      <div className={styles.foot}>
+        {/* ONE transport (§7.3). The pause control is always present — a run
+            you cannot stop is not a control, it is an animation. */}
+        <div className={styles.transport}>
+          <button
+            type="button"
+            className={styles.play}
+            aria-pressed={paused}
+            aria-label={paused ? "Play" : "Pause"}
+            title={paused ? "Play" : "Pause"}
+            onClick={() => setPaused((p) => !p)}
+          >
+            {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}
+          </button>
+          {/* Determinate, with exact counts — never a spinner (§14). A real
+              `<progress>`, so the indeterminate state is not expressible. */}
+          <progress
+            className={styles.track}
+            aria-label="Position"
+            max={photos.length}
+            value={idx + 1}
+          />
+          <span className={styles.position}>
+            {idx + 1} / {photos.length}
+          </span>
+          <button type="button" className={styles.exit} onClick={leave}>
+            Exit
+          </button>
+        </div>
+        {/* The status line, inside the stage. It answers the one question a
+            running slideshow raises. Verbatim (§7.3). */}
+        <p className={styles.status}>{SLIDESHOW_STATUS}</p>
+      </div>
+    </div>
   );
 }

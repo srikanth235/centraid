@@ -37,10 +37,16 @@ export const lightPalette = {
   link: '#2D4BA8',
   net: '#9A3B2E',
   onAccent: '#FDFDFC',
-  scrim: 'rgba(20,20,20,0.48)',
+  onStage: '#EDEDEC',
+  onStageSoft: '#9A9A98',
+  scrim: 'rgba(26,24,21,0.3)',
   shadowLg: '0 24px 48px -16px rgba(20,20,20,.16)',
   shadowMd: '0 8px 24px -8px rgba(20,20,20,.10)',
   shadowSm: '0 1px 2px rgba(20,20,20,.06)',
+  skel: '#E4E3E0',
+  stage: '#0B0B0B',
+  stageLine: '#2A2A29',
+  stageSunken: '#1A1A19',
   success: '#3a6540',
   text: '#141414',
   textDisabled: '#9C9C99',
@@ -88,10 +94,16 @@ export const darkPalette = {
   link: '#9DB0F0',
   net: '#E08878',
   onAccent: '#FDFDFC',
-  scrim: 'rgba(0,0,0,0.72)',
+  onStage: '#EDEDEC',
+  onStageSoft: '#9A9A98',
+  scrim: 'rgba(0,0,0,0.62)',
   shadowLg: '0 30px 70px -24px rgba(0,0,0,.7)',
   shadowMd: '0 12px 30px -14px rgba(0,0,0,.6)',
   shadowSm: '0 1px 0 rgba(0,0,0,.4)',
+  skel: '#1E1E1D',
+  stage: '#0B0B0B',
+  stageLine: '#2A2A29',
+  stageSunken: '#1A1A19',
   success: '#7fb588',
   text: '#EDEDEC',
   textDisabled: '#565654',
@@ -114,6 +126,12 @@ export const radii = {
   sm: 4,
   xl: 12,
   xs: 0,
+} as const;
+
+// The one rule weight. A FULL point, never `StyleSheet.hairlineWidth` —
+// see packages/design/src/borders.ts for why.
+export const borders = {
+  hairline: 1,
 } as const;
 
 export const spacing = {
@@ -176,6 +194,10 @@ export const type = {
   smallStrong: { family: 'sans', fontSize: 15, lineHeight: 21, weight: '500' },
   title: { family: 'sans', fontSize: 22, lineHeight: 28, weight: '500' },
 } as const;
+
+// The horizontal page inset every screen uses — NOT a `spacing` rung.
+// See packages/design/src/density.ts#pageMargin for why 18 is off the scale.
+export const pageMargin = 18;
 
 export const targetMin = {"coarse":48,"fine":32} as const;
 export const durations = {"one":140,"two":280} as const;

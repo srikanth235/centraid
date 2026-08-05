@@ -8,6 +8,7 @@ import { isWebHost } from "../../host-platform.js";
 import ImportScreen from "../../screens/ImportScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
 import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
+import SettingsEnrichmentScreen from "../../screens/SettingsEnrichmentScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
 import SettingsProvidersScreen from "../../screens/SettingsProvidersScreen.js";
 import SettingsStorageScreen from "../../screens/SettingsStorageScreen.js";
@@ -26,6 +27,7 @@ import {
   loadThisDeviceData,
   setOfflineCopy,
 } from "./settingsAccountData.js";
+import { loadEnrichPolicy, setEnrichTier } from "./settingsEnrichmentData.js";
 import {
   activateRunner,
   loadProviders,
@@ -66,6 +68,7 @@ export type SettingsPageId =
   | "vault"
   | "profile"
   | "device"
+  | "enrichment"
   | "import"
   | "providers"
   | "storage";
@@ -109,6 +112,18 @@ const ALL_PAGES: readonly PageDef[] = [
     icon: "Users",
     subtitle:
       "This vault’s presentation — name, icon, color, and description, plus whether it stays on this device. Switch between reachable vaults from the sidebar switcher (⌘⇧G).",
+  },
+  // The counterpart to the runtime enrichment gate (decision S9). The tier is
+  // enforced on the execution path, and the seeded default refuses every
+  // model-routed enricher — so without a control here the refusal has no
+  // remedy and a member's request for face proposals ends in silence.
+  {
+    id: "enrichment",
+    label: "Enrichment",
+    section: "Account",
+    icon: "Shield",
+    subtitle:
+      "What Centraid may do to make photographs and documents findable — and whether any of that work is allowed to leave your devices for a model provider.",
   },
   // Web only: on desktop the gateway runs in-process, so "this device" has no
   // separate pairing to forget; the desktop case is the active vault's own
@@ -497,6 +512,35 @@ export default function SettingsRoute({
                   {...(onWhatsNew ? { onWhatsNew } : {})}
                   {...(onLogOut ? { onLogOut } : {})}
                 />
+              ) : page === "enrichment" ? (
+                // The scope's own name, never "this vault" (#599 / S6): this
+                // setting governs one scope, and the label is what the member
+                // already reads in the switcher. Until the active scope has
+                // loaded there is no honest label to put in the copy, so the
+                // page waits rather than naming the wrong thing.
+                activeVault.status === "loading" ? (
+                  <PageLoading label="Loading this scope…" />
+                ) : activeVault.status === "error" ? (
+                  <PageEmpty
+                    message={`Couldn’t load enrichment settings: ${activeVault.error}`}
+                  />
+                ) : activeVault.data ? (
+                  <SettingsEnrichmentScreen
+                    scopeLabel={activeVault.data.name}
+                    loadPolicy={loadEnrichPolicy}
+                    setTier={setEnrichTier}
+                    confirmEgress={(input) =>
+                      confirm({
+                        confirmLabel: input.confirmLabel,
+                        message: input.message,
+                        title: input.title,
+                      })
+                    }
+                    showToast={showToast}
+                  />
+                ) : (
+                  <PageEmpty message="This connection exposes no scope to configure enrichment for." />
+                )
               ) : page === "import" ? (
                 <ImportScreen {...importProps} />
               ) : page === "storage" ? (

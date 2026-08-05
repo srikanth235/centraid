@@ -1,130 +1,613 @@
+// The selection bar (v4 handoff §6): the toolbar row's OWN content while a
+// selection is active — count, five actions in a fixed order, Select
+// all/none, Done. Two arrangements of the SAME data, exactly like the
+// viewer's ViewerBarActions/ViewerBottomBar split (ViewerActions.tsx):
+//
+//   * `SelectionBarView` — desktop/PWA. A row whose actions carry a visible
+//     label once the bar itself is at least `LABEL_BREAKPOINT` wide
+//     (measured by the caller — selection.tsx owns the ResizeObserver — and
+//     handed in as `labelled`, never re-derived from a surface flag here).
+//   * `SelectionBottomBar` — the phone's bottom bar of five 56px targets.
+//     Always icon + small caption; the count, Select all and Done stay in the
+//     frame's head on that surface (out of this file's reach — see the
+//     integration note below).
+//
+// `buildSelectionActions` is the one place the fixed order and the two shelf
+// swaps (Trash → Restore, Sharing → Remove from Sharing) live, as a pure
+// function of shelf + read-only state — both view components and the tests
+// read the same table, so the order can't drift between them.
+//
+// INTEGRATION NOTE (not this file's to fix): `SelectionBarView` is rendered
+// into the app's `#selectionBar` overlay region (Chrome.tsx), not literally
+// inside the toolbar row's own DOM node — that seam belongs to whoever wires
+// Chrome.tsx/app-root.tsx, both off limits to this change. `shelfKind` and
+// `readOnlyReason` likewise need the current shelf and the selected assets'
+// write grants, which only app-root.tsx's closure holds; selection.tsx
+// exposes optional getters for both so wiring them up later is additive.
+// `SelectionBottomBar` is written and tested but not yet mounted anywhere —
+// the phone band is Chrome.tsx's to claim.
 import { useRef } from "react";
+import type { FC } from "react";
 
-import { CloseIcon } from "../icons.tsx";
-// The selection toolbar: count, "Add to album ▾" menu, Delete, exit. The
-// "Add to album ▾" menu's open/closed flag (`menuOpen`) is app.tsx state (it
-// drives an away-click listener added/removed in lockstep with it) — this
-// view only reads it as a prop. `countRef` is the batch-progress node that
-// selection-actions.ts mutates via direct `textContent` writes.
+import type { InlineScope } from "../../inline-types.ts";
+import { shareDestination } from "../filters.ts";
+import {
+  SelectAlbumIcon,
+  SelectDownloadIcon,
+  SelectFavoriteIcon,
+  SelectRemoveFromIcon,
+  SelectRestoreIcon,
+  SelectShareIcon,
+  SelectTrashIcon,
+} from "../icons.tsx";
 import { armConfirm } from "../kit.ts";
-import { runBatchAddToAlbum, runBatchDelete } from "../selection-actions.ts";
-import type { Album } from "../types.ts";
+import { writeTarget } from "../outcomes.ts";
+import {
+  runBatchAddToAlbum,
+  runBatchCopyToSharing,
+  runBatchDelete,
+  runBatchDownload,
+  runBatchFavorite,
+  runBatchRemoveFromSharing,
+  runBatchRestore,
+} from "../selection-actions.ts";
+import type { Album, Asset } from "../types.ts";
 
 import styles from "./SelectionBar.module.css";
 
+/** Below this many pixels OF BAR the actions go icon-only (§6, §15). A
+ *  function of the bar's own measured width, never of which surface this is —
+ *  the PWA's narrower bar crosses it well above a phone's; a bare viewport
+ *  breakpoint would get both wrong. */
+export const LABEL_BREAKPOINT = 840;
+
+/** Are the bar's actions labelled at this measured width? */
+export function labelsVisible(barWidth: number): boolean {
+  return barWidth >= LABEL_BREAKPOINT;
+}
+
+/** Which swap applies to the fixed five (§6): Trash's fifth action becomes
+ *  Restore, Sharing's third becomes Remove from Sharing. Every other shelf
+ *  that allows selection carries the base order untouched. */
+export type SelectionShelfKind = "trash" | "sharing" | "normal";
+
+export interface SelectionActionSpec {
+  id: "favorite" | "add-to-album" | "share" | "download" | "trash";
+  label: string;
+  icon: FC<{ size?: number }>;
+  onRun: () => void;
+  disabled: boolean;
+  /** Why it is disabled — a read-only vault states this on the control
+   *  itself, never only in a tooltip (§6, §18). */
+  reason?: string;
+  /** An outlined `--net` button, never filled (§18) — Trash only; Restore
+   *  undoes a destructive action rather than being one. */
+  destructive?: boolean;
+  /** Asks for a second tap on the same control before it fires (armConfirm),
+   *  the wording naming exactly what will happen. Trash only. */
+  confirmLabel?: string;
+}
+
+export interface BuildSelectionActionsInput {
+  count: number;
+  shelfKind: SelectionShelfKind;
+  /** Non-null in a read-only vault (§6): Favorite, Add to album and
+   *  Trash/Restore disable with this reason; Copy to Sharing/Remove from
+   *  Sharing and Download do not — copying into the member's own Sharing
+   *  vault, and downloading, are never writes on someone else's library. */
+  readOnlyReason: string | null;
+  /**
+   * Why *Copy to Sharing* cannot fire — the member's share destination is not
+   * mounted here, or none has ever been chosen (§H). Null when it can. The
+   * control DISABLES with this sentence on it rather than being tappable and
+   * doing nothing; `Remove from Sharing` never consults it, because leaving a
+   * place needs no destination.
+   */
+  shareBlockedReason: string | null;
+  onFavorite: () => void;
+  onAddToAlbum: () => void;
+  onShare: () => void;
+  onDownload: () => void;
+  onTrash: () => void;
+}
+
+/**
+ * The five actions, in the handoff's fixed order, with the two shelf swaps
+ * applied (§6). Pure — no DOM, no React — so the order, the swaps and the
+ * disabled/reason state are all directly testable without rendering anything.
+ */
+export function buildSelectionActions({
+  count,
+  shelfKind,
+  readOnlyReason,
+  shareBlockedReason,
+  onFavorite,
+  onAddToAlbum,
+  onShare,
+  onDownload,
+  onTrash,
+}: BuildSelectionActionsInput): SelectionActionSpec[] {
+  const empty = count === 0;
+  const netOff = readOnlyReason !== null;
+  const shareLabel =
+    shelfKind === "sharing" ? "Remove from Sharing" : "Copy to Sharing";
+  const shareIcon =
+    shelfKind === "sharing" ? SelectRemoveFromIcon : SelectShareIcon;
+  const isTrashShelf = shelfKind === "trash";
+  const trashLabel = isTrashShelf ? "Restore" : "Trash";
+  const trashIcon = isTrashShelf ? SelectRestoreIcon : SelectTrashIcon;
+  const specs: SelectionActionSpec[] = [
+    {
+      id: "favorite",
+      label: "Favorite",
+      icon: SelectFavoriteIcon,
+      onRun: onFavorite,
+      disabled: empty || netOff,
+      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
+    },
+    {
+      id: "add-to-album",
+      label: "Add to album",
+      icon: SelectAlbumIcon,
+      onRun: onAddToAlbum,
+      disabled: empty || netOff,
+      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
+    },
+    {
+      id: "share",
+      label: shareLabel,
+      icon: shareIcon,
+      onRun: onShare,
+      disabled:
+        empty || (shelfKind !== "sharing" && shareBlockedReason !== null),
+      reason:
+        shelfKind === "sharing" ? undefined : (shareBlockedReason ?? undefined),
+    },
+    {
+      id: "download",
+      label: "Download",
+      icon: SelectDownloadIcon,
+      onRun: onDownload,
+      disabled: empty,
+    },
+    {
+      id: "trash",
+      label: trashLabel,
+      icon: trashIcon,
+      onRun: onTrash,
+      disabled: empty || netOff,
+      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
+      destructive: !isTrashShelf,
+      confirmLabel: isTrashShelf ? undefined : `${trashLabel} ${count}?`,
+    },
+  ];
+  // Defense in depth (v4 handoff §6, prototype `act:off?()=>{}:…`): a disabled
+  // control's own handler is inert, not just its DOM `disabled` attribute.
+  // The attribute is what stops a pointer or a keyboard activation; the no-op
+  // is what stops anything that calls `spec.onRun()` directly — a test, a
+  // future caller, a synthetic activation — from reaching the vault write.
+  return specs.map((spec) =>
+    spec.disabled ? { ...spec, onRun: () => {} } : spec
+  );
+}
+
+function ActionButton({
+  spec,
+  labelled,
+}: {
+  spec: SelectionActionSpec;
+  labelled: boolean;
+}) {
+  const Icon = spec.icon;
+  return (
+    <button
+      type="button"
+      className={`${styles.action} ${spec.destructive ? styles.destructive : ""}`}
+      disabled={spec.disabled}
+      aria-label={spec.label}
+      // Labelled, the visible text IS the name, so `title` only ever carries
+      // the disabled reason; icon-only, it doubles as the name for a pointer
+      // that hovers and wonders (§6, §18 — every icon-only control is named).
+      title={spec.reason ?? (labelled ? undefined : spec.label)}
+      onClick={(e) => {
+        if (
+          spec.confirmLabel &&
+          !armConfirm(e.currentTarget, { armedLabel: spec.confirmLabel })
+        ) {
+          return;
+        }
+        spec.onRun();
+      }}
+    >
+      <Icon size={15} />
+      {labelled ? (
+        <span className={styles.actionLabel}>{spec.label}</span>
+      ) : null}
+    </button>
+  );
+}
+
+/**
+ * Why the batch *Copy to Sharing* cannot fire, as one sentence for the
+ * disabled control (§H). Two different truths, and a member can act on the
+ * difference: nothing has ever been chosen as a destination, versus the one
+ * they chose is not open on this device.
+ */
+function shareBlockedReasonFor(
+  target: InlineScope | undefined,
+  targetId: string | undefined
+): string | null {
+  if (target)
+    return target.canWrite ? null : `${target.label} is read-only for you.`;
+  return targetId === undefined
+    ? "There is nowhere to share to on this device yet."
+    : "Where your shares go isn't open on this device.";
+}
+
+export interface SelectionBarViewProps {
+  selectedIds: Set<string>;
+  /** The currently loaded rows — Download resolves each key's `content_uri`
+   *  from here, and Select all/none walks the same list. */
+  visible: readonly Asset[];
+  albums: Album[];
+  /** Every mounted scope (issue #599). */
+  scopes: readonly InlineScope[];
+  /** The member's share destination — a POINTER they own, resolved against
+   *  `scopes` here; never "the vault named Sharing" (§H, filters.ts). */
+  shareTargetId: string | undefined;
+  shelfKind: SelectionShelfKind;
+  readOnlyReason: string | null;
+  menuOpen: boolean;
+  busy: boolean;
+  /** Is the bar itself at least `LABEL_BREAKPOINT` wide? Measured by the
+   *  caller (selection.tsx), never re-derived from a surface flag here. */
+  labelled: boolean;
+  refresh: () => Promise<void>;
+  setBarBusy: (on: boolean) => void;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onExit: () => void;
+  onToggleAll: () => void;
+}
+
 export function SelectionBarView({
   selectedIds,
+  visible,
   albums: albumList,
+  scopes,
+  shareTargetId,
+  shelfKind,
+  readOnlyReason,
   menuOpen,
   busy,
+  labelled,
   refresh,
   setBarBusy,
   onToggleMenu,
   onCloseMenu,
   onExit,
-}: {
-  selectedIds: Set<string>;
-  albums: Album[];
-  menuOpen: boolean;
-  busy: boolean;
-  refresh: () => Promise<void>;
-  setBarBusy: (on: boolean) => void;
-  /**
-   * The scope a selected asset is shown from (issue #599). A selection can
-   * span scopes, so the delete/restore batches address each asset's own.
-   */
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-  onExit: () => void;
-}) {
+  onToggleAll,
+}: SelectionBarViewProps) {
   const count = selectedIds.size;
   const countRef = useRef<HTMLSpanElement>(null);
+  const sharingTarget = shareDestination(scopes, shareTargetId);
+
+  // countRef is passed as a REF, and the batch helpers dereference it only
+  // inside their own event-time bodies; nothing reads `.current` during this
+  // render — the compiler just cannot see through the call.
+  // oxlint-disable-next-line react/react-compiler
+  const actions = buildSelectionActions({
+    count,
+    shelfKind,
+    readOnlyReason,
+    shareBlockedReason: shareBlockedReasonFor(sharingTarget, shareTargetId),
+    onFavorite: () =>
+      void runBatchFavorite([...selectedIds], countRef, {
+        refresh,
+        setBarBusy,
+      }),
+    onAddToAlbum: onToggleMenu,
+    onShare: () => {
+      if (shelfKind === "sharing") {
+        void runBatchRemoveFromSharing([...selectedIds], countRef, {
+          refresh,
+          setBarBusy,
+          exitSelectMode: onExit,
+        });
+      } else if (sharingTarget) {
+        void runBatchCopyToSharing(
+          [...selectedIds],
+          sharingTarget.id,
+          countRef,
+          { refresh, setBarBusy, exitSelectMode: onExit }
+        );
+      }
+    },
+    onDownload: () =>
+      void runBatchDownload([...selectedIds], visible, countRef, {
+        setBarBusy,
+      }),
+    onTrash: () => {
+      if (shelfKind === "trash") {
+        void runBatchRestore([...selectedIds], { refresh });
+      } else {
+        void runBatchDelete([...selectedIds], countRef, {
+          refresh,
+          setBarBusy,
+          exitSelectMode: onExit,
+        });
+      }
+    },
+  });
+
   return (
     <>
       <span className={styles.count} ref={countRef}>
-        {count === 0 ? "Select photos" : `${count} selected`}
+        {count}
       </span>
-      <div className="bar-menu-wrap">
-        <button
-          type="button"
-          className={`kit-btn ${styles.btn}`}
-          aria-haspopup="true"
-          disabled={count === 0}
-          onClick={onToggleMenu}
-        >
-          Add to album ▾
-        </button>
-        {menuOpen ? (
-          // kit-popover/kit-popover-item are the shared CSS classes; the
-          // JS-positioned openPopover() helper is a bigger behavioral swap
-          // than this app wants (this menu's open/close is React state, not
-          // an imperative singleton), so `.albumMenu` stays as a thin local
-          // positioning rule (compound selector — kit.css loads after
-          // app.css and would otherwise win the `position` tie).
-          <div className={`kit-popover ${styles.albumMenu}`} role="menu">
-            {albumList.length === 0 ? (
-              <p className={`${styles.albumMenuEmpty} kit-muted`}>
-                No albums yet — make one from the chips above.
-              </p>
-            ) : (
-              albumList.map((album) => (
-                <button
-                  key={album.album_id}
-                  type="button"
-                  className={`kit-popover-item ${styles.albumMenuItem}`}
-                  role="menuitem"
-                  onClick={() => {
-                    onCloseMenu();
-                    void runBatchAddToAlbum(
-                      [...selectedIds],
-                      album,
-                      countRef.current,
-                      {
-                        refresh,
-                        setBarBusy,
-                        exitSelectMode: onExit,
-                      }
-                    );
-                  }}
-                >
-                  {album.title ?? "Album"}
-                </button>
-              ))
-            )}
-          </div>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        className={`kit-btn ${styles.btn} danger`}
-        disabled={count === 0}
-        onClick={(e) => {
-          if (busy || selectedIds.size === 0) return;
-          if (
-            !armConfirm(e.currentTarget, {
-              armedLabel: `Delete ${selectedIds.size}?`,
-            })
+      <span className={styles.countLabel}>selected</span>
+      <span className={styles.spacer} />
+      {/* A real <fieldset>, not role="group": same semantics, native tag.
+          The module strips the browser's fieldset chrome. */}
+      <fieldset
+        className={styles.actions}
+        aria-label="Selection actions"
+        aria-busy={busy || undefined}
+      >
+        {actions.map((spec) =>
+          spec.id === "add-to-album" ? (
+            <div key={spec.id} className={`bar-menu-wrap ${styles.menuWrap}`}>
+              <ActionButton spec={spec} labelled={labelled} />
+              {menuOpen ? (
+                // kit-popover/kit-popover-item are the shared CSS classes; see
+                // the original note this replaces — the away-click listener
+                // lives in selection.tsx and queries `.bar-menu-wrap`.
+                <div className={`kit-popover ${styles.albumMenu}`} role="menu">
+                  {albumList.length === 0 ? (
+                    <p className={`${styles.albumMenuEmpty} kit-muted`}>
+                      No albums yet — make one from the chips above.
+                    </p>
+                  ) : (
+                    albumList.map((album) => (
+                      <button
+                        key={album.album_id}
+                        type="button"
+                        className={`kit-popover-item ${styles.albumMenuItem}`}
+                        role="menuitem"
+                        onClick={() => {
+                          onCloseMenu();
+                          // Albums are own-scope regardless of the chip
+                          // selection (albums-actions.ts) — resolved here,
+                          // at the call site, so selection-actions.ts stays
+                          // free of the outcomes.ts write-target import.
+                          const target = writeTarget("own");
+                          void runBatchAddToAlbum(
+                            [...selectedIds],
+                            album,
+                            target.disabled ? null : target.scopeId,
+                            countRef,
+                            { refresh, setBarBusy, exitSelectMode: onExit }
+                          );
+                        }}
+                      >
+                        {album.title ?? "Album"}
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <ActionButton key={spec.id} spec={spec} labelled={labelled} />
           )
-            return;
-          void runBatchDelete([...selectedIds], countRef.current, {
+        )}
+      </fieldset>
+      <button type="button" className={styles.selectAll} onClick={onToggleAll}>
+        {count > 0 ? "Select none" : "Select all"}
+      </button>
+      <button type="button" className={styles.done} onClick={onExit}>
+        Done
+      </button>
+      {readOnlyReason ? (
+        <div className={styles.reason}>{readOnlyReason}</div>
+      ) : null}
+    </>
+  );
+}
+
+export interface SelectionBottomBarProps {
+  selectedIds: Set<string>;
+  visible: readonly Asset[];
+  scopes: readonly InlineScope[];
+  /** The member's share destination — see `SelectionBarViewProps`. */
+  shareTargetId: string | undefined;
+  shelfKind: SelectionShelfKind;
+  readOnlyReason: string | null;
+  refresh: () => Promise<void>;
+  setBarBusy: (on: boolean) => void;
+  onExit: () => void;
+  /** The phone has no room for an inline popover; the caller supplies
+   *  whatever picks an album there (a sheet, most likely) — not this file's
+   *  layout to invent. */
+  onAddToAlbum: () => void;
+}
+
+/**
+ * The phone's bottom bar (§6, §D): five 56px targets, icon + small caption,
+ * where a thumb is. Never measured for labels — at 390px there is no width
+ * for six words either way, so every target names itself on the element.
+ */
+export function SelectionBottomBar({
+  selectedIds,
+  visible,
+  scopes,
+  shareTargetId,
+  shelfKind,
+  readOnlyReason,
+  refresh,
+  setBarBusy,
+  onExit,
+  onAddToAlbum,
+}: SelectionBottomBarProps) {
+  const count = selectedIds.size;
+  const sharingTarget = shareDestination(scopes, shareTargetId);
+  const actions = buildSelectionActions({
+    count,
+    shelfKind,
+    readOnlyReason,
+    shareBlockedReason: shareBlockedReasonFor(sharingTarget, shareTargetId),
+    onFavorite: () =>
+      void runBatchFavorite(
+        [...selectedIds],
+        { current: null },
+        { refresh, setBarBusy }
+      ),
+    onAddToAlbum,
+    onShare: () => {
+      if (shelfKind === "sharing") {
+        void runBatchRemoveFromSharing(
+          [...selectedIds],
+          { current: null },
+          {
             refresh,
             setBarBusy,
             exitSelectMode: onExit,
-          });
-        }}
+          }
+        );
+      } else if (sharingTarget) {
+        void runBatchCopyToSharing(
+          [...selectedIds],
+          sharingTarget.id,
+          { current: null },
+          {
+            refresh,
+            setBarBusy,
+            exitSelectMode: onExit,
+          }
+        );
+      }
+    },
+    onDownload: () =>
+      void runBatchDownload(
+        [...selectedIds],
+        visible,
+        { current: null },
+        { setBarBusy }
+      ),
+    onTrash: () => {
+      if (shelfKind === "trash") {
+        void runBatchRestore([...selectedIds], { refresh });
+      } else {
+        void runBatchDelete(
+          [...selectedIds],
+          { current: null },
+          {
+            refresh,
+            setBarBusy,
+            exitSelectMode: onExit,
+          }
+        );
+      }
+    },
+  });
+
+  return (
+    <>
+      <div
+        className={styles.bottomBar}
+        role="toolbar"
+        aria-label="Selection actions"
       >
-        Delete
-      </button>
-      {/* `kit-icon-btn`, not a hand-rolled 40px round button, and a real glyph
-          rather than a literal "×" that an `aria-label` then has to override. */}
-      <button
-        type="button"
-        className="kit-icon-btn"
-        aria-label="Exit selection"
-        onClick={onExit}
-      >
-        <CloseIcon />
-      </button>
+        {actions.map((spec) => {
+          const Icon = spec.icon;
+          return (
+            <button
+              key={spec.id}
+              type="button"
+              className={`${styles.bottomAction} ${spec.destructive ? styles.destructive : ""}`}
+              disabled={spec.disabled}
+              aria-label={spec.label}
+              // `title` names an icon-only control for a pointer that hovers
+              // and wonders — it never carries the read-only STORY on its
+              // own; that is the visible `.reason` line below (§6, §18: a
+              // refusal is stated inline, never only in a tooltip).
+              title={spec.reason ?? spec.label}
+              onClick={(e) => {
+                if (
+                  spec.confirmLabel &&
+                  !armConfirm(e.currentTarget, {
+                    armedLabel: spec.confirmLabel,
+                  })
+                ) {
+                  return;
+                }
+                spec.onRun();
+              }}
+            >
+              <Icon size={18} />
+              <span className={styles.bottomActionLabel}>{spec.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {readOnlyReason ? (
+        <div className={styles.reason}>{readOnlyReason}</div>
+      ) : null}
     </>
+  );
+}
+
+export interface PhoneAlbumSheetProps {
+  albums: Album[];
+  onPick: (album: Album) => void;
+  onCancel: () => void;
+}
+
+/**
+ * The phone's "Add to album" surface (§6): "the phone has no room for an
+ * inline popover" (see the file header), so `SelectionBottomBar`'s Add to
+ * album target opens this instead — a sheet-like list above the bottom bar,
+ * dismissed by an explicit Cancel rather than a bare away-click (there is no
+ * pointer to miss the target with on a touch surface). Picking an album and
+ * the vault-write plumbing behind it are selection.tsx's job, same as the
+ * desktop popover's — this component only says what the member tapped.
+ */
+export function PhoneAlbumSheet({
+  albums,
+  onPick,
+  onCancel,
+}: PhoneAlbumSheetProps) {
+  return (
+    <div className={styles.phoneSheet} role="menu" aria-label="Add to album">
+      <div className={styles.phoneSheetHead}>
+        <span className={styles.phoneSheetTitle}>Add to album</span>
+        <button
+          type="button"
+          className={styles.phoneSheetCancel}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+      {albums.length === 0 ? (
+        <p className={`${styles.albumMenuEmpty} kit-muted`}>
+          No albums yet — make one from the chips above.
+        </p>
+      ) : (
+        <div className={styles.phoneSheetList}>
+          {albums.map((album) => (
+            <button
+              key={album.album_id}
+              type="button"
+              className={`kit-popover-item ${styles.albumMenuItem}`}
+              role="menuitem"
+              onClick={() => onPick(album)}
+            >
+              {album.title ?? "Album"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,14 +1,16 @@
-/* Face-proposer header control. Authored camelCase (old `enrichment-` prefix
-   dropped). The popover rides the shared `.kit-popover` base as a compound so
-   its positioning keeps the specificity that beat kit.css. The status note
-   stays a global `lightbox-note enrichment-note` string (neither class carries
-   an app rule — the note is deliberately unstyled), so it owns no module
-   class here. */
+/* The enrichment control and the question it opens (v4 handoff §8).
+
+   What went away with the popover: a 15rem `.kit-popover` box holding a status
+   sentence and a fire button. A consent moment is not a popover — it is a
+   surface a member reads before answering — so the dialog now takes the app
+   pane, on opaque paper, and the panels inside it own their own rhythm
+   (EnrichmentConsent.module.css). */
 
 .wrap {
   position: relative;
   display: flex;
 }
+
 /* The open/pressed ground for the kit icon button. Ink only — `--accent-soft`
    is an 8% ink wash and `--accent-text` IS the ink since the Binding Layer
    flip, so no hue lands on a control. */
@@ -16,14 +18,22 @@
   background: var(--accent-soft);
   color: var(--accent-text);
 }
-:global(.kit-popover).panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  inset-inline-end: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 15rem;
-  padding: 0.7rem 0.75rem;
-  z-index: 5;
+
+/* The question. A <dialog open> inside the app pane, not the top layer: it
+   takes back the UA's margin, border, sizing and colour, then fills the pane
+   on opaque paper — the backdrop is unpredictable photographs, so nothing
+   here is translucent. It scrolls itself rather than the pane behind it. */
+.surface {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  margin: 0;
+  max-inline-size: none;
+  max-block-size: none;
+  border: none;
+  color: inherit;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: var(--sp-4);
+  padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
 }

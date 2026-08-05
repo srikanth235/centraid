@@ -1,3 +1,4 @@
+import { StackActions } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import React, { useEffect } from "react";
 
@@ -72,7 +73,12 @@ async function handleNotificationResponse(
       return;
     }
     if (plan.kind === "open-home") {
-      if (rootNavigationRef.isReady()) rootNavigationRef.navigate("Home");
+      // `StackActions.popTo`, not `navigate`: the notification can arrive with
+      // an app cover open, and React Navigation 7's `navigate` would push a
+      // SECOND Home above that cover — which UIKit then presents as an inset
+      // card sheet rather than returning the member to the springboard.
+      if (rootNavigationRef.isReady())
+        rootNavigationRef.dispatch(StackActions.popTo("Home"));
       return;
     }
     if (plan.kind === "open-notifications") {

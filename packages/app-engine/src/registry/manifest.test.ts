@@ -221,6 +221,39 @@ describe(validateManifest, () => {
     const m = { ...baseManifest(), kind: "widget" };
     expect(() => validateManifest(m)).toThrow(ManifestError);
   });
+
+  it("treats the seats block as optional", () => {
+    const m = baseManifest();
+    const out = validateManifest(m);
+    expect(out.seats).toBeUndefined();
+  });
+
+  it("round-trips a well-formed seats block (docs/blueprint-seats.md)", () => {
+    const m = {
+      ...baseManifest(),
+      seats: {
+        byteBearing: true,
+        originActs: ["autofill"],
+        disabledOn: ["viewer"],
+        northStar: "1password",
+      },
+    };
+    const out = validateManifest(m);
+    expect(out.seats).toStrictEqual({
+      byteBearing: true,
+      originActs: ["autofill"],
+      disabledOn: ["viewer"],
+      northStar: "1password",
+    });
+  });
+
+  it("rejects a seats block missing a required field", () => {
+    const m = {
+      ...baseManifest(),
+      seats: { byteBearing: true, originActs: [], disabledOn: [] },
+    };
+    expect(() => validateManifest(m)).toThrow(ManifestError);
+  });
 });
 
 describe(parseManifest, () => {

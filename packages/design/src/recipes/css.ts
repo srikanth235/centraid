@@ -25,7 +25,7 @@ export function emitRecipeCss(scope = ":root"): string {
     // StatusLine — one persistent line, updated in place. Never a floating
     // stack: a state change is `--dur-1`, an entry/settle is `--dur-2`, and
     // the determinate bar is track-then-fill, never a spinner.
-    `${scope} .kit-status-line { min-height: var(--h-control); background: var(--bg); border-top: 1px solid var(--line); color: var(--text-soft); font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric); transition: color var(--dur-1) var(--ease); }`,
+    `${scope} .kit-status-line { min-height: var(--h-control); background: var(--bg); border-top: 1px solid var(--line); color: var(--text-soft); font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric); direction: var(--t-mono-direction); unicode-bidi: var(--t-mono-bidi); transition: color var(--dur-1) var(--ease); }`,
     `${scope} .kit-status-line-dot { background: var(--text-faint); border-radius: var(--r-pill); }`,
     `${scope} .kit-status-line-track { background: var(--bg-elev); border-radius: var(--r-pill); }`,
     `${scope} .kit-status-line-fill { background: var(--text); border-radius: inherit; transition: width var(--dur-1) var(--ease); }`,

@@ -10,7 +10,6 @@ import type {
 } from "@centraid/design";
 
 import { spacing, t, useTheme } from "../theme";
-import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
@@ -31,89 +30,57 @@ export default function Button({
   disabled,
   style,
 }: ButtonProps): React.JSX.Element {
-  const isPrimary = variant === "primary";
-  const isDestructive = variant === "destructive";
   const { colors, radii, targetMin } = useTheme();
-  const styles = useMemo(() => {
-    const recipeStyle = nativeButtonStyle(variant, {
-      colors,
-      radii,
-      targetMin,
-    });
-    return makeStyles(colors, recipeStyle);
-  }, [colors, radii, targetMin, variant]);
+  const recipeStyle = useMemo(
+    () => nativeButtonStyle(variant, { colors, radii, targetMin }, disabled),
+    [colors, radii, targetMin, variant, disabled]
+  );
+  const styles = useMemo(() => makeStyles(recipeStyle), [recipeStyle]);
+  // The recipe's visual box is the 34pt control height; hitSlop restores the
+  // 48pt coarse touch target around it without inflating what's drawn.
+  const verticalHitSlop = (targetMin.coarse - recipeStyle.minHeight) / 2;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      hitSlop={{ bottom: 4, left: 4, right: 4, top: 4 }}
+      hitSlop={{
+        bottom: verticalHitSlop,
+        left: 0,
+        right: 0,
+        top: verticalHitSlop,
+      }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
-        styles.variant,
-        disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
       ]}
     >
       <View style={styles.row}>
-        {icon ? (
-          <Icon
-            name={icon}
-            size={14}
-            color={
-              disabled
-                ? colors.textDisabled
-                : isPrimary
-                  ? colors.textInv
-                  : isDestructive
-                    ? colors.danger
-                    : colors.text
-            }
-          />
-        ) : null}
-        <Text
-          style={[
-            styles.label,
-            isPrimary && styles.labelPrimary,
-            isDestructive && styles.labelDestructive,
-            disabled && styles.labelDisabled,
-          ]}
-        >
-          {label}
-        </Text>
+        {icon ? <Icon name={icon} size={14} color={recipeStyle.color} /> : null}
+        <Text style={styles.label}>{label}</Text>
       </View>
     </Pressable>
   );
 }
 
-const makeStyles = (colors: ThemeColors, recipeStyle: NativeButtonStyle) =>
+const makeStyles = (recipeStyle: NativeButtonStyle) =>
   StyleSheet.create({
     base: {
+      backgroundColor: recipeStyle.backgroundColor,
+      borderColor: recipeStyle.borderColor,
       borderRadius: recipeStyle.borderRadius,
       borderWidth: 1,
       minHeight: recipeStyle.minHeight,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingHorizontal: recipeStyle.paddingHorizontal,
     },
-    // Disabled recedes on the leaves — the icon and the label each take
-    // `textDisabled` above. Fading the Pressable instead would composite every
-    // descendant and quietly invalidate the contrast those tokens guarantee.
-    disabled: { borderColor: colors.lineStrong },
     label: { ...t("smallStrong"), color: recipeStyle.color },
-    labelDestructive: { color: recipeStyle.color },
-    labelDisabled: { color: colors.textDisabled },
-    labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: spacing[2],
       justifyContent: "center",
-    },
-    variant: {
-      backgroundColor: recipeStyle.backgroundColor,
-      borderColor: recipeStyle.borderColor,
     },
   });

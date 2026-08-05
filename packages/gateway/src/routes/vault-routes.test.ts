@@ -668,6 +668,53 @@ describe("vault-routes", () => {
     expect(requestBody).toContain("original-raw-placeholder");
   });
 
+  // The owner's tier control (Settings → Enrichment) writes through this
+  // route and no other. Two things must hold: the write reaches the mirror the
+  // runtime gate reads, and the standing "enrichment isn't running" card that
+  // described the OLD tier is retired — a card left asserting a setting the
+  // owner has just changed is a second silent lie.
+  test("the enrichment tier route writes the mirror the gate reads and retires the stale refusal card", async () => {
+    const { base, plane } = await setup();
+    const stale = plane.notices.put({
+      kind: "enrichment",
+      sourceRef: "photos",
+      headline: "Photo enrichment is limited to your devices",
+      severity: "info",
+      detail: { sourceType: "app", enrichDomain: "photos", tier: "local" },
+    });
+    const untouched = plane.notices.put({
+      kind: "enrichment",
+      sourceRef: "docs",
+      headline: "Document enrichment is limited to your devices",
+      severity: "info",
+      detail: { sourceType: "app", enrichDomain: "docs", tier: "local" },
+    });
+
+    const res = await fetch(`${base}/centraid/_vault/enrich`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ photos: "model" }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toStrictEqual({
+      enrich: { photos: "model", docs: "local" },
+    });
+    const mirrored = plane.db.vault
+      .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
+      .get("photos") as { tier: string };
+    expect(mirrored.tier).toBe("model");
+    // Archived, not deleted — the record of what was refused stays readable.
+    expect(
+      plane.notices.getBySource("enrichment", "photos")?.archivedAt
+    ).not.toBeNull();
+    // The domain that did not move keeps its card, unread state and all.
+    expect(plane.notices.getBySource("enrichment", "docs")).toStrictEqual(
+      untouched
+    );
+    expect(stale.archivedAt).toBeNull();
+  });
+
   test("unknown outbox item id on an edit attempt 404s", async () => {
     const { base } = await setup();
     const res = await fetch(`${base}/centraid/_vault/outbox/does-not-exist`, {

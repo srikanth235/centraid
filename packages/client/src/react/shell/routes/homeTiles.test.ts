@@ -141,12 +141,12 @@ describe("shell/routes/homeTiles", () => {
         bodyOf(
           {
             people: {
-              names: [
-                "Ada Lovelace",
-                "Grace Hopper",
-                "Alan Turing",
-                "Ken",
-                "X",
+              directory: [
+                { id: "party-ada", name: "Ada Lovelace" },
+                { id: "party-grace", name: "Grace Hopper" },
+                { id: "party-alan", name: "Alan Turing" },
+                { id: "party-ken", name: "Ken" },
+                { id: "party-x", name: "X" },
               ],
               total: 12,
             },
@@ -154,11 +154,13 @@ describe("shell/routes/homeTiles", () => {
           "people"
         )
       ).toStrictEqual({
+        // The party id rides along: it is what the renderer derives each
+        // circle's hue from, so it has to survive the model.
         faces: [
-          { initials: "AL", name: "Ada Lovelace" },
-          { initials: "GH", name: "Grace Hopper" },
-          { initials: "AT", name: "Alan Turing" },
-          { initials: "K", name: "Ken" },
+          { id: "party-ada", initials: "AL", name: "Ada Lovelace" },
+          { id: "party-grace", initials: "GH", name: "Grace Hopper" },
+          { id: "party-alan", initials: "AT", name: "Alan Turing" },
+          { id: "party-ken", initials: "K", name: "Ken" },
         ],
         kind: "people",
         more: 8,

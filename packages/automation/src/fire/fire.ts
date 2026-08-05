@@ -38,6 +38,8 @@ import type {
 } from "../handler/runner.js";
 import { parseRef } from "../manifest/ref.js";
 import { handlerPath, readAppOwned } from "../scaffold/app.js";
+import { decideEnrichmentGate, sealedModelTurnReason } from "./enrich-gate.js";
+import type { EnrichDomain, EnrichTier } from "./enrich-gate.js";
 
 /**
  * The gateway broker's per-fire seam (issue #304). Resolves the connector's
@@ -202,6 +204,21 @@ export interface RunFireOptions {
    * connection is treated as harness-ambient (pre-#304 behavior).
    */
   resolveConnection?: ResolveConnection;
+  /**
+   * Enrichment-tier seam (privacy enforcement): resolve the vault's standing
+   * `enrich_policy` tier for one domain. The gateway supplies this off its
+   * OWNER plane (`plane.db.vault`), never through the fired automation's own
+   * consent-checked bridge — a guard must not depend on the grants of the
+   * party it guards.
+   *
+   * Absent, or throwing, or resolving `undefined` → every automation
+   * declaring `manifest.enrich` is REFUSED. Fail-closed is the whole point:
+   * a host that has not wired the policy in cannot be allowed to run
+   * enrichment as though the owner had consented to it.
+   */
+  resolveEnrichPolicy?: (
+    domain: EnrichDomain
+  ) => Promise<EnrichTier | undefined> | EnrichTier | undefined;
   /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
   fetchRetryDelaysMs?: readonly number[];
 }
@@ -274,29 +291,22 @@ export async function runFire(
     opts.runnerKind
   );
 
-  const effectiveModel =
-    opts.allowManifestProviderPins === false
-      ? opts.model
-      : (row.manifest.requires.model ?? opts.model);
-  const dispatch = await deps.openDispatch({
-    workdir: row.dir,
-    automationRef: opts.automationRef,
-    runId,
-    ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
-    ...(effectiveModel ? { model: effectiveModel } : {}),
-    ...(opts.configPins ? { configPins: opts.configPins } : {}),
-    onLog,
-  });
-
   const skipRun = (
-    error: string
+    error: string,
+    /**
+     * Present only for the enrichment-tier refusal — the one skip class the
+     * host must surface to the member, because the state that blocked it is
+     * a setting they may not know exists. See `HandlerOutcome.enrichRefusal`.
+     */
+    enrichRefusal?: HandlerOutcome["enrichRefusal"]
   ): { outcome: HandlerOutcome; record: RunRecord } => {
     const endedAt = Date.now();
     const outcomeSkipped: HandlerOutcome = {
+      ...(enrichRefusal ? { enrichRefusal } : {}),
       ok: false,
       // A skip is distinguishable from a run that failed: the handler never
       // executed, and the state that blocked it is already the owner's to
-      // see (paused/needs-auth connection, missing secret).
+      // see (paused/needs-auth connection, missing secret, enrichment tier).
       skipped: true,
       error,
       logs: [],
@@ -319,6 +329,77 @@ export async function runFire(
       },
     };
   };
+
+  // ENRICHMENT TIER GATE — the privacy choke point.
+  //
+  // An automation that declares `manifest.enrich` is subject to the owner's
+  // per-domain tier in `enrich_policy`. This is the ONE place the tier is
+  // enforced, and it sits before `openDispatch` so a refused run starts no
+  // agent process and reaches no provider. The refusal is a stated, logged
+  // skip carrying its reason into the run ledger — never a silent drop,
+  // because a member turned this off and is owed the receipt.
+  //
+  // Fail-closed in three ways: an absent seam refuses, a throwing seam
+  // refuses, and an unreadable/unknown tier refuses. See `enrich-gate.ts`
+  // for what `local` means in this runtime and why.
+  const enrich = row.manifest.enrich;
+  /** Set under the `local` tier: the domain whose promise seals `ctx.agent`. */
+  let sealedDomain: EnrichDomain | undefined;
+  if (enrich) {
+    let tier: EnrichTier | undefined;
+    try {
+      tier = await opts.resolveEnrichPolicy?.(enrich.domain);
+    } catch (error) {
+      onLog(
+        "warn",
+        `${opts.automationRef}: enrichment policy read failed — ${error instanceof Error ? error.message : String(error)}`
+      );
+      tier = undefined;
+    }
+    const decision = decideEnrichmentGate({
+      automationRef: opts.automationRef,
+      domain: enrich.domain,
+      capability: enrich.capability,
+      lane: enrich.lane,
+      tier,
+    });
+    if (!decision.allowed) {
+      onLog("warn", decision.reason);
+      return skipRun(decision.reason, {
+        capability: enrich.capability,
+        domain: enrich.domain,
+        ...(tier === undefined ? {} : { tier }),
+      });
+    }
+    if (decision.sealModelTurns) sealedDomain = enrich.domain;
+  }
+
+  const effectiveModel =
+    opts.allowManifestProviderPins === false
+      ? opts.model
+      : (row.manifest.requires.model ?? opts.model);
+  const dispatch = await deps.openDispatch({
+    workdir: row.dir,
+    automationRef: opts.automationRef,
+    runId,
+    ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+    ...(effectiveModel ? { model: effectiveModel } : {}),
+    ...(opts.configPins ? { configPins: opts.configPins } : {}),
+    onLog,
+  });
+
+  // The `local` tier's backstop: the fire may run its deterministic /
+  // device-lease work, but a model turn is provider egress, so `ctx.agent` is
+  // sealed shut rather than left to a handler's good manners. A handler that
+  // reaches for one fails loudly with the reason instead of egressing.
+  const sealed = sealedDomain;
+  const agentDispatcher: AgentDispatcher = sealed
+    ? () => {
+        const reason = sealedModelTurnReason(opts.automationRef, sealed);
+        onLog("warn", reason);
+        return Promise.reject(new Error(reason));
+      }
+    : dispatch.agentDispatcher;
 
   // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
   // never fires its connector — the skip is logged, and since connectors are
@@ -424,7 +505,7 @@ export async function runFire(
       handlerFile: handlerPath(row.dir),
       runId,
       now: new Date(startedAt).toISOString(),
-      agentDispatcher: dispatch.agentDispatcher,
+      agentDispatcher,
       runsStore,
       ...(dispatch.finalizeTurn ? { finalizeTurn: dispatch.finalizeTurn } : {}),
       ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
@@ -515,6 +596,11 @@ export async function runFire(
                 : {}),
               ...((nestedRuntime?.configPins ?? opts.configPins)
                 ? { configPins: nestedRuntime?.configPins ?? opts.configPins }
+                : {}),
+              // The cascade target is a fire like any other: if it declares
+              // `enrich`, the same tier gate must apply to it.
+              ...(opts.resolveEnrichPolicy
+                ? { resolveEnrichPolicy: opts.resolveEnrichPolicy }
                 : {}),
               ...(opts.resolveNestedRuntime
                 ? { resolveNestedRuntime: opts.resolveNestedRuntime }

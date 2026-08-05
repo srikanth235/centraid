@@ -57,7 +57,11 @@ describe("OnboardingScreen scenarios", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listVaultsMock.mockResolvedValue([
-      { ownerPartyId: "party-1", vaultId: "a", name: "Personal" },
+      {
+        ownerPartyId: "party-1",
+        vaultId: "a",
+        name: "Personal",
+      },
     ]);
     // Default: an auto-founded gateway whose owner is still the placeholder,
     // so onboarding has a reason to ask for a name.
@@ -234,8 +238,16 @@ describe("OnboardingScreen scenarios", () => {
 
     it("the fresh path completes on the local Personal vault", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
-        { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "shared",
+          name: "Shared",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Personal",
+        },
       ]);
       const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ path: "fresh", onComplete });
@@ -278,7 +290,11 @@ describe("OnboardingScreen scenarios", () => {
 
     it("trims the name and carries the chosen swatch through", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Personal",
+        },
       ]);
       const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ path: "fresh", onComplete });
@@ -371,8 +387,16 @@ describe("OnboardingScreen scenarios", () => {
     // vault — "Shared". The host must not rename that, so the flag is false.
     it("the fresh path does not flag the fallback vault as renamable", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
-        { ownerPartyId: "party-1", vaultId: "grace", name: "Grace" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "shared",
+          name: "Shared",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "grace",
+          name: "Grace",
+        },
       ]);
       const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ path: "fresh", onComplete });
@@ -397,7 +421,11 @@ describe("OnboardingScreen scenarios", () => {
     // even on a build that exposes `installGatewayService`.
     it("does not ask about the OS service on the fresh path", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Personal",
+        },
       ]);
       const api = (
         globalThis as unknown as { CentraidApi: Record<string, unknown> }
@@ -528,7 +556,11 @@ describe("OnboardingScreen scenarios", () => {
 
     it("surfaces an error inline when onComplete rejects", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Personal",
+        },
       ]);
       const onComplete = onCompleteMock().mockRejectedValue(new Error("nope"));
       const el = mount({ path: "fresh", onComplete });

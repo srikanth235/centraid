@@ -22,6 +22,11 @@
       { "schema": "enrich", "verbs": "read+act" }
     ]
   },
+  "enrich": {
+    "domain": "photos",
+    "capability": "captions",
+    "lane": "model"
+  },
   "history": {
     "keep": {
       "count": 100

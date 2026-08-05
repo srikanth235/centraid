@@ -17,7 +17,11 @@
 
 import type { DailyBrief } from "../../../gateway-client.js";
 import { authorizeBlobUrl, BLOB_PREFIX } from "../../blueprints/blob-auth.js";
-import type { HomeTileContent, HomeTileTaskRow } from "./homeTiles.js";
+import type {
+  HomeTileContent,
+  HomeTilePerson,
+  HomeTileTaskRow,
+} from "./homeTiles.js";
 
 /** The replica read surface this module needs — narrowed so the loader can be
  *  driven by a stub in tests without standing up a coordinator. */
@@ -140,13 +144,21 @@ async function photoThumbs(
 
 async function peopleFaces(
   reader: HomeTileReader
-): Promise<{ total: number; names: string[] }> {
+): Promise<{ total: number; directory: HomeTilePerson[] }> {
   const rows = await rowsOf(reader, "people", "core.party", WINDOW.faces);
-  const names = rows
+  const directory = rows
     .filter((row) => text(row.values.kind) === "person")
-    .map((row) => text(row.values.display_name))
-    .filter(Boolean);
-  return { names, total: names.length };
+    .map((row) => ({
+      // The party id, because the face circle's hue is derived from it and a
+      // person has to stay the same colour through a rename — and the same
+      // colour as the phone's Home draws them, which derives from this same
+      // id. A row with no id falls back to the name: a stable-enough key for
+      // one render, and the alternative is dropping the person entirely.
+      id: text(row.values.party_id) || text(row.values.display_name),
+      name: text(row.values.display_name),
+    }))
+    .filter((person) => person.name !== "");
+  return { directory, total: directory.length };
 }
 
 async function taskBoard(

@@ -429,6 +429,12 @@ function projectMediaAsset(
 ): ProjectionResult {
   // `media_media_asset.content_id` is UNIQUE: one asset per content item, so
   // the dedup falls out of the schema exactly like the content item's sha.
+  //
+  // `source_asset_id` (issue #711, edit lineage) is deliberately NOT projected
+  // and is NOT in MEDIA_ASSET_COLUMNS: it names an asset in the ORIGIN vault,
+  // which the audience has no row for and was never placed into. Carrying it
+  // across would be a dangling self-FK. NULL here reads as "this audience does
+  // not know where it came from", which is exactly true.
   const existing = audience
     .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;

@@ -22,6 +22,7 @@
       { "schema": "media", "table": "update_asset", "verbs": "act" },
       { "schema": "media", "table": "delete_asset", "verbs": "act" },
       { "schema": "media", "table": "restore_asset", "verbs": "act" },
+      { "schema": "media", "table": "purge_asset", "verbs": "act" },
       { "schema": "media", "table": "create_album", "verbs": "act" },
       { "schema": "media", "table": "rename_album", "verbs": "act" },
       { "schema": "media", "table": "set_album_cover", "verbs": "act" },
@@ -39,7 +40,8 @@
       { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "enrich", "table": "policy", "verbs": "read" },
       { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
-      { "schema": "blob", "table": "custody_state", "verbs": "read" }
+      { "schema": "blob", "table": "custody_state", "verbs": "read" },
+      { "schema": "blob", "table": "custody_rollup", "verbs": "read" }
     ]
   },
   "actionSideEffect": "vault-write",
@@ -67,6 +69,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "source_asset_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The asset these bytes were derived from — what the editor stamps on the new photograph it saves beside the original (issue #711). Absent for anything that is not a derived copy."
           },
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
@@ -151,6 +159,28 @@
       "name": "restore",
       "description": "Bring a trashed photo (and its bytes) back through media.restore_asset; metadata survives intact, album membership does not. Restoring a live photo fails.",
       "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "purge-asset",
+      "description": "Delete one ALREADY-TRASHED photo forever through media.purge_asset. Irreversible: the asset row, its faces, tags, album membership and annotations go now, and the bytes are handed to the gateway's next storage sweep. A photo that is not in the trash is refused, as is one an edited copy still names as its source — purge the copy first.",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -466,6 +496,23 @@
   ],
   "queries": [
     {
+      "name": "storage",
+      "description": "The whole library's byte custody, as the gateway's standing blob sweep counted it (blob.custody_rollup): per-bucket counts and bytes for the five custody states, plus `freeable` (locally resident originals with a proved copy elsewhere) and `local-unproven` (locally resident originals with no such proof, which no surface may offer to release). Seven small rows — the aggregate the bounded library window cannot give, and which no app can compute for itself because local-CAS presence is a filesystem fact. `computedAt` is null until the sweep has run, and must be rendered as \u201cnot counted yet\u201d rather than as zeroes.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "rollup": { "type": "object" },
+          "vaultDenied": { "type": "object" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+    {
       "name": "library",
       "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list. Issue #599: `before` is a keyset cursor (only assets captured strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
       "input": {
@@ -514,6 +561,43 @@
           "regions": { "type": "array" },
           "people": { "type": "array" },
           "denied": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "face-queue",
+      "description": "The Face review surface's vault-wide queue (issue #711): one ordered page of unconfirmed media.face_region proposals with a match count (never a percentage — README.md:285), first-seen capture date, and the source photograph, plus confirmed/unmatched totals for the status line.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "queue": { "type": "array" },
+          "unmatchedTotal": { "type": "number" },
+          "confirmedTotal": { "type": "number" },
+          "people": { "type": "array" },
+          "denied": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "people",
+      "description": "The People shelf's roster: every person confirmed on a face (with how many photographs carry them and which ones) alongside the unconfirmed face proposals sitting next to them, grouped by candidate identity where the enricher offered one and never carrying a name — plus the same vault-wide unmatched count queries/face-queue.ts derives, so the shelf's pending note needs no second read.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": { "type": "array" },
+          "proposals": { "type": "array" },
+          "unmatchedTotal": { "type": "number" },
+          "vaultDenied": { "type": "object" }
         }
       }
     },
@@ -611,5 +695,11 @@
         { "value": "hide", "label": "Hide" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["camera"],
+    "disabledOn": [],
+    "northStar": "google-photos"
+  }
 }

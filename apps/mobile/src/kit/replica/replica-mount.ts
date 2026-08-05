@@ -32,6 +32,18 @@ interface ScopeWire {
   vaultId: string;
   label: string;
   role: "admin" | "write" | "read";
+  /**
+   * Whether this is the member's OWN vault — what the vault *is*, which is not
+   * what it is called. Apps derive the "somewhere other than my own vault"
+   * marker from this and never from `label`: a member who names their own
+   * vault "Sharing" has not shared anything. The gateway sends it on every
+   * scope row (`ScopeRow.personal` in `scopes-routes.ts`); the phone used to
+   * drop it.
+   *
+   * Optional because a scope cached by an older build, or the synthesised
+   * fallback below, genuinely does not know.
+   */
+  personal?: boolean;
 }
 
 export function fetcher(vaultId?: string): ReplicaFetcher {

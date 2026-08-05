@@ -235,8 +235,10 @@
   padding-block-start: var(--sp-1);
 }
 
-/* The hue arrives inline from `identityColor` — this is identity, the one
-   place the shell carries a person's colour (same rule as the stem avatar). */
+/* The hue arrives inline as `var(--c-<key>)` from `identityHueKey` — this is
+   identity, the one place the shell carries a person's colour (same rule as
+   the stem avatar). A custom property, not a hex, so the disc moves to the
+   dark ring with the theme and `--text-inv` below stays at AA on it. */
 .face {
   align-items: center;
   block-size: 30px;

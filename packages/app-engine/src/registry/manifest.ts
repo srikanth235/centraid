@@ -177,6 +177,30 @@ export interface ManifestExtBlock {
   readonly tables: readonly ManifestExtTable[];
 }
 
+/**
+ * The seat profile block (docs/blueprint-seats.md, decision S1/S2/S5) —
+ * where this app's bytes live and which way they flow, machine-readable so
+ * a coding agent (or the runtime) never has to re-derive the split from
+ * prose. `byteBearing: false` marks a record-only app (S2): its payloads
+ * are rows, the replica gives every seat full offline for free, and it
+ * must not import custody machinery (`local-only` / `remote-only` /
+ * `backupState` / the transfer engine) — see
+ * `packages/blueprints/src/blueprint-seats.test.ts` for the tripwire.
+ * `disabledOn` lists seats the app refuses to mount on (S5: Locker
+ * disables `"viewer"`) — `InlineAppRoute` reads this field, generically,
+ * off the manifest rather than special-casing an app id.
+ */
+export interface ManifestSeatsBlock {
+  /** Whether this app's payloads carry bytes (not just rows) — the S2 class split. */
+  readonly byteBearing: boolean;
+  /** Frame-owned origin acts (camera, scanner, voice, autofill…) this app registers targets for. */
+  readonly originActs: readonly string[];
+  /** Seats (docs/platform-gating.md `SEAT`) this app refuses to mount on. */
+  readonly disabledOn: readonly string[];
+  /** The incumbent product this app's behaviour defaults to when a design question has no handoff answer. */
+  readonly northStar: string;
+}
+
 export interface Manifest {
   readonly manifestVersion: number;
   readonly id: string;
@@ -202,6 +226,10 @@ export interface Manifest {
   readonly vault?: ManifestVaultBlock;
   /** Declared extension tables, hosted inside vault.db (#286). Optional. */
   readonly ext?: ManifestExtBlock;
+  /** Seat profile (docs/blueprint-seats.md). Optional for compatibility, but
+   *  every bundled blueprint declares one — see the blueprints package's
+   *  `blueprint-seats.test.ts`. */
+  readonly seats?: ManifestSeatsBlock;
 }
 
 // ----------------------------------------------------------------------------
@@ -345,6 +373,17 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
             },
           },
         },
+      },
+    },
+    seats: {
+      type: "object",
+      required: ["byteBearing", "originActs", "disabledOn", "northStar"],
+      additionalProperties: false,
+      properties: {
+        byteBearing: { type: "boolean" },
+        originActs: { type: "array", items: { type: "string" } },
+        disabledOn: { type: "array", items: { type: "string" } },
+        northStar: { type: "string", minLength: 1 },
       },
     },
     knobs: {
@@ -547,6 +586,9 @@ export function validateManifest(raw: unknown): Manifest {
       : {}),
     ...(r.ext && typeof r.ext === "object"
       ? { ext: r.ext as ManifestExtBlock }
+      : {}),
+    ...(r.seats && typeof r.seats === "object"
+      ? { seats: r.seats as ManifestSeatsBlock }
       : {}),
   };
 }

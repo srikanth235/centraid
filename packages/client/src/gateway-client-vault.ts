@@ -1,6 +1,7 @@
 /*
  * Renderer-side client for the gateway's owner consent surface
  * (`/centraid/_vault/*`, duaility §12). Everything here is an OWNER act
+ * governance: allow-repo-hygiene file-size-limit #711 The vault protocol adapter remains a cohesive client surface.
  * executed by the gateway with the owner-device credential — apps never
  * see these routes; their door is `ctx.vault` inside handlers.
  *
@@ -9,6 +10,7 @@
  * "no vault on this gateway" state rather than an error.
  */
 
+import type { EnrichPolicy } from "./enrich-policy.js";
 import {
   auth,
   authHeaders,
@@ -64,6 +66,14 @@ export interface VaultListEntry {
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
+  /**
+   * Whether this is the member's OWN vault — the durable founding marker
+   * (issue #711 item H). An app's "somewhere other than my own" marker is
+   * exactly `personal === false`, never a match on `label`. Optional only
+   * because a gateway older than the marker omits it, and "unknown" must read
+   * as the member's own (unmarked) rather than falsely marking everything.
+   */
+  personal?: boolean;
   color?: string;
   icon?: string;
   /** The calling member's role in this scope. `read` cannot write. */
@@ -72,13 +82,25 @@ export interface AppScopeEntry {
 }
 
 /**
- * The scopes one app may mount for the calling member. `undefined` when the
- * gateway mounts no scopes plane (route 404s) — an older gateway, not an error;
- * callers fall back to the single ambient scope.
+ * The whole scopes answer: the rows, plus where this member's shares go by
+ * default (issue #711 item H). The destination is a POINTER the member owns,
+ * not a property of any vault — so it sits beside the rows, and may name a
+ * vault that is not among them (deleted, or one they hold no role in), which
+ * a caller renders as the action disabled with the reason inline.
  */
-export async function listAppScopes(
+export interface AppScopePlane {
+  scopes: AppScopeEntry[];
+  defaultShareTargetVaultId?: string;
+}
+
+/**
+ * The scopes plane for one app. `undefined` when the gateway mounts none
+ * (route 404s) — an older gateway, not an error; callers fall back to the
+ * single ambient scope.
+ */
+export async function readAppScopePlane(
   appId?: string
-): Promise<AppScopeEntry[] | undefined> {
+): Promise<AppScopePlane | undefined> {
   const { baseUrl, token } = await auth();
   const path = appId
     ? `/centraid/_vault/scopes?app=${encodeURIComponent(appId)}`
@@ -91,11 +113,17 @@ export async function listAppScopes(
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  const body = await readJson<{ scopes: AppScopeEntry[] }>(
-    res,
-    "list app scopes"
-  );
-  return body.scopes;
+  return await readJson<AppScopePlane>(res, "list app scopes");
+}
+
+/**
+ * Just the rows, for callers that do not care where shares go (the shell's
+ * own scope registry). `undefined` has the same meaning as above.
+ */
+export async function listAppScopes(
+  appId?: string
+): Promise<AppScopeEntry[] | undefined> {
+  return (await readAppScopePlane(appId))?.scopes;
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */
@@ -613,4 +641,50 @@ export async function vaultConnectionSetStatus(
     }
   );
   await readJson(res, "set connection status");
+}
+
+/**
+ * The owner's standing enrichment tier, per domain (`GET/PUT
+ * /centraid/_vault/enrich`, vault-routes.ts).
+ *
+ * This is the OWNER's copy of the setting — the authoritative writer is
+ * `updateEnrichSettings` (packages/vault/src/host.ts), which also refreshes
+ * the app-readable `enrich_policy` mirror the enforcement gate reads
+ * (packages/automation/src/fire/enrich-gate.ts). Apps never reach this route;
+ * they read the mirror through `ctx.vault` and cannot write it at all, which
+ * is why raising the tier can only happen from an owner surface.
+ */
+/** Read the owner's per-domain enrichment tiers. */
+export async function getEnrichPolicy(): Promise<EnrichPolicy> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ enrich: EnrichPolicy }>(
+    res,
+    "read enrichment policy"
+  );
+  return body.enrich;
+}
+
+/**
+ * Write one or both domains' tier. Returns the tiers that actually took
+ * effect, read back from the vault — the caller renders THAT, never the value
+ * it hoped for, so a rejected or coerced write can never show as applied.
+ */
+export async function setEnrichPolicy(
+  patch: Partial<EnrichPolicy>
+): Promise<EnrichPolicy> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
+    method: "PUT",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify(patch),
+  });
+  const body = await readJson<{ enrich: EnrichPolicy }>(
+    res,
+    "set enrichment policy"
+  );
+  return body.enrich;
 }

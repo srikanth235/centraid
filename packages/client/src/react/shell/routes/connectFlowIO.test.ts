@@ -137,8 +137,16 @@ describe("connectFlowIO scenarios", () => {
 
     it("connectFreshLocalGateway addresses the auto-founded Personal vault", async () => {
       listVaults.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
-        { ownerPartyId: "party-1", vaultId: "personal", name: "Personal" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "shared",
+          name: "Shared",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Personal",
+        },
       ]);
       await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
         displayLabel: "This Mac",
@@ -153,7 +161,11 @@ describe("connectFlowIO scenarios", () => {
 
     it("connectFreshLocalGateway finds the owner's vault by its marker after a rename", async () => {
       listVaults.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "shared",
+          name: "Shared",
+        },
         {
           ownerPartyId: "party-1",
           vaultId: "personal",
@@ -176,8 +188,16 @@ describe("connectFlowIO scenarios", () => {
     // would rename everyone's shared vault.
     it("connectFreshLocalGateway never flags the fallback vault as the owner's", async () => {
       listVaults.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
-        { ownerPartyId: "party-1", vaultId: "ada", name: "Ada" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "shared",
+          name: "Shared",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "ada",
+          name: "Ada",
+        },
       ]);
       await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
         displayLabel: "This Mac",

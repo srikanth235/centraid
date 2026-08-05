@@ -84,6 +84,45 @@ export const RING_DARK = "#8098E8";
 export const NET = "#9A3B2E";
 export const NET_DARK = "#E08878";
 
+// ── The stage ──────────────────────────────────────────────────────────────
+//
+// The opaque media ground for a viewer, a slideshow, and an editor (Photos
+// handoff v4 §2.2 / §B). Deliberately the SAME literal in both themes: the
+// media ground does not follow the theme, because a viewer scrim that flipped
+// to a light plane in "light mode" would blow out the photograph it is
+// framing. `--stage-line` is the hairline between chrome and media ON the
+// stage — `--line` is invisible against near-black, so the stage needs its
+// own boundary rung rather than inheriting the page's.
+export const STAGE = "#0B0B0B";
+export const ON_STAGE = "#EDEDEC";
+export const STAGE_LINE = "#2A2A29";
+/**
+ * The SOFT ink rung on the stage — capture lines, the stage's status line,
+ * filmstrip labels, the editor's mono note.
+ *
+ * It exists because `--text-soft` follows the PAGE theme while the stage does
+ * not. In light mode `--text-soft` is `#5A5A58`, tuned for near-white paper;
+ * on the near-black stage that is 2.85:1 — under AA, and under it for every
+ * secondary line the viewer draws. Like `--on-stage`, this rung is one literal
+ * in both themes because the ground beneath it is one literal in both themes.
+ * 7.15:1 against `--stage`.
+ */
+export const ON_STAGE_SOFT = "#9A9A98";
+/**
+ * The SUNKEN rung on the stage — a recess cut INTO the media ground rather
+ * than a rule drawn on it: the media transport's unplayed track, and any
+ * other trough whose filled part is `--on-stage`.
+ *
+ * The stage needs its own sunken rung for the same reason it needs its own
+ * line rung: `--bg-sunken` follows the PAGE theme, and in light mode it is a
+ * near-white that would punch a hole in the photograph's ground. Reaching for
+ * `--stage-line` instead — the near-miss this token replaces — reads too
+ * light, because a hairline is tuned to be *seen* as an edge while a trough
+ * is tuned to recede under the fill it carries. One literal in both themes,
+ * like every other stage role (handoff v4 line 4479, `sunken:'#1A1A19'`).
+ */
+export const STAGE_SUNKEN = "#1A1A19";
+
 // ── Surfaces ───────────────────────────────────────────────────────────────
 //
 // Paper, not elevation. The raised surface in light mode is DARKER than the
@@ -171,6 +210,9 @@ export interface Theme {
   bgSunken: string;
   bgElev: string;
   bgApp: string;
+  /** The ground a tile paints before its bytes arrive. `--bg-elev` reads as a
+   *  card; an absence is not a card, so a loading tile gets its own rung. */
+  skel: string;
 
   // Text (text + icon foreground). Roles, not arbitrary brightness rungs.
   text: string;

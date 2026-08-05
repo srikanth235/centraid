@@ -579,11 +579,37 @@ export function describeAppBoot(
           }
         };
 
+        // The frame's contribution channel (Photos v4 §3), recorded rather
+        // than rendered. The client hands every inline app one of these, so
+        // the harness must too — an app that contributes to a bar that isn't
+        // there is exactly the crash this journey exists to catch.
+        const contributed: {
+          appBar: Record<string, unknown> | null;
+          band: Record<string, unknown> | null;
+          status: ({ text: string } | null)[];
+        } = { appBar: null, band: null, status: [] };
+        const frame = {
+          setAppBar: (bar: Record<string, unknown> | null) => {
+            contributed.appBar = bar;
+          },
+          setStatus: (text: string) => {
+            contributed.status.push({ text });
+          },
+          clearStatus: () => {
+            contributed.status.push(null);
+          },
+          claimBand: (claim: Record<string, unknown> | null) => {
+            contributed.band = claim;
+          },
+        };
+
         const module = await import(
           pathToFileURL(path.join(dir, "app-root.tsx")).href
         );
         reactRoot = createRoot(document.querySelector("#appRoot")!);
-        reactRoot.render(createElement(module.Root, { rootRef: () => {} }));
+        reactRoot.render(
+          createElement(module.Root, { rootRef: () => {}, frame })
+        );
         await settle();
         expectNoErrors("rendering its granted replica in airplane mode");
 
@@ -735,6 +761,35 @@ export function describeAppBoot(
               "the populated local Photos row did not render"
             ).toBeTruthy();
             expect(tile?.querySelector("img")?.alt).toBe(PHOTO_TITLE);
+
+            // Photos is a ROUTE INSIDE THE FRAME (v4 §3): it draws no app bar
+            // of its own, it contributes one. A mount that painted a grid but
+            // contributed nothing would leave the frame showing a bare bar,
+            // which is the failure this asserts against.
+            await waitFor(
+              () => contributed.appBar !== null,
+              "Photos to contribute the frame's app bar"
+            );
+            expect(contributed.appBar?.title).toBe("Photos");
+            expect(String(contributed.appBar?.count)).toContain("1");
+            // …and it claims the compact band with its own five destinations,
+            // so the frame renders exactly one band (§3.1).
+            const claimed = (contributed.band ?? {}).destinations as
+              | { id: string }[]
+              | undefined;
+            expect(claimed?.map((d) => d.id)).toEqual([
+              "library",
+              "albums",
+              "people",
+              "search",
+            ]);
+
+            // The app draws no chrome of its own inside the pane: no
+            // hamburger, no in-pane search field in a header, no zoom pair.
+            expect(document.querySelector("#hamburgerBtn")).toBeNull();
+            expect(document.querySelector("#zoomInBtn")).toBeNull();
+            expect(document.querySelector("#sidebarMount")).toBeNull();
+            expect(document.querySelector("#noticeBanner")).toBeNull();
           }
 
           response = DENIED;

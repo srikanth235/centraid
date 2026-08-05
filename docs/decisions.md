@@ -336,6 +336,22 @@ That is the chip/badge geometry class lane (1) declined for the same reason, app
 - **Nothing between `tiny` (0.6rem) and `mono` (0.72rem).** 17 declarations cluster at `0.66rem ×6`, `0.68rem ×4`, `0.7rem ×4`, `0.62rem ×2`, `0.625rem ×1` — the kit's real eyebrow band. This is the same gap the 94 shell eyebrows describe from the other side, and the same reason open decision (b) exists. Adding a rung to absorb them before that convergence lands would be a third `--r-lg`.
 - **The largest near-miss cluster is `0.85rem ×7`** (13.6px), 0.08px off `--t-body-size` on the blueprint but **+1.4px** on the shell. It is a near-miss, not an exact match, and #686 deferred the near-miss band as a whole. Quantified here so the next lane does not have to re-derive it.
 
+## Blueprint seats and north stars (2026-08-05)
+
+Settled in the Photos v4 design session; the full model lives in [blueprint-seats.md](blueprint-seats.md).
+
+| Id | Decision |
+| --- | --- |
+| **S1** | **Three seats, orthogonal to form factor.** Mobile = `origin`, desktop = `custodian`, web/PWA = `viewer`. Byte-custody logic never branches on `compact`; layout never branches on seat. Declared as a build-time `SEAT` constant per bundle, never sniffed. |
+| **S2** | **Two blueprint classes.** Record-only apps (tasks, agenda, people, tally) get full offline everywhere from the replica and must not import custody machinery. Byte-bearing apps (photos, docs; notes/locker via attachments) use the shared custody triple + backup + pin/download engines. |
+| **S3** | **North stars are binding defaults.** Each blueprint mimics the most popular incumbent (Photos → Google Photos, Docs → Google Drive **feature-rich**, Notes → Apple Notes, Agenda → Google Calendar, Tasks → Todoist/Reminders, People → Google Contacts, Locker → 1Password, Tally → Splitwise). A design question without a handoff answer takes the north star's behaviour. Rationale: zero switching friction. |
+| **S4** | **Photos: merged timeline + automatic backup.** The mobile timeline shows camera roll and vault as one stream with `local-only` marked per tile (`on this device only`). Backup is consent-once, then automatic under a Wi-Fi/charging/roaming policy owned by the **frame**, not the app — one policy for every byte-bearing app. Per-item backup survives only as a manual override. |
+| **S5** | **Locker is disabled on the viewer seat** (PWA) for now — a shared browser is the risky seat. The shell refuses the mount and says so plainly; revisit post-v0 with a re-auth-per-open design. |
+| **S6** | **The #599 vocabulary gate outranks the v4 handoff's verbatim copy.** Where the handoff says "this vault", Photos says the scope's human label instead. Photos mounts over several scopes at once, so "this vault" is ambiguous the moment a household exists; the handoff was written against a single-vault demo. The gate is amended into the handoff, never the reverse. |
+| **S7** | **The viewer's info panel sits on paper, not stage ground**, and keeps its Albums row and Activity log — both are honest provenance beyond the prototype. It carries **no destructive control**: `Move to trash` is removed, because the viewer bar already offers it and a second destructive path inside a facts panel is a misfire waiting to happen. |
+| **S8** | **Edit lineage is a real column, not copy.** `source_asset_id` is added to the photos asset record and written by the editor's save path, so "recorded as its source" is true. Weakening honest copy to match a missing field is backwards; the north star tracks lineage too. Pre-1.0 epoch rules (F1) mean no migration burden. |
+| **S9** | **Enrichment consent is per capability.** A consent that names faces must not also enable every other enricher on the queue — a consent that enables more than it names is not consent. The policy is read on the execution path and fails closed. |
+
 ## Related docs
 
 | Doc | Covers |

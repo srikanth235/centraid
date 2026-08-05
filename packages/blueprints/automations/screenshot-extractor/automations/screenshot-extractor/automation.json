@@ -21,6 +21,11 @@
       { "schema": "sync", "verbs": "read+act" }
     ]
   },
+  "enrich": {
+    "domain": "photos",
+    "capability": "screenshot-text",
+    "lane": "model"
+  },
   "history": {
     "keep": {
       "count": 100

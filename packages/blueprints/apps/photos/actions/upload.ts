@@ -20,6 +20,13 @@ export default async function upload({ body, ctx }: HandlerArgs) {
         ...(input.captured_at == null
           ? {}
           : { captured_at: String(input.captured_at) }),
+        // Edit lineage (issue #711): the editor saves a crop as a new asset
+        // and names the one it came from. Only forwarded when the caller
+        // actually knows a source — an ordinary upload has none, and an empty
+        // string is not a lineage.
+        ...(input.source_asset_id == null
+          ? {}
+          : { source_asset_id: String(input.source_asset_id) }),
         ...(input.title == null ? {} : { title: String(input.title) }),
         ...(input.width == null ? {} : { width: Number(input.width) }),
         ...(input.height == null ? {} : { height: Number(input.height) }),

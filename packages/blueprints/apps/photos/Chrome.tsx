@@ -1,231 +1,119 @@
-// The Photos chrome as JSX (issue #505 inline path). One-for-one with the static
-// index.html body the served app ships — the flex row (sidebar host, main column
-// with header/consent-notice banners/live region/scroll pane/empty state), plus
-// the fixed-overlay regions (selection bar, lightbox, slideshow, picker, drop
-// overlay) and the hidden file input — but expressed as a React tree so
-// app-inline.tsx renders ONE tree instead of eight imperative `createRoot`
-// islands. Each dynamic region is a `slots.*` ReactNode the app's render
-// orchestrators (reused verbatim from sidebar.tsx/lightbox.tsx/… through injected
-// slot-roots) fill; the imperatively-toggled nodes (`#empty`, `#consentBanner`,
-// `#noticeBanner`, `#live`, `#sidebarMount`, `#selectionBar`, `#lightbox`,
-// `#slideshow`, `#picker`, `#dropOverlay`) keep their ids and a literal `hidden`
-// so app.tsx's `$(…).hidden = …` writes survive (React never re-writes an
-// unchanged prop — the pilot's `#noticeBanner` pattern).
+// The Photos chrome as JSX — a ROUTE INSIDE THE FRAME, not a standalone app
+// (v4 handoff §3).
 //
-// Classes: structural chrome comes from Chrome.module.css (scoped, positioned
-// for the inline app pane — never the viewport); the media/faces/selection guts
-// stay the global `:global(...)` strings app.css owns (media.ts / faces.ts write
-// them as plain strings), and `kit-*` is the global kit vocabulary (kit.css,
-// loaded once by the route host). Every icon-only control here is the kit's
-// `kit-icon-btn` — the hand-rolled `ph-header-icon-btn` retired with #708.
-// The served path (index.html + app.css) is untouched.
+// WHAT RETIRED HERE, and why each one had to go:
+//
+//  * the hamburger and the sidebar/drawer — the frame owns navigation (the
+//    240px stem on desktop, the claimed band on the phone). A drawer inside
+//    the content pane was a second navigation for the same destinations.
+//  * the in-pane search field — search is a SHELF now (§9), reached from the
+//    band and the frame, not a field this app draws in a header of its own.
+//  * the zoom in/out pair — tile size is a four-rung member preference in the
+//    toolbar row (§4.2), not two unlabelled buttons walking a pixel value.
+//  * the slideshow button — the slideshow is a mode on the stage, entered from
+//    the viewer.
+//  * the app's own title, count, Select and Import — those are the frame's app
+//    bar, contributed through `frame.setAppBar` (frame.tsx).
+//  * `#noticeBanner` — the ONE status line is the frame's, and every write
+//    outcome goes there through `frame.setStatus` with Undo where undo is
+//    possible (outcomes.ts). No toast, no spinner, no badge, no red dot.
+//
+//  * the `kit-banner` consent strip — permission is a designed SCREEN (§13,
+//    components/Permission.tsx), which arrives here as a slot and replaces the
+//    live region rather than sitting in a strip above it. A strip reads as
+//    "something went wrong up there"; a refused grant is a state the product
+//    is designed for.
+//
+// WHAT STAYS: the permission screen's slot (§13), the
+// live region, the scroll pane and the fixed-overlay regions — lightbox,
+// slideshow, picker, drop overlay — whose contents other modules own. Inline
+// they live INSIDE the app pane and are re-scoped to `position:absolute`
+// against `.shell` so they never overlay the shell chrome (#505 trap 7).
+//
+// SELECTION HAS NO OVERLAY OF ITS OWN (v4 §6). It used to get a second React
+// root on a floating `#selectionBar` pill — two roots fighting over what "the
+// selection bar" means. Now there is one decision, made where the toolbar row
+// already lives (`#toolbarMount`, selection.tsx): `selectMode ? <SelectionBar>
+// : <ToolbarView>`. `#selectionBottomBar` is new and different — the PHONE's
+// five-target action bar (§6, §15), which is never the toolbar row (the row
+// carries nothing there while selecting; the count/Select all/Done move to
+// the frame's head) and never a second band (it claims no destinations and
+// never calls `frame.claimBand`).
+//
+// The imperatively-toggled nodes (`#empty`, `#consentBanner`, `#live`,
+// `#lightbox`, `#slideshow`, `#picker`, `#dropOverlay`) keep their ids and a
+// literal `hidden` so the orchestrator's `$(…).hidden = …` writes survive —
+// React never re-writes an unchanged prop.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+import { EMPTY_ACTIONS, EMPTY_TITLE } from "./view-copy.ts";
 
 import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
-  sidebar: ReactNode;
+  /** The shelf strip (§5). Absent in album detail and on the phone whose band
+   *  claim was honoured — the band carries the shelves there. */
+  shelfStrip: ReactNode;
+  /** The Photos toolbar row (§3) — or the selection bar, while a selection is
+   *  active (§6). Null when it carries nothing. */
   toolbar: ReactNode;
   main: ReactNode;
-  selectionBar: ReactNode;
+  /** The phone's floating selection action bar (§6, §15). Null everywhere
+   *  else — desktop/PWA carry the same actions inside `toolbar`. */
+  selectionBottomBar: ReactNode;
   lightbox: ReactNode;
   slideshow: ReactNode;
   picker: ReactNode;
   enrichment: ReactNode;
+  /**
+   * The permission screen (§13), or null while access is granted. It is a
+   * SCREEN and not a strip, so it replaces the live region rather than sitting
+   * above it — there is nothing behind it to look at, and a banner over an
+   * empty pane would say otherwise.
+   */
+  permission: ReactNode;
+  /** The compact band's overflow sheet (§3.1), or null while it is closed. */
+  moreSheet: ReactNode;
+  /**
+   * The offline banner (§14), or null while the library is reachable. It sits
+   * at the head of the scroll pane and pushes nothing aside: everything below
+   * it — months, days, counts, captions, albums, people, the rail, Select —
+   * still renders, because "the meaning is still here" is the banner's whole
+   * claim (components/OfflineBanner.tsx).
+   */
+  banner: ReactNode;
 }
 
 export interface ChromeProps {
   narrow: boolean;
-  /** Set one frame after first paint — gates the drawer slide transition so the
-      mount-time narrow snap is instant (#505). */
-  ready: boolean;
   slots: ChromeSlots;
 }
 
-const hamburgerGlyph = (
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.75"
-    strokeLinecap="round"
-  >
-    <path d="M4 7h16M4 12h16M4 17h16" />
-  </svg>
-);
-const searchGlyph = (
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.75"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="11" cy="11" r="7" />
-    <path d="m21 21-4.3-4.3" />
-  </svg>
-);
-const zoomOutGlyph = (
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.75"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
-  </svg>
-);
-const zoomInGlyph = (
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.75"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="3" width="8" height="8" rx="1" />
-    <rect x="13" y="13" width="8" height="8" rx="1" />
-  </svg>
-);
-const closeGlyph = (
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.75"
-    strokeLinecap="round"
-  >
-    <path d="M6 6l12 12M18 6 6 18" />
-  </svg>
-);
-const playGlyph = (
-  <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
-
-export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
-  const shellClass = [
-    styles.shell,
-    narrow ? styles.isNarrow : "",
-    ready ? styles.ready : "",
-  ]
+export function Chrome({ narrow, slots }: ChromeProps): ReactNode {
+  const shellClass = [styles.shell, narrow ? styles.isNarrow : ""]
     .filter(Boolean)
     .join(" ");
+  const denied = Boolean(slots.permission);
   return (
     <div className={shellClass} data-tone="mat" data-density="compact">
-      {/* Sidebar host — the SidebarView Fragment (scrim + <aside>) renders here.
-          `display:contents` lets the <aside> be a real flex child while the
-          host id survives for app.tsx's `$('sidebarMount').hidden` toggle. */}
-      <div id="sidebarMount" className={styles.sideHost}>
-        {slots.sidebar}
-      </div>
-
       <main className={styles.main}>
-        <div className={styles.header}>
-          <button
-            id="hamburgerBtn"
-            type="button"
-            className="kit-icon-btn ph-hamburger"
-            aria-label="Menu"
-          >
-            {hamburgerGlyph}
-          </button>
-          <search className={`kit-search ${styles.search}`}>
-            {/* The magnifier is the input's <label> (clicking it focuses the
-                field, as it did when the whole box was one <label>); it is
-                `display:contents`, so the flex row is unchanged and the svg is
-                still the direct flex child kit.css sizes. */}
-            <label className={styles.searchGlyph} htmlFor="searchInput">
-              {searchGlyph}
-              <span className="kit-sr-only">Search photos</span>
-            </label>
-            <input
-              id="searchInput"
-              type="search"
-              placeholder="Search people, places, things"
-              aria-label="Search photos"
-              autoComplete="off"
-            />
-            <button
-              id="searchClear"
-              type="button"
-              className="kit-icon-btn"
-              aria-label="Clear search"
-              hidden
-            >
-              {closeGlyph}
-            </button>
-          </search>
-          <div className={styles.headerActions}>
-            <fieldset className={styles.zoom} aria-label="Zoom">
-              <button
-                id="zoomOutBtn"
-                type="button"
-                className="kit-icon-btn"
-                aria-label="Smaller tiles"
-              >
-                {zoomOutGlyph}
-              </button>
-              <button
-                id="zoomInBtn"
-                type="button"
-                className="kit-icon-btn"
-                aria-label="Larger tiles"
-              >
-                {zoomInGlyph}
-              </button>
-            </fieldset>
-            {/* Face-proposer (issue #352) — its own self-contained React region,
-                rendered once into this slot at boot. */}
-            <div id="enrichmentMount">{slots.enrichment}</div>
-            <button
-              id="slideshowBtn"
-              type="button"
-              className="kit-icon-btn slideshow-toolbar-btn"
-              aria-label="Slideshow"
-            >
-              {playGlyph}
-            </button>
-            <div className={`${styles.askMount} ph-ask-mount`} data-ask-mount />
-          </div>
-        </div>
+        {slots.permission}
 
-        <div id="consentBanner" className="kit-banner" hidden>
-          <strong>No access yet.</strong>{" "}
-          <span id="consentDetail">
-            Ask the owner to approve this app&apos;s requested scopes in
-            settings.
-          </span>
-          <VaultAccessButton />
-        </div>
-        {/* <output>'s implicit role IS `status`, so the live region survives the
-            tag swap; `.noticeBanner` restores the block box the <div> had. */}
-        <output
-          id="noticeBanner"
-          className={`kit-banner notice ${styles.noticeBanner}`}
-          aria-live="polite"
-          hidden
-        />
-
-        <div id="live" className={styles.live}>
+        {/* `hidden` rather than unmounted: the orchestrator kept the live
+            region's geometry across a denial before, and re-mounting it would
+            throw away every tile's already loaded bytes the moment access
+            came back. */}
+        <div id="live" className={styles.live} hidden={denied}>
+          <div id="shelfStripMount">{slots.shelfStrip}</div>
           <div id="toolbarMount">{slots.toolbar}</div>
+          {/* Face-proposer (issue #352) — its own self-contained React region,
+              rendered once into this slot at boot. */}
+          <div id="enrichmentMount" className={styles.enrichment}>
+            {slots.enrichment}
+          </div>
 
           <div id="scrollPane" className={styles.scroll}>
+            {slots.banner}
             <section
               id="grid"
               className={styles.content}
@@ -233,16 +121,56 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             >
               {slots.main}
             </section>
-            <div id="empty" className="kit-empty" hidden>
-              <div id="emptyText" className="kit-empty-title" />
-              <div className="kit-empty-sub">
+            {/* THE EMPTY BLOCK IS PHOTOS' OWN (§14, proto 4406), not the
+                shared `.kit-empty`. Three things the kit's version could not
+                say, each of them load-bearing:
+
+                  * it CENTRES a 38ch column, and this state is a paragraph a
+                    member reads — reading copy is left-aligned and in flow,
+                    at 44ch, like every other paragraph in the product;
+                  * its title is 0.95rem/600, which is a row label. §14 asks
+                    for the display serif, because an empty library is the
+                    first real screen this app ever shows somebody;
+                  * IT HAS NO NODE FOR A BODY PARAGRAPH AT ALL. So the one
+                    sentence §14 requires — where the bytes actually go — had
+                    nowhere to live and was simply never said.
+
+                The nodes stay imperative (`#emptyText`, `#emptyBody`,
+                `#emptyUpload`, `#emptyCamera`) and keep their ids: app-root's
+                `applyEmptyState` writes them from `emptyStateView`
+                (view-state.ts), upload.ts binds `#emptyUpload` once at boot,
+                and `applyUploadTarget` re-reads it on every render. React
+                never re-writes an unchanged prop, so those writes survive. */}
+            <div id="empty" className={styles.empty} hidden>
+              {/* Seeded with the title it takes in every view but a search
+                  miss, so the heading is never an empty one to a screen
+                  reader; `applyEmptyState` overwrites its text content, and
+                  the block is `hidden` until it has. */}
+              <h2 id="emptyText" className={styles.emptyTitle}>
+                {EMPTY_TITLE}
+              </h2>
+              <p id="emptyBody" className={styles.emptyBody} />
+              <div className={styles.emptyActions}>
+                {/* The ONE filled control in this view (§18). The frame's app
+                    bar drops its own Import while this is offered — two filled
+                    Imports on one screen is two answers to one question. */}
                 <button
                   id="emptyUpload"
+                  type="button"
+                  className="kit-btn primary"
+                  hidden
+                >
+                  {EMPTY_ACTIONS.import}
+                </button>
+                {/* Phone only (§15's Import row: the camera is the compact
+                    surface's second way in). Outlined, always. */}
+                <button
+                  id="emptyCamera"
                   type="button"
                   className="kit-btn"
                   hidden
                 >
-                  Add media
+                  {EMPTY_ACTIONS.camera}
                 </button>
               </div>
             </div>
@@ -250,19 +178,17 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         </div>
       </main>
 
-      {/* Selection bar / lightbox / slideshow / picker — served siblings of
-          `.ph-app` at body level (position:fixed to the viewport). Inline they
-          live INSIDE the app pane and are re-scoped to `position:absolute`
-          against `.shell` so they never overlay the shell chrome (#505 trap 7). */}
-      <div
-        id="selectionBar"
-        className={styles.selectionBar}
-        role="toolbar"
-        aria-label="Selection actions"
-        hidden
-      >
-        {slots.selectionBar}
+      {/* Empty (no children) whenever selection is not active on the phone —
+          `.selectionBottomBar:empty` (Chrome.module.css) collapses it to
+          nothing rather than this needing a `hidden` toggle of its own. */}
+      <div id="selectionBottomBar" className={styles.selectionBottomBar}>
+        {slots.selectionBottomBar}
       </div>
+
+      {/* The band's own overflow sheet (§3.1) — the app's, because the band's
+          sixth slot is the app's. It renders only while open, so there is no
+          empty region to collapse and nothing to hide. */}
+      {slots.moreSheet}
 
       {/* Never focusable and never shown — `hidden` already keeps it out of the
           accessibility tree, so it carries no `aria-hidden`; upload.ts drives it
@@ -272,6 +198,19 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         type="file"
         accept="image/*,video/*,audio/*"
         multiple
+        hidden
+      />
+      {/* `Take a photograph` (§14, §15) is a real camera, not a second file
+          picker: `capture` hands the compact surface its camera directly. It
+          is a SEPARATE input because `capture` on the shared one would take
+          the file picker away from the desktop, where the camera is not one
+          of the three ways in. app-root binds its `change`; it is never shown
+          on a surface where the button is not offered. */}
+      <input
+        id="cameraInput"
+        type="file"
+        accept="image/*"
+        capture="environment"
         hidden
       />
 
@@ -287,8 +226,8 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         {slots.lightbox}
       </dialog>
       {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
-          without it is `display:none`) and app.tsx keeps driving visibility
-          through the `hidden` attribute exactly as before. */}
+          without it is `display:none`) and the orchestrator keeps driving
+          visibility through the `hidden` attribute exactly as before. */}
       <dialog
         id="slideshow"
         open

@@ -37,6 +37,21 @@ export interface AppKnobsManifest {
 }
 
 /**
+ * The seat profile block (docs/blueprint-seats.md, decisions S1/S2/S5),
+ * bundled from a template's `app.json#seats` the same way `appKnobs` is
+ * bundled from `app.json#knobs` — see `scripts/build-manifest.mjs`. Mirrors
+ * `@centraid/app-engine`'s `ManifestSeatsBlock`; duplicated here (rather
+ * than imported) because blueprints must never depend on app-engine at the
+ * package-manifest layer.
+ */
+export interface AppSeats {
+  byteBearing: boolean;
+  originActs: string[];
+  disabledOn: string[];
+  northStar: string;
+}
+
+/**
  * Metadata for a single template entry. Mirrors @centraid/design'
  * `AppMeta` plus a `version` field (so the gallery can detect updates) and
  * a `files` list (so the remote fetcher knows what to download).
@@ -82,6 +97,13 @@ export interface TemplateMeta {
    * desktop popover renders only the rows declared here.
    */
   appKnobs?: AppKnob[];
+  /**
+   * Seat profile (docs/blueprint-seats.md). Bundled from `app.json#seats`
+   * the same way `appKnobs` is bundled from `app.json#knobs`. Every
+   * bundled UI app declares one; automation templates (no UI, no seat)
+   * omit it.
+   */
+  seats?: AppSeats;
   /**
    * 'app' (default) or 'automation'. Declared explicitly in `index.json`
    * for automation templates; omitted entries default to 'app'.

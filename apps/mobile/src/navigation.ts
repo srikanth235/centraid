@@ -26,23 +26,68 @@
 // back to Home.
 
 import type {
+  CompositeNavigationProp,
   CompositeScreenProps,
   NavigatorScreenParams,
 } from "@react-navigation/native";
 import { createNavigationContainerRef } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from "@react-navigation/native-stack";
 
 export type PhotosStackParamList = {
-  PhotosHome: undefined;
+  // `destination` names which of the claimed band's shelves to land on. The
+  // band is rendered on every Photos surface (`PhotosScreen.tsx`), and its
+  // four shelf destinations all live on this one screen — so a band tap from
+  // a pushed route navigates here WITH the shelf named rather than pushing a
+  // second copy of anything. Optional, and `more` never reaches it: More is a
+  // sheet, not a route.
+  //
+  // Written out longhand rather than imported as
+  // `Exclude<BandDestinationKey, "more">` from `apps/photos/photos-band.ts`:
+  // the frame may not import an app (`scripts/check-import-boundaries.ts`).
+  // What pins the two together is `PhotosScreen.tsx`'s band handler, which
+  // passes a `BandDestinationKey` straight into this param — a destination
+  // added to the band and forgotten here fails to typecheck there.
+  PhotosHome:
+    | { destination?: "library" | "albums" | "people" | "search" }
+    | undefined;
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
   PhotosSearch: undefined;
   BackupHealth: undefined;
+  // Places' shelf (cards first, proto:4197): `PlacesView` is where the More
+  // sheet's "Places" row lands; `PlacesMap` is the full-screen map it opens
+  // on demand from the shelf head's Map control, and `PlaceDetail` is what a
+  // card opens — one place's photographs, filtered locally (see
+  // `PlaceDetail.tsx` for why: `PhotoStateView` has no "place" mode and is
+  // not this route's to grow).
+  PlacesView: undefined;
   PlacesMap: undefined;
+  PlaceDetail: { placeKey: string; placeName: string };
   FaceReview: undefined;
+  // Duplicates is TWO surfaces, as the v4 prototype has it: the shelf lists
+  // the clusters (proto:4436), and the review works one cluster at a time
+  // (proto:4291). The More sheet's row lands on the shelf; the shelf's own
+  // primary control is the way into the review.
+  DuplicatesShelf: undefined;
   DuplicateReview: undefined;
   AlbumDetail: { albumId: string };
-  PhotoStateView: { mode: "favorites" | "archive" | "trash" };
+  // The picker (§10) — full screen on the phone. Its picked set is its own,
+  // so the album it commits to is a route param rather than shared state.
+  PhotoPicker: { albumId: string };
+  // The OS photo-library grant as a designed screen (§13), not an error.
+  PhotoPermission: undefined;
+  // Person is a distinct case: it needs the party to filter by AND the name
+  // already resolved (the view has no other route to a display name for an
+  // id it did not already have on hand). `archive` has no client affordance
+  // that ever sets it (nothing writes `archived`/`archived_at` true), but
+  // `PhotosLibrary.tsx` still reads it back out — left in place until that
+  // caller is retired, not deleted blind.
+  PhotoStateView:
+    | { mode: "favorites" | "archive" | "trash" }
+    | { mode: "person"; partyId: string; personName: string };
 };
 
 export type DocsStackParamList = {
@@ -116,6 +161,20 @@ type Root = RootScreenProps<keyof RootStackParamList>;
 
 export type PhotosScreenProps<T extends keyof PhotosStackParamList> =
   CompositeScreenProps<NativeStackScreenProps<PhotosStackParamList, T>, Root>;
+
+/**
+ * What the Photos shell (`apps/photos/PhotosScreen.tsx`) needs: the Photos
+ * stack (for the band's four shelf destinations and the More sheet's rows)
+ * composed with the root stack (for the band capsule's one tap to Home).
+ *
+ * Read through `useNavigation()` rather than taken as a prop, so the shell can
+ * wrap ANY Photos screen without each one having to widen its own navigation
+ * type to the union of every route it never navigates to.
+ */
+export type PhotosShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<PhotosStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export type DocsScreenProps<T extends keyof DocsStackParamList> =
   CompositeScreenProps<NativeStackScreenProps<DocsStackParamList, T>, Root>;

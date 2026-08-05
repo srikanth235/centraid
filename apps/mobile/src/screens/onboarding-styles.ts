@@ -11,7 +11,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { family } from "../kit/theme";
+import { borders, family } from "../kit/theme";
 // Straight from the pure resolver, not the theme barrel: this runs at module
 // scope, and the barrel drags in React/RN-only surface that screens' tests mock.
 import { resolveTheme } from "../kit/theme/resolve";
@@ -109,7 +109,7 @@ export const styles = StyleSheet.create({
     backgroundColor: C.fieldBg,
     borderColor: C.fieldLine,
     borderRadius: 13,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     color: C.text,
     fontFamily: family.sansRegular,
     fontSize: 16,
@@ -135,7 +135,7 @@ export const styles = StyleSheet.create({
     backgroundColor: C.fieldBg,
     borderColor: C.fieldLine,
     borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     color: C.text,
     fontFamily: family.monoRegular,
     fontSize: 15,

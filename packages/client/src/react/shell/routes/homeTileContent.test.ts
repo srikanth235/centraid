@@ -103,7 +103,10 @@ describe("shell/routes/homeTileContent", () => {
         ],
       }),
     });
-    expect(content.people).toStrictEqual({ names: ["Ada"], total: 1 });
+    expect(content.people).toStrictEqual({
+      directory: [{ id: "p1", name: "Ada" }],
+      total: 1,
+    });
   });
 
   it("counts only people, not orgs and groups, on the people tile", async () => {
@@ -115,7 +118,10 @@ describe("shell/routes/homeTileContent", () => {
         ],
       }),
     });
-    expect(content.people).toStrictEqual({ names: ["Ada"], total: 1 });
+    expect(content.people).toStrictEqual({
+      directory: [{ id: "p1", name: "Ada" }],
+      total: 1,
+    });
   });
 
   it("counts OPEN tasks but carries the most recent completed one too", async () => {

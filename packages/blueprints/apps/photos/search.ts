@@ -18,13 +18,33 @@ import type { MergeAsset } from "./merge.ts";
 import { mountedScopes, ownScopeId } from "./scopes.ts";
 import type { Asset } from "./types.ts";
 
+/**
+ * Which of §9's states the search shelf is in. It is derived HERE, not in the
+ * view, because only this module knows whether the index answered:
+ *
+ *  * `resting`     — no query. The shelf shows what it searches and five real
+ *                    example queries.
+ *  * `searching`   — a request is in flight. Determinate copy, never a spinner:
+ *                    what is already on screen is the local match over the
+ *                    loaded window, and the shelf says so.
+ *  * `ready`       — the index answered. Hits, or the honest "no matches" line
+ *                    with the query echoed back.
+ *  * `unreachable` — the index lives on the gateway and could not be reached.
+ *                    Search WILL NOT PRETEND TO HAVE LOOKED (§9), so this is
+ *                    never collapsed into "no results".
+ */
+export type SearchStatus = "resting" | "searching" | "ready" | "unreachable";
+
 export function createSearch({
   getQuery,
   setResults,
+  setStatus,
   renderGrid,
 }: {
   getQuery: () => string;
   setResults: (r: Asset[] | null) => void;
+  /** Where §9's four states land. */
+  setStatus: (status: SearchStatus) => void;
   renderGrid: () => void;
 }): { run: () => void; invalidate: () => void } {
   let seq = 0;
@@ -33,11 +53,13 @@ export function createSearch({
     const term = getQuery();
     if (!term) {
       setResults(null);
+      setStatus("resting");
       renderGrid();
       return;
     }
     const mySeq = (seq += 1);
     let assets: Asset[] = [];
+    let reached = true;
     try {
       const client = window.centraid;
       if (typeof client.readAll === "function") {
@@ -69,9 +91,14 @@ export function createSearch({
       }
     } catch {
       assets = [];
+      reached = false;
     }
     if (mySeq !== seq) return; // superseded by a newer keystroke's request
-    setResults(assets);
+    // A failed reach contributes NO results rather than an empty answer: the
+    // local match over the loaded window stays on screen, and the shelf says
+    // the index could not be reached instead of claiming nothing matched.
+    setResults(reached ? assets : null);
+    setStatus(reached ? "ready" : "unreachable");
     renderGrid();
   }, 150);
 

@@ -35,7 +35,9 @@ import type { RecentSourceRow } from "./search-model";
  *  ever survives into the merged, capped RECENTS list. */
 const READ_LIMIT = 20;
 const RECENTS_SHOWN = 8;
-const SUGGESTIONS_SHOWN = 6;
+// The handoff's `try` row is ONE line of three short terms (v4 .dc.html
+// :6012 — `['Pemberton','right of way','Ana']`), never a wrapping rail.
+const SUGGESTIONS_SHOWN = 3;
 
 const appMetaById = new Map(apps.map((meta) => [meta.id, meta]));
 

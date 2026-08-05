@@ -1,9 +1,17 @@
+// The justified timeline (Photos v4 handoff §4).
+//
+// Rows are packed from real aspect ratios to the member's rung, then scaled to
+// fill the width exactly. Nothing is cropped to a square. Month headers are
+// sticky with a mono count; day sub-labels carry a count and an optional
+// place. The scrub rail overlays the grid rather than taking a column from it.
+//
+// The grouping, the packing and the row list are all in `timeline-rows.ts` and
+// `justify.ts`; this file is the view and the gestures over them.
+
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListRef } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
-import { Image } from "expo-image";
 import React, {
-  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -14,123 +22,50 @@ import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { gridImageProps } from "../../kit/media/grid-image";
-import { imageSource } from "../../kit/media/media-source";
-import { family, useTheme } from "../../kit/theme";
+import { pageMargin, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
+import { usePhotosRung } from "./photos-rung-store";
+import type { Rung } from "./photos-rungs";
+import { pinchRung, rungHeight } from "./photos-rungs";
+import { useVaultFacts } from "./photos-vaults";
+import PhotoTile from "./PhotoTile";
+import ScrubRail from "./ScrubRail";
 import { addDragSelection } from "./timeline-model";
+import {
+  buildRows,
+  monthHeaderIndices,
+  monthLabelAt,
+  rowTops,
+} from "./timeline-rows";
+import type { TimelineRow } from "./timeline-rows";
 import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
-type TimelineRow =
-  | { type: "month"; key: string; title: string; assets: PhotoAsset[] }
-  | { type: "header"; key: string; title: string; assets: PhotoAsset[] }
-  | {
-      type: "assets";
-      key: string;
-      assets: PhotoAsset[];
-      height: number;
-      widths: number[];
-    };
+// Where the rail's drag surface starts and ends inside the content area.
+const RAIL_TOP = 8;
 
-// Hoisted so the scrubber doesn't build a fresh Intl formatter on every move.
-const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  year: "numeric",
-});
-
-const ratioFor = (asset: PhotoAsset): number =>
-  Math.max(
-    0.65,
-    Math.min(1.9, asset.width && asset.height ? asset.width / asset.height : 1)
-  );
-
-const rowHeightOf = (row: TimelineRow): number =>
-  row.type === "month" ? 52 : row.type === "header" ? 42 : row.height;
-
-function assetRows(
-  assets: PhotoAsset[],
-  columns: number,
-  width: number,
-  key: string
-): TimelineRow[] {
-  const chunks: PhotoAsset[][] = [];
-  let chunk: PhotoAsset[] = [];
-  let ratioSum = 0;
-  for (const asset of assets) {
-    chunk.push(asset);
-    ratioSum += ratioFor(asset);
-    if (ratioSum >= columns || chunk.length >= columns + 1) {
-      chunks.push(chunk);
-      chunk = [];
-      ratioSum = 0;
-    }
-  }
-  if (chunk.length) chunks.push(chunk);
-  return chunks.map((rowAssets, index) => {
-    const ratios = rowAssets.map(ratioFor);
-    const sum = ratios.reduce((total, ratio) => total + ratio, 0);
-    const isLooseFinalRow = index === chunks.length - 1 && sum < columns * 0.82;
-    const gapWidth = Math.max(0, rowAssets.length - 1) * 2;
-    const height = isLooseFinalRow ? width / columns : (width - gapWidth) / sum;
-    return {
-      type: "assets" as const,
-      key: `r:${key}:${index}:${columns}`,
-      assets: rowAssets,
-      height,
-      widths: ratios.map((ratio) => ratio * height),
-    };
-  });
-}
-
-function rowsFor(
-  sections: PhotoSection[],
-  columns: number,
-  width: number
-): TimelineRow[] {
-  return sections.flatMap((section, sectionIndex) => {
-    const monthChanged =
-      sectionIndex === 0 || sections[sectionIndex - 1]?.month !== section.month;
-    return [
-      ...(monthChanged
-        ? [
-            {
-              type: "month" as const,
-              key: `m:${section.month}`,
-              title: section.monthTitle,
-              assets: section.assets,
-            },
-          ]
-        : []),
-      {
-        type: "header" as const,
-        key: `h:${section.day}`,
-        title: section.title,
-        assets: section.assets,
-      },
-      ...assetRows(section.assets, columns, width, section.day),
-    ];
-  });
-}
-
-// Hit-test a gesture point (relative to the list view) to the asset under it.
-// Shared by tap-to-open and long-press drag-select so both agree on geometry.
+/** Hit-test a gesture point to the asset under it. Shared by tap-to-open and
+ *  long-press drag-select so both agree on geometry.
+ *
+ * `x` arrives in the GESTURE layer's coordinates, which span the whole stage;
+ * the tiles start one page margin in. Forgetting that subtraction is silent —
+ * every tap simply resolves to the tile one position to its left, and only at
+ * the very edge of a row does it resolve to nothing at all. */
 function assetAt(
-  rows: TimelineRow[],
-  rowTops: number[],
+  rows: readonly TimelineRow[],
+  tops: readonly number[],
   scrollY: number,
   x: number,
   y: number
 ): PhotoAsset | undefined {
   const cursor = scrollY + y;
-  // Binary search for the row whose band contains the cursor.
   let lo = 0;
   let hi = rows.length - 1;
   let rowIndex = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const top = rowTops[mid]!;
-    const bottom = top + rowHeightOf(rows[mid]!);
+    const top = tops[mid]!;
+    const bottom = top + rows[mid]!.height;
     if (cursor < top) hi = mid - 1;
     else if (cursor >= bottom) lo = mid + 1;
     else {
@@ -140,20 +75,14 @@ function assetAt(
   }
   const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
   if (!row || row.type !== "assets") return undefined;
-  let position = Math.max(0, x);
-  let assetIndex = 0;
-  for (let index = 0; index < row.widths.length; index += 1) {
-    if (position <= row.widths[index]!) {
-      assetIndex = index;
-      break;
-    }
-    position -= row.widths[index]! + 2;
-    assetIndex = Math.min(index + 1, row.assets.length - 1);
+  let position = Math.max(0, x - pageMargin);
+  for (const tile of row.tiles) {
+    if (position <= tile.width) return tile.asset;
+    position -= tile.width + 2;
   }
-  return row.assets[assetIndex];
+  return row.tiles.at(-1)?.asset;
 }
 
-/** Selection with `id` flipped in or out — never mutates the input set. */
 function toggleSelection(current: Set<string>, id: string): Set<string> {
   const next = new Set(current);
   if (next.has(id)) next.delete(id);
@@ -161,38 +90,26 @@ function toggleSelection(current: Set<string>, id: string): Set<string> {
   return next;
 }
 
-// Built outside any component on purpose. `Gesture.Pinch()` & friends are
-// capitalised factories whose builder chain then *mutates* the object — a shape
-// the React compiler rejects inside a render body. The compiler only analyses
-// components and hooks, so a lowercase module-level helper is legal and runtime-
-// identical; the Reanimated babel plugin still workletises the handler bodies
-// (it keys off the `.onEnd`/`.onStart`/`.onUpdate` chain, not the enclosing
-// function). Everything the handlers close over is passed in explicitly.
-//
-// Exclusive(drag, tap): a held gesture becomes a drag-select, a quick release a
-// tap — never both. Pinch (two fingers) runs simultaneously with either.
+// Built outside any component: `Gesture.Pinch()` & friends are capitalised
+// factories whose builder chain then MUTATES the object — a shape the React
+// compiler rejects inside a render body. Everything the handlers close over is
+// passed in explicitly.
 function buildTimelineGestures(
-  columns: number,
-  onColumns: (next: number) => void,
+  rung: Rung,
+  onRung: (next: Rung) => void,
   onTap: (x: number, y: number) => void,
   onDrag: (x: number, y: number) => void
 ): ReturnType<typeof Gesture.Simultaneous> {
+  // Pinch resolves to a STEPPER PRESS, not a continuous zoom (§4.2): the
+  // gesture and the pointer control must not be able to drift to different
+  // rungs, and every gesture keeps a pointer equivalent.
   const pinch = Gesture.Pinch().onEnd(({ scale }) => {
-    const next =
-      scale > 1.15
-        ? Math.max(2, columns - 1)
-        : scale < 0.86
-          ? Math.min(7, columns + 1)
-          : columns;
-    if (next !== columns) runOnJS(onColumns)(next);
+    const next = pinchRung(rung, scale);
+    if (next !== rung) runOnJS(onRung)(next);
   });
   const tap = Gesture.Tap().onEnd((event, success) => {
     if (success) runOnJS(onTap)(event.x, event.y);
   });
-  // Select on long-press *activation* (onStart), not touch-begin (onBegin): the
-  // latter fired on every touch-down — including quick taps — and fought the tap
-  // gesture. The drag only starts after the 220ms hold, so onStart is the moment
-  // the first cell is grabbed; onUpdate extends the selection as the finger moves.
   const drag = Gesture.Pan()
     .activateAfterLongPress(220)
     .onStart(({ x, y }) => runOnJS(onDrag)(x, y))
@@ -200,164 +117,88 @@ function buildTimelineGestures(
   return Gesture.Simultaneous(pinch, Gesture.Exclusive(drag, tap));
 }
 
-// The gesture layer is its own component so its handlers arrive as props. The
-// timeline's tap/drag handlers necessarily read live refs (the scroll offset,
-// the in-flight selection); handing them across a JSX boundary lets this
-// component treat them as ordinary values and build the gesture from them, so
-// no render body ever touches a ref — and nothing has to be suppressed.
 function TimelineGestureLayer({
-  columns,
-  onColumns,
+  rung,
+  onRung,
   onTap,
   onDrag,
   children,
 }: {
-  columns: number;
-  onColumns: (next: number) => void;
+  rung: Rung;
+  onRung: (next: Rung) => void;
   onTap: (x: number, y: number) => void;
   onDrag: (x: number, y: number) => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <GestureDetector
-      gesture={buildTimelineGestures(columns, onColumns, onTap, onDrag)}
+      gesture={buildTimelineGestures(rung, onRung, onTap, onDrag)}
     >
       {children}
     </GestureDetector>
   );
 }
 
-const AssetCell = memo(
-  ({
-    asset,
-    height,
-    width,
-    selected,
-    selecting,
-    onOpen,
-    onSelect,
-  }: {
-    asset: PhotoAsset;
-    height: number;
-    width: number;
-    selected: boolean;
-    selecting: boolean;
-    onOpen: (asset: PhotoAsset) => void;
-    onSelect: (asset: PhotoAsset) => void;
-  }) => {
-    const { colors } = useTheme();
-    return (
-      <Pressable
-        accessibilityLabel={asset.filename ?? `Photo from ${asset.capturedAt}`}
-        accessibilityRole="imagebutton"
-        onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
-        style={{ height, width }}
-      >
-        {/* `gridImageProps` carries the decode contract (container-sized
-          pixels, 16-bit decode, low priority, cache tier by source) — see
-          grid-image.ts for why each prop is there. `recyclingKey` stays
-          explicit: FlashList recycles these views, and without it a cell shows
-          the previous asset until the new one decodes. */}
-        <Image
-          source={imageSource(asset.uri)}
-          {...gridImageProps(asset.uri)}
-          placeholder={
-            asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
-          }
-          transition={120}
-          recyclingKey={asset.id}
-          style={[styles.image, { backgroundColor: colors.bgSunken }]}
-        />
-        <View style={styles.badges}>
-          {asset.kind === "video" ? (
-            <Icon name="Play" size={14} color="#fff" />
-          ) : null}
-          {asset.backupState !== "backed-up" &&
-          asset.backupState !== "remote-only" ? (
-            <Icon name="cloud" size={14} color="#fff" />
-          ) : null}
-        </View>
-        {asset.scopeLabels?.length ? (
-          <View style={styles.scopeBadges}>
-            {asset.scopeLabels.slice(0, 2).map((label) => (
-              <View key={label} style={styles.scopeBadge}>
-                <Text style={styles.scopeBadgeText}>{label}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        {asset.duplicateHint ? (
-          <View style={styles.duplicate}>
-            <Icon name="Copy" size={12} color="#fff" />
-          </View>
-        ) : null}
-        {selected ? (
-          <View style={[styles.selection, { borderColor: colors.accent }]}>
-            <View style={[styles.check, { backgroundColor: colors.accent }]}>
-              <Icon name="Check" size={13} color="#fff" strokeWidth={2.5} />
-            </View>
-          </View>
-        ) : null}
-      </Pressable>
-    );
-  }
-);
-
-AssetCell.displayName = "AssetCell";
+export interface PhotoTimelineProps {
+  sections: PhotoSection[];
+  onOpen: (asset: PhotoAsset) => void;
+  selection: Set<string>;
+  onSelectionChange: (next: Set<string>) => void;
+  placeNames?: ReadonlyMap<string, string>;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  /** The gateway is not answering. Passed straight through to every tile,
+   *  where it turns `on the gateway` from steady-state provenance into the
+   *  explanation for a tile that cannot paint. */
+  unreachable?: boolean;
+}
 
 export default function PhotoTimeline({
   sections,
   onOpen,
   selection,
   onSelectionChange,
+  placeNames,
   refreshing = false,
   onRefresh,
-}: {
-  sections: PhotoSection[];
-  onOpen: (asset: PhotoAsset) => void;
-  selection: Set<string>;
-  onSelectionChange: (next: Set<string>) => void;
-  refreshing?: boolean;
-  onRefresh?: () => void;
-}): React.JSX.Element {
+  unreachable = false,
+}: PhotoTimelineProps): React.JSX.Element {
+  // The rung and the vault facts are read here, not passed in: a shelf is the
+  // same timeline under a filter (§5), so every one of them must show the size
+  // the member chose and mark tiles by the same rule, without each screen
+  // re-wiring it.
+  const [rung, onRungChange] = usePhotosRung();
+  const vaults = useVaultFacts();
   const { colors } = useTheme();
-  const { width, height } = useWindowDimensions();
-  const [columns, setColumns] = useState(4);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { width } = useWindowDimensions();
   const [scrubLabel, setScrubLabel] = useState("");
+  const [scrubPosition, setScrubPosition] = useState(0);
   const list = useRef<FlashListRef<TimelineRow>>(null);
   const scrollOffset = useRef(0);
-  // Latest-value mirrors, written from an effect rather than during render:
-  // writing a ref while rendering is not safe under concurrent React (the render
-  // may be thrown away), and the gesture callbacks that read them can only fire
-  // after the commit that the effect follows.
+
   const selectionRef = useRef(selection);
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+
+  const target = rungHeight(rung, "phone");
+  // The grid is packed to the CONTENT column, not to the stage. The handoff is
+  // explicit: `contentW = stageW - pad*2` (proto:4656) with `pad = R.margin.m`
+  // = 18 on the phone, and the whole scroll column carries that margin
+  // (proto:5566 — `padding: 16px 18px 24px`). Packing to the full window width
+  // instead ran the tiles edge to edge while the month and day headers stayed
+  // inset, so the grid and its own headers disagreed about where the page
+  // begins — and every row was justified 36pt too wide.
+  const contentWidth = Math.max(1, width - 2 * pageMargin);
   const rows = useMemo(
-    () => rowsFor(sections, columns, width),
-    [columns, sections, width]
+    () => buildRows(sections, contentWidth, target, placeNames),
+    [contentWidth, placeNames, sections, target]
   );
-  const monthHeaderIndices = useMemo(
-    () => rows.flatMap((row, index) => (row.type === "month" ? [index] : [])),
-    [rows]
-  );
-  // Prefix-summed row tops, so a drag maps a y-offset to its row by binary
-  // search instead of re-walking every row's height on each pan event.
-  const rowTops = useMemo(() => {
-    const tops: number[] = [];
-    let cursor = 0;
-    for (const row of rows) {
-      tops.push(cursor);
-      cursor += rowHeightOf(row);
-    }
-    return tops;
-  }, [rows]);
+  const stickyIndices = useMemo(() => monthHeaderIndices(rows), [rows]);
+  const tops = useMemo(() => rowTops(rows), [rows]);
   const selecting = selection.size > 0;
 
-  // Stable identities so the memoized AssetCell isn't invalidated every render
-  // by a fresh closure. onOpen is read through a ref so a parent passing an
-  // inline arrow doesn't defeat the memo either.
   const onOpenRef = useRef(onOpen);
   useEffect(() => {
     onOpenRef.current = onOpen;
@@ -375,45 +216,40 @@ export default function PhotoTimeline({
   );
 
   const dragSelect = (x: number, y: number): void => {
-    const asset = assetAt(rows, rowTops, scrollOffset.current, x, y);
+    const asset = assetAt(rows, tops, scrollOffset.current, x, y);
     if (!asset || selectionRef.current.has(asset.id)) return;
     void Haptics.selectionAsync();
     const next = addDragSelection(selectionRef.current, asset.id);
-    // Written straight through so the next onUpdate of the same drag sees it —
-    // the parent's re-render is a commit away and would drop intermediate cells.
+    // Written straight through so the next onUpdate of the same drag sees it.
     selectionRef.current = next;
     onSelectionChange(next);
   };
 
   const tapAsset = (x: number, y: number): void => {
-    const asset = assetAt(rows, rowTops, scrollOffset.current, x, y);
+    const asset = assetAt(rows, tops, scrollOffset.current, x, y);
     if (!asset) return;
     if (selectionRef.current.size > 0) toggle(asset);
     else handleOpen(asset);
   };
 
-  const scrub = (pageY: number): void => {
-    const ratio = Math.max(
-      0,
-      Math.min(1, (pageY - 100) / Math.max(1, height - 180))
+  const scrub = (ratio: number): void => {
+    const index = Math.min(
+      rows.length - 1,
+      Math.max(0, Math.floor(ratio * rows.length))
     );
-    const index = Math.min(rows.length - 1, Math.floor(ratio * rows.length));
     void list.current?.scrollToIndex({
       index,
       animated: false,
       viewPosition: 0,
     });
-    const row = rows[index];
-    const asset = row?.assets[0];
-    if (asset) {
-      setScrubLabel(MONTH_YEAR_FORMAT.format(new Date(asset.capturedAt)));
-    }
+    setScrubPosition(ratio);
+    setScrubLabel(monthLabelAt(rows, index));
   };
 
   return (
     <TimelineGestureLayer
-      columns={columns}
-      onColumns={setColumns}
+      rung={rung}
+      onRung={onRungChange}
       onTap={tapAsset}
       onDrag={dragSelect}
     >
@@ -423,23 +259,29 @@ export default function PhotoTimeline({
           data={rows}
           keyExtractor={(item) => item.key}
           getItemType={(item) => item.type}
-          stickyHeaderIndices={monthHeaderIndices}
+          stickyHeaderIndices={stickyIndices}
           renderItem={({ item }) =>
             item.type === "month" ? (
-              <View
-                style={[styles.monthHeader, { backgroundColor: colors.bg }]}
-              >
-                <Text style={[styles.monthText, { color: colors.text }]}>
+              <View style={styles.month}>
+                <Text style={styles.monthTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
+                <Text style={styles.count} numberOfLines={1}>
+                  {item.count}
+                </Text>
               </View>
-            ) : item.type === "header" ? (
-              <View style={[styles.header, { backgroundColor: colors.bg }]}>
-                <Text style={[styles.headerText, { color: colors.text }]}>
+            ) : item.type === "day" ? (
+              <View style={styles.day}>
+                <Text style={styles.dayTitle} numberOfLines={1}>
                   {item.title}
+                </Text>
+                <Text style={styles.count} numberOfLines={1}>
+                  {item.count}
                 </Text>
                 {selecting ? (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${item.title}`}
                     onPress={() =>
                       onSelectionChange(
                         new Set([
@@ -448,23 +290,25 @@ export default function PhotoTimeline({
                         ])
                       )
                     }
+                    style={styles.selectDayTarget}
                   >
-                    <Text style={[styles.selectDay, { color: colors.accent }]}>
-                      Select day
-                    </Text>
+                    <Text style={styles.selectDay}>Select day</Text>
                   </Pressable>
                 ) : null}
               </View>
             ) : (
-              <View style={[styles.row, { height: item.height }]}>
-                {item.assets.map((asset, index) => (
-                  <AssetCell
-                    key={asset.id}
-                    asset={asset}
-                    height={item.height}
-                    width={item.widths[index] ?? item.height}
-                    selected={selection.has(asset.id)}
+              <View style={styles.row}>
+                {item.tiles.map((tile) => (
+                  <PhotoTile
+                    key={tile.asset.id}
+                    asset={tile.asset}
+                    width={tile.width}
+                    height={tile.height}
+                    rung={rung}
+                    selected={selection.has(tile.asset.id)}
                     selecting={selecting}
+                    vaults={vaults}
+                    unreachable={unreachable}
                     onOpen={handleOpen}
                     onSelect={toggle}
                   />
@@ -479,111 +323,54 @@ export default function PhotoTimeline({
             scrollOffset.current = event.nativeEvent.contentOffset.y;
           }}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: 110 }}
         />
-        <View
-          accessibilityLabel="Timeline scrubber"
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderGrant={(event) => scrub(event.nativeEvent.pageY)}
-          onResponderMove={(event) => scrub(event.nativeEvent.pageY)}
-          onResponderRelease={() => setTimeout(() => setScrubLabel(""), 450)}
-          style={styles.scrubber}
-        >
-          <View style={[styles.rail, { backgroundColor: colors.line }]} />
-        </View>
-        {scrubLabel ? (
-          <View style={[styles.scrubBubble, { backgroundColor: colors.text }]}>
-            <Text style={[styles.scrubText, { color: colors.bg }]}>
-              {scrubLabel}
-            </Text>
-          </View>
-        ) : null}
+        {/* The rail spans this surface, and this surface already ends above the
+            band — the band is a sibling of the scroll region, not an overlay on
+            it, so the rail's foot needs no band-sized reserve of its own. */}
+        <ScrubRail
+          label={scrubLabel}
+          position={scrubPosition}
+          onScrub={scrub}
+          onScrubEnd={() => setScrubLabel("")}
+          top={RAIL_TOP}
+          bottom={RAIL_TOP}
+        />
       </View>
     </TimelineGestureLayer>
   );
 }
 
-const styles = StyleSheet.create({
-  badges: {
-    position: "absolute",
-    bottom: 7,
-    right: 7,
-    flexDirection: "row",
-    gap: 5,
-  },
-  check: {
-    alignItems: "center",
-    borderRadius: 14,
-    height: 24,
-    justifyContent: "center",
-    width: 24,
-  },
-  duplicate: { position: "absolute", left: 7, bottom: 7 },
-  fill: { flex: 1 },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    height: 42,
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-  },
-  headerText: { fontFamily: family.sansMedium, fontSize: 13 },
-  image: { borderRadius: 3, height: "100%", width: "100%" },
-  monthHeader: {
-    height: 52,
-    justifyContent: "flex-end",
-    paddingHorizontal: 18,
-    paddingBottom: 8,
-  },
-  monthText: { fontFamily: family.sansMedium, fontSize: 20 },
-  rail: { borderRadius: 2, height: "100%", width: 3 },
-  row: { flexDirection: "row", gap: 2, marginBottom: 2 },
-  scrubber: {
-    alignItems: "center",
-    bottom: 100,
-    paddingHorizontal: 8,
-    position: "absolute",
-    right: 0,
-    top: 50,
-    width: 24,
-  },
-  scrubBubble: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    position: "absolute",
-    right: 30,
-    top: "46%",
-  },
-  scrubText: { fontFamily: family.sansMedium, fontSize: 12 },
-  scopeBadge: {
-    backgroundColor: "rgba(0,0,0,.56)",
-    borderRadius: 999,
-    maxWidth: 76,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  scopeBadges: {
-    flexDirection: "row",
-    gap: 3,
-    left: 5,
-    position: "absolute",
-    top: 5,
-  },
-  scopeBadgeText: {
-    color: "#fff",
-    fontFamily: family.sansMedium,
-    fontSize: 13,
-  },
-  selectDay: { fontFamily: family.sansMedium, fontSize: 12 },
-  selection: {
-    borderWidth: 3,
-    borderRadius: 4,
-    bottom: 1,
-    left: 1,
-    position: "absolute",
-    right: 1,
-    top: 1,
-  },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    count: { ...t("mono"), color: colors.textSoft },
+    day: {
+      alignItems: "baseline",
+      flexDirection: "row",
+      gap: 8,
+      height: 34,
+      paddingHorizontal: pageMargin,
+    },
+    dayTitle: { ...t("small"), color: colors.textSoft },
+    fill: { flex: 1 },
+    month: {
+      alignItems: "baseline",
+      // Sticky over the grid, so it needs the page's own opaque ground.
+      backgroundColor: colors.toneMat,
+      flexDirection: "row",
+      gap: 8,
+      height: 46,
+      paddingHorizontal: pageMargin,
+      paddingTop: 12,
+    },
+    monthTitle: { ...t("eyebrow"), color: colors.text },
+    row: {
+      flexDirection: "row",
+      gap: 2,
+      marginBottom: 2,
+      // The same margin the month and day headers carry, so the grid's edge
+      // and its headers' edge are one line down the page.
+      paddingHorizontal: pageMargin,
+    },
+    selectDay: { ...t("control"), color: colors.text },
+    selectDayTarget: { justifyContent: "center", minHeight: 44 },
+  });

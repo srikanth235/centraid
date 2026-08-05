@@ -233,6 +233,8 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
       "--h-control",
       "--t-mono",
       "--t-mono-numeric",
+      "--t-mono-direction",
+      "--t-mono-bidi",
       "--text-soft",
       "--text-faint",
     ],

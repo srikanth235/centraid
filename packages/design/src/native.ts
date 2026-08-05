@@ -9,11 +9,20 @@
 // the product accent to one of five hues. The Binding Layer removed that
 // choice at the root: the accent is ink, so there is nothing to pick.
 
-import { DENSITY_TIERS, metrics, spacing } from "./density";
+import { borders } from "./borders";
+import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
 import { paletteFor } from "./palette";
 import { radii } from "./radii";
 import { assertNativeColorRoleContract } from "./roles";
-import { darkTheme, lightTheme } from "./themes";
+import {
+  darkTheme,
+  lightTheme,
+  ON_STAGE,
+  ON_STAGE_SOFT,
+  STAGE,
+  STAGE_LINE,
+  STAGE_SUNKEN,
+} from "./themes";
 import type { Theme } from "./themes";
 import { nativeTypeStyle, typeForProfile } from "./typography";
 import type { TypeKey } from "./typography";
@@ -43,11 +52,17 @@ export interface NativeColors {
   link: string;
   net: string;
   onAccent: string;
+  onStage: string;
+  onStageSoft: string;
   focusRingColor: string;
   scrim: string;
   shadowLg: string;
   shadowMd: string;
   shadowSm: string;
+  skel: string;
+  stage: string;
+  stageLine: string;
+  stageSunken: string;
   success: string;
   text: string;
   textFaint: string;
@@ -69,6 +84,10 @@ export interface NativeTypeStyle {
   letterSpacing?: string;
   textTransform?: "uppercase";
   variantNumeric?: "tabular-nums";
+  /** Only the numeric role carries these two — pin the mono role's own
+   *  reading direction so it does not reorder under RTL. */
+  direction?: "ltr";
+  unicodeBidi?: "isolate";
 }
 
 export type NativeTypeKey = TypeKey;
@@ -79,8 +98,18 @@ export interface NativeTheme {
   scheme: NativeScheme;
   colors: NativeColors;
   radii: typeof radii;
+  borders: typeof borders;
   spacing: typeof spacing;
   metrics: typeof metrics;
+  /**
+   * The phone's page margin — the horizontal inset from the viewport edge to
+   * page content. `pageMargin.mobile`, not a `spacing` rung: the handoff keeps
+   * gaps and page margins on separate scales (`R.gap` vs `R.margin`, handoff
+   * line 3356), and 18 deliberately does not sit on the 4px gap scale. Only
+   * the mobile value is lowered here, because native never draws the desktop
+   * margin.
+   */
+  pageMargin: number;
   density: typeof DENSITY_TIERS;
   type: Record<NativeTypeKey, NativeTypeStyle>;
   targetMin: { coarse: number; fine: number };
@@ -170,11 +199,19 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     link: theme.link,
     net: theme.net,
     onAccent: "#FDFDFC",
+    // Same literal in both themes — the media ground does not follow the
+    // theme (Photos handoff v4 §B).
+    onStage: ON_STAGE,
+    onStageSoft: ON_STAGE_SOFT,
     focusRingColor: theme.ring,
     scrim: theme.scrim,
     shadowLg: theme.shadowLg,
     shadowMd: theme.shadowMd,
     shadowSm: theme.shadowSm,
+    skel: theme.skel,
+    stage: STAGE,
+    stageLine: STAGE_LINE,
+    stageSunken: STAGE_SUNKEN,
     success: theme.success,
     text: theme.text,
     textDisabled: theme.textDisabled,
@@ -208,15 +245,23 @@ export function toNativeTheme(scheme: NativeScheme): NativeTheme {
           ...(lowered.variantNumeric === undefined
             ? {}
             : { variantNumeric: lowered.variantNumeric }),
+          ...(lowered.direction === undefined
+            ? {}
+            : { direction: lowered.direction }),
+          ...(lowered.unicodeBidi === undefined
+            ? {}
+            : { unicodeBidi: lowered.unicodeBidi }),
         },
       ];
     })
   ) as Record<NativeTypeKey, NativeTypeStyle>;
   return {
+    borders,
     colors: colorsFor(scheme),
     density: DENSITY_TIERS,
     durations: { one: 140, two: 280 },
     metrics,
+    pageMargin: pageMargin.mobile,
     radii,
     scheme,
     spacing,

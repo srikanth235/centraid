@@ -13,11 +13,13 @@ import type { JSX, ReactNode } from "react";
 // banners, ask panel) that blueprint component modules reference. Loaded once,
 // globally, by the route host — same as the served path's <link rel=kit.css>.
 import "@centraid/design/kit/kit.css";
-import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
+import type {
+  InlineAppModule,
+  InlineFrame,
+} from "@centraid/blueprints/apps/inline-types";
 import { toBlueprintCss } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
-import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
 import { acquireReplicaShellSession } from "../../../replica/shell-session.js";
 import type { ReplicaScopeLease } from "../../../replica/shell-session.js";
 import {
@@ -26,15 +28,19 @@ import {
 } from "../../blueprints/centraid-inline.js";
 import { installInlineBlobImages } from "../../blueprints/inline-blob-images.js";
 import { installInlineAsk } from "../../blueprints/kit-ask-inline.js";
+import { seat } from "../../host-platform.js";
 import { useShellActions } from "../actions.js";
 import ErrorBoundary from "../ErrorBoundary.js";
 import { iconSvg } from "../iconSvg.js";
-import { openPrompt } from "../prompt.js";
 import type { ShellNav } from "../ShellApp.js";
 import ShellFrame from "../ShellFrame.js";
 import { useAsyncData } from "../useAsyncData.js";
+import { useGatewayStatus } from "../useGatewayRuntime.js";
 import AppSettingsController from "./AppSettingsController.js";
 import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
+import { deleteInlineApp, renameInlineApp } from "./inlineAppFlows.js";
+import { useInlineAppFrame } from "./inlineAppFrame.js";
+import { isDisabledOnSeat } from "./inlineAppSeats.js";
 import { loadAppTemplates } from "./templatesData.js";
 import { scopeSetKey, useAppScopes } from "./useAppScopes.js";
 import type { ResolvedAppScope } from "./useAppScopes.js";
@@ -52,6 +58,9 @@ export interface InlineAppRouteProps {
    *  so they are handed the same node rather than inheriting it. */
   statusLine?: ReactNode;
   prefs: AppearancePrefs;
+  /** The compact form factor — the stem is the bottom band, and a first-party
+   *  route may claim it (Photos v4, CHANGELOG F). Layout only. */
+  compact?: boolean;
 }
 
 const INLINE_SCOPE_CLASS = "centraid-inline-scope";
@@ -129,6 +138,11 @@ interface InlineAppMountProps {
   descriptorPromise: Promise<{ default: InlineAppModule }>;
   /** Mounted scopes, primary first (issue #599). */
   scopes: readonly ResolvedAppScope[];
+  /** Where this member's shares go by default (issue #711 item H). Absent
+   *  when nothing has been pointed at, or on a solo mount. */
+  shareTargetVaultId?: string;
+  /** The frame's contribution channel — app bar, status line, compact band. */
+  frame: InlineFrame;
   onDescriptor: (descriptor: InlineAppModule) => void;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
 }
@@ -138,6 +152,8 @@ function InlineAppMount({
   cacheKey: _cacheKey,
   descriptorPromise,
   scopes,
+  shareTargetVaultId,
+  frame,
   onDescriptor,
   onRootReady,
 }: InlineAppMountProps): JSX.Element {
@@ -163,6 +179,7 @@ function InlineAppMount({
       appId,
       queries: descriptor.queries,
       scopes: [{ scope: primary.scope, session: lease.session }],
+      ...(shareTargetVaultId === undefined ? {} : { shareTargetVaultId }),
       onInstalled: (published) => {
         client = published;
       },
@@ -219,7 +236,7 @@ function InlineAppMount({
     (el: HTMLElement | null) => onRootReady(el, descriptor),
     [descriptor, onRootReady]
   );
-  return <Root rootRef={rootRef} />;
+  return <Root rootRef={rootRef} frame={frame} />;
 }
 
 export default function InlineAppRoute({
@@ -230,9 +247,19 @@ export default function InlineAppRoute({
   renderStem,
   statusLine,
   prefs,
+  compact,
 }: InlineAppRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
+  // The seat wall (docs/blueprint-seats.md S5): a manifest-declared refusal,
+  // not a hard-coded app id, so the next app that needs one (the doc's
+  // open follow-up list already has candidates) gets it free. Locker is the
+  // only app that trips this today (`INLINE_APP_DISABLED_SEATS`, mirrored
+  // from `app.json#seats.disabledOn` and cross-checked by
+  // inlineAppSeats.test.ts). `seat()` is presentation-only per
+  // host-platform.ts's own caveat — this is a UI decision (what to render),
+  // never a security boundary; nothing sensitive is denied twice here.
+  const refused = isDisabledOnSeat(appId, seat());
   // Opening the settings panel snapshots the mounted inline root at click
   // time — an event handler may read the ref, render may not.
   const [settings, setSettings] = useState<{
@@ -244,6 +271,20 @@ export default function InlineAppRoute({
   const askTeardown = useRef<(() => void) | null>(null);
   const blobTeardown = useRef<(() => void) | null>(null);
   const knobValues = useRef<Record<string, string>>({});
+
+  // The shell's gateway verdict, stamped onto the inline root as a dataset
+  // knob — the same channel the knob values ride. Blueprints may not import
+  // the client package, so this attribute IS the reachability contract: the
+  // Photos offline banner (§14) reads `data-gateway-status` and only trusts
+  // "up"/"down". A ref mirror covers the root that mounts AFTER the status
+  // arrived, since `onRootReady` fires outside this effect's dependency world.
+  const gatewayStatus = useGatewayStatus();
+  const gatewayStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    gatewayStatusRef.current = gatewayStatus;
+    const el = appRootRef.current;
+    if (el && gatewayStatus) el.dataset.gatewayStatus = gatewayStatus;
+  }, [gatewayStatus]);
 
   ensureInlineScopeTokens();
 
@@ -290,6 +331,8 @@ export default function InlineAppRoute({
       }
       appRootRef.current = el;
       el.classList.add(INLINE_SCOPE_CLASS);
+      if (gatewayStatusRef.current)
+        el.dataset.gatewayStatus = gatewayStatusRef.current;
       syncInlineProductAccent(el);
       for (const [k, v] of Object.entries(knobValues.current))
         pushKnobToInlineRoot(el, k, v);
@@ -328,78 +371,10 @@ export default function InlineAppRoute({
     []
   );
 
-  const renameFlow = async (): Promise<void> => {
-    const next = await openPrompt({
-      title: "Rename app",
-      initial: app.name,
-      placeholder: "App name",
-      confirmLabel: "Rename",
-    });
-    if (!next) return;
-    try {
-      await updateAppMeta({ id: app.id, name: next });
-      showToast(`Renamed to "${next}"`);
-    } catch (error) {
-      showToast(
-        `Could not rename: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  // Code-store apps only: the panel gives a bundled app no danger zone at all
-  // (issue #708 — it reinstalls at every vault mount, so there is nothing an
-  // uninstall could durably mean).
-  const deleteFlow = async (): Promise<void> => {
-    const ok = await confirm({
-      confirmLabel: "Delete",
-      danger: true,
-      title: "Delete app?",
-      message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
-    });
-    if (!ok) return;
-    try {
-      await deleteApp({ id: app.id });
-      showToast(`Deleted "${app.name}"`);
-      nav.navigate({ kind: "home" });
-    } catch (error) {
-      showToast(
-        `Could not delete: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
-  const brandChip = (
-    <span>
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          font: "var(--t-body-strong, 600 0.85rem/1.4 system-ui)",
-        }}
-      >
-        <span
-          style={{
-            width: 20,
-            height: 20,
-            borderRadius: 6,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: finish.background,
-            color: finish.glyphColor,
-            boxShadow: finish.boxShadow || undefined,
-          }}
-          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-          dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
-        />
-        {app.name}
-      </span>
-    </span>
-  );
-
-  const titlebarRight = (
+  // The FRAME's affordances. They survive whatever the app contributes: they
+  // stand ahead of the app's own actions, so the app's one filled ink control
+  // is still the last thing in the bar.
+  const frameActions = (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
       {builderEnabled ? (
         <button
@@ -435,21 +410,40 @@ export default function InlineAppRoute({
   const cacheKey = `${appId}:${attempt}`;
   // Kick the descriptor chunk import off NOW, so it downloads in parallel with
   // the scopes fetch below — InlineAppMount receives this same promise, and
-  // first paint pays max(chunk, scopes) instead of their sum.
+  // first paint pays max(chunk, scopes) instead of their sum. A refused seat
+  // (S5 above) never calls `loader()` at all — the app's lazy chunk is not
+  // even fetched, since the wall means "does not mount", not "mounts and
+  // then hides".
   const descriptorPromise = useMemo(
-    () => loadDescriptor(cacheKey, loader),
-    [cacheKey, loader]
+    () => (refused ? undefined : loadDescriptor(cacheKey, loader)),
+    [cacheKey, loader, refused]
   );
   // The mount key gains a SCOPE-SET axis (issue #599, docs/client-keying.md):
   // the same app over a different set of scopes is a different mount, because
   // `window.centraid` and every replica lease it holds are per scope set.
   const scopesState = useAppScopes(appId);
-  const scopes = scopesState.status === "ready" ? scopesState.data : null;
+  const mounted = scopesState.status === "ready" ? scopesState.data : null;
+  const scopes = mounted?.scopes ?? null;
   const scopeKey = scopes ? scopeSetKey(scopes) : "";
+  const mountKey = `${appId}\0${cacheKey}\0${scopeKey}`;
+
+  // What the app contributes to the frame (Photos v4, §3): the bar's lockup and
+  // actions, the compact band, and the channel the app writes them through.
+  // Only a BUNDLED app may claim the band — first-party until submission can
+  // enforce the capsule.
+  const contributed = useInlineAppFrame({
+    app,
+    compact: Boolean(compact),
+    firstParty: bundled,
+    mountKey,
+    onHome: () => nav.navigate({ kind: "home" }),
+  });
 
   return (
     <ShellFrame
       stem={renderStem(nav)}
+      compact={compact}
+      {...(contributed.band === undefined ? {} : { band: contributed.band })}
       statusLine={statusLine}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
@@ -457,39 +451,71 @@ export default function InlineAppRoute({
       onForward={() => nav.forward()}
       showNewChat={builderEnabled}
       onNewChat={openNewAppSheet}
-      titlebarLead={brandChip}
-      titlebarRight={titlebarRight}
+      appMark={contributed.mark}
+      appTitle={contributed.title}
+      {...(contributed.count === undefined
+        ? {}
+        : { appCount: contributed.count })}
+      titlebarRight={
+        <>
+          {frameActions}
+          {contributed.actions}
+        </>
+      }
     >
       <div className={styles.view} data-testid="inline-app-view">
         <div className={styles.body}>
-          <ErrorBoundary
-            key={attempt}
-            title={`${app.name} hit a problem`}
-            onReset={() => {
-              descriptorCache.delete(cacheKey);
-              setAttempt((a) => a + 1);
-            }}
-          >
-            <Suspense
-              fallback={
-                <div className={styles.fallback}>Loading {app.name}…</div>
-              }
+          {refused ? (
+            // The seat wall (docs/blueprint-seats.md S5). Stated plainly,
+            // per the repo's refusal grammar (docs/decisions.md S5, §14's
+            // offline banner is the sibling case): a title and one sentence
+            // of reason, no icon, no alarm colour, and no control — there is
+            // nothing to retry, because the seat itself is what refuses.
+            <output
+              className={styles.refusal}
+              data-testid="inline-app-seat-refusal"
             >
-              {scopes ? (
-                <InlineAppMount
-                  key={`${appId}\0${cacheKey}\0${scopeKey}`}
-                  appId={appId}
-                  cacheKey={cacheKey}
-                  descriptorPromise={descriptorPromise}
-                  scopes={scopes}
-                  onDescriptor={() => {}}
-                  onRootReady={onRootReady}
-                />
-              ) : (
-                <div className={styles.fallback}>Loading {app.name}…</div>
-              )}
-            </Suspense>
-          </ErrorBoundary>
+              <p className={styles.refusalTitle}>
+                {app.name} isn’t available here
+              </p>
+              <p className={styles.refusalBody}>
+                {app.name} opens on a paired device, not in a browser — for now.
+              </p>
+            </output>
+          ) : (
+            <ErrorBoundary
+              key={attempt}
+              title={`${app.name} hit a problem`}
+              onReset={() => {
+                descriptorCache.delete(cacheKey);
+                setAttempt((a) => a + 1);
+              }}
+            >
+              <Suspense
+                fallback={
+                  <div className={styles.fallback}>Loading {app.name}…</div>
+                }
+              >
+                {scopes && descriptorPromise ? (
+                  <InlineAppMount
+                    key={mountKey}
+                    appId={appId}
+                    cacheKey={cacheKey}
+                    descriptorPromise={descriptorPromise}
+                    scopes={scopes}
+                    {...(mounted?.shareTargetVaultId === undefined
+                      ? {}
+                      : { shareTargetVaultId: mounted.shareTargetVaultId })}
+                    frame={contributed.frame}
+                    onDescriptor={() => {}}
+                    onRootReady={onRootReady}
+                  />
+                ) : (
+                  <div className={styles.fallback}>Loading {app.name}…</div>
+                )}
+              </Suspense>
+            </ErrorBoundary>
+          )}
         </div>
         {settings === null ? null : (
           <AppSettingsController
@@ -508,7 +534,7 @@ export default function InlineAppRoute({
             }}
             onRename={() => {
               setSettings(null);
-              void renameFlow();
+              void renameInlineApp({ app, say: showToast });
             }}
             onShare={() => showToast("Sharing isn’t available yet.")}
             onReveal={() =>
@@ -516,7 +542,12 @@ export default function InlineAppRoute({
             }
             onDelete={() => {
               setSettings(null);
-              void deleteFlow();
+              void deleteInlineApp({
+                app,
+                confirm,
+                say: showToast,
+                onDeleted: () => nav.navigate({ kind: "home" }),
+              });
             }}
             showToast={showToast}
           />

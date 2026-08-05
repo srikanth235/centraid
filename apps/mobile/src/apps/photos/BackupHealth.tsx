@@ -1,7 +1,28 @@
-import { File } from "expo-file-system";
-import * as MediaLibrary from "expo-media-library";
+// THE BACKUP SURFACE — a device question, not a Photos question (#711, S4).
+//
+// What changed, and why it is not a refactor: this screen used to ask a member
+// to pick DEVICE ALBUMS and press "Back up selected albums now", per app, per
+// run. docs/decisions.md S4 settles the opposite model — consent once, then
+// automatic under one Wi-Fi/charging/roaming policy owned by the frame — so the
+// album picker and its 100-line MediaLibrary walk are gone, replaced by the
+// consent panel below and the sweep in `photos-backup.ts`. Nothing here selects
+// what to back up any more: the answer is "this device".
+//
+// The switches now read and write the FRAME's policy record
+// (`kit/transfer/transfer-policy.ts`) — the same durable rows, a new owner. The
+// per-app framing is gone from the copy with them: these rules govern Docs'
+// scans and Notes' attachments the moment those enqueue, and saying "Photos"
+// anywhere on this screen would be a lie the next PR has to unpick.
+//
+// WHERE THIS SCREEN GOES NEXT: frame Settings, beside Phone storage. It sits in
+// the Photos stack today only because that is where a member can reach it, and
+// mounting the consent moment here is this pass's compromise — see the report
+// note about first-run. When it moves, this file moves whole; nothing in it is
+// Photos-specific except the route that reaches it.
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Linking,
   Platform,
   Pressable,
@@ -10,7 +31,6 @@ import {
   Switch,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { formatBytes } from "@centraid/design";
 
@@ -20,115 +40,88 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { t, useTheme } from "../../kit/theme";
-import { authHeader } from "../../lib/gateway";
-import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import {
-  LAST_SUCCESSFUL_SYNC_KEY,
-  nativeUploadPolicy,
-} from "../../lib/upload/native-policy";
-import { UploadQueue } from "../../lib/upload/native-queue";
+  AUTOMATIC_BACKUP_OFF,
+  AUTOMATIC_BACKUP_ON,
+  STOP_BACKING_UP_ACTION,
+  STOP_BACKING_UP_EXPLANATION,
+  answerBackupConsent,
+  automaticTransferAllowed,
+  backupConsentPanel,
+  hydrateBackupConsent,
+} from "../../kit/transfer/transfer-consent";
+import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
+import {
+  DEFAULT_TRANSFER_POLICY,
+  TRANSFER_POLICY_SWITCHES,
+  hydrateTransferPolicy,
+  writeTransferPolicy,
+} from "../../kit/transfer/transfer-policy";
+import type { TransferPolicy } from "../../kit/transfer/transfer-policy";
+import { readTransferQueue } from "../../kit/transfer/transfer-queue";
+import type { TransferQueueCounts } from "../../kit/transfer/transfer-queue";
+import { authHeader } from "../../lib/gateway";
+import { LAST_SUCCESSFUL_SYNC_KEY } from "../../lib/upload/native-policy";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { styles } from "./BackupHealth.styles";
-import {
-  IN_CLOUD_MESSAGE,
-  InCloudOriginalError,
-  capturedAtIso,
-  durationSeconds,
-  liveVideoUri,
-  openDeviceOriginal,
-} from "./device-media";
-import type { DeviceOriginal } from "./device-media";
-
-interface Rules {
-  wifiOnly: boolean;
-  allowMetered: boolean;
-  allowRoaming: boolean;
-  chargerOnly: boolean;
-  selectedAlbums: string[];
-}
-const RULES_KEY = "photos.backupRules";
-const DEFAULT_RULES: Rules = {
-  wifiOnly: true,
-  allowMetered: false,
-  allowRoaming: false,
-  chargerOnly: false,
-  selectedAlbums: [],
-};
-
-type PendingUpload = {
-  plaintextSize: number;
-  lastError?: string;
-  filename?: string;
-};
+import { IN_CLOUD_MESSAGE } from "./device-media";
+import { useAutomaticPhotoBackup } from "./photos-backup";
+import PhotosScreen from "./PhotosScreen";
+import { CUSTODY_ICON, CUSTODY_LABEL } from "./tile-overlays";
 
 type StorageStatus =
   | { kind: "unavailable" }
   | { kind: "ready"; replicated: number; offsite: number; casAck: string };
 
-// A one-shot read of the durable upload queue — an external system, opened and
-// closed around the read so the screen never holds the sqlite handle. Lives
-// outside the component so the effect that calls it stays a plain external read
-// rather than an in-body state update.
-function readPendingUploads(
+// A one-shot read of an EXTERNAL system, kept outside the component so the
+// effect that calls it stays a plain external read rather than an in-body state
+// update — the same reason `readPendingUploads` lived out here before it moved
+// into the frame's `readTransferQueue`.
+function readQueueInto(
   gatewayBase: string,
-  setPending: (next: PendingUpload[]) => void
+  apply: (counts: TransferQueueCounts) => void
 ): void {
-  const queue = UploadQueue.open({
-    gatewayBaseUrl: gatewayBase,
-    headers: authHeader,
-  });
-  setPending(queue.pending());
-  queue.close();
+  apply(readTransferQueue(gatewayBase));
 }
 
-export default function BackupHealth({
-  navigation,
-}: PhotosScreenProps<"BackupHealth">): React.JSX.Element {
+const EMPTY_QUEUE: TransferQueueCounts = {
+  pending: 0,
+  bytes: 0,
+  failures: [],
+  readable: true,
+};
+
+export default function BackupHealth(
+  _props: PhotosScreenProps<"BackupHealth">
+): React.JSX.Element {
   const { colors } = useTheme();
-  const { gatewayBase, online, session, vaultId } = useReplica();
+  const { gatewayBase, online } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
-  const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
-  // Album titles are async getters in the Next API, so they are read once here
-  // rather than during render. The asset count legacy albums carried has no
-  // Next equivalent short of walking every album, which this screen will not do.
-  const [albums, setAlbums] = useState<Array<{ id: string; title: string }>>(
-    []
-  );
-  const [albumError, setAlbumError] = useState<string>();
-  const [pending, setPending] = useState<PendingUpload[]>([]);
+  const [policy, setPolicy] = useState<TransferPolicy>(DEFAULT_TRANSFER_POLICY);
+  const [consent, setConsent] = useState<BackupConsentRecord>();
+  const [queue, setQueue] = useState<TransferQueueCounts>(EMPTY_QUEUE);
   const [storage, setStorage] = useState<StorageStatus>({
     kind: "unavailable",
   });
-  const [running, setRunning] = useState(false);
-  const [inCloudSkipped, setInCloudSkipped] = useState(0);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
+  // The sweep runs while this screen is up. It is gated on `consent` and on
+  // nothing else — see `automaticBackupCandidates`.
+  const automatic = useAutomaticPhotoBackup(consent);
+  const consented = automaticTransferAllowed(consent);
+  const panel = useMemo(() => backupConsentPanel(policy), [policy]);
 
   useEffect(() => {
-    void Store.hydrate(RULES_KEY, DEFAULT_RULES).then((value) =>
-      setRules({ ...DEFAULT_RULES, ...value })
-    );
+    void hydrateTransferPolicy().then(setPolicy);
+    void hydrateBackupConsent().then(setConsent);
     void Store.hydrate<string | undefined>(
       LAST_SUCCESSFUL_SYNC_KEY,
       undefined
     ).then(setLastSuccessfulSync);
-    void MediaLibrary.Album.getAll()
-      .then((all) =>
-        Promise.all(
-          all.map(async (album) => ({
-            id: album.id,
-            title: await album.getTitle(),
-          }))
-        )
-      )
-      .then(setAlbums)
-      .catch((error: unknown) =>
-        setAlbumError(error instanceof Error ? error.message : String(error))
-      );
   }, []);
   useEffect(() => {
     if (!gatewayBase) return;
-    readPendingUploads(gatewayBase, setPending);
+    readQueueInto(gatewayBase, setQueue);
     if (online)
       void fetch(`${gatewayBase}/centraid/_gateway/storage/status`, {
         headers: authHeader(),
@@ -153,127 +146,35 @@ export default function BackupHealth({
           }
         )
         .catch(() => undefined);
-  }, [gatewayBase, online]);
+    // The sweep hands rows to the durable queue, so the readout has to follow
+    // it; `automatic.sent` is the exact count that moved.
+  }, [gatewayBase, online, automatic.sent]);
 
-  const bytes = useMemo(
-    () => pending.reduce((sum, item) => sum + item.plaintextSize, 0),
-    [pending]
-  );
-  const update = (next: Rules): void => {
-    setRules(next);
-    Store.set(RULES_KEY, next);
+  const update = (next: TransferPolicy): void => {
+    setPolicy(next);
+    writeTransferPolicy(next);
   };
-  const backupAlbums = async (): Promise<void> => {
-    if (!session || !gatewayBase || rules.selectedAlbums.length === 0) return;
-    if (!(await nativeUploadPolicy().canTransfer())) return;
-    setRunning(true);
-    let skipped = 0;
-    setInCloudSkipped(0);
-    try {
-      const pageSize = 250;
-      const backupAsset = async (
-        metadata: MediaLibrary.AssetMetadata
-      ): Promise<void> => {
-        const isVideo = metadata.mediaType === MediaLibrary.MediaType.VIDEO;
-        const capturedAt = capturedAtIso(metadata);
-        let original: DeviceOriginal;
-        try {
-          original = await openDeviceOriginal(metadata.id);
-        } catch (error) {
-          if (!(error instanceof InCloudOriginalError)) throw error;
-          // Counted and shown on the screen, never passed over in silence.
-          skipped += 1;
-          setInCloudSkipped(skipped);
-          return;
-        }
-        // Resolved before the still so both halves share one capture group.
-        const companion = await liveVideoUri(original.asset);
-        await backupDeviceMedia(session, gatewayBase, {
-          localUri: original.uri,
-          ...(vaultId ? { targetVaultId: vaultId } : {}),
-          ...(metadata.filename ? { filename: metadata.filename } : {}),
-          mediaType: isVideo ? "video/mp4" : "image/jpeg",
-          plaintextSize: new File(original.uri).size,
-          kind: isVideo ? "video" : "photo",
-          capturedAt,
-          captureGroupId: companion ? `live:${metadata.id}` : undefined,
-          width: metadata.width ?? undefined,
-          height: metadata.height ?? undefined,
-          durationS: durationSeconds(metadata.duration),
-        });
-        if (companion) {
-          const companionFile = new File(companion);
-          await backupDeviceMedia(session, gatewayBase, {
-            localUri: companion,
-            ...(vaultId ? { targetVaultId: vaultId } : {}),
-            // The Next API extracts the Live Photo's video to a file rather
-            // than exposing a paired asset, so its dimensions and duration
-            // are not on offer — only the name and the bytes.
-            filename: companionFile.name,
-            mediaType: "video/quicktime",
-            plaintextSize: companionFile.size,
-            kind: "video",
-            capturedAt,
-            captureGroupId: `live:${metadata.id}`,
-          });
-        }
-      };
-      const backupAlbumPage = async (
-        albumId: string,
-        offset: number
-      ): Promise<void> => {
-        // One native round-trip per page for every cheap field; the bytes of
-        // each asset are resolved individually below.
-        const page = await new MediaLibrary.Query()
-          .album(new MediaLibrary.Album(albumId))
-          .within(MediaLibrary.AssetField.MEDIA_TYPE, [
-            MediaLibrary.MediaType.IMAGE,
-            MediaLibrary.MediaType.VIDEO,
-          ])
-          .limit(pageSize)
-          .offset(offset)
-          .exeForMetadata();
-        const backupPageAsset = async (index: number): Promise<void> => {
-          const metadata = page[index];
-          if (metadata === undefined) return;
-          await backupAsset(metadata);
-          return backupPageAsset(index + 1);
-        };
-        await backupPageAsset(0);
-        if (page.length === pageSize)
-          return backupAlbumPage(albumId, offset + page.length);
-      };
-      const backupAlbum = async (index: number): Promise<void> => {
-        const albumId = rules.selectedAlbums[index];
-        if (albumId === undefined) return;
-        await backupAlbumPage(albumId, 0);
-        return backupAlbum(index + 1);
-      };
-      await backupAlbum(0);
-      setLastSuccessfulSync(
-        Store.get<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined)
-      );
-    } finally {
-      setRunning(false);
-    }
+  const stopBackingUp = (): void => {
+    Alert.alert("Stop backing up this device?", STOP_BACKING_UP_EXPLANATION, [
+      { text: "Keep backing up" },
+      {
+        text: STOP_BACKING_UP_ACTION,
+        onPress: () => setConsent(answerBackupConsent("not-now")),
+      },
+    ]);
   };
+
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    // Reached from the More sheet's `Storage` row, so `more` is the current
+    // destination — and the band is what leaves this screen now (§F,
+    // proto:4953-4954). The back chevron is gone with it: it was the only exit
+    // this screen had, and an exit the band already provides twice over does
+    // not need a third spelling in the head.
+    <PhotosScreen current="more">
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>
           Backup health
         </Text>
-        <View style={{ width: 26 }} />
       </View>
       <ReplicaStatusBar />
       <ScrollView
@@ -286,38 +187,48 @@ export default function BackupHealth({
           style={[
             styles.hero,
             {
-              backgroundColor: pending.length ? colors.bgSunken : colors.bgElev,
+              backgroundColor: queue.pending ? colors.bgSunken : colors.bgElev,
               borderColor: colors.line,
             },
           ]}
         >
           <Icon
-            name={pending.length ? "cloud" : "check-circle"}
+            name={queue.pending ? "cloud" : "check-circle"}
             size={30}
-            color={pending.length ? colors.accent : "#2f9d6a"}
+            color={queue.pending ? colors.accent : colors.success}
           />
           <Text style={[styles.heroValue, { color: colors.text }]}>
-            {pending.length ? (
-              <>
-                <Text style={[t("mono"), { color: colors.text }]}>
-                  {pending.length}
-                </Text>{" "}
-                pending
-              </>
+            {queue.readable ? (
+              queue.pending ? (
+                <>
+                  <Text style={[t("mono"), { color: colors.text }]}>
+                    {queue.pending}
+                  </Text>{" "}
+                  pending
+                </>
+              ) : (
+                "Backup is healthy"
+              )
             ) : (
-              "Backup is healthy"
+              // The ledger is intact; only this view of it failed. Saying
+              // "healthy" here would be a reassurance we cannot support.
+              "The queue could not be read on this phone"
             )}
           </Text>
           <Text style={[styles.meta, { color: colors.textSoft }]}>
-            {pending.length ? (
-              <>
-                <Text style={[t("mono"), { color: colors.textSoft }]}>
-                  {formatBytes(bytes)}
-                </Text>{" "}
-                remaining
-              </>
+            {queue.readable ? (
+              queue.pending ? (
+                <>
+                  <Text style={[t("mono"), { color: colors.textSoft }]}>
+                    {formatBytes(queue.bytes)}
+                  </Text>{" "}
+                  remaining
+                </>
+              ) : (
+                "The durable queue is empty."
+              )
             ) : (
-              "The durable queue is empty."
+              "Nothing queued has been lost. Free up phone storage and reopen this screen."
             )}
           </Text>
           <Text style={[styles.meta, { color: colors.textSoft }]}>
@@ -331,118 +242,191 @@ export default function BackupHealth({
             )}
           </Text>
         </View>
-        {inCloudSkipped ? (
+
+        {/* THE CONSENT MOMENT, or the state it left behind. A device that has
+            not answered sees the question; a device that has sees what it is
+            doing and how to stop. Never both. */}
+        {consented ? (
+          <View
+            style={[
+              styles.panel,
+              { backgroundColor: colors.bgElev, borderColor: colors.line },
+            ]}
+          >
+            <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
+              Backup
+            </Text>
+            <Text style={[styles.panelTitle, { color: colors.text }]}>
+              {AUTOMATIC_BACKUP_ON}
+            </Text>
+            <Text style={[styles.body, { color: colors.textSoft }]}>
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {automatic.remaining}
+              </Text>{" "}
+              on this device only ·{" "}
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {automatic.sent}
+              </Text>{" "}
+              sent since this screen opened
+            </Text>
+
+            {/* Where the grid's custody mark is TAUGHT. The glyph is silent by
+                design — it is a mark, not a caption — and an unlabelled mark
+                earns its silence only if something, somewhere, says what it
+                means. This is that somewhere: the screen a member already
+                opens when they are asking the question the mark answers. */}
+            <View style={styles.legend}>
+              <View
+                style={[styles.legendChip, { backgroundColor: colors.toneMat }]}
+              >
+                <Icon name={CUSTODY_ICON} size={13} color={colors.textSoft} />
+              </View>
+              <Text style={[styles.legendText, { color: colors.textSoft }]}>
+                On a photograph in the grid, this means it is {CUSTODY_LABEL} —
+                on this device and nowhere else.
+              </Text>
+            </View>
+            {automatic.blocked ? (
+              <Text style={[styles.unavailable, { color: colors.textSoft }]}>
+                {automatic.blocked}
+              </Text>
+            ) : null}
+            <View style={styles.actions}>
+              {/* Outlined, never filled: stopping is not the commit this
+                  surface is for, and it is not destructive either (§18). */}
+              <Pressable
+                accessibilityLabel={STOP_BACKING_UP_ACTION}
+                accessibilityRole="button"
+                onPress={stopBackingUp}
+                style={[styles.action, { borderColor: colors.line }]}
+              >
+                <Text style={[styles.actionText, { color: colors.text }]}>
+                  {STOP_BACKING_UP_ACTION}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.panel,
+              { backgroundColor: colors.bgElev, borderColor: colors.line },
+            ]}
+          >
+            <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
+              {panel.eyebrow}
+            </Text>
+            <Text style={[styles.panelTitle, { color: colors.text }]}>
+              {panel.title}
+            </Text>
+            <Text style={[styles.body, { color: colors.textSoft }]}>
+              {panel.body}
+            </Text>
+            {panel.facts.map((fact) => (
+              <View
+                key={fact.label}
+                style={[
+                  styles.fact,
+                  { borderBottomColor: colors.line },
+                  // The egress fact takes a 2px `net` rule on its leading edge
+                  // and nothing else — never a fill, never a red dot.
+                  fact.net
+                    ? { borderLeftColor: colors.net, ...styles.factFlagged }
+                    : null,
+                ]}
+              >
+                <Text style={[styles.factLabel, { color: colors.textSoft }]}>
+                  {fact.label}
+                </Text>
+                <Text style={[styles.factValue, { color: colors.text }]}>
+                  {fact.value}
+                </Text>
+              </View>
+            ))}
+            {consent ? (
+              <Text style={[styles.unavailable, { color: colors.textSoft }]}>
+                {AUTOMATIC_BACKUP_OFF}
+              </Text>
+            ) : null}
+            <View style={styles.actions}>
+              {/* THE one filled element on this screen (§18). */}
+              <Pressable
+                accessibilityLabel={panel.action}
+                accessibilityRole="button"
+                onPress={() => setConsent(answerBackupConsent("automatic"))}
+                style={[
+                  styles.action,
+                  styles.filled,
+                  { backgroundColor: colors.accentFill },
+                ]}
+              >
+                <Text style={[styles.actionText, { color: colors.textInv }]}>
+                  {panel.action}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel={panel.action2}
+                accessibilityRole="button"
+                onPress={() => setConsent(answerBackupConsent("not-now"))}
+                style={[styles.action, { borderColor: colors.line }]}
+              >
+                <Text style={[styles.actionText, { color: colors.text }]}>
+                  {panel.action2}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {automatic.deferred ? (
           <View style={[styles.warning, { borderColor: colors.danger }]}>
             <Icon name="cloud-off" size={18} color={colors.danger} />
             <Text style={[styles.warningText, { color: colors.danger }]}>
               <Text style={[t("mono"), { color: colors.danger }]}>
-                {inCloudSkipped}
+                {automatic.deferred}
               </Text>{" "}
-              {inCloudSkipped === 1 ? "original is" : "originals are"}{" "}
+              {automatic.deferred === 1 ? "original is" : "originals are"}{" "}
               {IN_CLOUD_MESSAGE}, so{" "}
-              {inCloudSkipped === 1 ? "it was" : "they were"} not backed up.
-              Download {inCloudSkipped === 1 ? "it" : "them"} in the Photos app
-              and run this again.
+              {automatic.deferred === 1 ? "it was" : "they were"} not backed up.
+              Download {automatic.deferred === 1 ? "it" : "them"} in the Photos
+              app and they will be picked up on the next sweep.
             </Text>
           </View>
         ) : null}
+
         <Text style={[styles.section, { color: colors.textSoft }]}>
           TRANSFER RULES
         </Text>
-        <Rule
-          label="Wi-Fi only"
-          value={rules.wifiOnly}
-          onValueChange={(value) => update({ ...rules, wifiOnly: value })}
-          colors={colors}
-        />
-        <Rule
-          label="Allow metered or cellular"
-          value={rules.allowMetered}
-          onValueChange={(value) => update({ ...rules, allowMetered: value })}
-          colors={colors}
-          disabled={rules.wifiOnly}
-        />
-        <Rule
-          label="Allow roaming or unknown cellular status"
-          value={rules.allowRoaming}
-          onValueChange={(value) => update({ ...rules, allowRoaming: value })}
-          colors={colors}
-          disabled={rules.wifiOnly || !rules.allowMetered}
-        />
-        <Rule
-          label="Only while charging"
-          value={rules.chargerOnly}
-          onValueChange={(value) => update({ ...rules, chargerOnly: value })}
-          colors={colors}
-        />
-        <Text style={[styles.section, { color: colors.textSoft }]}>
-          DEVICE ALBUMS
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          These rules govern every transfer this device makes — photographs,
+          scans and attachments alike.
         </Text>
-        {albumError ? (
-          <Text style={[styles.error, { color: colors.danger }]}>
-            Device albums could not be read: {albumError}
-          </Text>
-        ) : null}
-        {albums.map((album) => {
-          const active = rules.selectedAlbums.includes(album.id);
+        {TRANSFER_POLICY_SWITCHES.map((rule) => {
+          const inert = rule.inert(policy);
           return (
-            <Rule
-              key={album.id}
-              label={album.title}
-              value={active}
-              onValueChange={(value) => {
-                update({
-                  ...rules,
-                  selectedAlbums: value
-                    ? [...new Set([...rules.selectedAlbums, album.id])]
-                    : rules.selectedAlbums.filter((id) => id !== album.id),
-                });
-              }}
-              colors={colors}
-            />
+            <View
+              key={rule.key}
+              style={[styles.rule, { borderBottomColor: colors.line }]}
+            >
+              <Text
+                style={[
+                  styles.ruleLabel,
+                  { color: inert ? colors.textFaint : colors.text },
+                ]}
+              >
+                {rule.label}
+              </Text>
+              <Switch
+                disabled={inert}
+                value={policy[rule.key]}
+                onValueChange={(value) =>
+                  update({ ...policy, [rule.key]: value })
+                }
+                trackColor={{ true: colors.accent }}
+              />
+            </View>
           );
         })}
-        <Pressable
-          accessibilityLabel="Back up selected albums now"
-          accessibilityRole="button"
-          accessibilityState={{
-            busy: running,
-            disabled: running || rules.selectedAlbums.length === 0,
-          }}
-          disabled={running || rules.selectedAlbums.length === 0}
-          style={[
-            styles.settings,
-            {
-              backgroundColor: rules.selectedAlbums.length
-                ? colors.accentFill
-                : colors.bgSunken,
-              borderColor: colors.line,
-            },
-          ]}
-          onPress={() => void backupAlbums()}
-        >
-          <Icon
-            name="upload-cloud"
-            size={18}
-            color={
-              rules.selectedAlbums.length ? colors.textInv : colors.textFaint
-            }
-          />
-          <Text
-            style={[
-              styles.settingsText,
-              {
-                color: rules.selectedAlbums.length
-                  ? colors.textInv
-                  : colors.textFaint,
-              },
-            ]}
-          >
-            {running
-              ? "Backing up selected albums…"
-              : "Back up selected albums now"}
-          </Text>
-        </Pressable>
         <Text style={[styles.section, { color: colors.textSoft }]}>
           STORAGE
         </Text>
@@ -462,13 +446,11 @@ export default function BackupHealth({
             "Storage policy unavailable offline"
           )}
         </Text>
-        {pending
-          .filter((item) => item.lastError)
-          .map((item, index) => (
-            <Text key={index} style={[styles.error, { color: colors.danger }]}>
-              {item.filename ?? "Asset"}: {item.lastError}
-            </Text>
-          ))}
+        {queue.failures.map((failure, index) => (
+          <Text key={index} style={[styles.error, { color: colors.danger }]}>
+            {failure.filename ?? "Asset"}: {failure.lastError}
+          </Text>
+        ))}
         {Platform.OS === "android" ? (
           <Pressable
             accessibilityLabel="Open battery optimization settings"
@@ -483,40 +465,7 @@ export default function BackupHealth({
           </Pressable>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function Rule({
-  label,
-  value,
-  onValueChange,
-  colors,
-  disabled = false,
-}: {
-  label: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  colors: ReturnType<typeof useTheme>["colors"];
-  disabled?: boolean;
-}): React.JSX.Element {
-  return (
-    <View style={[styles.rule, { borderBottomColor: colors.line }]}>
-      <Text
-        style={[
-          styles.ruleLabel,
-          { color: disabled ? colors.textFaint : colors.text },
-        ]}
-      >
-        {label}
-      </Text>
-      <Switch
-        disabled={disabled}
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ true: colors.accent }}
-      />
-    </View>
+    </PhotosScreen>
   );
 }
 

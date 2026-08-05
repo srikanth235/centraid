@@ -13,17 +13,25 @@
 .memoriesStrip::-webkit-scrollbar {
   height: 0;
 }
+/* 250x120 desktop / 200x96 phone, 4px radius (v4 handoff §4.6). Landscape,
+   not portrait: a memory is a scene, and the card is the shape a scene is. No
+   shadow — surfaces are paper, not elevation. */
 .memoryCard {
   position: relative;
   flex: 0 0 auto;
-  width: 132px;
-  height: 176px;
-  border-radius: var(--r-xl);
+  width: 250px;
+  height: 120px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   border: none;
   background: var(--bg-sunken) center/cover no-repeat;
-  box-shadow: var(--shadow-sm);
   padding: 0;
+}
+@media (max-width: 719px) {
+  .memoryCard {
+    width: 200px;
+    height: 96px;
+  }
 }
 .memoryScrim {
   position: absolute;

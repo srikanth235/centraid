@@ -79,6 +79,15 @@ export interface InlineCentraidClient {
   appId: string;
   /** Mounted scopes, primary (the member's own) first. */
   scopes: InlineScope[];
+  /**
+   * Where this member's shares land by default (issue #711 item H) — a
+   * POINTER they own, not a property of any mounted scope, which is why it
+   * sits here rather than on a scope row. It may name a vault that is not in
+   * `scopes` (deleted, or one this member holds no role in): an app renders
+   * that as its share action disabled with the reason inline, never as a
+   * silent no-op. Absent on a solo mount and on a gateway that names none.
+   */
+  shareTargetVaultId?: string;
   read: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
@@ -196,6 +205,8 @@ export interface CreateInlineCentraidOptions {
   scopes?: readonly InlineScopeBinding[];
   /** Single-scope shorthand (pre-#599 callers and single-scope apps). */
   session?: InlineScopeSession;
+  /** The member's default share destination — see `InlineCentraidClient`. */
+  shareTargetVaultId?: string;
   isOnline?: () => boolean;
 }
 
@@ -307,6 +318,9 @@ export function createInlineCentraidClient(
     // The SAME array the app holds: hydrating a scope pushes into it, so an
     // app that captured `client.scopes` sees the audience appear.
     scopes: bindings.map((binding) => binding.scope),
+    ...(options.shareTargetVaultId === undefined
+      ? {}
+      : { shareTargetVaultId: options.shareTargetVaultId }),
 
     // `async` deliberately: an unmounted-scope refusal must REJECT like every
     // other read failure, not throw synchronously out of the call site.

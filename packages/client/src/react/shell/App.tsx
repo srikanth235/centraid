@@ -1225,6 +1225,7 @@ export default function App(): JSX.Element {
                 renderStem={renderStem}
                 statusLine={statusLine}
                 prefs={prefs}
+                compact={compact}
               />
             );
           }

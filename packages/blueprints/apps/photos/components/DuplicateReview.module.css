@@ -1,0 +1,155 @@
+/* The duplicate review (v4 handoff proto :4291-:4303). Authored camelCase.
+
+   Everything a photograph draws — the --skel ground, the selection control,
+   the state slot that carries `keep`/`trash` — lives in Tile.module.css. This
+   file owns only the review's own chrome: the section head, the readout rows,
+   the consequence panel and the foot note.
+
+   The section head is the SAME pair Duplicates.module.css uses for a cluster
+   label (`.clusterName`/`.clusterMeta`), mirrored rather than imported for the
+   same reason that file mirrors Timeline's day label: leaving the list for one
+   cluster must not change the rhythm.
+
+   Invariants (§18): spacing off `--sp-*`, type off the `--t-*` roles, colour
+   only from tokens, logical properties only, numerics mono + tabular. */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block: var(--sp-1) var(--sp-4);
+}
+
+/* ---- section head: the ordinal, then the honest "why we think so" ---- */
+
+.sectionLabel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+}
+.sectionName {
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
+  color: var(--text-faint);
+}
+.sectionMeta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* ---- the copies: the 2px gutter, the one place content touches content ---- */
+
+.copies {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-block-end: var(--sp-1);
+}
+
+/* ---- the readout rows: one per copy, the verdict at the trailing edge ---- */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.copyRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: none;
+  border-block-end: 1px solid var(--line);
+  text-align: start;
+  cursor: pointer;
+}
+.copyRow:last-child {
+  border-block-end: none;
+}
+/* The kept row is inert — keeping the copy that is already kept is not one of
+   the answers this screen offers — so it drops the pointer affordance rather
+   than fading out a row the member still has to read. */
+.copyRow:disabled {
+  cursor: default;
+}
+.copyName {
+  font: var(--t-body);
+  color: var(--text);
+}
+.copyFacts {
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+}
+/* The verdict owns the trailing edge whether or not the row had facts to
+   print, so a row missing its dimensions does not slide its verdict inward. */
+.copyVerdict {
+  margin-inline-start: auto;
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+.copyRow[data-kept="true"] .copyVerdict {
+  color: var(--text);
+}
+
+/* ---- the consequence panel: what happens, said before it happens ---- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.panelTitle {
+  margin: 0;
+  font: var(--t-title);
+}
+.panelBody {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+.panelActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+/* Destructive is an outlined `--net` button, never a fill (§18) — the same
+   pair Duplicates.module.css and AlbumBar.module.css use, so the review's
+   Trash reads as the SAME confirm-to-act control as every other destructive
+   action in this app. */
+.destructive:not(:disabled) {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
+
+/* ---- the foot note: where the member is in the queue ---- */
+
+.foot {
+  margin: 0;
+  font: var(--t-mono);
+  font-size: var(--t-small-size);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}

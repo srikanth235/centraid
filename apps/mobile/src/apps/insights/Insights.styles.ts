@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t } from "../../kit/theme";
+import { borders, family, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const makeStyles = (colors: ThemeColors) =>
@@ -102,7 +102,7 @@ export const makeStyles = (colors: ThemeColors) =>
       marginLeft: 18,
       marginTop: -4,
     },
-    divider: { backgroundColor: colors.line, height: StyleSheet.hairlineWidth },
+    divider: { backgroundColor: colors.line, height: borders.hairline },
 
     // Recent events tail.
     eventRow: { flexDirection: "row", gap: 10, marginTop: 10 },

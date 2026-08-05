@@ -362,9 +362,13 @@ const ICON_DATA = {
       d: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z",
     },
   ],
+  // Symmetric about x=12, the box's centre line, which is also where the point
+  // at the bottom sits. The previous curve drew its lobes with their own centre
+  // at x=9.25 while keeping the point at 12, so the glyph leaned left and its
+  // right lobe collapsed into a notch — visible at every size.
   Heart: [
     {
-      d: "M12 20s-7-4.4-9.2-8.4C1.3 8.9 2.6 6 5.4 6c1.8 0 3 1 3.6 2 .6-1 1.8-2 3.6-2 2.8 0 4.1 2.9 2.6 5.6C19 15.6 12 20 12 20z",
+      d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
     },
   ],
   Pin: [{ d: "M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5" }],
@@ -418,6 +422,98 @@ const ICON_DATA = {
     { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
     { d: "m9 9 6 6M15 9l-6 6" },
   ],
+
+  // Photos v4 handoff (issue #711/#707, "New icon keys" — CHANGELOG v4 -
+  // Photos.md §B2): the shelves, the selection set and the viewer bar. Same
+  // contract as every other mark — single-tone stroke on a 24 grid, fill:
+  // none, round caps and joins; the caller sets stroke-width (1.6, 1.75 below
+  // 16px) and `aria-hidden` at render time. Lowercase keys match the
+  // handoff's own key *names* — the handoff itself calls this path data
+  // "placeholder stroke paths" (its "New icon keys this design needs" row),
+  // not final artwork. None of the ten shared keys (album, dupe, heart,
+  // info, person, place, removeFrom, restore, share, trash) is byte-for-byte
+  // identical to the handoff's path data. `heart` was a genuine bug — its
+  // lobes were drawn centred at x=9.25 while the bottom point sat at x=12,
+  // so the glyph leaned left and the right lobe collapsed into a notch — and
+  // has been replaced with the handoff's curve, which is symmetric about
+  // x=12. The other nine are a deliberate deviation, not an oversight:
+  //   - `trash` and `share` reuse this file's app-wide `Trash`/`Share`
+  //     artwork verbatim, so those glyphs look identical everywhere they
+  //     appear instead of drawing a second, different-looking version for
+  //     Photos alone.
+  //   - `restore` deliberately does NOT reuse the handoff's generic circular
+  //     undo-arrow: that arc shape is already `Reset`/`Refresh`/`History`
+  //     below, and a fourth near-identical circular arrow under yet another
+  //     name would be indistinguishable from those at a glance. It draws a
+  //     trash can with an up-arrow instead — unambiguous for "bring this
+  //     back from Recently Deleted."
+  //   - `place` keeps its pin with an explicit ring instead of the handoff's
+  //     pin, whose dot is a zero-length `M12 9.5v.01` — that only renders
+  //     because of round line-caps, a guarantee react-native-svg does not
+  //     make, so the handoff's own mark risks disappearing on mobile.
+  //   - `removeFrom` keeps a self-contained circle-minus. The handoff's is a
+  //     bare `M5 12h14` line with no circle; it is never actually wired to a
+  //     button in the mockup (it appears only in the handoff's own "new icon
+  //     keys" documentation row) and would read as nothing more than a
+  //     horizontal divider without a circular button chrome around it that
+  //     this codebase does not guarantee.
+  //   - `album`, `dupe`, `info` and `person` differ in path data and/or
+  //     subpath count (a photo-stack vs. a folder for `album`; a merged
+  //     line+dot vs. three separate subpaths for `info`) but render as the
+  //     same recognizable pictogram at 24px with no asymmetry or clipping.
+  //     `person` also matches this file's `User` glyph exactly, again for
+  //     cross-surface consistency rather than accident.
+  // None of this claims parity with the handoff's path data — only that
+  // each glyph reads correctly, and, where it deviates, why.
+  heart: [
+    {
+      d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
+    },
+  ],
+  album: [
+    { d: "M4 7h13v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" },
+    { d: "M7 4h13v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4z" },
+  ],
+  place: [
+    { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
+    { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  ],
+  person: [
+    { d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+    { d: "M4.5 20.5a7.5 7.5 0 0 1 15 0" },
+  ],
+  dupe: [
+    {
+      d: "M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z",
+    },
+    { d: "M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" },
+  ],
+  trash: [
+    {
+      d: "M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6",
+    },
+  ],
+  restore: [
+    {
+      d: "M4 7h16M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2",
+    },
+    { d: "M12 15V9M9 12l3-3 3 3" },
+  ],
+  add: [{ d: "M12 5v14M5 12h14" }],
+  share: [
+    { d: "M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" },
+    { d: "M16 6l-4-4-4 4M12 2v14" },
+  ],
+  download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
+  removeFrom: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M8 12h8" },
+  ],
+  info: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M12 16v-4M12 8h.01" },
+  ],
+  more: [{ d: "M6 12h.01M12 12h.01M18 12h.01" }],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;

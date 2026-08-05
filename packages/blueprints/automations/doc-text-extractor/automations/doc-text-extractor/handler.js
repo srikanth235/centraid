@@ -57,7 +57,12 @@ export default async function handler({ ctx, log }) {
   const leased = await ctx.vault.read({
     entity: "enrich.request",
     where: [
-      { column: "entity_type", op: "eq", value: "core.content_item" },
+      // Real column names: `enrich_request` carries `target_type`/`target_id`,
+      // never `entity_type`/`entity_id`. The old names are not columns of the
+      // table, so this read threw `unknown column` and `deviceOwned` was
+      // always empty — the gateway backstop ran straight over live device
+      // leases instead of yielding to them.
+      { column: "target_type", op: "eq", value: "core.content_item" },
       { column: "required_capability", op: "eq", value: "pdfText" },
       { column: "drained_at", op: "is-null" },
       { column: "lease_expires_at", op: "gt", value: now },
@@ -66,7 +71,7 @@ export default async function handler({ ctx, log }) {
     purpose: PURPOSE,
   });
   const deviceOwned = new Set(
-    (leased.rows ?? []).map((request) => request.entity_id)
+    (leased.rows ?? []).map((request) => request.target_id)
   );
   const read = await ctx.vault.read({
     entity: "core.content_item",

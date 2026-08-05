@@ -19,6 +19,11 @@
       { "schema": "sync", "verbs": "read+act" }
     ]
   },
+  "enrich": {
+    "domain": "photos",
+    "capability": "trips",
+    "lane": "device"
+  },
   "history": {
     "keep": {
       "count": 100

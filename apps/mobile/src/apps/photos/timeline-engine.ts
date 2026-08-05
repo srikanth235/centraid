@@ -483,6 +483,9 @@ class PhotoTimelineEngine {
           favorite: value<number>(asset, "favorite") === 1,
           archived: Boolean(value<string>(asset, "archived_at")),
           deleted: Boolean(value<string>(asset, "deleted_at")),
+          purgeAt:
+            value<string>(asset, "purge_at") ??
+            value<string>(item!, "purge_at"),
           backupState: "remote-only",
           source: "replica",
           sourceVaultId: scopeId,

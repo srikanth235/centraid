@@ -1,50 +1,15 @@
+// The daily-brief NOTIFICATION. What used to be here as well — `fetchDailyBrief`
+// and the `DailyBrief` payload — went with `DailyBriefCard`, which the Binding
+// Layer retires: a card summarising four apps sat above a springboard whose
+// tiles preview those same four apps from the local replica, said it a beat
+// later (it was a gateway round trip), and pushed the grid down while it
+// arrived. The 07:00 notification survives because it is the one part that
+// reaches the member when Home is NOT open.
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 
-import { ROUTES } from "@centraid/protocol";
-
-import { authHeader, fetchJson, requireGatewayBase } from "./gateway";
-
-export interface DailyBrief {
-  date: string;
-  events: Array<{ id: string; title: string; at: string }>;
-  tasks: Array<{ id: string; title: string; dueAt: string }>;
-  newPhotos: number;
-  balanceMinor: number;
-  currency: string;
-}
-
 const SCHEDULE_KEY = "centraid:daily-brief-notification:v1";
-
-function localDayRange(now = new Date()): {
-  date: string;
-  from: string;
-  to: string;
-  timeZone: string;
-} {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return {
-    date: [
-      start.getFullYear(),
-      String(start.getMonth() + 1).padStart(2, "0"),
-      String(start.getDate()).padStart(2, "0"),
-    ].join("-"),
-    from: start.toISOString(),
-    to: end.toISOString(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  };
-}
-
-export async function fetchDailyBrief(now = new Date()): Promise<DailyBrief> {
-  const base = await requireGatewayBase();
-  const params = new URLSearchParams(localDayRange(now));
-  return fetchJson<DailyBrief>(`${base}${ROUTES.briefToday}?${params}`, {
-    headers: authHeader(),
-  });
-}
 
 export function nextBriefNotificationAt(now = new Date()): Date {
   const next = new Date(now);

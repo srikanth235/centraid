@@ -101,6 +101,14 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
   const shimmer = document.createElement("span");
   shimmer.className = "ph-tile-ph";
   shimmer.setAttribute("aria-hidden", "true");
+  // The ground an absence paints (v4 §2.2). `--bg-elev`/`--bg-sunken` read as
+  // a CARD, and an absence is not a card — `--skel` is the role the design
+  // system added for exactly this. Set here rather than on `.ph-tile-ph` so
+  // the three non-React callers of this function (the picker, the duplicates
+  // shelf, the trash tile) agree with the Tile's own skeleton without a
+  // second stylesheet having to be loaded for them. The fallback keeps an
+  // older host that injects only the contract painting something.
+  shimmer.style.background = "var(--skel, var(--bg-sunken))";
   tile.appendChild(shimmer);
   if (isVideoAsset(asset)) {
     const badge = document.createElement("span");
@@ -138,7 +146,21 @@ function renderDuration(tile: HTMLElement, asset: Asset): void {
 // picker and the duplicates shelf. Imperative on purpose: `mountMedia` guards
 // it to run once per mounted element, exactly like the old code's one-time
 // build.
-export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
+/**
+ * What a tile reports back about its bytes (v4 §14). Deliberately a callback
+ * and not a return value: `pending → bytes` and `pending → failed` happen
+ * after the retry ladder below has run, long after this function returns, and
+ * the state slot has to be able to say so. Typed loosely (a string union
+ * declared in tile-state.ts) so this module keeps its no-JSX, no-app-state
+ * shape and tile-state.ts stays the one owner of the vocabulary.
+ */
+export type MediaReport = (state: "bytes" | "gateway" | "failed") => void;
+
+export function fillTileMedia(
+  tile: HTMLElement,
+  asset: Asset,
+  report?: MediaReport
+): void {
   // WHICH scope owns these bytes (issue #599). The shell's blob authorizer
   // reads `data-scope` off the element carrying a `/centraid/_vault/blobs/…`
   // reference or its nearest ancestor, and fetches the bytes in that scope.
@@ -150,8 +172,13 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
   if (scope) tile.dataset.scope = scope;
   const src = gridSrc(asset);
   if (src == null) {
+    // NOT a failure: there is simply nothing on this device to paint, which is
+    // the offline / offloaded case (§14). The tile says `on the gateway` and
+    // keeps its shape and its colour — a grey mosaic with no explanation is a
+    // bug.
     renderPlaceholder(tile, asset);
     renderDuration(tile, asset);
+    report?.("gateway");
     return;
   }
   const img = document.createElement("img");
@@ -216,7 +243,11 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
     tile.querySelector(".ph-tile-duration")?.remove();
     renderPlaceholder(tile, asset);
     renderDuration(tile, asset);
+    // The retry ladder is exhausted: this IS the terminal failure §14 names.
+    // The tile keeps its geometry and says `could not decode`.
+    report?.("failed");
   });
+  img.addEventListener("load", () => report?.("bytes"));
   tile.appendChild(img);
   if (isVideoAsset(asset)) {
     const badge = document.createElement("span");
@@ -238,7 +269,11 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
 // with a stable `key={asset.asset_id}` on the tile is what keeps the
 // underlying `<img>` node — and therefore its already loaded bytes — alive
 // across refreshes.
-export function mountMedia(el: HTMLElement | null, asset: Asset): void {
+export function mountMedia(
+  el: HTMLElement | null,
+  asset: Asset,
+  report?: MediaReport
+): void {
   // Keyed by SCOPE + asset id (issue #599). Asset ids are minted per scope and
   // collide across scopes exactly like content ids do, so an id-only guard
   // would treat a Family photo as "already painted" because the member's own
@@ -247,5 +282,5 @@ export function mountMedia(el: HTMLElement | null, asset: Asset): void {
   const key = `${asset.scope_id ?? ""}:${asset.asset_id}`;
   if (!el || el.dataset.mediaFor === key) return;
   el.dataset.mediaFor = key;
-  fillTileMedia(el, asset);
+  fillTileMedia(el, asset, report);
 }

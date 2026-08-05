@@ -127,7 +127,10 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
     "grid cells lost their bounded image cache tier"
   );
   const grids = [
-    "apps/mobile/src/apps/photos/PhotoTimeline.tsx",
+    // The timeline's image cell lives in PhotoTile since the Photos v4
+    // rewrite — PhotoTimeline renders rows of PhotoTile, so the decode/cache
+    // contract is asserted where the <Image> actually is.
+    "apps/mobile/src/apps/photos/PhotoTile.tsx",
     "apps/mobile/src/apps/photos/PhotosLibrary.tsx",
   ];
   const gridSources = await Promise.all(grids.map((file) => source(file)));

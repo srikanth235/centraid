@@ -1,11 +1,11 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii } from "../../kit/theme";
+import { borders, family, radii } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   backlink: {
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     gap: 2,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -42,7 +42,7 @@ export const styles = StyleSheet.create({
   },
   chip: {
     borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
@@ -102,7 +102,7 @@ export const styles = StyleSheet.create({
   },
   linkAction: {
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -130,7 +130,7 @@ export const styles = StyleSheet.create({
     fontSize: 20,
   },
   note: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: borders.hairline,
     gap: 6,
     paddingVertical: 17,
   },
@@ -157,7 +157,7 @@ export const styles = StyleSheet.create({
   search: {
     alignItems: "center",
     borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     flex: 1,
     flexDirection: "row",
     gap: 8,
@@ -177,7 +177,7 @@ export const styles = StyleSheet.create({
     marginTop: 2,
   },
   title: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: borders.hairline,
     fontFamily: family.sansMedium,
     fontSize: 23,
     paddingBottom: 10,

@@ -163,6 +163,7 @@ export {
   type ManifestExtIndex,
   type ManifestVaultBlock,
   type ManifestVaultScope,
+  type ManifestSeatsBlock,
   type HandlerConfirmation,
   type JsonSchema,
   type ManifestValidationCode as AppManifestValidationCode,

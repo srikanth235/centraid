@@ -59,7 +59,14 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   docs: ["drive", "search"],
   locker: ["auth", "items", "item"],
   people: ["people", "person"],
-  photos: ["library", "faces", "duplicates", "enrichment-status", "search"],
+  photos: [
+    "library",
+    "faces",
+    "face-queue",
+    "duplicates",
+    "enrichment-status",
+    "search",
+  ],
   tally: ["dashboard", "group"],
   tasks: ["board"],
 };

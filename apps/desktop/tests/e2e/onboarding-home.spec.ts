@@ -286,6 +286,36 @@ test("2.6 — opening a first-party app from Home lands in the app view", async 
   }
 });
 
+test("2.6b — Photos opens into the app view and yields the #711 UI evidence", async () => {
+  // The ui-receipt gate (scripts/validate-ui-receipt.mjs) wants a screenshot
+  // emitted by a CHANGED harness, and #711 is a Photos rewrite — so the frame
+  // it captures has to be Photos itself. Screenshotting Home under a
+  // `photos` filename would satisfy the regex and lie to the reviewer, which
+  // is the one thing a visual-evidence gate cannot afford.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-711-photos-v4.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

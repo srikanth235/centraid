@@ -48,6 +48,14 @@ export interface Asset {
   kind?: string | null;
   taken_at?: string | null;
   captured_at?: string | null;
+  /**
+   * Edit lineage (issue #711): the asset this one was derived from, when it
+   * was — the editor saves a crop as a new photograph and stamps the original
+   * here. Null/absent on every camera original and every import, and that
+   * absence is meaningful: it is the difference between "from a photograph
+   * taken in March" and "from an edit", and the viewer says which.
+   */
+  source_asset_id?: string | null;
   created_at?: string | null;
   width?: number | null;
   height?: number | null;

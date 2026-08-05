@@ -64,6 +64,14 @@ export interface TypeStyle {
   textTransform?: "uppercase";
   /** `font-variant-numeric`. The numeric register is always tabular. */
   variantNumeric?: "tabular-nums";
+  /** `direction`. Only the numeric role carries one — a number is not a word,
+   *  and under RTL the bidi algorithm reorders a mixed digit-and-word run
+   *  (`30 July 2026 · 17:42` reads back to front) unless the role pins its own
+   *  direction. Declared ONCE, on the role, never per span. */
+  direction?: "ltr";
+  /** `unicode-bidi`, paired with `direction` so the pinned direction actually
+   *  isolates from the surrounding paragraph's own directionality. */
+  unicodeBidi?: "isolate";
 }
 
 /**
@@ -164,9 +172,11 @@ export const type = {
     weight: "400",
   }),
   mono: style("mono", {
+    direction: "ltr",
     family: "mono",
     lineHeight: 16,
     size: 11.5,
+    unicodeBidi: "isolate",
     variantNumeric: "tabular-nums",
     weight: "400",
   }),
@@ -310,13 +320,18 @@ export function typeKeyToKebab(key: string): string {
 /**
  * The properties the CSS `font` shorthand cannot carry.
  *
- * Tracking, small caps and tabular figures are part of a ROLE, not decoration
- * a stylesheet adds on top — "numerics are mono and tabular in every app,
- * without exception" is only true if the tabular figures travel with the role.
- * The shorthand has no slot for any of them, so they are published beside it:
- * a surface writes `font: var(--t-mono); font-variant-numeric:
- * var(--t-mono-numeric);` and cannot get one without the other by accident.
- * Native carries the same three fields on its lowered style.
+ * Tracking, small caps, tabular figures, and the numeric role's own
+ * direction are part of a ROLE, not decoration a stylesheet adds on top —
+ * "numerics are mono and tabular in every app, without exception" is only
+ * true if the tabular figures travel with the role, and "a number reads in
+ * order under RTL" is only true if the direction does too. The shorthand has
+ * no slot for any of them, so they are published beside it: a surface writes
+ * `font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric);
+ * direction: var(--t-mono-direction); unicode-bidi: var(--t-mono-bidi);` and
+ * cannot get one without the rest by accident. `--t-mono-direction` /
+ * `--t-mono-bidi` belong on TEXT elements only — a layout container that
+ * carries the numeric face would flip its own inline axis along with it.
+ * Native carries the same fields on its lowered style.
  */
 export function typeModifiers(
   scale: Readonly<Record<string, TypeStyle>>
@@ -332,6 +347,12 @@ export function typeModifiers(
     }
     if (styleValue.variantNumeric !== undefined) {
       out[`--t-${role}-numeric`] = styleValue.variantNumeric;
+    }
+    if (styleValue.direction !== undefined) {
+      out[`--t-${role}-direction`] = styleValue.direction;
+    }
+    if (styleValue.unicodeBidi !== undefined) {
+      out[`--t-${role}-bidi`] = styleValue.unicodeBidi;
     }
   }
   return out;

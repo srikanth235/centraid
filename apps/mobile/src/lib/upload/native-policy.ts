@@ -2,16 +2,12 @@ import * as Battery from "expo-battery";
 import * as Network from "expo-network";
 
 import { getCellularRoamingStatus } from "../../../modules/centraid-network-status";
-import { Store } from "../../storage";
+// The RECORD is frame-owned (#711, S4): one policy for every byte-bearing app,
+// not one per app. This file keeps the EVALUATION — what the radios and the
+// battery say about it right now — because that is the drain loop's business.
+// See `kit/transfer/transfer-policy.ts` for why the storage key never changes.
+import { hydrateTransferPolicy } from "../../kit/transfer/transfer-policy";
 import type { UploadPolicy } from "./uploader";
-
-const RULES_KEY = "photos.backupRules";
-interface TransferRules {
-  wifiOnly: boolean;
-  allowMetered: boolean;
-  allowRoaming: boolean;
-  chargerOnly: boolean;
-}
 
 export const LAST_SUCCESSFUL_SYNC_KEY = "photos.lastSuccessfulSync";
 
@@ -19,12 +15,7 @@ export const LAST_SUCCESSFUL_SYNC_KEY = "photos.lastSuccessfulSync";
 export function nativeUploadPolicy(): UploadPolicy {
   return {
     async canTransfer() {
-      const rules = await Store.hydrate<TransferRules>(RULES_KEY, {
-        wifiOnly: true,
-        allowMetered: false,
-        allowRoaming: false,
-        chargerOnly: false,
-      });
+      const rules = await hydrateTransferPolicy();
       const network = await Network.getNetworkStateAsync();
       if (!network.isConnected) return false;
       if (rules.wifiOnly && network.type !== Network.NetworkStateType.WIFI)

@@ -2,7 +2,7 @@ import React, { useMemo, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { radii, t, useTheme } from "../theme";
+import { borders, radii, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
 import { readStatus, subscribeStatus } from "./status-line";
@@ -102,7 +102,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bg,
       borderTopColor: colors.line,
-      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopWidth: borders.hairline,
       bottom: 0,
       flexDirection: "row",
       left: 0,

@@ -1,97 +1,89 @@
-/* The duplicates shelf (issue #352). Authored camelCase (old `dup-` prefix
-   dropped). `.tileMedia` is filled imperatively by media.ts, whose global
-   `is-placeholder`/`ph-tile-*` classes land inside it — the `is-placeholder`
-   marker is referenced here as a `:global` compound. */
+/* The duplicates shelf (issue #352, v4 handoff CHANGELOG "same tile, same
+   selection"). Authored camelCase. Everything a photograph itself draws
+   (the --skel ground, the selection control, the kind/state slots) lives in
+   Tile.module.css — this file only owns the shelf's OWN chrome: the cluster
+   label, the row's 2px gutter (the one place content touches content,
+   Timeline.module.css's own rule, mirrored here) and the sticky action bar.
+
+   Logical properties only (§18); real tokens throughout — the sticky bar
+   used to fake its ground with `color-mix(in oklab, var(--bg) 92%,
+   transparent)`, which is not a role this system publishes; `--bg-elev` is. */
 
 .shelf {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 0.25rem 0 1rem;
+  gap: var(--sp-4);
+  padding-block: var(--sp-1) var(--sp-4);
 }
 .shelfHead {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--sp-1);
 }
 .actions {
   position: sticky;
-  top: 0;
+  inset-block-start: 0;
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.6rem;
-  background: color-mix(in oklab, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px);
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-md);
 }
 .count {
   margin-inline-end: auto;
   font: var(--t-mono);
   font-size: var(--t-small-size);
   font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-soft);
 }
+/* Destructive is an outlined `--net` button, never filled (§18) — the exact
+   pair AlbumBar.module.css's own `.destructive` and SelectionBar's `.action`
+   use, so Duplicates' Trash reads as the SAME confirm-to-act control as every
+   other destructive action in this app, not a shelf-local variant. */
+.destructive:not(:disabled) {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
+
 .cluster {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--sp-2);
 }
+/* The cluster header, mirroring Timeline.module.css's own day sub-label
+   (`.dayLabel`/`.dayName`/`.dayMeta`) rather than importing it — same reason
+   `.clusterRow`'s 2px gutter mirrors `.row` above: a cluster row reads as the
+   SAME packed geometry as a Timeline day, not a different rhythm. */
 .clusterLabel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
   margin: 0;
-  font: var(--t-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
-.clusterRow {
-  display: flex;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding-bottom: 0.15rem;
+.clusterName {
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
+  color: var(--text-faint);
 }
-.tile {
-  position: relative;
-  flex: 0 0 8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  cursor: pointer;
-}
-.tileMedia {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--ph-tile-r);
-  overflow: hidden;
-  background: var(--bg-sunken);
-  border: 2px solid transparent;
-}
-.tileMedia:global(.is-placeholder) {
-  position: relative;
-}
-.tile:has(input:checked) .tileMedia {
-  border-color: var(--accent);
-  border-radius: var(--ph-tile-r-sel);
-}
-.tileMedia img,
-.tileMedia video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.tile input[type="checkbox"] {
-  position: absolute;
-  top: 0.35rem;
-  inset-inline-start: 0.35rem;
-  width: 1.1rem;
-  height: 1.1rem;
-}
-.tileMeta {
+.clusterMeta {
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
-  color: var(--text-soft);
-  text-align: center;
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+/* The 2px gutter, both axes — the one place content touches content
+   (Timeline.module.css's `.row`, mirrored here so a cluster row reads as the
+   same packed geometry, not a different rhythm). */
+.clusterRow {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-block-end: var(--sp-1);
 }
