@@ -1,5 +1,4 @@
 // Photos' home surface on the phone (v4 handoff §3.1, §4, §14, §15).
-// governance: allow-repo-hygiene file-size-limit #711 Photos v4 home wiring remains a cohesive interaction module.
 //
 // The screen is now the wiring: state, data and routing. Everything with a
 // shape of its own moved out to a file that can be read — and tested — on its
@@ -19,9 +18,10 @@
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
@@ -33,8 +33,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { pageMargin, t, useTheme } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
 import { hydrateBackupConsent } from "../../kit/transfer/transfer-consent";
 import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
 import {
@@ -52,20 +51,13 @@ import {
   runBackup,
   useAutomaticPhotoBackup,
 } from "./photos-backup";
-import {
-  DEFAULT_BAND_OWNER,
-  bandOwnerKey,
-  resolveMoreRowRoute,
-} from "./photos-band";
-import type {
-  BandDestinationKey,
-  BandOwner,
-  PhotosMoreRowKey,
-} from "./photos-band";
+import { resolveMoreRowRoute } from "./photos-band";
+import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
 import { usePhotosRung } from "./photos-rung-store";
 import PhotosBand from "./PhotosBand";
 import PhotosCollectionsView from "./PhotosCollectionsView";
 import PhotosGridSkeleton from "./PhotosGridSkeleton";
+import { makeStyles } from "./PhotosHome.styles";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import PhotosPeopleView from "./PhotosPeopleView";
 import { PhotosSearchView } from "./PhotosSearch";
@@ -136,12 +128,12 @@ export default function PhotosHome({
   // device for exactly that reason — so both persist per device here, matching
   // that reality rather than inventing a sync path.
   const [rung, changeRung] = usePhotosRung();
-  const [bandOwner, setBandOwner] = useState<BandOwner>(DEFAULT_BAND_OWNER);
-  useEffect(() => {
-    void Store.hydrate(bandOwnerKey("photos"), DEFAULT_BAND_OWNER).then(
-      (stored) => setBandOwner(stored === "host" ? "host" : "app")
-    );
-  }, []);
+  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
+  // dance this replaced lived in two Photos screens under a Photos-owned key;
+  // it is one hook in `kit/band/band-owner.ts` now, on the same
+  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
+  // answer is WRITTEN from frame Settings rather than only read.
+  const { bandOwner } = useBandOwner("photos");
 
   // The automatic sweep (#711 S4) belongs HERE, not on the Backup screen: the
   // enqueue it performs is over newly-taken camera-roll photographs, and the
@@ -594,57 +586,3 @@ export default function PhotosHome({
     </View>
   );
 }
-
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    // The scroll region takes what is left after the head and the band; the
-    // band takes its own height. No absolute slot, and so nothing to reserve.
-    body: { flex: 1 },
-    bodyText: {
-      ...t("body"),
-      color: colors.textSoft,
-      marginTop: 12,
-      maxWidth: 290,
-      textAlign: "center",
-    },
-    center: {
-      alignItems: "center",
-      flex: 1,
-      justifyContent: "center",
-      paddingHorizontal: 28,
-    },
-    emptyTitle: { ...t("display"), color: colors.text },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      // 56px (handoff `appBarStyle` :5533's `min-height:56px`).
-      minHeight: 56,
-      paddingHorizontal: pageMargin,
-    },
-    headerActions: { flexDirection: "row" },
-    headerBtn: {
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      width: 44,
-    },
-    safe: { flex: 1 },
-    selectionCount: { ...t("mono"), color: colors.text },
-    // The title starts at the page margin now that no ☰ occupies the leading
-    // slot; `header`'s own `paddingHorizontal: pageMargin` is that margin, so
-    // the title needs no margin of its own — it used to add `spacing[2]` on
-    // top of a header padding that was only an approximation (`10`) of the
-    // page margin, which happened to sum to 18; now that `header` carries the
-    // real token, adding `spacing[2]` again would push the title past it.
-    title: { ...t("title"), color: colors.text },
-    uploadFill: { borderRadius: 999, height: "100%" },
-    uploadProgress: { gap: 5, paddingHorizontal: 16, paddingVertical: 8 },
-    uploadProgressText: { ...t("mono"), color: colors.textSoft },
-    uploadTrack: {
-      backgroundColor: colors.line,
-      borderRadius: 999,
-      height: 5,
-      overflow: "hidden",
-    },
-  });

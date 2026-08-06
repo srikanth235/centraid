@@ -1,5 +1,4 @@
 // The viewer, on the stage.
-// governance: allow-repo-hygiene file-size-limit #711 Photos v4 viewer surface remains a cohesive interaction module.
 //
 // The stage is full-bleed `--stage` in BOTH themes with `--on-stage` ink and
 // `--stage-line` hairlines; it covers the entire screen. Focus and selection
@@ -34,7 +33,6 @@ import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
-import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
@@ -60,16 +58,14 @@ import { PhotoFilmstrip } from "./PhotoFilmstrip";
 import { PhotoInfoSheet } from "./PhotoInfoSheet";
 import type { InfoChip } from "./PhotoInfoSheet";
 import { styles } from "./PhotoLightbox.styles";
+import { ViewerStatusLine, ViewerTopBar } from "./PhotoLightboxChrome";
 import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 import {
-  LOAD_THE_ORIGINAL,
   READ_ONLY_VAULT_REASON,
-  SLIDESHOW_ACTION,
   SLIDESHOW_INTERVAL_MS,
   SLIDESHOW_TITLE,
-  VIEWER_TOP_BAR_HEIGHT,
   captureLine,
   originalStatus,
   resolveOriginalPlacement,
@@ -403,76 +399,17 @@ export default function PhotoLightbox({
           bar below and the toolbar at the foot — so nothing lands under the
           clock while the ground still covers the screen. */}
       <View style={[styles.fill, { backgroundColor: colors.stage }]}>
-        {/* 52px, exit and overflow only — the five actions live below. */}
-        <View
-          style={[
-            styles.topbar,
-            {
-              borderBottomColor: colors.stageLine,
-              height: VIEWER_TOP_BAR_HEIGHT + insets.top,
-              paddingTop: insets.top,
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityLabel="Close photo viewer"
-            accessibilityRole="button"
-            hitSlop={12}
-            onPress={() => navigation.goBack()}
-          >
-            {/* ✕, not a chevron (proto 2601). A chevron-down describes the
-                swipe-down dismissal, which still works — but the CONTROL is a
-                close, and a mark that describes the gesture beside it rather
-                than its own effect is a mark pointing at the wrong thing. */}
-            <Icon name="x" size={26} color={colors.onStage} />
-          </Pressable>
-          <View style={styles.topbarTitle}>
-            <Text numberOfLines={1} style={{ color: colors.onStage }}>
-              {barTitle}
-            </Text>
-            {/* `--on-stage-soft`, never `--text-soft`: the stage is one
-                colour in BOTH themes, so a token that softens against the
-                page's background lands at 2.85:1 here in light mode. This is
-                the token that exists to be soft ON the stage and still clear
-                AA. Same for the status line below. */}
-            <Text
-              numberOfLines={1}
-              style={[styles.topbarCapture, { color: colors.onStageSoft }]}
-            >
-              {barMeta}
-            </Text>
-          </View>
-          {/* The slideshow's ONE action, LABELLED. It used to wear a pause
-              glyph and exit the slideshow — a control whose mark promised one
-              thing and whose press did another. Label and effect are now read
-              from the same value (`SLIDESHOW_ACTION`), so they cannot drift
-              apart again; the missing transport is a recorded non-goal, stated
-              beside that value. The editor suppresses this slot entirely: its
-              way out is `Cancel`, beside the commit it is the alternative to. */}
-          {editing ? null : slideshow ? (
-            <Pressable
-              accessibilityLabel={SLIDESHOW_ACTION.label}
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => {
-                if (SLIDESHOW_ACTION.effect === "leave") setSlideshow(false);
-              }}
-            >
-              <Text style={[styles.statusAction, { color: colors.onStage }]}>
-                {SLIDESHOW_ACTION.label}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityLabel="More actions"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => setOverflowOpen(true)}
-            >
-              <Icon name="more-vertical" size={22} color={colors.onStage} />
-            </Pressable>
-          )}
-        </View>
+        <ViewerTopBar
+          colors={colors}
+          insets={insets}
+          title={barTitle}
+          meta={barMeta}
+          editing={editing}
+          slideshow={slideshow}
+          onClose={() => navigation.goBack()}
+          onLeaveSlideshow={() => setSlideshow(false)}
+          onOverflow={() => setOverflowOpen(true)}
+        />
 
         {/* The editor takes the whole body: no pager arrows, no swipe target,
             no filmstrip below (proto 4518, 4599, 4606). A member mid-edit is
@@ -561,42 +498,20 @@ export default function PhotoLightbox({
           </View>
         )}
 
-        {/* One status line inside the stage: what is true about the bytes,
-            with the single inline action. No toast, no spinner. While the
-            editor is open it carries the editor's live sentence instead —
-            `Crop 3 : 2 · rotation −2° · nothing written yet` — which is the
-            promise the whole mode rests on (proto 4632–4645). */}
-        <View style={[styles.statusLine, { borderTopColor: colors.stageLine }]}>
-          <Text
-            numberOfLines={2}
-            style={[styles.statusText, { color: colors.onStageSoft }]}
-          >
-            {editing
+        <ViewerStatusLine
+          colors={colors}
+          text={
+            editing
               ? editorLine
               : slideshow
                 ? "Leaving the slideshow keeps the photograph you stopped on"
-                : status.text}
-          </Text>
-          {/* The ONE offer to spend the bytes lives here (proto 4645). The
-              page used to render a second `Load the original` chip over the
-              photograph; two controls for one fetch is two states to keep in
-              step, and they did not stay in step. This tap unlocks the gate
-              AND climbs the page's quality ladder, which is exactly what the
-              chip did — the stated choice is unchanged, it just has one
-              home. */}
-          {!slideshow && !editing && status.action ? (
-            <Pressable
-              accessibilityLabel={LOAD_THE_ORIGINAL}
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={() => setFullQualityUnlocked(true)}
-            >
-              <Text style={[styles.statusAction, { color: colors.link }]}>
-                {status.action}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+                : status.text
+          }
+          actionLabel={
+            !slideshow && !editing && status.action ? status.action : null
+          }
+          onAction={() => setFullQualityUnlocked(true)}
+        />
 
         {/* Slideshow is a different mode: no filmstrip, no info, no bar. The
             home-indicator inset therefore has to land on whichever control is

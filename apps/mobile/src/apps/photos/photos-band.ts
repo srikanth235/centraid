@@ -19,6 +19,8 @@
 // This module is deliberately free of `react-native` imports so the rules can
 // be asserted directly. `PhotosBand.tsx` renders them and adds nothing.
 
+import type { BandOwner } from "../../kit/band/band-owner";
+
 /** A destination in the claimed band. `more` opens the sheet, not a route. */
 export type BandDestinationKey =
   | "library"
@@ -192,18 +194,21 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
 }
 
 /**
- * Who owns the band right now. The member may hand it back to the frame; the
- * shipped web shell persists this PER DEVICE (`shell.bandOwner.<appId>` in
- * local storage) because this repo has no server-side member-preference plane.
- * Mobile matches that reality rather than inventing a sync path.
+ * Who owns the band right now — THE FRAME'S LATCH, not Photos'
+ * (`kit/band/band-owner.ts`, issue #712 E3). This module used to define the
+ * type, the default and the storage key itself, under `photos.bandOwner.*`,
+ * while the web shell kept the same concept under `shell.bandOwner.*`. Two
+ * namespaces for one preference, owned by an app, for a decision the frame
+ * makes. Mobile adopted web's key; see that module's header for what that
+ * costs and why it is safe here.
+ *
+ * NOTHING is re-exported from here — every consumer imports the type, the
+ * hook and the key straight from `kit/band/band-owner`. This file only
+ * CONSUMES the type (in `resolveBand`'s signature) and stays free of
+ * react-native and storage imports, so its rules can be asserted as plain
+ * values (`photos-band.test.ts`) without dragging AsyncStorage into that
+ * test's module graph.
  */
-export type BandOwner = "app" | "host";
-
-export const DEFAULT_BAND_OWNER: BandOwner = "app";
-
-/** Where a member's band-owner choice lives on this device. */
-export const bandOwnerKey = (appId: string): string =>
-  `photos.bandOwner.${appId}`;
 
 /** The frame's capsule — a frame control, never one of the app's tabs. */
 export interface BandCapsule {

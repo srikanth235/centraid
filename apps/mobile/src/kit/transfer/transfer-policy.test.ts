@@ -92,6 +92,51 @@ describe("which switches go inert", () => {
     ).toStrictEqual([]);
   });
 
+  // THE REFUSAL GRAMMAR (issue #712 E1). "Shown disabled and explained" was
+  // the interface's own promise and only the first half was kept — four
+  // switches went grey in silence. `inertReason` is required on the switch's
+  // shape now, so these two properties are what keep it honest rather than
+  // merely present.
+  it("every inert switch states a reason, and no active one does", () => {
+    const policies = [
+      DEFAULT_TRANSFER_POLICY,
+      { ...DEFAULT_TRANSFER_POLICY, wifiOnly: false },
+      { ...DEFAULT_TRANSFER_POLICY, wifiOnly: false, allowMetered: true },
+      { ...DEFAULT_TRANSFER_POLICY, never: true },
+    ];
+    // Collected, then asserted once — an `if` around an `expect` hides which
+    // case actually ran when the assertion never fires.
+    const seen = policies.flatMap((policy) =>
+      TRANSFER_POLICY_SWITCHES.map((rule) => ({
+        key: rule.key,
+        inert: rule.inert(policy),
+        explained: (rule.inertReason(policy)?.length ?? 0) > 10,
+      }))
+    );
+    expect(seen.filter((row) => row.inert !== row.explained)).toStrictEqual([]);
+    // …and the sample actually contained both cases, or the line above is
+    // vacuously true.
+    expect(seen.some((row) => row.inert)).toBe(true);
+    expect(seen.some((row) => !row.inert)).toBe(true);
+  });
+
+  it("names the rule that answered, not a generic 'unavailable'", () => {
+    const wifi = TRANSFER_POLICY_SWITCHES.find((r) => r.key === "allowMetered");
+    expect(wifi?.inertReason(DEFAULT_TRANSFER_POLICY)).toContain("Wi-Fi only");
+    const roaming = TRANSFER_POLICY_SWITCHES.find(
+      (r) => r.key === "allowRoaming"
+    );
+    expect(
+      roaming?.inertReason({ ...DEFAULT_TRANSFER_POLICY, wifiOnly: false })
+    ).toContain("Metered and cellular");
+    // The floor rule wins over the narrower ones, so a member never reads
+    // "Wi-Fi only already answered this" on a device that will not transfer
+    // at all.
+    expect(
+      roaming?.inertReason({ ...DEFAULT_TRANSFER_POLICY, never: true })
+    ).toContain("Never move bytes off this device");
+  });
+
   it("charging is orthogonal and never inert", () => {
     expect(inertKeys(DEFAULT_TRANSFER_POLICY)).not.toContain("chargerOnly");
   });

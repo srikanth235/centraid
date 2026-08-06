@@ -29,11 +29,11 @@ import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
 import { borders, radii, t } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
+import { TILE_EMPTY_COPY } from "./springboard-policy";
 import {
   MOSAIC_CELL_HEIGHT,
   mosaicAwaitingBytes,
   mosaicCells,
-  TILE_EMPTY_COPY,
   TILE_PAD,
 } from "./tile-model";
 import type {

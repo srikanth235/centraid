@@ -190,6 +190,12 @@ export function exifRows(asset: Asset): ExifRow[] {
 // hasn't run yet) — the caller renders nothing rather than a wrong claim.
 const CUSTODY_META: Record<string, CustodyMeta> = {
   "local-only": { label: "On this device only", tone: "warn" },
+  // A state the projection has always written and this table never had a row
+  // for (issue #712 P6a), so a photograph with an upload still outstanding
+  // showed NO backup fact at all — silently indistinguishable from one whose
+  // custody had never been computed. "warn", not "ok": a queued copy is not a
+  // copy.
+  "pending-offsite": { label: "Copy queued, not finished", tone: "warn" },
   replicated: { label: "Backed up", tone: "ok" },
   "remote-only": { label: "Only in the cloud", tone: "warn" },
   missing: { label: "Missing — needs attention", tone: "danger" },

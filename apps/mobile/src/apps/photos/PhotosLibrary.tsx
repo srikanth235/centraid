@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #711 Photos v4 library surface remains a cohesive interaction module.
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
 import type { ListRenderItemInfo } from "@shopify/flash-list";

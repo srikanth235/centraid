@@ -33,7 +33,7 @@
 // parent), because those differ per screen and the band does not.
 
 import { useNavigation } from "@react-navigation/native";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,22 +42,14 @@ import {
   BAND_INSET,
   bandSurfaceStyle,
 } from "../../kit/band-surface";
+import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosShellNavigation } from "../../navigation";
-import { Store } from "../../storage";
-import {
-  DEFAULT_BAND_OWNER,
-  bandOwnerKey,
-  resolveMoreRowRoute,
-} from "./photos-band";
-import type {
-  BandDestinationKey,
-  BandOwner,
-  PhotosMoreRowKey,
-} from "./photos-band";
+import { resolveMoreRowRoute } from "./photos-band";
+import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
 import {
   SELECTION_ACTION_TARGET,
   buildSelectionActions,
@@ -105,12 +97,12 @@ export default function PhotosScreen({
   // The member's band-owner choice, per device — the same latch (and the same
   // key) `PhotosHome` reads, so handing the band back on one Photos surface
   // hands it back on all of them rather than on whichever screen was open.
-  const [bandOwner, setBandOwner] = useState<BandOwner>(DEFAULT_BAND_OWNER);
-  useEffect(() => {
-    void Store.hydrate(bandOwnerKey("photos"), DEFAULT_BAND_OWNER).then(
-      (stored) => setBandOwner(stored === "host" ? "host" : "app")
-    );
-  }, []);
+  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
+  // dance this replaced lived in two Photos screens under a Photos-owned key;
+  // it is one hook in `kit/band/band-owner.ts` now, on the same
+  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
+  // answer is WRITTEN from frame Settings rather than only read.
+  const { bandOwner } = useBandOwner("photos");
 
   const selecting = (selection?.count ?? 0) > 0;
 

@@ -41,6 +41,7 @@ import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
+import BandSection from "./settings/BandSection";
 import SettingsSection from "./settings/SettingsSection";
 import ShareTargetSection from "./settings/ShareTargetSection";
 import VaultSection from "./settings/VaultSection";
@@ -201,6 +202,7 @@ export default function SettingsScreen({
         <AppearanceSection />
         <AppLockSection />
         <VaultSection />
+        <BandSection />
 
         <SettingsSection label="Desktop link">
           {paired ? (

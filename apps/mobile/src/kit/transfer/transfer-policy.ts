@@ -95,6 +95,16 @@ export interface TransferPolicySwitch {
   /** Inert while this predicate is true of the current record. */
   inert: (policy: TransferPolicy) => boolean;
   /**
+   * WHY it is inert, in the member's words, or `undefined` when it is not.
+   * REQUIRED, not optional: the comment above this interface has always
+   * claimed an inert switch is "shown disabled and explained", and until
+   * issue #712 E1 nothing on any surface actually said the second half —
+   * four of the five switches went grey in silence. Making the reason part of
+   * the switch's own shape means a sixth rule cannot be added without one.
+   * `scripts/lint-engine-conformance.mjs` gates the rendering half.
+   */
+  inertReason: (policy: TransferPolicy) => string | undefined;
+  /**
    * Drawn in `--net` — a 2px rule on the leading edge and `net` ink, never a
    * fill and never red (§18). Reserved for the switch whose ON state STOPS
    * this device moving bytes; everything else here only narrows when it may.
@@ -108,28 +118,59 @@ export interface TransferPolicySwitch {
  * turning it on is the one answer here that halts a transfer already in
  * flight rather than scheduling it differently.
  */
+/**
+ * The one sentence every inert switch starts from: the floor rule is on, so
+ * nothing below it can matter. Named once because four of the five switches
+ * say it, and a member who reads two different phrasings of the same fact on
+ * one screen learns that the screen is not careful.
+ */
+const NEVER_REASON =
+  "“Never move bytes off this device” is on, so no transfer rule applies.";
+
 export const TRANSFER_POLICY_SWITCHES: readonly TransferPolicySwitch[] = [
-  { key: "wifiOnly", label: "Wi-Fi only", inert: (policy) => policy.never },
+  {
+    key: "wifiOnly",
+    label: "Wi-Fi only",
+    inert: (policy) => policy.never,
+    inertReason: (policy) => (policy.never ? NEVER_REASON : undefined),
+  },
   {
     key: "allowMetered",
     label: "Allow metered or cellular",
     // Meaningless while Wi-Fi-only is on: the stricter rule already answered.
     inert: (policy) => policy.never || policy.wifiOnly,
+    inertReason: (policy) =>
+      policy.never
+        ? NEVER_REASON
+        : policy.wifiOnly
+          ? "“Wi-Fi only” already answers this — turn it off to choose."
+          : undefined,
   },
   {
     key: "allowRoaming",
     label: "Allow roaming or unknown cellular status",
     inert: (policy) => policy.never || policy.wifiOnly || !policy.allowMetered,
+    inertReason: (policy) =>
+      policy.never
+        ? NEVER_REASON
+        : policy.wifiOnly
+          ? "“Wi-Fi only” already answers this — turn it off to choose."
+          : policy.allowMetered
+            ? undefined
+            : "Metered and cellular transfers are off, so roaming cannot arise.",
   },
   {
     key: "chargerOnly",
     label: "Only while charging",
     inert: (policy) => policy.never,
+    inertReason: (policy) => (policy.never ? NEVER_REASON : undefined),
   },
   {
     key: "never",
     label: "Never move bytes off this device",
     inert: () => false,
+    // The floor rule is never inert: it is the switch that makes the others so.
+    inertReason: () => undefined,
     net: true,
   },
 ];

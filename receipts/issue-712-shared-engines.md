@@ -13,7 +13,7 @@ Engine A — placement spine
 - [x] A3 — first-share picker at the moment of intent
 - [x] A4 — placement registry, not enumeration
 - [x] A5 — Photos Sharing shelf (mobile), first consumer
-- [ ] A6 — Tally ledger-root audit, second posture
+- [x] A6 — Tally ledger-root audit, second posture
 - [x] A7 — exclusion ruling: Locker does not share (see Decisions)
 
 Engine B — byte custody unification
@@ -36,7 +36,8 @@ Engine D — the triage verb
 - [x] D1 — generic proposal-answer verb (confirm / reject / dismiss-without-naming)
 - [x] D2 — face review (web + mobile) onto D1; a session can reach zero remaining
 - [x] D3 — duplicates review onto the same queue shape
-- [ ] D4 — Docs OCR corrections join as the third consumer
+- [~] D4 — Docs OCR corrections join as the third consumer — **STRUCK**, see
+  Decisions 6
 
 Search
 
@@ -45,26 +46,26 @@ Search
 
 Conformance
 
-- [ ] E1 — per-engine conformance gates, sabotage-verified
-- [ ] E2 — engine contracts in blueprint-seats.md with structural exclusions
-- [ ] E3 — the band can be handed back; verified in two apps
+- [x] E1 — per-engine conformance gates, sabotage-verified
+- [x] E2 — engine contracts in blueprint-seats.md with structural exclusions
+- [x] E3 — the band can be handed back; verified in two apps
 
 Photos remainder
 
 - [x] P5 — backup policy switches, "Back up now", failure verdict on the frame screen
-- [ ] P6 — per-copy provenance + cross-person face grouping
+- [x] P6 — per-copy provenance + cross-person face grouping
 - [x] P7 — Sharing's grant roster (folded into Engine A; see Decisions)
 - [x] P8 — the five pushed destinations vs the receipt's band claim (see Decisions)
-- [ ] P9 — PlacesView ground colour measured
-- [ ] P10 — browser verification of the web surfaces
+- [x] P9 — PlacesView ground colour measured
+- [~] P10 — browser verification of the web surfaces — **STRUCK**, see Decisions 7
 - [x] P11 — `enforceRetention` fix-or-disable for `media_media_asset`
 - [x] P12 — sweep operator log carries the lineage-blocked lists
 - [x] P13 — mobile Permission as a timeline takeover
-- [ ] P14 — `packages/blueprints/manifest.json` final regeneration
-- [ ] P15 — mechanical gates green (`bun run check:push`)
+- [x] P14 — `packages/blueprints/manifest.json` final regeneration
+- [x] P15 — mechanical gates green (`bun run check:push`)
 - [x] P16 — portable-export ruling recorded before the fingerprint moves
-- [ ] P17 — mobile native-state fingerprints after L1–L3 review
-- [ ] P18 — six files under 625 lines by extraction, no limit bump
+- [x] P17 — mobile native-state fingerprints after L1–L3 review
+- [x] P18 — six files under 625 lines by extraction, no limit bump
 - [x] P19 — independent fresh-context audit of the #711 receipt
 
 ## Decisions
@@ -102,6 +103,35 @@ before the pass started; a default chosen by silence is still a choice, recorded
    near-duplicate clustering rides the standing sweep
    (`gateway.ts` → `recomputeDuplicateClusters`), both outside the enrich
    gate. Building the standing per-capability grant is follow-up work.
+
+6. **D4 — struck, with the finding.** The issue conditions D4 on "when C3
+   produces output". C3 shipped the *consent* for Docs OCR, not a review
+   surface, and OCR extraction produces a derived text column, not proposal
+   rows: there is no per-correction row for a member to confirm, reject or
+   dismiss. The nearest existing table, `agent_correction`
+   (`packages/vault/src/schema/agent.ts`), records a correction that already
+   happened — it is an audit row, not a queue. Joining D4 would therefore
+   mean inventing a proposal shape for text spans, which is a feature, not a
+   consumer of the engine this pass built. The triage engine is proven by two
+   consumers (face review's durable answers, duplicate review's ephemeral
+   decisions) sharing one session model; the third joins when a doc-text
+   proposal row exists to answer.
+
+7. **P10 — struck, with a finding that refutes the existing evidence.** Both
+   real-browser harnesses were run (`bun run --cwd apps/desktop test:e2e`,
+   58 passed; `bun run --cwd apps/web e2e` against a real gateway). Photos
+   never mounts in either: the harness session holds no replica-plane grant
+   (`403 /centraid/_web/control?path=/centraid/_vault/replica/bootstrap`),
+   so `InlineAppRoute` sits on "Loading Photos…" forever. Consequently the
+   `artifacts/e2e/ui-impact/issue-711-photos-v4.png` and
+   `issue-712-shared-engines.png` frames the ui-receipt gate accepts are
+   pictures of that spinner — any receipt citing them as Photos-surface
+   evidence over-claims, including #711's and the first draft of this one
+   (amended under User impact). Per-surface browser verification is
+   unobtainable without granting the harness session the replica plane,
+   which is harness work outside this pass. The honest substitute on record
+   is the jsdom/unit suite (80 files / 2031 tests) — reported as what it is,
+   not as browser evidence.
 
 Gate-required deviation note (quality knobs, verbatim single line so the gate's substring match resolves):
 #712 shared-engines manifest classification rebase: the governed automation manifest changed with the enrich lane rename (off|device|gateway axis, C5); the reviewed fingerprint is intentionally updated.
@@ -361,6 +391,7 @@ Gate-required deviation note (quality knobs, verbatim single line so the gate's 
 - A3 — first-share picker at the moment of intent — kit/share/ShareTargetPicker.tsx at the moment of intent
 - A4 — placement registry, not enumeration — _shared/placement-registry.ts + tripwire
 - A5 — Photos Sharing shelf (mobile), first consumer — SharingShelf.tsx, first More row
+- A6 — Tally ledger-root audit, second posture — placement-registry.test.ts ledger-root audit block; zero engine edits
 - A7 — exclusion ruling: Locker does not share (see Decisions) — registry excludes locker.item; Locker placement UI removed
 - B1 — rename the More row "Storage" → "Backup" — photos-band.ts backup row
 - B2 — Backup health → frame Settings beside Phone storage; Photos keeps a deep link — screens/BackupHealth.tsx beside Phone storage; Photos deep-link row
@@ -376,14 +407,103 @@ Gate-required deviation note (quality knobs, verbatim single line so the gate's 
 - D3 — duplicates review onto the same queue shape — triage-session consumed by duplicates
 - S1 — one grouping scaffold, per-app entity lists as config — _shared/search-scaffold + Photos and Tally
 - S2 — "things" search stays deferred (honest omission stands) — no things entity added; mobile copy untouched
+- E1 — per-engine conformance gates, sabotage-verified — scripts/lint-engine-conformance.mjs, sabotage-verified per engine
+- E2 — engine contracts in blueprint-seats.md with structural exclusions — blueprint-seats.md Engine contracts section
+- E3 — the band can be handed back; verified in two apps — inlineAppFrame frame action + kit/band/band-owner + BandSection
 - P5 — backup policy switches, "Back up now", failure verdict on the frame screen — backup-verdict.ts + switches on the frame screen
+- P6 — per-copy provenance + cross-person face grouping — viewer.ts custody policy table + people confirmed_by
 - P7 — Sharing's grant roster (folded into Engine A; see Decisions) — InlineScope.audience end to end
 - P8 — the five pushed destinations vs the receipt's band claim (see Decisions) — PlacesView/PlaceDetail wrapped in PhotosScreen; claim rewritten in Decisions 3
+- P9 — PlacesView ground colour measured — PlacesView --bg-sunken + radii.lg; static token comparison
 - P11 — `enforceRetention` fix-or-disable for `media_media_asset` — RETENTION_REFUSALS in duties.ts
 - P12 — sweep operator log carries the lineage-blocked lists — runSweep log carries the lineage lists
 - P13 — mobile Permission as a timeline takeover — PhotoAccessPanel takeover; access row deleted
+- P14 — `packages/blueprints/manifest.json` final regeneration — manifest regenerated; version drift recorded
+- P15 — mechanical gates green (`bun run check:push`) — 39/39 gates green (see Verification)
 - P16 — portable-export ruling recorded before the fingerprint moves — Decisions 4, recorded before the fingerprint moved
+- P17 — mobile native-state fingerprints after L1–L3 review — no native change; fingerprints agree, --write correctly not run
+- P18 — six files under 625 lines by extraction, no limit bump — six files extracted under 625; seams named above
 - P19 — independent fresh-context audit of the #711 receipt — independent audit summarized in Verification
+
+Struck items (both restated here so the crosswalk is complete): D4 — Docs OCR corrections join as the third consumer — struck, Decisions 6. P10 — browser verification of the web surfaces — struck, Decisions 7.
+
+### Conformance (E1–E3, A6)
+
+- `scripts/lint-engine-conformance.mjs` + `scripts/lib/disabled-controls.mjs`
+  (+ `scripts/lint-engine-conformance.test.mjs`), wired into `check:push` as
+  `lint:engine-conformance` (`package.json`) — one sabotage-verified gate per
+  engine: placement outside the registry fails; `locker.item` as an itemType
+  fails (A7); mobile apps reaching past `kit/transfer`/`kit/storage` to the
+  upload internals or custody projections fail (2-entry shrink-only ratchet,
+  reasons stated); a consent gate for a non-ENRICH_DOMAIN fails; the retired
+  `media.confirm_face`/`media.reject_face` verbs fail; a reasonless disabled
+  control on the named engine surfaces fails. Scope limits stated in the
+  file's header. Real defect found by the gate and fixed:
+  `TransferPolicySwitch.inertReason` is now required and rendered
+  (`apps/mobile/src/kit/transfer/transfer-policy.ts` + test,
+  `apps/mobile/src/screens/BackupHealth.tsx`). Known refusal gaps in the two
+  FaceReview clients ratcheted with reasons (`TRIAGE_REFUSAL_GAPS`).
+- `docs/blueprint-seats.md` — new "Engine contracts" section: verbs,
+  reason-string grammar, structural exclusions per engine; search scaffold
+  reconciled as the fifth shared thing (no contract: no verbs, no refusals).
+- E3 — web: `packages/client/src/react/shell/routes/inlineAppFrame.tsx`
+  (+ `inlineFrame.test.tsx`) — a frame action in the app bar hands the band
+  back and re-claims it from the same place; second-app (docs) verification
+  at the hook level, persistence asserted against raw storage after remount.
+  Mobile: new `apps/mobile/src/kit/band/band-owner.ts` (+ test) — the latch
+  moves out of `photos-band.ts` onto web's `shell.bandOwner.<appId>` key
+  (stored `photos.bandOwner.*` answers reset; safe — no writer existed), and
+  `apps/mobile/src/screens/settings/BandSection.tsx` (+ `Settings.tsx`) is
+  the per-app hand-back list. Latent bug fixed: mobile `PhotosBand.tsx`
+  returned null for `owner === "host"`, stranding the member; the capsule
+  now stays (`PhotosHome.tsx`, `PhotosScreen.tsx`, `photos-band.ts`,
+  `PhotosLibrary.tsx` touched by the move). Photos is the only claiming app
+  today — recorded; `BAND_CLAIMING_APPS` is a tripwired roster.
+- A6 — `packages/blueprints/src/placement-registry.test.ts` gained the
+  ledger-root audit block: `tally.group` is an ordinary registry row, no
+  engine module branches on an app id or item type, Tally's call sites pass
+  nothing the engine had to learn. Verdict: zero engine edits needed.
+
+### Photos finals (P6, P9, P14, P18)
+
+- P6(a) — `packages/blueprints/apps/photos/viewer.ts` (+ `viewer.test.ts`):
+  `originParagraph` is a per-custody-state policy table with an explicit
+  "has not been checked yet" branch (it previously asserted "on this device"
+  with no custody row at all); `format.ts` gains the missing
+  `pending-offsite` row. Recorded limit: `blob_replica` is not a registered
+  entity, so per-copy *locations* beyond the five-state vocabulary would be
+  invented — not shipped.
+- P6(b) — `packages/blueprints/apps/photos/queries/people.ts`, `people.ts`,
+  `view-copy.ts`, `components/People.tsx` (+ `.module.css`, test): each
+  person carries `confirmed_by`; a group spanning two answerers renders
+  "Confirmed by X and Y — separately, and they stay separate." Read-side
+  only, no schema.
+- P9 — `apps/mobile/src/apps/photos/PlacesView.tsx`: the card ground pinned
+  `--skel` (the loading absence) forever and 7px radius; now
+  `--bg-sunken` / `radii.lg` per the handoff. Method: static token
+  comparison against `tokens.generated.ts` and the design roles — no pixel
+  scan run, stated as such. Hairline deliberately not added (no Photos shelf
+  card carries one) — flagged, not fixed unilaterally.
+- P18 — six files under 625 by extraction, every `#711` waiver removed, no
+  limit bump. Named seams: `apps/mobile/src/screens/home/
+  springboard-policy.ts` (Home layout law; desktop twin is
+  `homeTiles.ts` — unifying is now a file move),
+  `packages/client/src/gateway-client-vault-imports.ts` (staged-import
+  workflow split from owner acts; the `gateway-client-atlas.ts` seam),
+  `apps/mobile/src/apps/photos/PhotoLightboxChrome.tsx` (the two pure
+  stage strips; the `--on-stage` token rule stated once),
+  `AlbumDetail.styles.ts` + `PhotosHome.styles.ts` (the directory's
+  `.styles.ts` convention). Incidental: `tile-model.ts` (+ test),
+  `catalog.ts` (+ test), `Home.tsx`, `home/LauncherGrid.tsx`,
+  `home/TileBody.tsx`, `gateway-client.ts`,
+  `gateway-client-contract-fixtures.ts`,
+  `gateway-client-vault.contract.test.ts`.
+- P14 — `packages/blueprints/manifest.json` regenerated from a settled tree
+  (one-line diff: photos 0.2.0 → 0.4.0 via `packages/blueprints/index.json`,
+  which is the version source); three other templates' version drift
+  (agenda, notes, docs) recorded, not fixed (other apps' issues).
+  `docs/traps/manifest-regeneration.md` corrected per the write-back loop
+  (stale ".js handlers" checklist line; version-source note).
 
 ### Every file this pass touched
 
@@ -401,6 +521,7 @@ complete set, so nothing rides along unnamed.
 - `apps/mobile/src/apps/docs/docs-model.ts`
 - `apps/mobile/src/apps/locker/LockerHome.tsx`
 - `apps/mobile/src/apps/locker/LockerHome.views.tsx`
+- `apps/mobile/src/apps/photos/AlbumDetail.styles.ts`
 - `apps/mobile/src/apps/photos/AlbumDetail.tsx`
 - `apps/mobile/src/apps/photos/BackupHealth.tsx`
 - `apps/mobile/src/apps/photos/DuplicateReview.tsx`
@@ -411,9 +532,13 @@ complete set, so nothing rides along unnamed.
 - `apps/mobile/src/apps/photos/FaceReview.test.tsx`
 - `apps/mobile/src/apps/photos/FaceReview.tsx`
 - `apps/mobile/src/apps/photos/PhotoAccessPanel.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightboxChrome.tsx`
 - `apps/mobile/src/apps/photos/PhotoPermission.tsx`
 - `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+- `apps/mobile/src/apps/photos/PhotosBand.tsx`
 - `apps/mobile/src/apps/photos/PhotosGridSkeleton.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.styles.ts`
 - `apps/mobile/src/apps/photos/PhotosHome.test.tsx`
 - `apps/mobile/src/apps/photos/PhotosHome.tsx`
 - `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
@@ -439,6 +564,8 @@ complete set, so nothing rides along unnamed.
 - `apps/mobile/src/apps/photos/photos-sharing.ts`
 - `apps/mobile/src/apps/photos/search-hits.ts`
 - `apps/mobile/src/apps/photos/use-copy-to-sharing.ts`
+- `apps/mobile/src/kit/band/band-owner.test.ts`
+- `apps/mobile/src/kit/band/band-owner.ts`
 - `apps/mobile/src/kit/components/AudiencePlacementSheet.tsx`
 - `apps/mobile/src/kit/components/ConsentGate.styles.ts`
 - `apps/mobile/src/kit/components/ConsentGate.tsx`
@@ -462,14 +589,25 @@ complete set, so nothing rides along unnamed.
 - `apps/mobile/src/screens/BackupHealth.custody.tsx`
 - `apps/mobile/src/screens/BackupHealth.styles.ts`
 - `apps/mobile/src/screens/BackupHealth.tsx`
+- `apps/mobile/src/screens/Home.tsx`
 - `apps/mobile/src/screens/Scan.test.tsx`
 - `apps/mobile/src/screens/Scan.tsx`
 - `apps/mobile/src/screens/Settings.tsx`
+- `apps/mobile/src/screens/home/LauncherGrid.tsx`
+- `apps/mobile/src/screens/home/TileBody.tsx`
+- `apps/mobile/src/screens/home/catalog.test.ts`
+- `apps/mobile/src/screens/home/catalog.ts`
+- `apps/mobile/src/screens/home/springboard-policy.ts`
+- `apps/mobile/src/screens/home/tile-model.test.ts`
+- `apps/mobile/src/screens/home/tile-model.ts`
 - `apps/mobile/src/screens/scan-consent.test.ts`
 - `apps/mobile/src/screens/scan-consent.ts`
+- `apps/mobile/src/screens/settings/BandSection.tsx`
 - `apps/mobile/src/screens/settings/ShareTargetSection.tsx`
 - `docs/blueprint-seats.md`
 - `docs/glossary.md`
+- `docs/traps/manifest-regeneration.md`
+- `package.json`
 - `packages/automation/src/fire/enrich-gate.test.ts`
 - `packages/automation/src/fire/enrich-gate.ts`
 - `packages/automation/src/fire/enrich-refusal-outcome.test.ts`
@@ -506,6 +644,7 @@ complete set, so nothing rides along unnamed.
 - `packages/blueprints/apps/photos/components/EnrichmentConsent.tsx`
 - `packages/blueprints/apps/photos/components/FaceReview.module.css`
 - `packages/blueprints/apps/photos/components/FaceReview.tsx`
+- `packages/blueprints/apps/photos/components/People.module.css`
 - `packages/blueprints/apps/photos/components/People.test.tsx`
 - `packages/blueprints/apps/photos/components/People.tsx`
 - `packages/blueprints/apps/photos/components/SearchShelf.module.css`
@@ -516,7 +655,9 @@ complete set, so nothing rides along unnamed.
 - `packages/blueprints/apps/photos/enrichment-consent.ts`
 - `packages/blueprints/apps/photos/enrichment-gate.ts`
 - `packages/blueprints/apps/photos/faces.ts`
+- `packages/blueprints/apps/photos/format.ts`
 - `packages/blueprints/apps/photos/icons.tsx`
+- `packages/blueprints/apps/photos/people.ts`
 - `packages/blueprints/apps/photos/queries/enrichment-status.ts`
 - `packages/blueprints/apps/photos/queries/face-queue.ts`
 - `packages/blueprints/apps/photos/queries/faces.ts`
@@ -524,6 +665,8 @@ complete set, so nothing rides along unnamed.
 - `packages/blueprints/apps/photos/triage-session.test.ts`
 - `packages/blueprints/apps/photos/triage-session.ts`
 - `packages/blueprints/apps/photos/view-copy.ts`
+- `packages/blueprints/apps/photos/viewer.test.ts`
+- `packages/blueprints/apps/photos/viewer.ts`
 - `packages/blueprints/apps/tally/app-root.tsx`
 - `packages/blueprints/apps/tally/components/Search.tsx`
 - `packages/blueprints/apps/tally/logic.ts`
@@ -537,6 +680,7 @@ complete set, so nothing rides along unnamed.
 - `packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/automation.json`
 - `packages/blueprints/automations/photo-captioner/automations/photo-captioner/automation.json`
 - `packages/blueprints/automations/screenshot-extractor/automations/screenshot-extractor/automation.json`
+- `packages/blueprints/index.json`
 - `packages/blueprints/manifest.json`
 - `packages/blueprints/src/handler-reachability.test.ts`
 - `packages/blueprints/src/no-inference-client.test.ts`
@@ -545,11 +689,17 @@ complete set, so nothing rides along unnamed.
 - `packages/blueprints/src/placement-registry.test.ts`
 - `packages/blueprints/types/centraid.d.ts`
 - `packages/client/src/enrich-policy.ts`
+- `packages/client/src/gateway-client-contract-fixtures.ts`
 - `packages/client/src/gateway-client-enrich.contract.test.ts`
 - `packages/client/src/gateway-client-seam-fixtures.ts`
+- `packages/client/src/gateway-client-vault-imports.ts`
+- `packages/client/src/gateway-client-vault.contract.test.ts`
 - `packages/client/src/gateway-client-vault.ts`
+- `packages/client/src/gateway-client.ts`
 - `packages/client/src/react/screens/SettingsEnrichmentScreen.test.tsx`
 - `packages/client/src/react/screens/SettingsEnrichmentScreen.tsx`
+- `packages/client/src/react/shell/inlineFrame.test.tsx`
+- `packages/client/src/react/shell/routes/inlineAppFrame.tsx`
 - `packages/client/src/react/shell/routes/useAppScopes.test.ts`
 - `packages/client/src/react/shell/routes/useAppScopes.ts`
 - `packages/gateway/src/routes/scopes-routes.test.ts`
@@ -576,6 +726,9 @@ complete set, so nothing rides along unnamed.
 - `packages/vault/src/schema/domains-social-knowledge-media.ts`
 - `packages/vault/src/schema/enrich.ts`
 - `receipts/issue-712-shared-engines.md`
+- `scripts/lib/disabled-controls.mjs`
+- `scripts/lint-engine-conformance.mjs`
+- `scripts/lint-engine-conformance.test.mjs`
 - `tests/quality/classification-ratchet.json`
 - `tests/schema-export-fingerprint.json`
 
@@ -603,7 +756,11 @@ complete set, so nothing rides along unnamed.
 
 Visual evidence: `artifacts/e2e/ui-impact/issue-712-shared-engines.png`,
 emitted by `apps/desktop/tests/e2e/onboarding-home.spec.ts` (test 2.6c) with
-Photos open in the app view.
+the Photos app view open. Honesty note (P10, Decisions 7): the harness
+session lacks a replica-plane grant, so the captured frame shows the app
+view in its loading state, not a mounted Photos timeline — the same is true
+of #711's evidence frame. The emitter and gate wiring are real; the frame's
+content is the P10 finding.
 
 ## Out of scope
 
@@ -624,7 +781,10 @@ records its reason here. The whole pass re-runs with:
 bun run check:push
 ```
 
-(38/38 gates green at each commit on this branch.) Engine-specific proofs a
+(38/38 green on the first two commits; 39/39 once E1 added the
+`lint:engine-conformance` gate to the chain — the count changed because this
+pass added a gate to `check:push`, not because a gate was skipped.)
+Engine-specific proofs a
 reviewer can re-run:
 
 ```sh
@@ -641,6 +801,12 @@ bun run --cwd packages/blueprints test -- no-inference-client # C5(c) gate
 - P12 — `runSweep()` logs the same `assetsBlockedByLineage` /
   `contentBlockedByLineage` lists the journal receipt carries, and fires even
   when a sweep only declined.
+- P17 — this pass changed no native module, podspec, or native project file
+  (the #711 `expo-blur` removal was remediated before #713 merged), so there
+  was no fingerprint to rewrite and `ci:native-state --write` was correctly
+  NOT run: `bun run check:mobile-native-state` reports "Pod lock, project
+  paths, and iOS/Android fingerprints agree" (L1–L3 coherent, L4 matching)
+  and has been green in every `check:push` on this branch.
 - P19 — the independent fresh-context audit of the #711 receipt ran in this
   pass: ~55 claims checked, 48 PASS, 3 REFUTED, 2 unverifiable here. The
   REFUTED findings: (1) the #711 "slideshow transport controls unbuilt"
@@ -655,125 +821,189 @@ bun run --cwd packages/blueprints test -- no-inference-client # C5(c) gate
 ## Audit
 
 Performed by a **fresh-context sub-agent** (no prior turns in this session),
-per the mid-pass attestation the pre-commit hook requested. Verified against
-`git diff origin/main` on the single commit this branch currently carries
-(`b357e3ab`), spot-read source files, `gh issue view 712`, and six of the
-`## Verification` section's own proof commands re-run live.
+re-attesting the receipt at its **final state**: three waves of work now land
+on this branch — two committed (`b357e3ab`, `f2f65036`) and a third still
+uncommitted in the worktree. `git diff origin/main --stat` (which compares the
+working tree, not just `HEAD`, against `origin/main`) already covers all three
+waves in one pass — 210 files, +12074/-3714 — so both committed and
+uncommitted work were audited together, not separately. Verified against that
+diff, `git status`, spot-read source files with running code, `gh issue view
+712 --repo srikanth235/centraid`, the two `## Decisions` findings' underlying
+evidence, and a live re-run of `lint:engine-conformance` plus several of the
+`## Verification` section's own proof commands.
 
-- **(1) `## What changed` faithfully describes the diff — PASS.** Every path
-  named under Engine A, C and D, the search scaffold, and the Photos-defects
-  bullets exists in `git diff origin/main --stat` with the described shape.
-  Spot-checked in full: `packages/vault/src/host.ts` and
-  `packages/vault/src/enrich/policy.ts` (the `LEGACY_TIER` compat map exactly
-  as narrated — `local`→`device`, `model`→`gateway`, new default `gateway`),
-  `apps/mobile/src/apps/locker/LockerHome.tsx` (the `AudiencePlacementSheet`
-  import and its call site are both gone, replaced by the doctrine comment
-  claimed), `packages/vault/src/gateway/duties.ts` (`RETENTION_REFUSALS` map
-  and the `refused`/`retentionRefused` plumbing exactly as described),
-  `packages/gateway/src/serve/vault-plane.ts` (the log line now fires on
-  `blockedByLineage > 0` too, and includes both lists verbatim), and
-  `packages/vault/src/gateway/portable-export.ts` (comment-only; no code
-  change was claimed beyond the audit note, and none exists). No
-  misrepresentation or omission found in the diffs checked. One documentation
-  gap, not a misrepresentation: the P19 sub-agent's full ~55-row PASS/REFUTED
-  table is not persisted anywhere in the repo — only the three-line summary
-  above survives in `## Verification`; the verbatim table lives solely in
-  this session's transcript and an ephemeral task-output file under `/tmp`,
-  neither of which a future reader of this receipt can reach.
-- **(2) Each `- [x]` checklist item is realized in the diff — PASS.**
-  Re-verified with running code, not just reading it, for the items most
-  load-bearing to the pass's central claims:
-  - `A7` — `git diff` on `LockerHome.tsx`/`LockerHome.views.tsx`/
-    `locker/components/Detail.tsx` shows every placement control removed, not
-    disabled, matching the ruling.
-  - `C5` — `packages/gateway/src/serve/enrich-tier-control.test.ts`'s
-    `[C5 sabotage]` test (line 133) does exactly what the doc-comment above
-    it says: writes the pre-rename `'local'` string into the mirror row and
-    asserts the gateway-lane gate stays closed until an explicit owner write.
-    This directly substantiates Decision 5's claim that the widening did
-    **not** ship — confirmed by reading `host.ts`/`policy.ts`'s
-    `LEGACY_TIER` maps, not merely by trusting the receipt's prose.
-  - `D1`–`D3` — `grep` confirms zero remaining references to
-    `media.confirm_face`/`media.reject_face` anywhere under
-    `packages/blueprints/apps/photos` or `apps/mobile/src/apps/photos`;
-    `media.answer_face_proposal` is the only verb wired. Re-ran
-    `bun run --cwd packages/blueprints test -- face-review` (7/7 pass,
-    including "a fully answered library reaches the zero-remaining state"
-    asserting the literal "No faces need review right now." string) and
-    `bun run --cwd packages/vault test -- duties` (22/22 pass).
-  - `S1`/`S2` — re-ran `no-inference-client search-scaffold` (534/534 pass)
-    and `placement-registry` (5/5 pass) in `packages/blueprints`; read
-    `apps/mobile/src/apps/photos/search-hits.ts`'s diff directly — it now
-    imports `groupSearchHits` from the shared scaffold and does not add any
-    "things"/scene search, matching the S2 claim that the omission stays
-    honest.
-  - `P7`, `P11`, `P12`, `P16`, `P19` — each checked directly against its
-    named file (`member-store.ts`/`scopes-routes.ts`, `duties.ts`,
-    `vault-plane.ts`, `portable-export.ts`) and, for P19, against the actual
-    task-notification in the session transcript (task id `a4c10c57e9e18a86c`,
-    "P19 audit of #711 receipt"), which independently confirms the sub-agent
-    ran, used the merged `13444172` commit, and reported the same
-    48-PASS/3-REFUTED shape the receipt states. P19 was **not** rubber-stamped
-    from the receipt's own prose — the transcript evidence was located and
-    read before accepting the claim.
-  - No falsely-checked item was found. Every `- [x]` row inspected has a
-    corresponding, verifiable change; every unchecked P/E/B/C1-4/D4 row was
-    left unchecked, consistent with this being a stated mid-pass state.
-- **(3) `## Checklist` mirrors the issue's checklist — PASS.** Diffed against
-  `gh issue view 712`'s checklist verbatim: A1–A7, B1–B4, C1–C5, D1–D4, S1–S2,
-  E1–E3, P5–P19 all present, in the same order, with the same item identifiers
-  as the issue. No item renumbered, dropped, or invented.
-- **Not independently re-verified (scope limit, not a finding):** the
-  `## Verification` section's headline claim of "38/38 gates green" via
-  `bun run check:push` was not re-run by this audit (a full push-gate pass is
-  multi-minute and outside a mid-pass attestation's budget); six of the
-  section's own named `bun run --cwd … test` commands were re-run instead and
-  all passed, which is corroborating but not equivalent evidence. A reviewer
-  who wants the full-gate claim re-checked should re-run `check:push`
-  directly.
+- **(1) `## What changed` faithfully describes the full diff (committed +
+  uncommitted) — PASS.** Every path named under Engines A–E, the search
+  scaffold, and the Photos-defects/finals bullets exists in `git diff
+  origin/main --stat` with the described shape; every path in `git status`'s
+  "Changes not staged" and "Untracked files" lists (e.g.
+  `apps/mobile/src/kit/band/`, `scripts/lint-engine-conformance.mjs`,
+  `apps/mobile/src/screens/home/springboard-policy.ts`,
+  `packages/client/src/gateway-client-vault-imports.ts`,
+  `apps/mobile/src/apps/photos/PhotoLightboxChrome.tsx`) appears in "Every
+  file this pass touched" and is attributed to a named item. No untracked or
+  modified file rides along unnamed.
+- **(2) Each `- [x]` checklist item is realized in the tree — PASS, with the
+  newest claims spot-checked against running code, not prose:**
+  - `E1` — `scripts/lint-engine-conformance.mjs`,
+    `scripts/lib/disabled-controls.mjs` and
+    `scripts/lint-engine-conformance.test.mjs` all exist; `package.json`
+    wires `"lint:engine-conformance": "node
+    scripts/lint-engine-conformance.mjs"` into the `check:push` gate list
+    (confirmed by grep against the script line itself, not the receipt's
+    claim about it). Re-ran it live: `ok   engine conformance — placement,
+    custody, consent and triage each have exactly one door, and the engine
+    surfaces explain every refusal`.
+  - `E2` — `docs/blueprint-seats.md` carries a `## Engine contracts` heading
+    (line 74).
+  - `E3` — `apps/mobile/src/kit/band/band-owner.ts` (+ `.test.ts`) and
+    `apps/mobile/src/screens/settings/BandSection.tsx` both exist;
+    `BandSection.tsx` calls `useBandOwner(app.id)` and wires `onChange={
+    setBandOwner}` — a real writer, not a stub. `inlineAppFrame.tsx` also
+    reads/writes `bandOwner`/`setBandOwner`, matching the web-side "frame
+    action hands the band back" claim.
+  - `P6` — `packages/blueprints/apps/photos/viewer.ts` defines
+    `originParagraph(asset, gatewayName)` as a per-custody-state table
+    including a `pending-offsite` branch (lines 315–336), matching the claim.
+    `packages/blueprints/apps/photos/queries/people.ts` carries
+    `confirmed_by_party_id` on the region read and assembles a `confirmed_by`
+    array per person group (lines 58–264), matching the P6(b) claim.
+  - `P9` — `apps/mobile/src/apps/photos/PlacesView.tsx` reads
+    `colors.bgSunken` for the card ground and sets `borderRadius: radii.lg`,
+    matching the claim exactly.
+  - `P18` — the six named seams (`PhotosHome.tsx` 588, `AlbumDetail.tsx` 590,
+    `packages/client/src/gateway-client-vault.ts` 564, `home/tile-model.ts`
+    483, `PhotoLightbox.tsx` 623, `screens/BackupHealth.tsx` 521 lines) are
+    all under the 625-line `repo-hygiene` cap. A repo-wide `grep -rn
+    "allow-repo-hygiene"` finds waivers only in files this pass never
+    touched (`centraid-city/`, `packages/app-engine/`,
+    `tests/quality/user-facing-qualities.test.ts`, etc.) — none in any
+    Photos/#712 file, confirming the #711 waivers were genuinely removed by
+    extraction rather than left in place beside a raised limit.
+  - `P14` — `packages/blueprints/index.json` shows exactly the claimed
+    one-line diff (`"version": "0.2.0"` → `"0.4.0"` for photos);
+    `packages/blueprints/manifest.json`'s own diff is 16 lines (the
+    regenerated derived artifact), consistent with "one-line diff" referring
+    to the version *source*, not the generated manifest.
+  - No falsely-checked item was found among the items spot-checked. Every
+    struck item (`D4`, `P10`) was left struck, not silently checked.
+- **(3) `## Checklist` mirrors the issue's checklist — PASS.** `gh issue view
+  712 --repo srikanth235/centraid` lists A1–A7, B1–B4, C1–C5, D1–D4, S1–S2,
+  E1–E3, P5–P19 (P1–P4 explicitly retired/moved per the issue body's own
+  note) — the receipt's `## Checklist` carries the identical set, same order,
+  same identifiers, nothing renumbered or invented.
+- **(4) The two struck items' findings — PASS on both, evidence read
+  directly, not trusted from prose:**
+  - **Decisions 6 (D4, no OCR proposal row exists).** `grep`-ed
+    `packages/vault/src/schema/` for `ocr_proposal`, `doc_text_proposal`,
+    `text_span_proposal` — zero matches. `agent_correction`
+    (`packages/vault/src/schema/agent.ts` line 45) exists and is exactly
+    what the receipt describes: a row that records a correction that already
+    happened, with no `review_state`/proposal-queue shape to answer against.
+    The finding holds.
+  - **Decisions 7 (P10, evidence frames show a loading state).**
+    `artifacts/e2e/ui-impact/issue-712-shared-engines.png` was opened and
+    read as an image: it shows the Photos app shell with the centre pane
+    reading **"Loading Photos…"** — a spinner state, not a mounted Photos
+    timeline. The finding is accurate as stated, not an over-claim walked
+    back to a milder one.
+- **Discrepancy found and reconciled during this attestation:** the
+  crosswalk row for `P15` said "39/39 gates green" while `## Verification`
+  said "38/38". Both were true of different moments — 38 gates existed
+  until E1 added `lint:engine-conformance` to `check:push`, making 39.
+  The Verification prose now says so explicitly rather than carrying two
+  numbers for one claim.
+- **Not independently re-verified (scope limit, not a finding):** a full
+  `bun run check:push` run was not re-executed by this audit (multi-minute,
+  outside a fresh-context attestation's budget). `lint:engine-conformance`
+  was re-run live and passed; the P19 independent-audit claim (48
+  PASS/3 REFUTED) was checked in the prior attestation pass against the
+  actual task-notification transcript and is not re-litigated here since
+  nothing in this pass's diff touches it.
 
-**Verdict: PASS.** No checked box overstates what the diff contains; the one
-gap found (P19's full evidence table not persisted to the repo) is a
-durability note for a future receipt, not a misrepresentation in this one.
+**Verdict: PASS.** No checked box overstates what the tree (committed or
+uncommitted) contains, both struck items' findings hold up against direct
+evidence, and the checklist mirrors the issue. One internal numeric
+inconsistency (39/39 vs. 38/38 gates) is named above as a discrepancy the
+author should reconcile before merge — it does not itself falsify any
+checklist claim.
 
 ## Steering
 
-Extracted candidate human-steering events from the session transcript
-(`8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d.jsonl`, 469 lines) by walking every
-top-level `type: "user"` entry and excluding (a) entries whose `message.content`
-is exclusively `tool_result` blocks — these are tool responses being fed back
-to the agent, not human input — and (b) `isSidechain: true` entries, which are
-a parent agent talking to its own sub-agent, not the human operator.
+Re-scanned the session transcript
+(`8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d.jsonl`, 809 lines) for events *since*
+the prior fresh-context attestation (which found zero events over the
+session's first ~469 lines). Walked every `type: "user"` entry plus every
+`type: "attachment"`/`"queue-operation"` entry carrying a human-authored
+`prompt` (the prior pass's method missed these because a queued slash-style
+message is not a plain `type: "user"` entry — corrected here), again
+excluding `isSidechain: true` entries and tool-result-only payloads.
 
-That leaves exactly three non-tool-result top-level user entries, at lines 3–5,
-all part of the session's **opening** exchange: the `/goal` slash-command
-invocation itself, its `<local-command-stdout>` echo, and the resulting
-Stop-hook-activation notice. The directive is explicit that the session's
-opening instruction is not a steering event, and all three lines are that
-same opening instruction and its mechanical echoes — not a distinct,
-mid-task redirect. `grep -c "Request interrupted"` over the full transcript
-returns `0`: no structural interrupt occurred either. Task-notification
-`queue-operation`/`attachment` entries (e.g. the P19 sub-agent's completion
-report) were confirmed to be machine events per the directive's own framing
-and excluded from consideration on that basis, not counted and then discarded.
+Three candidate events surfaced after line 469, evaluated individually
+against the directive's rubric (`.governance/packs/governance-kit/audit/
+directives/agent-steering-accounting/README.md`: an **interrupt** is a
+runtime-emitted `[Request interrupted by user...]` sentinel; a **correction**
+is a message that redirects or corrects the agent's work mid-task; "tool
+denials and ordinary task messages are not steering"):
 
-**No steering events occurred in this session.** The human operator set the
-goal once, at session start, and a session-scoped Stop hook kept the agent
-working autonomously from that single instruction through to this attestation
-— there is no second human message anywhere in the transcript to classify as
-either an interrupt or a correction.
+1. **Line 645 (attachment, `2026-08-06T06:56:06.931Z`): "what percentage of
+   work is done?"** — a status query, not a redirect. It asks for
+   information about progress; it does not change scope, correct a mistake,
+   or redirect the agent's next action. **Not steering** under the rubric's
+   own "ordinary task messages are not steering" carve-out — classified the
+   same way a "keep going" message would be.
+2. **Line 709 (user, `2026-08-06T07:11:39.766Z`): "just logged in...continue."**
+   and **line 716 (user, `2026-08-06T07:12:18.520Z`): "just lggoed in
+   .continue...act as orcehstrator and span opus/sonnet/haiku..."** — both
+   follow a `401 OAuth access token has expired` failure at line 700 (an
+   *auth outage*, a runtime/infra event, not a human decision) and a `/model`
+   switch to `claude-fable-5` at line 714. Both messages restate "continue"
+   (the second re-pastes the session's original scope verbatim rather than
+   introducing new scope) to resume the interrupted run. **Not steering** —
+   resumption after an outage, not a correction of agent behavior; no scope,
+   plan, or approach changed.
+3. **Line 711 (user, `2026-08-06T07:11:47.175Z`): "[Request interrupted by
+   user]"** — this is the literal runtime sentinel the directive names as
+   the structural-interrupt case. **Steering event, type `interrupt`, tier
+   `structural`.** Recorded as `steer-8eaf2fc5-1786000307-1` under
+   `### Steering` below: session `8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d`,
+   issue `#712`, ordinal `711` (1-based line position in the transcript
+   file), timestamp `2026-08-06T07:11:47.175Z`, commit `PENDING` (the wave
+   that followed this interrupt has not been committed yet as of this
+   attestation). `user-reason` left empty per the row schema (interrupts
+   carry no reason field; the `/model` switch immediately after is a
+   plausible cause but is not asserted as fact here).
+
+No other candidate events were found: `grep -c "Request interrupted"` returns
+exactly `1` over the full 809-line transcript (the event just recorded), and
+no other `type: "attachment"` entry with `origin.kind: "human"` exists besides
+the percentage-status query already classified above as non-steering.
 
 Checks, per the directive's rubric:
-1. **Every steering event recorded — PASS** (vacuously: zero events exist,
-   zero rows appended).
+1. **Every steering event recorded — PASS.** The one qualifying interrupt is
+   appended as a row with a valid `(session, ordinal)` identity, confirmed
+   unique via `existing-ordinals` (empty before this append) and validated
+   below.
 2. **No non-steering message recorded as a steering event — PASS.** The
-   opening `/goal` command was correctly excluded rather than logged as a
-   "correction"; no other candidate existed to misclassify.
+   status query and the two outage-resumption messages were evaluated and
+   correctly excluded rather than logged as corrections; none redirects the
+   agent's work.
 
-**Verdict: PASS — no steering events in this session.** No ledger row is
-appended to `### Steering` below; per the directive's own convention (see e.g.
-`receipts/issue-686-design-consistency.md`'s `### Steering`), a zero-event
-session records the verdict in prose rather than an empty table.
+**Ledger validation:**
+
+```
+$ python3 .governance/packs/governance-kit/audit/directives/agent-steering-accounting/lib/ledger.py validate-dir receipts
+```
+
+ran clean (no violations reported) after the row was appended and the table
+header/separator were added to `### Steering` below (the ledger tool's
+`append_row` only inserts a bare row when a `### Steering` sub-table with a
+header does not yet exist under an existing heading — the header/separator
+were added by hand to match the schema the tool expects on the next append).
+
+**Verdict: PASS.** One structural interrupt recorded for this session,
+correctly distinguished from two non-steering resumption messages and one
+non-steering status query; the ledger validates clean across `receipts/`.
 
 ## Accounting
 
@@ -796,11 +1026,17 @@ session records the verdict in prose rather than an empty table.
 | claude-code-8eaf2fc5-4c2-1785999354-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 34022 | 1347288 | 96697089 | 445189 | feat(engines): first consumers (#712) |
 | claude-code-8eaf2fc5-4c2-1785999452-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 8 | 1158380 | 506338 | 2897 | 1161285 | 7.5655 | 34030 | 2505668 | 97203427 | 448086 | feat(engines): first consumers — sharing shelf, frame backup, consent re-home, c |
 | claude-code-8eaf2fc5-4c2-1785999533-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 2 | 611 | 416811 | 404 | 1017 | 0.2223 | 34032 | 2506279 | 97620238 | 448490 | feat(engines): land the first engine consumers across mobile and web (#712)Mobil |
+| claude-code-8eaf2fc5-4c2-1786003430-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 157 | 4564558 | 24868872 | 53448 | 4618163 | 42.2999 | 34189 | 7070837 | 122489110 | 501938 | feat(engines): close the pass — conformance gates, band hand-back, Photos finals |
 
 ### Steering
 
-No steering events recorded for session `8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d`
-(see the `## Steering` attestation above for the full method and evidence).
-The only human-authored content in the transcript is the opening `/goal`
-command that set the session's scope; there is no subsequent interrupt or
-mid-task correction to log a row for.
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-8eaf2fc5-1786000307-1 | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | interrupt | structural |  | PENDING | 711 | 2026-08-06T07:11:47.175Z |
+
+One structural interrupt recorded for session `8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d`
+(see the `## Steering` attestation above for the full method and evidence). The
+`what percentage of work is done?` status query and the two `just logged
+in...continue` resumption messages that followed the mid-session auth outage
+are not steering events under the directive's rubric — none redirects or
+corrects the agent's work — and are recorded in prose only, not as rows.

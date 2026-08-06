@@ -9,11 +9,17 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import {
   countThings,
+  isWideTile,
+  springboardState,
+  tileEarnsGrid,
+  tileSize,
+  TILE_EMPTY_COPY,
+} from "./springboard-policy";
+import {
   countUpcoming,
   decodeProse,
   firstProseLine,
   initialsOf,
-  isWideTile,
   monthStartDate,
   MOSAIC_CELL_HEIGHT,
   MOSAIC_SLOTS,
@@ -27,11 +33,7 @@ import {
   selectNoteExcerpt,
   selectPhotoMosaic,
   selectTaskRows,
-  springboardState,
   sumMinor,
-  tileEarnsGrid,
-  tileSize,
-  TILE_EMPTY_COPY,
 } from "./tile-model";
 import type { TileData, TileStatus } from "./tile-model";
 

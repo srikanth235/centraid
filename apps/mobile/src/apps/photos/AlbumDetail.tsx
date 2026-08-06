@@ -1,5 +1,4 @@
 // One album (Photos v4 handoff §14, §18).
-// governance: allow-repo-hygiene file-size-limit #711 Photos v4 album surface remains a cohesive interaction module.
 //
 // An album REFERS to a photograph where it lives; it never moves or copies
 // anything. That is why "Remove" here is an outlined control and not a filled
@@ -9,14 +8,7 @@
 // a shelf, not a different way of looking at photographs.
 
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Switch,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, Switch, View } from "react-native";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
@@ -31,12 +23,12 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
-import { borders, spacing, t, useTheme } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import { optimisticValues } from "../../lib/replica/optimistic";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
+import { makeStyles } from "./AlbumDetail.styles";
 import {
   NO_DOWNLOAD_REASON,
   batchAddToAlbum,
@@ -596,91 +588,3 @@ export default function AlbumDetail({
     </PhotosScreen>
   );
 }
-
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    actions: { flexDirection: "row" },
-    backdrop: { backgroundColor: colors.scrim, flex: 1 },
-    blockedReason: {
-      ...t("mono"),
-      paddingBottom: spacing[1],
-      paddingHorizontal: spacing[4],
-    },
-    copy: { flex: 1, marginStart: spacing[2], minWidth: 0 },
-    destructive: { borderColor: colors.danger },
-    disabledOutline: { borderColor: colors.line },
-    destructiveText: { color: colors.danger },
-    dialog: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: 16,
-      borderWidth: borders.hairline,
-      insetInlineEnd: spacing[5],
-      insetInlineStart: spacing[5],
-      padding: spacing[5],
-      position: "absolute",
-      top: "34%",
-    },
-    dialogTitle: { ...t("title"), color: colors.text },
-    empty: {
-      alignItems: "center",
-      flex: 1,
-      gap: spacing[3],
-      justifyContent: "center",
-      paddingHorizontal: spacing[6],
-    },
-    emptyBody: { ...t("small"), color: colors.textSoft, textAlign: "center" },
-    emptyTitle: { ...t("display"), color: colors.text, textAlign: "center" },
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      minHeight: 48,
-      paddingEnd: spacing[3],
-      paddingStart: spacing[2],
-    },
-    headerBtn: {
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      width: 44,
-    },
-    input: {
-      ...t("body"),
-      borderColor: colors.lineStrong,
-      borderRadius: 12,
-      borderWidth: borders.hairline,
-      color: colors.text,
-      marginTop: spacing[4],
-      padding: spacing[3],
-    },
-    keepCopy: { flex: 1, minWidth: 0 },
-    keepRow: {
-      alignItems: "center",
-      borderBottomColor: colors.line,
-      borderBottomWidth: borders.hairline,
-      flexDirection: "row",
-      gap: spacing[3],
-      marginHorizontal: spacing[4],
-      minHeight: 44,
-      paddingVertical: spacing[2],
-    },
-    keepTitle: { ...t("smallStrong"), color: colors.text },
-    meta: { ...t("mono"), color: colors.textSoft },
-    outlineBtn: {
-      borderColor: colors.line,
-      borderRadius: 999,
-      borderWidth: borders.hairline,
-      justifyContent: "center",
-      minHeight: 34,
-      paddingHorizontal: spacing[3],
-    },
-    outlineBtnText: { ...t("control"), color: colors.text },
-    save: { alignItems: "center", marginTop: spacing[3], padding: spacing[3] },
-    saveText: { ...t("control"), color: colors.textInv },
-    selectionActions: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: spacing[2],
-    },
-    title: { ...t("title"), color: colors.text },
-  });

@@ -34,7 +34,7 @@ import { faceCropStyle } from "../face-crop.ts";
 import { mountMedia } from "../media.ts";
 import type { FaceProposal, Person } from "../people.ts";
 import type { Asset } from "../types.ts";
-import { peoplePendingNote } from "../view-copy.ts";
+import { peopleConfirmedByNote, peoplePendingNote } from "../view-copy.ts";
 import { EnrichmentConsent } from "./EnrichmentConsent.tsx";
 import type { EnrichmentConsentProps } from "./EnrichmentConsent.tsx";
 
@@ -156,6 +156,10 @@ export function PeopleShelf({
       <div className={styles.grid}>
         {people.map((person) => {
           const cover = coverFor(person, assets);
+          // Only when the group actually spans more than one answerer — see
+          // `peopleConfirmedByNote`. Null on every ordinary card, so nothing
+          // is added to the common case's geometry.
+          const confirmedBy = peopleConfirmedByNote(person.confirmed_by ?? []);
           // NOT a fallback string. `queries/people.ts` only ever names a
           // party already in `core.party` with `kind = 'person'`, and the
           // one command that can mint one (`people.create`,
@@ -183,6 +187,9 @@ export function PeopleShelf({
               />
               <span className={styles.name}>{person.name}</span>
               <span className={styles.count}>{person.count}</span>
+              {confirmedBy ? (
+                <span className={styles.confirmedBy}>{confirmedBy}</span>
+              ) : null}
             </button>
           );
         })}

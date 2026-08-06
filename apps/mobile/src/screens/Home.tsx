@@ -75,7 +75,7 @@ import {
   countThings,
   springboardState,
   tileEarnsGrid,
-} from "./home/tile-model";
+} from "./home/springboard-policy";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultHeader from "./home/VaultHeader";
 import VaultsSwitcher from "./home/VaultsSwitcher";

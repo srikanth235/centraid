@@ -119,3 +119,82 @@ describe("locker is structurally excluded from placement (A7)", () => {
     expect(offenders).toStrictEqual([]);
   });
 });
+
+/*
+ * A6 — THE LEDGER-ROOT AUDIT. Tally is the app whose whole posture is "born
+ * shared": a Splitwise group is a multi-party balance and belongs in a
+ * household vault from the moment it exists. It is therefore the honest test
+ * of whether engine A is an ENGINE or just Photos' sharing code with a wider
+ * type — the issue's own framing is that whatever edit Tally needs is an
+ * ENGINE DEFECT, not a Tally patch.
+ *
+ * VERDICT: it consumes cleanly. Tally supplies a registry row and two call
+ * sites; the engine has no Tally-shaped code in it at all. These assertions
+ * are what would go red if someone "fixed" that by teaching the engine about
+ * an app.
+ */
+describe("Tally consumes the placement engine with zero engine edits (A6)", () => {
+  const ENGINE_FILES = [
+    path.join(APPS_DIR, "_shared", "placement-registry.ts"),
+    path.join(APPS_DIR, "_shared", "AudiencePlacement.tsx"),
+    path.resolve(
+      PACKAGE_ROOT,
+      "../../apps/mobile/src/kit/components/AudiencePlacementSheet.tsx"
+    ),
+  ];
+
+  it("tally.group is an ordinary registry row, owned by tally", () => {
+    const entry = PLACEMENT_REGISTRY.find((e) => e.itemType === "tally.group");
+    expect(entry).toStrictEqual({
+      appId: "tally",
+      itemType: "tally.group",
+      label: "group",
+    });
+  });
+
+  it("no engine module branches on an app id or an item type", () => {
+    // The registry file itself names apps — that is what a registry IS — so
+    // only the RENDERERS are held to this. A renderer that grew an
+    // `if (itemType === "tally.group")` would be the fourth hand-copied union
+    // arriving by the back door.
+    for (const file of ENGINE_FILES.slice(1)) {
+      const source = readFileSync(file, "utf8");
+      expect(source.toLowerCase(), file).not.toContain("tally");
+      expect(source, file).not.toContain("media.media_asset");
+      expect(source, file).not.toContain("core.document");
+    }
+  });
+
+  it("Tally's own call sites pass nothing the engine had to learn", () => {
+    // Web: an itemType from the registry and an id. Native: the same, plus
+    // the caller's own noun for the status line — copy, not behaviour.
+    const web = readFileSync(
+      path.join(APPS_DIR, "tally", "components", "GroupManager.tsx"),
+      "utf8"
+    );
+    expect(web).toContain('<AudiencePlacement itemType="tally.group"');
+    const native = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/tally/TallyHome.tsx"
+      ),
+      "utf8"
+    );
+    expect(native).toContain('itemType="tally.group"');
+    expect(native).toContain("AudiencePlacementSheet");
+  });
+
+  it("record-only Tally reaches placement without touching custody", () => {
+    // The two engines are independent by construction: being "born shared"
+    // (engine A) says nothing about carrying bytes (engine B). Tally is the
+    // app that proves the split, and `blueprint-seats.test.ts` already gates
+    // the custody half — this only pins that placement did not drag any of it
+    // in through the back door.
+    const dir = path.join(APPS_DIR, "tally");
+    for (const file of sourceFiles(dir)) {
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toContain("kit/transfer");
+      expect(text, file).not.toContain("custody_rollup");
+    }
+  });
+});

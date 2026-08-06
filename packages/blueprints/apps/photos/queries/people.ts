@@ -128,7 +128,7 @@ export default async function people({ ctx }: HandlerArgs) {
     // whatever the shelf is ordered on, so no order is asserted here.
     const byParty = new Map<
       string,
-      { asset_ids: string[]; seen: Set<string> }
+      { asset_ids: string[]; seen: Set<string>; confirmers: Set<string> }
     >();
     for (const region of regions) {
       if (region.confirmed_by_party_id == null) continue;
@@ -137,9 +137,21 @@ export default async function people({ ctx }: HandlerArgs) {
       if (!partyId || !assetId || !nameOf.has(partyId)) continue;
       let entry = byParty.get(partyId);
       if (!entry) {
-        entry = { asset_ids: [], seen: new Set() };
+        entry = { asset_ids: [], seen: new Set(), confirmers: new Set() };
         byParty.set(partyId, entry);
       }
+      // WHO SAID SO (issue #712 P6b). A group is keyed by the party the faces
+      // ARE (`party_id`); `confirmed_by_party_id` is a different axis — the
+      // party who answered the proposal — and the DDL pins it to exist on
+      // exactly the confirmed rows. Collecting it here is what lets one
+      // person's group span two members' confirmations WITHOUT merging them:
+      // the confirmers stay a set beside the group, never folded into the
+      // subject, so "Ana, confirmed by you and by Sam" is expressible and
+      // "Ana and Sam are the same person" is not. Every confirmed region is
+      // counted here, including the second one in a photograph the count
+      // above deliberately skips — the question is who answered, not how
+      // many photographs.
+      entry.confirmers.add(region.confirmed_by_party_id);
       // Two confirmed regions of one person in one photograph is one
       // photograph, not two — a count that double-counted them would disagree
       // with the tiles the shelf then shows.
@@ -244,6 +256,15 @@ export default async function people({ ctx }: HandlerArgs) {
         name: nameOf.get(partyId) ?? null,
         count: entry.asset_ids.length,
         asset_ids: entry.asset_ids,
+        // The distinct parties who answered, each carrying whatever name
+        // `core.party` holds for them — `null` where the confirmer is not a
+        // `kind = 'person'` party this read named (a device or a service that
+        // acted for the owner), which the view renders as "someone else on
+        // this library" rather than as an invented name.
+        confirmed_by: [...entry.confirmers].sort().map((confirmerId) => ({
+          party_id: confirmerId,
+          name: nameOf.get(confirmerId) ?? null,
+        })),
       })),
       proposals,
       // Same derivation as face-queue.ts's `unmatchedTotal` — the pending

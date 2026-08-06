@@ -32,7 +32,7 @@ import {
   orderByPins,
   orderForSpringboard,
 } from "./catalog";
-import { SPRINGBOARD_ORDER } from "./tile-model";
+import { SPRINGBOARD_ORDER } from "./springboard-policy";
 
 function meta(id: string, name: string, description = ""): AppMetaResolved {
   return {

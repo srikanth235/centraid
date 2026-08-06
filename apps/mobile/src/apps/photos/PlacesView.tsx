@@ -31,6 +31,7 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
+import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
 
 interface PlaceCard {
@@ -144,7 +145,25 @@ export default function PlacesView({
               })
             }
           >
-            <View style={[styles.cover, { backgroundColor: colors.skel }]}>
+            {/* THE GROUND (issue #712 P9). `--skel` is defined as "the ground
+                a tile paints BEFORE its bytes arrive" (packages/design/src/
+                roles.ts) — it is the absence, not the surface. This card used
+                to pin it forever, so a place whose cover had decoded still
+                stood on the placeholder. `tileGround` is the app's own
+                contract for exactly this (PhotoTile.tsx): skel while there is
+                nothing to show, `--bg-sunken` once there is. */}
+            <View
+              style={[
+                styles.cover,
+                {
+                  backgroundColor: tileGround(
+                    Boolean(item.coverUri),
+                    colors.skel,
+                    colors.bgSunken
+                  ),
+                },
+              ]}
+            >
               {item.coverUri ? (
                 <Image
                   source={imageSource(item.coverUri)}
@@ -178,7 +197,10 @@ const makeStyles = (colors: ThemeColors) =>
     count: { ...t("mono"), color: colors.textSoft, marginEnd: spacing[3] },
     cover: {
       aspectRatio: 4 / 3,
-      borderRadius: radii.md,
+      // 12, not `radii.md` (7) — the shelf-card radius the handoff states and
+      // the one `PhotosCollectionsView`'s album tile already uses. A shelf of
+      // cards has one corner, and this was the only card cutting a tighter one.
+      borderRadius: radii.lg,
       overflow: "hidden",
     },
     coverImage: { height: "100%", width: "100%" },

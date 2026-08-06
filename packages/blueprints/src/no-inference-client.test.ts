@@ -41,6 +41,18 @@ const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 // provider import in tooling would be just as much a third road.
 const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 
+// WIDENED TO THE NATIVE TREE (issue #712 E1, engine C). The doctrine says "no
+// blueprint app OR AUTOMATION" invents a third road, and the native client is
+// where the device work-lease lane actually runs (iOS Vision / Android ML
+// Kit): it is the surface with both the motive and the opportunity to reach
+// for a provider SDK instead. `apps/mobile` is a separate package with its own
+// vitest project, so this file reaches ACROSS the package boundary the same
+// way it already reaches into `packages/vault` for `SHAREABLE_ITEM_TYPES` —
+// one check for one rule beats two that drift.
+const EXTRA_ROOTS = [
+  path.resolve(PACKAGE_ROOT, "../../apps/mobile/src"),
+] as const;
+
 // Known third-party inference/provider SDK package names (and their scoped
 // families) a handler or component has no business importing — the two
 // roads named above are the only ones a blueprint may take to a model.
@@ -95,8 +107,10 @@ function importedProviderPackages(text: string): string[] {
   return hits;
 }
 
-const allFiles = SOURCE_DIRS.flatMap((rel) => {
-  const dir = path.join(PACKAGE_ROOT, rel);
+const allFiles = [
+  ...SOURCE_DIRS.map((rel) => path.join(PACKAGE_ROOT, rel)),
+  ...EXTRA_ROOTS,
+].flatMap((dir) => {
   try {
     return statSync(dir).isDirectory() ? sourceFiles(dir) : [];
   } catch {
@@ -110,6 +124,17 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     // package layout, not that the roster went clean — the count guards
     // against the check silently scanning nothing.
     expect(allFiles.length).toBeGreaterThan(50);
+  });
+
+  it("sanity: the widened scan actually reaches the native tree", () => {
+    // Without this the EXTRA_ROOTS path could silently resolve to nothing
+    // (a moved package, a renamed `src`) and engine C's native half would go
+    // ungated while the suite stayed green.
+    expect(
+      allFiles.filter((f) =>
+        f.includes(`${path.sep}apps${path.sep}mobile${path.sep}`)
+      ).length
+    ).toBeGreaterThan(50);
   });
 
   it.each(allFiles.map((f) => [path.relative(PACKAGE_ROOT, f), f] as const))(

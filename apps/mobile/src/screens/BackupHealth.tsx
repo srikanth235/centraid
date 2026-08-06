@@ -432,6 +432,15 @@ export default function BackupHealth({
         </Text>
         {TRANSFER_POLICY_SWITCHES.map((rule) => {
           const inert = rule.inert(policy);
+          // THE REFUSAL GRAMMAR, RENDERED (issue #712 E1). Four of these five
+          // switches go inert depending on the other four, and until now the
+          // screen said nothing about why — a member who turned on "Wi-Fi
+          // only" watched two rules below it fade with no account given, which
+          // is the half of docs/blueprint-seats.md "Shared engines" 5 that
+          // nothing checked. `transfer-policy.ts` owns the words (they are
+          // part of the switch's own shape, so a sixth rule cannot arrive
+          // without one); this only places them.
+          const inertReason = inert ? rule.inertReason(policy) : undefined;
           return (
             <View
               key={rule.key}
@@ -443,21 +452,30 @@ export default function BackupHealth({
                   : null,
               ]}
             >
-              <Text
-                style={[
-                  styles.ruleLabel,
-                  {
-                    color: inert
-                      ? colors.textFaint
-                      : rule.net
-                        ? colors.net
-                        : colors.text,
-                  },
-                ]}
-              >
-                {rule.label}
-              </Text>
+              <View style={styles.ruleText}>
+                <Text
+                  style={[
+                    styles.ruleLabel,
+                    {
+                      color: inert
+                        ? colors.textFaint
+                        : rule.net
+                          ? colors.net
+                          : colors.text,
+                    },
+                  ]}
+                >
+                  {rule.label}
+                </Text>
+                {inertReason ? (
+                  <Text style={[styles.ruleReason, { color: colors.textSoft }]}>
+                    {inertReason}
+                  </Text>
+                ) : null}
+              </View>
               <Switch
+                accessibilityLabel={rule.label}
+                {...(inertReason ? { accessibilityHint: inertReason } : {})}
                 disabled={inert}
                 value={policy[rule.key]}
                 onValueChange={(value) =>

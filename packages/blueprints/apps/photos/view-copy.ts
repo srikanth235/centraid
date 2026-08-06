@@ -180,6 +180,31 @@ export function peoplePendingNote(unmatchedCount: number | null): string {
 }
 
 /**
+ * WHO AGREED THIS IS THEM (issue #712 P6b). A person's group is assembled
+ * from confirmations, and in a shared library those confirmations can come
+ * from more than one member — `media_face_region` records the subject
+ * (`party_id`) and the answerer (`confirmed_by_party_id`) as two separate
+ * columns, so a group that spans two members is a fact the schema already
+ * carries rather than a merge anyone has to perform.
+ *
+ * SAID ONLY WHEN IT IS NEWS. One confirmer is the ordinary case and needs no
+ * caption — attribution on every card would be noise that teaches a reader to
+ * stop reading it. `null` there, and a sentence only when the group genuinely
+ * spans more than one answerer. A confirmer this read could not name is
+ * counted, never invented: it reads as "someone else", which is exactly what
+ * is known about them.
+ */
+export function peopleConfirmedByNote(
+  confirmedBy: ReadonlyArray<{ party_id: string; name: string | null }>
+): string | null {
+  if (confirmedBy.length < 2) return null;
+  const names = confirmedBy.map((party) => party.name ?? "someone else");
+  const last = names[names.length - 1];
+  const head = names.slice(0, -1).join(", ");
+  return `Confirmed by ${head} and ${last} — separately, and they stay separate.`;
+}
+
+/**
  * THE READ-ONLY SURFACE'S APP-BAR PRIMARY (proto 4800-4801). A grant that
  * reads "read and download" keeps a primary — it BECOMES `Download` — rather
  * than losing one: a surface with its only filled control removed reads as a

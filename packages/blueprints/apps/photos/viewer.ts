@@ -295,19 +295,52 @@ export function originStatus(
  *  hostname — "the gateway" is true on every deployment. */
 export const DEFAULT_GATEWAY_NAME = "the gateway";
 
-/** One paragraph on where the original lives, for the info panel (§7.2). */
+/**
+ * One paragraph on where the original lives, for the info panel (§7.2) — the
+ * per-copy provenance line (issue #712 P6a).
+ *
+ * WHAT IT MAY SAY, AND WHAT IT MAY NOT. The only per-photograph custody fact
+ * an app can read is `blob.custody_state` (the five-value projection in
+ * packages/vault/src/blob/custody-state.ts, granted in app.json and joined
+ * onto every asset row by queries/_shared.ts). `blob_replica` — the table that
+ * knows WHICH remote object, in which bucket, under which class — is NOT a
+ * registered logical entity (packages/vault/src/schema/tables.ts registers
+ * only `custody_state` and `custody_rollup` under `blob`), so naming an
+ * individual copy's destination here would be an invention, not a read. The
+ * paragraph therefore answers "where are its copies" at exactly the
+ * granularity the vault asserts: this disk, the gateway, both, or neither.
+ *
+ * A TABLE, AND TOTAL. The previous shape was three `if`s and a trailing
+ * `return` that fired for THREE different worlds — `local-only`,
+ * `pending-offsite`, and an ABSENT custody state (the sweep has never run, or
+ * this content item has no row) — and asserted the same location claim for
+ * all of them. The last of those is the defect: the vault had made no claim
+ * at all and the panel made one anyway. Each state now has its own sentence,
+ * and "nobody has looked" is one of them.
+ */
+const ORIGIN_PARAGRAPHS: Record<string, (gatewayName: string) => string> = {
+  replicated: (gateway) =>
+    `The original is on this device and on ${gateway}. Either copy can serve it, so losing one does not lose the photograph.`,
+  "remote-only": (gateway) =>
+    `The original is on ${gateway} and not on this device. Opening it at full quality fetches it, which is why that is a choice and not something this screen does for you.`,
+  missing: () =>
+    `No copy of the original can be found. The record — the caption, the date, the albums it is in — is still here, and it is what a restored copy would attach to.`,
+  // Distinct from local-only: an upload is OUTSTANDING (a `blob_outbox` row),
+  // which is a different fact from "there is nowhere to copy it to".
+  "pending-offsite": (gateway) =>
+    `The original is on this device only. A copy to ${gateway} is queued and has not finished, so for now this device is the one place it exists.`,
+  "local-only": (gateway) =>
+    `The original is on this device and nowhere else. Nothing is queued to copy it to ${gateway}, so losing this device loses the photograph.`,
+};
+
 export function originParagraph(asset: Asset, gatewayName: string): string {
-  const custody = String(asset.custody_state ?? "");
-  if (custody === "replicated") {
-    return `The original is on this device and on ${gatewayName}. Either copy can serve it, so losing one does not lose the photograph.`;
-  }
-  if (custody === "remote-only") {
-    return `The original is on ${gatewayName} and not on this device. Opening it at full quality fetches it, which is why that is a choice and not something this screen does for you.`;
-  }
-  if (custody === "missing") {
-    return `No copy of the original can be found. The record — the caption, the date, the albums it is in — is still here, and it is what a restored copy would attach to.`;
-  }
-  return `The original is on this device and has not been copied to ${gatewayName} yet.`;
+  const line = ORIGIN_PARAGRAPHS[String(asset.custody_state ?? "")];
+  // No row, no claim. The gateway's standing blob sweep is what fills
+  // `blob_custody_state`; before it has run there is nothing to report, and
+  // saying so is the only honest sentence available.
+  if (!line)
+    return `Where the original is kept has not been checked yet. ${gatewayName} works this out on its own schedule; until it has, this panel will not guess.`;
+  return line(gatewayName);
 }
 
 /** The viewer's six actions, in the handoff's order (§7.1, desktop bar). */
