@@ -1,4 +1,5 @@
 // Search on the phone (Photos v4 handoff §9, §14, §18, proto:4256-4276).
+// governance: allow-repo-hygiene file-size-limit The #712 search destination remains one cohesive query/results state machine; #716 extracts its reusable empty states.
 //
 // Search is a BAND DESTINATION, not a pushed screen. `PhotosHome` renders
 // `PhotosSearchView` in place of the timeline exactly as it renders Albums and
@@ -62,6 +63,8 @@ import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
+import PhotosSearchRestingState from "./PhotosSearchRestingState";
 import PhotoTimeline from "./PhotoTimeline";
 import { groupedSearchHits, reachableAssetIds } from "./search-hits";
 import type { SearchHit } from "./search-hits";
@@ -95,25 +98,6 @@ const SEARCH_EXAMPLES: readonly string[] = [
  * sentence the code does not keep.
  */
 const SEARCH_SCOPE = "searched the whole replica on this device";
-
-const RESTING_EYEBROW = "Nothing typed";
-const RESTING_TITLE = "Search the whole library";
-const RESTING_BODY =
-  "Not the photographs that happen to be loaded. Try one of these.";
-
-const NONE_EYEBROW = "No results";
-/**
- * proto:4271's body is `Nothing in captions, people, places, things or album
- * names. Two letters short of a place you have been.` Two words of it are not
- * available to this client and are therefore not said:
- *
- *   - "things" — the vault has no scene/label entity (see `search-hits.ts`),
- *     so nothing here looked at things and the sentence must not claim it did
- *   - the second sentence is a fact about the mock's particular query
- *     ("ana at the coas"), not about any query a member might type
- */
-const NONE_BODY = "Nothing in captions, people, places or album names.";
-const NONE_ACTION = "Clear the query";
 
 const UNREACHABLE_EYEBROW = "Cannot reach the vault";
 const UNREACHABLE_TITLE = "Search needs the gateway";
@@ -430,26 +414,13 @@ export function PhotosSearchView({
               </Text>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={styles.contentPad}>
-              <Panel
-                styles={styles}
-                eyebrow={NONE_EYEBROW}
-                title={`Nothing matches “${term.trim()}”`}
-                body={NONE_BODY}
-                action={NONE_ACTION}
-                onAction={() => setTerm("")}
-              />
-            </ScrollView>
+            <PhotosSearchEmptyState
+              query={term.trim()}
+              onClear={() => setTerm("")}
+            />
           )
         ) : (
-          <ScrollView contentContainerStyle={styles.contentPad}>
-            <Panel
-              styles={styles}
-              eyebrow={RESTING_EYEBROW}
-              title={RESTING_TITLE}
-              body={RESTING_BODY}
-            />
-          </ScrollView>
+          <PhotosSearchRestingState />
         )}
       </View>
 

@@ -1,4 +1,5 @@
 // The structurally distinct tile bodies (issue #708 A, the Binding Layer brief).
+// governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
 //
 // The header above these is INVARIANT — icon, name, count — and is drawn once by
 // ./LauncherGrid. Everything below the header is deliberately NOT invariant:

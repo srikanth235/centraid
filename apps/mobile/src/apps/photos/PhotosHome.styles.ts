@@ -64,16 +64,6 @@ export const makeStyles = (colors: ThemeColors) =>
       width: 44,
     },
     safe: { flex: 1 },
-    // Select is a WORD, not a 44-square icon target (issue #712) — so it takes
-    // the same 44pt height and the text's own width plus a gutter, rather than
-    // being squeezed into an icon's box.
-    selectChip: {
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      paddingHorizontal: 8,
-    },
-    selectChipText: { ...t("control"), color: colors.text },
     // SELECTION BAR (iOS Photos parity, issue #712). Ground it takes over from
     // the band while a selection is live — same plate anatomy as
     // `PhotosBand.tsx`'s own two plates (opaque `bgElev`, `lineStrong` edge,

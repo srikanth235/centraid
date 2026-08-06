@@ -1,4 +1,5 @@
 // Photos' home surface on the phone (v4 handoff §3.1, §4, §14, §15).
+// governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
 //
 // The screen is now the wiring: state, data and routing. Everything with a
 // shape of its own moved out to a file that can be read — and tested — on its
@@ -76,6 +77,7 @@ import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import { makeStyles } from "./PhotosHome.styles";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import { PhotosSearchView } from "./PhotosSearch";
+import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import {
   pinnedThumbnailCandidates,
@@ -694,22 +696,13 @@ export default function PhotosHome({
                 elsewhere, so Select gets the same scoping rather than a
                 second control that appears to do nothing. */}
             {destination === "library" ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Select"
+              <PhotosSelectChip
+                disabled={timeline.assets.length === 0}
                 onPress={() => {
                   const first = timeline.assets[0];
                   if (first) setSelection(new Set([first.id]));
                 }}
-                style={styles.selectChip}
-              >
-                {/* iOS words this control rather than drawing it. A bare ✓ in
-                    a header reads as "confirm" — the mark every dialog in this
-                    app uses to mean "done" — while this control ENTERS a mode
-                    and confirms nothing. The word is unambiguous at a glance
-                    and is what the member is looking for by name. */}
-                <Text style={styles.selectChipText}>Select</Text>
-              </Pressable>
+              />
             ) : null}
           </View>
         </View>

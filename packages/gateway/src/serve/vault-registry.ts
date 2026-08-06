@@ -47,7 +47,11 @@ import type {
   VaultFootprintBudget,
 } from "@centraid/vault";
 
-import { vaultContext } from "./vault-context.js";
+import {
+  replicaIntentContext,
+  runWithReplicaIntent,
+} from "./replica-intent-context.js";
+import { runWithVaultContext, vaultContext } from "./vault-context.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
 import { openVaultPlane } from "./vault-plane.js";
 
@@ -759,10 +763,25 @@ export class VaultRegistry {
    * first (identity only — grants stay per vault, deny-by-default).
    */
   bridgeFor(appId: string): VaultBridge {
+    // App workers invoke this bridge from their message callback, after the
+    // request's async-local scopes have otherwise unwound. Capture only scopes
+    // that exist at bridge construction; an unscoped long-lived bridge keeps
+    // resolving dynamically, preserving the ordinary multi-vault contract.
+    const capturedVault = vaultContext();
+    const capturedIntent = replicaIntentContext();
     return async (call) => {
-      const plane = this.current();
-      plane.enrollApp(appId);
-      return plane.bridgeFor(appId)(call);
+      const invoke = async (): Promise<Awaited<ReturnType<VaultBridge>>> => {
+        const plane = this.current();
+        plane.enrollApp(appId);
+        return plane.bridgeFor(appId)(call);
+      };
+      const withIntent = (): ReturnType<typeof invoke> =>
+        capturedIntent
+          ? runWithReplicaIntent(capturedIntent, invoke)
+          : invoke();
+      return capturedVault
+        ? runWithVaultContext(capturedVault, withIntent)
+        : withIntent();
     };
   }
 

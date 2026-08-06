@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit The #712 settings surface coordinates coupled gateway, pairing, storage, and device permission state in one screen.
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, {
   useCallback,

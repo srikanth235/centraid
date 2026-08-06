@@ -381,6 +381,7 @@ jobs:
           # scroll-settle proxy.
           node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
+          node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()

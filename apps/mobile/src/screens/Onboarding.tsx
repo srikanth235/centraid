@@ -134,6 +134,7 @@ export default function Onboarding({
     <TopSafeArea style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -296,8 +297,6 @@ function ConnectionStep({
             onChangeText={setCode}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
-            multiline
-            textAlignVertical="top"
             style={styles.phrase}
             autoCapitalize="none"
             autoCorrect={false}

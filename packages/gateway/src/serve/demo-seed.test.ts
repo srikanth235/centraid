@@ -144,7 +144,10 @@ describe("demo-seed", () => {
 
     const count = (sql: string): number =>
       (plane.db.vault.prepare(sql).get() as { n: number }).n;
-    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(18);
+    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(19);
+    expect(
+      count("SELECT count(*) AS n FROM media_media_asset WHERE kind = 'video'")
+    ).toBe(1);
     expect(
       count("SELECT count(*) AS n FROM media_media_asset WHERE favorite = 1")
     ).toBe(2);
@@ -159,7 +162,19 @@ describe("demo-seed", () => {
           WHERE a.width IS NOT NULL AND a.height IS NOT NULL
             AND a.captured_at IS NOT NULL AND c.byte_size > 0`
       )
-    ).toBe(18);
+    ).toBe(19);
+    // The mobile journeys exercise the Years → Months → All drill-down, so a
+    // fresh harness vault must honestly cross both boundaries.
+    expect(
+      count(
+        "SELECT count(DISTINCT strftime('%Y-%m', captured_at)) AS n FROM media_media_asset"
+      )
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      count(
+        "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_media_asset"
+      )
+    ).toBeGreaterThanOrEqual(2);
     // Face proposals (issue #712): the portrait frames stage regions through
     // the ordinary enrichment publisher, so People and the triage verb have a
     // queue to answer on a fresh vault. Every seeded region must arrive

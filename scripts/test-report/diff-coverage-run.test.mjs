@@ -10,6 +10,7 @@ import {
   projectNameOf,
   resolveBase,
   run,
+  vitestProjectNames,
   workspaceDirOf,
 } from "./diff-coverage-run.mjs";
 
@@ -138,5 +139,17 @@ describe("projectNameOf", () => {
     );
     writeFileSync(path.join(dir, "vitest.config.ts"), "export default {}");
     expect(projectNameOf(path.join(relFixture, "unnamed"))).toBeNull();
+  });
+});
+
+describe("vitestProjectNames", () => {
+  test("adds the React Native transform companion to the mobile package", () => {
+    expect(
+      vitestProjectNames(["@centraid/gateway", "@centraid/mobile"])
+    ).toStrictEqual([
+      "@centraid/gateway",
+      "@centraid/mobile",
+      "@centraid/mobile-rn",
+    ]);
   });
 });

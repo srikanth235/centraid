@@ -41,6 +41,7 @@ import { useShareTarget } from "../../kit/share/use-share-target";
 import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import CollectionShelfBody from "./CollectionShelfBody";
 import { buildCollectionSections } from "./photos-collections";
 import type {
   CollectionSection,
@@ -178,24 +179,18 @@ function Section({
         </Pressable>
       </View>
 
-      {collapsed ? null : section.tiles.length === 0 ? (
-        // The empty card: the shelf's own sentence, plus its verb when it has
-        // one. Never a spinner and never a blank — see the file header for why
-        // this renders at all.
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>{section.empty}</Text>
-          {section.action ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${section.action} ${section.title}`}
-              onPress={onAction}
-              style={styles.emptyAction}
-            >
-              <Text style={styles.emptyActionText}>{section.action}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
+      <CollectionShelfBody
+        action={section.action}
+        collapsed={collapsed}
+        empty={section.empty}
+        emptyActionStyle={styles.emptyAction}
+        emptyActionTextStyle={styles.emptyActionText}
+        emptyStyle={styles.empty}
+        emptyTextStyle={styles.emptyText}
+        hasTiles={section.tiles.length > 0}
+        onAction={onAction}
+        title={section.title}
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -210,7 +205,7 @@ function Section({
             />
           ))}
         </ScrollView>
-      )}
+      </CollectionShelfBody>
     </View>
   );
 }

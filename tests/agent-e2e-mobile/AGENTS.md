@@ -4,7 +4,7 @@ Notes for any agent (or human) writing or running flows in this folder. Pair wit
 
 ## What this layer is for
 
-A loose, exploratory complement to whatever scripted-mobile tier eventually lands in `apps/mobile/tests/e2e/` (Detox is the planned inhabitant — not wired up yet). The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
+The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
 
 `MAESTRO_PLATFORM=ios|android` forces a target when both are running; otherwise iOS is preferred. `state.json` and `verdict.md` record the chosen platform alongside the udid.
 
@@ -14,7 +14,7 @@ The structural payoff over flat YAML is **`ctx.restart()`** (stopApp + relaunch 
 
 | Symptom | Where it belongs |
 | --- | --- |
-| Hard invariant that must never flake in CI | `apps/mobile/tests/e2e/` (Detox, when wired up) |
+| Hard native invariant that must never flake in CI | a committed Maestro flow here |
 | End-to-end mobile journey ("set gateway, open an app, see the WebView load, come back") | here |
 | Visual / copy / "does this feel right" judgment | here |
 | DOM-level assertion inside the in-app WebView | Playwright over CDP into the WebView |

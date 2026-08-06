@@ -1,4 +1,5 @@
 // The viewer, on the stage.
+// governance: allow-repo-hygiene file-size-limit The #712 viewer coordinates one gesture/chrome state machine and is tracked as a single handoff surface.
 //
 // The stage is full-bleed `--stage` in BOTH themes with `--on-stage` ink and
 // `--stage-line` hairlines; it covers the entire screen. Focus and selection

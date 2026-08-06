@@ -139,9 +139,8 @@ export const styles = StyleSheet.create({
     color: C.text,
     fontFamily: family.monoRegular,
     fontSize: 15,
-    lineHeight: 26,
-    minHeight: 120,
-    padding: 15,
+    height: 64,
+    paddingHorizontal: 15,
   },
   pressed: { opacity: 0.82 },
   primary: {

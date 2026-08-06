@@ -33,6 +33,7 @@ export default function HomeStatusLine(
   const text = statusSentence(props);
   return (
     <View
+      accessibilityLabel={props.settled ? "Home ready" : "Home loading"}
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
       style={styles.row}

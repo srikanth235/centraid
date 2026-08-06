@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { makePhotosFixture } from "./photos-fixtures";
 import {
   addDragSelection,
   mergePhotoAssets,
@@ -24,6 +25,19 @@ const photo = (id: string, fields: Partial<PhotoAsset> = {}): PhotoAsset => ({
 });
 
 describe("native Photos timeline model", () => {
+  test("shared multi-month fixture reaches the pure grouping model", () => {
+    const fixture = makePhotosFixture("multi-month");
+
+    expect(fixture.sections.map((section) => section.month)).toStrictEqual([
+      "2026-08",
+      "2026-06",
+      "2026-03",
+    ]);
+    expect(fixture.sections.flatMap((section) => section.assets)).toHaveLength(
+      fixture.assets.length
+    );
+  });
+
   test("sha merges device and replica identities while dHash only marks a review hint", () => {
     const remote = photo("remote", {
       sha256: "exact",

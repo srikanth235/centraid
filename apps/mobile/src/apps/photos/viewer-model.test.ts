@@ -119,7 +119,7 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
       for (const id of group.actions) expect(viewerAction(id).id).toBe(id);
     // A group naming an id the list does not carry is a wiring bug, not a
     // state to render an empty target for.
-    // @ts-expect-error — the point of the assertion is the unlisted id.
+    // @ts-expect-error — the point of the assertion is the unlisted id (#712).
     expect(() => viewerAction("slideshow")).toThrow(
       "No viewer action named slideshow"
     );

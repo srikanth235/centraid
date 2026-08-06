@@ -732,6 +732,89 @@ complete set, so nothing rides along unnamed.
 - `tests/quality/classification-ratchet.json`
 - `tests/schema-export-fingerprint.json`
 
+### Branch-wide file coverage reconciliation
+
+The stacked #716 commit activated the newer branch-wide receipt coverage gate
+for this already-complete #712 change set. These #712 paths were present in the
+audited PR diff but omitted from the original path inventory above; naming them
+here closes that mechanical inventory gap without changing their ownership:
+
+- `apps/mobile/src/apps/photos/viewer-model.test.ts`
+- `apps/mobile/src/apps/agenda/AgendaEvent.tsx`
+- `apps/mobile/src/apps/agenda/AgendaHome.tsx`
+- `apps/mobile/src/apps/assistant/Assistant.tsx`
+- `apps/mobile/src/apps/automations/AutomationThread.tsx`
+- `apps/mobile/src/apps/automations/Automations.tsx`
+- `apps/mobile/src/apps/insights/GatewayAlerts.tsx`
+- `apps/mobile/src/apps/insights/Insights.tsx`
+- `apps/mobile/src/apps/notes/NotesHome.tsx`
+- `apps/mobile/src/apps/people/MergePicker.tsx`
+- `apps/mobile/src/apps/people/PeopleHome.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.styles.ts`
+- `apps/mobile/src/apps/photos/PhotoLightboxToolbar.tsx`
+- `apps/mobile/src/apps/photos/PhotoPeriodGrid.tsx`
+- `apps/mobile/src/apps/photos/PhotoPicker.tsx`
+- `apps/mobile/src/apps/photos/PhotoTile.tsx`
+- `apps/mobile/src/apps/photos/PhotoTimeline.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosScreen.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/photos/TimelineZoomDrawer.tsx`
+- `apps/mobile/src/apps/photos/device-media.ts`
+- `apps/mobile/src/apps/photos/photos-backup-copy.ts`
+- `apps/mobile/src/apps/photos/photos-backup-messages.test.ts`
+- `apps/mobile/src/apps/photos/photos-backup.ts`
+- `apps/mobile/src/apps/photos/photos-collections-menu.test.ts`
+- `apps/mobile/src/apps/photos/photos-collections-menu.ts`
+- `apps/mobile/src/apps/photos/photos-collections.ts`
+- `apps/mobile/src/apps/photos/photos-library-menu.test.ts`
+- `apps/mobile/src/apps/photos/photos-library-menu.ts`
+- `apps/mobile/src/apps/photos/photos-zoom.test.ts`
+- `apps/mobile/src/apps/photos/photos-zoom.ts`
+- `apps/mobile/src/apps/photos/search-hits.test.ts`
+- `apps/mobile/src/apps/photos/timeline-rows.test.ts`
+- `apps/mobile/src/apps/photos/timeline-rows.ts`
+- `apps/mobile/src/apps/photos/viewer-menu.test.ts`
+- `apps/mobile/src/apps/photos/viewer-menu.ts`
+- `apps/mobile/src/apps/photos/viewer-model.ts`
+- `apps/mobile/src/apps/photos/viewer-read-only-reason.test.ts`
+- `apps/mobile/src/apps/tally/TallyHome.tsx`
+- `apps/mobile/src/apps/tasks/TasksHome.tsx`
+- `apps/mobile/src/kit/components/AnchoredMenu.test.tsx`
+- `apps/mobile/src/kit/components/AnchoredMenu.tsx`
+- `apps/mobile/src/kit/components/TopSafeArea.tsx`
+- `apps/mobile/src/kit/components/icon-resolver.sweep.test.ts`
+- `apps/mobile/src/kit/components/icon-resolver.ts`
+- `apps/mobile/src/kit/media/use-image-fallback.ts`
+- `apps/mobile/src/kit/replica/ReplicaStatusBar.test.tsx`
+- `apps/mobile/src/kit/replica/ReplicaStatusBar.tsx`
+- `apps/mobile/src/kit/security/AppLock.tsx`
+- `apps/mobile/src/lib/automations.ts`
+- `apps/mobile/src/screens/AppDetail.tsx`
+- `apps/mobile/src/screens/Approvals.tsx`
+- `apps/mobile/src/screens/Capture.tsx`
+- `apps/mobile/src/screens/PhoneStorage.tsx`
+- `apps/mobile/src/screens/home/HomeTitleRow.tsx`
+- `packages/automation/src/manifest/enricher-templates.test.ts`
+- `packages/blueprints/apps/photos/actions/request-enrichment.ts`
+- `packages/blueprints/apps/photos/actions/update-asset.ts`
+- `packages/client/src/react/screens/AutomationTemplatesScreen.test.tsx`
+- `packages/client/src/react/shell/routes/templatesData.test.ts`
+- `packages/client/src/react/shell/routes/templatesData.ts`
+- `packages/gateway/src/serve/enrichment-health.test.ts`
+- `packages/gateway/src/serve/enrichment-health.ts`
+- `apps/mobile/src/apps/photos/use-image-fallback.ts`
+- `apps/mobile/src/lib/replica/op-sqlite-driver.ts`
+- `packages/blueprints/apps/photos/sample/ana-and-marco-table.png`
+- `packages/blueprints/apps/photos/sample/ana-kitchen-window.png`
+- `packages/blueprints/apps/photos/sample/ana-porch-evening.png`
+- `packages/blueprints/apps/photos/sample/ana-profile-doorway.png`
+- `packages/blueprints/apps/photos/sample/ana-trailhead.png`
+- `packages/blueprints/apps/photos/sample/empty-hallway.png`
+- `packages/blueprints/apps/photos/sample/marco-harbor-wall.png`
+- `packages/blueprints/apps/photos/sample/marco-workshop.png`
+- `packages/vault/src/gateway/demo.ts`
+
 ## User impact
 
 - Sharing gains its roster: a shared place now shows **who has access**

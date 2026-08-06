@@ -36,6 +36,7 @@ import {
   emptyTrashSummary,
 } from "./photos-trash";
 import PhotosScreen from "./PhotosScreen";
+import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -307,39 +308,52 @@ export default function PhotoStateView({
           >
             <Text style={[styles.action, { color: colors.text }]}>Done</Text>
           </Pressable>
-        ) : mode === "trash" && assets.length ? (
-          // OUTLINED `--net`, never filled (proto:4800-4803) — the one
-          // irreversible control in the app must not look louder than Import.
-          // Pressing it opens the confirm; only the confirm destroys anything.
-          <Pressable
-            accessibilityLabel="Empty trash"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: emptyTrashReason !== null }}
-            accessibilityHint={emptyTrashReason ?? EMPTY_TRASH_NOTE}
-            disabled={emptyTrashReason !== null}
-            onPress={runEmptyTrash}
-            style={[
-              styles.emptyTrash,
-              {
-                borderColor:
-                  emptyTrashReason === null ? colors.net : colors.textDisabled,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.action,
-                {
-                  color:
-                    emptyTrashReason === null
-                      ? colors.net
-                      : colors.textDisabled,
-                },
-              ]}
-            >
-              Empty trash
-            </Text>
-          </Pressable>
+        ) : assets.length ? (
+          <View style={styles.headerActions}>
+            {mode === "trash" ? (
+              // OUTLINED `--net`, never filled (proto:4800-4803) — the one
+              // irreversible control in the app must not look louder than Import.
+              // Pressing it opens the confirm; only the confirm destroys anything.
+              <Pressable
+                accessibilityLabel="Empty trash"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: emptyTrashReason !== null }}
+                accessibilityHint={emptyTrashReason ?? EMPTY_TRASH_NOTE}
+                disabled={emptyTrashReason !== null}
+                onPress={runEmptyTrash}
+                style={[
+                  styles.emptyTrash,
+                  {
+                    borderColor:
+                      emptyTrashReason === null
+                        ? colors.net
+                        : colors.textDisabled,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.action,
+                    {
+                      color:
+                        emptyTrashReason === null
+                          ? colors.net
+                          : colors.textDisabled,
+                    },
+                  ]}
+                >
+                  Empty trash
+                </Text>
+              </Pressable>
+            ) : null}
+            <PhotosSelectChip
+              disabled={false}
+              onPress={() => {
+                const first = assets[0];
+                if (first) setSelection(new Set([first.id]));
+              }}
+            />
+          </View>
         ) : null}
       </View>
       <ReplicaStatusBar />
@@ -419,6 +433,11 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     minWidth: 44,
+  },
+  headerActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing[2],
   },
   meta: { ...t("control"), marginTop: 2 },
   note: {

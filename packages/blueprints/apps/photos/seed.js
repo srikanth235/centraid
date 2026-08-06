@@ -45,6 +45,7 @@ const ROLL = [
     height: 240,
     thumbhash: "DPcFFYJIeHl1eHdweIdoeJeAfAeI",
     phash: "3727170f8b494d6e",
+    monthOffset: -24,
   },
   {
     file: "harbor-lights.png",
@@ -55,6 +56,7 @@ const ROLL = [
     height: 360,
     thumbhash: "TPcFDQJoiHJ4B3dXiHqHR4hwiQcn",
     phash: "935517099b3bb235",
+    monthOffset: -24,
   },
   {
     file: "cabin-window-morning.png",
@@ -65,6 +67,7 @@ const ROLL = [
     height: 360,
     thumbhash: "XdcVFQJ3d4+HV4hXh4eHd4dwhwk3",
     phash: "0f0f0f272b958f27",
+    monthOffset: -13,
   },
   {
     file: "trailhead-sign.png",
@@ -75,6 +78,7 @@ const ROLL = [
     height: 360,
     thumbhash: "mOgNDQJoiI93R5dXd4h3h1iMgAeH",
     phash: "0f072f0d4d554149",
+    monthOffset: -8,
   },
   {
     file: "granite-switchback.png",
@@ -85,6 +89,7 @@ const ROLL = [
     height: 240,
     thumbhash: "G+cNLYZod3h/d3dzh1iId4iAhghY",
     phash: "0f0f0f171f9f0f97",
+    monthOffset: -4,
   },
   {
     file: "sand-harbor-dawn.png",
@@ -298,10 +303,28 @@ const ALBUM_FILES = [
 ];
 const ALBUM_COVER = "emerald-bay-overlook.png";
 
+/** A tiny deterministic video payload. The journey corpus needs media-kind
+ * diversity, not playback fidelity; the viewer's capability rows and video
+ * badge read the vault's honest kind/duration metadata while the fixture stays
+ * small enough for the inline scenario door. */
+const VIDEO = {
+  file: "tahoe-pan.mp4",
+  title: "Tahoe shoreline pan",
+  day: -2,
+  hour: 17,
+  width: 360,
+  height: 240,
+  duration: 12,
+  thumbhash: "DAcKDYJod3d7h4hweHiIeJiAi2gH",
+  data: "AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29t",
+};
+
 export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now()).getTime();
-  const at = (day, hour) => {
-    const stamp = new Date(now + day * 86400000);
+  const at = (day, hour, monthOffset = 0) => {
+    const stamp = new Date(now);
+    stamp.setUTCMonth(stamp.getUTCMonth() + monthOffset);
+    stamp.setUTCDate(stamp.getUTCDate() + day);
     stamp.setUTCHours(hour, 0, 0, 0);
     return stamp.toISOString();
   };
@@ -330,7 +353,7 @@ export default async function seedHandler({ input, log, ctx }) {
       data_uri: `data:image/png;base64,${bytes.toString("base64")}`,
       kind: "photo",
       title: frame.title,
-      captured_at: at(frame.day, frame.hour),
+      captured_at: at(frame.day, frame.hour, frame.monthOffset),
       tz_offset_min: TZ_OFFSET_MIN,
       width: frame.width,
       height: frame.height,
@@ -373,6 +396,19 @@ export default async function seedHandler({ input, log, ctx }) {
     return addPortrait(index + 1);
   };
   await addPortrait(0);
+
+  const video = await invoke("media.add_asset", {
+    data_uri: `data:video/mp4;base64,${VIDEO.data}`,
+    kind: "video",
+    title: VIDEO.title,
+    captured_at: at(VIDEO.day, VIDEO.hour),
+    tz_offset_min: TZ_OFFSET_MIN,
+    width: VIDEO.width,
+    height: VIDEO.height,
+    duration_s: VIDEO.duration,
+    thumbhash: VIDEO.thumbhash,
+  });
+  assetIdByFile.set(VIDEO.file, video.asset_id);
 
   // The roster a confirm can name. `people.add_person` is the same command the
   // People app uses, so these are ordinary parties, not seed-only rows.
@@ -440,9 +476,9 @@ export default async function seedHandler({ input, log, ctx }) {
 
   const faceCount = facesByAsset.reduce((n, e) => n + e.faces.length, 0);
   log.info(
-    `photos scenario: ${ROLL.length + PORTRAITS.length} assets seeded ` +
+    `photos scenario: ${ROLL.length + PORTRAITS.length + 1} assets seeded ` +
       `(2 favorites, 1 album of ${ALBUM_FILES.length}, ` +
       `${faceCount} face proposals across ${facesByAsset.length} frames)`
   );
-  return { seeded: ROLL.length + PORTRAITS.length };
+  return { seeded: ROLL.length + PORTRAITS.length + 1 };
 }

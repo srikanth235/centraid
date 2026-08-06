@@ -1,4 +1,5 @@
 // FACE REVIEW, NATIVE (issue #711, v4 handoff 4305-4318 / §8) — brought in
+// governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
 // line with the same handoff EnrichmentConsent.tsx already answers to, and
 // with the web twin (@centraid/blueprints FaceReview.tsx).
 //
@@ -536,6 +537,13 @@ export default function FaceReview({
                   </View>
                   <Pressable
                     accessibilityLabel="Name this face"
+                    accessibilityHint={
+                      busy
+                        ? "Face review is updating."
+                        : people.length === 0
+                          ? "No named people are available."
+                          : undefined
+                    }
                     accessibilityRole="button"
                     accessibilityState={{
                       disabled: busy || people.length === 0,

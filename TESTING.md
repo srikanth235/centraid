@@ -43,6 +43,7 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Tier | Marker / location | Owns | Schedule |
 | --- | --- | --- | --- |
 | Unit / logic | `*.test.ts[x]` | one module's observable behaviour | per PR |
+| React Native component | RNTL tests under `apps/mobile/src/**/*.test.tsx` | native roles/state, responder events, and component composition that jsdom cannot falsify | per PR |
 | Integration | `*.integration.test.ts` | real SQLite, sockets, processes, or cross-component behaviour | per PR |
 | Contract | `*.contract.test.ts` | named product law that refactors must preserve | per PR |
 | Boot-the-artifact smoke | `scripts/gateway-package/smoke.mjs` (+ `--base-url` for containers) + path-filtered `gateway-package` workflow | "builds but doesn't start" (host binary **and** Docker image with `/data` volume) | **PR path-filtered** (gateway/protocol/Dockerfile/scripts) + manual `bun run gateway:package:smoke` |
@@ -146,6 +147,26 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
 Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
+
+React Native component tests use `@testing-library/react-native` 13 on the **same Vitest runner**. They are reserved for claims that need the RN accessibility/responder tree; pure transforms stay unit tests and recognizer/device integration stays Maestro. The renderer choice, measured cost, and mock boundary are recorded in [`docs/plans/photos-testing.md`](docs/plans/photos-testing.md). A component test over roughly 200ms must state what cheaper layer cannot falsify and should be consolidated with adjacent scenarios rather than spawning another cold renderer file.
+
+### Photos scenario × layer contract (#716)
+
+`U` is a pure/unit test, `C` is the RNTL/Vitest component file, and `E` is one named Maestro journey. A row owns one cheapest falsifying layer; `U + E` is intentional only where the claims differ (model arithmetic versus device gesture/runtime integration).
+
+| Photos scenario | U | C | E | Owner / evidence |
+| --- | --- | --- | --- | --- |
+| drawer activity, hide timer, pinned summary grains | — | ✅ | ✅ | `PhotosHome.test.tsx`; `photos-library.mjs` owns recognizer-vs-sibling hit testing |
+| scrub offset → month bubble | ✅ | ✅ | — | timeline-row/model units + native responder geometry |
+| empty/loading skeleton geometry | ✅ | ✅ | — | skeleton row packing + rendered progress/grid geometry |
+| Select word, role, disabled state | — | ✅ | ✅ | `PhotosSelectChip` semantics; select-write journey |
+| search resting/no-hits and grouped album result | ✅ | ✅ | ✅ | search grouping units; no-hits component; `photos-search.mjs` |
+| viewer mode chrome and filmstrip current item | ✅ | ✅ | ✅ | viewer models; top chrome/filmstrip component; `photos-viewer.mjs` |
+| Collections shelves, empty/collapsed bodies, and menu commands | ✅ | ✅ | ✅ | collection model; shelf component; Photos device entry/drill-down |
+| permission-refused behavior (empty-device takeover / seeded-vault continuity) | ✅ | ✅ | ✅ | access predicate/copy proves both branches; panel component and `photos-permissions.mjs` own the empty-vault takeover on a denied device grant |
+| selection trash + restore write | ✅ | — | ✅ | write batch units; `photos-select-write.mjs` |
+
+The five Photos device journeys use one gateway and paired profile and target **under eight minutes together per platform**. The denied-permission flow runs first against an explicitly purged vault; the next flow seeds the deterministic scenario for the remaining journeys through normal replica sync. The operational response to a budget breach lives beside them in [`photos-budget.md`](tests/agent-e2e-mobile/flows/photos-budget.md). Mobile offline write/reconnect replay remains a separate reliability journey because it requires host network control rather than a sixth Photos UI path; [#717](https://github.com/srikanth235/centraid/issues/717) owns that reliability contract.
 
 Property-style checks follow the normal `*.test.ts` convention and say `property` in the suite name. `.spec.ts` is Playwright-only.
 
@@ -379,7 +400,6 @@ Governance directive `coverage-scope-reachability` fails when a `packages/*` or 
 
 ## Deliberately deferred
 
-- A second React Native component-test toolchain.
 - Per-PR UI / scale / full Playwright perf waterfall (nightly only).
 - Chasing 100% or testing trivial getters.
 - Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O, React shells) — pure property-defended mutate sets only.

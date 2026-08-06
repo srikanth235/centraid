@@ -22,38 +22,38 @@ const SURFACES = [
   // "Search photos & moments" — a bare "Search photos" matches neither.
   {
     marker: "Search photos.*",
-    open: "Open Photos",
+    open: "Open Photos.*",
     name: "photos",
   },
   {
     marker: "Add document or folder",
-    open: "Open Docs",
+    open: "Open Docs.*",
     name: "docs",
   },
-  { marker: "Create event", open: "Open Agenda", name: "agenda" },
+  { marker: "Create event", open: "Open Agenda.*", name: "agenda" },
   {
     marker: "New task title",
-    open: "Open Tasks",
+    open: "Open Tasks.*",
     name: "tasks",
   },
   {
     marker: "Person name",
-    open: "Open People",
+    open: "Open People.*",
     name: "people",
   },
   {
     marker: "Search notes",
-    open: "Open Notes",
+    open: "Open Notes.*",
     name: "notes",
   },
   {
     marker: "Fixed-point multi-currency ledger, available offline",
-    open: "Open Tally",
+    open: "Open Tally.*",
     name: "tally",
   },
   {
     marker: "Secrets stay online-only",
-    open: "Open Locker",
+    open: "Open Locker.*",
     name: "locker",
   },
   // Settings is opened from the Vault drawer, not the dock. The dock sits at

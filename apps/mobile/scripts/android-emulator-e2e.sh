@@ -69,5 +69,6 @@ ec=0
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
 set -e
 exit "$ec"

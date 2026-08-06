@@ -126,6 +126,18 @@ export function projectNameOf(dir) {
 }
 
 /**
+ * Expand package-level project names to any companion Vitest projects that
+ * own a deliberately separate transform/runtime lane.
+ * @param {string[]} names Package-level Vitest project names.
+ * @returns {string[]} Concrete project names accepted by `--project`.
+ */
+export function vitestProjectNames(names) {
+  return names.flatMap((name) =>
+    name === "@centraid/mobile" ? [name, "@centraid/mobile-rn"] : [name]
+  );
+}
+
+/**
  * Expand a package set to include everything that depends on it, using turbo as
  * the authority so this agrees with `test:affected:full`.
  * @param {string} baseRef Base ref.
@@ -210,8 +222,9 @@ function main() {
   }
 
   const names = [...projects].sort();
+  const testProjectNames = vitestProjectNames(names);
   console.log(
-    `diff-coverage-run: ${names.length} project(s) — ${names.join(", ")}`
+    `diff-coverage-run: ${testProjectNames.length} project(s) — ${testProjectNames.join(", ")}`
   );
 
   // Handler tests load built workers from dist, so dist must match src. turbo
@@ -231,7 +244,7 @@ function main() {
     "--config",
     "vitest.diff-coverage.config.ts",
     "--coverage",
-    ...names.map((n) => `--project=${n}`),
+    ...testProjectNames.map((n) => `--project=${n}`),
   ]);
   if (testStatus !== 0) return testStatus;
 
