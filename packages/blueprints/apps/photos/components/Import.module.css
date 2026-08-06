@@ -1,0 +1,69 @@
+/* The two import outcome panels (v4 handoff §11, proto 4386-4400).
+
+   They sit at the HEAD of the timeline, in the same slot the memories strip
+   and the trash note use, so they read as part of the list rather than as a
+   banner over it. Nothing here is filled and nothing here is alarming: a
+   dedupe and a restore are both ordinary, correct outcomes, and the app bar
+   already carries the view's one filled ink element (§18).
+
+   Logical properties only; nothing below 11px. */
+
+.panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-inline-size: 34rem;
+  margin-block-end: var(--sp-4);
+  align-items: flex-start;
+}
+
+/* A rule on the leading edge, not a card: the panel is a passage of the page,
+   and a fill would make an explanation look like a warning. */
+.panel {
+  padding-inline-start: var(--sp-3);
+  border-inline-start: 2px solid var(--line);
+}
+
+.eyebrow {
+  margin: 0 0 var(--sp-1);
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text-faint);
+}
+
+.title {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+
+/* The reading register — a paragraph a member reads once (§2.1). */
+.body {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-reading);
+  color: var(--text-soft);
+}
+
+.facts {
+  margin: 0;
+}
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.factLabel {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-small-strong);
+  color: var(--text);
+}

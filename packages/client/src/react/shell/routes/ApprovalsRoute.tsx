@@ -452,7 +452,13 @@ export default function ApprovalsRoute(): JSX.Element {
         onOpenNotice={(notice) => {
           const ref = notice.detail.automationRef;
           const appId = notice.detail.appId;
-          if (typeof ref === "string") {
+          // An enrichment-tier refusal (decision S9) has exactly one useful
+          // destination: the control that decides it. Checked before the
+          // automation branch — the card is keyed by DOMAIN, not by whichever
+          // of the seven enrichers happened to be refused first.
+          if (typeof notice.detail.enrichDomain === "string") {
+            navigate({ kind: "settings", page: "enrichment" });
+          } else if (typeof ref === "string") {
             navigate({ kind: "automation-view", automationId: ref });
           } else if (notice.kind === "gateway-health") {
             // Legacy rows only (issue #665): health no longer projects into the

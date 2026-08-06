@@ -881,5 +881,11 @@
         { "value": "list", "label": "List" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": [],
+    "disabledOn": [],
+    "northStar": "google-contacts"
+  }
 }

@@ -573,6 +573,12 @@ export {
   type EnrichmentLease,
 } from "./enrich/leases.js";
 export {
+  ENRICH_DOMAINS,
+  isEnrichTier,
+  readEnrichPolicyTier,
+  type EnrichDomain,
+} from "./enrich/policy.js";
+export {
   hexHamming,
   registerHammingFn,
   encodeVector,

@@ -244,6 +244,9 @@ interface CentraidChangeDetail {
 interface CentraidScope {
   id: string;
   label: string;
+  /** The member's own vault? The "somewhere other than my own" marker is
+   *  exactly `personal === false` (issue #711 item H). */
+  personal?: boolean;
   color?: string;
   icon?: string;
   canWrite: boolean;
@@ -269,6 +272,14 @@ interface CentraidClient {
    * it fresh rather than caching a snapshot.
    */
   scopes?: CentraidScope[];
+  /**
+   * Where this member's shares land by default (issue #711 item H) — a
+   * POINTER they own, so it sits beside the scope list rather than on one of
+   * its rows. May name a vault that is not in `scopes` at all (deleted, or
+   * one this member holds no role in), which an app renders as its share
+   * action disabled with the reason inline, never as a silent no-op.
+   */
+  shareTargetVaultId?: string;
   read: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;

@@ -18,6 +18,11 @@ import { emitRecipeCss } from "./recipes/css";
 import {
   EASE,
   EASE_ENTRY,
+  ON_STAGE,
+  ON_STAGE_SOFT,
+  STAGE,
+  STAGE_LINE,
+  STAGE_SUNKEN,
   SURFACE_TONE_NAMES,
   SURFACE_TONES,
   themes,
@@ -76,10 +81,19 @@ function themeProps(theme: Theme): Record<string, string> {
     "--link": theme.link,
     "--net": theme.net,
     "--on-accent": "#FDFDFC",
+    // The stage is the media ground for viewer/slideshow/editor — deliberately
+    // the SAME literal in both themes (Photos handoff v4 §B), unlike every
+    // other role in this block.
+    "--on-stage": ON_STAGE,
+    "--on-stage-soft": ON_STAGE_SOFT,
     "--scrim": theme.scrim,
     "--shadow-lg": theme.shadowLg,
     "--shadow-md": theme.shadowMd,
     "--shadow-sm": theme.shadowSm,
+    "--skel": theme.skel,
+    "--stage": STAGE,
+    "--stage-line": STAGE_LINE,
+    "--stage-sunken": STAGE_SUNKEN,
     "--success": theme.success,
     "--text": theme.text,
     "--text-faint": theme.textFaint,

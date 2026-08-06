@@ -123,9 +123,12 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   enrich: ["embedding", "request", "policy"],
   outbox: ["item", "grant"],
   notifications: ["notice"],
-  // Read-only custody projection (issue #352): local-vs-replicated state per
-  // content item, rebuilt on the standing sweep — see blob/custody.ts.
-  blob: ["custody_state"],
+  // Read-only custody projections, both rebuilt on the standing sweep:
+  // `custody_state` (issue #352) is local-vs-replicated state per content item;
+  // `custody_rollup` (issue #711) is its aggregate — per-bucket counts and
+  // bytes, including how much of the local tier is provably safe to release.
+  // See blob/custody.ts and blob/custody-rollup.ts.
+  blob: ["custody_state", "custody_rollup"],
 };
 
 /** journal.db tables — the append-only audit stream. */

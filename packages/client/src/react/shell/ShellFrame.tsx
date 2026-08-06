@@ -90,6 +90,14 @@ export interface ShellFrameProps {
   appTitle?: string;
   /** The line under it, in the numeric register. */
   appMeta?: ReactNode;
+  /** A count BESIDE the title, on the same line (Photos v4, §3). The frame
+   *  renders it in the numeric register — the caller passes the number, never
+   *  the styling. Unlike `appMeta` it does not turn the bar into a header:
+   *  "1,904 photographs" beside the title names the same screen, it does not
+   *  become a second row of identity. */
+  appCount?: ReactNode;
+  /** The app's own mark, leading the title in the bar lockup. */
+  appMark?: ReactNode;
   /** Makes the title itself a control (issue #708). Home's title is the vault
    *  name, and a vault name that names a CHOICE should be the thing you press
    *  to change it — one switcher, at the size the brief already gives the
@@ -124,6 +132,16 @@ export interface ShellFrameProps {
   onToggleChat?: () => void;
   /** Compact form factor — the stem becomes the bottom band. Layout only. */
   compact?: boolean;
+  /**
+   * A band the ROUTE claims, on the compact surface (Photos v4, CHANGELOG F).
+   *
+   * When one is given and the form factor is compact, it renders INSTEAD of
+   * the stem — the frame renders one band or the other, so "exactly one band
+   * exists at any moment" is a property of this expression rather than a rule
+   * two components have to keep. It is ignored on desktop, where the stem is a
+   * column and there is no band to claim.
+   */
+  band?: ReactNode;
   /** Whether the stem column is showing. Undefined = no toggle at all, which
    *  is what the compact band and every full-bleed host want. */
   stemOpen?: boolean;
@@ -230,10 +248,27 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     ) : (
       <h1 className={chrome.appTitle}>{props.appTitle}</h1>
     );
-  const identity =
-    props.appTitle === undefined && props.appMeta === undefined ? null : (
-      <div className={chrome.appIdentity}>
+  // The lockup: the app's mark, its title, and a count on the same line. The
+  // count never becomes a meta line — a number beside the title names the same
+  // screen, while a line under it is a second row of identity.
+  const lockup =
+    props.appMark === undefined && props.appCount === undefined ? (
+      title
+    ) : (
+      <div className={chrome.appLockup}>
+        {props.appMark}
         {title}
+        {props.appCount === undefined ? null : (
+          <span className={chrome.appCount}>{props.appCount}</span>
+        )}
+      </div>
+    );
+  const identity =
+    props.appTitle === undefined &&
+    props.appMeta === undefined &&
+    props.appMark === undefined ? null : (
+      <div className={chrome.appIdentity}>
+        {lockup}
         {props.appMeta === undefined ? null : (
           <div className={chrome.appMeta}>{props.appMeta}</div>
         )}
@@ -276,11 +311,17 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
       // switcher keeps its anchor, so ⌘⇧G still opens under the same control.
       data-stem={props.stemOpen === false ? "hidden" : undefined}
     >
-      {props.stem}
+      {/* ONE band, always. A claimed band replaces the stem rather than
+          standing beside a hidden one, so there is no state in which both
+          exist and none in which neither does. */}
+      {props.compact && props.band ? props.band : props.stem}
       <div className={chrome.main}>
         <div
           className={chrome.appBar}
           data-layout={props.titlebarCenter ? "grid" : "flat"}
+          // The app lockup (mark · title · count) rather than the bare
+          // titlebar title — the app-bar type rung, not the header's.
+          data-lockup={props.appMark === undefined ? undefined : "app"}
           // A bar carrying an app's identity LOCKUP is a HEADER, not a
           // titlebar: the brief gives it the display face at 31px over a mono
           // meta line, and that block needs the rhythm's larger steps around

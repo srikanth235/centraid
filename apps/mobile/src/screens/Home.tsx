@@ -1,68 +1,89 @@
-// The springboard Home launcher (issue #498, Slice B; band + fonts flipped to
-// the Binding Layer in issue #707 Phase 5). A thin composition over the
-// pieces in ./home: the editorial greeting, the attention-first status line,
-// the always-eight-apps grid, the bottom navigation band, and the search
-// overlay.
+// The Home screen — the Binding Layer's two-tier, three-state springboard.
 //
-// Home owns only the data load and the navigation wiring; every visual block is
-// its own component so this file stays a readable assembly (and under the
-// repo-hygiene size cap, hence no exemption header).
+// The frame, top to bottom: which vault and which gateway (./home/VaultHeader),
+// the route's own title row carrying the view's one filled control
+// (./home/HomeTitleRow), the content tiles that have earned the grid
+// (./home/LauncherGrid), the first moves for the apps that have not
+// (./home/FirstMoves), one ambient status line (./home/HomeStatusLine), and the
+// band of frame destinations (./home/HomeBand).
 //
-// Data model: one `listAppRegistry()` fetch per load splits into openable apps
-// (the grid, merged over the static catalog) and an automations count (the
-// attention line); parked approvals load best-effort on top. When there's no
-// gateway, the grid still renders — the eight apps show, gateway-hosted ones
-// dimmed — so the launcher always advertises the full surface.
+// GRADED, NOT BINARY. A vault fills up gradually, so Home has three states and
+// they are decided per tile, not per screen:
+//
+//  · every readable tile settled and empty  → a themed day-one PAGE;
+//  · some tiles with content, some without  → the grid, plus a quiet band of
+//    first moves under a hairline rule;
+//  · everything with content                → the grid alone.
+//
+// Home owns only the grading and the navigation wiring; every visual block is
+// its own component so this file stays a readable assembly.
+//
+// Data: the tiles read the local replica per app (./home/useSpringboardTiles)
+// and fill offline, independently of the gateway. The one gateway-shaped load
+// left is the app registry, which is what tells Home about apps the member
+// built themselves; with no gateway the eight first-party apps still render,
+// because their UI is in the binary.
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AppState, RefreshControl, ScrollView, StyleSheet } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
-import type { SharedValue } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import {
+  HOME_OFFLINE_BANNER,
+  homeDayOneFoot,
+} from "@centraid/client/home-copy";
+import { radii } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
+import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
-import { family, useTheme } from "../kit/theme";
+import { useReplica } from "../kit/replica/ReplicaProvider";
+import { borders, pageMargin, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
-import { fetchDailyBrief } from "../lib/daily-brief";
-import type { DailyBrief } from "../lib/daily-brief";
 import {
-  GatewayError,
+  apiHeaders,
+  fetchJson,
   isOpenableApp,
   listAppRegistry,
-  getNotifications,
+  requireGatewayBase,
   resolveAppMeta,
   resolveGatewayBase,
-  subscribeMobileNotificationsChanges,
 } from "../lib/gateway";
-import { getProfileColor, getProfileName } from "../lib/profile";
-import { subscribeVaultLinks } from "../lib/vault-links";
+import { getActiveVaultLink, subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
 import AllAppsSheet from "./home/AllAppsSheet";
-import AttentionLine from "./home/AttentionLine";
-import type { ConnectionState } from "./home/AttentionLine";
-import { ASSISTANT_ID, buildAllEntries, buildBandTabs } from "./home/band";
-import { hydratePins, togglePin, usePins } from "./home/band-pins";
-import { NATIVE_APP_IDS, buildLauncherItems } from "./home/catalog";
+import type { BandTarget } from "./home/band";
+import {
+  NATIVE_APP_IDS,
+  buildLauncherItems,
+  orderByPins,
+  orderForSpringboard,
+} from "./home/catalog";
 import type { LauncherItem } from "./home/catalog";
-import DailyBriefCard from "./home/DailyBriefCard";
-import GreetingHeader from "./home/GreetingHeader";
+import { firstMoves } from "./home/first-moves";
+import type { FirstMove } from "./home/first-moves";
+import FirstMovesBand, { DayOne } from "./home/FirstMoves";
+import { hydratePins, togglePin, usePins } from "./home/home-pins";
 import HomeBand from "./home/HomeBand";
+import HomeStatusLine from "./home/HomeStatusLine";
+import HomeTitleRow from "./home/HomeTitleRow";
 import LauncherGrid from "./home/LauncherGrid";
+import type { PlaceId } from "./home/places";
 import SearchOverlay from "./home/SearchOverlay";
+import {
+  countThings,
+  springboardState,
+  tileEarnsGrid,
+} from "./home/tile-model";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
-import VaultDrawer from "./home/VaultDrawer";
+import VaultHeader from "./home/VaultHeader";
 import VaultsSwitcher from "./home/VaultsSwitcher";
 
-const H_PADDING = 20;
-
-// A drag must start within this many points of the left screen edge to open the
-// Vault drawer, so an edge-swipe never competes with in-content horizontal
-// scroll (e.g. the attention line's chip strip).
-const EDGE_ZONE = 24;
+// The shared page margin — R.margin.m (handoff :3356), lowered as
+// `pageMargin` rather than re-typed here, so Home and every other screen
+// agree on where the page starts.
+const H_PADDING = pageMargin;
 
 // Stable empty listing for the not-ready states — a fresh `[]` per render would
 // defeat the `items` memo below (exhaustive-deps flags it).
@@ -71,205 +92,154 @@ const NO_APPS: readonly AppMetaResolved[] = [];
 type HomeState =
   | { kind: "loading" }
   | { kind: "no-gateway" }
-  | {
-      kind: "ready";
-      apps: AppMetaResolved[];
-      automations: number;
-      brief?: DailyBrief;
-    }
-  | { kind: "error"; message: string };
+  | { kind: "ready"; apps: AppMetaResolved[] }
+  | { kind: "error" };
 
-// The loader lives outside the component: it closes over nothing but the two
-// (stable) state setters, so it needs no `useCallback` identity dance and the
-// effects below read as plain async kick-offs.
 /**
  * How long a loaded Home stays good enough to reuse.
  *
- * Home used to re-fetch the app registry, the daily brief and notifications on
- * mount, on every focus, on every vault-link event and on every doorbell — so
- * tabbing away and back cost three round trips for an answer that had not
- * changed. Anything that genuinely invalidates the screen (pull-to-refresh, a
- * vault switch) forces past this window; ordinary navigation does not.
+ * Home used to re-fetch the app registry on mount, on every focus, on every
+ * vault-link event and on every doorbell — so tabbing away and back cost three
+ * round trips for an answer that had not changed. Anything that genuinely
+ * invalidates the screen (pull-to-refresh, a vault switch) forces past this
+ * window; ordinary navigation does not.
  */
 const HOME_STALE_MS = 30_000;
 
 let homeLoadedAt = 0;
 let homeInFlight: Promise<void> | undefined;
 
+// The loader lives outside the component: it closes over nothing but the
+// (stable) state setter, so it needs no `useCallback` identity dance.
 async function loadHome(
   setState: (next: HomeState) => void,
-  setApprovals: (next: number) => void,
   options: { force?: boolean } = {}
 ): Promise<void> {
   if (!options.force && Date.now() - homeLoadedAt < HOME_STALE_MS) return;
-  // One screen owns these setters, so a caller that arrives mid-load wants the
+  // One screen owns this setter, so a caller that arrives mid-load wants the
   // result of the load already running, not a second copy of it.
   if (homeInFlight) return homeInFlight;
-  homeInFlight = runHomeLoad(setState, setApprovals).finally(() => {
+  homeInFlight = runHomeLoad(setState).finally(() => {
     homeInFlight = undefined;
   });
   return homeInFlight;
 }
 
-async function runHomeLoad(
-  setState: (next: HomeState) => void,
-  setApprovals: (next: number) => void
-): Promise<void> {
+async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
   try {
     const base = await resolveGatewayBase();
     if (!base) {
       setState({ kind: "no-gateway" });
-      setApprovals(0);
       return;
     }
-    const [rows, brief] = await Promise.all([
-      listAppRegistry(),
-      fetchDailyBrief().catch(() => undefined),
-    ]);
-    const apps = rows
-      .filter(isOpenableApp)
-      .map(resolveAppMeta)
-      .filter((app) => !NATIVE_APP_IDS.has(app.id));
-    const automations = rows.filter((row) => row.kind === "automation").length;
-    setState({ apps, automations, brief, kind: "ready" });
-    homeLoadedAt = Date.now();
-    // Notifications is secondary — never fail the whole load over it.
-    try {
-      setApprovals((await getNotifications()).decisions.count);
-    } catch {
-      setApprovals(0);
-    }
-  } catch (error) {
+    const rows = await listAppRegistry();
     setState({
-      kind: "error",
-      message:
-        error instanceof GatewayError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "Could not load apps.",
+      apps: rows
+        .filter(isOpenableApp)
+        .map(resolveAppMeta)
+        .filter((app) => !NATIVE_APP_IDS.has(app.id)),
+      kind: "ready",
     });
-    setApprovals(0);
+    homeLoadedAt = Date.now();
+  } catch {
+    // A registry that will not answer is a gateway fact, and the status line is
+    // where gateway facts go — never a banner, and never a thrown-away grid.
+    setState({ kind: "error" });
   }
 }
 
-// Left-edge swipe opens the drawer. `activeOffsetX` demands horizontal intent
-// and `failOffsetY` bows out to vertical grid scroll, so the gesture only wins
-// on a deliberate rightward drag; the edge guard keeps it off in-content swipes.
-// Built outside the component because `Gesture.Pan()` is a capitalised factory
-// whose builder chain mutates the object, and the handlers drive a shared value
-// — both shapes the React compiler rejects inside a render body.
-function buildEdgeSwipeGesture(
-  edgeStartX: SharedValue<number>,
-  onOpenMenu: (open: boolean) => void
-): ReturnType<typeof Gesture.Pan> {
-  return Gesture.Pan()
-    .activeOffsetX(18)
-    .failOffsetY([-16, 16])
-    .onBegin((event) => {
-      edgeStartX.value = event.x;
-    })
-    .onStart(() => {
-      if (edgeStartX.value <= EDGE_ZONE) runOnJS(onOpenMenu)(true);
-    });
+/** The vault + gateway lockup, re-read whenever the active link changes. */
+function useActiveVault(): {
+  vaultName: string | undefined;
+  gatewayName: string | undefined;
+  color: string | undefined;
+} {
+  const [link, setLink] = useState(getActiveVaultLink);
+  useEffect(() => subscribeVaultLinks(() => setLink(getActiveVaultLink())), []);
+  return {
+    color: link?.color,
+    gatewayName: link?.desktopName,
+    vaultName: link?.vaultName,
+  };
 }
 
 export default function HomeScreen({
   navigation,
 }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<HomeState>({ kind: "loading" });
-  const [approvals, setApprovals] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [vaultsOpen, setVaultsOpen] = useState(false);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
   const pins = usePins();
-  const [profile, setProfile] = useState(() => ({
-    name: getProfileName(),
-    color: getProfileColor(),
-  }));
+  const vault = useActiveVault();
+  const replica = useReplica();
 
   useEffect(() => {
-    void loadHome(setState, setApprovals);
+    void loadHome(setState);
   }, []);
-  // The band's pin list is user data (issue #707 Decision, State section) —
-  // hydrate it once at mount, same as the profile/appearance prefs in App.tsx.
+  // The grid order is user data (the brief's State section) — hydrate it once
+  // at mount, same as the appearance prefs in App.tsx.
   useEffect(() => {
     void hydratePins();
   }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    const refreshNotificationsCount = (): void => {
-      void getNotifications()
-        .then((notifications) => setApprovals(notifications.decisions.count))
-        .catch(() => undefined);
-    };
-    void subscribeMobileNotificationsChanges(
-      refreshNotificationsCount,
-      controller.signal
-    ).catch(() => undefined);
-    // The SSE doorbell is the primary signal; this is its backstop, and a
-    // backgrounded phone has no badge to keep current.
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const startPoll = (): void => {
-      timer ??= setInterval(refreshNotificationsCount, 60_000);
-    };
-    const stopPoll = (): void => {
-      if (timer) clearInterval(timer);
-      timer = undefined;
-    };
-    const appStateSub = AppState.addEventListener("change", (next) => {
-      if (next === "active") {
-        refreshNotificationsCount();
-        startPoll();
-      } else stopPoll();
-    });
-    if (AppState.currentState === "active") startPoll();
-    return () => {
-      controller.abort();
-      appStateSub.remove();
-      stopPoll();
-    };
-  }, []);
-  // Switching / adding / forgetting a Vault re-points the whole app at a new
-  // vault — reload the grid so it reflects the now-active vault's apps.
+  // Switching / adding / forgetting a vault re-points the whole app at a new
+  // vault — reload so the grid reflects the now-active vault's apps.
   useEffect(
-    () =>
-      subscribeVaultLinks(
-        () => void loadHome(setState, setApprovals, { force: true })
-      ),
+    () => subscribeVaultLinks(() => void loadHome(setState, { force: true })),
     []
   );
   useFocusEffect(
     useCallback(() => {
-      void loadHome(setState, setApprovals);
-      setProfile({ name: getProfileName(), color: getProfileColor() });
+      void loadHome(setState);
     }, [])
   );
 
   const onRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await loadHome(setState, setApprovals, { force: true });
+    await loadHome(setState, { force: true });
     setRefreshing(false);
   }, []);
 
   const remoteApps = state.kind === "ready" ? state.apps : NO_APPS;
-  const items = useMemo(() => buildLauncherItems(remoteApps), [remoteApps]);
-  // The springboard is content now (issue #708 A): each first-party tile reads
-  // its own app's replica shape. This is independent of the gateway load above
-  // — the tiles fill offline, and a sleeping gateway costs the grid nothing.
+  const items = useMemo(
+    // Springboard order first, THEN pins: the order is the default page, and a
+    // pin is the member overriding it. Reversing the two would let the default
+    // re-sort a pinned app back down the grid.
+    () =>
+      orderByPins(orderForSpringboard(buildLauncherItems(remoteApps)), pins),
+    [pins, remoteApps]
+  );
+  // The springboard is content: each first-party tile reads its own app's
+  // replica shape. Independent of the gateway load above — the tiles fill
+  // offline, and a sleeping gateway costs the grid nothing.
   const tiles = useSpringboardTiles();
-  const automations = state.kind === "ready" ? state.automations : 0;
 
-  const connection: ConnectionState =
-    state.kind === "ready"
-      ? { kind: "ready" }
-      : state.kind === "error"
-        ? { kind: "error", message: state.message }
-        : state; // loading | no-gateway
+  // The grading. A tile earns the grid by having something to show; an app that
+  // has not becomes a first move. An app with NO tile at all (one the member
+  // built themselves) is neither: it keeps its place on the grid, because Home
+  // has no read that could say it is empty and demoting it would be a guess.
+  const { earned, idleIds } = useMemo(() => {
+    const kept: LauncherItem[] = [];
+    const idle: string[] = [];
+    for (const item of items) {
+      const tile = tiles.get(item.meta.id);
+      if (!tile || tileEarnsGrid(tile)) kept.push(item);
+      else idle.push(item.meta.id);
+    }
+    return { earned: kept, idleIds: idle };
+  }, [items, tiles]);
+
+  const moves = useMemo(() => firstMoves(idleIds), [idleIds]);
+  const springboard = useMemo(
+    () => springboardState([...tiles.values()]),
+    [tiles]
+  );
+  const things = useMemo(() => countThings(tiles.values()), [tiles]);
+  const offline = state.kind === "no-gateway" || state.kind === "error";
 
   const openItem = useCallback(
     (item: LauncherItem): void => {
@@ -312,6 +282,11 @@ export default function HomeScreen({
     [navigation]
   );
 
+  const openSettings = useCallback(
+    () => navigation.navigate("Settings", { screen: "Settings" }),
+    [navigation]
+  );
+
   const openFromSearch = useCallback(
     (item: LauncherItem): void => {
       setSearchOpen(false);
@@ -320,174 +295,315 @@ export default function HomeScreen({
     [openItem]
   );
 
-  // The band and the All-apps sheet both address entries by id (Assistant
-  // included, which — unlike every other entry — has no LauncherItem/route of
-  // its own), so this is the one place that resolves an id back to a
-  // navigation action for both.
-  const openId = useCallback(
-    (id: string): void => {
-      if (id === ASSISTANT_ID) {
-        navigation.navigate("Assistant");
+  /**
+   * A first move has to land somewhere that can TAKE content.
+   *
+   * `connectors` has no mobile screen of its own — connecting an account is a
+   * desktop act — so it routes to Settings, where this phone's own connection
+   * to the gateway is managed and the nearest place the move can actually be
+   * carried out. The app moves open the app they name, which on mobile is where
+   * that app's own add control lives; there is no separate compose route to
+   * send them to, and inventing one would be a destination that does not exist.
+   */
+  const pickMove = useCallback(
+    (move: FirstMove): void => {
+      if (move.id === "connectors") {
+        openSettings();
         return;
       }
-      const item = items.find((candidate) => candidate.meta.id === id);
+      const item = items.find((candidate) => candidate.meta.id === move.id);
       if (item) openItem(item);
     },
-    [items, navigation, openItem]
+    [items, openItem, openSettings]
   );
 
-  const bandTabs = useMemo(() => buildBandTabs(pins, items), [pins, items]);
-  const allEntries = useMemo(() => buildAllEntries(items), [items]);
+  /** Day one's "Bring in photographs"/"Bring in documents" buttons — the SAME
+   *  navigation `pickMove` uses for the identically-named first moves, found
+   *  directly by app id rather than through the (day-one-only, top-3-limited)
+   *  `moves` list, since day one's two buttons are fixed regardless of which
+   *  three apps `firstMoves()` happens to rank first. */
+  const openPhotos = useCallback((): void => {
+    const item = items.find((candidate) => candidate.meta.id === "photos");
+    if (item) openItem(item);
+  }, [items, openItem]);
+  const openDocuments = useCallback((): void => {
+    const item = items.find((candidate) => candidate.meta.id === "docs");
+    if (item) openItem(item);
+  }, [items, openItem]);
 
-  const openSettings = useCallback(
-    () => navigation.navigate("Settings", { screen: "Settings" }),
-    [navigation]
+  /**
+   * "Fill it with sample content" — the demo register (#290): status, then
+   * one seed POST per seedable app, then a replica pull so the tiles this
+   * screen reads catch up to what just landed.
+   *
+   * Calls the gateway's `/centraid/_vault/demo` endpoints directly, mirroring
+   * the exact contract `vaultDemoStatus`/`vaultDemoLoad`
+   * (packages/client/src/gateway-client-vault.ts) already speak for desktop —
+   * this file cannot import that module. `packages/client`'s only mobile-
+   * reachable subpaths are `home-copy`, `capture`, `replica/native`,
+   * `receipt-capture`, `version-handshake` and `video-frame` (see that
+   * package's `exports` map); the bare package barrel that carries
+   * `vaultDemoLoad` also pulls in `pdfjs-dist`/`@sqlite.org/sqlite-wasm` and
+   * other web-only weight Metro has no business bundling into the phone app.
+   * Editing that map is outside the files this pass owns, so this speaks the
+   * same wire contract instead of sharing the function. Fail-soft throughout,
+   * same contract `packages/client/.../homeSample.ts` holds for desktop: a
+   * partial or failed fill is recoverable (the offer stays live), never a
+   * crash on the one screen every route returns to.
+   */
+  const fillSample = useCallback(async (): Promise<void> => {
+    try {
+      const base = await requireGatewayBase();
+      const status = await fetchJson<{
+        apps: readonly { appId: string; seedable: boolean }[];
+      }>(`${base}/centraid/_vault/demo`, { headers: apiHeaders() });
+      const seedable = status.apps
+        .filter((app) => app.seedable)
+        .map((app) => app.appId);
+      for (const appId of seedable) {
+        try {
+          // Sequential and per-app-caught, same as `seedHomeSample`: one
+          // generator throwing is not the others' problem.
+          // oxlint-disable-next-line no-await-in-loop -- ordered by contract
+          await fetchJson(
+            `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
+            { headers: apiHeaders(), method: "POST" }
+          );
+        } catch {
+          // Per-app failure is survivable — see the function comment.
+        }
+      }
+      // Pull the seeded rows into the local replica before the tiles
+      // re-read it, same ordering `syncHomeSampleReplica` enforces for
+      // desktop — otherwise the tiles rebuild from the pre-seed replica and
+      // day one appears to have done nothing.
+      await replica.refresh?.();
+    } catch {
+      // A gateway that will not answer costs this offer, never the screen.
+    }
+    await loadHome(setState, { force: true });
+  }, [replica]);
+
+  /**
+   * The eleven places (./home/places), each resolved to the nearest REAL
+   * mobile screen — shared by the band (`selectBandTab`) and the All-apps
+   * sheet's places half (`openPlace`), so the two never drift into naming two
+   * different destinations for the same place.
+   *
+   * `notifs` is the Approvals inbox, which is what "waiting on a decision"
+   * means here; `autos` is Automations; `conn` and `settings` both land on
+   * Settings (accounts and the account itself are one screen on mobile);
+   * `stats` and `gateway` both land on Insights, which the nav tree's own
+   * comment already scopes as "gateway health + limited usage insights" — one
+   * screen legitimately holding both facts, not two labels hiding behind one
+   * wrong page. `storage` is `PhoneStorage`, the existing local-replica-usage
+   * screen.
+   *
+   * `data`, `devices` and `starred` have NO mobile screen yet — no store
+   * browser, no device list, no cross-app favourites view — so they are a
+   * STATED no-op rather than a guess at the nearest existing screen. Routing
+   * them to a page that does not hold what the row promised would be exactly
+   * the class of bug fixed elsewhere in Photos right now (labelled rows that
+   * all silently opened the same wrong page); a place with nowhere to go
+   * should fail loudly (by doing visibly nothing) rather than lie.
+   *
+   * The `default` arm asserts `never` on the narrowed remainder, so a twelfth
+   * place added to ./places without a case here is a typecheck failure, not a
+   * silent fall-through.
+   */
+  const goToPlace = useCallback(
+    (id: PlaceId): void => {
+      switch (id) {
+        case "home":
+          break;
+        case "notifs":
+          navigation.navigate("Settings", { screen: "Approvals" });
+          break;
+        case "autos":
+          navigation.navigate("Automations");
+          break;
+        case "conn":
+        case "settings":
+          openSettings();
+          break;
+        case "stats":
+        case "gateway":
+          navigation.navigate("Insights");
+          break;
+        case "storage":
+          navigation.navigate("Settings", { screen: "PhoneStorage" });
+          break;
+        case "data":
+        case "devices":
+        case "starred":
+          // No mobile screen for this place yet — see the function comment.
+          break;
+        default: {
+          const exhaustive: never = id;
+          throw new Error(`Unhandled place: ${String(exhaustive)}`);
+        }
+      }
+    },
+    [navigation, openSettings]
   );
 
-  const openMenu = useCallback(() => setMenuOpen(true), []);
+  const openPlace = useCallback(
+    (id: string): void => goToPlace(id as PlaceId),
+    [goToPlace]
+  );
 
-  const edgeStartX = useSharedValue(0);
-  const edgeSwipe = useMemo(
-    () => buildEdgeSwipeGesture(edgeStartX, setMenuOpen),
-    [edgeStartX]
+  const selectBandTab = useCallback(
+    (target: BandTarget): void => {
+      if (target === "more") {
+        setAllAppsOpen(true);
+        return;
+      }
+      goToPlace(target);
+    },
+    [goToPlace]
   );
 
   return (
-    <GestureDetector gesture={edgeSwipe}>
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <GreetingHeader
-          name={profile.name}
-          color={profile.color}
-          onOpenMenu={openMenu}
-          onSearch={() => setSearchOpen(true)}
-          onCapture={() => navigation.navigate("Capture")}
-        />
+    // Explicit `paddingTop` rather than SafeAreaView edges: edges intermittently
+    // resolves to zero inside this app's cover stacks (PhotosHome carries the
+    // same treatment for the same reason), which lands the vault lockup under
+    // the status bar.
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <VaultHeader
+        vaultName={vault.vaultName}
+        gatewayName={vault.gatewayName}
+        color={vault.color}
+        offline={offline}
+        onSwitchVault={() => setVaultsOpen(true)}
+        onSearch={() => setSearchOpen(true)}
+        onNewChat={() => navigation.navigate("Assistant")}
+      />
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-              tintColor={colors.accent}
-            />
-          }
-        >
-          <AttentionLine
-            connection={connection}
-            approvals={approvals}
-            automations={automations}
-            onApprovals={() =>
-              navigation.navigate("Settings", { screen: "Approvals" })
-            }
-            onAutomations={() => navigation.navigate("Automations")}
-            onPair={openSettings}
+      {/* Fixed chrome, not scroll content — the handoff's mobile lockup and
+          app bar are `flex:none` siblings ABOVE the scroll region, and the
+          app bar carries its own hairline rule (`appBarStyle`, :5532–5533),
+          which is why the prototype's scrollbar starts below that rule
+          rather than under the vault lockup. */}
+      <HomeTitleRow
+        onAllApps={() => setAllAppsOpen(true)}
+        onSearch={() => setSearchOpen(true)}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
           />
-          <DailyBriefCard
-            brief={state.kind === "ready" ? state.brief : undefined}
-            onEvents={() =>
-              navigation.navigate("Agenda", { screen: "AgendaHome" })
-            }
-            onTasks={() => navigation.navigate("Tasks")}
-            onPhotos={() =>
-              navigation.navigate("Photos", { screen: "PhotosHome" })
-            }
-            onTally={() => navigation.navigate("Tally")}
+        }
+      >
+        {offline ? <OfflineBanner colors={colors} /> : null}
+        {springboard === "first-run" ? (
+          <DayOne
+            // Real counts, on a vault that holds nothing: the foot is honest
+            // about the zero rather than hiding it, and says what IS ready.
+            foot={homeDayOneFoot(items.length, things.total)}
+            onSeedSample={() => void fillSample()}
+            onBringPhotos={openPhotos}
+            onBringDocuments={openDocuments}
           />
+        ) : (
+          <>
+            <LauncherGrid items={earned} tiles={tiles} onOpen={openItem} />
+            <FirstMovesBand moves={moves} onPick={pickMove} />
+          </>
+        )}
+      </ScrollView>
 
-          <Text
-            // The launcher grid is intentionally visible while its gateway
-            // data loads, but the Daily Brief above it can still arrive and
-            // move every tile. Publish that distinction to assistive tech (and
-            // device-driving journeys) so an early "YOUR APPS" sighting is not
-            // mistaken for a stable, tappable layout.
-            accessibilityLabel={
-              state.kind === "loading"
-                ? "Your apps, loading"
-                : "Your apps, ready"
-            }
-            accessibilityLiveRegion="polite"
-            style={styles.railLabel}
-          >
-            YOUR APPS
-          </Text>
-          <LauncherGrid
-            items={items}
-            tiles={tiles}
-            onOpen={openItem}
-            // The same overlay the header's search control opens — Home's
-            // "Search everything" is a third door, not a second search.
-            onSearch={() => setSearchOpen(true)}
-          />
-        </ScrollView>
+      <HomeStatusLine
+        total={things.total}
+        capped={things.capped}
+        settled={things.settled}
+        gatewayName={vault.gatewayName}
+        offline={offline}
+      />
+      <HomeBand active="home" onSelect={selectBandTab} />
 
-        <HomeBand
-          tabs={bandTabs}
-          onOpen={openId}
-          onMore={() => setAllAppsOpen(true)}
+      {searchOpen ? (
+        <SearchOverlay
+          items={items}
+          onOpen={openFromSearch}
+          onClose={() => setSearchOpen(false)}
         />
+      ) : null}
 
-        {searchOpen ? (
-          <SearchOverlay
-            items={items}
-            onOpen={openFromSearch}
-            onClose={() => setSearchOpen(false)}
-          />
-        ) : null}
+      <AllAppsSheet
+        visible={allAppsOpen}
+        items={items}
+        tiles={tiles}
+        pinnedIds={pins}
+        onOpenApp={openFromSearch}
+        onOpenPlace={openPlace}
+        onTogglePin={togglePin}
+        onClose={() => setAllAppsOpen(false)}
+      />
 
-        <AllAppsSheet
-          visible={allAppsOpen}
-          entries={allEntries}
-          pinnedIds={pins}
-          onOpen={openId}
-          onTogglePin={togglePin}
-          onClose={() => setAllAppsOpen(false)}
-        />
-
-        <VaultDrawer
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          connection={connection}
-          approvals={approvals}
-          profile={profile}
-          onVaults={() => {
-            setMenuOpen(false);
-            setVaultsOpen(true);
-          }}
-          onAssistant={() => navigation.navigate("Assistant")}
-          onAutomations={() => navigation.navigate("Automations")}
-          onInsights={() => navigation.navigate("Insights")}
-          onApprovals={() =>
-            navigation.navigate("Settings", { screen: "Approvals" })
-          }
-          onSettings={openSettings}
-        />
-
-        <VaultsSwitcher
-          open={vaultsOpen}
-          onClose={() => setVaultsOpen(false)}
-          onPairDesktop={openSettings}
-        />
-      </SafeAreaView>
-    </GestureDetector>
+      <VaultsSwitcher
+        open={vaultsOpen}
+        onClose={() => setVaultsOpen(false)}
+        onPairDesktop={openSettings}
+      />
+    </View>
   );
 }
 
+/**
+ * The offline banner (handoff :597–622, :5559–5563).
+ *
+ * Sits between the title row and the grid — a second, PLACED fact beside the
+ * status line's ambient one. They are not redundant: the status line is the
+ * screen's one continuous channel and covers every state, offline included;
+ * this banner is what tells a member who has not read the status line yet
+ * that today's Home is reading from the local replica, not the gateway, and
+ * that writes are queued rather than committed. It disappears the moment the
+ * gateway answers again — never a dismiss control, because there is nothing
+ * to dismiss once the fact stops being true.
+ */
+function OfflineBanner({ colors }: { colors: ThemeColors }): React.JSX.Element {
+  return (
+    <View
+      style={[bannerStyles.banner, { borderColor: colors.net }]}
+      accessibilityRole="text"
+    >
+      <Icon name="CloudOff" size={15} color={colors.net} />
+      <Text style={[bannerStyles.copy, { color: colors.textSoft }]}>
+        {HOME_OFFLINE_BANNER}
+      </Text>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  banner: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: borders.hairline,
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  copy: { ...t("mono"), flex: 1 },
+});
+
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Bottom padding clears the flush band so the last app row stays tappable.
+    // Bottom padding clears the status line and the flush band, so the last row
+    // of the grid stays tappable.
     content: {
       paddingBottom: 24,
       paddingHorizontal: H_PADDING,
-      paddingTop: 6,
+      paddingTop: 4,
     },
-    railLabel: {
-      color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
-      letterSpacing: 0.9,
-      marginBottom: 16,
-    },
-    safe: { backgroundColor: colors.bg, flex: 1 },
+    screen: { backgroundColor: colors.bg, flex: 1 },
   });

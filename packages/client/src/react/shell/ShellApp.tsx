@@ -50,6 +50,10 @@ export interface ShellAppBar {
   title?: string;
   /** The line under it, in the numeric register. */
   meta?: ReactNode;
+  /** A count BESIDE the title, on the same line — see `ShellFrameProps.appCount`. */
+  count?: ReactNode;
+  /** The app's mark, leading the title — see `ShellFrameProps.appMark`. */
+  mark?: ReactNode;
   /** The app's actions, trailing. Quiet first, the one commit control last. */
   actions?: ReactNode;
   /** Makes the title a control — see `ShellFrameProps.appTitleAction`. */
@@ -182,6 +186,8 @@ export default function ShellApp({
       stem={<Outlet nav={nav} render={renderStem} />}
       {...(bar?.title === undefined ? {} : { appTitle: bar.title })}
       {...(bar?.meta === undefined ? {} : { appMeta: bar.meta })}
+      {...(bar?.count === undefined ? {} : { appCount: bar.count })}
+      {...(bar?.mark === undefined ? {} : { appMark: bar.mark })}
       {...(bar?.actions === undefined ? {} : { titlebarRight: bar.actions })}
       {...(bar?.titleAction === undefined
         ? {}

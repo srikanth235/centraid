@@ -121,6 +121,8 @@ describe("generated stylesheet values", () => {
       "--t-eyebrow-tracking": "0.06em",
       "--t-eyebrow-transform": "uppercase",
       "--t-mono-numeric": "tabular-nums",
+      "--t-mono-direction": "ltr",
+      "--t-mono-bidi": "isolate",
     });
     for (const [name, value] of Object.entries(typeModifiers(type))) {
       expect(root?.get(name), name).toBe(value);

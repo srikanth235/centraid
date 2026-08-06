@@ -90,7 +90,6 @@
         "expo": "~57.0.8",
         "expo-background-task": "~57.0.6",
         "expo-battery": "~57.0.1",
-        "expo-blur": "~57.0.2",
         "expo-build-properties": "~57.0.7",
         "expo-camera": "~57.0.3",
         "expo-clipboard": "~57.0.1",
@@ -2003,8 +2002,6 @@
     "expo-background-task": ["expo-background-task@57.0.6", "", { "dependencies": { "expo-task-manager": "~57.0.6" }, "peerDependencies": { "expo": "*" } }, "sha512-nqKqFBvPAyQfIBXhm7OvwY99zP52EeUkoaJJum6JzFGugBSJu3Lgf7zM+0sz9klqlPtHkO7ksKyGdwH2jvz+rA=="],
 
     "expo-battery": ["expo-battery@57.0.1", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-Q8WE1JedCs7XMFGLzShdtnGKC4ETjoV13DWXgN0lyWgicmIXOYN9+VlKm2g/lYzMObMP/r+psbPdnnOJhljZ/A=="],
-
-    "expo-blur": ["expo-blur@57.0.2", "", { "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-Aoud8H8lmlNkbRufyvRLefmGFELdBf1n5Te/Xm+Zx8ORINH+aXL+gKb5mbftFSha860+I7pMArz77TBYz8HDVg=="],
 
     "expo-build-properties": ["expo-build-properties@57.0.7", "", { "dependencies": { "@expo/schema-utils": "^57.0.2", "resolve-from": "^5.0.0", "semver": "^7.6.0" }, "peerDependencies": { "expo": "*" } }, "sha512-yo/2rp7tmWdmwHa2cA2EgOQNKmihNivTAiB9Dcg2s20b4g+QasGDyq4aOmwifUaLjK9bIRUs4D4xX5HzjSL1Hw=="],
 

@@ -41,6 +41,16 @@ describe("typed native lowering", () => {
     expect(theme.density.comfortable.row).toBe(44);
     expect(theme.density.dense.row).toBe(34);
     expect(theme.targetMin).toStrictEqual({ coarse: 48, fine: 32 });
+    // The one rule weight, a FULL point. `StyleSheet.hairlineWidth` is one
+    // PHYSICAL pixel — 0.33pt on a 3× phone, a third of the handoff's
+    // `border: 1px solid` — and the whole point of lowering the weight into a
+    // token is that no screen has to remember that.
+    expect(theme.borders).toStrictEqual({ hairline: 1 });
+    // The page margin is its OWN scale (`R.margin:{d:32,m:18}`, handoff
+    // :3356), not a `spacing` rung — 18 does not sit on the 4px gap ladder,
+    // which is exactly why screens that had to hard-code it drifted to 16/20.
+    expect(theme.pageMargin).toBe(18);
+    expect(Object.values(theme.spacing)).not.toContain(theme.pageMargin);
     expect(theme.type.body.fontSize).toBe(17);
   });
 
@@ -55,6 +65,13 @@ describe("typed native lowering", () => {
   it("carries the net and link roles, and never carries an accentThemes matrix", () => {
     expect(theme.light.net).toBeTruthy();
     expect(theme.light.link).toBeTruthy();
+    // The stage roles, including its own sunken rung (handoff :4479), are one
+    // literal in both schemes — the media ground does not follow the theme.
+    expect(theme.light.stageSunken).toBe("#1A1A19");
+    expect(theme.dark.stageSunken).toBe(theme.light.stageSunken);
+    // …and the corrected veil (handoff :5101), which DOES follow the theme.
+    expect(theme.light.scrim).toBe("rgba(26,24,21,0.3)");
+    expect(theme.dark.scrim).toBe("rgba(0,0,0,0.62)");
     expect(theme).not.toHaveProperty("accentThemes");
   });
 
@@ -65,6 +82,8 @@ describe("typed native lowering", () => {
     expect(a).toContain("export const lightPalette");
     expect(a).toContain("export const type");
     expect(a).toContain("export const metrics");
+    expect(a).toContain("export const borders");
+    expect(a).toContain("export const pageMargin");
     expect(a).toContain("export const density");
     expect(a).toContain("InstrumentSans_400Regular");
     expect(a).not.toContain("Geist");

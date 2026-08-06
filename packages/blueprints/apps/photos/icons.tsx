@@ -71,3 +71,28 @@ export const PlusIcon = make("Plus");
 export const ShieldIcon = make("CheckCircle");
 export const PinIcon = make("Pin");
 export const RenameIcon = make("Pencil");
+
+// The selection bar's five actions (v4 handoff §6, CHANGELOG B2) — the new
+// lowercase icon keys, not the pre-existing capitalised ones above. B2 is
+// explicit that these entries "share their exact artwork rather than drawing
+// a second, competing glyph for the same action", so Favorite/Trash here are
+// deliberately a second export, not a reuse of HeartIcon/TrashIcon.
+export const SelectFavoriteIcon = make("heart");
+export const SelectAlbumIcon = make("album");
+export const SelectShareIcon = make("share");
+export const SelectRemoveFromIcon = make("removeFrom");
+export const SelectDownloadIcon = make("download");
+export const SelectTrashIcon = make("trash");
+export const SelectRestoreIcon = make("restore");
+// The viewer's two marks that had no honest stand-in (CHANGELOG §B2).
+//
+// `more` is bound to the registry's own key rather than re-using `Menu`: the
+// two are different actions to the member — `Menu` opens navigation, `more`
+// opens the rest of THIS bar — and "an action that changes its icon between
+// surfaces is a different action".
+//
+// `info` replaces `AlertCircle` on the stage for the same reason in reverse:
+// an alert glyph on an Info control says something went wrong, which is a
+// different message from "here is what is known about this photograph".
+export const MoreIcon = make("more");
+export const InfoMarkIcon = make("info");

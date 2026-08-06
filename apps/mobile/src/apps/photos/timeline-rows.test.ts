@@ -1,0 +1,131 @@
+import { describe, expect, test } from "vitest";
+
+import { sectionPhotoAssets } from "./timeline-model";
+import type { PhotoAsset } from "./timeline-model";
+import {
+  DAY_ROW_HEIGHT,
+  MONTH_ROW_HEIGHT,
+  buildRows,
+  describeCounts,
+  describeDay,
+  monthHeaderIndices,
+  monthLabelAt,
+  rowTops,
+} from "./timeline-rows";
+
+function asset(overrides: Partial<PhotoAsset> & { id: string }): PhotoAsset {
+  return {
+    uri: "file:///a.jpg",
+    previewUri: "file:///a.jpg",
+    originalUri: "file:///a.jpg",
+    capturedAt: "2026-08-04T10:00:00.000Z",
+    kind: "photo",
+    favorite: false,
+    archived: false,
+    deleted: false,
+    backupState: "backed-up",
+    source: "replica",
+    width: 4000,
+    height: 3000,
+    ...overrides,
+  };
+}
+
+describe("month and day labels (handoff §4.3)", () => {
+  test("the month count names photographs and videos", () => {
+    expect(
+      describeCounts([
+        ...Array.from({ length: 86 }, (_, i) => asset({ id: `p${i}` })),
+        ...Array.from({ length: 4 }, (_, i) =>
+          asset({ id: `v${i}`, kind: "video" })
+        ),
+      ])
+    ).toBe("86 photographs · 4 videos");
+  });
+
+  test("a count of zero videos is not stated — that would be chrome", () => {
+    expect(describeCounts([asset({ id: "p" })])).toBe("1 photograph");
+  });
+
+  test("the day sub-label carries a count, and a place when there is one", () => {
+    const places = new Map([["pl1", "Lyme Regis"]]);
+    const dayAtOnePlace = Array.from({ length: 12 }, (_, i) =>
+      asset({ id: `a${i}`, placeId: "pl1" })
+    );
+    expect(describeDay(dayAtOnePlace, places)).toBe("12 · Lyme Regis");
+  });
+
+  test("a day spread across places states no place rather than guessing", () => {
+    const places = new Map([
+      ["pl1", "Lyme Regis"],
+      ["pl2", "Charmouth"],
+    ]);
+    expect(
+      describeDay(
+        [
+          asset({ id: "a", placeId: "pl1" }),
+          asset({ id: "b", placeId: "pl2" }),
+        ],
+        places
+      )
+    ).toBe("2");
+  });
+});
+
+describe("the row list", () => {
+  const assets = [
+    asset({ id: "a", capturedAt: "2026-08-04T10:00:00.000Z" }),
+    asset({ id: "b", capturedAt: "2026-08-04T11:00:00.000Z" }),
+    asset({ id: "c", capturedAt: "2026-08-03T11:00:00.000Z" }),
+    asset({ id: "d", capturedAt: "2026-07-30T11:00:00.000Z" }),
+  ];
+  const sections = sectionPhotoAssets(assets, new Date("2026-08-04T12:00:00Z"));
+  const rows = buildRows(sections, 390, 120);
+
+  test("a month header is emitted once per month, not once per day", () => {
+    const months = rows.filter((row) => row.type === "month");
+    // Three days across two months → two month headers.
+    expect(months).toHaveLength(2);
+    expect(rows.filter((row) => row.type === "day")).toHaveLength(3);
+  });
+
+  test("the sticky indices point at the month headers", () => {
+    for (const index of monthHeaderIndices(rows)) {
+      expect(rows[index]!.type).toBe("month");
+    }
+  });
+
+  test("every asset reaches a tile", () => {
+    const tiles = rows.flatMap((row) =>
+      row.type === "assets" ? row.tiles : []
+    );
+    expect(tiles).toHaveLength(assets.length);
+  });
+
+  test("row tops are the running sum of the row heights", () => {
+    const tops = rowTops(rows);
+    expect(tops[0]).toBe(0);
+    expect(tops[1]).toBe(rows[0]!.height);
+    expect(rows[0]!.height).toBe(MONTH_ROW_HEIGHT);
+    expect(rows[1]!.height).toBe(DAY_ROW_HEIGHT);
+  });
+
+  test("the scrub bubble names the month the row belongs to", () => {
+    const firstMonth = rows.find((row) => row.type === "month");
+    expect(monthLabelAt(rows, 2)).toBe(
+      firstMonth?.type === "month" ? firstMonth.title : ""
+    );
+    // A row before any header still resolves to a month rather than blank.
+    expect(monthLabelAt(rows, 0)).not.toBe("");
+  });
+
+  test("changing the rung repacks without losing or reordering assets", () => {
+    const small = buildRows(sections, 390, 64).flatMap((row) =>
+      row.type === "assets" ? row.tiles.map((tile) => tile.asset.id) : []
+    );
+    const large = buildRows(sections, 390, 168).flatMap((row) =>
+      row.type === "assets" ? row.tiles.map((tile) => tile.asset.id) : []
+    );
+    expect(small).toStrictEqual(large);
+  });
+});

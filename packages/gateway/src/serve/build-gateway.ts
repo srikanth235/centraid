@@ -101,6 +101,7 @@ import { ROUTES } from "@centraid/protocol";
 import {
   KeyStore,
   readBlobStoreSettings,
+  readEnrichPolicyTier,
   custodyStateCounts,
   jitterDelayMs,
   DEFAULT_VAULT_FOOTPRINT,
@@ -241,9 +242,11 @@ import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
+  enrichRefusalNotice,
   humanizeAutomationRef,
   noticeGist,
   shouldWriteAutomationNotice,
+  shouldWriteEnrichRefusalNotice,
 } from "./notices.js";
 import {
   createNotificationsDecisionWakeTracker,
@@ -272,6 +275,10 @@ import {
 } from "./runner-prefs.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
+import {
+  readDefaultShareTarget,
+  writeDefaultShareTarget,
+} from "./share-target.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -1127,6 +1134,14 @@ export async function buildGateway(
           vaultRegistry.create("Personal", { personal: true }),
         ]
       : [];
+  // "Shared" is an ORDINARY vault — nothing on its record says "sharing"
+  // (issue #711 item H). What makes it the place shares land is the ACCOUNT'S
+  // POINTER at it, aimed here, once, at founding: a member may later re-aim
+  // their own (share-target.ts), and renaming this vault — or naming some
+  // other vault "Sharing" — changes nothing, because the pointer holds an id.
+  if (autoFoundedVaults.length > 0) {
+    writeDefaultShareTarget(gatewayDatabase, autoFoundedVaults[0]!.vaultId);
+  }
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -2111,6 +2126,24 @@ export async function buildGateway(
         },
       });
     };
+    /**
+     * The one skip that is NOT silent (decision S9). Every other skip rests on
+     * state the owner already sees — a paused connection carries its own
+     * decision row. A tier refusal rests on a setting the member may not know
+     * exists, so it gets a card that names the domain and points at the
+     * control, written ONCE per (domain, tier): re-putting an unchanged
+     * refusal would clear `read_at` on every enrichment tick and turn the
+     * explanation into the nag #647 D6 was written to prevent.
+     */
+    const recordEnrichRefusalNotice = (
+      refusal: { domain: string; tier?: string } | undefined
+    ): void => {
+      if (!refusal) return;
+      const plane = vaultRegistry.current();
+      const prior = plane.notices.getBySource("enrichment", refusal.domain);
+      if (!shouldWriteEnrichRefusalNotice(prior, refusal.tier)) return;
+      plane.notices.put(enrichRefusalNotice(refusal));
+    };
     try {
       // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
       // reconciliation. The host is already mounted in `settledHosts` at that
@@ -2187,6 +2220,13 @@ export async function buildGateway(
           );
         },
         resolveConnection: connectionBroker.resolveForFire,
+        // The enrichment tier gate's owner-plane read (privacy enforcement).
+        // `plane.db.vault` deliberately, NOT `agentBridgeFor` — the guard
+        // must not be answerable by the grants of the automation it guards.
+        // A throw here is a refusal, not a default: the fire spine catches it
+        // and skips the run with the reason stated.
+        resolveEnrichPolicy: (domain) =>
+          readEnrichPolicyTier(vaultRegistry.current().db.vault, domain),
         resolveNestedRuntime: async (nestedRef) => {
           const nested = await resolveAutomationAgentForRef(
             nestedRef,
@@ -2235,6 +2275,7 @@ export async function buildGateway(
             : "failure",
         result.outcome.error
       );
+      recordEnrichRefusalNotice(result.outcome.enrichRefusal);
       // Grant-matched outbox items the fire just staged drain now, not
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
@@ -4415,6 +4456,8 @@ export async function buildGateway(
   const scopesHandler = makeScopesRouteHandler({
     enrollments: enrollmentStore,
     listVaults: () => vaultRegistry.list(),
+    defaultShareTarget: (memberId) =>
+      readDefaultShareTarget(gatewayDatabase, memberId),
     installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
     ensureAppInstalled: ensureBundledAppInstalled,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),

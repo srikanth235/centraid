@@ -53,6 +53,32 @@ export const metrics = {
 export type MetricKey = keyof typeof metrics;
 
 /**
+ * The PAGE MARGIN — the inset from the viewport edge to page content.
+ *
+ * A separate scale from `spacing`, exactly as the v4 handoff keeps it
+ * separate: its rhythm table carries `gap` (the six rungs above) and
+ * `margin:{d:32,m:18}` side by side (`R`, handoff line 3356). The desktop
+ * value coincides with `spacing[6]`; the mobile value, 18, does NOT sit on
+ * the 4px scale and is not supposed to — a page margin is the distance from
+ * the paper's edge to the text block, not a gap between two things, so it is
+ * tuned against the phone's own width rather than snapped to a gap rung.
+ *
+ * Without this token a phone screen has to choose between hard-coding 18 and
+ * substituting a rung that is visibly wrong (16 crowds the edge, 24 wastes a
+ * quarter-inch of a 390pt viewport), which is how Home and Photos ended up
+ * disagreeing about where the page starts.
+ *
+ * Only the mobile value is lowered to native (`toNativeTheme`), because the
+ * desktop margin is a shell/blueprint concern and native never draws it.
+ */
+export const pageMargin = {
+  /** Desktop and the wide web shell. */
+  desktop: 32,
+  /** The phone. Every native screen's horizontal page inset. */
+  mobile: 18,
+} as const;
+
+/**
  * Density tiers scale ROW HEIGHT and CONTENT PADDING only — never control
  * size. An app declares its tier; the shell writes it as a `data-density`
  * attribute and every row/padding site reads `--density-row` / `--density-pad`

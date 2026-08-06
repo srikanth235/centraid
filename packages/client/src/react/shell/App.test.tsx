@@ -353,8 +353,16 @@ describe("App suite", () => {
 
     it("switches the active vault through the app bar's title", async () => {
       apiMocks.listVaults.mockResolvedValue([
-        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
-        { vaultId: "personal", name: "Personal", ownerPartyId: "owner" },
+        {
+          vaultId: "shared",
+          name: "Shared",
+          ownerPartyId: "owner",
+        },
+        {
+          vaultId: "personal",
+          name: "Personal",
+          ownerPartyId: "owner",
+        },
       ]);
       const setActiveVault =
         vi.fn<(input: { vaultId: string }) => Promise<void>>();
@@ -389,7 +397,11 @@ describe("App suite", () => {
     // Issue #665 — the switcher is VAULTS ONLY, flattened across gateways.
     it("lists the vaults of every registered gateway in one list, and picking one on another gateway switches both", async () => {
       apiMocks.listVaults.mockResolvedValue([
-        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
+        {
+          vaultId: "shared",
+          name: "Shared",
+          ownerPartyId: "owner",
+        },
       ]);
       const order: string[] = [];
       const setActiveVault = vi.fn<

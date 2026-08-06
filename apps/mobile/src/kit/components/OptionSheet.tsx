@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import { radii, spacing, t, useTheme } from "../theme";
+import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import { Text } from "./NativeText";
 
@@ -133,19 +133,20 @@ const makeStyles = (colors: ThemeColors) =>
     list: { maxHeight: 340 },
     row: {
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
     rowDetail: { ...t("control"), color: colors.textFaint },
     rowDisabled: { color: colors.textFaint },
     rowLabel: { ...t("body"), color: colors.text },
-    // Scrims are shadow, not surface — the same literal the vault drawer uses.
-    scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
+    scrim: { backgroundColor: colors.scrim, flex: 1 },
     sheet: {
       backgroundColor: colors.bgElev,
+      borderColor: colors.line,
       borderTopLeftRadius: radii.lg,
       borderTopRightRadius: radii.lg,
+      borderWidth: borders.hairline,
       paddingBottom: spacing[6],
       paddingTop: spacing[4],
     },

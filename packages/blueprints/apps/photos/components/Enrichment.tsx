@@ -1,16 +1,44 @@
-import { useEffect, useRef, useState } from "react";
+// THE ENRICHMENT GATE (v4 handoff §8, prototype `s==='enrich'`).
+//
+// What this replaced, and why it was a defect rather than a style: a popover
+// status readout ("Face detection is on (cloud model)") with a `Detect faces
+// now` button beside it. That is a SETTINGS TOGGLE — the exact shape the
+// handoff forbids in so many words (line 4332) — and it fired
+// `request-enrichment` on one click, having told the member nothing about
+// where the work would run, what would leave the device, what would be
+// written, or how to undo it. None of the nine facts the design requires were
+// on screen, and the cloud-helper option — the only place the product says
+// that photographs can leave the device — did not exist at all.
+//
+// Now: the control OPENS A QUESTION (EnrichmentConsent.tsx) and this file is
+// the gate. THE LOAD-BEARING RULE — no enrichment write is issued without an
+// explicit answer:
+//
+//   * mounting, opening, reading the policy and closing the surface all write
+//     nothing;
+//   * `act("request-enrichment", …)` is reachable from exactly one place, the
+//     `Run on this device` callback;
+//   * `Not now` and Escape write nothing and say so;
+//   * the answer is latched (`answered`), so the question cannot be answered
+//     twice by a double click or a re-open.
+//
+// The consent surface itself is a pure view; keeping the ONE call site here
+// means "can this fire without an answer" is answered by reading one
+// function, and the jsdom suite (src/photos-enrichment-consent.test.ts) pins
+// it by counting writes.
+import { useEffect, useState } from "react";
 
+import {
+  CLOUD_ANSWER,
+  deviceAnswerFor,
+  ENRICHMENT_DECLINED_NOTE,
+  ENRICHMENT_REQUESTED_NOTE,
+  ENRICHMENT_STATUS_LINE,
+  ENRICHMENT_TITLE,
+} from "../enrichment-consent.ts";
 import { FacesIcon } from "../icons.tsx";
-// Face-proposer on-demand (issue #352 phase 3/4): a header icon-button +
-// popover that reads `enrichment-status` (enrich.policy for the photos
-// domain) on mount and either offers "Detect faces now" (fires
-// enrich.request_enrichment, reason 'manual') or says plainly that
-// enrichment is off — never a button that would silently no-op. Fully
-// self-contained (own open/status/busy state via hooks), so app.tsx mounts
-// it once at boot and never re-renders it itself; no domain (asset/album)
-// state is threaded in. v2: lives in the main header's icon-button group
-// (next to zoom) instead of the old text "✨ Faces" toolbar button.
-import { act, narrate } from "../outcomes.ts";
+import { act, narrate, notice } from "../outcomes.ts";
+import { EnrichmentConsent } from "./EnrichmentConsent.tsx";
 
 import styles from "./Enrichment.module.css";
 
@@ -19,15 +47,29 @@ interface EnrichmentStatus {
   vaultDenied?: { message?: string } | null;
 }
 
-export function EnrichmentPanel() {
+/**
+ * The header control and the question it opens.
+ *
+ * `photographCount` is the live library count for the question's title. It is
+ * optional because the mount is a slot that is constructed once and never
+ * re-rendered by app-root; absent, the title asks about "these photographs"
+ * rather than inventing a number.
+ */
+export function EnrichmentPanel({
+  photographCount,
+}: {
+  photographCount?: number | null;
+}) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<EnrichmentStatus | null>(null); // null while first read in flight
   const [busy, setBusy] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const noteRef = useRef<HTMLParagraphElement>(null);
+  const [answered, setAnswered] = useState<"device" | "declined" | null>(null);
 
+  // The policy read happens when the question is OPENED, not at mount: it is
+  // a read the member's own gesture asks for, and a slot constructed once at
+  // boot should not query the vault for a screen nobody has asked to see.
   useEffect(() => {
+    if (!open || status != null) return undefined;
     let cancelled = false;
     window.centraid
       .read<EnrichmentStatus>({ query: "enrichment-status" })
@@ -38,104 +80,83 @@ export function EnrichmentPanel() {
         if (!cancelled)
           setStatus({
             tier: null,
-            vaultDenied: { message: "Could not check." },
+            vaultDenied: { message: "Could not read." },
           });
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open, status]);
 
-  // Away-click close, same contract as the "Add to album" menu
-  // (components/SelectionBar.tsx) — a plain document listener, torn down
-  // whenever the popover isn't open.
+  // The frame's ONE status line carries what is true of this vault right now
+  // (prototype cfg 3968). It is posted on open and taken back down on close —
+  // never left behind on a screen this surface no longer owns.
   useEffect(() => {
     if (!open) return undefined;
-    function onAway(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
-        setOpen(false);
-    }
-    // Escape closes it too — an away-click is a mouse gesture, and a popover a
-    // keyboard user can open but not dismiss is a trap.
+    notice(ENRICHMENT_STATUS_LINE);
+    return () => notice("");
+  }, [open]);
+
+  // Escape closes the question. Closing is NOT an answer: nothing is written,
+  // and the question can be asked again.
+  useEffect(() => {
+    if (!open) return undefined;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    document.addEventListener("click", onAway, true);
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("click", onAway, true);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const tier = status?.tier ?? null;
-  const enabled = tier === "local" || tier === "model";
+  // THE ONE WRITE. Reachable from the `Run on this device` answer and from
+  // nowhere else in this file.
+  async function runOnDevice(): Promise<void> {
+    if (busy || answered) return;
+    if (!deviceAnswerFor(status?.tier, !!status?.vaultDenied).available) return;
+    setBusy(true);
+    const outcome = await act("request-enrichment", {
+      entity_type: "media.media_asset",
+    });
+    setBusy(false);
+    if (narrate(outcome)) {
+      setAnswered("device");
+      notice(ENRICHMENT_REQUESTED_NOTE);
+    }
+  }
+
+  function decline(): void {
+    setAnswered("declined");
+    notice(ENRICHMENT_DECLINED_NOTE);
+    setOpen(false);
+  }
 
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    <div className={styles.wrap}>
       <button
         type="button"
         className={`kit-icon-btn ${styles.toggle}`}
         data-active={open ? "true" : "false"}
-        aria-haspopup="true"
+        aria-haspopup="dialog"
         aria-expanded={open ? "true" : "false"}
-        aria-label="Face detection"
+        aria-label={ENRICHMENT_TITLE}
         onClick={() => setOpen((v) => !v)}
       >
         <FacesIcon />
       </button>
-      {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
-          without it is `display:none`); the popover keeps its own away-click
-          close and its `.kit-popover` box. */}
+      {/* Native <dialog>, never `showModal()` — an app may not take the top
+          layer over the frame's own chrome (MoreSheet.tsx holds the same
+          rule). `open` is mandatory: a <dialog> without it is display:none. */}
       {open ? (
-        <dialog
-          open
-          className={`kit-popover ${styles.panel}`}
-          aria-label="Face detection"
-        >
-          {status == null ? (
-            <p className="kit-muted kit-small">Checking…</p>
-          ) : status.vaultDenied ? (
-            <p className="kit-small">No access to check enrichment settings.</p>
-          ) : enabled ? (
-            <>
-              <p className="kit-small">
-                Face detection is on (
-                {tier === "model" ? "cloud model" : "on-device"}).
-              </p>
-              <button
-                type="button"
-                className="kit-btn"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  const outcome = await act("request-enrichment", {
-                    entity_type: "media.media_asset",
-                  });
-                  setBusy(false);
-                  if (narrate(outcome, noteRef.current)) {
-                    setRequested(true);
-                    if (noteRef.current) {
-                      noteRef.current.textContent =
-                        "Requested — new face proposals will show up on your photos soon.";
-                    }
-                  }
-                }}
-              >
-                {busy
-                  ? "Requesting…"
-                  : requested
-                    ? "Requested ✓"
-                    : "Detect faces now"}
-              </button>
-            </>
-          ) : (
-            <p className="kit-small">
-              Face detection is turned off here. Turn it on in settings to use
-              this.
-            </p>
-          )}
-          <p className="lightbox-note enrichment-note" ref={noteRef} />
+        <dialog open className={styles.surface} aria-label={ENRICHMENT_TITLE}>
+          <EnrichmentConsent
+            count={photographCount ?? null}
+            onDevice={deviceAnswerFor(status?.tier, !!status?.vaultDenied)}
+            cloud={CLOUD_ANSWER}
+            busy={busy}
+            answered={answered}
+            onRunOnDevice={() => void runOnDevice()}
+            onDecline={decline}
+          />
         </dialog>
       ) : null}
     </div>

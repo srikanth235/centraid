@@ -117,7 +117,14 @@ const BackupHealth = lazyScreen(() => import("./src/apps/photos/BackupHealth"));
 const DuplicateReview = lazyScreen(
   () => import("./src/apps/photos/DuplicateReview")
 );
+const DuplicatesShelf = lazyScreen(
+  () => import("./src/apps/photos/DuplicatesShelf")
+);
 const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
+const PhotoPermission = lazyScreen(
+  () => import("./src/apps/photos/PhotoPermission")
+);
+const PhotoPicker = lazyScreen(() => import("./src/apps/photos/PhotoPicker"));
 const PhotoLightbox = lazyScreen(
   () => import("./src/apps/photos/PhotoLightbox")
 );
@@ -130,6 +137,8 @@ const PhotoStateView = lazyScreen(
   () => import("./src/apps/photos/PhotoStateView")
 );
 const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
+const PlacesView = lazyScreen(() => import("./src/apps/photos/PlacesView"));
+const PlaceDetail = lazyScreen(() => import("./src/apps/photos/PlaceDetail"));
 const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
 const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
 const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
@@ -203,10 +212,15 @@ function PhotosNavigator(): React.JSX.Element {
       <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
       <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
       <PhotosStack.Screen name="BackupHealth" component={BackupHealth} />
+      <PhotosStack.Screen name="PlacesView" component={PlacesView} />
       <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
+      <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
       <PhotosStack.Screen name="FaceReview" component={FaceReview} />
+      <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
       <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
       <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
+      <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
+      <PhotosStack.Screen name="PhotoPermission" component={PhotoPermission} />
       <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
     </PhotosStack.Navigator>
   );

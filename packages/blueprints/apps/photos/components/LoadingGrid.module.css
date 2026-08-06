@@ -1,0 +1,40 @@
+/* The loading grid (v4 handoff §14, README §14). Geometry is deliberately
+   IDENTICAL to Timeline.module.css's `.timeline` / `.stream` / `.row`: same
+   14px rail reserve, same 2px gutter on both axes, same row height. The whole
+   point of this state is that nothing reflows when the real rows arrive, and
+   two stylesheets that drifted by a pixel would defeat it.
+
+   `--skel` is the system's "before its bytes arrive" ground (§2.2) — the same
+   token the album cover, the person's face and the tile placeholder take. It
+   is STATIC: no shimmer, no pulse. "Loading is determinate-only with static
+   skeletons; a shimmer is attention-seeking about work the product can simply
+   describe" (DESIGN.md, Components), and the one status line is where the
+   description goes.
+
+   Logical properties only; the rail mirrors under RTL with the timeline's. */
+
+.grid {
+  position: relative;
+}
+
+.stream {
+  padding-inline-end: 14px;
+}
+/* On the phone the rail OVERLAYS (§4.5), so the grid keeps every pixel — the
+   same split the timeline makes. */
+.streamPhone {
+  padding-inline-end: 0;
+}
+
+.row {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.tile {
+  display: block;
+  flex: none;
+  border-radius: var(--ph-tile-r, 3px);
+  background: var(--skel, var(--bg-sunken));
+}

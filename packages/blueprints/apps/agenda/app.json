@@ -513,5 +513,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": [],
+    "disabledOn": [],
+    "northStar": "google-calendar"
+  }
 }

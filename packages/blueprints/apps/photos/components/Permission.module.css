@@ -1,0 +1,76 @@
+/* The permission screen (v4 handoff §13). A designed full-pane state, not a
+   banner: display serif headline, one paragraph in the reading register, the
+   refusal in the host's own words, then the two facts that are true right now.
+
+   Nothing here is alarming and nothing here is a fill — a refused grant is a
+   state the product expects, so it takes paper and ink like every other
+   screen. Logical properties only; nothing below 11px. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 34rem;
+  padding-block: var(--sp-6);
+}
+
+.headline {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking, -0.01em);
+  color: var(--text);
+}
+
+/* The reading register — this is a paragraph a member reads once, not a row
+   they scan (§2.1: Photos draws Reading in exactly these states). */
+.lede {
+  margin: 0 0 var(--sp-4);
+  font: var(--t-reading);
+  color: var(--text-soft);
+}
+
+.head {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text);
+}
+
+/* The refusal itself. A `--net` rule on the leading edge, never a fill and
+   never a red dot — `--net` means "this leaves the device", and it is a border
+   or a 2px rule, nothing more (§18). */
+.missing {
+  margin: 0 0 var(--sp-4);
+  padding-inline-start: var(--sp-3);
+  border-inline-start: 2px solid var(--net);
+  font: var(--t-body);
+  color: var(--text);
+}
+
+.facts {
+  margin: 0 0 var(--sp-4);
+}
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.factLabel {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  gap: var(--sp-2);
+}

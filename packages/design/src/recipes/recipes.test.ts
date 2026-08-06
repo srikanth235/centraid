@@ -55,13 +55,31 @@ describe("revision 3 recipe registry", () => {
     const theme = toNativeTheme("light");
     for (const variant of BUTTON_VARIANTS) {
       const style = nativeButtonStyle(variant, theme);
-      expect(style.minHeight).toBe(48);
+      expect(style.minHeight).toBe(theme.metrics.control);
       expect(style.borderRadius).toBe(theme.radii.md);
       expect(style.color).toMatch(/^#/u);
     }
     expect(nativeButtonStyle("destructive", theme).backgroundColor).toBe(
       "transparent"
     );
+    expect(nativeButtonStyle("secondary", theme).backgroundColor).toBe(
+      "transparent"
+    );
+    expect(nativeButtonStyle("secondary", theme).borderColor).toBe(
+      theme.colors.lineStrong
+    );
+    expect(nativeButtonStyle("quiet", theme).color).toBe(theme.colors.text);
+    expect(nativeButtonStyle("quiet", theme).paddingHorizontal).toBe(10);
+
+    // D19: disabled overrides every variant to the same transparent recipe —
+    // a filled control that cannot be pressed stops being filled.
+    for (const variant of BUTTON_VARIANTS) {
+      const disabledStyle = nativeButtonStyle(variant, theme, true);
+      expect(disabledStyle.backgroundColor).toBe("transparent");
+      expect(disabledStyle.borderColor).toBe(theme.colors.line);
+      expect(disabledStyle.color).toBe(theme.colors.textDisabled);
+      expect(disabledStyle.minHeight).toBe(theme.metrics.control);
+    }
   });
 
   test("emits the scoped web lowering from the shared recipe contract", () => {

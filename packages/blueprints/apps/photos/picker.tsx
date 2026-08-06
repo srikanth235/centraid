@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 // The album picker ("Add photos" from inside an album). Owns its own small
 // state (which album, which ids are picked) — nothing outside the picker
@@ -25,21 +25,33 @@ export function createPicker({
 }) {
   let pickerAlbum: Album | null = null;
   const pickerPicked = new Set<string>();
+  // The panel goes BUSY rather than the commit turning into a progress bar
+  // (§14): the geometry stands still, the counts ride the frame's one status
+  // line, and a second click cannot start a second pass.
+  let pickerBusy = false;
 
   function closePicker() {
     const p = $("picker");
     p.hidden = true;
     pickerRoot.render(null);
     pickerAlbum = null;
+    pickerBusy = false;
     pickerPicked.clear();
   }
 
-  function submitPicker(e: MouseEvent<HTMLButtonElement>) {
-    if (!pickerAlbum) return;
-    return runSubmitPicker(e, pickerAlbum, [...pickerPicked], {
-      refresh,
-      closePicker,
-    });
+  async function submitPicker(): Promise<void> {
+    const album = pickerAlbum;
+    if (!album || pickerBusy) return;
+    pickerBusy = true;
+    renderPicker();
+    try {
+      await runSubmitPicker(album, [...pickerPicked], {
+        refresh,
+        closePicker,
+      });
+    } finally {
+      pickerBusy = false;
+    }
   }
 
   function renderPicker() {
@@ -55,13 +67,15 @@ export function createPicker({
         album={album}
         candidates={candidates}
         picked={pickerPicked}
+        busy={pickerBusy}
         onToggle={(id) => {
+          if (pickerBusy) return;
           if (pickerPicked.has(id)) pickerPicked.delete(id);
           else pickerPicked.add(id);
           renderPicker();
         }}
         onCancel={closePicker}
-        onSubmit={submitPicker}
+        onSubmit={() => void submitPicker()}
       />
     );
   }
@@ -70,6 +84,7 @@ export function createPicker({
     const album = getAlbums().find((a) => a.album_id === getSelectedAlbum());
     if (!album) return;
     pickerAlbum = album;
+    pickerBusy = false;
     pickerPicked.clear();
     renderPicker();
     $("picker").hidden = false;

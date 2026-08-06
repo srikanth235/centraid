@@ -22,6 +22,11 @@ import { radii } from "./radii";
 import {
   darkTheme,
   lightTheme,
+  ON_STAGE,
+  ON_STAGE_SOFT,
+  STAGE,
+  STAGE_LINE,
+  STAGE_SUNKEN,
   SURFACE_TONE_NAMES,
   SURFACE_TONES,
 } from "./themes";
@@ -185,6 +190,57 @@ const roleTable: RoleDef[] = [
     allSurfaces,
     everywhere(lightTheme.link),
     4.5
+  ),
+  role(
+    "--stage",
+    "color",
+    "The opaque media ground for a viewer, a slideshow and an editor. Full-bleed near-black, the SAME literal in both themes — the media ground does not follow the theme.",
+    "--on-stage clears AA text on it in both themes",
+    allSurfaces,
+    everywhere(STAGE),
+    4.5
+  ),
+  role(
+    "--on-stage",
+    "color",
+    "Ink published on the stage — the one ink rung that does not flip with the theme, because the surface under it does not either.",
+    "AA against --stage in both themes",
+    allSurfaces,
+    everywhere(ON_STAGE),
+    4.5
+  ),
+  role(
+    "--on-stage-soft",
+    "color",
+    "The SOFT ink rung on the stage — capture lines, the stage's status line, filmstrip labels. One literal in both themes, because the ground under it is one literal in both themes: `--text-soft` follows the PAGE and is 2.85:1 on the stage in light mode.",
+    "AA against --stage in both themes",
+    allSurfaces,
+    everywhere(ON_STAGE_SOFT),
+    4.5
+  ),
+  role(
+    "--stage-line",
+    "color",
+    "The hairline between chrome and media ON the stage. `--line` is invisible against the stage, so the stage owns its own boundary rung.",
+    "decorative separation on the stage; never the only signal that a control exists",
+    allSurfaces,
+    everywhere(STAGE_LINE)
+  ),
+  role(
+    "--stage-sunken",
+    "color",
+    "The recess cut INTO the stage — the media transport's unplayed track, and any other trough whose filled part is --on-stage. `--bg-sunken` follows the PAGE and would punch a near-white hole in the media ground; `--stage-line` is tuned to be SEEN as an edge, where a trough is tuned to recede under its fill.",
+    "decorative recess on the stage; never carries text",
+    allSurfaces,
+    everywhere(STAGE_SUNKEN)
+  ),
+  role(
+    "--skel",
+    "color",
+    "The ground a tile paints before its bytes arrive. `--bg-elev` reads as a card; an absence is not a card.",
+    "decorative placeholder surface; never carries text",
+    allSurfaces,
+    everywhere(lightTheme.skel)
   ),
   role(
     "--bg-chrome",
@@ -789,6 +845,7 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--line-strong": darkTheme.lineStrong,
   "--link": darkTheme.link,
   "--net": darkTheme.net,
+  "--skel": darkTheme.skel,
   "--success": darkTheme.success,
   "--text": darkTheme.text,
   "--text-inv": darkTheme.textInv,
@@ -819,11 +876,16 @@ export const NATIVE_COLOR_ROLE_MAP = {
   link: "--link",
   net: "--net",
   onAccent: "--on-accent",
+  onStage: "--on-stage",
   focusRingColor: "--focus-ring-color",
   scrim: "--scrim",
   shadowLg: "--shadow-lg",
   shadowMd: "--shadow-md",
   shadowSm: "--shadow-sm",
+  skel: "--skel",
+  stage: "--stage",
+  stageLine: "--stage-line",
+  stageSunken: "--stage-sunken",
   success: "--success",
   text: "--text",
   textFaint: "--text-faint",

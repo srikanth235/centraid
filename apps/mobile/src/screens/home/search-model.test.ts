@@ -111,13 +111,45 @@ describe(selectSuggestionChips, () => {
     expect(chips).toStrictEqual(["Jordan Lee", "Grocery list"]);
   });
 
-  it("truncates an overlong candidate with an ellipsis", () => {
+  it("keeps a handoff-shaped candidate set whole — short terms pass as-is", () => {
+    // The v4 fixture row (.dc.html :6012): three short terms, one row.
+    expect(
+      selectSuggestionChips(["Pemberton", "right of way", "Ana"])
+    ).toStrictEqual(["Pemberton", "right of way", "Ana"]);
+  });
+
+  it("derives a distinctive word from a long label instead of ellipsising", () => {
     const chips = selectSuggestionChips(
-      ["A vault-content title so long it must be truncated for a chip"],
-      1,
-      20
+      ["Pemberton right of way survey notes for the north lot"],
+      3
     );
-    expect(chips[0]).toHaveLength(20);
-    expect(chips[0]?.endsWith("…")).toBe(true);
+    expect(chips).toStrictEqual(["Pemberton"]);
+  });
+
+  it("never emits an ellipsised fragment", () => {
+    const chips = selectSuggestionChips(
+      ["A vault-content title so long it must never be truncated for a chip"],
+      3
+    );
+    for (const chip of chips) expect(chip).not.toContain("…");
+  });
+
+  it("drops a candidate with no usable word rather than truncating it", () => {
+    // Every word exceeds the term cap — nothing searchable survives.
+    expect(
+      selectSuggestionChips(["Pneumonoultramicroscopicsilicovolcanoconiosis"])
+    ).toStrictEqual([]);
+  });
+
+  it("caps the row by total characters — an overflowing term is dropped, a shorter later one still fits", () => {
+    const chips = selectSuggestionChips(
+      ["Pemberton", "right of way", "Reconciliation", "Ana"],
+      3,
+      16,
+      24
+    );
+    // 9 + 12 = 21 used; "Reconciliation" (14) would blow the 24 budget and
+    // is dropped, but "Ana" (3) still fits exactly.
+    expect(chips).toStrictEqual(["Pemberton", "right of way", "Ana"]);
   });
 });

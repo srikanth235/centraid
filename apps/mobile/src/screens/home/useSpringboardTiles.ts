@@ -41,7 +41,7 @@ import {
   countUpcoming,
   monthStartDate,
   openTasks,
-  selectDocExcerpt,
+  selectDocRows,
   selectFaces,
   selectNextEvent,
   selectNoteExcerpt,
@@ -301,18 +301,14 @@ export function useSpringboardTiles(): Map<string, TileData> {
       body: { kind: "photos", photos: mosaic },
     });
 
-    const doc = selectDocExcerpt(documents.rows, docContents.rows);
+    const docRows = selectDocRows(documents.rows, docContents.rows);
     tiles.set("docs", {
       appId: "docs",
-      status: combineStatus([documents, docContents], doc !== undefined),
+      status: combineStatus([documents, docContents], docRows.length > 0),
       count: documents.rows.length,
       countCapped: capped(documents.rows, LIMITS.documents),
       countLabel: "documents",
-      body: {
-        kind: "docs",
-        title: doc?.title ?? "",
-        excerpt: doc?.excerpt ?? "",
-      },
+      body: { kind: "docs", rows: docRows },
     });
 
     const note = selectNoteExcerpt(notes.rows, noteContents.rows);
@@ -466,7 +462,18 @@ function expandOccurrences(
   });
 }
 
-/** Today reads as a clock time; anything further out earns its weekday. */
+/**
+ * The Agenda body's "when", in the numeric register: `Wed 11 · 08:15`.
+ *
+ * Weekday AND day-of-month, because a bare weekday is ambiguous the moment an
+ * event is more than a week out — "Wed" could be this Wednesday or the next
+ * one, and a next-event line that cannot be trusted about WHICH day is not a
+ * next-event line. Today drops the date half entirely and reads as a clock
+ * time, since "today" is the one day that needs no naming.
+ *
+ * The middle dot separates two facts of different kinds (which day, what time)
+ * and is what stops the string reading as one long number.
+ */
 function formatEventTime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return "";
@@ -475,9 +482,14 @@ function formatEventTime(iso: string): string {
     when.getFullYear() === today.getFullYear() &&
     when.getMonth() === today.getMonth() &&
     when.getDate() === today.getDate();
-  return when.toLocaleTimeString(undefined, {
-    hour: "numeric",
+  const clock = when.toLocaleTimeString(undefined, {
+    hour: "2-digit",
     minute: "2-digit",
-    ...(sameDay ? {} : { weekday: "short" }),
   });
+  if (sameDay) return clock;
+  const day = when.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+  });
+  return `${day} · ${clock}`;
 }

@@ -137,7 +137,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "google-calendar"
+      }
     },
     {
       "id": "tasks",
@@ -274,7 +280,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "todoist"
+      }
     },
     {
       "id": "people",
@@ -448,7 +460,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "google-contacts"
+      }
     },
     {
       "id": "notes",
@@ -596,7 +614,16 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "capture",
+          "voice"
+        ],
+        "disabledOn": [],
+        "northStar": "apple-notes"
+      }
     },
     {
       "id": "photos",
@@ -614,6 +641,7 @@
         "actions/create-album.ts",
         "actions/delete-album.ts",
         "actions/delete-asset.ts",
+        "actions/purge-asset.ts",
         "actions/reject-face.ts",
         "actions/remove-from-album.ts",
         "actions/rename-album.ts",
@@ -633,40 +661,85 @@
         "app.json",
         "asset-key.ts",
         "assets-actions.ts",
+        "components/AlbumBar.module.css",
+        "components/AlbumBar.tsx",
         "components/AlbumGrid.module.css",
         "components/AlbumGrid.tsx",
+        "components/DuplicateReview.module.css",
+        "components/DuplicateReview.tsx",
         "components/Duplicates.module.css",
         "components/Duplicates.tsx",
         "components/Editor.module.css",
         "components/Editor.tsx",
+        "components/EmptyTrash.module.css",
+        "components/EmptyTrash.tsx",
         "components/Enrichment.module.css",
         "components/Enrichment.tsx",
+        "components/EnrichmentConsent.module.css",
+        "components/EnrichmentConsent.tsx",
+        "components/FaceReview.module.css",
+        "components/FaceReview.tsx",
+        "components/Import.module.css",
+        "components/Import.tsx",
         "components/InlineInput.tsx",
         "components/Lightbox.module.css",
         "components/Lightbox.tsx",
         "components/LightboxInfo.module.css",
         "components/LightboxInfo.tsx",
+        "components/LoadingGrid.module.css",
+        "components/LoadingGrid.tsx",
         "components/Memories.module.css",
         "components/Memories.tsx",
+        "components/MoreSheet.module.css",
+        "components/MoreSheet.tsx",
+        "components/OfflineBanner.module.css",
+        "components/OfflineBanner.tsx",
+        "components/People.module.css",
+        "components/People.tsx",
+        "components/Permission.module.css",
+        "components/Permission.tsx",
         "components/Picker.module.css",
         "components/Picker.tsx",
+        "components/Places.module.css",
+        "components/Places.tsx",
+        "components/ScrubRail.module.css",
+        "components/ScrubRail.tsx",
+        "components/SearchShelf.module.css",
+        "components/SearchShelf.tsx",
         "components/SelectionBar.module.css",
         "components/SelectionBar.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
+        "components/Sharing.module.css",
+        "components/Sharing.tsx",
+        "components/ShelfStrip.module.css",
+        "components/ShelfStrip.tsx",
         "components/Slideshow.module.css",
         "components/Slideshow.tsx",
+        "components/Storage.module.css",
+        "components/Storage.tsx",
+        "components/Tile.module.css",
+        "components/Tile.tsx",
         "components/Timeline.module.css",
         "components/Timeline.tsx",
         "components/Toolbar.module.css",
         "components/Toolbar.tsx",
+        "components/ViewerActions.tsx",
+        "components/ViewerStage.tsx",
         "components/shared.module.css",
         "constants.ts",
+        "custody-store.ts",
         "dom.ts",
+        "duplicate-decision.ts",
         "duplicates-actions.ts",
         "duplicates.tsx",
+        "enrichment-consent.test.ts",
+        "enrichment-consent.ts",
+        "face-crop.test.ts",
+        "face-crop.ts",
         "faces.ts",
+        "filters.ts",
         "format.ts",
+        "frame.tsx",
+        "grouping.ts",
         "icons.tsx",
         "index.html",
         "layout.ts",
@@ -675,17 +748,24 @@
         "lightbox.tsx",
         "media-observer.ts",
         "media.ts",
+        "member-prefs.ts",
+        "memories.ts",
         "merge.ts",
         "outcomes.ts",
         "package.json",
+        "people.ts",
         "picker-actions.ts",
         "picker.tsx",
+        "pinch.ts",
         "queries/_shared.ts",
         "queries/duplicates.ts",
         "queries/enrichment-status.ts",
+        "queries/face-queue.ts",
         "queries/faces.ts",
         "queries/library.ts",
+        "queries/people.ts",
         "queries/search.ts",
+        "queries/storage.ts",
         "sample/backyard-last-light.png",
         "sample/cabin-window-morning.png",
         "sample/downtown-blue-hour.png",
@@ -697,14 +777,29 @@
         "sample/trailhead-sign.png",
         "sample/truckee-river-bend.png",
         "scopes.ts",
+        "search-entry.test.ts",
+        "search-groups.test.ts",
+        "search-groups.ts",
         "search.ts",
         "seed.js",
         "selection-actions.ts",
-        "sidebar.tsx",
+        "selection.tsx",
+        "shared-copy.ts",
+        "sharing.ts",
+        "shelves.ts",
         "slideshow.tsx",
+        "storage-model.test.ts",
+        "storage-model.ts",
         "thumbhash.ts",
+        "tile-state.ts",
+        "trash-actions.test.ts",
+        "trash-actions.ts",
         "types.ts",
         "upload.ts",
+        "view-copy.ts",
+        "view-state.ts",
+        "viewer.test.ts",
+        "viewer.ts",
         "visibility.ts"
       ],
       "appKnobs": [
@@ -788,7 +883,15 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "camera"
+        ],
+        "disabledOn": [],
+        "northStar": "google-photos"
+      }
     },
     {
       "id": "docs",
@@ -948,7 +1051,15 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "scanner"
+        ],
+        "disabledOn": [],
+        "northStar": "google-drive"
+      }
     },
     {
       "id": "locker",
@@ -1052,7 +1163,17 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "autofill"
+        ],
+        "disabledOn": [
+          "viewer"
+        ],
+        "northStar": "1password"
+      }
     },
     {
       "id": "tally",
@@ -1169,7 +1290,15 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [
+          "camera"
+        ],
+        "disabledOn": [],
+        "northStar": "splitwise"
+      }
     },
     {
       "id": "photo-captioner",

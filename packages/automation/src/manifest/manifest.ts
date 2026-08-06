@@ -21,6 +21,8 @@
  */
 
 import { isValidIanaTimeZone } from "../cron-timezone.js";
+import { ENRICH_DOMAINS, ENRICH_LANES } from "../fire/enrich-gate.js";
+import type { EnrichDomain, EnrichLane } from "../fire/enrich-gate.js";
 import { ManifestError } from "./manifest-errors.js";
 import { validateOutputSchema } from "./manifest-output.js";
 import type { OutputSchema } from "./manifest-output.js";
@@ -70,6 +72,34 @@ export interface ManifestRequires {
    * and never enters the handler worker. Connector-only.
    */
   readonly secrets?: readonly string[];
+}
+
+/**
+ * Declares this automation an ENRICHER governed by the vault's per-domain
+ * enrichment tier (`enrich_policy`). Without this block nothing on the
+ * execution path can tell which owner setting an automation is subject to,
+ * which is exactly why the tier went unenforced — see
+ * `packages/automation/src/fire/enrich-gate.ts`.
+ *
+ * The block is a DECLARATION, not a permission: `runFire` reads the vault's
+ * tier for `domain` and refuses the fire when the tier does not allow this
+ * enricher's lane.
+ */
+export interface ManifestEnrich {
+  /** Which `enrich_policy` row governs this automation. */
+  readonly domain: EnrichDomain;
+  /**
+   * Stable capability id for this enricher (`faces`, `captions`, `trips`, …).
+   * Named in refusals, and the scope key an on-demand `enrich_request` is
+   * tagged with so consenting to one enricher does not enable the rest.
+   */
+  readonly capability: string;
+  /**
+   * `model` = the handler takes a `ctx.agent` turn (provider egress).
+   * `device` = deterministic / device-lease work only. Omitted reads as
+   * `model`: assuming the cheaper lane would be assuming consent.
+   */
+  readonly lane: EnrichLane;
 }
 
 export interface CostEstimate {
@@ -478,6 +508,11 @@ export interface Manifest {
   readonly connections?: readonly ConnectionBinding[];
   /** Requested vault access — owner-approved into a grant on the automation's agent. */
   readonly vault?: ManifestVault;
+  /**
+   * Declares this automation subject to the vault's per-domain enrichment
+   * tier. Present = every fire passes the tier gate in `runFire`.
+   */
+  readonly enrich?: ManifestEnrich;
   /** App ids this automation is associated with. */
   readonly apps?: readonly string[];
   readonly costEstimate?: CostEstimate;
@@ -1192,6 +1227,49 @@ function validateVault(raw: unknown): ManifestVault | undefined {
   return { purpose, ...(why === undefined ? {} : { why }), scopes };
 }
 
+/**
+ * The `enrich` block. Every field is required except `lane`, which defaults
+ * to the EXPENSIVE reading (`model`) — a manifest is agent-writable, so an
+ * omitted lane must never be the one that escapes the gate.
+ */
+function validateEnrich(raw: unknown): ManifestEnrich | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.enrich must be an object",
+      "enrich"
+    );
+  }
+  const e = raw as Record<string, unknown>;
+  if (
+    typeof e.domain !== "string" ||
+    !(ENRICH_DOMAINS as readonly string[]).includes(e.domain)
+  ) {
+    throw new ManifestError(
+      "invalid_field",
+      `manifest.enrich.domain must be one of ${ENRICH_DOMAINS.join(", ")}`,
+      "enrich.domain"
+    );
+  }
+  const capability = requireString(e.capability, "enrich.capability");
+  if (
+    e.lane !== undefined &&
+    !(ENRICH_LANES as readonly string[]).includes(e.lane as string)
+  ) {
+    throw new ManifestError(
+      "invalid_field",
+      `manifest.enrich.lane must be one of ${ENRICH_LANES.join(", ")}`,
+      "enrich.lane"
+    );
+  }
+  return {
+    domain: e.domain as EnrichDomain,
+    capability,
+    lane: (e.lane as EnrichLane | undefined) ?? "model",
+  };
+}
+
 function validateCostEstimate(raw: unknown): CostEstimate | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== "object") {
@@ -1289,6 +1367,7 @@ export function validateManifest(raw: unknown): Manifest {
   const connector = validateConnector(r.connector);
   const connections = validateConnectionBindings(r.connections);
   const vault = validateVault(r.vault);
+  const enrich = validateEnrich(r.enrich);
   // A connector's whole job is writing staged rows into the vault — a
   // connector manifest without a vault block can never do anything.
   if (connector && !vault) {
@@ -1365,6 +1444,7 @@ export function validateManifest(raw: unknown): Manifest {
     ...(connector ? { connector } : {}),
     ...(connections === undefined ? {} : { connections }),
     ...(vault ? { vault } : {}),
+    ...(enrich ? { enrich } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),
     ...(outputSchema ? { outputSchema } : {}),

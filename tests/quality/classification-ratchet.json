@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "Issue #599 approves the compatibility-matrix regrade for the desktop and web pairing surfaces introduced with multi-vault pairing and sync hardening.",
+  "approvedDeviation": "#711 Photos v4 manifest classification rebase: the governed automation manifest changed with the PR's new Photos action surface; the reviewed fingerprint is intentionally updated.",
   "matrixGovernanceFingerprint": "8a83d43679ec6c4dc88d0ac13fe5b76e938b24f0301595e67db8b063aaa4545a",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
-    "packages/automation/src/manifest/manifest.ts": "0aa200d5ba16a0fcd200032aab3129e3f974692a01478137f440d1d9a08d0c0d",
+    "packages/automation/src/manifest/manifest.ts": "0b9866963d470b3952ace1865d1e1813d3e611119e262fb3338b2125a86ee218",
     "packages/gateway/src/routes/route-security.ts": "26008724a88da1af21fa416f8b4fc0e62d196fddd6d9618e295b4ab8743e8cb3",
     "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
     "packages/vault/src/schema/sealed.ts": "064b112ba05240dbac2a1360f0f5b79b452273577e1ddf7844e2a23a27551248",

@@ -1,73 +1,85 @@
+// Library's layout, kept out of the screen so the screen reads as data + routes.
+//
+// This sheet is COLOURLESS on purpose: every colour on Library comes from
+// `useTheme()` at the call site, so one sheet serves light and dark without a
+// second copy. What lives here is geometry (the spacing scale) and type (the
+// ramp's roles via `t()`), neither of which changes with the scheme.
+
 import { StyleSheet } from "react-native";
 
-import { family } from "../../kit/theme";
+import { borders, spacing, t } from "../../kit/theme";
 
 export const styles = StyleSheet.create({
   // The grid is two FlashList columns, so each cell already owns half the
-  // width; the 6pt inset on both sides is what produces the 12pt gutter between
-  // them and, with `content`'s 12pt page padding, the 18pt page margin.
-  albumCard: { paddingBottom: 14, paddingHorizontal: 6 },
-  albumCover: { aspectRatio: 1.35, borderRadius: 10, width: "100%" },
-  albumTitle: { fontFamily: family.sansMedium, fontSize: 13, marginTop: 7 },
+  // width; the 4pt inset on both sides is what produces the 8pt gutter between
+  // them and, with `content`'s 12pt page padding, the 16pt page margin.
+  albumCard: { paddingBottom: spacing[3], paddingHorizontal: spacing[1] },
+  albumCover: { aspectRatio: 1.35, borderRadius: 12, width: "100%" },
   albumInput: {
-    borderRadius: 10,
-    borderWidth: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    marginTop: 18,
-    padding: 12,
+    ...t("body"),
+    borderRadius: 12,
+    borderWidth: borders.hairline,
+    marginTop: spacing[4],
+    padding: spacing[3],
   },
-  backdrop: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
-  content: { padding: 12, paddingBottom: 60 },
+  albumTitle: { ...t("smallStrong"), marginTop: spacing[2] },
+  backdrop: { flex: 1 },
+  content: { padding: spacing[3], paddingBottom: spacing[6] * 2 },
   create: {
     alignItems: "center",
-    borderRadius: 10,
-    marginTop: 12,
-    padding: 12,
+    borderRadius: 12,
+    marginTop: spacing[3],
+    padding: spacing[3],
   },
-  createText: { color: "#fff", fontFamily: family.sansMedium, fontSize: 14 },
+  createText: t("control"),
   dialog: {
     borderRadius: 16,
-    left: 28,
-    padding: 20,
+    borderWidth: borders.hairline,
+    insetInlineEnd: spacing[5],
+    insetInlineStart: spacing[5],
+    padding: spacing[5],
     position: "absolute",
-    right: 28,
     top: "34%",
   },
-  dialogTitle: { fontFamily: family.sansMedium, fontSize: 19 },
-  empty: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 15 },
+  dialogTitle: t("title"),
+  empty: { ...t("small"), paddingVertical: spacing[4] },
   header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 50,
-    paddingHorizontal: 14,
+    minHeight: 48,
+    paddingHorizontal: spacing[2],
   },
-  /** Header/footer bands, inset to line up with the album cells' 6pt gutter. */
-  pageSection: { paddingHorizontal: 6 },
+  headerBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
   icon: {
     alignItems: "center",
-    borderRadius: 10,
-    height: 38,
+    borderRadius: 12,
+    borderWidth: borders.hairline,
+    height: 44,
     justifyContent: "center",
-    width: 38,
+    width: 44,
   },
+  /** Header/footer bands, inset to line up with the album cells' 4pt gutter. */
+  pageSection: { paddingHorizontal: spacing[1] },
   row: {
     alignItems: "center",
-    borderBottomWidth: 1,
+    borderBottomWidth: borders.hairline,
     flexDirection: "row",
     minHeight: 64,
   },
-  rowCopy: { flex: 1, marginLeft: 12 },
-  rowMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 3 },
-  rowTitle: { fontFamily: family.sansMedium, fontSize: 14 },
-  safe: { flex: 1 },
+  rowCopy: { flex: 1, marginStart: spacing[3], minWidth: 0 },
+  /** Metas count things, and a numeral is mono everywhere in this system. */
+  rowMeta: t("mono"),
+  rowTitle: t("body"),
   section: {
-    fontFamily: family.monoMedium,
-    fontSize: 12.5,
-    letterSpacing: 1,
-    marginBottom: 4,
-    marginTop: 24,
+    ...t("eyebrow"),
+    marginBottom: spacing[1],
+    marginTop: spacing[5],
   },
-  title: { fontFamily: family.sansMedium, fontSize: 18 },
+  title: t("title"),
 });

@@ -17,17 +17,22 @@ describe("blueprint state honesty", () => {
     }
   );
 
+  // The file that carries the recovery action, per app. It is the chrome for
+  // every app that renders a denial as a banner inside its own shell; Photos
+  // renders permission as a designed SCREEN instead (v4 handoff §13), so its
+  // action lives in that screen. What is asserted is unchanged: a denied read
+  // always offers a direct way to the grant, never a dead end.
   test.each([
-    "agenda",
-    "locker",
-    "notes",
-    "people",
-    "tasks",
-    "docs",
-    "tally",
-    "photos",
-  ])("%s gives denied reads a direct vault-access action", (app) => {
-    expect(read(`${app}/Chrome.tsx`)).toContain("VaultAccessButton");
+    ["agenda", "agenda/Chrome.tsx"],
+    ["locker", "locker/Chrome.tsx"],
+    ["notes", "notes/Chrome.tsx"],
+    ["people", "people/Chrome.tsx"],
+    ["tasks", "tasks/Chrome.tsx"],
+    ["docs", "docs/Chrome.tsx"],
+    ["tally", "tally/Chrome.tsx"],
+    ["photos", "photos/components/Permission.tsx"],
+  ])("%s gives denied reads a direct vault-access action", (_app, file) => {
+    expect(read(file)).toContain("VaultAccessButton");
   });
 
   test.each([
@@ -38,10 +43,28 @@ describe("blueprint state honesty", () => {
     ["tasks", "tasks/components/Board.tsx"],
     ["docs", "docs/app-root.tsx"],
     ["tally", "tally/components/Ledger.tsx"],
-    ["photos", "photos/Chrome.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {
     const source = read(file);
     expect(source).toContain("kit-empty");
     expect(source).toContain("kit-btn");
+  });
+
+  // Photos is deliberately NOT in that list. `.kit-empty` is a centred notice
+  // card with no node for a paragraph, and v4 §14 asks this one state for a
+  // display-serif title, a reading-register paragraph carrying the truth about
+  // where the bytes go, and up to two actions — so Photos draws its own block
+  // (Chrome.tsx `.empty`). The requirement the row above was really testing —
+  // an empty state that offers the member a way forward — is unchanged.
+  test("photos draws its own empty block, in its own two registers", () => {
+    const chrome = read("photos/Chrome.tsx");
+    expect(chrome).toContain('id="emptyText"');
+    // The node the shared kit has no equivalent of, and the reason the truth
+    // about where the bytes go was never on screen.
+    expect(chrome).toContain('id="emptyBody"');
+    expect(chrome).toContain("kit-btn");
+    const css = read("photos/Chrome.module.css");
+    expect(css).toContain("var(--t-display)");
+    expect(css).toContain("var(--t-reading)");
+    expect(css).toContain("44ch");
   });
 });

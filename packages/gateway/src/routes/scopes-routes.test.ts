@@ -21,6 +21,10 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
+import {
+  readDefaultShareTarget,
+  writeDefaultShareTarget,
+} from "../serve/share-target.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
 import { makeScopesRouteHandler } from "./scopes-routes.js";
 import type { ScopeVault } from "./scopes-routes.js";
@@ -40,6 +44,7 @@ describe("scopes-routes suite", () => {
   interface ScopeRow {
     vaultId: string;
     label: string;
+    personal?: boolean;
     color?: string;
     icon?: string;
     role: string;
@@ -70,6 +75,7 @@ describe("scopes-routes suite", () => {
     {
       vaultId: "vault-priya",
       name: "Priya",
+      personal: true,
       color: "#b91c1c",
       icon: "sparkle",
     },
@@ -171,11 +177,17 @@ describe("scopes-routes suite", () => {
       {
         vaultId: "vault-priya",
         label: "Priya",
+        personal: true,
         color: "#b91c1c",
         icon: "sparkle",
         role: "admin",
       },
-      { vaultId: "vault-family", label: "Family", role: "write" },
+      {
+        vaultId: "vault-family",
+        label: "Family",
+        personal: false,
+        role: "write",
+      },
     ]);
   });
 
@@ -260,7 +272,12 @@ describe("scopes-routes suite", () => {
     const scopes = await scopesOf(await f.get("sid-phone"));
 
     expect(scopes).toStrictEqual([
-      { vaultId: "vault-family", label: "Family", role: "read" },
+      {
+        vaultId: "vault-family",
+        label: "Family",
+        personal: false,
+        role: "read",
+      },
     ]);
   });
 
@@ -379,5 +396,131 @@ describe("scopes-routes suite", () => {
 
     expect(scopes.map((row) => row.installed)).toStrictEqual([true, true]);
     expect(f.ensured).toStrictEqual([["vault-family", "notes"]]);
+  });
+  // ---------------------------------------------------------------------------
+  // Where shares go (issue #711 item H)
+  // ---------------------------------------------------------------------------
+  //
+  // The destination is a POINTER the member owns, held in `gateway.db`'s prefs
+  // bag (`share-target.ts`) — never a property of a vault record, because a
+  // member may want to share into several vaults. These are the rename traps
+  // that keep it honest.
+
+  describe("the default share destination", () => {
+    async function pointerHarness(): Promise<{
+      database: GatewayDatabase;
+      priyaMemberId: string;
+      vaults: ScopeVault[];
+      body: (endpointId: string) => Promise<{
+        scopes: ScopeRow[];
+        defaultShareTargetVaultId?: string;
+      }>;
+    }> {
+      const root = await tempDir("scopes-share-target-");
+      dirs.push(root);
+      const database = GatewayDatabase.open(root);
+      databases.push(database);
+      const enrollments = EnrollmentStore.open(database);
+      const priya = enrollments.enroll({
+        endpointId: "priya-laptop",
+        vaultId: "vault-priya",
+        role: "admin",
+        label: "Priya laptop",
+        memberLabel: "Priya",
+      });
+      enrollments.members.setGrant(priya.memberId, "vault-shared", "write");
+      const vaults: ScopeVault[] = [
+        { vaultId: "vault-priya", name: "Priya", personal: true },
+        { vaultId: "vault-shared", name: "Shared" },
+      ];
+      const handler = makeScopesRouteHandler({
+        enrollments,
+        listVaults: () => vaults,
+        defaultShareTarget: (memberId) =>
+          readDefaultShareTarget(database, memberId),
+        installedApps: () => undefined,
+      });
+      const server = http.createServer((req, res) => {
+        void (async () => {
+          if (!(await handler(req, res))) {
+            res.statusCode = 404;
+            res.end("{}");
+          }
+        })();
+      });
+      servers.push(server);
+      await new Promise<void>((resolve) => {
+        server.listen(0, "127.0.0.1", resolve);
+      });
+      const { port } = server.address() as AddressInfo;
+      return {
+        database,
+        priyaMemberId: priya.memberId,
+        vaults,
+        body: async (endpointId) =>
+          (await (
+            await fetch(`http://127.0.0.1:${port}/centraid/_vault/scopes`, {
+              headers: { [AUTHED_DEVICE_HEADER]: endpointId },
+            })
+          ).json()) as {
+            scopes: ScopeRow[];
+            defaultShareTargetVaultId?: string;
+          },
+      };
+    }
+
+    test("holds an id, so renaming the destination — or naming another vault Sharing — changes nothing", async () => {
+      const f = await pointerHarness();
+      writeDefaultShareTarget(f.database, "vault-shared");
+
+      expect((await f.body("priya-laptop")).defaultShareTargetVaultId).toBe(
+        "vault-shared"
+      );
+
+      // The owner renames the destination to something of their own…
+      f.vaults[1]!.name = "Holiday pics";
+      // …and renames their PERSONAL vault to "Sharing", which must not make it
+      // one: a name is display, never the pointer.
+      f.vaults[0]!.name = "Sharing";
+
+      const after = await f.body("priya-laptop");
+      expect(after.defaultShareTargetVaultId).toBe("vault-shared");
+      expect(
+        after.scopes.map((row) => [row.label, row.personal])
+      ).toStrictEqual([
+        ["Sharing", true],
+        ["Holiday pics", false],
+      ]);
+    });
+
+    test("a member's own pointer outranks the account default", async () => {
+      const f = await pointerHarness();
+      writeDefaultShareTarget(f.database, "vault-shared");
+      writeDefaultShareTarget(f.database, "vault-priya", f.priyaMemberId);
+
+      expect((await f.body("priya-laptop")).defaultShareTargetVaultId).toBe(
+        "vault-priya"
+      );
+    });
+
+    test("is reported as stored even when it names a vault this member cannot reach", async () => {
+      const f = await pointerHarness();
+      // The destination was deleted, or this member holds no role in it. The
+      // pointer is still the truth; the client renders the action disabled
+      // with the reason rather than silently doing nothing.
+      writeDefaultShareTarget(f.database, "vault-gone");
+
+      const body = await f.body("priya-laptop");
+      expect(body.defaultShareTargetVaultId).toBe("vault-gone");
+      expect(body.scopes.map((row) => row.vaultId)).not.toContain("vault-gone");
+    });
+
+    test("is absent when nothing has ever been pointed at", async () => {
+      const f = await pointerHarness();
+
+      expect(
+        (await f.body("priya-laptop")).defaultShareTargetVaultId
+      ).toBeUndefined();
+    });
   });
 });

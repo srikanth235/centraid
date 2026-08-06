@@ -215,6 +215,116 @@ describe("app-icon silhouette contract", () => {
   });
 });
 
+// ── Photos v4 handoff icon keys (CHANGELOG v4 - Photos.md §B2) ─────────────
+//
+// Thirteen new keys for the shelves, the selection set and the viewer bar.
+// The names are the exact, lowercase names the handoff gives — "the names
+// are the binding part" — which is why this suite checks them by literal
+// key rather than through `ICON_CONCEPTS` (a separate, PascalCase-glyph
+// concept layer these keys deliberately do not go through).
+describe("Photos v4 handoff icon keys", () => {
+  const PHOTOS_ICON_KEYS = [
+    "heart",
+    "album",
+    "place",
+    "person",
+    "dupe",
+    "trash",
+    "restore",
+    "add",
+    "share",
+    "download",
+    "removeFrom",
+    "info",
+    "more",
+  ] as const;
+
+  test("every key exists in the shared registry, spelled exactly", () => {
+    for (const name of PHOTOS_ICON_KEYS) {
+      expect(isIconName(name), name).toBe(true);
+    }
+  });
+
+  test("reused artwork does not duplicate or restyle the existing marks", () => {
+    // The handoff calls out photos/add/trash as possibly-existing; `add` and
+    // `trash` share the exact path data of `Plus` and `Trash` rather than
+    // drawing a second, competing glyph for the same action.
+    expect(icons.add.map((p) => p.d)).toStrictEqual(icons.Plus.map((p) => p.d));
+    expect(icons.trash.map((p) => p.d)).toStrictEqual(
+      icons.Trash.map((p) => p.d)
+    );
+    expect(icons.share.map((p) => p.d)).toStrictEqual(
+      icons.Share.map((p) => p.d)
+    );
+    expect(icons.download.map((p) => p.d)).toStrictEqual(
+      icons.Download.map((p) => p.d)
+    );
+    expect(icons.heart.map((p) => p.d)).toStrictEqual(
+      icons.Heart.map((p) => p.d)
+    );
+  });
+
+  test("every key follows the single-tone stroke contract: no baked colour, fill:none", () => {
+    for (const name of PHOTOS_ICON_KEYS) {
+      for (const iconPath of icons[name]) {
+        expect(
+          iconPath.fill === undefined || iconPath.fill === "currentColor",
+          `${name} path fill`
+        ).toBe(true);
+        expect(iconPath.fillRule, `${name} fillRule`).toBeUndefined();
+      }
+    }
+  });
+
+  test("every key renders through the shared SVG lowering, aria-hidden left to the caller", () => {
+    for (const name of PHOTOS_ICON_KEYS) {
+      const markup = iconSvg(name);
+      expect(markup, name).toContain('fill="none"');
+      expect(markup, name).toContain("<path");
+    }
+  });
+
+  // Same distinguishability proxy as the app-icon suite above: no shipped
+  // key accumulates so many path commands that a 14px render can't resolve
+  // it, and every key is distinct from every other shipped key by path data.
+  test("every key stays under the detail-density ceiling", () => {
+    const MAX_PATH_COMMANDS = 24;
+    const countCommands = (d: string): number =>
+      (d.match(/[a-df-z]/giu) ?? []).length;
+    for (const name of PHOTOS_ICON_KEYS) {
+      const commands = icons[name].reduce(
+        (sum, iconPath) => sum + countCommands(iconPath.d),
+        0
+      );
+      expect(commands, `${name} path-command count`).toBeLessThanOrEqual(
+        MAX_PATH_COMMANDS
+      );
+    }
+  });
+
+  // The five aliases share artwork on purpose (see the test above); every
+  // OTHER key in the set must be genuinely distinct artwork from its
+  // siblings, so this list is checked separately rather than with a
+  // conditional expect inside one shared loop.
+  const REUSED_ALIASES = new Set([
+    "add",
+    "trash",
+    "share",
+    "download",
+    "heart",
+  ]);
+
+  test("every non-aliased key is distinct artwork from its siblings", () => {
+    const signature = (name: (typeof PHOTOS_ICON_KEYS)[number]): string =>
+      icons[name].map((p) => p.d).join("|");
+    const distinctKeys = PHOTOS_ICON_KEYS.filter(
+      (name) => !REUSED_ALIASES.has(name)
+    );
+    const signatures = distinctKeys.map(signature);
+    expect(new Set(signatures).size).toBe(signatures.length);
+  });
+});
+
 function walkJsonFiles(directory: string, out: string[] = []): string[] {
   for (const entry of readdirSync(directory)) {
     const full = path.join(directory, entry);

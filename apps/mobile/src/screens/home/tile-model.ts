@@ -1,4 +1,5 @@
 // What each springboard tile SAYS, derived from replica rows (issue #708 A).
+// governance: allow-repo-hygiene file-size-limit #711 Home tile policy remains a cohesive pure selection module.
 //
 // The Binding Layer's Home is made of content, not of icons: every tile carries
 // an INVARIANT header — app icon, app name at the UI role, a count in the
@@ -37,14 +38,34 @@ export type TileStatus =
 
 export interface TilePhoto {
   id: string;
-  /** Absolute gateway thumb URL, or a pinned on-device thumbnail path. */
-  uri: string;
+  /**
+   * Absolute gateway thumb URL, or a pinned on-device thumbnail path.
+   *
+   * `undefined` when the asset EXISTS but its bytes are not addressable from
+   * this device yet — no gateway to fetch from, and nothing pinned locally.
+   * That is a cell, not an absence: it paints the skeleton ground at the exact
+   * geometry the photograph will occupy and keeps it until the bytes arrive.
+   * Dropping the row instead is what made a vault of ten photographs render as
+   * one blank rectangle under a header reading "10".
+   */
+  uri?: string;
 }
 
 export interface TileFace {
+  /** The person's `party_id` — a STABLE identity. The renderer derives the
+   *  circle's hue from this when there is no stored colour, so it has to be the
+   *  id and never the display name: a rename must not repaint a person. */
   id: string;
   initials: string;
-  /** The person's own avatar colour when they have one; else undefined. */
+  /**
+   * The person's own avatar colour when they have chosen one; else undefined.
+   *
+   * A stored colour always wins — it is the member's (or the People app's) own
+   * choice and nothing here overrides it. Blank and whitespace-only values are
+   * NOT a choice, though: the seeded vault leaves `avatar_color` empty, and
+   * treating `""` as a colour is what painted the tile's faces with no fill at
+   * all. Those fall through to the derivation.
+   */
   color?: string;
 }
 
@@ -54,14 +75,28 @@ export interface TileTaskRow {
   done: boolean;
 }
 
+/** One ruled row in the Docs body: the file's name and its size in mono. */
+export interface TileDocRow {
+  id: string;
+  name: string;
+  /** Already formatted ("4.1 MB"); empty when the byte size is not recorded. */
+  size: string;
+}
+
 /** The structurally distinct bodies. One member per first-party app. */
 export type TileBody =
   | { kind: "photos"; photos: TilePhoto[] }
-  | { kind: "docs"; title: string; excerpt: string }
+  | { kind: "docs"; rows: TileDocRow[] }
   | { kind: "agenda"; title: string; at: string; after: string }
   | { kind: "people"; faces: TileFace[]; more: number }
   | { kind: "tasks"; rows: TileTaskRow[] }
-  | { kind: "tally"; figure: string; caption: string }
+  // `after` is optional: the brief's third line (:5079, "Everyday · £1,120")
+  // needs a second read mobile's ./useSpringboardTiles does not build yet
+  // (this month's figure is already read; a same-period rolling comparison
+  // is a follow-up, out of scope for the tile-body layer this module and
+  // ./TileBody own). The body renders the line the moment a caller supplies
+  // it and stays honestly silent otherwise, rather than fabricating one.
+  | { kind: "tally"; figure: string; caption: string; after?: string }
   | { kind: "locker"; locked: boolean }
   | { kind: "notes"; title: string; excerpt: string };
 
@@ -97,23 +132,33 @@ function byDescending(
  *
  * Rows arrive already ordered by the read, but a replica read merges N vault
  * scopes, so the order is re-established here rather than trusted.
+ *
+ * An asset whose bytes are not addressable yet still yields a CELL, with no
+ * `uri`. "The tile exists" and "the bytes are decoded" are two different
+ * moments and the window between them is a designed state: the cell holds the
+ * exact geometry the photograph will occupy and paints the skeleton ground
+ * meanwhile. Returning fewer cells than there are photographs would make the
+ * tile reflow when they land, and returning none at all — which is what a
+ * gateway-side seed produced — draws an empty box under a header saying 10.
  */
 export function selectPhotoMosaic(
   rows: readonly ReplicaRow[],
   gatewayBase: string | undefined,
   pinned: (scopeId: string, contentId: string) => string | undefined,
-  count = 6
+  count = MOSAIC_SLOTS
 ): TilePhoto[] {
   return [...rows]
     .sort(byDescending("captured_at", "asset_id"))
     .flatMap((row) => {
       const contentId = text(row, "content_id");
       const assetId = text(row, "asset_id");
+      // No content id is the one case with no cell to draw: there is no
+      // photograph behind it to be waiting for.
       if (!contentId || !assetId) return [];
       const scopeId = text(row, "__centraidScopeId");
       const local = pinned(scopeId, contentId);
       if (local) return [{ id: assetId, uri: local }];
-      if (!gatewayBase) return [];
+      if (!gatewayBase) return [{ id: assetId }];
       // Same address the Photos timeline builds (apps/photos/timeline-engine),
       // so a tile thumbnail is a cache hit on the grid the tile opens into.
       const blob = `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
@@ -123,6 +168,62 @@ export function selectPhotoMosaic(
       return [{ id: assetId, uri: `${blob}?variant=${variant}` }];
     })
     .slice(0, count);
+}
+
+/** True when the mosaic has cells but not one of them can paint bytes yet — the
+ *  moment the tile has to SAY where the originals are rather than look broken. */
+export function mosaicAwaitingBytes(photos: readonly TilePhoto[]): boolean {
+  return photos.length > 0 && photos.every((photo) => !photo.uri);
+}
+
+/**
+ * How many cells the mosaic draws. Always this many, in every state.
+ *
+ * Four is ONE row across the tile's full bled width (the brief's
+ * `repeat(4,1fr)`, :5044) — mobile never draws the desktop's second row. A
+ * FIXED count is the no-reflow contract: the grid looks the same the instant it
+ * mounts, while the read is in flight, while the bytes are being fetched, and
+ * once they land — only the contents of each cell change.
+ */
+export const MOSAIC_SLOTS = 4;
+
+/**
+ * The cell's height in points, and the reason it is stated rather than derived.
+ *
+ * A percentage-width cell sized by `aspectRatio` can resolve to zero height,
+ * and a zero-height cell inside a container with a minimum height of its own is
+ * invisible — the container's ground is all that shows, which reads as one
+ * large deliberate blank rectangle instead of as a layout failure. That is
+ * exactly how a seeded vault's Photos tile appeared to be a design decision.
+ * Lives here, beside the slot count, so the geometry the tile depends on is
+ * asserted in the same place the selection rules are.
+ *
+ * The row now bleeds to the full card width rather than sitting inside three
+ * columns of padded content, so a single row of four reads roughly square at
+ * ordinary phone widths — taller than the old 56pt half-row, because it is
+ * carrying the whole tile's vertical budget alone now instead of splitting it
+ * across two rows.
+ */
+export const MOSAIC_CELL_HEIGHT = 88;
+
+/**
+ * Tile content padding — `R.gap.m` in the brief (:5031). Shared between the
+ * card's own padding (./LauncherGrid) and the photo mosaic's negative margins
+ * (./TileBody): the mosaic reaching the tile's own edge is only true while its
+ * bleed exactly cancels whatever padding the card uses, so a mismatch here is
+ * a photo mosaic that stops a few points short of the edge for no visible
+ * reason.
+ */
+export const TILE_PAD = 12;
+
+/**
+ * The mosaic's slots: exactly `MOSAIC_SLOTS` of them, each holding a photograph
+ * or nothing. A slot with nothing in it is still a cell and still paints.
+ */
+export function mosaicCells(
+  photos: readonly TilePhoto[]
+): (TilePhoto | undefined)[] {
+  return Array.from({ length: MOSAIC_SLOTS }, (_, index) => photos[index]);
 }
 
 // ------------------------------------------------------------ prose bodies ---
@@ -183,22 +284,57 @@ export function selectNoteExcerpt(
   };
 }
 
-/** Newest document, same treatment — a title over prose, not a file row. */
-export function selectDocExcerpt(
+// ------------------------------------------------------------------ docs ---
+
+const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
+
+/**
+ * A file size in the numeric register — "4.1 MB", the brief's own example.
+ *
+ * One decimal above the byte rung and none below it: "1,024 bytes" is a size a
+ * reader can hold, "1.0 KB" is not more precise than "1 KB" but is longer, and
+ * a size is scanned rather than compared, so a second decimal is noise. A
+ * missing or nonsensical byte count returns "" — the row then shows a name with
+ * no size, which is the honest answer, never a fabricated 0 bytes.
+ */
+export function formatBytes(bytes: unknown): string {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return "";
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < BYTE_UNITS.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  const rounded = unit === 0 ? Math.round(size) : Math.round(size * 10) / 10;
+  return `${rounded.toLocaleString()} ${BYTE_UNITS[unit]}`;
+}
+
+/**
+ * The Docs body: RULED ROWS, name and size — not a prose excerpt.
+ *
+ * Docs and Notes both hold text, and drawing both as a title over an opening
+ * line made two tiles that were impossible to tell apart at a glance, which is
+ * the one thing a springboard body exists to prevent. The brief separates them
+ * on exactly this axis: Notes is prose in the reading register, Docs is a FILE
+ * LIST — because what a member wants from a document tile is which files are
+ * there and how big they are, not the first sentence of one of them.
+ */
+export function selectDocRows(
   documents: readonly ReplicaRow[],
-  contents: readonly ReplicaRow[]
-): { title: string; excerpt: string } | undefined {
-  const newest = [...documents].sort(
-    byDescending("updated_at", "document_id")
-  )[0];
-  if (!newest) return undefined;
-  const body = contents.find(
-    (row) => row.content_id === newest.current_content_id
-  );
-  return {
-    title: text(newest, "title") || "Untitled",
-    excerpt: firstProseLine(decodeProse(body?.content_uri)),
-  };
+  contents: readonly ReplicaRow[],
+  limit = 3
+): TileDocRow[] {
+  const sizes = new Map<string, unknown>();
+  for (const row of contents) sizes.set(text(row, "content_id"), row.byte_size);
+  return [...documents]
+    .sort(byDescending("updated_at", "document_id"))
+    .slice(0, limit)
+    .map((row) => ({
+      id: text(row, "document_id"),
+      name: text(row, "title") || "Untitled",
+      size: formatBytes(sizes.get(text(row, "current_content_id"))),
+    }));
 }
 
 // ---------------------------------------------------------------- agenda ---
@@ -265,7 +401,7 @@ export function selectFaces(
       return {
         id: partyId,
         name: namesByParty.get(partyId) ?? "",
-        color: text(row, "avatar_color"),
+        color: text(row, "avatar_color").trim(),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -277,13 +413,16 @@ export function selectFaces(
     }));
 }
 
-/** Up to two letters. An unnamed person still gets a circle, not a hole. */
+/**
+ * ONE initial. The handoff's faces carry a single letter (the fixture faces
+ * are single letters, and the 30px disc at 12px/500 initials is sized for
+ * one) — never two, which is what a `first + last` pairing drew. An unnamed
+ * person still gets a circle, not a hole.
+ */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
   if (parts.length === 0) return "?";
-  const first = parts[0]![0] ?? "";
-  const last = parts.length > 1 ? (parts.at(-1)![0] ?? "") : "";
-  return (first + last).toUpperCase();
+  return (parts[0]![0] ?? "").toUpperCase();
 }
 
 // ----------------------------------------------------------------- tasks ---
@@ -358,6 +497,35 @@ export function monthStartDate(now: Date): string {
  */
 export type TileSize = "small" | "medium" | "large";
 
+/**
+ * Springboard order, taken from the handoff's own tile list rather than from
+ * the CATALOG's order.
+ *
+ * The catalog (`@centraid/design`'s `apps`) is the All-apps listing and is not
+ * a statement about the grid; using it here put Notes in the corner and pushed
+ * the mosaic to the third row, so the first thing the eye met on Home was a
+ * paragraph. The mosaic is the only body that needs area to be itself, and
+ * giving it the corner is what makes the grid read as a page with a subject
+ * instead of a launcher with a picture in it.
+ *
+ * Kept in step with packages/client/src/react/shell/routes/homeTiles.ts's
+ * `HOME_TILE_ORDER`, the same way `TILE_SIZE` below is: the two clients must
+ * not disagree about where an app sits.
+ *
+ * Freshness still decides what is IN a tile — it just does not decide where
+ * the tile sits. A member who learns where Tally is has to find it there again.
+ */
+export const SPRINGBOARD_ORDER: readonly string[] = [
+  "photos",
+  "docs",
+  "notes",
+  "agenda",
+  "tasks",
+  "people",
+  "tally",
+  "locker",
+];
+
 const TILE_SIZE: Record<string, TileSize> = {
   agenda: "small",
   docs: "medium",
@@ -387,11 +555,11 @@ export function isWideTile(appId: string): boolean {
 /**
  * What to do when an app holds nothing yet — one imperative line per app.
  *
- * Used twice: as an empty tile's body, and as the caption under each dashed
- * placeholder in the first-run treatment. It is deliberately what-to-DO rather
- * than what-is-missing ("no photos") — an empty grid on day one is a set of
- * invitations, not a set of failures. Locker's line is the odd one out because
- * its content is not missing, it is sealed.
+ * With the grid GRADED (see `tileEarnsGrid`) an empty app is normally a first
+ * move rather than a tile, so this is the defensive body for the one case that
+ * survives: a tile that earned the grid while loading and then settled with
+ * nothing. It is deliberately what-to-DO rather than what-is-missing ("no
+ * photos") — a quiet tile is an invitation, not a failure.
  */
 export const TILE_EMPTY_COPY: Record<string, string> = {
   agenda: "Put something on the calendar",
@@ -403,6 +571,63 @@ export const TILE_EMPTY_COPY: Record<string, string> = {
   tally: "Log your first expense",
   tasks: "Capture the next thing to do",
 };
+
+// -------------------------------------------------------------- grading ---
+
+/**
+ * Whether this tile has EARNED a place on the grid.
+ *
+ * "A vault fills up gradually, so Home is graded, not binary" — a tile earns
+ * the grid by having something to show, and everything else becomes a first
+ * move under it. This replaces the all-or-nothing rule that put eight tiles on
+ * screen the moment one note existed, seven of them apologising.
+ *
+ * Three answers, and each is a different kind of "yes":
+ *
+ *  - `content` — it has something. The obvious case.
+ *  - `loading` — it may. A read in flight holds its slot at full geometry with
+ *    a static skeleton, because demoting a tile to a first move and promoting
+ *    it back a beat later is a relayout the member watches happen.
+ *  - `locker` — its body is a STATE, not a query result. A locked shelf always
+ *    has something true to say ("Locked") without previewing anything, so it is
+ *    never an empty tile and never an invitation to fill it.
+ *
+ * `empty` and `unknown` do not earn it. `unknown` is the honest one: a tile
+ * with no replica, no grant or a failed read cannot claim content, and putting
+ * it on the grid would show a body we cannot stand behind.
+ */
+export function tileEarnsGrid(
+  tile: Pick<TileData, "status"> & { body: Pick<TileBody, "kind"> }
+): boolean {
+  if (tile.body.kind === "locker") return true;
+  return tile.status === "content" || tile.status === "loading";
+}
+
+/**
+ * How many things the vault holds, for the status line.
+ *
+ * Sums only counts a read actually returned. A withheld count (Locker) is
+ * omitted rather than treated as zero, and a capped count contributes its
+ * ceiling — which is why the status line says "at least" when anything capped
+ * (see `HomeStatusLine`). The one number on Home that claims to describe the
+ * whole vault has to be assembled out of numbers that are each true.
+ */
+export function countThings(tiles: Iterable<TileData>): {
+  total: number;
+  capped: boolean;
+  settled: boolean;
+} {
+  let total = 0;
+  let capped = false;
+  let settled = true;
+  for (const tile of tiles) {
+    if (tile.status === "loading") settled = false;
+    if (tile.count === undefined) continue;
+    total += tile.count;
+    if (tile.countCapped) capped = true;
+  }
+  return { capped, settled, total };
+}
 
 // ------------------------------------------------------------ first run ---
 

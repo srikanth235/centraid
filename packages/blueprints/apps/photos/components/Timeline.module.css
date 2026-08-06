@@ -1,32 +1,90 @@
-/* The justified timeline's React-owned classes. Authored camelCase (old `ph-`
-   prefix dropped). IMPORTANT: the tile's imperatively-injected media guts —
-   `ph-tile-ph`, `ph-tile-video-badge`, `ph-tile-audio-badge`, `ph-tile-duration`
-   and the `is-placeholder` marker (all set by media.ts's fillTileMedia)
-   STAY GLOBAL in app.css; they are string class names
-   media.ts writes onto nodes React never sees. The `<img>`/`<video>` media.ts
-   appends into `.tileMedia` are styled here as descendant selectors. */
+/* The justified timeline's React-owned classes (v4 handoff §4.1-4.3). The
+   TILE's own rules live in Tile.module.css and the rail's in
+   ScrubRail.module.css — three controls, three stylesheets.
+
+   IMPORTANT: the tile's imperatively-injected media guts — `ph-tile-ph`,
+   `ph-tile-video-badge`, `ph-tile-audio-badge`, `ph-tile-duration` and the
+   `is-placeholder` marker (all set by media.ts's fillTileMedia) STAY GLOBAL in
+   Chrome.module.css; they are string class names media.ts writes onto nodes
+   React never sees.
+
+   NO CHROME INSIDE THE GRID (§4.3): the month header and the day sub-label are
+   type on paper. No rules, no cards, no pills, no fills. */
+
+.timeline {
+  position: relative;
+}
+
+/* The stream reserves the rail's 14px column on the trailing edge so a tile
+   never sits under it. On the phone the rail OVERLAYS instead (§4.5), so the
+   grid keeps every pixel. */
+.stream {
+  padding-inline-end: 14px;
+}
+.streamPhone {
+  padding-inline-end: 0;
+  /* The phone hides scrollbars entirely — the rail is the scrub control. */
+  scrollbar-width: none;
+}
+.streamPhone::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ---- month header: micro-caps, sticky to the top of the scroller ---- */
+/* It persists while its month is on screen, which is what `sticky` means and
+   why the header is a direct child of the scrolled column rather than a child
+   of a wrapper with its own overflow. */
 
 .monthLabel {
   position: sticky;
-  top: -2px;
+  top: 0;
   z-index: 3;
-  margin: var(--sp-3) 0 0;
+  margin: var(--sp-4) 0 0;
   padding: var(--sp-2) 0 6px;
-  font: var(--t-body-strong);
-  letter-spacing: -0.01em;
-  background: color-mix(in oklab, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  background: var(--bg);
+  font: var(--t-eyebrow);
 }
+.monthName {
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text);
+}
+/* Beside it, never under it: the count is what the month contains, and a
+   number is mono and tabular everywhere (§18). */
+.monthCount {
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* ---- day sub-label ---- */
+
 .dayLabel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 6px 0 6px 2px;
+}
+.dayName {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.dayMeta {
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
-  margin: 6px 0 6px 2px;
 }
+
+/* ---- rows: the 2px gutter, both axes ---- */
+
 .row {
   display: flex;
-  gap: var(--sp-1);
-  margin-bottom: var(--sp-1);
+  gap: 2px;
+  margin-bottom: 2px;
   /* Timeline windowing without a virtualization lib: the browser skips
      layout/paint/decode for rows that are off-screen and remembers each row's
      real height once measured (the `auto` keyword), so scrolling a deep
@@ -35,216 +93,29 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 160px;
 }
-.tile {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--ph-tile-r);
-  background: var(--bg-sunken);
-  flex: 0 0 auto;
-  transition:
-    transform var(--dur-1) var(--ease),
-    border-radius var(--dur-1) var(--ease);
+
+/* ---- album detail's own Remove (Tile.tsx `extras` — see its header) ---- */
+
+.extraBtn {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-control);
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-sm);
 }
-.tile.selected {
-  border-radius: var(--ph-tile-r-sel);
-  transform: scale(0.85);
-  background: var(--accent-soft);
+.extraBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
 }
-.tileMedia {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.tileMedia:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  outline-offset: -2px;
-}
-.tileMedia img,
-.tileMedia video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.tile.trash .tileMedia {
+/* A refused Remove keeps its geometry and takes the recessive token on the
+   leaf — never a container opacity (§18). It says why through its own name;
+   the sentence itself is on the album bar above the grid (§6, §14). */
+.extraBtn:disabled {
+  color: var(--text-faint);
+  border-color: var(--line);
   cursor: default;
 }
-.tile.trash img,
-.tile.trash video {
-  filter: grayscale(0.35);
-  opacity: 0.85;
-}
-.tileScrim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--scrim) 44%, transparent),
-    transparent 26%,
-    transparent 72%,
-    color-mix(in oklab, var(--scrim) 39%, transparent)
-  );
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-}
-@media (hover: hover) {
-  .tile:hover .tileScrim {
-    opacity: 1;
-  }
-}
-.tile.selected .tileScrim {
-  opacity: 1;
-}
-.tileCheck {
-  position: absolute;
-  top: 7px;
-  inset-inline-start: 7px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-pill);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid var(--text-inv);
-  background: color-mix(in oklab, var(--scrim) 25%, transparent);
-  box-shadow: 0 1px 3px color-mix(in oklab, var(--scrim) 62%, transparent);
-  padding: 0;
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .tile:hover .tileCheck {
-    opacity: 1;
-  }
-}
-.tile.selected .tileCheck,
-.tileCheck:focus-visible {
-  opacity: 1;
-  background: var(--accent-deep);
-}
-/* The "shown from <audience>" pill (issue #599), bottom-left so it never
-   collides with the select check (top-left), the heart or the remove control
-   (top-right), or the trash bar (full-width bottom — trash is own-scope, so
-   the two never coexist). Always visible, unlike the hover-revealed controls:
-   it is provenance, not an action, and a tile whose origin only appears on
-   hover would be a lie on touch. Colour comes from the accent + surface
-   tokens; the tile beneath it is an arbitrary photo, hence the scrim-like
-   translucent fill rather than a flat token background. */
-.tileScope {
-  position: absolute;
-  inset-inline-start: 7px;
-  bottom: 7px;
-  max-width: calc(100% - 14px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px var(--sp-2);
-  border-radius: var(--r-pill);
-  font: var(--t-small);
-  font-size: var(--t-control-size);
-  line-height: 1.5;
-  color: var(--accent-text);
-  background: color-mix(in oklab, var(--accent-soft) 88%, transparent);
-  border: 1px solid color-mix(in oklab, var(--app-identity) 30%, transparent);
-  backdrop-filter: blur(6px);
-  pointer-events: none;
-  z-index: 2;
-}
-.tileHeart {
-  position: absolute;
-  top: 6px;
-  inset-inline-end: 6px;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--text-inv);
-  filter: drop-shadow(
-    0 1px 2px color-mix(in oklab, var(--scrim) 69%, transparent)
-  );
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .tile:hover .tileHeart,
-  .tileHeart:focus-visible {
-    opacity: 1;
-  }
-}
-.tileHeart[aria-pressed="true"] {
-  opacity: 1;
-}
-.tileRemove {
-  position: absolute;
-  top: 6px;
-  inset-inline-end: 36px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-pill);
-  border: none;
-  background: color-mix(in oklab, var(--scrim) 56%, transparent);
-  color: var(--text-inv);
-  font-size: var(--t-small-size);
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .tile:hover .tileRemove,
-  .tileRemove:focus-visible {
-    opacity: 1;
-  }
-}
-.tileTrashBar {
-  position: absolute;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: var(--sp-2) var(--sp-2);
-  background: linear-gradient(to top, var(--scrim), transparent);
-  z-index: 2;
-}
-.tilePurge {
-  font: var(--t-mono);
-  font-size: var(--t-control-size);
-  font-variant-numeric: var(--t-mono-numeric);
-  color: color-mix(in oklab, var(--text-inv) 90%, transparent);
-}
-.tileRestore {
-  border: 1px solid color-mix(in oklab, var(--text-inv) 40%, transparent);
-  background: color-mix(in oklab, var(--text-inv) 12%, transparent);
-  color: var(--text-inv);
-  font: var(--t-small);
-  font-size: var(--t-control-size);
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--r-pill);
-}
-.tileRestore:hover {
-  background: color-mix(in oklab, var(--text-inv) 24%, transparent);
-}
+
 .foot {
   margin-top: var(--sp-3);
 }

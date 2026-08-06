@@ -13,6 +13,7 @@ Decision matrix for UI/runtime branches across desktop (Electron), web PWA, and 
 | `isNative` | Expo / React Native | `Platform.OS` / Expo constants |
 | Electron bridge | Desktop main capabilities | `window.centraid` / preload IPC |
 | Compact form-factor | Narrow layout, not a trust boundary | CSS / shell layout, not auth |
+| `SEAT` | The bundle's byte-custody role — `origin` (mobile) / `custodian` (desktop) / `viewer` (web/PWA). Orthogonal to compact: a PWA on a phone is compact **and** a viewer; a narrow desktop window is compact **and** the custodian. Never sniffed at runtime — a declared build-time constant. See [blueprint-seats.md](blueprint-seats.md) | `apps/mobile/src/lib/seat.ts` (`SEAT = "origin"`); `packages/client/src/react/host-platform.ts` (`seat()`, resolved from the `isWebHost()` first-paint marker since one bundle serves both custodian and viewer) |
 
 ## Prefer
 

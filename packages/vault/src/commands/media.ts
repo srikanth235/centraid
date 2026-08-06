@@ -9,7 +9,9 @@
 // the meaning rows and
 // soft-deletes the bytes only when nothing else (an attachment, a note body,
 // an avatar) still rents them — content items are canonical and shared, so
-// the last reference decides, not the first delete.
+// the last reference decides, not the first delete. Purging (issue #711) is
+// the owner's way to end that grace window early — see PURGE_ASSET for what
+// it destroys, what it refuses, and why the bytes go to the sweep.
 
 import { validateDerivativeContribution } from "../blob/derivatives.js";
 import {
@@ -18,6 +20,7 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import {
   loadEntityRevision,
   markEntityRevisionUndone,
@@ -169,6 +172,27 @@ export function contentUnreferenced(
   return true;
 }
 
+/**
+ * Collapse a content item's grace window to NOW when nothing rents it any
+ * more, so the next lifecycle sweep purges the row, its derivatives and its
+ * CAS blobs (`purgeContentItem` in gateway/duties.ts). This is how an
+ * owner-driven purge frees bytes: a command handler cannot delete from the
+ * CAS itself, and deleting the row here would strand the blob with nothing
+ * left to drive its reclamation. Bytes still rented elsewhere are untouched.
+ */
+function releaseContentNow(ctx: HandlerCtx, contentId: string): boolean {
+  if (!contentUnreferenced(ctx, contentId)) return false;
+  ctx.db
+    .prepare(
+      `UPDATE core_content_item
+          SET deleted_at = COALESCE(deleted_at, ?), purge_at = ?
+        WHERE content_id = ?`
+    )
+    .run(ctx.now, ctx.now, contentId);
+  ctx.wrote("core.content_item", contentId);
+  return true;
+}
+
 /** Soft-delete a content item's bytes if nothing rents them any more. */
 export function releaseContentIfUnreferenced(
   ctx: HandlerCtx,
@@ -201,6 +225,10 @@ const ADD_ASSET: CommandDefinition = {
       // off the same EXIF the capture time came from.
       tz_offset_min: { type: "integer", minimum: -1080, maximum: 1080 },
       capture_group_id: { type: "string", minLength: 1, maxLength: 200 },
+      // Edit lineage (issue #711): the asset these bytes were derived FROM.
+      // The photo editor saves an edit as a new asset dated today, and this
+      // is what makes that copy's provenance a fact instead of a promise.
+      source_asset_id: { type: "string", minLength: 1, maxLength: 200 },
       title: { type: "string" },
       width: { type: "integer", minimum: 1 },
       height: { type: "integer", minimum: 1 },
@@ -265,6 +293,18 @@ const ADD_ASSET: CommandDefinition = {
       op: "eq",
       value: 1,
     },
+    {
+      // A claimed source must be a real asset in THIS vault (issue #711).
+      // Named here rather than left to the FK so a caller that mistypes a
+      // lineage gets a refusal that says which precondition failed, not a
+      // raw constraint error from the middle of the insert.
+      name: "source_asset_exists",
+      sql: `SELECT CASE WHEN :source_asset_id IS NULL THEN 1 ELSE
+              EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :source_asset_id) END AS n`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -290,6 +330,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     captured_at?: string;
     tz_offset_min?: number;
     capture_group_id?: string;
+    source_asset_id?: string;
     title?: string;
     width?: number;
     height?: number;
@@ -338,6 +379,10 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
         .run(input.capture_group_id ?? null, existingAsset.asset_id);
       ctx.wrote("media.media_asset", existingAsset.asset_id);
     }
+    // Deliberately does NOT stamp `source_asset_id` (issue #711): these bytes
+    // already are that asset, so this call created nothing to have a lineage.
+    // Overwriting an existing asset's provenance from a later upload would
+    // rewrite history, and the honest record of a dedupe is that it deduped.
     return {
       asset_id: existingAsset.asset_id,
       content_id: contentId,
@@ -368,8 +413,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       : null;
   ctx.db
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
     )
     .run(
       assetId,
@@ -380,6 +425,10 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
         (meta as { tz_offset_min?: number }).tz_offset_min ??
         null,
       input.capture_group_id ?? null,
+      // Edit lineage (issue #711). Only the caller knows it — nothing in the
+      // bytes or the EXIF says "I was cropped out of that one" — so there is
+      // no spool fallback here on purpose.
+      input.source_asset_id ?? null,
       placeId,
       input.width ?? meta.width ?? null,
       input.height ?? meta.height ?? null,
@@ -787,6 +836,184 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id };
+}
+
+/**
+ * `media.purge_asset` — destroy one ALREADY-TRASHED asset now, instead of
+ * waiting out its 30-day grace window (issue #711). This is the only
+ * owner-driven hard delete in the media pack, and everything about its shape
+ * follows from that:
+ *
+ *  * ONLY TRASH. `asset_is_trashed` demands `deleted_at IS NOT NULL`, so a
+ *    live asset — or an id that names nothing — is REFUSED by name rather
+ *    than skipped. There is no "purge anything" door; the trash is the door.
+ *  * WHAT GOES. Face regions (derived data about these pixels), the phash
+ *    sidecar (`ON DELETE CASCADE`), and every polymorphic pointer at the
+ *    asset — album membership, tags, annotations, attachments, embeddings,
+ *    sync-map rows, shares — via the A1 registry (`cleanupPolyRefs`), which
+ *    is the same complete sweep the lifecycle purge runs. An album whose
+ *    cover this was hands off to its next member first, exactly as
+ *    `delete_asset` does, so the album goes on having a face.
+ *  * WHAT DOES NOT GO: THE BYTES, HERE. A command handler has no CAS delete
+ *    (`HandlerCtx.blobs` stages, claims and spills — it never reclaims), and
+ *    deleting `core_content_item` from here would strand its blob with no row
+ *    left to drive `purgeContentItem`. So the bytes are handed to the sweep
+ *    that owns them: the content item's grace window is collapsed to NOW when
+ *    nothing else rents it, and the next lifecycle sweep purges the row,
+ *    its derivatives and its blobs together. The member's copy says exactly
+ *    this — the photograph leaves the library at once, the bytes are
+ *    reclaimed by the next storage sweep. Bytes still rented by an
+ *    attachment, an avatar or a note body are left alone: asset meaning and
+ *    byte custody have independent lifecycles (issue #274).
+ *  * EDIT LINEAGE. `media_media_asset.source_asset_id` (issue #711) is a
+ *    self-FK, and a purge that broke it would have to either forge or destroy
+ *    a fact. NULLing the child's column is a forgery: the schema says NULL
+ *    means "camera original or import", so a cropped copy would start
+ *    claiming it was shot that way. Cascading the purge into the child
+ *    destroys a photograph the member never put in the trash. So the third
+ *    option is the honest one — `no_derived_assets` REFUSES while any other
+ *    asset still names this one as its source, live or trashed, and says so.
+ *    The member purges the edit first; `emptyTrashOrder` on both clients puts
+ *    derived copies ahead of their sources so a trash holding both empties in
+ *    one pass. (`PRAGMA foreign_keys` is ON, so the DELETE would fail anyway
+ *    — a named refusal beats a raw constraint string.)
+ *
+ * Not `confirm: true`. Parking would mean a member pressing "Empty trash"
+ * got a queue of decisions instead of an empty trash — the confirmation for
+ * an owner-initiated destruction belongs in front of the owner, before the
+ * command fires, which is where both clients put it. `atlas.delete_row`, the
+ * other owner-driven hard delete, is `risk: "high"` without `confirm` for the
+ * same reason.
+ */
+const PURGE_ASSET: CommandDefinition = {
+  name: "media.purge_asset",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["asset_id"],
+    additionalProperties: false,
+    properties: { asset_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["asset_id"],
+    properties: {
+      asset_id: { type: "string" },
+      /** 1 when the bytes were handed to the sweep, 0 when still rented. */
+      content_released: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "asset_is_trashed",
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+      message:
+        "Only a photograph that is already in the trash can be deleted forever.",
+    },
+    {
+      name: "no_derived_assets",
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE source_asset_id = :asset_id`,
+      column: "n",
+      op: "eq",
+      value: 0,
+      message:
+        "An edited copy was made from this photograph. Delete the copy forever first, so its record of where it came from stays true.",
+    },
+  ],
+  postconditions: [
+    {
+      name: "asset_destroyed",
+      sql: "SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id",
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+    {
+      // Nothing may still point at the row (issue #441 A1). Engine FKs, the
+      // self-FK, and every polymorphic mechanism in one predicate: a sweep
+      // clause quietly dropped in a later edit fails here rather than in a
+      // member's library six months on.
+      name: "nothing_references_the_asset",
+      sql: `SELECT (
+              (SELECT count(*) FROM media_face_region WHERE asset_id = :asset_id)
+            + (SELECT count(*) FROM media_asset_phash WHERE asset_id = :asset_id)
+            + (SELECT count(*) FROM media_media_asset WHERE source_asset_id = :asset_id)
+            + (SELECT count(*) FROM core_collection_entry
+                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+            + (SELECT count(*) FROM core_tag
+                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+            + (SELECT count(*) FROM knowledge_annotation
+                WHERE target_type = 'media.media_asset' AND target_id = :asset_id)
+            + (SELECT count(*) FROM core_link
+                WHERE valid_to IS NULL
+                  AND ((from_type = 'media.media_asset' AND from_id = :asset_id)
+                    OR (to_type = 'media.media_asset' AND to_id = :asset_id)))
+            ) AS n`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  idempotency: "once",
+  risk: "high",
+  handler: purgeAsset,
+};
+
+function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string };
+  const asset = ctx.db
+    .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
+    .get(input.asset_id) as { content_id: string } | undefined;
+  if (!asset) throw new Error("asset vanished between check and execute");
+  // Album covers hand off BEFORE the entries go, exactly as delete_asset
+  // does: an asset can be filed into an album while it sits in the trash, so
+  // membership is not guaranteed to have been dropped at trash time.
+  const covered = ctx.db
+    .prepare(
+      "SELECT collection_id FROM core_collection WHERE cover_content_id = ?"
+    )
+    .all(asset.content_id) as { collection_id: string }[];
+  ctx.db
+    .prepare(
+      `DELETE FROM core_collection_entry
+        WHERE target_type = 'media.media_asset' AND target_id = ?`
+    )
+    .run(input.asset_id);
+  for (const collection of covered) {
+    ctx.db
+      .prepare(
+        `UPDATE core_collection SET cover_content_id =
+           (SELECT a.content_id FROM core_collection_entry e
+              JOIN media_media_asset a ON a.asset_id = e.target_id
+             WHERE e.collection_id = ? AND e.target_type = 'media.media_asset'
+             ORDER BY e.position LIMIT 1)
+         WHERE collection_id = ?`
+      )
+      .run(collection.collection_id, collection.collection_id);
+    ctx.wrote("core.collection", collection.collection_id);
+  }
+  // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they
+  // go by hand — the same pair the lifecycle sweep deletes in duties.ts.
+  ctx.db
+    .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
+    .run(input.asset_id);
+  ctx.db
+    .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+    .run(input.asset_id);
+  cleanupPolyRefs(ctx.db, ctx.now, "media.media_asset", input.asset_id);
+  ctx.wrote("media.media_asset", input.asset_id);
+  const released = releaseContentNow(ctx, asset.content_id);
+  ctx.cite({
+    claim: `asset ${input.asset_id} deleted forever; bytes ${released ? "handed to the next storage sweep" : "still rented elsewhere"}`,
+    entityType: "media.media_asset",
+    entityId: input.asset_id,
+  });
+  return { asset_id: input.asset_id, content_released: released ? 1 : 0 };
 }
 
 const SET_FAVORITE: CommandDefinition = {
@@ -1424,6 +1651,7 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_ARCHIVED);
   gateway.registerCommand(DELETE_ASSET);
   gateway.registerCommand(RESTORE_ASSET);
+  gateway.registerCommand(PURGE_ASSET);
   gateway.registerCommand(CREATE_ALBUM);
   gateway.registerCommand(RENAME_ALBUM);
   gateway.registerCommand(SET_ALBUM_COVER);

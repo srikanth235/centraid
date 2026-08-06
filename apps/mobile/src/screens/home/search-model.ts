@@ -114,27 +114,60 @@ export function formatSearchMeta(iso?: string): string | undefined {
 }
 
 /**
- * Suggestion chips: real labels from the vault, deduplicated case-
- * insensitively, capped in count and length. Tapping a chip fills the query
- * with exactly this string (SearchOverlay owns that wiring) — so a chip is
- * never a category name or an invented example, only something that exists.
+ * One suggestion TERM from one vault label. The handoff's chips are short
+ * search terms — `['Pemberton','right of way','Ana']` (v4 .dc.html :6012) —
+ * never a full note/doc title. A label already short enough is a term as-is;
+ * a longer label contributes its single most distinctive word (the longest —
+ * "Pemberton right of way survey notes" → "Pemberton"), because an
+ * ellipsised "A vault-content ti…" fragment is not a searchable term. A
+ * label with no usable word yields nothing rather than a truncation.
+ */
+function deriveSuggestionTerm(
+  label: string,
+  maxTermChars: number
+): string | undefined {
+  const trimmed = label.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length <= maxTermChars) return trimmed;
+  let best: string | undefined;
+  for (const raw of trimmed.split(/\s+/u)) {
+    const word = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (word.length < 3 || word.length > maxTermChars) continue;
+    if (!best || word.length > best.length) best = word;
+  }
+  return best;
+}
+
+/**
+ * Suggestion chips: SHORT search terms derived from real vault labels —
+ * still never a category name or an invented example, only something that
+ * exists (tapping a chip fills the query with exactly this string;
+ * SearchOverlay owns that wiring). The handoff's `try` row is ONE line of a
+ * few short terms (:3277–3289, :6009–6013 — `display:flex`, no wrap), so
+ * this caps in count AND in total characters: a term that would push the row
+ * past the budget is dropped, never wrapped onto a second line. Terms are
+ * deduplicated case-insensitively.
  */
 export function selectSuggestionChips(
   candidates: readonly string[],
-  limit = 6,
-  maxChars = 28
+  limit = 3,
+  maxTermChars = 16,
+  rowCharBudget = 30
 ): string[] {
   const seen = new Set<string>();
   const chips: string[] = [];
+  let used = 0;
   for (const raw of candidates) {
-    const label = raw.trim();
-    if (!label) continue;
-    const key = label.toLowerCase();
+    const term = deriveSuggestionTerm(raw, maxTermChars);
+    if (!term) continue;
+    const key = term.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    chips.push(
-      label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label
-    );
+    // Drop what overflows the one-row budget, but keep scanning — a shorter
+    // later term may still fit.
+    if (used + term.length > rowCharBudget) continue;
+    chips.push(term);
+    used += term.length;
     if (chips.length >= limit) break;
   }
   return chips;

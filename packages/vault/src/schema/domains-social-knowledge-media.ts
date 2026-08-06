@@ -133,6 +133,17 @@ CREATE TABLE media_media_asset (
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
+  -- Edit lineage (issue #711). The photo editor is non-destructive: saving an
+  -- edit writes a NEW asset beside the original and never touches the source
+  -- bytes, so the copy has to say what it came from or the provenance is lost
+  -- the moment it lands. Self-referencing FK, NULL for every camera original
+  -- and every import — "no source" is a real answer the UI must be able to
+  -- read and say plainly, not a hole to paper over with the copy's own
+  -- capture date. An asset may not be its own source (an edit of itself is
+  -- not a thing the editor can produce). SQLite never auto-indexes a child FK
+  -- column, and merge.ts re-points FKs by UPDATE, so it carries its own index.
+  source_asset_id  TEXT REFERENCES media_media_asset(asset_id)
+                     CHECK (source_asset_id IS NULL OR source_asset_id <> asset_id),
   -- First-class asset state (issue #419) so the Photos replica shape is
   -- self-contained: favorite is a boolean on the asset (no more reconstructing
   -- it from a 3-table core_tag/core_concept join), and archive hides an asset
@@ -147,6 +158,7 @@ CREATE TABLE media_media_asset (
 CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_media_asset(place_id);
 CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_media_asset(camera_device_id);
 CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_media_asset(capture_group_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_source ON media_media_asset(source_asset_id);
 
 CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,

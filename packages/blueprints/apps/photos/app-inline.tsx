@@ -11,7 +11,9 @@ import duplicatesQuery from "./queries/duplicates.ts";
 import enrichmentStatusQuery from "./queries/enrichment-status.ts";
 import facesQuery from "./queries/faces.ts";
 import libraryQuery from "./queries/library.ts";
+import peopleQuery from "./queries/people.ts";
 import searchQueryModule from "./queries/search.ts";
+import storageQuery from "./queries/storage.ts";
 
 const photosInlineApp: InlineAppModule = {
   appId: "photos",
@@ -29,6 +31,9 @@ const photosInlineApp: InlineAppModule = {
     duplicates: { default: duplicatesQuery },
     "enrichment-status": { default: enrichmentStatusQuery },
     faces: { default: facesQuery },
+    people: { default: peopleQuery },
+    // The whole-library custody rollup the Storage screen reads (issue #711).
+    storage: { default: storageQuery },
   } as unknown as InlineAppModule["queries"],
   kitAsk: {
     scope: "photos",

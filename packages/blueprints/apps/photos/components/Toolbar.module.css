@@ -1,56 +1,68 @@
-/* The main pane's toolbar row. Authored camelCase (old `ph-` prefix dropped).
-   The pill button rides the shared `.kit-btn` base as a compound so it keeps
-   the specificity that beat kit.css's later-loaded `.kit-btn`. */
+/* The Photos toolbar row (v4 handoff §3): kind filter, vault filter, tile-size
+   stepper. Nothing else — the title, the count, Select and Import moved to the
+   frame's app bar, and their rules moved out with them.
+
+   The row is never drawn empty (the component returns null when it carries
+   nothing), so these rules only ever describe a row with something in it.
+   Logical properties only, so the row and the stepper mirror under RTL. */
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 14px 20px 10px;
+  padding: var(--sp-2) 20px;
   flex-wrap: wrap;
   flex-shrink: 0;
 }
-.backBtn {
-  flex-shrink: 0;
-}
-.toolbarTitle {
-  min-width: 0;
-}
-/* A long album title has to ellipsize, not run past the actions on its row —
-   the parent already carries `min-width: 0` so the flex item can shrink. */
-.toolbarH1 {
-  font: var(--t-title);
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.toolbarSub {
-  font: var(--t-small);
-  color: var(--text-soft);
-  margin-top: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* The scope chips (issue #599) sit under the subtitle, inside the title block,
-   so they read as "what this view is showing" rather than as another action.
-   Layout only — the chips themselves are kit.css's `.kit-chip`. */
-.toolbarScopes {
-  margin-top: 6px;
-}
-.toolbarActions {
-  margin-inline-start: auto;
+
+.field {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
 }
-:global(.kit-btn).pillBtn {
-  border-radius: var(--r-pill);
+.select {
+  font: var(--t-control);
+  padding-block: var(--sp-1);
+  padding-inline: var(--sp-2);
 }
-:global(.kit-btn).pillBtn[data-active="true"] {
+
+/* The vault filter and the stepper are groups for the accessibility tree, not
+   boxes — a <fieldset> draws a border and padding by UA default. */
+.vaults,
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+/* A recessive state takes its own token on the leaf; never a container
+   opacity (§18). */
+.vaultChip[data-on="false"] {
+  color: var(--text-faint);
+}
+.vaultChip[data-on="true"] {
   border-color: var(--line-sel);
   color: var(--accent-text);
   background: var(--accent-soft);
+}
+
+.stepper {
+  margin-inline-start: auto;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+/* The rung name is a numeric-register readout: mono, tabular, and above the
+   11px floor. */
+.rung {
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  min-inline-size: 2ch;
+  text-align: center;
 }

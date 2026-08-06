@@ -288,6 +288,10 @@ export default function Stem({
     <nav
       className={chrome.stem}
       data-compact={compact ? "true" : undefined}
+      // The frame's OWN band, on compact (Photos v4, CHANGELOG F). A route that
+      // claims the band replaces this element entirely — `ShellFrame` renders
+      // one or the other — so `[data-band]` never matches twice in a document.
+      data-band={compact ? "host" : undefined}
       aria-label="Apps"
     >
       {compact ? null : (

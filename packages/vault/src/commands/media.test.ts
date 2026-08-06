@@ -101,6 +101,43 @@ describe("media", () => {
     ]);
   });
 
+  test("add_asset records the asset an edited copy was derived from", () => {
+    const original = addAsset({
+      data_uri: PIXEL,
+      captured_at: "2026-03-04T09:00:00Z",
+    });
+    // A crop of it: different bytes, saved today, pointing at its source.
+    const edited = addAsset({
+      data_uri: CLIP,
+      captured_at: "2026-08-05T12:00:00Z",
+      source_asset_id: original.asset_id,
+    });
+    const rows = db.vault
+      .prepare(
+        "SELECT asset_id, source_asset_id FROM media_media_asset ORDER BY captured_at"
+      )
+      .all() as Array<{ asset_id: string; source_asset_id: string | null }>;
+    expect(rows.map((row) => ({ ...row }))).toStrictEqual([
+      // The original was derived from nothing, and says so.
+      { asset_id: original.asset_id, source_asset_id: null },
+      { asset_id: edited.asset_id, source_asset_id: original.asset_id },
+    ]);
+  });
+
+  test("add_asset refuses a source that is not an asset in this vault", () => {
+    const outcome = invoke("media.add_asset", {
+      data_uri: PIXEL,
+      source_asset_id: "asset-that-never-existed",
+    });
+    // A missed precondition is a `failed` outcome, not a raw FK error from
+    // the middle of the insert — and nothing lands.
+    expect(outcome.status).toBe("failed");
+    const count = db.vault
+      .prepare("SELECT count(*) AS n FROM media_media_asset")
+      .get() as { n: number };
+    expect(count.n).toBe(0);
+  });
+
   test("add_asset dedupes identical bytes onto one asset (content_id is UNIQUE)", () => {
     const first = addAsset({ data_uri: PIXEL });
     const second = invoke("media.add_asset", { data_uri: PIXEL });

@@ -294,19 +294,9 @@ export default function SettingsScreen({
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Notifications"
           >
-            <Icon
-              name="CheckCircle"
-              size={18}
-              color={colors.textSoft}
-              strokeWidth={1.75}
-            />
+            <Icon name="CheckCircle" size={18} color={colors.textSoft} />
             <Text style={styles.rowLabel}>Decisions and updates</Text>
-            <Icon
-              name="ChevronRight"
-              size={16}
-              color={colors.textFaint}
-              strokeWidth={1.75}
-            />
+            <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
         </SettingsSection>
 
@@ -316,19 +306,9 @@ export default function SettingsScreen({
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Phone storage"
           >
-            <Icon
-              name="Folder"
-              size={18}
-              color={colors.textSoft}
-              strokeWidth={1.75}
-            />
+            <Icon name="Folder" size={18} color={colors.textSoft} />
             <Text style={styles.rowLabel}>Vault storage on this phone</Text>
-            <Icon
-              name="ChevronRight"
-              size={16}
-              color={colors.textFaint}
-              strokeWidth={1.75}
-            />
+            <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
         </SettingsSection>
 
@@ -338,18 +318,12 @@ export default function SettingsScreen({
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Gateway connection"
           >
-            <Icon
-              name="Code"
-              size={18}
-              color={colors.textSoft}
-              strokeWidth={1.75}
-            />
+            <Icon name="Code" size={18} color={colors.textSoft} />
             <Text style={styles.rowLabel}>Gateway connection</Text>
             <Icon
               name={advancedOpen ? "ChevronDown" : "ChevronRight"}
               size={16}
               color={colors.textFaint}
-              strokeWidth={1.75}
             />
           </Pressable>
 
@@ -430,12 +404,7 @@ function PairScanner({
           accessibilityLabel="Cancel scan"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
-          <Icon
-            name="ArrowLeft"
-            size={20}
-            color={colors.text}
-            strokeWidth={1.75}
-          />
+          <Icon name="ArrowLeft" size={20} color={colors.text} />
         </Pressable>
         <Text style={styles.scanTitle}>Scan pairing code</Text>
         <View style={styles.barSpacer} />

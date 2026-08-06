@@ -8,14 +8,20 @@ import { describe, expect, it } from "vitest";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import {
+  countThings,
   countUpcoming,
   decodeProse,
   firstProseLine,
   initialsOf,
   isWideTile,
   monthStartDate,
+  MOSAIC_CELL_HEIGHT,
+  MOSAIC_SLOTS,
+  mosaicAwaitingBytes,
+  mosaicCells,
   openTasks,
-  selectDocExcerpt,
+  formatBytes,
+  selectDocRows,
   selectFaces,
   selectNextEvent,
   selectNoteExcerpt,
@@ -23,10 +29,11 @@ import {
   selectTaskRows,
   springboardState,
   sumMinor,
+  tileEarnsGrid,
   tileSize,
   TILE_EMPTY_COPY,
 } from "./tile-model";
-import type { TileStatus } from "./tile-model";
+import type { TileData, TileStatus } from "./tile-model";
 
 const row = (values: Record<string, unknown>): ReplicaRow =>
   values as ReplicaRow;
@@ -65,10 +72,16 @@ describe(selectPhotoMosaic, () => {
     expect(mosaic[0]?.uri).toBe("file:///pinned.jpg");
   });
 
-  it("drops rows it cannot address rather than rendering a broken tile", () => {
-    expect(selectPhotoMosaic(assets, undefined, () => undefined)).toStrictEqual(
-      []
-    );
+  it("keeps a cell for an asset whose bytes are not addressable yet", () => {
+    // A seeded, gateway-side vault with no gateway reachable: ten photographs
+    // exist, none can be painted. Dropping them rendered the tile as one blank
+    // rectangle under a header reading 10.
+    const mosaic = selectPhotoMosaic(assets, undefined, () => undefined);
+    expect(mosaic.map((photo) => photo.id)).toStrictEqual(["b", "a"]);
+    expect(mosaic.every((photo) => photo.uri === undefined)).toBe(true);
+  });
+
+  it("drops a row with no content behind it — there is nothing to wait for", () => {
     expect(
       selectPhotoMosaic(
         [row({ captured_at: "x" })],
@@ -84,7 +97,80 @@ describe(selectPhotoMosaic, () => {
       "https://gw",
       () => undefined
     );
-    expect(mosaic[0]?.uri.endsWith("?variant=poster")).toBe(true);
+    expect(mosaic[0]?.uri?.endsWith("?variant=poster")).toBe(true);
+  });
+});
+
+describe("the mosaic a seeded, gateway-side vault produces", () => {
+  // The real replica shape for `media.media_asset`: `asset_id` and `content_id`
+  // are both NOT NULL in the DDL, `captured_at` is nullable, and the multi-vault
+  // reader stamps `__centraidScopeId` on every row. Ten of them, none pinned to
+  // this device — which is what a freshly seeded vault looks like from a phone.
+  const seeded = Array.from({ length: 10 }, (_, index) =>
+    row({
+      asset_id: `asset-${index}`,
+      content_id: `content-${index}`,
+      kind: "photo",
+      captured_at: `2026-07-${String(index + 1).padStart(2, "0")}T12:00:00.000Z`,
+      __centraidScopeId: "vault-personal",
+    })
+  );
+
+  it("draws a full grid of cells with no local bytes and no gateway", () => {
+    const photos = selectPhotoMosaic(seeded, undefined, () => undefined);
+    // Bounded to what the tile draws, not to how many exist.
+    expect(photos).toHaveLength(MOSAIC_SLOTS);
+    expect(mosaicCells(photos)).toHaveLength(MOSAIC_SLOTS);
+    // Every slot is a real cell — this is the assertion that fails if a row
+    // without addressable bytes is dropped, which rendered the tile as one
+    // blank rectangle under a header reading 10.
+    for (const cell of mosaicCells(photos)) expect(cell).toBeDefined();
+    expect(mosaicAwaitingBytes(photos)).toBe(true);
+  });
+
+  it("gives every cell a real height, so none can collapse into the ground", () => {
+    // TileBody's `styles.thumb` takes this exact value as an explicit height
+    // rather than deriving one from `aspectRatio`. A zero-height cell is
+    // invisible and reads as a deliberate blank rectangle.
+    expect(MOSAIC_CELL_HEIGHT).toBeGreaterThan(0);
+    expect(Number.isFinite(MOSAIC_CELL_HEIGHT)).toBe(true);
+  });
+
+  it("still fills every slot once the gateway can address the bytes", () => {
+    const photos = selectPhotoMosaic(seeded, "https://gw", () => undefined);
+    expect(photos).toHaveLength(MOSAIC_SLOTS);
+    expect(photos.every((photo) => photo.uri !== undefined)).toBe(true);
+    expect(mosaicAwaitingBytes(photos)).toBe(false);
+  });
+
+  it("keeps the slot count when fewer photographs exist than slots", () => {
+    const photos = selectPhotoMosaic(
+      seeded.slice(0, 2),
+      undefined,
+      () => undefined
+    );
+    expect(photos).toHaveLength(2);
+    // The grid does not shrink to two cells — it draws six and leaves four
+    // empty, so nothing reflows when the rest arrive.
+    const cells = mosaicCells(photos);
+    expect(cells).toHaveLength(MOSAIC_SLOTS);
+    expect(cells.filter(Boolean)).toHaveLength(2);
+  });
+});
+
+describe(mosaicAwaitingBytes, () => {
+  it("is true when cells exist but not one of them can paint", () => {
+    expect(mosaicAwaitingBytes([{ id: "a" }, { id: "b" }])).toBe(true);
+  });
+
+  it("is false as soon as one cell has bytes to draw", () => {
+    expect(
+      mosaicAwaitingBytes([{ id: "a" }, { id: "b", uri: "file:///b.jpg" }])
+    ).toBe(false);
+  });
+
+  it("is false with no cells at all — that is the empty tile, not this state", () => {
+    expect(mosaicAwaitingBytes([])).toBe(false);
   });
 });
 
@@ -151,21 +237,58 @@ describe(selectNoteExcerpt, () => {
   });
 });
 
-describe(selectDocExcerpt, () => {
-  it("resolves through current_content_id", () => {
+describe(formatBytes, () => {
+  it("carries one decimal above the byte rung and none below it", () => {
+    expect(formatBytes(512)).toBe("512 bytes");
+    expect(formatBytes(4_299_161)).toBe("4.1 MB");
+    expect(formatBytes(2048)).toBe("2 KB");
+  });
+
+  it("says nothing rather than inventing a size it does not have", () => {
+    expect(formatBytes(undefined)).toBe("");
+    expect(formatBytes("not a number")).toBe("");
+    expect(formatBytes(-1)).toBe("");
+  });
+});
+
+describe(selectDocRows, () => {
+  const doc = (id: string, title: string, updated: string, content: string) =>
+    row({
+      document_id: id,
+      title,
+      updated_at: updated,
+      current_content_id: content,
+    });
+
+  it("draws newest-first file rows with the size off the content item", () => {
     expect(
-      selectDocExcerpt(
+      selectDocRows(
         [
-          row({
-            document_id: "d1",
-            title: "Lease",
-            updated_at: "2026-02-02T00:00:00.000Z",
-            current_content_id: "c9",
-          }),
+          doc("d1", "Lease", "2026-02-02T00:00:00.000Z", "c9"),
+          doc("d2", "Survey", "2026-03-03T00:00:00.000Z", "c4"),
         ],
-        [row({ content_id: "c9", content_uri: prose("The tenant shall…") })]
+        [
+          row({ content_id: "c9", byte_size: 2048 }),
+          row({ content_id: "c4", byte_size: 4_299_161 }),
+        ]
       )
-    ).toStrictEqual({ title: "Lease", excerpt: "The tenant shall…" });
+    ).toStrictEqual([
+      { id: "d2", name: "Survey", size: "4.1 MB" },
+      { id: "d1", name: "Lease", size: "2 KB" },
+    ]);
+  });
+
+  it("keeps a row whose byte size was never recorded, without a size", () => {
+    expect(
+      selectDocRows([doc("d1", "Lease", "2026-02-02T00:00:00.000Z", "c9")], [])
+    ).toStrictEqual([{ id: "d1", name: "Lease", size: "" }]);
+  });
+
+  it("bounds what reaches the tile", () => {
+    const many = Array.from({ length: 9 }, (_, i) =>
+      doc(`d${i}`, `Doc ${i}`, `2026-01-0${i + 1}T00:00:00.000Z`, `c${i}`)
+    );
+    expect(selectDocRows(many, [])).toHaveLength(3);
   });
 });
 
@@ -239,9 +362,43 @@ describe(selectFaces, () => {
       ])
     );
     expect(faces).toStrictEqual([
-      { id: "p1", initials: "AL" },
-      { id: "p2", initials: "ZQ", color: "#abc" },
+      { id: "p1", initials: "A" },
+      { id: "p2", initials: "Z", color: "#abc" },
     ]);
+  });
+
+  it("does not treat a blank stored colour as a choice", () => {
+    // The seeded vault leaves `avatar_color` empty, and an empty string that
+    // survives to the renderer wins over the derivation — which is exactly how
+    // the tile drew unfilled, near-white circles. Blank is absent.
+    const faces = selectFaces(
+      [
+        row({ party_id: "p1", avatar_color: "" }),
+        row({ party_id: "p2", avatar_color: "   " }),
+        row({ party_id: "p3", avatar_color: "  #7a5283 " }),
+      ],
+      new Map([
+        ["p1", "Ada Lovelace"],
+        ["p2", "Bo Nguyen"],
+        ["p3", "Cy Twombly"],
+      ])
+    );
+    expect(faces).toStrictEqual([
+      { id: "p1", initials: "A" },
+      { id: "p2", initials: "B" },
+      // A real stored colour still wins, and only its surrounding space is cut.
+      { id: "p3", initials: "C", color: "#7a5283" },
+    ]);
+  });
+
+  it("identifies a face by party id, never by the name it renders", () => {
+    // The id is what the renderer derives the circle's hue from, so a rename
+    // must not be able to move it.
+    const faces = selectFaces(
+      [row({ party_id: "party_ada" })],
+      new Map([["party_ada", "Ada Lovelace"]])
+    );
+    expect(faces[0]?.id).toBe("party_ada");
   });
 
   it("caps the sample", () => {
@@ -253,8 +410,8 @@ describe(selectFaces, () => {
 });
 
 describe(initialsOf, () => {
-  it("takes first and last initials, and never renders a hole", () => {
-    expect(initialsOf("Ada Byron Lovelace")).toBe("AL");
+  it("takes a single initial, and never renders a hole", () => {
+    expect(initialsOf("Ada Byron Lovelace")).toBe("A");
     expect(initialsOf("Prince")).toBe("P");
     expect(initialsOf("   ")).toBe("?");
   });
@@ -332,6 +489,68 @@ describe(sumMinor, () => {
 describe(monthStartDate, () => {
   it("is the ISO date `spent_on` stores", () => {
     expect(monthStartDate(new Date(2026, 6, 17))).toBe("2026-07-01");
+  });
+});
+
+describe(tileEarnsGrid, () => {
+  const tile = (status: TileStatus, kind: "notes" | "locker" = "notes") => ({
+    body: { kind },
+    status,
+  });
+
+  it("admits a tile that has something to show", () => {
+    expect(tileEarnsGrid(tile("content"))).toBe(true);
+  });
+
+  it("holds the slot while a read is in flight, so nothing relayouts", () => {
+    expect(tileEarnsGrid(tile("loading"))).toBe(true);
+  });
+
+  it("demotes a settled-empty app to a first move", () => {
+    expect(tileEarnsGrid(tile("empty"))).toBe(false);
+  });
+
+  it("demotes an unreadable app rather than showing a body it cannot stand behind", () => {
+    expect(tileEarnsGrid(tile("unknown"))).toBe(false);
+  });
+
+  it("always keeps Locker, whose body is a state and not a query result", () => {
+    expect(tileEarnsGrid(tile("unknown", "locker"))).toBe(true);
+    expect(tileEarnsGrid(tile("empty", "locker"))).toBe(true);
+  });
+});
+
+describe(countThings, () => {
+  const tile = (over: Partial<TileData>): TileData =>
+    ({
+      appId: "notes",
+      body: { kind: "notes", title: "", excerpt: "" },
+      countLabel: "notes",
+      status: "content",
+      ...over,
+    }) as TileData;
+
+  it("sums only the counts a read actually returned", () => {
+    expect(
+      countThings([
+        tile({ count: 8000 }),
+        tile({ count: 432 }),
+        // Locker withholds its count — omitted, never counted as zero.
+        tile({ count: undefined, status: "unknown" }),
+      ])
+    ).toStrictEqual({ capped: false, settled: true, total: 8432 });
+  });
+
+  it("reports the total as a floor when a contributing read hit its ceiling", () => {
+    expect(countThings([tile({ count: 200, countCapped: true })]).capped).toBe(
+      true
+    );
+  });
+
+  it("is unsettled while any tile is still reading", () => {
+    expect(
+      countThings([tile({ count: 3 }), tile({ status: "loading" })]).settled
+    ).toBe(false);
   });
 });
 

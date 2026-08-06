@@ -13,12 +13,45 @@
 // and `@centraid/client/replica/native`), so this is the narrowest existing
 // seam that both can reach without inventing a new package.
 
-/** First run — the vault has no content ANYWHERE. Verbatim from the brief. */
-export const HOME_FIRST_RUN_TITLE = "Nothing here yet";
+/** First run — the vault has no content ANYWHERE. Verbatim from the v4 Binding
+ *  Layer handoff (design_handoff_photos/…v4.dc.html:5700, `frTitle`). The v3
+ *  brief's "Nothing here yet" retired with the flip. */
+export const HOME_FIRST_RUN_TITLE = "Nothing in here yet";
 
 /** The body under it. One sentence about what Home becomes, one about custody. */
 export const HOME_FIRST_RUN_BODY =
   "Bring your photographs and documents in and this becomes the front of your own archive. Everything you import stays on this device.";
+
+/**
+ * Day one's three buttons, verbatim from the handoff (:983–990). One filled —
+ * the vault's own offer — flanked by the two outlined moves the body
+ * paragraph promises ("bring in your own"). Deliberately its own trio rather
+ * than a slice of `HOME_FIRST_MOVE_COPY` below: the quiet start band reuses
+ * that catalog's verb-first phrasing across up to nine apps, but day one is a
+ * themed page with exactly three fixed offers, and "Bring in photographs" /
+ * "Bring in documents" read as a page's own copy, not a band row's.
+ */
+export const HOME_DAY_ONE_SEED_LABEL = "Fill it with sample content";
+export const HOME_DAY_ONE_PHOTOS_LABEL = "Bring in photographs";
+export const HOME_DAY_ONE_DOCS_LABEL = "Bring in documents";
+
+/**
+ * Day one's mono foot, real counts substituted into the handoff's own template
+ * (`frFoot`, :5706 — the prototype's static "8 apps installed · 0 things …").
+ * `appsInstalled` and `things` are real reads (`items.length` / `countThings`
+ * in Home.tsx), never the prototype's fixture numbers.
+ */
+export function homeDayOneFoot(appsInstalled: number, things: number): string {
+  return `${appsInstalled} apps installed · ${things} things · sample content can be removed in one action`;
+}
+
+/**
+ * The offline banner, verbatim from the handoff (`offlineCopy`, :5563). Shared
+ * because a route reachable from both surfaces should not risk two spellings
+ * of the same fact — see this module's header.
+ */
+export const HOME_OFFLINE_BANNER =
+  "Offline · changes stay on this device and commits are disabled until the gateway is back";
 
 /**
  * How many first moves the day-one treatment draws.

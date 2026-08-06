@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Switch, View } from "react-native";
 
 import Button from "../kit/components/Button";
 import { Text, TextInput } from "../kit/components/NativeText";
-import { radii, spacing, t, useTheme } from "../kit/theme";
+import { borders, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import type { MobileOutboxRow } from "../lib/gateway";
 import {
@@ -161,7 +161,7 @@ const makeStyles = (colors: ThemeColors) =>
     alwaysRow: {
       alignItems: "center",
       borderTopColor: colors.line,
-      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[3],
       paddingTop: spacing[3],

@@ -23,6 +23,20 @@
 
 ## Resolved
 
+- #711 — Closed the enrichment-tier enforcement gap. The vault's per-domain
+  `enrich_policy` (`off | local | model`) was written by Settings and read by
+  nothing on the execution path, so Photos' "what leaves the device: nothing"
+  was copy rather than behaviour — enrichment automations fired and took model
+  turns whatever the tier said. Added a manifest `enrich` block (domain,
+  capability, lane), a fail-closed gate at the single fire choke point
+  (`runFire`), and an owner-plane tier read the guarded automation's own grants
+  cannot answer for. `off` refuses the run with a logged reason, `local`
+  refuses any model-routed run and seals `ctx.agent` for the ones it allows,
+  and an unreadable policy refuses. Also scoped the on-demand queue by
+  `capability`, so a face-detection consent no longer hands the same row to
+  every enabled enricher, and fixed three enricher drains that filtered on
+  `entity_type`/`entity_id` — columns `enrich_request` does not have — and had
+  therefore never drained at all.
 - #225 — Rebuilt the desktop Playwright e2e suite for the post-#109/#137/#141
   gateway-store architecture (the old `delete-app` suite had silently broken —
   all 8 tests failed — when it kept seeding a `gatewayUrl` settings no longer

@@ -1,0 +1,45 @@
+/* Settings → Enrichment. The tier ladder is the whole page, so the only
+   styles here are for the ladder itself — everything around it reuses the
+   shared drawer/segment primitives. */
+
+.tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tier {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: var(--t-small-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* The tier this domain is actually on. Marked with the border as well as the
+   text, so "which one am I on" survives a greyscale or low-contrast screen —
+   colour alone would be the only signal otherwise. */
+.tier[data-current="true"] {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.tierName {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.status {
+  margin: 10px 0 0;
+  font-size: var(--t-small-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+}

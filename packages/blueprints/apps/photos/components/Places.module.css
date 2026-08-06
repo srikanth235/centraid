@@ -1,0 +1,47 @@
+/* The Places shelf (v4 handoff §5): one section per place, each a name, a
+   count in tabular mono, and justified rows of the SAME tile the timeline
+   packs. Type on paper — no cards, no rules, no pills, and the 2px gutter is
+   the timeline's, because these ARE timeline rows under a place filter.
+
+   Logical properties throughout; nothing below 11px; numerics mono. */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+}
+
+.place {
+  margin-block-end: var(--sp-4);
+}
+
+/* The section head reads as the month header does — micro-caps for the place,
+   the count beside it and never under it. */
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: var(--sp-4) 0 6px;
+  font: var(--t-eyebrow);
+}
+.name {
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text);
+}
+.count {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* The same 2px gutter on both axes as the timeline's rows — the one place in
+   the product where content touches content (§2.4). */
+.row {
+  display: flex;
+  gap: 2px;
+  margin-block-end: 2px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}

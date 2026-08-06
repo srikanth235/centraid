@@ -114,6 +114,7 @@ export const act = (action: string, input: unknown, scope?: string | null) => {
   return Promise.resolve({ status: 'executed' });
 };
 export const narrate = (): boolean => false;
+export const notice = (): void => undefined;
 export const writeTarget = () => ({ disabled: false, scopeId: 'vault-own', label: 'Library' });
 `
 );

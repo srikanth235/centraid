@@ -25,3 +25,32 @@
   color: var(--text-soft);
   font: var(--t-small, 400 0.85rem/1.4 system-ui, sans-serif);
 }
+
+/* The seat wall (docs/blueprint-seats.md S5) — an app the manifest refuses
+   to mount on this SEAT (docs/platform-gating.md). The refusal grammar this
+   repo already uses for offline/out-of-room states: a stated title and one
+   sentence of reason, no icon, no alarm colour, no dead control — there is
+   nothing here to retry, because the seat itself is what's refusing. */
+.refusal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6);
+  max-inline-size: 30rem;
+  margin-inline: auto;
+}
+
+.refusalTitle {
+  color: var(--text);
+  font: var(--t-title);
+  margin: 0;
+}
+
+.refusalBody {
+  color: var(--text-soft);
+  font: var(--t-body);
+  margin: 0;
+}

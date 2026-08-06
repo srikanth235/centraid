@@ -26,14 +26,26 @@ export function createSlideshow({ slideshowRoot }: { slideshowRoot: Root }) {
   // walks the same photos the grid/lightbox were just showing, in the same
   // order. `startAssetId` seeds where it opens; null starts at the first
   // photo (the toolbar entry point has no "current" asset).
-  function openSlideshow(list: Asset[], startAssetId: string | null) {
+  //
+  // `onStopped` is how §7.3's promise is kept: "the viewer keeps the
+  // photograph you stopped on". The run reports where it stopped, and the
+  // caller — the lightbox orchestrator — reopens the viewer there. Optional,
+  // because the toolbar entry point has no viewer to go back to.
+  function openSlideshow(
+    list: Asset[],
+    startAssetId: string | null,
+    onStopped?: (stoppedOn: Asset | null) => void
+  ) {
     open = true;
     $("slideshow").hidden = false;
     slideshowRoot.render(
       <SlideshowView
         list={list}
         startAssetId={startAssetId ?? null}
-        onClose={closeSlideshow}
+        onClose={(stoppedOn) => {
+          closeSlideshow();
+          onStopped?.(stoppedOn);
+        }}
       />
     );
   }

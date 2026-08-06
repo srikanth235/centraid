@@ -618,8 +618,21 @@ export function makeVaultRouteHandler(
             }
             patch[key] = v as EnrichTier | null;
           }
+          const before = readEnrichSettings(plane.db);
           updateEnrichSettings(plane.db, patch);
-          return sendJson(res, 200, { enrich: readEnrichSettings(plane.db) });
+          const after = readEnrichSettings(plane.db);
+          // A standing "enrichment isn't running" card (notices.ts
+          // `enrichRefusalNotice`) describes the tier that was in force. The
+          // owner has just answered it, so it is archived here rather than
+          // left on the Notifications surface asserting a setting that no
+          // longer holds. Archived, not deleted: the record of what was
+          // refused and when stays readable.
+          for (const domain of ["photos", "docs"] as const) {
+            if (before[domain] === after[domain]) continue;
+            const stale = plane.notices.getBySource("enrichment", domain);
+            if (stale) plane.notices.archive(stale.noticeId);
+          }
+          return sendJson(res, 200, { enrich: after });
         }
       }
 

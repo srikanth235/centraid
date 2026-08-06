@@ -21,6 +21,10 @@ colors:
   link-dark: "#9DB0F0"
   net: "#9A3B2E"
   net-dark: "#E08878"
+  stage: "#0B0B0B"
+  on-stage: "#EDEDEC"
+  stage-line: "#2A2A29"
+  stage-sunken: "#1A1A19"
   ring: "#4A67C8"
   ring-dark: "#8098E8"
   success: "#3a6540"
@@ -95,6 +99,8 @@ colors:
   dark-text-inv: "#0E0E0E"
   dark-line: "#1B1B1A"
   dark-line-strong: "#232322"
+  light-skel: "#E4E3E0"
+  dark-skel: "#1E1E1D"
 typography:
   display:
     fontFamily: "Instrument Serif"
@@ -371,6 +377,8 @@ Home takes no hue: it renders in `--text-soft`. Colour is never the only channel
 
 Three hues are reserved and named. `--link` is prose links and text selection, and is never permitted on a control; `--bg-sel` and `--line-sel` are washes of it. `--focus-ring-color` is the ring. `--net` is "this leaves the device" — a border or a 2px rule, never a fill, because nothing alarming should be a large filled surface. `--danger` is solved from the same base as `--net` so a destructive action and a network egress read as one consequence.
 
+`--stage` and `--on-stage` are the opaque media ground and its ink for a viewer, a slideshow, and an editor (the Photos v4 handoff, §2.2/§B) — `#0B0B0B` / `#EDEDEC`, **the same literal in both themes**, because the media ground does not follow the theme: a viewer that lightened under "light mode" would blow out the photograph it is framing. `--stage-line` (`#2A2A29`) is the hairline between chrome and media ON the stage, because `--line` is invisible against near-black. `--stage-sunken` (`#1A1A19`) is the recess cut INTO the stage — the media transport's unplayed track and any other trough whose fill is `--on-stage` — because `--bg-sunken` follows the PAGE and would punch a near-white hole in the media ground, while `--stage-line` is tuned to be seen as an edge where a trough is tuned to recede. `--skel` (`#E4E3E0` / `#1E1E1D`) is the ground a tile paints before its bytes arrive; `--bg-elev` reads as a card, and an absence is not a card, so a loading tile gets its own rung rather than borrowing one that implies content already landed. None of the three moves a token that existed before it, and none is a new hue.
+
 The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, `--bg-sel`, and the five tone roles `--bg-tone-neutral` / `-paper` / `-mat` / `-cool` / `-warm`. Surfaces are PAPER, not elevation: in light the raised surface is darker than the page, in dark it is lighter — a tile is a sheet laid on the page, not a plane floating above it. An app's declared tone retunes `--bg` and nothing else.
 
 The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface tone, not against `--bg`** — in dark every raised surface is lighter than the page, and in light the `mat` tone is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
@@ -400,13 +408,15 @@ Roles are not families. There is one face per genus, all four shipped from the r
 
 Link is not a size role: it inherits, takes `--link`, and is always underlined.
 
-Every `--t-*` is a `font` shorthand, and the three properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
+Every `--t-*` is a `font` shorthand, and the properties that shorthand cannot carry travel beside it as their own tokens rather than as decoration a stylesheet has to remember: `--t-display-tracking` −0.01em, `--t-eyebrow-tracking` 0.06em, `--t-eyebrow-transform` uppercase, and `--t-mono-numeric` tabular-nums. "Numerics are tabular in every app, without exception" is only true while that last one exists and is used.
+
+The numeric role also declares its own reading direction: `--t-mono-direction` `ltr` and `--t-mono-bidi` `isolate`, set once on the role, never per span. A number is not a word — under RTL the bidi algorithm reorders a mixed digit-and-word run (`30 July 2026 · 17:42` reads back to front) unless the role pins its own direction and isolates it from the surrounding paragraph. This lands on TEXT elements only: a layout container must never carry the numeric face, because its inline axis would flip along with it. The defect was shell-wide, not app-specific — it was reordering the stem's gateway line and the account handle beside every mono-set date and count in the product. The distinct composable size rungs are `--t-display-size` 31px, `--t-title-size` 20px, `--t-reading-size` 19px, `--t-body-size` 15px, `--t-small-size` 13px, `--t-control-size` 11px, and `--t-mono-size` 11.5px. `--t-body-strong-size` does not exist because it would duplicate the body rung, and the same is true of `--t-small-strong-size` and `--t-eyebrow-size`. There are no line-height rungs. The declaration order in `typography.ts` is ramp order precisely because it decides which name owns each rung.
 
 Native consumes the pre-lowered `nativeDelta`; it does not parse CSS or do runtime math. Two roles step DOWN on a phone rather than up — display to 27 and reading to 17.5 — because a 31px serif title overruns a 390px screen. Text scaling and Dynamic Type may enlarge a role, never shrink it below 11px.
 
 ## Layout
 
-`--sp-1` 4px, `--sp-2` 8px, `--sp-3` 12px, `--sp-4` 16px, `--sp-5` 24px, and `--sp-6` 32px are the one spacing scale; the 48px rung retired because the system's largest rhythm step is the 32px desktop content margin. Content margin is 32px desktop and 18px mobile.
+`--sp-1` 4px, `--sp-2` 8px, `--sp-3` 12px, `--sp-4` 16px, `--sp-5` 24px, and `--sp-6` 32px are the one spacing scale; the 48px rung retired because the system's largest rhythm step is the 32px desktop content margin. Content margin is its own scale beside the gaps — 32px desktop, 18px mobile — because a page margin is the distance from the paper's edge to the text block, not a gap between two things; the mobile value deliberately does not sit on the 4px ladder, and native lowers it as `pageMargin`.
 
 The component metrics are tokens, not conventions: `--h-control` 34px, `--h-row` 44px, `--h-segmented` 28px, and `--w-stem` 240px. Density tiers move `--density-row` and `--density-pad` only — comfortable 44/16, compact 38/12, dense 34/8 — and never control size, because a control below 34px stops being reliably hittable. Mobile renders one tier looser than declared.
 
@@ -436,7 +446,7 @@ Button variants are `primary`, `secondary`, `quiet`, and `destructive`. `primary
 
 The three renderers are generated from the same recipe table: the kit renderer emits scoped CSS, the shell renderer emits the shared recipe CSS, and native composes typed recipe states. Kit primitives are recipe-derived; content remains app-owned. Inline apps scope under `:where(.centraid-inline-scope)` and served apps use the same recipe output. Freshness, CSS↔native, and scoped≡served tests are required.
 
-One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
+One icon registry owns iconKey resolution for manifest, index, and app metadata. Components use semantic concepts (`back`, `close`, `ask`, `settings`, `add`, `trash`, `leave`, `up`) before concrete glyphs. Every icon shares one contract regardless of which app claims it: single-tone stroke on a 24 grid, `fill: none`, round caps and joins, and `aria-hidden` on the `<svg>` — an app-specific mark (Photos' `heart`, `album`, `place`, `person`, `dupe`, `restore`, `removeFrom`, `info`, `more`, and its shared `trash`/`add`/`share`/`download`) draws new artwork inside that same contract rather than a one-off. Identity uses one initials formatter and one identity-colour resolver. Relative time and bytes use one formatter module. `aria-label` on a container is a REPLACEMENT, not an addition: use it only on controls whose visible content is an icon, and mark decorative SVG `aria-hidden`.
 
 ## Responsive Behavior
 

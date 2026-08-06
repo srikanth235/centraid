@@ -11,7 +11,7 @@
 // facts about the vault, not about a preferences page.
 import type { JSX } from "react";
 
-import { iconChipRadius, identityColor } from "@centraid/design";
+import { iconChipRadius, identityHueKey } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import {
@@ -123,15 +123,22 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
       return (
         <div className={styles.body}>
           <div className={styles.faces}>
-            {/* Coloured, because a person is the subject here — the same rule
-                (and the same deriver) as the stem's account avatar. A row of
-                grey pills reads as another table; the handoff's faces read as
-                people, which is the whole argument for the tile. */}
+            {/* Coloured, because a person is the subject here — a row of grey
+                pills reads as another table; the handoff's faces read as
+                people, which is the whole argument for the tile.
+
+                Derived from the PARTY ID and painted through the `--c-<hue>`
+                custom property rather than an inline hex, for two reasons the
+                previous name-hashed `identityColor` got wrong: a rename must
+                not repaint a person (and the phone's Home derives from the
+                same id, so the two clients agree), and `--c-*` is per theme,
+                so `--text-inv` clears AA on it in DARK as well — an inline
+                light-ring hex left near-black initials on it at 3.1:1. */}
             {body.faces.map((face) => (
               <span
                 className={styles.face}
-                key={face.name}
-                style={{ background: identityColor(face.name) }}
+                key={face.id}
+                style={{ background: `var(--c-${identityHueKey(face.id)})` }}
                 title={face.name}
               >
                 {face.initials}

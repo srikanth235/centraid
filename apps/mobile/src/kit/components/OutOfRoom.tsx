@@ -17,7 +17,7 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { t, useTheme } from "../theme";
+import { borders, t, useTheme } from "../theme";
 import { Text } from "./NativeText";
 
 export interface OutOfRoomProps {
@@ -120,7 +120,7 @@ const makeStyles = () =>
     meterFill: { height: "100%" },
     wrap: {
       borderRadius: 12,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: borders.hairline,
       gap: 8,
       padding: 16,
     },

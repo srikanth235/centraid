@@ -21,6 +21,8 @@
  */
 
 const BATCH = 8;
+/** This enricher's consent scope — must match automation.json `enrich.capability`. */
+const CAPABILITY = "captions";
 const PURPOSE = "dpv:ServiceProvision";
 
 const CAPTION_SCHEMA = {
@@ -61,25 +63,50 @@ export default async function handler({ ctx, log }) {
   // The on-demand queue drains FIRST (issue #299 phase 5): an owner search
   // that found nothing, or an opened unenriched photo, names specific
   // assets — those jump the backlog regardless of the cursor.
-  const requested = await ctx.vault.read({
+  //
+  // Two reads, because the `where` grammar is AND-only and this enricher is
+  // entitled to exactly two kinds of row: rows an owner tagged for CAPTIONS,
+  // and the untagged system signals (search-miss / on-view), which are not
+  // consent and stay broadcast. A row tagged `faces` belongs to
+  // face-proposer — reading it here is what made one face-detection consent
+  // silently enable captioning too (schema/enrich.ts `capability`).
+  //
+  // Filter columns are the table's real ones (`target_type`/`target_id`);
+  // the previous `entity_type`/`entity_id` names are not columns of
+  // `enrich_request`, so every one of these reads threw `unknown column` and
+  // the on-demand queue never actually drained.
+  const queueFilter = (capabilityClause) => ({
     entity: "enrich.request",
     where: [
-      { column: "entity_type", op: "eq", value: "media.media_asset" },
-      { column: "entity_id", op: "not-null" },
+      { column: "target_type", op: "eq", value: "media.media_asset" },
+      { column: "target_id", op: "not-null" },
       { column: "required_capability", op: "is-null" },
       { column: "drained_at", op: "is-null" },
+      capabilityClause,
     ],
     orderBy: { column: "request_id", dir: "asc" },
     limit: 5,
     purpose: PURPOSE,
   });
-  const requests = requested.rows ?? [];
+  const mine = await ctx.vault.read(
+    queueFilter({ column: "capability", op: "eq", value: CAPABILITY })
+  );
+  const untagged = await ctx.vault.read(
+    queueFilter({ column: "capability", op: "is-null" })
+  );
+  // Deduped by request_id: the two reads are disjoint by construction, but a
+  // row must never be drained (or charged for) twice if that ever stops
+  // holding.
+  const byId = new Map();
+  for (const request of [...(mine.rows ?? []), ...(untagged.rows ?? [])])
+    if (!byId.has(request.request_id)) byId.set(request.request_id, request);
+  const requests = [...byId.values()].slice(0, 5);
   const requestedAssets = [];
   for (const request of requests) {
     const hit = await ctx.vault.read({
       entity: "media.media_asset",
       where: [
-        { column: "asset_id", op: "eq", value: request.entity_id },
+        { column: "asset_id", op: "eq", value: request.target_id },
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,

@@ -1,60 +1,77 @@
-/* Albums overview: a responsive card grid. Authored camelCase (old `ph-`
-   prefix dropped). */
+/* The Albums shelf's card grid (v4 handoff §5): 4 columns desktop / 2 phone,
+   a 4:3 cover at the sub-control radius, the title clamped to two lines, the
+   count in tabular mono.
+
+   The column rule is a GRID FIT, not a breakpoint: `auto-fill` with a 210px
+   floor lands on four across a desktop content pane and two on a 390px phone,
+   which is what the handoff asks for without either surface being named.
+
+   Surfaces are paper, not elevation — no shadow. Nothing below 11px. Logical
+   properties only. */
 
 .albumGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: var(--sp-4);
 }
+
 .albumCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   border: none;
   background: none;
   padding: 0;
   text-align: start;
+  color: inherit;
 }
+
+/* THE COVER'S GROUND IS `--skel` (§2.2): an album whose cover bytes have not
+   arrived is an absence, and an absence is not a card. It holds its 4:3 box
+   from the first frame, so nothing reflows when the photograph lands. */
 .albumCardCover {
   display: block;
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--r-xl);
-  background: var(--bg-sunken) center/cover no-repeat;
-  box-shadow: var(--shadow-sm);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-sm);
+  background: var(--skel, var(--bg-sunken)) center/cover no-repeat;
   border: 1px solid var(--line);
 }
 .albumCard:hover .albumCardCover {
   border-color: var(--line-strong);
 }
+
+/* Line-clamped to two lines, never `overflow: hidden` on a fixed height. */
 .albumCardName {
-  display: block;
-  font: var(--t-body-strong);
-  margin-top: var(--sp-2);
+  margin-block-start: var(--sp-2);
+  font: var(--t-small);
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .albumCardCount {
-  display: block;
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
-  margin-top: 2px;
 }
-.albumCardNew {
+
+/* The one card that is not an album says so with a dashed edge, and hovers to
+   the soft ink — never to the accent, which IS the ink and would read as a
+   fill arriving. */
+.albumCardNewCover {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-2);
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   border: 1.5px dashed var(--line-strong);
-  border-radius: var(--r-xl);
-  background: var(--bg-elev);
+  border-radius: var(--r-sm);
   color: var(--text-faint);
 }
-.albumCardNew:hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-.albumCardNew span:last-child {
-  font: var(--t-small);
+.albumCard:hover .albumCardNewCover {
+  border-color: var(--text-soft);
+  color: var(--text);
 }

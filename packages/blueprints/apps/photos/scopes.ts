@@ -13,8 +13,14 @@ import { resolveWriteTarget } from "../_shared/write-target.ts";
 import type { WriteTarget } from "../_shared/write-target.ts";
 import type { InlineScope } from "../inline-types.ts";
 
-/** The stand-in for a host that mounts one, unnamed scope. */
-const SOLO_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
+/** The stand-in for a host that mounts one, unnamed scope. It is the member's
+ *  OWN library, so nothing in it is marked as somewhere else (§H). */
+const SOLO_SCOPE: InlineScope = {
+  id: "",
+  label: "Library",
+  personal: true,
+  canWrite: true,
+};
 
 /**
  * Every mounted scope, primary (the member's own) first. Read LIVE on every
@@ -24,6 +30,16 @@ const SOLO_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 export function mountedScopes(): InlineScope[] {
   const list = window.centraid?.scopes;
   return Array.isArray(list) && list.length > 0 ? list : [SOLO_SCOPE];
+}
+
+/**
+ * Where this member's shares land by default (§H) — the id of a vault, held
+ * by the SHELL as a pointer the member owns, never a property of a scope. A
+ * host that names none (a solo mount, an older shell) answers undefined, and
+ * the share action reports that as a reason rather than doing nothing.
+ */
+export function shareTargetId(): string | undefined {
+  return window.centraid?.shareTargetVaultId;
 }
 
 /** The member's own scope id — the shell puts the primary first, by contract. */

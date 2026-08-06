@@ -471,6 +471,149 @@ describe("duties", () => {
     expectPolyDependentsCleaned(deps, "media.media_asset", "poly-a");
   });
 
+  // ---- edit lineage vs the sweep (issue #711 decision S8) ----
+
+  const PAST = "2020-01-01T00:00:00Z";
+
+  /** A content item, lapsed-trashed when `lapsed`. */
+  function seedContent(id: string, lapsed: boolean): void {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+         VALUES (?, 'image/jpeg', ?, ?, 1, ?, ?, ?)`
+      )
+      .run(
+        id,
+        `data:image/jpeg,${id}`,
+        `sha-${id}`,
+        PAST,
+        lapsed ? PAST : null,
+        lapsed ? PAST : null
+      );
+  }
+
+  /** A photo asset over its own bytes, lapsed-trashed when `lapsed`. */
+  function seedAsset(
+    assetId: string,
+    opts: { lapsed: boolean; sourceAssetId?: string }
+  ): void {
+    seedContent(`${assetId}-body`, false);
+    db.vault
+      .prepare(
+        `INSERT INTO media_media_asset
+           (asset_id, content_id, kind, source_asset_id, deleted_at, purge_at)
+         VALUES (?, ?, 'photo', ?, ?, ?)`
+      )
+      .run(
+        assetId,
+        `${assetId}-body`,
+        opts.sourceAssetId ?? null,
+        opts.lapsed ? PAST : null,
+        opts.lapsed ? PAST : null
+      );
+  }
+
+  /**
+   * A retention policy with exactly one row past its window. It is enforced
+   * near the END of the sweep, after every purge pass, so `retentionDeleted
+   * === 1` is the assertion that the pass did not abort halfway: a FOREIGN KEY
+   * error in a purge above takes this duty (and the receipt) down with it.
+   */
+  function seedLaterDuty(): void {
+    db.vault
+      .prepare(
+        `INSERT INTO social_thread (thread_id, channel, created_at) VALUES ('th-late', 'sms', ?)`
+      )
+      .run(PAST);
+    seedContent("msg-body", false);
+    db.vault
+      .prepare(
+        `INSERT INTO social_message (message_id, thread_id, sender_handle, sent_at, body_content_id, delivery)
+         VALUES ('m-stale', 'th-late', 'x@y.z', ?, 'msg-body', 'read')`
+      )
+      .run(PAST);
+    db.vault
+      .prepare(
+        `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, effective_from, priority)
+         VALUES (?, 'retention', 'social', 'message', '{"timestamp_column":"sent_at"}', 365, '2019-01-01T00:00:00Z', 1)`
+      )
+      .run(uuidv7());
+  }
+
+  test("lifecycle sweep skips a lapsed photograph whose derived edit is still live, and keeps sweeping (issue #711 S8)", () => {
+    seedAsset("a-source", { lapsed: true });
+    seedAsset("a-edit", { lapsed: false, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    // The self-FK would have aborted the pass; instead the row is declined…
+    expect(result.assetsPurged).toBe(0);
+    expect(result.assetsBlockedByLineage).toStrictEqual(["a-source"]);
+    expect(
+      db.vault
+        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'a-source'`)
+        .get(),
+      "the source must survive rather than be force-deleted"
+    ).toBeTruthy();
+    expect(
+      db.vault
+        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'a-edit'`)
+        .get(),
+      "the live edit the member never trashed must be untouched"
+    ).toBeTruthy();
+    // …and every duty after the purge still ran.
+    expect(result.retentionDeleted).toBe(1);
+    expect(result.receiptId).toBeTruthy();
+  });
+
+  test("lifecycle sweep purges a lapsed edit before its lapsed source in one pass (issue #711 S8)", () => {
+    seedAsset("a-source", { lapsed: true });
+    seedAsset("a-edit", { lapsed: true, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    expect(result.assetsPurged).toBe(2);
+    expect(result.assetsBlockedByLineage).toStrictEqual([]);
+    const remaining = db.vault
+      .prepare("SELECT count(*) AS n FROM media_media_asset")
+      .get() as { n: number };
+    expect(
+      remaining.n,
+      "trashing a photograph and its edit together empties both in one sweep"
+    ).toBe(0);
+    expect(result.retentionDeleted).toBe(1);
+  });
+
+  test("lifecycle sweep declines a lapsed content item whose asset is a lineage source (issue #711 S8)", () => {
+    // The delete_asset flow lapses the asset and its bytes together, so this
+    // is the same member action as the first test seen from the content pass.
+    seedAsset("a-source", { lapsed: true });
+    db.vault
+      .prepare(
+        "UPDATE core_content_item SET deleted_at = ?, purge_at = ? WHERE content_id = 'a-source-body'"
+      )
+      .run(PAST, PAST);
+    seedAsset("a-edit", { lapsed: false, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    expect(result.contentPurged).toBe(0);
+    expect(result.contentBlockedByLineage).toStrictEqual(["a-source-body"]);
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_item WHERE content_id = 'a-source-body'`
+        )
+        .get(),
+      "bytes stay put while the asset that rents them cannot go"
+    ).toBeTruthy();
+    expect(result.retentionDeleted).toBe(1);
+  });
+
   test("lifecycle sweep purges lapsed trashed People/Tally rows and cleans their poly refs (issue #441 A4)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";

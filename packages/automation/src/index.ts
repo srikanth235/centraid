@@ -37,6 +37,7 @@ export {
   EVENT_DEFAULT_EVERY,
   EVENT_TRIGGER_CATALOG,
   type Manifest,
+  type ManifestEnrich,
   type ManifestRequires,
   type ManifestVault,
   type ManifestVaultFilterClause,
@@ -206,6 +207,21 @@ export {
   type OpenDispatchArgs,
   type ResolveConnection,
 } from "./fire/fire.js";
+// The enrichment tier gate (privacy enforcement): the vault's per-domain
+// `enrich_policy` tier, applied at the fire choke point above. The decision
+// is pure and exported so a host can explain a refusal without re-deriving it.
+export {
+  ENRICH_DOMAINS,
+  ENRICH_LANES,
+  ENRICH_TIERS,
+  decideEnrichmentGate,
+  sealedModelTurnReason,
+  type EnrichDomain,
+  type EnrichGateDecision,
+  type EnrichGateInput,
+  type EnrichLane,
+  type EnrichTier,
+} from "./fire/enrich-gate.js";
 
 // Automation-app scaffolders. The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local

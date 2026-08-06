@@ -31,8 +31,11 @@ import {
   LINK_DARK,
   NET,
   NET_DARK,
+  ON_STAGE,
   RING,
   RING_DARK,
+  STAGE,
+  STAGE_LINE,
   SUCCESS,
   SUCCESS_LIGHT,
   SURFACE_TONE_NAMES,
@@ -145,6 +148,11 @@ describe("DESIGN.md front matter", () => {
       "danger-dark": DANGER_DARK,
       warning: WARNING_LIGHT,
       "warning-dark": WARNING,
+      // The stage roles are the SAME literal in both themes — the media
+      // ground does not follow the theme (Photos v4 handoff, §B).
+      stage: STAGE,
+      "on-stage": ON_STAGE,
+      "stage-line": STAGE_LINE,
     };
     for (const [key, value] of Object.entries(expected)) {
       expect(frontMatterValue(key), key).toBe(value);
@@ -202,6 +210,9 @@ describe("DESIGN.md front matter", () => {
     })) {
       expect(frontMatterValue(key), key).toBe(value);
     }
+    // --skel flips per theme, unlike the stage roles above.
+    expect(frontMatterValue("light-skel")).toBe(themes.light.skel);
+    expect(frontMatterValue("dark-skel")).toBe(themes.dark.skel);
   });
 
   test("pins typography and every recipe component", () => {
@@ -365,6 +376,27 @@ describe("DESIGN.md body", () => {
     expect(body).toContain("720px");
     expect(body).toContain("prefers-reduced-motion");
     expect(body).toContain("ONE global rule");
+  });
+
+  test("documents the stage/skel roles and the numeric role's own direction", () => {
+    // Photos v4 handoff, §2.2/§B — the three new shared color roles and the
+    // one existing role (--t-mono) that gains a correction.
+    expect(body).toContain("`--stage`");
+    expect(body).toContain("`--on-stage`");
+    expect(body).toContain("`--stage-line`");
+    expect(body).toContain("`--skel`");
+    expect(body).toContain(STAGE);
+    expect(body).toContain(ON_STAGE);
+    expect(body).toContain(STAGE_LINE);
+    expect(body).toContain(themes.light.skel);
+    expect(body).toContain(themes.dark.skel);
+    expect(body).toContain("the same literal in both themes");
+    expect(body).toContain("`--t-mono-direction`");
+    expect(body).toContain("`--t-mono-bidi`");
+    expect(body).toContain("never per span");
+    expect(body).toContain(
+      "layout container must never carry the numeric face"
+    );
   });
 
   test("names the deeper docs and machine checks", () => {

@@ -29,8 +29,10 @@ export interface GeneratedTheme {
   light: Record<string, string>;
   dark: Record<string, string>;
   radii: Record<string, number>;
+  borders: Record<string, number>;
   spacing: Record<string, number>;
   metrics: Record<string, number>;
+  pageMargin: NativeTheme["pageMargin"];
   density: NativeTheme["density"];
   fonts: typeof FONT_ROLES;
   type: NativeTheme["type"];
@@ -48,12 +50,14 @@ export function buildTheme(): GeneratedTheme {
   const light = toNativeTheme("light");
   const dark = toNativeTheme("dark");
   return {
+    borders: { ...light.borders },
     dark: colorRecord(dark),
     density: light.density,
     durations: light.durations,
     fonts: FONT_ROLES,
     light: colorRecord(light),
     metrics: { ...light.metrics },
+    pageMargin: light.pageMargin,
     radii: { ...light.radii },
     spacing: { ...light.spacing },
     targetMin: light.targetMin,
@@ -166,6 +170,12 @@ export const radii = {
 ${renderRecord(theme.radii, "  ")}
 } as const;
 
+// The one rule weight. A FULL point, never \`StyleSheet.hairlineWidth\` —
+// see packages/design/src/borders.ts for why.
+export const borders = {
+${renderRecord(theme.borders, "  ")}
+} as const;
+
 export const spacing = {
 ${renderRecord(theme.spacing, "  ")}
 } as const;
@@ -183,6 +193,10 @@ ${renderNested(theme.fonts as unknown as Record<string, Record<string, string>>,
 export const type = {
 ${renderType(theme.type, "  ")}
 } as const;
+
+// The horizontal page inset every screen uses — NOT a \`spacing\` rung.
+// See packages/design/src/density.ts#pageMargin for why 18 is off the scale.
+export const pageMargin = ${theme.pageMargin};
 
 export const targetMin = ${JSON.stringify(theme.targetMin)} as const;
 export const durations = ${JSON.stringify(theme.durations)} as const;

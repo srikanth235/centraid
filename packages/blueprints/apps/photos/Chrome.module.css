@@ -86,79 +86,33 @@
 
 /* ---------- Shell (the .ph-app flex row) ---------- */
 
+/* The `--app-topbar-*` knobs went with the topbar (v4 §3) — this app draws no
+   bar of its own to size. */
 .shell {
   composes: kit-app-shell from global;
-  --app-topbar-gap: 10px;
-  --app-topbar-padding: 14px 20px;
-  /* Positioning context for the drawer + the lightbox/slideshow/selection-bar
-     overlays, so they overlay the app pane inline — never the shell chrome. */
+  /* Positioning context for the lightbox/slideshow/selection-bar overlays, so
+     they overlay the app pane inline — never the shell chrome. */
   -webkit-font-smoothing: antialiased;
 }
 
-/* The SidebarView Fragment (scrim + <aside>) renders into this host; contents so
-   the <aside> is a real flex child of `.shell` while `#sidebarMount` survives for
-   `$('sidebarMount').hidden`. */
-.sideHost {
-  display: contents;
-}
-/* Neutralise the served aside's viewport positioning (Sidebar.module.css
-   `height:100vh; position:sticky`, a hashed class we cannot edit) — inline it
-   fills the pane height and flows normally. */
-.sideHost > aside {
-  height: 100%;
-  position: relative;
-  top: auto;
-  z-index: 1;
-}
-
-/* ---------- Main / header ---------- */
+/* ---------- Main ---------- */
 
 .main {
   composes: kit-app-main from global;
 }
-.header {
-  composes: kit-app-topbar from global;
+
+/* The face-proposer's own region. It used to sit among the header's icon
+   buttons; with the header retired it is a row of its own above the grid, and
+   it collapses when it has nothing to propose so it costs no height. */
+.enrichment {
+  flex-shrink: 0;
 }
-.search {
-  flex: 1;
-  min-width: 9rem;
-  max-width: 30rem;
-}
-/* The magnifier's <label htmlFor="searchInput"> generates no box, so the svg
-   stays the direct flex child `.kit-search svg` sizes — the row is unchanged.
-   kit.css makes that svg `pointer-events: none` (it was there to let clicks
-   fall through to the old wrapping <label>); now the label IS the glyph, so the
-   svg takes the click again and clicking the magnifier still focuses the field. */
-.searchGlyph {
-  display: contents;
-}
-.searchGlyph svg {
-  pointer-events: auto;
-}
-.headerActions {
-  composes: kit-app-tools from global;
-}
-/* Two `kit-icon-btn`s in one bordered group. The buttons themselves are the
-   kit's, at the kit's `--target-min` floor — the pair used to be hand-rolled
-   at 32×30px, under both `--h-control` (34px) and the 44px target floor. */
-.zoom {
-  display: flex;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-}
-.askMount {
-  composes: kit-app-ask-mount from global;
+.enrichment:empty {
+  display: none;
 }
 
-/* `#noticeBanner` is an <output> (implicit role=status) — an inline element by
-   default, where the <div> it replaced was block. */
-.noticeBanner {
-  display: block;
-}
-
-/* #live wraps the toolbar + scroll pane; it must be a bounded flex column so
+/* #live wraps the shelf strip, the toolbar row + scroll pane; it must be a
+   bounded flex column so
    `.scroll` (flex:1) scrolls inside the pane. */
 .live {
   flex: 1;
@@ -180,26 +134,78 @@
   margin: 0.75rem 0;
 }
 
+/* ---------- The empty block (§14, proto 4064-4073, 4406) ---------- */
+
+/* Photos' OWN empty state, not the shared `.kit-empty`. The kit's version is
+   `text-align:center; padding:64px 20px` with a 0.95rem/600 title and a 0.82rem
+   sub at 38ch — a centred notice card. §14 asks for something else entirely,
+   and the difference is not decoration:
+
+     * IN FLOW AND LEFT-ALIGNED, 44ch. This is reading copy — a paragraph a
+       member reads once, on the first real screen this app ever shows them.
+       Centred prose is a label; left-aligned prose at a measure is text.
+     * The title is the DISPLAY register and the paragraph is the READING
+       register. Those are the two roles §2.1 says Photos draws in this exact
+       state, and the ramp already carries the phone step-down (display 31→27,
+       reading 19→17.5) so no media query re-derives it here.
+     * `padding: R.gap.xxl 0` — 32px block, none inline, because the block is
+       part of the page, not a card floating in it. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-inline-size: 44ch;
+  padding-block: var(--sp-6);
+}
+.emptyTitle {
+  margin: 0;
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking, -0.01em);
+  color: var(--text);
+}
+/* `text-wrap: pretty` for the same reason the prototype sets it: a two-word
+   last line in a 44ch paragraph reads as an accident. */
+.emptyBody {
+  margin: 0;
+  font: var(--t-reading);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-1);
+}
+/* A row that offers nothing costs no height. Trash and a search miss withhold
+   both actions (`emptyOffersImport`), and the buttons are `hidden` rather than
+   unmounted — upload.ts binds `#emptyUpload` once at boot — so this asks
+   whether any of them is actually shown. */
+.emptyActions:not(:has(button:not([hidden]))) {
+  display: none;
+}
+
 /* ---------- Overlays — re-scoped from viewport-fixed to app-pane-absolute ---------- */
 
-.selectionBar {
+/* The phone's floating selection action bar (§6, §15) — SelectionBottomBar's
+   five 56px targets. The pane (`.shell`, position:relative) already ends
+   where the frame's band begins (the frame gives the claimed band its own
+   grid row outside this pane), so `bottom: 0` here sits ABOVE the band
+   without this app ever needing to know the band's height. It is a floating
+   ACTION bar, not a second band: it carries no destinations and never calls
+   `frame.claimBand`. Opaque paper and a hairline, never a shadow or blur
+   (§3.1's same rule for the bands — the backdrop is unpredictable
+   photographs either way). */
+.selectionBottomBar {
   position: absolute;
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  inset-inline: 0;
+  bottom: 0;
   z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  max-width: calc(100% - 1.5rem);
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg-elev);
-  border: 1px solid var(--line-strong);
-  background-color: var(--accent-soft);
-  border-radius: var(--r-pill);
-  padding: 0.4rem 0.5rem 0.4rem 1rem;
-  box-shadow: var(--shadow-lg);
+  border-block-start: 1px solid var(--line);
 }
-.selectionBar[hidden] {
+.selectionBottomBar:empty {
   display: none;
 }
 .lightbox {
@@ -249,21 +255,10 @@
 }
 
 /* ---------- Global remainder OTHER code writes as plain strings ---------- */
-/* `.ph-header-icon-btn` is GONE (#708). It was a hand-rolled 36×36 icon button
-   — border, radius, fill, ink ramp, hover — standing next to `kit-icon-btn`,
-   whose own docstring names "photos' equivalents" as the debt it exists to
-   absorb. Every header control (hamburger, the zoom pair, slideshow, the
-   face-proposer toggle) is now `kit-icon-btn`; only the display toggles below
-   remain app-owned, because they are layout, not a control look. */
-:global(.ph-hamburger) {
-  display: none;
-}
-:global(.slideshow-toolbar-btn) {
-  display: none;
-}
-.shell:not(.isNarrow) :global(.slideshow-toolbar-btn) {
-  display: flex;
-}
+/* The `.ph-hamburger` / `.slideshow-toolbar-btn` display toggles are GONE with
+   the header that carried them (v4 §3): Photos draws no chrome of its own
+   inside the content pane, so there is no per-surface show/hide left to
+   express here. */
 
 /* Tile media guts injected by media.ts as plain strings (React never renders
    these). The placeholder is a STATIC recessed ground, matching `.kit-skeleton`
@@ -358,54 +353,24 @@
   color: inherit;
 }
 
-/* The selection bar's "Add to album ▾" menu wrapper — app.tsx queries it by this
-   literal class name for the away-click hit test. */
+/* The selection bar's "Add to album ▾" menu wrapper — selection.tsx queries it
+   by this literal class name for the away-click hit test. */
 :global(.bar-menu-wrap) {
   position: relative;
   display: flex;
 }
-/* Nudge the status line above the floating selection bar (body gets
-   `has-selection` from app.tsx). */
-:global(body.has-selection .kit-status-line) {
-  bottom: 4.75rem;
-}
+/* The `body.has-selection` nudge that used to live here retired with the
+   floating `#selectionBar` pill it was compensating for (v4 §6 close-out):
+   the bar now lives in `#toolbarMount`, in the layout's own flow, so nothing
+   needs to push the frame's status line out of its way — and restyling
+   `.kit-status-line`, a FRAME element, from inside the app is exactly what
+   the frame contract forbids. */
 
 /* ---------- Narrow (phone) — driven by `.isNarrow` on `.shell` ---------- */
-/* Inline the sidebar drawer is absolute within `.shell` (the app pane), not
-   fixed to the viewport as the served @media rules do. These out-specify the
-   served hashed `.sidebar`/`.scrim` rules (0,1,0) so they win at any viewport
-   width, and add the scrim (SidebarView renders it as the first child when the
-   drawer is open). */
-.shell.isNarrow :global(.ph-hamburger) {
-  display: flex;
-}
-.shell.isNarrow .sideHost > aside {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 274px;
-  z-index: 46;
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-110%);
-}
-/* Enable the slide only after the first painted frame (`.ready`), so the
-   mount-time narrow snap above is instant and only user-driven open/close
-   animates — the drawer-flash gate (#505). */
-.shell.ready.isNarrow .sideHost > aside {
-  transition: transform var(--dur-2) var(--ease);
-}
-.shell.isNarrow .sideHost > aside[data-open="true"] {
-  transform: translateX(0);
-}
-/* The drawer scrim — SidebarView's first child, a real <button> (kit-modal-scrim)
-   since #573 so it is keyboard-reachable; it was a bare <div>. */
-.shell.isNarrow .sideHost > button {
-  display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 45;
-  background: color-mix(in oklab, var(--scrim) 56%, transparent);
-}
-.shell.isNarrow .header,
+/* The drawer rules retired with the drawer (v4 §3): the frame owns navigation
+   on every surface — the stem on desktop, the claimed band on the phone — so
+   there is no second navigation inside the pane to slide, scrim or animate.
+   What is left is the compact gutter. */
 .shell.isNarrow .scroll {
   padding-inline-start: var(--sp-4);
   padding-inline-end: var(--sp-4);

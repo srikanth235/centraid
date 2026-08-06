@@ -1,0 +1,184 @@
+/* The Tile (v4 handoff §2.4, §4.4). Four overlay slots and nothing else.
+
+   INVARIANTS THIS FILE IS HELD TO (§18):
+     * logical properties only — the vault rule sits on the LEADING edge and
+       mirrors under RTL, which `inset-inline-start` does and `left` does not;
+     * no container `opacity` for state — the selection control hides with
+       `visibility`, and a recessive state takes its own token on the leaf;
+     * numerics are mono and tabular;
+     * nothing below 11px;
+     * Photos' amber hue never lands on a control and is never a ground. The
+       one place a hue appears is the 2px vault rule, which §2.1 sanctions as a
+       CONTENT marker.
+
+   `--net`, `--skel` and `--on-stage` are real roles in `packages/design`
+   (blueprint.ts `themeProps`) but are not in `BLUEPRINT_TOKEN_CONTRACT` yet,
+   so each carries a contract-name fallback rather than silently dropping its
+   declaration where the contract is all that is injected. */
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ph-tile-r);
+  flex: 0 0 auto;
+  /* THE GROUND A TILE PAINTS BEFORE ITS BYTES ARRIVE. `--bg-elev` reads as a
+     card, and an absence is not a card. This is on the tile itself, not on a
+     child, so it is there from the first frame at the exact geometry
+     `justify()` packed — nothing reflows when the photograph lands. */
+  background: var(--skel, var(--bg-sunken));
+  /* A transparent border of the SAME width the failed state paints, so a
+     failure changes colour and nothing else. `box-sizing: border-box` is set
+     app-wide, so neither one moves a pixel of the packed box. */
+  border: 1px solid transparent;
+}
+/* A real terminal failure keeps its geometry and takes a --net border (§14). */
+.tile.failed {
+  border-color: var(--net, var(--danger));
+}
+/* Selection outlines the tile itself: 2px ink at -2px offset (§4.4). An
+   outline draws OUTSIDE the box model, so the packed row does not move. */
+.tile.selected {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+
+.media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.media:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  outline-offset: -2px;
+}
+.media img,
+.media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* ---- slot 1: selection (top, trailing, 6px in; 20px circle) ---- */
+
+.check {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+  /* Off: transparent, a 1.5px paper border, and a 1px dark shadow RING so the
+     circle survives a white beach as well as a night sky. */
+  background: transparent;
+  border: 1.5px solid var(--on-accent);
+  box-shadow: 0 0 0 1px var(--scrim);
+  color: var(--text-inv);
+  /* An affordance, not a state — hence `visibility`, never a container
+     `opacity` (§18). On a surface with no hover it is simply always there. */
+  visibility: hidden;
+}
+@media (hover: none) {
+  .check {
+    visibility: visible;
+  }
+}
+@media (hover: hover) {
+  .tile:hover .check,
+  .check:focus-visible {
+    visibility: visible;
+  }
+}
+.check[aria-pressed="true"] {
+  visibility: visible;
+  background: var(--text);
+  border-color: var(--text);
+}
+
+/* ---- slot 2: vault — a 2px rule on the LEADING edge, plus the initial ---- */
+
+.vaultRule {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  z-index: 2;
+  pointer-events: none;
+}
+.vaultInitial {
+  position: absolute;
+  top: 6px;
+  inset-inline-start: 8px;
+  z-index: 2;
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-stage, var(--on-accent));
+  text-shadow: 0 1px 3px var(--scrim);
+  pointer-events: none;
+}
+
+/* ---- slot 3: kind — duration or `live`, from rung S up ---- */
+
+.kind {
+  position: absolute;
+  bottom: 6px;
+  inset-inline-end: 6px;
+  z-index: 2;
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-stage, var(--on-accent));
+  text-shadow: 0 1px 3px var(--scrim);
+  pointer-events: none;
+}
+
+/* ---- slot 4: state — ONE line of mono on the PAGE COLOUR ---- */
+/* Not a fill over the photograph, not a red dot, not a vanishing tile: a
+   sentence, on paper, that says what is true about the bytes. */
+
+.state {
+  position: absolute;
+  inset-inline: 4px;
+  bottom: 4px;
+  z-index: 2;
+  padding: 2px var(--sp-1);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text-soft);
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  /* Clamped to its one line, never clipped (§18). */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tile.failed .state {
+  color: var(--net, var(--danger));
+}
+
+/* ---- album detail's own Remove — see TileProps.extras ---- */
+
+.extras {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+}

@@ -33,6 +33,13 @@
  * `installed` is reported only when the request names an app (`?app=<id>`);
  * with no app named the field is omitted entirely, because "not asked" and
  * "not installed" are different answers.
+ *
+ * THE SHARE DESTINATION RIDES ALONG (issue #711 item H) as
+ * `defaultShareTargetVaultId`, beside the rows rather than on one of them: a
+ * member may want to share into several vaults, so "where my shares go" is a
+ * pointer they own (`share-target.ts`), never a property of a vault record.
+ * The rows themselves carry only `personal` — the founding marker — and every
+ * "somewhere other than my own" marker is exactly `personal === false`.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -52,6 +59,8 @@ export const SCOPES_PATH = "/centraid/_vault/scopes";
 export interface ScopeVault {
   vaultId: string;
   name: string;
+  /** The durable founding marker (`core_vault.settings_json.personal`). */
+  personal?: boolean;
   color?: string;
   icon?: string;
 }
@@ -61,6 +70,15 @@ export interface ScopeRow {
   vaultId: string;
   /** The vault's own name — display only, never a key. */
   label: string;
+  /**
+   * Whether this is the member's OWN vault — the durable founding marker
+   * (issue #711 item H). Always present, so an app can derive its "somewhere
+   * other than my own" marker as exactly `personal === false` and never from
+   * `label`, which the owner is free to rename. There is no second marker
+   * and no vault "kind": sharing is a destination somebody chose (see
+   * `defaultShareTargetVaultId`), never a property of a vault record.
+   */
+  personal: boolean;
   color?: string;
   icon?: string;
   role: GrantableRole;
@@ -68,10 +86,26 @@ export interface ScopeRow {
   installed?: boolean;
 }
 
+/** The whole answer: the caller's scopes, and where their shares go. */
+export interface ScopesBody {
+  scopes: ScopeRow[];
+  /**
+   * The vault this member's shares land in by default (issue #711 item H) —
+   * a POINTER they own, not a property of any vault. Reported AS STORED: it
+   * may name a vault that is not in `scopes` (deleted, or one this member
+   * holds no role in), and a client renders that as the action disabled with
+   * the reason inline rather than silently doing nothing. Absent when nothing
+   * has ever been pointed at.
+   */
+  defaultShareTargetVaultId?: string;
+}
+
 export interface ScopesRouteDeps {
   enrollments: EnrollmentStore;
   /** Every MOUNTED vault in registry listing order — default vault first. */
   listVaults: () => readonly ScopeVault[];
+  /** This member's default share destination — see `ScopesBody`. */
+  defaultShareTarget?: (memberId: string | undefined) => string | undefined;
   /** The app ids installed in one mounted vault, or undefined when unknown. */
   installedApps: (vaultId: string) => ReadonlySet<string> | undefined;
   /**
@@ -192,6 +226,7 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
     const scopes: ScopeRow[] = visible.map((vault) => ({
       vaultId: vault.vaultId,
       label: vault.name,
+      personal: vault.personal === true,
       ...(vault.color === undefined ? {} : { color: vault.color }),
       ...(vault.icon === undefined ? {} : { icon: vault.icon }),
       role: roles.get(vault.vaultId)!,
@@ -199,6 +234,13 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
         ? { installed: installed.get(vault.vaultId) === true }
         : {}),
     }));
-    return sendJson(res, 200, { scopes });
+    const shareTarget = deps.defaultShareTarget?.(member?.memberId);
+    const body: ScopesBody = {
+      scopes,
+      ...(shareTarget === undefined
+        ? {}
+        : { defaultShareTargetVaultId: shareTarget }),
+    };
+    return sendJson(res, 200, body);
   };
 }

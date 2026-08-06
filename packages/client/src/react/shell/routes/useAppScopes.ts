@@ -20,8 +20,11 @@
 import type { InlineScope } from "@centraid/blueprints/apps/inline-types";
 
 import { auth } from "../../../gateway-client-core.js";
-import { listAppScopes } from "../../../gateway-client-vault.js";
-import type { AppScopeEntry } from "../../../gateway-client-vault.js";
+import { readAppScopePlane } from "../../../gateway-client-vault.js";
+import type {
+  AppScopeEntry,
+  AppScopePlane,
+} from "../../../gateway-client-vault.js";
 import {
   addressedGatewayAuth,
   replicaIdentityForGatewayAuth,
@@ -43,6 +46,21 @@ export interface ResolvedAppScope {
   identity: ReplicaIdentity;
 }
 
+/**
+ * The whole mount: the scopes, and where this member's shares go by default
+ * (issue #711 item H).
+ *
+ * The destination sits BESIDE the scopes rather than on one of them, because
+ * it is a pointer the member owns — a choice of destination — not a property
+ * of a vault. It is passed through as the gateway stored it, including when it
+ * names a vault that is not mounted here: an app renders that as its share
+ * action disabled with the reason inline, never as a silent no-op.
+ */
+export interface ResolvedAppScopes {
+  scopes: ResolvedAppScope[];
+  shareTargetVaultId?: string;
+}
+
 /** Mirrors the gateway's `canWrite` — admin is write's superset. */
 function roleCanWrite(role: string): boolean {
   return role === "admin" || role === "write";
@@ -53,6 +71,11 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
     scope: {
       id: entry.vaultId,
       label: entry.label,
+      // Carried through EXACTLY as the gateway answered: an app's "somewhere
+      // other than my own" marker is `personal === false`, so an older
+      // gateway that omits it leaves every scope unmarked rather than marking
+      // every scope (issue #711 item H).
+      ...(entry.personal === undefined ? {} : { personal: entry.personal }),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.icon ? { icon: entry.icon } : {}),
       canWrite: roleCanWrite(entry.role),
@@ -62,15 +85,25 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
 }
 
 /** The single-scope answer: whatever the shell is focused on right now. */
-async function ambientScope(): Promise<ResolvedAppScope[]> {
+async function ambientScope(): Promise<ResolvedAppScopes> {
   const gatewayAuth = await addressedGatewayAuth();
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
-  return [
-    {
-      scope: { id: identity.vaultId, label: "Library", canWrite: true },
-      identity,
-    },
-  ];
+  return {
+    scopes: [
+      {
+        // The solo mount IS the member's own library — `personal: true`, so
+        // nothing in it is marked as somewhere else, and there is no share
+        // destination to offer when there is only one place to be.
+        scope: {
+          id: identity.vaultId,
+          label: "Library",
+          personal: true,
+          canWrite: true,
+        },
+        identity,
+      },
+    ],
+  };
 }
 
 /**
@@ -80,13 +113,14 @@ async function ambientScope(): Promise<ResolvedAppScope[]> {
  */
 export async function resolveAppScopes(
   appId: string
-): Promise<ResolvedAppScope[]> {
-  let entries: AppScopeEntry[] | undefined;
+): Promise<ResolvedAppScopes> {
+  let plane: AppScopePlane | undefined;
   try {
-    entries = await listAppScopes(appId);
+    plane = await readAppScopePlane(appId);
   } catch {
-    entries = undefined;
+    plane = undefined;
   }
+  const entries = plane?.scopes;
   // Only scopes the app is actually installed in are mountable: a replica
   // session for a vault with no enrolment for this app has no shapes to read,
   // so it would surface as a permanently-failing audience. The gateway already
@@ -103,7 +137,12 @@ export async function resolveAppScopes(
     vaultId: mountable[0]!.vaultId,
   }).gatewayId;
   const resolved = mountable.map((entry) => toResolved(entry, gatewayId));
-  return resolved.slice(0, MAX_MOUNTED_SCOPES);
+  return {
+    scopes: resolved.slice(0, MAX_MOUNTED_SCOPES),
+    ...(plane?.defaultShareTargetVaultId === undefined
+      ? {}
+      : { shareTargetVaultId: plane.defaultShareTargetVaultId }),
+  };
 }
 
 /** A stable identity for one scope SET — the mount key's new axis. */
@@ -120,10 +159,10 @@ export function scopeSetKey(scopes: readonly ResolvedAppScope[]): string {
  * the household does. Dropped wholesale when the gateway flips, because both
  * the roster and the credentials behind it belong to that gateway.
  */
-const resolved = new Map<string, Promise<ResolvedAppScope[]>>();
+const resolved = new Map<string, Promise<ResolvedAppScopes>>();
 window.CentraidApi?.onGatewayChanged?.(() => resolved.clear());
 
-export function useAppScopes(appId: string): AsyncState<ResolvedAppScope[]> {
+export function useAppScopes(appId: string): AsyncState<ResolvedAppScopes> {
   return useAsyncData(() => {
     let pending = resolved.get(appId);
     if (!pending) {

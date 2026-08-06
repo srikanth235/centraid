@@ -276,6 +276,8 @@ kit-reference-strip,
   color: var(--text-soft);
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   transition: color var(--dur-1) var(--ease);
 }
 

@@ -514,5 +514,11 @@
         { "value": "list", "label": "List" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["scanner"],
+    "disabledOn": [],
+    "northStar": "google-drive"
+  }
 }

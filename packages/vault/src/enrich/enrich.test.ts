@@ -5,6 +5,8 @@
 // auto-publish trust is what lets captions land without a review click, and
 // the agent content primitive only ever spells derivatives.
 
+import { DatabaseSync } from "node:sqlite";
+
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import {
@@ -29,6 +31,7 @@ import {
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
 } from "./leases.js";
+import { readEnrichPolicyTier } from "./policy.js";
 import {
   hexHamming,
   encodeVector,
@@ -898,6 +901,83 @@ describe("enrich", () => {
       expect(read.rows).toStrictEqual([
         expect.objectContaining({ domain: "photos", tier: "model" }),
       ]);
+    });
+
+    // The ENFORCEABLE read: the fire path asks this, off the owner plane,
+    // before it lets an enrichment automation run. It must never answer
+    // "allowed" by accident, so anything that is not a legible tier reads as
+    // `undefined` — which the gate treats as a refusal.
+    test("readEnrichPolicyTier answers the owner's tier and fails closed on anything else", () => {
+      expect(readEnrichPolicyTier(db.vault, "photos")).toBe("local");
+      updateEnrichSettings(db, { photos: "model" });
+      expect(readEnrichPolicyTier(db.vault, "photos")).toBe("model");
+
+      // A vault with no row for the domain states nothing, so nothing is allowed.
+      db.vault
+        .prepare("DELETE FROM enrich_policy WHERE domain = ?")
+        .run("docs");
+      expect(readEnrichPolicyTier(db.vault, "docs")).toBeUndefined();
+
+      // A tier this build cannot honour is not a tier. The live table's CHECK
+      // stops the normal writers, so the guard is exercised against a file
+      // whose enrich_policy is shaped by another build — restored, migrated
+      // from ahead, or hand-edited.
+      const foreign = new DatabaseSync(":memory:");
+      foreign.exec(
+        "CREATE TABLE enrich_policy (domain TEXT PRIMARY KEY, tier TEXT NOT NULL, updated_at TEXT NOT NULL)"
+      );
+      foreign
+        .prepare("INSERT INTO enrich_policy VALUES (?, ?, ?)")
+        .run("photos", "someday", "2026-08-05");
+      expect(readEnrichPolicyTier(foreign, "photos")).toBeUndefined();
+      foreign.close();
+    });
+
+    // CONSENT SCOPE (see schema/enrich.ts `capability`): an owner's on-demand
+    // ask names the enricher it is asking for, so a face-detection consent
+    // cannot be drained by the captioner. The system signals stay untagged
+    // and broadcast — they are not consent.
+    test("a manual enrichment request must name the capability it consents to", () => {
+      const asked = invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.media_asset",
+        reason: "manual",
+        capability: "faces",
+      });
+      expect(asked.status).toBe("executed");
+      const tagged = db.vault
+        .prepare("SELECT capability FROM enrich_request WHERE request_id = ?")
+        .get(output<{ request_id: string }>(asked).request_id) as {
+        capability: string;
+      };
+      expect(tagged.capability).toBe("faces");
+
+      // An untagged owner ask is refused: it would read as consent for every
+      // enabled enricher, which is not the question the member answered.
+      const refused = invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.media_asset",
+        reason: "manual",
+      });
+      expect(refused.status).toBe("failed");
+      assert(refused.status === "failed");
+      expect(refused.reason).toMatch(/must name the .capability./u);
+      // And nothing landed: the refusal is not a row someone could drain.
+      const manualRows = db.vault
+        .prepare("SELECT count(*) AS n FROM enrich_request WHERE reason = ?")
+        .get("manual") as { n: number };
+      expect(manualRows.n).toBe(1);
+
+      // A system signal is not consent, so it stays broadcast (capability NULL).
+      const signal = invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.media_asset",
+        reason: "on-view",
+      });
+      expect(signal.status).toBe("executed");
+      const broadcast = db.vault
+        .prepare("SELECT capability FROM enrich_request WHERE request_id = ?")
+        .get(output<{ request_id: string }>(signal).request_id) as {
+        capability: string | null;
+      };
+      expect(broadcast.capability).toBeNull();
     });
   });
 

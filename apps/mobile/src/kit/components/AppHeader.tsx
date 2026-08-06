@@ -3,7 +3,7 @@ import { View, Pressable, StyleSheet } from "react-native";
 
 import type { IconName } from "@centraid/design";
 
-import { radii, spacing, t, useTheme } from "../theme";
+import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
@@ -37,7 +37,7 @@ export default function AppHeader({
         <Icon name="ArrowLeft" size={20} color={colors.text} />
       </Pressable>
       <View style={[styles.iconWrap, { backgroundColor: color }]}>
-        <Icon name={iconKey} size={16} color="#fff" strokeWidth={2} />
+        <Icon name={iconKey} size={16} color="#fff" />
       </View>
       <View style={styles.titleWrap}>
         <Text style={styles.title} numberOfLines={1}>
@@ -60,7 +60,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bg,
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[3],
       paddingBottom: spacing[3],

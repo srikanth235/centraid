@@ -24,7 +24,14 @@ export {
   paletteFor,
 } from "./palette";
 export type { Palette, ColorKey, ColorHex } from "./palette";
-export { IDENTITY_COLORS, identityColor, identityInitials } from "./identity";
+export {
+  IDENTITY_COLORS,
+  identityColor,
+  identityFill,
+  identityHueKey,
+  identityInitials,
+  identityInk,
+} from "./identity";
 export type { IdentityPaletteKey } from "./identity";
 export { formatBytes, formatRelativeTime } from "./format";
 
@@ -44,8 +51,11 @@ export {
   LINK_DARK,
   NET,
   NET_DARK,
+  ON_STAGE,
   RING,
   RING_DARK,
+  STAGE,
+  STAGE_LINE,
   SURFACE_TONE_NAMES,
   SURFACE_TONES,
 } from "./themes";
@@ -73,6 +83,9 @@ export type { DensityScale, DensityTier, MetricKey } from "./density";
 
 export { ICON_CHIP_RADIUS_RATIO, iconChipRadius, radii } from "./radii";
 export type { RadiusKey } from "./radii";
+
+export { borders } from "./borders";
+export type { BorderKey } from "./borders";
 
 export {
   fonts,

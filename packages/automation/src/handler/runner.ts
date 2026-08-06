@@ -335,6 +335,24 @@ export interface HandlerOutcome {
    * long as the owner leaves the connection paused — #647 review).
    */
   skipped?: boolean;
+  /**
+   * Set when the skip was the ENRICHMENT TIER GATE refusing the fire
+   * (`fire.ts`, decision S9). Structured rather than left for a host to
+   * pattern-match out of `error`, because the host has to name the domain in
+   * a member-facing surface and point at the control that changes it — and a
+   * privacy refusal that only exists as prose in a log is the silent failure
+   * the gate was supposed to end.
+   *
+   * Absent on every other skip: a paused connection is already carried by its
+   * own decision row and must not be re-announced.
+   */
+  enrichRefusal?: {
+    domain: string;
+    /** The enricher's capability id (`faces`, `captions`, …). */
+    capability: string;
+    /** The tier in force, or `undefined` when it could not be read at all. */
+    tier?: string;
+  };
   value?: unknown;
   summary?: string;
   output?: unknown;

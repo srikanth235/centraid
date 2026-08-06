@@ -1,5 +1,4 @@
 import type { WriteTarget } from "../_shared/write-target.ts";
-import { $ } from "./dom.ts";
 // Outcome narration + the write trampoline (shared pattern across apps). No
 // domain (asset/album) state lives here — it's generic plumbing, which is
 // exactly why every action module and every component that needs to fire a
@@ -54,10 +53,55 @@ export function writeTarget(kind: WriteTargetKind = "new"): WriteTarget {
   return resolveTarget(kind);
 }
 
-export function notice(text: string): void {
-  const el = $("noticeBanner");
-  el.textContent = text;
-  el.hidden = !text;
+/**
+ * Where narration goes (v4 handoff §3, §14). The ONE status line belongs to
+ * the FRAME, and every write outcome announces itself there — briefly, with
+ * **Undo** where undo is possible. There is no second line, no badge, no
+ * spinner and no red dot, so a later note replaces the earlier one in place.
+ *
+ * The sink is installed once by app-root.tsx, which holds the frame handle.
+ * Until it is — and on any host that mounts this app without a frame — the
+ * calls below are no-ops rather than a banner the app drew for itself: the
+ * `#noticeBanner` this used to write to retired with the app's own chrome.
+ */
+export interface StatusNote {
+  text: string;
+  undo?: () => void;
+  /**
+   * Determinate progress with exact counts (§14) — `148 / 214`, never a
+   * spinner. A long local operation (an import, a batch write) says how far it
+   * has got on the SAME status line rather than growing a second surface, and
+   * app-root.tsx passes this straight through to the frame's meter.
+   */
+  progress?: { done: number; total: number };
+}
+
+let statusSink: ((note: StatusNote | null) => void) | null = null;
+
+/** app-root.tsx installs the frame-backed sink once, at mount. */
+export function setStatusSink(
+  fn: ((note: StatusNote | null) => void) | null
+): void {
+  statusSink = fn;
+}
+
+/**
+ * Say one thing on the status line, or take it back down with `""`.
+ *
+ * `progress` is the determinate meter (§14): a caller that knows how many of
+ * how many it has done says so, and the frame draws the bar. A caller that
+ * does not know says nothing rather than animating an indeterminate one.
+ */
+export function notice(
+  text: string,
+  undo?: () => void,
+  progress?: { done: number; total: number }
+): void {
+  statusSink?.(
+    text
+      ? { text, ...(undo ? { undo } : {}), ...(progress ? { progress } : {}) }
+      : null
+  );
 }
 
 export function narrate(

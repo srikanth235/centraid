@@ -80,12 +80,11 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     fontFamily: 0,
     customProps: ["--app-hue", "--app-identity"],
   },
-  "photos/components/Lightbox.module.css": {
-    hex: 0,
-    functional: 1,
-    fontFamily: 0,
-    customProps: [],
-  },
+  // `photos/components/Lightbox.module.css` used to sit here with one
+  // `hsl(0 0% 4%)` theater-stage backdrop, waiting on a `--stage` role in
+  // packages/design. That role landed (Photos v4 §2.2 / CHANGELOG §B), the
+  // stylesheet now says `var(--stage)`, and the seam is closed — so the entry
+  // is gone rather than shrunk to an empty budget.
   "tally/Chrome.module.css": {
     hex: 0,
     functional: 0,

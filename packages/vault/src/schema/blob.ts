@@ -195,6 +195,28 @@ CREATE TABLE IF NOT EXISTS blob_custody_state (
   checked_at    TEXT NOT NULL
 ) STRICT;
 
+-- Custody ROLLUP (issue #711): the aggregate twin of the mirror above, one row
+-- per bucket, rebuilt wholesale beside it (blob/custody-rollup.ts). It exists
+-- because the aggregate is not computable from the app plane: answering "what
+-- do my originals cost, and what could be released?" over the mirror would
+-- mean reading every content item (the whole library, bytes included), and the
+-- decisive fact — whether the byte is PRESENT in the local CAS — is a
+-- filesystem question no app can ask. Registered as blob.custody_rollup.
+--
+-- The bucket column is a custody state (counted per content item — a
+-- photograph is what a member counts) or one of the two local-tier buckets,
+-- freeable and local-unproven, counted per distinct sha because deduped
+-- content occupies the disk once. The two families never sum together.
+--
+-- byte_size is exact, not a floor: it sums core_content_item.byte_size, which
+-- is NOT NULL, so there is no sizeless remainder to disclose.
+CREATE TABLE IF NOT EXISTS blob_custody_rollup (
+  bucket      TEXT PRIMARY KEY,
+  item_count  INTEGER NOT NULL CHECK (item_count >= 0),
+  byte_size   INTEGER NOT NULL CHECK (byte_size >= 0),
+  computed_at TEXT NOT NULL
+) STRICT;
+
 -- Rebuild the document's FTS sync derivative-aware (see header).
 DROP TRIGGER IF EXISTS fts_core_document_ai;
 DROP TRIGGER IF EXISTS fts_core_document_au;

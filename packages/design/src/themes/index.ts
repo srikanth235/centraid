@@ -24,8 +24,13 @@ export {
   LINK_DARK,
   NET,
   NET_DARK,
+  ON_STAGE,
+  ON_STAGE_SOFT,
   RING,
   RING_DARK,
+  STAGE,
+  STAGE_LINE,
+  STAGE_SUNKEN,
   SURFACE_TONE_NAMES,
   SURFACE_TONES,
 } from "./shared";

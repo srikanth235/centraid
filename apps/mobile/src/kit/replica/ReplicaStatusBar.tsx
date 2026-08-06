@@ -19,7 +19,7 @@ import { clearPinnedThumbnailPacks } from "../../lib/replica/thumbnail-pack";
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
-import { family, radii, t, useTheme } from "../theme";
+import { borders, family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import { useReplica } from "./ReplicaProvider";
 
@@ -144,22 +144,27 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             {action}
           </Text>
         </Pressable>
-        <Pressable
-          accessibilityLabel={`Pending changes ${pending.length}`}
-          onPress={() => {
-            refreshPending();
-            setOpen(true);
-          }}
-          style={[styles.pending, { backgroundColor: colors.bgSunken }]}
-        >
-          <Text style={[styles.pendingText, { color: colors.text }]}>
-            Pending changes{" "}
-            <Text style={[t("mono"), { color: colors.text }]}>
-              {pending.length.toLocaleString()}
+        {/* A standing badge at zero is exactly what §18 forbids — "0 pending
+            changes" is not information a member needs to see permanently, so
+            this chip renders only once there is something to report. */}
+        {pending.length > 0 ? (
+          <Pressable
+            accessibilityLabel={`Pending changes ${pending.length}`}
+            onPress={() => {
+              refreshPending();
+              setOpen(true);
+            }}
+            style={[styles.pending, { backgroundColor: colors.bgSunken }]}
+          >
+            <Text style={[styles.pendingText, { color: colors.text }]}>
+              Pending changes{" "}
+              <Text style={[t("mono"), { color: colors.text }]}>
+                {pending.length.toLocaleString()}
+              </Text>
             </Text>
-          </Text>
-          <Icon name="chevron-right" size={14} color={colors.textFaint} />
-        </Pressable>
+            <Icon name="chevron-right" size={14} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
       </View>
       {bootstrap ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
@@ -177,8 +182,11 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       ) : null}
       {diverged ? (
         <View style={[styles.divergence, { backgroundColor: colors.bgSunken }]}>
+          {/* A non-alarming fact — sources settle at different times, which
+              is expected of a multi-vault replica, not a fault — so this
+              carries no alarm glyph, matching the no-icon banner grammar
+              (:4867-4873) rather than a danger-tinted alert-circle. */}
           <View style={styles.divergenceHeading}>
-            <Icon name="alert-circle" size={14} color={colors.danger} />
             <Text style={[styles.divergenceText, { color: colors.textSoft }]}>
               Sources last updated at different times.
             </Text>
@@ -330,7 +338,7 @@ const styles = StyleSheet.create({
   card: {
     alignItems: "center",
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     flexDirection: "row",
     gap: 12,
     padding: 14,
@@ -400,8 +408,8 @@ const styles = StyleSheet.create({
   title: { fontFamily: family.sansMedium, fontSize: 22 },
   wrap: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: borders.hairline,
+    borderTopWidth: borders.hairline,
     flexDirection: "row",
     gap: 7,
     minHeight: 36,

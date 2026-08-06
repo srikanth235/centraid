@@ -137,12 +137,7 @@ export default function ApprovalsScreen({
           accessibilityLabel="Back"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
-          <Icon
-            name="ArrowLeft"
-            size={20}
-            color={colors.text}
-            strokeWidth={1.75}
-          />
+          <Icon name="ArrowLeft" size={20} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Notifications</Text>
         <View style={styles.barSpacer} />
@@ -166,7 +161,11 @@ export default function ApprovalsScreen({
           filter,
           busy,
           styles,
-          openSettings: () => navigation.navigate("Settings"),
+          // `popTo`: Settings is this stack's initial route and therefore sits
+          // BENEATH Approvals, and React Navigation 7's `navigate` pushes a
+          // second copy of a route already in the stack rather than returning
+          // to it.
+          openSettings: () => navigation.popTo("Settings"),
           reconnectConnection: (connectionId) =>
             act(connectionId, async () => {
               const authUrl =

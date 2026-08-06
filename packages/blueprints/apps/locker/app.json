@@ -699,5 +699,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["autofill"],
+    "disabledOn": ["viewer"],
+    "northStar": "1password"
+  }
 }

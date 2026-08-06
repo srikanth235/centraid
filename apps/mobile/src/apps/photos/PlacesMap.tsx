@@ -1,3 +1,12 @@
+// Places on the phone (Photos v4 handoff §14, §18).
+//
+// A shelf reached from the More sheet, not a destination of its own. The map is
+// the content; everything this screen adds is a header that names the shelf and
+// states its size exactly — a count is a numeral, so it reads in mono.
+//
+// The empty state is the shelf's own: a place is not something a member forgot
+// to do, it is something a photograph either carries or does not.
+
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
@@ -7,7 +16,8 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { family, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -15,6 +25,7 @@ export default function PlacesMap({
   navigation,
 }: PhotosScreenProps<"PlacesMap">): React.JSX.Element {
   const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const places = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.place" }), [])
@@ -66,7 +77,7 @@ export default function PlacesMap({
     : { latitude: 20, longitude: 0, latitudeDelta: 100, longitudeDelta: 100 };
   return (
     <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
+      style={[styles.safe, { backgroundColor: colors.toneMat }]}
       edges={["top"]}
     >
       <View style={styles.header}>
@@ -74,12 +85,15 @@ export default function PlacesMap({
           accessibilityLabel="Back to Photos"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
         >
-          <Icon name="chevron-left" size={26} color={colors.text} />
+          <Icon name="chevron-left" size={24} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Places</Text>
-        <Text style={[styles.count, { color: colors.textSoft }]}>
-          {points.length}
+        <Text style={styles.title}>Places</Text>
+        {/* Stated exactly, in mono: how many geotagged photographs are drawn,
+            and out of how many the library holds. Never a badge. */}
+        <Text style={styles.count}>
+          {points.length} of {assets.length}
         </Text>
       </View>
       <ReplicaStatusBar />
@@ -88,21 +102,16 @@ export default function PlacesMap({
           <Marker
             key={point.id}
             coordinate={point}
-            title={point.count > 1 ? `${point.count} photos` : point.name}
+            title={point.count > 1 ? `${point.count} photographs` : point.name}
             description={point.names.slice(0, 3).join(", ")}
           />
         ))}
       </MapView>
       {points.length ? null : (
         <View pointerEvents="none" style={styles.empty}>
-          <Text
-            style={[
-              styles.emptyText,
-              { backgroundColor: colors.bgElev, color: colors.textSoft },
-            ]}
-          >
-            Geotagged assets appear here. Set-place changes sync as replica
-            intents.
+          <Text style={styles.emptyText}>
+            No places yet — a photograph lands here once it carries where it was
+            taken.
           </Text>
         </View>
       )}
@@ -110,31 +119,42 @@ export default function PlacesMap({
   );
 }
 
-const styles = StyleSheet.create({
-  count: { fontFamily: family.monoMedium, fontSize: 11 },
-  empty: {
-    alignItems: "center",
-    bottom: 30,
-    left: 20,
-    position: "absolute",
-    right: 20,
-  },
-  emptyText: {
-    borderRadius: 12,
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
-    padding: 14,
-    textAlign: "center",
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  map: { flex: 1 },
-  safe: { flex: 1 },
-  title: { fontFamily: family.sansMedium, fontSize: 18 },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    count: { ...t("mono"), color: colors.textSoft },
+    empty: {
+      alignItems: "center",
+      bottom: spacing[5],
+      insetInlineEnd: spacing[5],
+      insetInlineStart: spacing[5],
+      position: "absolute",
+    },
+    emptyText: {
+      ...t("small"),
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: 12,
+      borderWidth: borders.hairline,
+      color: colors.textSoft,
+      overflow: "hidden",
+      padding: spacing[4],
+      textAlign: "center",
+    },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: 48,
+      paddingEnd: spacing[4],
+      paddingStart: spacing[2],
+    },
+    headerBtn: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    map: { flex: 1 },
+    safe: { flex: 1 },
+    title: { ...t("title"), color: colors.text, flex: 1 },
+  });

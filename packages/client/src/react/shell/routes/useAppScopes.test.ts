@@ -6,11 +6,11 @@ import type { AppScopeEntry } from "../../../gateway-client-vault.js";
 import type * as TypeImport_lhrfvk from "../../../gateway-client-vault.js";
 import type * as TypeImport_ntzl9 from "../../../replica/shell-session.js";
 
-const { listAppScopes } = vi.hoisted(() => ({
-  listAppScopes: vi.fn<typeof TypeImport_lhrfvk.listAppScopes>(),
+const { readAppScopePlane } = vi.hoisted(() => ({
+  readAppScopePlane: vi.fn<typeof TypeImport_lhrfvk.readAppScopePlane>(),
 }));
 vi.mock(import("../../../gateway-client-vault.js") as Promise<unknown>, () => ({
-  listAppScopes,
+  readAppScopePlane,
 }));
 vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
   auth: vi.fn<typeof TypeImport_nod2nz.auth>(async () => ({
@@ -47,20 +47,35 @@ function entry(vaultId: string, label: string, role: string): AppScopeEntry {
   return { vaultId, label, role, installed: true };
 }
 
+/** The plane as the gateway answers it: rows, plus the member's pointer. */
+function plane(
+  scopes: AppScopeEntry[],
+  defaultShareTargetVaultId?: string
+): TypeImport_lhrfvk.AppScopePlane {
+  return {
+    scopes,
+    ...(defaultShareTargetVaultId === undefined
+      ? {}
+      : { defaultShareTargetVaultId }),
+  };
+}
+
 describe("resolveAppScopes", () => {
   // Braces matter: an arrow that RETURNS the mock hands vitest a teardown
   // callback, and vitest would then invoke the mock after each test.
   beforeEach(() => {
-    listAppScopes.mockReset();
+    readAppScopePlane.mockReset();
   });
 
   it("maps roles to write capability — read cannot add", async () => {
-    listAppScopes.mockResolvedValue([
-      entry("vault-own", "Library", "admin"),
-      entry("vault-family", "Family", "write"),
-      entry("vault-grandma", "Grandma", "read"),
-    ]);
-    const scopes = await resolveAppScopes("photos");
+    readAppScopePlane.mockResolvedValue(
+      plane([
+        entry("vault-own", "Library", "admin"),
+        entry("vault-family", "Family", "write"),
+        entry("vault-grandma", "Grandma", "read"),
+      ])
+    );
+    const { scopes } = await resolveAppScopes("photos");
     expect(scopes.map((s) => [s.scope.id, s.scope.canWrite])).toStrictEqual([
       ["vault-own", true],
       ["vault-family", true],
@@ -73,38 +88,98 @@ describe("resolveAppScopes", () => {
   });
 
   it("drops a scope the app is not installed in — it would have no shapes to read", async () => {
-    listAppScopes.mockResolvedValue([
-      entry("vault-own", "Library", "admin"),
-      { ...entry("vault-family", "Family", "write"), installed: false },
-    ]);
-    const scopes = await resolveAppScopes("photos");
+    readAppScopePlane.mockResolvedValue(
+      plane([
+        entry("vault-own", "Library", "admin"),
+        { ...entry("vault-family", "Family", "write"), installed: false },
+      ])
+    );
+    const { scopes } = await resolveAppScopes("photos");
     expect(scopes.map((s) => s.scope.id)).toStrictEqual(["vault-own"]);
   });
 
   it("caps how many scopes are hydrated at once", async () => {
-    listAppScopes.mockResolvedValue(
-      Array.from({ length: MAX_MOUNTED_SCOPES + 3 }, (_, i) =>
-        entry(`vault-${i}`, `Scope ${i}`, "write")
+    readAppScopePlane.mockResolvedValue(
+      plane(
+        Array.from({ length: MAX_MOUNTED_SCOPES + 3 }, (_, i) =>
+          entry(`vault-${i}`, `Scope ${i}`, "write")
+        )
       )
     );
-    await expect(resolveAppScopes("photos")).resolves.toHaveLength(
+    await expect(resolveAppScopes("photos")).resolves.toHaveProperty(
+      "scopes.length",
       MAX_MOUNTED_SCOPES
     );
   });
 
   it("degrades to the single ambient scope when the gateway has no scopes plane", async () => {
-    listAppScopes.mockResolvedValue(undefined);
-    const scopes = await resolveAppScopes("photos");
+    readAppScopePlane.mockResolvedValue(undefined);
+    const { scopes, shareTargetVaultId } = await resolveAppScopes("photos");
     expect(scopes).toHaveLength(1);
     expect(scopes[0]!.identity.vaultId).toBe("vault-ambient");
     expect(scopes[0]!.scope.canWrite).toBe(true);
+    // The solo mount IS the member's own library, so nothing in it is marked
+    // as somewhere else, and there is nowhere to share to (issue #711 item H).
+    expect(scopes[0]!.scope.personal).toBe(true);
+    expect(shareTargetVaultId).toBeUndefined();
   });
 
   it("degrades rather than failing the mount when the call throws", async () => {
-    listAppScopes.mockImplementation(() => {
+    readAppScopePlane.mockImplementation(() => {
       throw new Error("offline");
     });
-    await expect(resolveAppScopes("photos")).resolves.toHaveLength(1);
+    await expect(resolveAppScopes("photos")).resolves.toHaveProperty(
+      "scopes.length",
+      1
+    );
+  });
+
+  // Issue #711 item H: the share destination is a POINTER the member owns,
+  // carried beside the rows because it is not a property of any of them.
+  it("carries the member's share destination, and the founding marker per row", async () => {
+    readAppScopePlane.mockResolvedValue(
+      plane(
+        [
+          { ...entry("vault-own", "Library", "admin"), personal: true },
+          { ...entry("vault-shared", "Shared", "write"), personal: false },
+        ],
+        "vault-shared"
+      )
+    );
+    const resolvedScopes = await resolveAppScopes("photos");
+    expect(resolvedScopes.shareTargetVaultId).toBe("vault-shared");
+    expect(
+      resolvedScopes.scopes.map((s) => [s.scope.id, s.scope.personal])
+    ).toStrictEqual([
+      ["vault-own", true],
+      ["vault-shared", false],
+    ]);
+  });
+
+  it("passes a pointer this mount cannot reach straight through", async () => {
+    // Not resolved away here: the app renders the share action disabled WITH
+    // the reason rather than silently doing nothing.
+    readAppScopePlane.mockResolvedValue(
+      plane(
+        [{ ...entry("vault-own", "Library", "admin"), personal: true }],
+        "vault-gone"
+      )
+    );
+    const resolvedScopes = await resolveAppScopes("photos");
+    expect(resolvedScopes.shareTargetVaultId).toBe("vault-gone");
+    expect(resolvedScopes.scopes.map((s) => s.scope.id)).toStrictEqual([
+      "vault-own",
+    ]);
+  });
+
+  it("leaves a scope UNMARKED when the gateway did not answer the marker", async () => {
+    // An older gateway omits `personal`; marking every tile would say
+    // something untrue, so unknown reads as the member's own.
+    readAppScopePlane.mockResolvedValue(
+      plane([entry("vault-own", "Library", "admin")])
+    );
+    const resolvedScopes = await resolveAppScopes("photos");
+    expect(resolvedScopes.scopes[0]!.scope.personal).toBeUndefined();
   });
 });
 

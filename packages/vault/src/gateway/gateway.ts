@@ -9,6 +9,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { refreshCustodyRollup } from "../blob/custody-rollup.js";
 import { refreshCustodyState } from "../blob/custody.js";
 import type { ReconcileResult } from "../blob/custody.js";
 import { backfillPreviews } from "../blob/preview.js";
@@ -1872,6 +1873,12 @@ export class Gateway {
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
     // not a stale pre-sweep gap.
     await refreshCustodyState(this.db);
+    // The aggregate rollup (issue #711) reads the mirror that was just written
+    // AND the replica evidence reconcile just healed against the real remote
+    // listing — the same post-reconcile condition BlobCache requires before it
+    // will shed an original rather than a preview. Computing it anywhere else
+    // in the sweep would grade "safe to release" against stale evidence.
+    refreshCustodyRollup(this.db);
     // Preview backstop (issue #405 §2): fill missing tiny/medium derivatives
     // for image content a capable client never produced — Takeout imports,
     // weak/old clients, server-side ingestion. Bounded per sweep (cheap edge

@@ -82,7 +82,6 @@ vi.mock(import("react-native"), async () => {
     StyleSheet: {
       absoluteFill: {},
       create: <T,>(styles: T): T => styles,
-      hairlineWidth: 1,
     },
     Text: ({ children }: { children?: React.ReactNode }) =>
       element("span", { children }),
@@ -214,6 +213,7 @@ vi.mock(
   import("../kit/theme"),
   () =>
     ({
+      borders: { hairline: 1 },
       family: {
         monoMedium: "mono-medium",
         monoRegular: "mono",

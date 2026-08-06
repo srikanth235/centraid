@@ -79,13 +79,26 @@
 .window[data-window-controls="inset"] .stem:not([data-compact="true"]) {
   padding-block-start: 44px;
 }
-.stem[data-compact="true"] {
+/* A phone expects the bottom bar to FLOAT (Photos v4, CHANGELOG G): inset by
+   the 12 rung, `--r-lg`, a hairline, and OPAQUE paper. No blur, no
+   translucency, no shadow — surfaces here are paper, not elevation, and a
+   translucent bar over a photograph would make label contrast, the active bar
+   and the focus ring depend on what the member photographed. Content ends
+   ABOVE it (the frame grid gives the band its own row), so nothing runs under
+   it and no scrim is needed to keep it readable. */
+.stem[data-compact="true"],
+.appBand {
   flex-direction: row;
   align-items: stretch;
   padding-block: 0 var(--sp-2);
   padding-inline: var(--sp-1);
-  border-inline-end: 0;
-  border-block-start: 1px solid var(--line);
+  /* The shorthand REPLACES the desktop stem's trailing hairline — a floating
+     band is bounded on four sides or on none. */
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  margin-inline: 12px;
+  margin-block-end: 12px;
+  background: var(--bg);
 }
 
 .stemMark {
@@ -173,6 +186,8 @@
 .stemGateway {
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
 }
 
@@ -475,6 +490,8 @@
   flex: none;
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
 }
 
@@ -486,6 +503,72 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── The claimed band + the frame's capsule ─────────────────────────────────
+   Invariant 1 as amended (Photos v4, CHANGELOG F). A first-party route may
+   claim the phone's band; the frame's own band then does not render at all, so
+   there is never a second one to hide. The frame is represented by a capsule
+   OUTSIDE the app's tab group — the group boundary is what says it is not a
+   sixth tab — and the capsule keeps the frame's page colour, its own border and
+   its own target, whatever the app is themed as. */
+.appBand {
+  grid-area: stem;
+  display: flex;
+  gap: var(--sp-1);
+  min-height: 0;
+}
+.appBandGroup {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-inline-size: 0;
+}
+.appBandGroup .launchItem {
+  flex: 1;
+  min-inline-size: 0;
+  inline-size: auto;
+  padding-block: 7px 3px;
+}
+/* The active tab is carried by the label weight plus a 2px INK bar — the shell
+   spends no hue, and an app's own colour on the frame's band would be the app
+   theming a frame control. */
+.appBandGroup .launchItem[data-active="true"] .launchBar {
+  background: var(--accent);
+}
+/* The capsule is a FRAME control: host paper, its own border, never themed by
+   the app beside it, and never under 44px. 52px is the brief's target; the
+   floor is the guarantee. */
+.bandCapsule {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  inline-size: var(--band-capsule, 52px);
+  block-size: var(--band-capsule, 52px);
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  /* The seam. A capsule that shared the tabs' ground would read as a tab. */
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.bandCapsule:hover {
+  background: var(--bg-hover);
+}
+.bandCapsule:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.bandCapsuleMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The mark is INK. The shell spends no hue. */
+  color: var(--accent);
 }
 
 /* ── The main column ────────────────────────────────────────────────────── */
@@ -628,6 +711,28 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The app lockup (Photos v4, §3): mark chip, title, count, on ONE line. It is
+   the app's identity, not a page header, so it does not take the header's
+   display face or its taller block padding — the title is the 20/26 rung and
+   the count sits beside it rather than under it. */
+.appBar[data-lockup="app"] .appTitle {
+  font: var(--t-title);
+}
+.appLockup {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+/* A count is a numeric, so it is mono and tabular — the app passes the number,
+   the frame owns the register. */
+.appCount {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
 }
 
 /* Numerics are mono and tabular in every app, without exception. */

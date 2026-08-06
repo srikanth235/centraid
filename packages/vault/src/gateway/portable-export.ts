@@ -319,6 +319,9 @@ export async function exportPortableVault(
   db: VaultDb,
   owner: Identity
 ): Promise<PortableExport> {
+  // exportVault walks every registered canonical table and its columns. Keep
+  // this owner in the schema/export ratchet so additions such as the Photos
+  // custody rollup and source_asset_id are audited against that complete walk.
   const canonical = exportVault(db, owner);
   if (canonical.artifact.skippedTables?.length) {
     throw new Error(

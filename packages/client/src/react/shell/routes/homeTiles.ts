@@ -80,9 +80,16 @@ export function homeTileSize(id: HomeTileAppId): HomeTileSize {
   return TILE_SIZE[id];
 }
 
-/** One overlapping face circle. Identity, never a photo we do not have. */
-export interface HomeTileFace {
+/** One person in the directory, as the tile model needs them: a STABLE id and
+ *  the name it renders. The id is what the face circle's hue is derived from
+ *  (see `HomeTileFace`), so it is carried all the way from the read. */
+export interface HomeTilePerson {
+  id: string;
   name: string;
+}
+
+/** One overlapping face circle. Identity, never a photo we do not have. */
+export interface HomeTileFace extends HomeTilePerson {
   initials: string;
 }
 
@@ -144,7 +151,7 @@ export interface HomeTileContent {
     total: number;
     events: readonly { title: string; at: string }[];
   };
-  people?: { total: number; names: readonly string[] };
+  people?: { total: number; directory: readonly HomeTilePerson[] };
   tasks?: {
     total: number;
     rows: readonly HomeTileTaskRow[];
@@ -239,14 +246,18 @@ function bodyFor(
   }
   if (id === "people") {
     const people = content.people;
-    if (!people || people.names.length === 0) return empty;
+    if (!people || people.directory.length === 0) return empty;
     return {
-      faces: people.names.slice(0, FACES).map((name) => ({
-        initials: identityInitials(name),
-        name,
+      faces: people.directory.slice(0, FACES).map((person) => ({
+        id: person.id,
+        initials: identityInitials(person.name),
+        name: person.name,
       })),
       kind: "people",
-      more: Math.max(0, people.total - Math.min(FACES, people.names.length)),
+      more: Math.max(
+        0,
+        people.total - Math.min(FACES, people.directory.length)
+      ),
     };
   }
   if (id === "tasks") {

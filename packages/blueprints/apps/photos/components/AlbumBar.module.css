@@ -1,0 +1,52 @@
+/* Album detail's row, in the slot the shelf strip vacates (v4 handoff §5).
+   Same 38px rhythm and same block-end rule as the strip, so leaving Albums for
+   one album does not move the grid. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: 38px;
+  padding-inline: 20px;
+  border-block-end: 1px solid var(--line);
+  flex-shrink: 0;
+  /* The refusal line takes a row of its own under the controls, so the bar
+     wraps rather than squeezing them (§6's own reason line does the same). */
+  flex-wrap: wrap;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Destructive is an OUTLINED --net button, never a fill (§18). `--net` is the
+   blueprint layer's network/refusal ink; the fallback keeps the rule from
+   being dropped wholesale on a surface that has not emitted it yet. */
+.destructive:not(:disabled) {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
+
+/* THE REFUSAL, STATED INLINE (README:233, proto 4789) — `--net` mono under the
+   bar, never a tooltip. Same grammar as the selection bar's own reason line;
+   `flex-basis: 100%` is what puts it on its own row inside the flex bar. */
+.reason {
+  flex-basis: 100%;
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  line-height: 1.5;
+  color: var(--net, var(--danger));
+  padding-block: var(--sp-1);
+}

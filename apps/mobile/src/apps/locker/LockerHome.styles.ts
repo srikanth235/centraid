@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t } from "../../kit/theme";
+import { borders, family, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const makeLockerStyles = (colors: ThemeColors) =>
@@ -21,7 +21,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     detailHeader: {
       alignItems: "center",
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       justifyContent: "space-between",
       padding: spacing[5],
@@ -38,7 +38,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     field: {
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       paddingVertical: spacing[4],
     },
     fieldCopy: { gap: 4 },
@@ -121,7 +121,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     row: {
       alignItems: "center",
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[3],
       minHeight: 68,

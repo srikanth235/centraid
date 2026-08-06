@@ -37,6 +37,15 @@ export interface PhotoAsset {
   favorite: boolean;
   archived: boolean;
   deleted: boolean;
+  /**
+   * When the lifecycle sweep purges these bytes, straight off the asset's own
+   * `purge_at` (issue #274) with the content row as the fallback for vaults
+   * trashed before that pair landed. Present only for a trashed photograph;
+   * the tile's state slot turns it into the countdown Trash reads by
+   * (proto:4446-4449). Mirrors the web's derivation in
+   * `packages/blueprints/apps/photos/queries/library.ts`.
+   */
+  purgeAt?: string;
   backupState: BackupState;
   verifiedCasAck?: boolean;
   duplicateHint?: boolean;

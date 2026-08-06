@@ -9,12 +9,14 @@
 import type { Theme as NavigationTheme } from "@react-navigation/native";
 
 import {
+  borders,
   darkPalette,
   density,
   durations,
   fonts,
   lightPalette,
   metrics,
+  pageMargin,
   radii,
   spacing,
   targetMin,
@@ -31,8 +33,11 @@ export interface ThemeValue {
   scheme: Scheme;
   colors: ThemeColors;
   radii: typeof radii;
+  borders: typeof borders;
   spacing: typeof spacing;
   metrics: typeof metrics;
+  /** The horizontal page inset. Not a `spacing` rung — see density.ts. */
+  pageMargin: typeof pageMargin;
   density: typeof density;
   fonts: typeof fonts;
   type: typeof type;
@@ -43,11 +48,13 @@ export interface ThemeValue {
 function themeFor(scheme: Scheme): ThemeValue {
   const colors: ThemeColors = scheme === "dark" ? darkPalette : lightPalette;
   return {
+    borders,
     colors,
     density,
     durations,
     fonts,
     metrics,
+    pageMargin,
     radii,
     scheme,
     spacing,
