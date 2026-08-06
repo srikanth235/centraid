@@ -22,8 +22,8 @@ const outputWasmPath = path.join(publicDir, "centraid-worker-iroh.wasm");
 const source = readFileSync(sourcePath, "utf8");
 const classic = source
   .replace(
-    "module_or_path = new URL('centraid_web_iroh_bg.wasm', import.meta.url);",
-    "module_or_path = new URL('/centraid-worker-iroh.wasm' + self.location.search, self.location.origin);"
+    /^(?<indent>[ \t]*)module_or_path = new URL\((?<quote>["'])centraid_web_iroh_bg\.wasm\k<quote>,\s*import\.meta\.url\s*\);[ \t]*$/mu,
+    "$<indent>module_or_path = new URL('/centraid-worker-iroh.wasm' + self.location.search, self.location.origin);"
   )
   .replace(
     "export { initSync, __wbg_init as default };",

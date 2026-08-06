@@ -6,7 +6,7 @@
  * *This API requires the following crate features to be activated: `ReadableStreamType`*
  */
 
-type ReadableStreamType = 'bytes';
+type ReadableStreamType = "bytes";
 
 export class BrowserEndpoint {
   private constructor();
@@ -20,12 +20,12 @@ export class BrowserEndpoint {
     method: string,
     target: string,
     headers_json: string,
-    body: Uint8Array,
+    body: Uint8Array
   ): Promise<BrowserResponse>;
   secret_key(): Uint8Array;
   static spawn(
     secret_key?: Uint8Array | null,
-    relay_urls?: string[] | null,
+    relay_urls?: string[] | null
   ): Promise<BrowserEndpoint>;
 }
 
@@ -82,7 +82,12 @@ export function device_revoked_marker(): string;
 
 export function start(): void;
 
-export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+export type InitInput =
+  | RequestInfo
+  | URL
+  | Response
+  | BufferSource
+  | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
@@ -95,7 +100,7 @@ export interface InitOutput {
     b: number,
     c: number,
     d: number,
-    e: number,
+    e: number
   ) => number;
   readonly browserendpoint_request: (
     a: number,
@@ -108,10 +113,15 @@ export interface InitOutput {
     h: number,
     i: number,
     j: number,
-    k: number,
+    k: number
   ) => number;
   readonly browserendpoint_secret_key: (a: number, b: number) => void;
-  readonly browserendpoint_spawn: (a: number, b: number, c: number, d: number) => number;
+  readonly browserendpoint_spawn: (
+    a: number,
+    b: number,
+    c: number,
+    d: number
+  ) => number;
   readonly browserresponse_headers_json: (a: number, b: number) => void;
   readonly browserresponse_status: (a: number) => number;
   readonly browserresponse_take_body: (a: number, b: number) => void;
@@ -124,12 +134,14 @@ export interface InitOutput {
     c: number,
     d: number,
     e: number,
-    f: number,
+    f: number
   ) => void;
   readonly __wbg_intounderlyingbytesource_free: (a: number, b: number) => void;
   readonly __wbg_intounderlyingsink_free: (a: number, b: number) => void;
   readonly __wbg_intounderlyingsource_free: (a: number, b: number) => void;
-  readonly intounderlyingbytesource_autoAllocateChunkSize: (a: number) => number;
+  readonly intounderlyingbytesource_autoAllocateChunkSize: (
+    a: number
+  ) => number;
   readonly intounderlyingbytesource_cancel: (a: number) => void;
   readonly intounderlyingbytesource_pull: (a: number, b: number) => number;
   readonly intounderlyingbytesource_start: (a: number, b: number) => void;
@@ -142,12 +154,26 @@ export interface InitOutput {
   readonly __wasm_bindgen_func_elem_6270: (a: number, b: number) => void;
   readonly __wasm_bindgen_func_elem_2050: (a: number, b: number) => void;
   readonly __wasm_bindgen_func_elem_5043: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_4350: (a: number, b: number, c: number, d: number) => void;
-  readonly __wasm_bindgen_func_elem_2771: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_4350: (
+    a: number,
+    b: number,
+    c: number,
+    d: number
+  ) => void;
+  readonly __wasm_bindgen_func_elem_2771: (
+    a: number,
+    b: number,
+    c: number
+  ) => void;
   readonly __wasm_bindgen_func_elem_5044: (a: number, b: number) => void;
   readonly __wasm_bindgen_func_elem_5061: (a: number, b: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
-  readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_export2: (
+    a: number,
+    b: number,
+    c: number,
+    d: number
+  ) => number;
   readonly __wbindgen_export3: (a: number) => void;
   readonly __wbindgen_export4: (a: number, b: number, c: number) => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
@@ -164,7 +190,9 @@ export type SyncInitInput = BufferSource | WebAssembly.Module;
  *
  * @returns {InitOutput}
  */
-export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
+export function initSync(
+  module: { module: SyncInitInput } | SyncInitInput
+): InitOutput;
 
 /**
  * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
@@ -178,5 +206,5 @@ export default function __wbg_init(
   module_or_path?:
     | { module_or_path: InitInput | Promise<InitInput> }
     | InitInput
-    | Promise<InitInput>,
+    | Promise<InitInput>
 ): Promise<InitOutput>;
