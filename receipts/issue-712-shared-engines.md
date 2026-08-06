@@ -784,6 +784,19 @@ bun run check:push
 (38/38 green on the first two commits; 39/39 once E1 added the
 `lint:engine-conformance` gate to the chain — the count changed because this
 pass added a gate to `check:push`, not because a gate was skipped.)
+
+The first PR CI run also exposed eight type-aware diagnostics in
+`apps/mobile/src/apps/docs/docs-custody.ts`,
+`packages/blueprints/apps/photos/enrichment-consent.test.ts`, and
+`tests/quality/user-facing-qualities.test.ts`. The optional custody state is
+now explicit, the consent tests call their intentionally `void` UI callback
+without awaiting it, and the quality comparisons use an explicit string
+comparator. The corrected static gate passes with:
+
+```sh
+bun run lint:types
+```
+
 Engine-specific proofs a
 reviewer can re-run:
 
@@ -1027,6 +1040,7 @@ non-steering status query; the ledger validates clean across `receipts/`.
 | claude-code-8eaf2fc5-4c2-1785999452-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 8 | 1158380 | 506338 | 2897 | 1161285 | 7.5655 | 34030 | 2505668 | 97203427 | 448086 | feat(engines): first consumers — sharing shelf, frame backup, consent re-home, c |
 | claude-code-8eaf2fc5-4c2-1785999533-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 2 | 611 | 416811 | 404 | 1017 | 0.2223 | 34032 | 2506279 | 97620238 | 448490 | feat(engines): land the first engine consumers across mobile and web (#712)Mobil |
 | claude-code-8eaf2fc5-4c2-1786003430-1 | claude-code | 8eaf2fc5-4c26-4cea-a89d-c8f1f7ba124d | #712 | claude-opus-5 | 157 | 4564558 | 24868872 | 53448 | 4618163 | 42.2999 | 34189 | 7070837 | 122489110 | 501938 | feat(engines): close the pass — conformance gates, band hand-back, Photos finals |
+| codex-019fd642-e7c-1786007909-1 | codex | 019fd642-e7c5-7c51-983a-10ddd72c2c1c | #712 | gpt-5.6-luna | 338318 | 0 | 8062720 | 27455 | 365773 | 3.2733 | 338318 | 0 | 8062720 | 27455 | fix(ci): clear PR type-aware lint failures (#712) |
 
 ### Steering
 

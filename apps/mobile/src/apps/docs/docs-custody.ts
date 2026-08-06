@@ -76,6 +76,8 @@ export function custodySentence(custody: NativeDocument["custody"]): string {
       return "backing up now";
     case "missing":
       return "missing — needs attention";
+    case undefined:
+      return "backup status unknown";
     default:
       return "backup status unknown";
   }

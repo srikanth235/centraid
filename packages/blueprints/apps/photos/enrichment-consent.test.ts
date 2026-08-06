@@ -249,7 +249,7 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     gate.ensurePolicyLoaded();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     expect(write).not.toHaveBeenCalled();
-    await gate.props(6214)?.onRunOnDevice();
+    gate.props(6214)?.onRunOnDevice();
     expect(write).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         action: "request-enrichment",
@@ -262,8 +262,8 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     const gate = createEnrichmentGate({ onData });
     gate.ensurePolicyLoaded();
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
-    await gate.props(6214)?.onRunOnDevice();
-    await gate.props(6214)?.onRunOnDevice();
+    gate.props(6214)?.onRunOnDevice();
+    gate.props(6214)?.onRunOnDevice();
     expect(write).toHaveBeenCalledOnce();
   });
 
@@ -275,7 +275,7 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     const props = gate.props(6214);
     expect(props?.onDevice.available).toBe(false);
     expect(props?.onDevice.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.modelTier);
-    await props?.onRunOnDevice();
+    props?.onRunOnDevice();
     expect(write).not.toHaveBeenCalled();
   });
 });

@@ -61,6 +61,9 @@ import { createTestVault } from "../helpers/factories.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
+const compareStrings = (left: string, right: string): number =>
+  left.localeCompare(right);
+
 async function json(file: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(path.join(root, file), "utf8")) as Record<
     string,
@@ -624,9 +627,9 @@ describe("issue #679 user-facing quality gates", () => {
       { parties: 1, photos: 1, conversations: 1, turnsPerConversation: 1 }
     );
     const profile = year3VaultProfile();
-    expect(Object.keys(profile.sealedSentinels).sort()).toStrictEqual(
-      declared.toSorted()
-    );
+    expect(
+      Object.keys(profile.sealedSentinels).toSorted(compareStrings)
+    ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
       .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
@@ -855,9 +858,9 @@ describe("issue #679 user-facing quality gates", () => {
       "replica-snapshot": JSON.stringify(replicaArtifact),
       "provider-egress": providerEgressArtifact,
     };
-    expect(Object.keys(surfaceArtifacts).toSorted()).toStrictEqual(
-      [...SEALED_LEAK_SURFACES].toSorted()
-    );
+    expect(
+      Object.keys(surfaceArtifacts).toSorted(compareStrings)
+    ).toStrictEqual([...SEALED_LEAK_SURFACES].toSorted(compareStrings));
     const enforcementArtifacts: Record<
       (typeof SEALED_ENFORCEMENT_POINTS)[number],
       string
@@ -869,9 +872,9 @@ describe("issue #679 user-facing quality gates", () => {
       "fts-exclusion": JSON.stringify(ftsArtifact),
       "draft-stage-sealing": JSON.stringify(stagedArtifact),
     };
-    expect(Object.keys(enforcementArtifacts).toSorted()).toStrictEqual(
-      [...SEALED_ENFORCEMENT_POINTS].toSorted()
-    );
+    expect(
+      Object.keys(enforcementArtifacts).toSorted(compareStrings)
+    ).toStrictEqual([...SEALED_ENFORCEMENT_POINTS].toSorted(compareStrings));
     for (const [surface, artifact] of Object.entries({
       ...surfaceArtifacts,
       ...enforcementArtifacts,
