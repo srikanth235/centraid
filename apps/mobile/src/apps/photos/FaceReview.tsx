@@ -38,23 +38,38 @@
 //      queue (`face-review-queue.ts`'s `buildQueue`), one proposal on screen
 //      at a time.
 //
-// WHAT IS AND ISN'T A REAL WRITE (mirrors the web twin's own header — same
-// vault schema, same gap):
-//   * Confirm / Not this person: real writes (confirm-face / reject-face).
-//   * Someone else → a picker over people ALREADY confirmed elsewhere in
-//     this vault, reusing confirm-face with that party_id. Minting a BRAND
-//     NEW person has no action-plane command in app.json; picking an
-//     existing one is the honest subset of "name this face yourself" this
-//     client can actually do today.
-//   * Unknown person / Keep unnamed: no vault command confirms a region as
-//     "reviewed, deliberately left unnamed" (confirm-face needs a party_id;
-//     reject-face deletes the row outright). Says so instead of faking it.
+// EVERY CONTROL IS A REAL WRITE NOW (issue #712), which was not true before —
+// this header used to end by explaining which button was an apology:
+//   * Confirm / Not this person / Someone else → `answer-face` with
+//     `confirm` or `reject`. "Someone else" is a picker over people ALREADY
+//     confirmed elsewhere in this vault; minting a BRAND NEW person has no
+//     action-plane command in app.json, so picking an existing one is the
+//     honest subset of "name this face yourself" this client can do.
+//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. It used
+//     to set a note reading "isn't wired up yet"; there was genuinely no
+//     vault command that meant "reviewed, deliberately left unnamed", so
+//     every stranger the member declined to name came back on the next
+//     replica pull. `media.answer_face_proposal` has one, and a dismissed
+//     face stays dismissed.
 //   * Skip: local only — nothing is written, so "it stays in the queue"
-//     (4315) is literally true.
+//     (4315) is literally true, and it is now the ONLY control of which that
+//     is true.
+//
+// The cursor/progress arithmetic is `@centraid/blueprints`'
+// `apps/photos/triage-session` — the same pure model the web twin and the
+// duplicate review consume, so "1 of 54" cannot mean two different things on
+// two screens. See `session` below for why this screen builds the value per
+// render instead of holding it in state.
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  triageCurrent,
+  triageProgress,
+  triageSkip,
+} from "@centraid/blueprints/apps/photos/triage-session";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -77,6 +92,23 @@ import { styles } from "./FaceReview.styles";
 import { usePhotoTimeline } from "./timeline-source";
 
 const CROP_PX = 120;
+
+/** The row state each answer lands in — the same three the vault's
+ *  `media_face_region.review_state` CHECK allows. A table, not a branch
+ *  chain, so a fourth answer is one row here (docs/coding-standards.md). */
+const ANSWERED_STATE = {
+  confirm: "confirmed",
+  reject: "rejected",
+  dismiss: "dismissed",
+} as const;
+
+/** What a failed answer is called on the status bar. Never a stack trace:
+ *  the member asked a question of their own library and deserves a sentence. */
+const ANSWER_FAILURE = {
+  confirm: "Face not confirmed",
+  reject: "Face not rejected",
+  dismiss: "Face not kept",
+} as const;
 
 function safeParseBBox(
   json: unknown
@@ -113,7 +145,7 @@ export default function FaceReview({
   navigation,
 }: PhotosScreenProps<"FaceReview">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session: replicaSession } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
 
@@ -160,7 +192,8 @@ export default function FaceReview({
     [facesQuery.rows, assetsQuery.rows]
   );
   const confirmedTotal = useMemo(
-    () => facesQuery.rows.filter((row) => row.confirmed_by_party_id).length,
+    () =>
+      facesQuery.rows.filter((row) => row.review_state === "confirmed").length,
     [facesQuery.rows]
   );
 
@@ -182,7 +215,25 @@ export default function FaceReview({
       );
   }, [sessionStartTotal, queue.length]);
 
-  const current = queue.length > 0 ? queue[cursor % queue.length] : undefined;
+  // The shared triage model, BUILT PER RENDER rather than held in state — and
+  // that is the one thing this screen does differently from the web twin. The
+  // web surface loads a queue page and owns it; here the queue is DERIVED from
+  // live replica rows that re-resolve on every pull, so a session kept in
+  // state would need an effect to refill it on each new array identity, and
+  // that effect would set state that produces the next render. Deriving it
+  // instead keeps the data flow one-way, and the arithmetic the member reads
+  // (current, position, total, skip) still comes from one place for all three
+  // surfaces.
+  const session = useMemo(
+    () => ({
+      queue,
+      cursor: queue.length === 0 ? 0 : cursor % queue.length,
+      total: sessionStartTotal ?? queue.length,
+      counts: { answered: actedCount },
+    }),
+    [queue, cursor, sessionStartTotal, actedCount]
+  );
+  const current = triageCurrent(session);
   const region = current
     ? facesQuery.rows.find((r) => String(r.region_id) === current.regionId)
     : undefined;
@@ -195,47 +246,48 @@ export default function FaceReview({
       ? faceCropStyle(bbox, sourceAsset.width, sourceAsset.height, CROP_PX)
       : null;
 
-  async function act(
-    action: "confirm-face" | "reject-face",
+  /**
+   * The ONE write behind every answer on this screen (issue #712) — the same
+   * `answer-face` action, and the same three answers, the web twin fires.
+   *
+   * The OPTIMISTIC row is an upsert for all three: a rejection no longer
+   * deletes anything, so the local row must land in the same answered state
+   * the vault is about to write, or the queue would rebuild with the face
+   * still in it for the moment before the pull catches up. Rejected and
+   * dismissed regions carry no party — the vault's own CHECK says so.
+   */
+  async function answer(
+    kind: "confirm" | "reject" | "dismiss",
     partyId?: string
   ): Promise<boolean> {
-    if (!current || !session) return false;
+    if (!current || !replicaSession) return false;
+    const confirmed = kind === "confirm";
     setBusy(true);
     try {
-      const result = await session.write("photos", {
-        action,
+      const result = await replicaSession.write("photos", {
+        action: "answer-face",
         input: {
           region_id: current.regionId,
-          ...(partyId ? { party_id: partyId } : {}),
+          answer: kind,
+          ...(confirmed && partyId ? { party_id: partyId } : {}),
         },
-        optimistic:
-          action === "reject-face"
-            ? [
-                {
-                  op: "delete",
-                  entity: "media.face_region",
-                  rowId: current.regionId,
-                },
-              ]
-            : [
-                {
-                  op: "upsert",
-                  entity: "media.face_region",
-                  rowId: current.regionId,
-                  values: {
-                    party_id: partyId ?? null,
-                    confirmed_by_party_id: partyId ?? null,
-                  },
-                },
-              ],
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "media.face_region",
+            rowId: current.regionId,
+            values: {
+              review_state: ANSWERED_STATE[kind],
+              party_id: confirmed ? (partyId ?? null) : null,
+              confirmed_by_party_id: confirmed ? (partyId ?? null) : null,
+            },
+          },
+        ],
       });
       surfaceWriteOutcome(result);
       return true;
     } catch (error) {
-      surfaceWriteFailure(
-        error,
-        action === "reject-face" ? "Face not rejected" : "Face not confirmed"
-      );
+      surfaceWriteFailure(error, ANSWER_FAILURE[kind]);
       return false;
     } finally {
       setBusy(false);
@@ -244,7 +296,7 @@ export default function FaceReview({
 
   async function confirm(partyId: string, name: string): Promise<void> {
     setNote(null);
-    if (await act("confirm-face", partyId)) {
+    if (await answer("confirm", partyId)) {
       setNote(`Confirmed as ${name}.`);
       setActedCount((n) => n + 1);
       setPickerOpen(false);
@@ -254,7 +306,18 @@ export default function FaceReview({
 
   async function reject(): Promise<void> {
     setNote(null);
-    if (await act("reject-face")) {
+    if (await answer("reject")) {
+      setActedCount((n) => n + 1);
+      setCursor(0);
+    }
+  }
+
+  /** "Unknown person → Keep unnamed": reviewed, kept, deliberately unnamed —
+   *  and, unlike Skip, it does not come back on the next pull. */
+  async function dismiss(): Promise<void> {
+    setNote(null);
+    if (await answer("dismiss")) {
+      setNote("Kept, and left unnamed.");
       setActedCount((n) => n + 1);
       setCursor(0);
     }
@@ -263,11 +326,10 @@ export default function FaceReview({
   function skip(): void {
     if (queue.length === 0) return;
     setNote(null);
-    setCursor((c) => (c + 1) % queue.length);
+    setCursor(triageSkip(session).cursor);
   }
 
-  const total = sessionStartTotal ?? queue.length;
-  const position = Math.min(actedCount + 1, Math.max(total, 1));
+  const { position, total } = triageProgress(session);
   const proposedName = current?.partyId
     ? (names.get(current.partyId) ?? null)
     : null;
@@ -555,11 +617,9 @@ export default function FaceReview({
                   <Pressable
                     accessibilityLabel="Keep unnamed"
                     accessibilityRole="button"
-                    onPress={() =>
-                      setNote(
-                        "Keeping a face unnamed isn't wired up yet — there's no vault command for it. Skip for now."
-                      )
-                    }
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() => void dismiss()}
                   >
                     <Text
                       style={[styles.rowLabel, { color: colors.accentText }]}

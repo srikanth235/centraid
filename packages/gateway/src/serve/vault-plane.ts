@@ -2634,13 +2634,23 @@ export class VaultPlane {
         result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
-      if (touched > 0) {
+      // The operator log and the journal receipt must tell the same story:
+      // a sweep that declines purges because a row is an edit-lineage source
+      // touches nothing, yet an operator watching only this log would see
+      // silence while the receipt records the refusal (#712 P12). Blocked
+      // lists therefore both gate the line and appear in it verbatim.
+      const blockedByLineage =
+        result.assetsBlockedByLineage.length +
+        result.contentBlockedByLineage.length;
+      if (touched > 0 || blockedByLineage > 0) {
         this.logger.info(
           `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
             `documentsPurged=${result.documentsPurged} domainRowsPurged=${result.domainRowsPurged} ` +
             `retentionDeleted=${result.retentionDeleted} ` +
-            `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`
+            `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired} ` +
+            `assetsBlockedByLineage=${JSON.stringify(result.assetsBlockedByLineage)} ` +
+            `contentBlockedByLineage=${JSON.stringify(result.contentBlockedByLineage)}`
         );
       }
       const replicaPrune = pruneReplicaChanges(this.db.vault);

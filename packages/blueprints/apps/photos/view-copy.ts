@@ -380,6 +380,14 @@ export const SEARCH_COPY = {
     title: "Search the whole library",
     body: "Not the photographs that happen to be loaded. Try one of these.",
   },
+  // Moved here from SearchShelf.tsx's own JSX (issue #712 S1), alongside
+  // `unreachable.body` below, so `_shared/SearchScaffold.tsx` can source
+  // every state's copy from this one object.
+  searching: {
+    lead: "Searching your whole library.",
+    trail: (count: number) =>
+      `${count === 1 ? "match" : "matches"} from what is loaded on this device so far.`,
+  },
   miss: {
     eyebrow: "No results",
     // NOT `searchMissTitle` (below): that helper is shared with
@@ -403,6 +411,11 @@ export const SEARCH_COPY = {
     // Deliberate deviation from the handoff's "Cannot reach the vault" (§599).
     eyebrow: "Cannot reach the gateway",
     title: "Search needs the gateway",
+    // Moved here from SearchShelf.tsx's own JSX (issue #712 S1) when that
+    // component started sourcing its unreachable panel from the shared
+    // `SearchScaffold` — copy now lives with the rest of SEARCH_COPY instead
+    // of half in this object and half inline in the component.
+    body: "It lives on the gateway. Nothing below has been searched for you — what you can see is the match over the photographs already loaded on this device, which is a smaller question than the one you asked.",
     retry: "Retry",
     facts: [
       {

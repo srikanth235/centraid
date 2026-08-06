@@ -250,6 +250,9 @@ interface CentraidScope {
   color?: string;
   icon?: string;
   canWrite: boolean;
+  /** Everyone who holds a role here — the P7 grant roster (issue #712).
+   *  Absent, never `[]`, on a host that does not answer the question. */
+  audience?: readonly { memberId: string; name: string; role: string }[];
 }
 
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */

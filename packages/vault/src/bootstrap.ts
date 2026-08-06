@@ -151,12 +151,16 @@ export function bootstrapVault(
       now
     );
   // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
-  // readEnrichSettings/updateEnrichSettings): `local` is the default on both
-  // domains, same as the settings-bag default this table shadows.
+  // readEnrichSettings/updateEnrichSettings): `gateway` is the default on
+  // both domains (issue #712 C5 rename), same as the settings-bag default
+  // this table shadows — the member's own devices and gateway may do
+  // deterministic and device-lease work and whatever the gateway is
+  // already wired to; a THIRD-PARTY PROVIDER seeing bytes is still gated
+  // separately, per call (#567) and per capability (decision S9).
   for (const domain of ["photos", "docs"] as const) {
     db.vault
       .prepare(
-        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`
+        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'gateway', ?)`
       )
       .run(domain, now);
   }

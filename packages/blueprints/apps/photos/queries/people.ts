@@ -33,9 +33,11 @@
  * change needed here.
  *
  * `unmatchedTotal` is the same count `queries/face-queue.ts` derives for the
- * Face Review surface (same entity, same `confirmed_by_party_id IS NULL`
- * filter) — computed once here so the People shelf's pending note no longer
- * needs its own separate read of a different query to say a true number.
+ * Face Review surface (same entity, same `review_state = 'proposed'` filter,
+ * issue #712 — an answered region, rejected or deliberately left unnamed, is
+ * not pending on either surface) — computed once here so the People shelf's
+ * pending note no longer needs its own separate read of a different query to
+ * say a true number.
  *
  * `asset_ids` rides along so one read serves both halves of the shelf — the
  * card grid AND one person's own timeline sub-state — without a second round
@@ -54,6 +56,8 @@ interface RawRegion {
   bbox_json?: unknown;
   party_id?: string | null;
   confirmed_by_party_id?: string | null;
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  review_state?: string | null;
 }
 
 interface RawParty {
@@ -145,7 +149,9 @@ export default async function people({ ctx }: HandlerArgs) {
     }
 
     // ── unconfirmed proposals — grouped, never named (see file header) ──
-    const unconfirmed = regions.filter((r) => r.confirmed_by_party_id == null);
+    // Still-open proposals only: a rejected or dismissed region has been
+    // answered, so it is neither a person's face nor anybody's backlog.
+    const unconfirmed = regions.filter((r) => r.review_state === "proposed");
     const proposalGroups = new Map<string, ProposalGroup>();
     for (const region of unconfirmed) {
       if (!region.asset_id) continue; // no photograph, nothing to show

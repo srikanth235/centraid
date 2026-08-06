@@ -33,12 +33,40 @@ const mocks = vi.hoisted(() => ({
   // party "p2" has no display_name/name at all — the unnamed case. Both p1
   // and p2 have at least one confirmed face so both must render.
   faces: [
-    { region_id: "f1", asset_id: "a1", confirmed_by_party_id: "p1" },
-    { region_id: "f2", asset_id: "a2", confirmed_by_party_id: "p2" },
-    // Never confirmed to anyone — counted by the unmatched note, not shown
-    // as a card.
-    { region_id: "f3", asset_id: "a3", confirmed_by_party_id: undefined },
-    { region_id: "f4", asset_id: "a4", confirmed_by_party_id: undefined },
+    {
+      region_id: "f1",
+      asset_id: "a1",
+      confirmed_by_party_id: "p1",
+      review_state: "confirmed",
+    },
+    {
+      region_id: "f2",
+      asset_id: "a2",
+      confirmed_by_party_id: "p2",
+      review_state: "confirmed",
+    },
+    // Never answered — counted by the unmatched note, not shown as a card.
+    {
+      region_id: "f3",
+      asset_id: "a3",
+      confirmed_by_party_id: undefined,
+      review_state: "proposed",
+    },
+    {
+      region_id: "f4",
+      asset_id: "a4",
+      confirmed_by_party_id: undefined,
+      review_state: "proposed",
+    },
+    // Answered without being confirmed (issue #712): the member reviewed this
+    // face and deliberately left it unnamed. It is nobody's card AND nobody's
+    // backlog — before `review_state` the note counted it as still waiting.
+    {
+      region_id: "f5",
+      asset_id: "a5",
+      confirmed_by_party_id: undefined,
+      review_state: "dismissed",
+    },
   ],
   parties: [{ party_id: "p1", display_name: "Ana" }, { party_id: "p2" }],
 }));

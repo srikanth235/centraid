@@ -267,11 +267,20 @@ const faceRegionPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
-    // A confirmed region is the owner's word — the proposal never touches it.
+    // AN ANSWERED REGION IS TERMINAL (issue #712). The guard used to read
+    // `confirmed_by_party_id IS NULL`, which only protected a confirm; a
+    // rejection was a DELETE, so the next run re-created the same face as a
+    // brand-new proposal and the member re-answered it for ever. Now every
+    // answer — confirmed, rejected, dismissed — leaves the row in place with
+    // a non-`proposed` state, and the enricher may only refresh a region the
+    // owner has not yet answered. This one WHERE clause is the whole
+    // re-propose suppression: the external-id map still resolves
+    // `<asset>:face:<n>` to this row, so a re-run lands here and no-ops
+    // instead of inserting a duplicate.
     vault
       .prepare(
         `UPDATE media_face_region SET bbox_json = ?, party_id = ?, confidence = ?
-          WHERE region_id = ? AND confirmed_by_party_id IS NULL`
+          WHERE region_id = ? AND review_state = 'proposed'`
       )
       .run(JSON.stringify(p.bbox), p.party_id ?? null, p.confidence, entityId);
     return { wrote: [] };

@@ -167,8 +167,18 @@ export const ENRICHMENT_UNAVAILABLE = {
     "Not available from here: whether photographs may go to a model provider is decided in Settings → Enrichment — Photos cannot name a helper on its own.",
   offTier:
     "Not available: enrichment for photographs is switched off in Settings → Enrichment, so nothing would run.",
+  // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
+  // reads it by this name) even though the tier it now describes is named
+  // `gateway` (issue #712 C5, renamed from `model`) — the CONTENT below is
+  // what changed. `gateway` does not by itself mean "reaches a provider": it
+  // means the vault's own gateway may do whatever it is already wired to,
+  // which for a capability that needs a model turn is a provider egress
+  // gated separately per call (#567) and per capability (decision S9). This
+  // answer is withheld regardless, because the specific promise Panel A
+  // states — "what leaves the device: nothing" — is not one this module can
+  // vouch for once the vault has widened past `device`.
   modelTier:
-    "Not available: enrichment for photographs is already set to a model provider in Settings → Enrichment, so a run from here would not stay on this device.",
+    "Not available: enrichment for photographs is already set to the gateway tier in Settings → Enrichment, so a run from here would not stay on this device the way the on-device answer promises.",
   denied:
     "Photos cannot read the enrichment setting for photographs, so it cannot tell you what a run would do. It is in Settings → Enrichment.",
 } as const;
@@ -211,32 +221,34 @@ export interface AnswerAvailability {
  * that a run is offerable.
  *
  * The tier is the OWNER's setting, mirrored into `enrich.policy`
- * (packages/vault/src/schema/enrich.ts). It is not this consent — it is the
- * envelope this consent lives inside:
+ * (packages/vault/src/schema/enrich.ts), on the `off | device | gateway`
+ * axis (issue #712 C5, renamed from `off | local | model`). It is not this
+ * consent — it is the envelope this consent lives inside:
  *
- *   * `local` — the on-device promise in Panel A is true, so the answer is
+ *   * `device` — the on-device promise in Panel A is true, so the answer is
  *     offered;
- *   * `model` — this vault's enrichment already points at a remote model, so
- *     `what leaves the device → nothing` would be FALSE. The answer is
- *     withheld with that reason named, rather than printed beside a live
- *     button;
+ *   * `gateway` — this vault's enrichment may reach a runner that takes a
+ *     model turn, and every runner shipped today routes that turn to a
+ *     third-party provider, so `what leaves the device → nothing` would be
+ *     FALSE. The answer is withheld with that reason named, rather than
+ *     printed beside a live button;
  *   * `off` — a request would sit in the queue forever;
  *   * denied / not yet read — the client cannot say what it would be
  *     consenting to, so it offers nothing.
  *
- * THE TIER IS NOW ENFORCED, so `local` above states a fact rather than a hope.
- * It used to be written by Settings and read by nobody on the execution path:
- * enrichment automations fired and took model turns whatever the tier said,
- * which is why this module could only ever hedge. The gate is server-side, at
- * the one place enrichment automations are fired
- * (`packages/automation/src/fire/fire.ts`, deciding through
+ * THE TIER IS NOW ENFORCED, so `device` above states a fact rather than a
+ * hope. It used to be written by Settings and read by nobody on the
+ * execution path: enrichment automations fired and took model turns
+ * whatever the tier said, which is why this module could only ever hedge.
+ * The gate is server-side, at the one place enrichment automations are
+ * fired (`packages/automation/src/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by
- * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `local`
- * refuses any run that would take a model turn — and seals `ctx.agent` shut
- * for the ones it does allow — and an unreadable policy refuses too. Nothing
- * here enforces anything; withholding an answer is still the right UI, but it
- * is no longer the only thing standing between a `local` vault and a
- * provider.
+ * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
+ * refuses any run that would need the `gateway` lane — and seals `ctx.agent`
+ * shut for the ones it does allow — and an unreadable policy refuses too.
+ * Nothing here enforces anything; withholding an answer is still the right
+ * UI, but it is no longer the only thing standing between a `device` vault
+ * and a provider.
  */
 export function deviceAnswerFor(
   tier: string | null | undefined,
@@ -244,8 +256,14 @@ export function deviceAnswerFor(
 ): AnswerAvailability {
   if (denied)
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.denied };
-  if (tier === "local") return { available: true };
-  if (tier === "model")
+  // COMPAT(enrich-tier-rename #712): `local`/`model` are the pre-rename tier
+  // strings. `packages/vault/src/enrich/policy.ts`'s own read maps them the
+  // same way, but the raw mirror row can also reach this module directly
+  // (`queries/enrichment-status.ts` reads `enrich.policy` straight, not
+  // through that helper), so this comparison accepts both spellings rather
+  // than assume every caller normalized first.
+  if (tier === "device" || tier === "local") return { available: true };
+  if (tier === "gateway" || tier === "model")
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.modelTier };
   if (tier == null) return { available: false };
   return { available: false, reason: ENRICHMENT_UNAVAILABLE.offTier };

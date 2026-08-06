@@ -23,7 +23,7 @@
   "enrich": {
     "domain": "docs",
     "capability": "obligations",
-    "lane": "model"
+    "lane": "gateway"
   },
   "history": {
     "keep": {

@@ -15,9 +15,16 @@
 //  2. ONE FACE AT A TIME (v4 3967). This file used to render every
 //     unconfirmed region on the open photograph as a list. It now shows
 //     exactly one — the current index is kept on the host element itself
-//     (`data-face-index`) so it survives the confirm/reject re-render this
-//     function calls itself, without adding React state to a function that
-//     stays intentionally DOM-imperative (see below).
+//     (`data-face-index`) so it survives the answer re-render this function
+//     calls itself, without adding React state to a function that stays
+//     intentionally DOM-imperative (see below).
+//
+// It does NOT use ../triage-session.ts, and that is deliberate: this loop's
+// cursor lives in a DOM dataset precisely because the function is re-invoked
+// wholesale rather than re-rendered, and there is no frozen denominator or
+// outcome tally here to share — its progress line counts the photograph's own
+// regions. Borrowing the session type would mean serialising it through
+// `data-*` attributes to hold a state machine this surface does not have.
 //
 // Fully-imperative DOM builder, same as the Lit port: it targets an empty
 // `<div ref={facesHostRef}>` that LightboxInfo always renders with no JSX
@@ -160,28 +167,42 @@ export async function renderFaces(
     if (region.party_id === person.party_id) option.selected = true;
     picker.appendChild(option);
   }
+  // ONE VERB, THREE ANSWERS (issue #712) — the same `answer-face` action the
+  // full Face review surface fires, so a face answered in the lightbox is
+  // answered everywhere, and a face the member declines to name here does not
+  // reappear in the dedicated queue tomorrow.
+  const answerHere = async (
+    answer: "confirm" | "reject" | "dismiss",
+    partyId?: string
+  ): Promise<void> => {
+    const outcome = await act("answer-face", {
+      region_id: region.region_id,
+      answer,
+      ...(partyId ? { party_id: partyId } : {}),
+    });
+    if (narrate(outcome, note)) {
+      host.dataset.faceIndex = "0"; // the queue shifted; start from its head
+      await renderFaces(host, assetId, note);
+    }
+  };
   const confirm = kitBtn("Confirm", async () => {
     const partyId = picker.value;
     if (!partyId) {
       note.textContent = "Pick a person first.";
       return;
     }
-    const outcome = await act("confirm-face", {
-      region_id: region.region_id,
-      party_id: partyId,
-    });
-    if (narrate(outcome, note)) {
-      host.dataset.faceIndex = "0"; // the queue shifted; start from its head
-      await renderFaces(host, assetId, note);
-    }
+    await answerHere("confirm", partyId);
   });
   const reject = kitBtn("Not this person", async () => {
-    const outcome = await act("reject-face", { region_id: region.region_id });
-    if (narrate(outcome, note)) {
-      host.dataset.faceIndex = "0";
-      await renderFaces(host, assetId, note);
-    }
+    await answerHere("reject");
   });
+  // The lightbox's own "keep the face, do not name it". The full surface has
+  // carried this row since #711 with nothing behind it; here it is offered
+  // only now that there is a command that means it.
+  const keepUnnamed = kitBtn("Keep unnamed", async () => {
+    await answerHere("dismiss");
+  });
+  keepUnnamed.setAttribute("aria-label", "Keep this face, do not name it");
   const skip = kitBtn("Skip", () => {
     // Local-only: nothing is written, so the skipped face genuinely "stays
     // in the queue" rather than the app merely promising that.
@@ -189,7 +210,7 @@ export async function renderFaces(
     void renderFaces(host, assetId, note);
   });
   skip.setAttribute("aria-label", "Review this face later");
-  row.append(picker, confirm, reject, skip);
+  row.append(picker, confirm, reject, keepUnnamed, skip);
   host.appendChild(row);
   if (unconfirmed.length > 1) {
     const remaining = document.createElement("p");

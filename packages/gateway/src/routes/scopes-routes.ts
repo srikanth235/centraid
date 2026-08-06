@@ -34,6 +34,14 @@
  * with no app named the field is omitted entirely, because "not asked" and
  * "not installed" are different answers.
  *
+ * THE AUDIENCE RIDES ALONG PER SCOPE (issue #712, P7) — everyone who holds a
+ * role in that vault, name and role, from `MemberStore.membersOf`. Safe to
+ * attach unconditionally because a scope only appears in `visible` when the
+ * CALLER already holds a role there: nothing here can tell a caller about a
+ * vault they cannot already see, and knowing who ELSE can see it is not a new
+ * fact beyond that — every member of a household vault already sees each
+ * other on Household settings' own roster.
+ *
  * THE SHARE DESTINATION RIDES ALONG (issue #711 item H) as
  * `defaultShareTargetVaultId`, beside the rows rather than on one of them: a
  * member may want to share into several vaults, so "where my shares go" is a
@@ -65,6 +73,14 @@ export interface ScopeVault {
   icon?: string;
 }
 
+/** One person who can see a vault, and the role they hold there — the P7
+ *  grant roster (issue #712). */
+export interface AudienceMember {
+  memberId: string;
+  name: string;
+  role: GrantableRole;
+}
+
 /** One vault the caller may work in. */
 export interface ScopeRow {
   vaultId: string;
@@ -84,6 +100,11 @@ export interface ScopeRow {
   role: GrantableRole;
   /** Present only when the request named an app. */
   installed?: boolean;
+  /** Everyone who holds a role here — present only when `deps.membersOf` is
+   *  wired (issue #712, P7). Absent, not `[]`, on a host that answers no
+   *  roster at all, so a caller can tell "no audience beyond me" from "this
+   *  gateway does not answer that question". */
+  audience?: readonly AudienceMember[];
 }
 
 /** The whole answer: the caller's scopes, and where their shares go. */
@@ -106,6 +127,10 @@ export interface ScopesRouteDeps {
   listVaults: () => readonly ScopeVault[];
   /** This member's default share destination — see `ScopesBody`. */
   defaultShareTarget?: (memberId: string | undefined) => string | undefined;
+  /** Everyone holding a role in one vault — see `ScopeRow.audience` (issue
+   *  #712, P7). Omitted entirely (not merely returning `[]`) means the row
+   *  carries no `audience` field at all. */
+  membersOf?: (vaultId: string) => readonly AudienceMember[];
   /** The app ids installed in one mounted vault, or undefined when unknown. */
   installedApps: (vaultId: string) => ReadonlySet<string> | undefined;
   /**
@@ -233,6 +258,7 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
       ...(installed
         ? { installed: installed.get(vault.vaultId) === true }
         : {}),
+      ...(deps.membersOf ? { audience: deps.membersOf(vault.vaultId) } : {}),
     }));
     const shareTarget = deps.defaultShareTarget?.(member?.memberId);
     const body: ScopesBody = {

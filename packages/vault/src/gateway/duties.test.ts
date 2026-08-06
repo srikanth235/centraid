@@ -191,6 +191,44 @@ describe("duties", () => {
     ]);
   });
 
+  // THE SABOTAGE TARGET (#712 P11): drop the media.media_asset entry from
+  // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
+  // through to the missing-column skip and the refusal would lose its stated
+  // reason, which is exactly the "runs and silently retains nothing" duty the
+  // item exists to forbid.
+  test("retention policy on media.media_asset is refused with a stated reason, never silently skipped", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES ('c-ret', 'image/jpeg', 'file:///x', 'sha-ret', 1, '2019-01-01T00:00:00Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at)
+         VALUES ('a-ret', 'c-ret', 'photo', '2019-01-01T00:00:00Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, effective_from, priority)
+       VALUES (?, 'retention', 'media', 'media_asset', '{}', 30, '2020-01-01T00:00:00Z', 1)`
+      )
+      .run(uuidv7());
+    const result = gw.sweep(owner);
+    expect(result.retentionDeleted).toBe(0);
+    expect(result.retentionRefused).toHaveLength(1);
+    expect(result.retentionRefused[0]?.entity).toBe("media.media_asset");
+    expect(result.retentionRefused[0]?.reason).toContain("trash lifecycle");
+    // The asset outlives the policy: retention never reaches this table.
+    const kept = db.vault
+      .prepare("SELECT asset_id FROM media_media_asset")
+      .all();
+    expect(kept.map((row) => ({ ...row }))).toStrictEqual([
+      { asset_id: "a-ret" },
+    ]);
+  });
+
   test("lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A6)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";

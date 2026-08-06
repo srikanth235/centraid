@@ -17,7 +17,6 @@ import type { ListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppHeader from "../../kit/components/AppHeader";
-import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -67,7 +66,6 @@ export default function LockerHome({
     null
   );
   const [detail, setDetail] = useState<LockerItem | null>(null);
-  const [shareItemId, setShareItemId] = useState("");
   const [pendingItem, setPendingItem] = useState<LockerRow | null>(null);
   const [itemPassphrase, setItemPassphrase] = useState("");
   const [itemError, setItemError] = useState<string>();
@@ -578,23 +576,14 @@ export default function LockerHome({
           if (pendingItem) void revealWith(pendingItem, itemPassphrase);
         }}
       />
+      {/* No placement control here — A7: Locker is structurally excluded
+       *  from sharing (packages/blueprints/apps/_shared/placement-registry.ts).
+       *  A secret is the one thing v0 never lets a member place. */}
       <ItemDetailModal
         item={detail}
         styles={styles}
         onClose={() => setDetail(null)}
         onCopy={(value) => void copySecret(value)}
-        onShare={(itemId) => {
-          setDetail(null);
-          setShareItemId(itemId);
-        }}
-      />
-      <AudiencePlacementSheet
-        visible={Boolean(shareItemId)}
-        itemType="locker.item"
-        itemId={shareItemId}
-        sourceVaultId={replica.vaultId ?? ""}
-        noun="Locker item"
-        onClose={() => setShareItemId("")}
       />
       {masked ? (
         <View

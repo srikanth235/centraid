@@ -11,6 +11,10 @@
 //   3. AN UNMATCHED FACE HAS A FORWARD ACTION. The old screen rendered
 //      Confirm only when `party_id` was already set, so a proposal with no
 //      match — the PRIMARY case a face detector produces — was reject-only.
+//   4. THE QUEUE CAN BE FINISHED (issue #712). "Keep unnamed" writes a real
+//      `dismiss` answer through the one `answer-face` verb instead of setting
+//      an apologetic note; an already-answered region stays out of the queue
+//      across pulls; and Skip is the only control that still writes nothing.
 //
 // Same react-native-as-DOM mocking technique as PhotosPeopleView.test.tsx:
 // every RN primitive becomes a plain DOM element so the screen can be driven
@@ -55,9 +59,26 @@ const mocks = vi.hoisted(() => ({
       region_id: "r1",
       asset_id: "a1",
       party_id: "p-ana",
+      review_state: "proposed",
       bbox_json: JSON.stringify({ x: 0.3, y: 0.3, w: 0.2, h: 0.2 }),
     },
-    { region_id: "r2", asset_id: "a2", party_id: null, bbox_json: null },
+    {
+      region_id: "r2",
+      asset_id: "a2",
+      party_id: null,
+      review_state: "proposed",
+      bbox_json: null,
+    },
+    // Already answered and NOT confirmed (issue #712) — a face the member
+    // deliberately left unnamed. It must not be in the queue, and it must not
+    // be counted as one of Ana's matches either.
+    {
+      region_id: "r-dismissed",
+      asset_id: "a-dismissed",
+      party_id: null,
+      review_state: "dismissed",
+      bbox_json: null,
+    },
     // 8 more photographs already confirmed as Ana — exactly what "8
     // matching faces" (README.md:285's match-count rule) is counting.
     ...Array.from({ length: 8 }, (_, i) => ({
@@ -65,6 +86,7 @@ const mocks = vi.hoisted(() => ({
       asset_id: `a-confirmed-${i}`,
       party_id: "p-ana",
       confirmed_by_party_id: "p-ana",
+      review_state: "confirmed",
       bbox_json: null,
     })),
   ],
@@ -343,6 +365,48 @@ describe("Face review (native)", () => {
     await renderScreen();
     expect(container!.textContent).not.toMatch(/CONFIRMED PEOPLE/iu);
     expect(container!.textContent).not.toMatch(/\d+ photos\b/u);
+  });
+
+  it("Keep unnamed fires a real dismiss answer (issue #712)", async () => {
+    await renderScreen();
+    const keep = Array.from(container!.querySelectorAll("button")).find(
+      (b) => b.getAttribute("aria-label") === "Keep unnamed"
+    )!;
+    await act(async () => {
+      keep.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(mocks.write).toHaveBeenCalledOnce();
+    const [app, request] = mocks.write.mock.calls[0] as unknown as [
+      string,
+      {
+        action: string;
+        input: Record<string, unknown>;
+        optimistic: { op: string; values: Record<string, unknown> }[];
+      },
+    ];
+    expect(app).toBe("photos");
+    expect(request.action).toBe("answer-face");
+    expect(request.input).toStrictEqual({
+      region_id: "r1",
+      answer: "dismiss",
+    });
+    // The optimistic row is an UPSERT, not a delete: an answered region
+    // survives now, so the local copy has to land in the answered state or
+    // the queue rebuilds with the face still in it.
+    expect(request.optimistic[0]!.op).toBe("upsert");
+    expect(request.optimistic[0]!.values).toStrictEqual({
+      review_state: "dismissed",
+      party_id: null,
+      confirmed_by_party_id: null,
+    });
+  });
+
+  it("an already-answered region is not in the queue", async () => {
+    await renderScreen();
+    // Two proposals pending (r1, r2) — the dismissed one is not a third.
+    expect(container!.textContent).toMatch(/1 of 2/u);
+    expect(container!.textContent).toMatch(/2 to go/u);
   });
 
   it("Skip never fires a write", async () => {

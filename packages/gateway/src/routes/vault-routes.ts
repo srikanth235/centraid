@@ -595,9 +595,12 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The owner's enrichment policy (issue #299 §2): Tier 0 (`local`) is
-      // the default; `model` — derivative bytes leaving for an inference
-      // provider — is a deliberate per-domain opt-in; `off` silences a
+      // The owner's enrichment policy (issue #299 §2, renamed by #712 C5):
+      // `device` — the member's own phone/laptop plus deterministic gateway
+      // work — is the prior default; `gateway` — the member's own gateway
+      // may additionally do whatever it is already wired to, including a
+      // model turn to a third-party provider — is a deliberate per-domain
+      // opt-in, now the seeded default for fresh vaults; `off` silences a
       // domain entirely.
       if (segments[0] === "enrich" && segments.length === 1) {
         if (method === "GET") {
@@ -610,10 +613,15 @@ export function makeVaultRouteHandler(
           for (const key of ["photos", "docs"] as const) {
             const v = body[key];
             if (v === undefined) continue;
-            if (v !== null && v !== "off" && v !== "local" && v !== "model") {
+            if (
+              v !== null &&
+              v !== "off" &&
+              v !== "device" &&
+              v !== "gateway"
+            ) {
               return sendJson(res, 400, {
                 error: "bad_request",
-                message: `${key} must be "off", "local", "model" or null`,
+                message: `${key} must be "off", "device", "gateway" or null`,
               });
             }
             patch[key] = v as EnrichTier | null;

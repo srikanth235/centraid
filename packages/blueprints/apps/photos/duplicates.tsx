@@ -18,6 +18,8 @@ import { DuplicateReviewView } from "./components/DuplicateReview.tsx";
 import { DuplicatesView } from "./components/Duplicates.tsx";
 import { trashDuplicateAssets } from "./duplicates-actions.ts";
 import type { Rung } from "./layout.ts";
+import { openTriage, triageAnswer, triageCurrent } from "./triage-session.ts";
+import type { TriageSession } from "./triage-session.ts";
 import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
@@ -53,21 +55,28 @@ export function createDuplicates({
   // shortens the live list, and a denominator that shrank under the member
   // between two steps would be telling them the queue got shorter than the one
   // they agreed to walk.
-  let queue: DuplicateCluster[] = [];
-  let at = -1; // -1 = not reviewing
+  //
+  // That snapshot-plus-frozen-denominator dance is exactly what the Face
+  // review was also doing by hand, so it lives in `triage-session.ts` now and
+  // both flows read it from there. What stays different — and what that
+  // module deliberately does NOT unify — is durability: a face answer is a
+  // vault write, whereas resolving a cluster persists nothing but the trash
+  // batch itself, so this session is genuinely ephemeral by design.
+  // `null` = not reviewing.
+  let session: TriageSession<DuplicateCluster> | null = null;
   let busy = false;
   /** The copy the member chose to keep, per cluster key. A cluster with no
    *  entry takes `decideCluster`'s own proposal. */
   const keptByCluster = new Map<string, string>();
 
   function renderDuplicates() {
-    const cluster = at >= 0 ? queue[at] : undefined;
-    if (cluster) {
+    const cluster = session ? triageCurrent(session) : undefined;
+    if (cluster && session) {
       gridRoot.render(
         <DuplicateReviewView
           cluster={cluster}
-          index={at}
-          total={queue.length}
+          index={session.cursor}
+          total={session.total}
           rung={rung()}
           keptId={keptByCluster.get(cluster.key) ?? null}
           busy={busy}
@@ -77,7 +86,7 @@ export function createDuplicates({
           }}
           onKeepAll={() => {
             if (busy) return;
-            advance();
+            advance("kept-all");
           }}
           onTrashRest={(assetIds) => void resolveCluster(cluster, assetIds)}
         />
@@ -118,12 +127,13 @@ export function createDuplicates({
       .filter((c) => c.assets.length >= 2);
   }
 
-  /** Step to the next cluster in the queue, or leave the review when the queue
-   *  is done — the member is returned to the shelf they came from rather than
-   *  left on a cluster that no longer exists. */
-  function advance(): void {
-    at = at + 1 < queue.length ? at + 1 : -1;
-    if (at === -1) queue = [];
+  /** Record how this cluster was resolved and step to the next one, or leave
+   *  the review when the queue is done — the member is returned to the shelf
+   *  they came from rather than left on a cluster that no longer exists. */
+  function advance(outcome: "trashed" | "kept-all"): void {
+    if (!session) return;
+    const stepped = triageAnswer(session, outcome);
+    session = triageCurrent(stepped) === undefined ? null : stepped;
     renderDuplicates();
   }
 
@@ -144,7 +154,7 @@ export function createDuplicates({
     } finally {
       busy = false;
     }
-    advance();
+    advance("trashed");
   }
 
   // Called from renderGrid() every time the Duplicates chip is showing —
@@ -174,8 +184,7 @@ export function createDuplicates({
   function openReview(): void {
     const loaded = clusters ?? [];
     if (loaded.length === 0) return;
-    queue = loaded;
-    at = 0;
+    session = openTriage(loaded);
     busy = false;
     keptByCluster.clear();
     renderDuplicates();
@@ -183,9 +192,8 @@ export function createDuplicates({
 
   /** Leave the review without resolving anything, back to the shelf. */
   function exitReview(): void {
-    if (at === -1) return;
-    at = -1;
-    queue = [];
+    if (!session) return;
+    session = null;
     keptByCluster.clear();
     renderDuplicates();
   }
@@ -193,7 +201,7 @@ export function createDuplicates({
   /** Is the review the surface on screen? The app bar's title reads off this
    *  (proto :3964 — `Duplicate review`). */
   function reviewing(): boolean {
-    return at >= 0;
+    return session != null;
   }
 
   // Forces the next visit to re-fetch — called when leaving the shelf, so a
@@ -201,8 +209,7 @@ export function createDuplicates({
   function invalidate() {
     clusters = null;
     selected.clear();
-    at = -1;
-    queue = [];
+    session = null;
     keptByCluster.clear();
   }
 

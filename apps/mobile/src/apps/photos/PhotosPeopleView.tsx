@@ -79,10 +79,13 @@ export default function PhotosPeopleView({
       .sort((a, b) => b.count - a.count);
   }, [faces.rows, parties.rows]);
 
-  // Proposed faces never confirmed to any party — the note below the grid
-  // (proto:4433), with the live count standing in for the mock's 54.
+  // Faces still waiting on an answer — the note below the grid (proto:4433),
+  // with the live count standing in for the mock's 54. `review_state`, not
+  // `confirmed_by_party_id` (issue #712): a rejected or deliberately-unnamed
+  // region is answered, so counting it here would tell the member they have a
+  // backlog they already worked through.
   const unmatchedCount = useMemo(
-    () => faces.rows.filter((row) => !row.confirmed_by_party_id).length,
+    () => faces.rows.filter((row) => row.review_state === "proposed").length,
     [faces.rows]
   );
 

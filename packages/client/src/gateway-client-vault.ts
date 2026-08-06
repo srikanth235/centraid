@@ -63,6 +63,15 @@ export interface VaultListEntry {
  * Order is the gateway's: oldest vault first, which puts the member's own
  * (primary) scope first. `installed` is present only when `app` was named.
  */
+/** One person who can see a scope, and the role they hold there — the P7
+ *  grant roster (issue #712), mirrored from the gateway route's
+ *  `AudienceMember` (`scopes-routes.ts`). */
+export interface AppScopeAudienceMember {
+  memberId: string;
+  name: string;
+  role: string;
+}
+
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
@@ -79,6 +88,9 @@ export interface AppScopeEntry {
   /** The calling member's role in this scope. `read` cannot write. */
   role: string;
   installed?: boolean;
+  /** Everyone holding a role in this scope (issue #712, P7) — absent on a
+   *  gateway that answers no roster, never a lie in place of one. */
+  audience?: readonly AppScopeAudienceMember[];
 }
 
 /**

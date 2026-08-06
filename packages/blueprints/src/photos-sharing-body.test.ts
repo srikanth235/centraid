@@ -19,11 +19,17 @@ import { describe, expect, it } from "vitest";
 const app = (rel: string): string =>
   pathToFileURL(path.resolve(import.meta.dirname, "../apps/photos", rel)).href;
 
+interface AudienceMember {
+  memberId: string;
+  name: string;
+  role: string;
+}
 interface Scope {
   id: string;
   label: string;
   canWrite: boolean;
   personal?: boolean;
+  audience?: readonly AudienceMember[];
 }
 interface Asset {
   asset_id: string;
@@ -35,6 +41,7 @@ interface SharingPlace {
   count: number;
   canWrite: boolean;
   isDestination: boolean;
+  audience?: readonly AudienceMember[];
 }
 interface SharingFacts {
   ownLabel: string;
@@ -267,5 +274,48 @@ describe("SharingBody", () => {
     expect(html).toContain(
       "These counts cover the 201 photographs loaded here."
     );
+  });
+
+  it("draws the roster for a place the host answered — issue #712 P7", () => {
+    const html = render(
+      sharingFacts({
+        shared: [asset("a", "share")],
+        ownCount: 6,
+        scopes: [
+          OWN,
+          {
+            ...SHARED,
+            audience: [
+              { memberId: "m-priya", name: "Priya", role: "admin" },
+              { memberId: "m-sid", name: "Sid", role: "write" },
+            ],
+          },
+        ],
+        ownScopeId: "own",
+        shareTargetId: "share",
+        truncated: false,
+      })
+    );
+    expect(html).toContain("Who has access");
+    expect(html).toContain("Priya");
+    expect(html).toContain("Sid");
+    expect(html).toContain("admin");
+    expect(html).toContain("write");
+  });
+
+  it("stays silent about the roster when no place's host answered it", () => {
+    const html = render(
+      sharingFacts({
+        shared: [asset("a", "share")],
+        ownCount: 6,
+        scopes: [OWN, SHARED],
+        ownScopeId: "own",
+        shareTargetId: "share",
+        truncated: false,
+      })
+    );
+    // Absent, not an empty section: an unanswered roster must never read as
+    // "nobody else can see this".
+    expect(html).not.toContain("Who has access");
   });
 });

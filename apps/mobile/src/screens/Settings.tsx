@@ -42,6 +42,7 @@ import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
 import SettingsSection from "./settings/SettingsSection";
+import ShareTargetSection from "./settings/ShareTargetSection";
 import VaultSection from "./settings/VaultSection";
 import YouSection from "./settings/YouSection";
 
@@ -311,6 +312,8 @@ export default function SettingsScreen({
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
         </SettingsSection>
+
+        <ShareTargetSection />
 
         <SettingsSection label="Advanced (developer)">
           <Pressable

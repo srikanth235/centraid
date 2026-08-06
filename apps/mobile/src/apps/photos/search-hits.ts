@@ -25,6 +25,19 @@
 //   — the media domain is `media.media_asset`, `media.face_region` and
 //   `media.asset_phash`, and nothing else. There is nothing to count, so there
 //   is no row. Add it here the moment an enrichment publisher lands labels.
+//
+// ORDERING AND CAPPING (issue #712 S1) route through the web blueprints'
+// shared `groupSearchHits` combinator — the same "find, then cap, then
+// order" the web scaffold's Photos and Tally consumers use
+// (`packages/blueprints/apps/_shared/search-scaffold.ts`) — instead of a
+// fourth hand-inlined `[...a(), ...b(), ...c(), ...d()]`. The MATCHING stays
+// entirely in this file (token search over replica rows is a genuinely
+// different algorithm from the two web apps' plain substring match, per that
+// module's own header note); only the "run each kind, cap it, concatenate in
+// order" shell is shared. This is a pure-logic import with no UI change —
+// this file already had zero react-native imports, and stays that way.
+import { groupSearchHits } from "@centraid/blueprints/apps/_shared/search-scaffold";
+import type { SearchEntity } from "@centraid/blueprints/apps/_shared/search-scaffold";
 
 import type { PhotoAsset } from "./timeline-model";
 
@@ -162,25 +175,61 @@ function text(row: Row, ...keys: string[]): string | undefined {
   return undefined;
 }
 
+/** `SearchHitSources` plus the one value the person entity needs that is
+ *  cheaper to compute once than per-entity: which assets are already among
+ *  the loaded hits. */
+interface HitSource extends SearchHitSources {
+  matchedAssetIds: ReadonlySet<string>;
+}
+
+const PERSON_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "person",
+  label: "person",
+  match: (term, source) =>
+    personHits(source, queryTokens(term), source.matchedAssetIds),
+};
+const PLACE_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "place",
+  label: "place",
+  match: (term, source) => placeHits(source, queryTokens(term)),
+};
+const ALBUM_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "album",
+  label: "album",
+  match: (term, source) => albumHits(source, queryTokens(term)),
+};
+const CAPTION_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "caption",
+  label: "caption",
+  match: (term, source) => captionHits(source, queryTokens(term)),
+};
+
+/** Person → place → album → caption, proto:4258-4265's order and also
+ *  narrowest-to-broadest: a person is one identity, a caption is one
+ *  photograph's words. Declared as data (`SEARCH_HIT_ENTITIES`), not a
+ *  branch, the same rule the web scaffold's own entity configs follow. */
+const SEARCH_HIT_ENTITIES: readonly SearchEntity<HitSource, SearchHit>[] = [
+  PERSON_ENTITY,
+  PLACE_ENTITY,
+  ALBUM_ENTITY,
+  CAPTION_ENTITY,
+];
+
 /**
  * The rows above the grid. Ordered person → place → album → caption, which is
  * proto:4258-4265's order and is also narrowest-to-broadest: a person is one
  * identity, a caption is one photograph's words.
  */
 export function groupedSearchHits(sources: SearchHitSources): SearchHit[] {
-  const tokens = queryTokens(sources.query);
-  if (tokens.length === 0) return [];
-
   const matchedAssetIds = new Set(
     sources.matches.flatMap((asset) => (asset.assetId ? [asset.assetId] : []))
   );
-
-  return [
-    ...personHits(sources, tokens, matchedAssetIds),
-    ...placeHits(sources, tokens),
-    ...albumHits(sources, tokens),
-    ...captionHits(sources, tokens),
-  ];
+  return groupSearchHits(
+    sources.query,
+    { ...sources, matchedAssetIds },
+    SEARCH_HIT_ENTITIES,
+    PER_KIND_CAP
+  );
 }
 
 function personHits(
@@ -229,8 +278,7 @@ function personHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function placeHits(
@@ -271,8 +319,7 @@ function placeHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function albumHits(
@@ -309,17 +356,21 @@ function albumHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function captionHits(
   sources: SearchHitSources,
   tokens: readonly string[]
 ): SearchHit[] {
+  // No early break at `PER_KIND_CAP` here — `groupedSearchHits` caps every
+  // entity uniformly via the shared `groupSearchHits` combinator, after this
+  // returns every real match in order. Capping first and matching second
+  // would be the same result for this loop's own single pass, but a second
+  // cap point is one more place the number could drift from the other three
+  // entities'.
   const hits: SearchHit[] = [];
   for (const asset of sources.matches) {
-    if (hits.length >= PER_KIND_CAP) break;
     const title = asset.contentId
       ? sources.contentTitles.get(asset.contentId)
       : undefined;

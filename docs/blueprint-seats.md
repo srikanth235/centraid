@@ -69,6 +69,20 @@ Web's `TileMediaState` (`pending | bytes | gateway | failed`) is the **paint pip
 3. **The reachability contract.** Web: the shell stamps `data-gateway-status` on every inline app root (`InlineAppRoute`); blueprints read it (`libraryReachability`). Mobile: `kit/hooks/replica-query-state.ts`. The §14 offline banner grammar (bordered `--net`, no fill, no icon, outlined Retry) is the one way to say offline.
 4. **Origin acts live on the frame; apps register targets.** `Capture.tsx` and `Scan.tsx` already point this way. Camera, scanner, share-sheet-in, notifications, autofill are frame capabilities an app declares — one door for every app.
 5. **The refusal grammar** — outcomes to the one status line; disabled controls visible, inert at the handler, and explained inline (never a tooltip).
+6. **One search scaffold, per-app entity config.** `packages/blueprints/apps/_shared/search-scaffold.ts` (pure: status union, `groupSearchHits` over a per-app `SearchEntity[]` config, `SearchStateCopy`) + `SearchScaffold.tsx` (the ruled-row / four-state rendering) — issue #712 S1. Photos' `SearchShelf.tsx` and Tally's `components/Search.tsx` both render through it; mobile's `search-hits.ts` consumes the pure `groupSearchHits` combinator directly (no UI change). Matching stays app-owned — only "find, then cap, then order" is shared, per this doc's own worked example above: the words differ by seat, and now the states and grouping mechanics do not have to be reinvented per app to say them.
+
+## Enrichment doctrine
+
+Settled **2026-08-06** (issue #712 C5). Two roads reach the model, and an enricher never invents a third:
+
+1. **`ctx.agent`** through the ACP runner registry (`packages/app-engine`) — a coding-agent harness turn, dispatcher-gated per call for provider egress (#567).
+2. **The device work-lease lane** (`enrich_request.required_capability` + `packages/vault/src/enrich/leases.ts`) — iOS Vision / Android ML Kit / a local Tesseract-compatible worker, bytes never leaving the member's own devices.
+
+No blueprint app or automation imports a provider SDK to make a third road (`packages/blueprints/src/no-inference-client.test.ts` is the conformance check).
+
+**The trust-domain boundary.** A member's trust domain is their own devices _and_ their own gateway — the gateway is not, by itself, egress. What IS egress is a runner that talks to a **third-party provider**; every runner shipped today happens to be one, which is a fact about the roster, not a definition. The door stays open for a gateway-hosted local-inference runner (a custom `acp` kind fronting a model with no network egress) whose model turns would be legitimately inside the trust domain — the deciding fact is "does this runner egress to a provider", a property of the runner, never of which machine issued the call.
+
+**One axis, three points.** `off | device | gateway` (`packages/automation/src/fire/enrich-gate.ts`), ordered by how far work may run — `off` (nothing), `device` (the member's phone/laptop, plus deterministic gateway work), `gateway` (the member's own gateway may additionally do whatever it is already wired to). There is no fourth `provider` tier: provider egress is enforced per call at the dispatcher (#567) and per capability at the consent gate (decision S9), independently of this tier. An enricher declares the **lane** it needs (`manifest.enrich.lane: "device" | "gateway"`); the gate is one rank comparison, `rank(lane) <= rank(tier)`. Every enrich domain (`ENRICH_DOMAINS`: `photos`, `docs`) declares its enrichers' lanes the same way — none of them invent their own transport.
 
 ## Worked example: search is not one behaviour
 

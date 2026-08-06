@@ -3,6 +3,7 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads (queries/*.js) and the modal models logic.ts builds: money is
 // always INTEGER minor units, balances are derived server-side and never stored.
+import type { SearchStatus } from "../_shared/search-scaffold.ts";
 
 /** A person resolved from the loaded snapshots (owner or a friend). */
 export interface Person {
@@ -265,6 +266,10 @@ export interface AppState {
   groupId: string | null;
   friendId: string | null;
   search: string;
+  /** Which of the shared scaffold's four states the search shelf is in
+   *  (issue #712 S1, `_shared/search-scaffold.ts`) — resting until a query is
+   *  typed, then searching/ready/unreachable per `logic.ts`'s `runSearch`. */
+  searchStatus: SearchStatus;
   narrow: boolean;
   viewData: ViewData | null;
   detail: LedgerRow | null;

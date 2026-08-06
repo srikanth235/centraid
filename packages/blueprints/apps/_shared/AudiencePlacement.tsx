@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import type { PlaceableItemType } from "./placement-registry.ts";
+
 import styles from "./AudiencePlacement.module.css";
 
 export function AudiencePlacement({
@@ -8,7 +10,7 @@ export function AudiencePlacement({
   sourceVaultId,
   label = "Share with household",
 }: {
-  itemType: "core.collection" | "core.document" | "locker.item" | "tally.group";
+  itemType: PlaceableItemType;
   itemId: string;
   sourceVaultId?: string;
   label?: string;

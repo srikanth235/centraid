@@ -24,7 +24,7 @@
   "enrich": {
     "domain": "photos",
     "capability": "screenshot-text",
-    "lane": "model"
+    "lane": "gateway"
   },
   "history": {
     "keep": {

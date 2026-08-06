@@ -1,9 +1,9 @@
 {
   "name": "Face proposals",
   "version": "0.1.0",
-  "description": "Detects faces in new photos (preview only) and lands unconfirmed media.face_region proposals; you name and confirm them in Photos. Confirmed regions are never touched again.",
+  "description": "Detects faces in new photos (preview only) and lands unconfirmed media.face_region proposals; you answer them in Photos. Answered regions are never touched or re-proposed again.",
   "enabled": false,
-  "prompt": "When new photos arrive, look at each one's preview and mark where the faces are as normalized boxes with confidence scores. Never guess who anyone is — I confirm identities myself in the Photos app. Never touch a region I've already confirmed.",
+  "prompt": "When new photos arrive, look at each one's preview and mark where the faces are as normalized boxes with confidence scores. Never guess who anyone is — I confirm identities myself in the Photos app. Never touch a region I've already answered: confirming it, rejecting it, or deliberately leaving it unnamed all mean I am finished with that face.",
   "triggers": [
     {
       "kind": "data",
@@ -25,7 +25,7 @@
   "enrich": {
     "domain": "photos",
     "capability": "faces",
-    "lane": "model"
+    "lane": "gateway"
   },
   "history": {
     "keep": {

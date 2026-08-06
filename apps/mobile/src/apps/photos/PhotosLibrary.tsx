@@ -490,7 +490,7 @@ export default function PhotosLibrary({
               <Row
                 icon="users"
                 title="People"
-                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => !row.confirmed_by_party_id).length} proposals`}
+                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => row.review_state === "proposed").length} proposals`}
                 colors={colors}
               />
             </Pressable>

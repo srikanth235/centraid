@@ -6,6 +6,12 @@
 // The replica schema additions are included by that same canonical table walk;
 // this owner is touched whenever the schema fingerprint is deliberately
 // re-audited so export completeness cannot drift silently.
+// Schema/export audit #712: `media_face_region.review_state` is a new COLUMN
+// on an already-walked table, not a new table or adapter — the canonical walk
+// carries it, and it must, because it is the only record that the owner
+// answered a face proposal (a rejection stopped being a row deletion). A
+// restore that dropped it would hand the member back a review queue they had
+// already worked through.
 
 import { createHash } from "node:crypto";
 

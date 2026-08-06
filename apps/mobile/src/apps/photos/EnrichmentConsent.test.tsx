@@ -291,7 +291,7 @@ describe("the native enrichment consent surface", () => {
   });
 
   it("cannot be answered once the vault's tier will not honour it", () => {
-    render({ onDevice: deviceAnswerFor("model") });
+    render({ onDevice: deviceAnswerFor("gateway") });
     expect(host.textContent).toContain(ENRICHMENT_UNAVAILABLE.modelTier);
     const run = control(ON_DEVICE_PANEL.action);
     expect(run.dataset.disabled).toBe("true");

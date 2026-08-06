@@ -110,13 +110,15 @@ export function humanizeAutomationRef(ref: string): string {
 /**
  * The card an ENRICHMENT-TIER REFUSAL raises (decision S9).
  *
- * The gate is enforced on the execution path, and the seeded default (`local`)
- * refuses every model-routed enricher — captions, face proposals, screenshot
- * text, document extraction, filing, entity links, obligations. As an ordinary
- * skip that refusal was silent (#647 D6), so a member who asked for faces got
- * nothing and no explanation. It is a skip, so it is not a failure and never
- * wakes a device (`severity` is deliberately below `high`, which is the only
- * level `NoticeStore.put` wakes on) — but it IS a standing state the member is
+ * The gate is enforced on the execution path over the `off | device |
+ * gateway` axis (issue #712 C5). The card only appears under `off` or
+ * `device` — the tier that stops a gateway-lane (model-turn) enricher —
+ * since a `gateway`-tier vault only refuses the automations it hasn't
+ * enabled, which is not a policy refusal. As an ordinary skip that refusal
+ * was silent (#647 D6), so a member who asked for faces got nothing and no
+ * explanation. It is a skip, so it is not a failure and never wakes a
+ * device (`severity` is deliberately below `high`, which is the only level
+ * `NoticeStore.put` wakes on) — but it IS a standing state the member is
  * owed an account of, with the control that changes it named.
  *
  * Keyed by DOMAIN, not by automation: seven enrichers refusing for the same
@@ -138,7 +140,7 @@ export function enrichRefusalNotice(input: {
   const headline =
     input.tier === "off"
       ? `${subject} is switched off`
-      : input.tier === "local"
+      : input.tier === "device"
         ? `${subject} is limited to your devices — captions and recognition aren’t running`
         : input.tier === undefined
           ? `${subject} can’t run — its setting couldn’t be read`

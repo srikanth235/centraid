@@ -176,17 +176,28 @@ describe("the enrichment consent surface", () => {
     );
   });
 
-  it("withholds the device answer when the library points at a remote model", () => {
+  it("withholds the device answer when the library points at the gateway tier", () => {
     // "what leaves the device: nothing" is FALSE for such a library, so the
     // answer is not offered and the reason is named.
+    expect(copy.deviceAnswerFor("gateway").available).toBe(false);
+    expect(copy.deviceAnswerFor("gateway").reason).toBe(
+      copy.ENRICHMENT_UNAVAILABLE.modelTier
+    );
+    expect(copy.deviceAnswerFor("off").available).toBe(false);
+    expect(copy.deviceAnswerFor("device").available).toBe(true);
+    expect(copy.deviceAnswerFor(null).available).toBe(false);
+    expect(copy.deviceAnswerFor("device", true).available).toBe(false);
+  });
+
+  it("[C5] also accepts the pre-rename 'local'/'model' spellings, the same way", () => {
+    // A raw `enrich.policy` row can reach this module without going through
+    // packages/vault's own normalizing read (queries/enrichment-status.ts
+    // reads the table directly) — see this file's C5 COMPAT comment.
+    expect(copy.deviceAnswerFor("local").available).toBe(true);
     expect(copy.deviceAnswerFor("model").available).toBe(false);
     expect(copy.deviceAnswerFor("model").reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.modelTier
     );
-    expect(copy.deviceAnswerFor("off").available).toBe(false);
-    expect(copy.deviceAnswerFor("local").available).toBe(true);
-    expect(copy.deviceAnswerFor(null).available).toBe(false);
-    expect(copy.deviceAnswerFor("local", true).available).toBe(false);
   });
 });
 
@@ -198,7 +209,7 @@ describe("the enrichment gate", () => {
   );
   const read = vi.fn<(query: unknown) => Promise<{ tier: string }>>(
     async () => ({
-      tier: "local",
+      tier: "device",
     })
   );
 
@@ -272,7 +283,7 @@ describe("the enrichment gate", () => {
   });
 
   it("refuses the answer outright when the library's tier cannot honour it", async () => {
-    read.mockResolvedValueOnce({ tier: "model" });
+    read.mockResolvedValueOnce({ tier: "gateway" });
     await mount();
     await click("Enrichment");
     expect(host.textContent).toContain(copy.ENRICHMENT_UNAVAILABLE.modelTier);

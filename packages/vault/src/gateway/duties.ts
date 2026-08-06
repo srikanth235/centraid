@@ -176,6 +176,12 @@ export interface SweepResult {
   domainRowsPurged: number;
   retentionDeleted: number;
   /**
+   * Retention policies the pass refused to serve, with the reason each —
+   * standing exclusions (media assets ride the trash lifecycle) and missing
+   * timestamp columns both land here rather than in a silent skip (#712 P11).
+   */
+  retentionRefused: RetentionRefusal[];
+  /**
    * Content items the pass DECLINED to purge because the media asset over
    * their bytes is still named as another asset's `source_asset_id` (issue
    * #711 S8). They keep their lapsed `purge_at` and are retried next sweep.
@@ -193,13 +199,42 @@ export interface SweepResult {
   receiptId: string;
 }
 
+/** A retention policy the pass declined to serve, and the sentence saying why. */
+export interface RetentionRefusal {
+  entity: string;
+  reason: string;
+}
+
+/**
+ * Entities the retention duty REFUSES outright, each with its reason. This is
+ * a decision, not a gap: `media.media_asset` has no `created_at` to measure
+ * against, its rows are lineage-bound (`source_asset_id` self-FK and
+ * `media_face_region.asset_id`, both without `ON DELETE`), and asset purging
+ * already has a lifecycle (`purge_at` + the lineage-aware sweep above) — a
+ * blanket `DELETE` here would either violate those FKs or, with the missing
+ * column, run forever and silently retain nothing (issue #712 P11). Adding
+ * `created_at` is a platform decision to be taken deliberately (PX4), at
+ * which point the entry below is removed in the same change.
+ */
+const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
+  [
+    "media.media_asset",
+    "media assets are purged by the trash lifecycle, never by blanket retention: no created_at exists to measure against, and edit lineage (source_asset_id) plus face regions block raw deletes",
+  ],
+]);
+
 /**
  * consent.policy kind='retention': delete rows older than retention_days in
  * the policy's schema.table. The timestamp column comes from
- * rule_json.timestamp_column (default created_at) and must exist — a
- * misconfigured policy deletes nothing rather than the wrong thing.
+ * rule_json.timestamp_column (default created_at) and must exist. Either way
+ * a policy this pass does not serve is a RECORDED refusal, never a silent
+ * `continue` — a duty that runs and silently retains nothing is the failure
+ * mode this shape exists to prevent (issue #712 P11).
  */
-function enforceRetention(db: VaultDb, now: string): number {
+function enforceRetention(
+  db: VaultDb,
+  now: string
+): { deleted: number; refused: RetentionRefusal[] } {
   const policies = db.vault
     .prepare(
       `SELECT applies_schema, applies_table, retention_days, rule_json FROM consent_policy
@@ -214,15 +249,25 @@ function enforceRetention(db: VaultDb, now: string): number {
     rule_json: string;
   }[];
   let deleted = 0;
+  const refused: RetentionRefusal[] = [];
   for (const policy of policies) {
-    const ref = resolveEntity(
-      `${policy.applies_schema}.${policy.applies_table}`,
-      db.vault
-    );
+    const entity = `${policy.applies_schema}.${policy.applies_table}`;
+    const standingRefusal = RETENTION_REFUSALS.get(entity);
+    if (standingRefusal !== undefined) {
+      refused.push({ entity, reason: standingRefusal });
+      continue;
+    }
+    const ref = resolveEntity(entity, db.vault);
     if (!ref || ref.file !== "vault") continue;
     const rule = JSON.parse(policy.rule_json) as { timestamp_column?: string };
     const tsColumn = rule.timestamp_column ?? "created_at";
-    if (!tableColumns(db.vault, ref.physical).has(tsColumn)) continue;
+    if (!tableColumns(db.vault, ref.physical).has(tsColumn)) {
+      refused.push({
+        entity,
+        reason: `no "${tsColumn}" column exists to measure retention against; the policy deletes nothing rather than the wrong thing`,
+      });
+      continue;
+    }
     const cutoff = new Date(
       Date.parse(now) - policy.retention_days * 86_400_000
     ).toISOString();
@@ -231,7 +276,7 @@ function enforceRetention(db: VaultDb, now: string): number {
       .run(cutoff);
     deleted += Number(result.changes);
   }
-  return deleted;
+  return { deleted, refused };
 }
 
 /** The `revises` relation concept id, or null when nothing ever seeded it. */
@@ -733,7 +778,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
          (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`
     )
     .run();
-  const retentionDeleted = enforceRetention(db, now);
+  const retention = enforceRetention(db, now);
+  const retentionDeleted = retention.deleted;
   // The staging TTL (issue #296 §3): bytes nothing claimed leave with their
   // rows; a batch hold (import review in progress) pins past the TTL.
   const staging = sweepBlobStaging(db, { now });
@@ -754,6 +800,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       documentsPurged: lapsedDocuments.length,
       domainRowsPurged,
       retentionDeleted,
+      retentionRefused: retention.refused,
       // What the pass declined rather than died on (issue #711 S8). Empty on
       // every ordinary sweep; a non-empty list is the receipt saying which
       // rows outlived their grace window and why.
@@ -772,6 +819,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     documentsPurged: lapsedDocuments.length,
     domainRowsPurged,
     retentionDeleted,
+    retentionRefused: retention.refused,
     contentBlockedByLineage,
     assetsBlockedByLineage: lapsedAssets.blocked,
     blobsReclaimed,

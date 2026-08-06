@@ -49,6 +49,7 @@ describe("scopes-routes suite", () => {
     icon?: string;
     role: string;
     installed?: boolean;
+    audience?: Array<{ memberId: string; name: string; role: string }>;
   }
 
   interface Harness {
@@ -84,7 +85,7 @@ describe("scopes-routes suite", () => {
   ];
 
   async function harness(
-    opts: { ensureFails?: boolean } = {}
+    opts: { ensureFails?: boolean; withAudience?: boolean } = {}
   ): Promise<Harness> {
     const root = await tempDir("scopes-routes-");
     dirs.push(root);
@@ -126,6 +127,15 @@ describe("scopes-routes suite", () => {
         return true;
       },
       isHostCustody: (req) => req.headers["x-test-host-custody"] === "1",
+      // Opt-in: exercises the REAL `MemberStore.membersOf` (issue #712, P7)
+      // rather than a stub, so most tests keep asserting the exact ScopeRow
+      // shape from before the audience field existed.
+      ...(opts.withAudience
+        ? {
+            membersOf: (vaultId: string) =>
+              enrollments.members.membersOf(vaultId),
+          }
+        : {}),
     });
     const server = http.createServer((req, res) => {
       void (async () => {
@@ -189,6 +199,34 @@ describe("scopes-routes suite", () => {
         role: "write",
       },
     ]);
+  });
+
+  // Issue #712, P7 — the grant roster: "who can see vault X" now has an
+  // answer, riding along per scope from the real `MemberStore.membersOf`.
+  test("each scope carries its audience when the host wires membersOf", async () => {
+    const f = await harness({ withAudience: true });
+
+    const scopes = await scopesOf(await f.get("priya-laptop"));
+
+    expect(
+      scopes.find((s) => s.vaultId === "vault-priya")?.audience
+    ).toStrictEqual([{ memberId: f.priya, name: "Priya", role: "admin" }]);
+    // Alphabetical by label, same order `membersOf` returns: Priya (write)
+    // before Sid (read).
+    expect(
+      scopes.find((s) => s.vaultId === "vault-family")?.audience
+    ).toStrictEqual([
+      { memberId: f.priya, name: "Priya", role: "write" },
+      { memberId: f.sid, name: "Sid", role: "read" },
+    ]);
+  });
+
+  test("audience is absent entirely, not `[]`, when the host does not wire membersOf", async () => {
+    const f = await harness();
+
+    const scopes = await scopesOf(await f.get("priya-laptop"));
+
+    for (const scope of scopes) expect(scope).not.toHaveProperty("audience");
   });
 
   /*
