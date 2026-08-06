@@ -147,6 +147,30 @@ describe(photoAccessTakesOverTimeline, () => {
     );
   });
 
+  it("never hides vault photographs behind a device-grant panel", () => {
+    // The camera-roll grant governs what Photos may read OFF THIS DEVICE. A
+    // library that arrived through the replica needs no OS permission, so a
+    // refusal must not blank it — that hid the member's own photographs, the
+    // shelves, and the route into face review behind a panel about a
+    // permission none of that content needs.
+    for (const state of ["denied", "undetermined", "limited"] as const)
+      expect(
+        photoAccessTakesOverTimeline({
+          ...base,
+          state,
+          vaultReadableCount: 18,
+        })
+      ).toBe(false);
+    // Nothing anywhere is still the takeover: there is genuinely no grid.
+    expect(
+      photoAccessTakesOverTimeline({
+        ...base,
+        state: "denied",
+        vaultReadableCount: 0,
+      })
+    ).toBe(true);
+  });
+
   it("declines while the answer is unknown or the walk is still running", () => {
     // Unknown is not denied, and a takeover that appears for one frame and
     // vanishes is worse than the grid's own skeleton (§14).

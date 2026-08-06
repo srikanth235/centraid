@@ -15,6 +15,26 @@ import {
   isReplicaStorageFullError,
 } from "./replica-storage-error";
 
+/**
+ * How long a native connection waits for a conflicting lock before giving up.
+ *
+ * WHY THIS EXISTS AT ALL: the phone keeps TWO live handles on every vault file
+ * — the per-vault write handle each replica session owns, and the one
+ * gateway-scoped reader that `ATTACH`es all of them for cross-vault reads
+ * (`MultiVaultReplicaReader`). The shared store core runs
+ * `journal_mode=DELETE`, and under a rollback journal a writer needs an
+ * EXCLUSIVE lock that any reader's SHARED lock blocks. SQLite's default busy
+ * timeout is ZERO, so the writer does not wait — it fails instantly with
+ * SQLITE_BUSY, which surfaces to the member as "database is locked" when they
+ * tap Favourite while the grid happens to be reading (the reader's `allAsync`
+ * runs off-thread, so the two genuinely overlap).
+ *
+ * Five seconds is the wait, not the expectation: replica reads are short, so
+ * the realistic contention is milliseconds. A member's edit waiting out a scan
+ * is correct; refusing it is not.
+ */
+const BUSY_TIMEOUT_MS = 5000;
+
 /** Drives the shared replica store core against an in-process op-sqlite handle. */
 export class OpSqliteDriver implements ReplicaSqliteDriver {
   private constructor(private readonly db: DB) {}
@@ -31,6 +51,10 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
           ? {}
           : { location: options.location }),
       });
+      // Before anything else touches the file: the store core's own PRAGMA
+      // block is a write, so a handle opened during a live read would fail at
+      // construction without this.
+      db.executeSync(`PRAGMA busy_timeout=${BUSY_TIMEOUT_MS}`);
       return new OpSqliteDriver(db);
     } catch (error) {
       throw asReplicaStorageError(error);

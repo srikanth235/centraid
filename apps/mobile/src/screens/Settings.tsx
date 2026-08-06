@@ -58,6 +58,61 @@ import YouSection from "./settings/YouSection";
 // or paste the one-line ticket — everything then loads through an encrypted
 // tunnel, no URLs or tokens. The manual URL/token fields under Advanced remain a
 // dev fallback for simulators pointing at a token-less local gateway.
+//
+// BOTH pairing branches offer BOTH roads. The paste field used to render only in
+// the unpaired branch, so a phone that had already paired once could add a second
+// gateway by camera alone — and a camera is exactly what the two cases that need
+// a ticket do not have: a simulator, and a headless VPS whose QR lives in a
+// terminal on the same machine you are typing on. The only way back to the paste
+// field was to unpair (or reinstall), which throws away a working link to add
+// one. Adding a vault must never cost the vault you already have.
+
+interface TicketPasteProps {
+  value: string;
+  onChangeText: (next: string) => void;
+  onSubmit: () => void;
+  pairing: boolean;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ThemeColors;
+  label: string;
+}
+
+/** The paste road to a pairing ticket — rendered in BOTH pairing branches. */
+function TicketPasteField({
+  value,
+  onChangeText,
+  onSubmit,
+  pairing,
+  styles,
+  colors,
+  label,
+}: TicketPasteProps): React.JSX.Element {
+  return (
+    <>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="one-line pairing ticket"
+        placeholderTextColor={colors.textFaint}
+        style={styles.input}
+        autoCapitalize="none"
+        autoCorrect={false}
+        multiline
+        editable={!pairing}
+        accessibilityLabel="Paste pairing ticket"
+      />
+      <View style={styles.actions}>
+        <Button
+          label={pairing ? "Pairing…" : "Pair with ticket"}
+          icon="Key"
+          onPress={onSubmit}
+          disabled={pairing || value.trim().length === 0}
+        />
+      </View>
+    </>
+  );
+}
 
 function defaultDeviceName(): string {
   return Platform.OS === "ios" ? "iPhone" : "Android phone";
@@ -234,6 +289,19 @@ export default function SettingsScreen({
                   onPress={onUnpair}
                 />
               </View>
+              {tunnelAvailable ? (
+                <View style={styles.advanced}>
+                  <TicketPasteField
+                    label="Or paste another ticket"
+                    value={pasteTicket}
+                    onChangeText={setPasteTicket}
+                    onSubmit={onPastePair}
+                    pairing={pairing}
+                    styles={styles}
+                    colors={colors}
+                  />
+                </View>
+              ) : null}
               {pairError ? (
                 <Text style={styles.pairError}>{pairError}</Text>
               ) : null}
@@ -255,27 +323,15 @@ export default function SettingsScreen({
                     disabled={pairing}
                   />
                   <View style={styles.spacer} />
-                  <Text style={styles.fieldLabel}>Or paste ticket</Text>
-                  <TextInput
+                  <TicketPasteField
+                    label="Or paste ticket"
                     value={pasteTicket}
                     onChangeText={setPasteTicket}
-                    placeholder="one-line pairing ticket"
-                    placeholderTextColor={colors.textFaint}
-                    style={styles.input}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    multiline
-                    editable={!pairing}
-                    accessibilityLabel="Paste pairing ticket"
+                    onSubmit={onPastePair}
+                    pairing={pairing}
+                    styles={styles}
+                    colors={colors}
                   />
-                  <View style={styles.actions}>
-                    <Button
-                      label={pairing ? "Pairing…" : "Pair with ticket"}
-                      icon="Key"
-                      onPress={onPastePair}
-                      disabled={pairing || pasteTicket.trim().length === 0}
-                    />
-                  </View>
                 </>
               ) : (
                 <Text style={styles.unavailable}>

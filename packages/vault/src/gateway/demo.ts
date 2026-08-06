@@ -41,6 +41,16 @@ const DEPENDENT_ROWS: Record<string, { table: string; column: string }[]> = {
   "core.content_item": [
     { table: "core_content_derivative", column: "content_id" },
   ],
+  // A staged import row is not owner meaning — it is the batch's own line
+  // items, and it cannot outlive the batch it belongs to (its FK says so).
+  // Photos' scenario stages face proposals through the ordinary publisher
+  // road (issue #712), which is the same road any enricher takes, so without
+  // this the batch is reported blocked for ever and the one-click purge stops
+  // being one act. This differs from the content-derivative case above — an
+  // import row does not regenerate — but the deletion is still lossless in
+  // the only sense that matters here: the batch is going, and a line item of
+  // a deleted batch describes nothing.
+  "sync.import_batch": [{ table: "sync_import_row", column: "batch_id" }],
 };
 
 interface SeedRow {

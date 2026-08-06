@@ -97,6 +97,7 @@ export default function PhotosHome({
   const accessTakeover = photoAccessTakesOverTimeline({
     state: grant.state,
     deviceReadableCount: deviceReadable,
+    vaultReadableCount: timeline.assets.length - deviceReadable,
     loading: timeline.loading,
   });
 

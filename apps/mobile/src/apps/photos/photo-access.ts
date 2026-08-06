@@ -68,22 +68,43 @@ export function photoAccessState(
  *   - `limited` takes over ONLY when the chosen set is empty. A member who
  *     picked twelve photographs should see those twelve; the panel would be
  *     hiding the very thing they granted.
- *   - `denied` and `undetermined` always take over: there is nothing on the
- *     device Photos may read, so there is no grid to compete with.
+ *   - `denied` and `undetermined` take over only when the vault has nothing
+ *     either. The camera-roll grant governs what Photos may read OFF THIS
+ *     DEVICE; it says nothing about photographs that arrived through the
+ *     replica, which need no operating-system permission and are already on
+ *     the phone. Refusing the OS prompt on a phone holding a seeded or synced
+ *     library used to blank the whole grid — the member's own vault
+ *     photographs, the shelves, and the route into face review with them —
+ *     behind a panel explaining a permission none of that content needs. That
+ *     is the same defect the `limited` branch already names one line up: the
+ *     panel hiding the very thing it is not about.
+ *
+ * CONSEQUENCE, stated rather than hidden: when the vault carries photographs
+ * and the OS grant is refused, this panel is not drawn, and the panel is the
+ * only place the grant is asked for (`photos-band.ts` deliberately dropped the
+ * `Photo access` row). Re-asking then means the system Settings app. That is
+ * the correct trade — a reachable library with a longer road back to the
+ * prompt beats an unreachable library — but it is a real edge, and giving the
+ * question a home that does not cost the grid is follow-up work, not a reason
+ * to keep blanking the grid meanwhile.
  */
 export function photoAccessTakesOverTimeline({
   state,
   deviceReadableCount,
+  vaultReadableCount = 0,
   loading,
 }: {
   state: PhotoAccessState | null;
   /** Photographs Photos is reading off THIS device right now. */
   deviceReadableCount: number;
+  /** Photographs already here through the replica — no OS grant involved. */
+  vaultReadableCount?: number;
   /** The device walk has not finished. */
   loading: boolean;
 }): boolean {
   if (state === null || state === "granted") return false;
   if (loading) return false;
+  if (vaultReadableCount > 0) return false;
   if (state === "limited") return deviceReadableCount === 0;
   return true;
 }

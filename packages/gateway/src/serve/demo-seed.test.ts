@@ -144,7 +144,7 @@ describe("demo-seed", () => {
 
     const count = (sql: string): number =>
       (plane.db.vault.prepare(sql).get() as { n: number }).n;
-    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(10);
+    expect(count("SELECT count(*) AS n FROM media_media_asset")).toBe(18);
     expect(
       count("SELECT count(*) AS n FROM media_media_asset WHERE favorite = 1")
     ).toBe(2);
@@ -159,7 +159,28 @@ describe("demo-seed", () => {
           WHERE a.width IS NOT NULL AND a.height IS NOT NULL
             AND a.captured_at IS NOT NULL AND c.byte_size > 0`
       )
-    ).toBe(10);
+    ).toBe(18);
+    // Face proposals (issue #712): the portrait frames stage regions through
+    // the ordinary enrichment publisher, so People and the triage verb have a
+    // queue to answer on a fresh vault. Every seeded region must arrive
+    // UNANSWERED — a seed that pre-confirmed them would hide the one flow the
+    // scenario exists to exercise.
+    expect(count("SELECT count(*) AS n FROM media_face_region")).toBe(8);
+    expect(
+      count(
+        "SELECT count(*) AS n FROM media_face_region WHERE review_state = 'proposed'"
+      )
+    ).toBe(8);
+    expect(
+      count("SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL")
+    ).toBe(0);
+    // Two people to name a confirmed face as; face review never invents one.
+    expect(
+      count(
+        "SELECT count(*) AS n FROM core_party WHERE display_name IN ('Ana Ribeiro','Marco Salas')"
+      )
+    ).toBe(2);
+
     const album = plane.db.vault
       .prepare(
         "SELECT collection_id, cover_content_id FROM core_collection WHERE name = 'Tahoe scouting'"

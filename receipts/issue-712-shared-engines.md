@@ -772,6 +772,38 @@ content is the P10 finding.
 - Photos-local surfaces that ride no engine: slideshow transport, mobile Import,
   "Surfaces and asks" (PX7 — stay on #711).
 
+## Simulator pass — defects found and fixed (post-merge, same issue)
+
+Driving the engines on a seeded iPhone 17 Pro simulator surfaced seven defects.
+None is a regression from this issue's engine work; six are older bugs the
+seeded library was the first thing to walk into, and one is the seed itself.
+They are recorded here because they were found and fixed under this issue.
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 1 | `PRAGMA busy_timeout` was never set, so a favourite tapped while the grid read the same vault failed instantly with SQLITE_BUSY — surfaced as "database is locked". Two handles per vault file + `journal_mode=DELETE` guarantees the overlap. | `op-sqlite-driver.ts`: 5s busy timeout at connection open, before the store core's own PRAGMA block. |
+| 2 | Four icon spellings (`map-pin`, `activity`, `dollar-sign`, `hard-drive`) had no alias, and `resolveIconName` THROWS — each one took a whole screen down with a render error. Two more (`list`, `file`) had already shipped this way. | Aliases added, plus `icon-resolver.sweep.test.ts`: greps every icon literal out of the mobile source and resolves it, so this class cannot merge again. |
+| 3 | Refusing the OS camera-roll prompt blanked the ENTIRE Photos library — the vault's own replica photographs, the shelves, and the route into face review — behind a panel about a permission none of that content needs. | `photoAccessTakesOverTimeline` now counts vault-resident assets; the takeover is for when there is genuinely no grid, which is what its own doctrine already said. |
+| 4 | Tiles asked for `?variant=thumb`, which 404s until the gateway's preview backstop has run, and went straight to terminal `could not decode` over bytes sitting whole in CAS. The web grid has always had a fallback ladder; mobile had none. | `use-image-fallback.ts` — one hook, the web's `originalFallback` ladder, consumed by the tile and by face review. |
+| 5 | Face review's crop and source photograph were empty boxes for the same reason — the member was asked to name a face they could not see. | Same hook. |
+| 6 | Settings' PAIRED branch offered "Pair another" by camera only. The paste field existed solely in the unpaired branch, so adding a second gateway from a simulator or a headless VPS meant unpairing (or reinstalling) first — throwing away a working link to add one. | `TicketPasteField` extracted; both branches now offer both roads. |
+| 7 | Purging the demo scenario reported `sync.import_batch` blocked for ever, because the seed stages face proposals through the ordinary publisher road and nothing cleared the batch's own line items. | `DEPENDENT_ROWS` entry in `vault/gateway/demo.ts`. |
+
+The enrichment tier also has a trap worth recording: `readEnrichSettings` reads
+the JSON settings bag, but APPS read the mirrored `enrich_policy` table. Editing
+`core_vault.settings_json` directly leaves the two disagreeing and the phone
+still sees the old tier — the write must go through `updateEnrichSettings`
+(`PUT /centraid/_vault/enrich`), which refreshes the mirror.
+
+### Seed: face proposals for the triage verb
+
+`packages/blueprints/apps/photos/seed.js` now seeds 8 portrait frames and stages
+8 face regions through `sync.stage_rows` → `sync.publish_batch` — the ordinary
+enrichment publisher road, not a direct table write — plus two named parties.
+Every region arrives UNANSWERED: a seed that pre-confirmed them would hide the
+one flow the scenario exists to exercise. Portraits are procedurally generated
+into `sample/`, so no third-party image is redistributed.
+
 ## Verification
 
 One proof per item, on device or in CI, never "looks right"; a struck item

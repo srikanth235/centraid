@@ -96,6 +96,7 @@ import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
 import { usePhotoTimeline } from "./timeline-source";
+import { useImageFallback } from "./use-image-fallback";
 
 export default function FaceReview({
   navigation,
@@ -201,6 +202,17 @@ export default function FaceReview({
     sourceAsset && bbox
       ? faceCropStyle(bbox, sourceAsset.width, sourceAsset.height, CROP_PX)
       : null;
+  // The evidence on this card is the whole point of the card — a face the
+  // member is asked to name, over a photograph they are asked to recognise.
+  // Both come from the same asset, which is asked for as a derivative and may
+  // not have one yet, so both ride the one retry ladder rather than rendering
+  // as two empty boxes. Called unconditionally: it is a hook, and `current`
+  // changes as the queue advances.
+  const media = useImageFallback(
+    sourceAsset?.uri ?? "",
+    sourceAsset?.originalUri,
+    sourceAsset?.assetId ?? "none"
+  );
 
   /**
    * The ONE write behind every answer on this screen (issue #712) — the same
@@ -338,8 +350,11 @@ export default function FaceReview({
                 >
                   {sourceAsset && crop ? (
                     <Image
-                      source={imageSource(sourceAsset.uri)}
-                      {...gridImageProps(sourceAsset.uri)}
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.onLoad}
+                      onError={media.onError}
                       contentFit="fill"
                       style={[
                         styles.cropImg,
@@ -353,8 +368,11 @@ export default function FaceReview({
                     />
                   ) : sourceAsset ? (
                     <Image
-                      source={imageSource(sourceAsset.uri)}
-                      {...gridImageProps(sourceAsset.uri)}
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.onLoad}
+                      onError={media.onError}
                       style={styles.tileImg}
                     />
                   ) : null}
@@ -372,8 +390,11 @@ export default function FaceReview({
                 >
                   {sourceAsset ? (
                     <Image
-                      source={imageSource(sourceAsset.uri)}
-                      {...gridImageProps(sourceAsset.uri)}
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.onLoad}
+                      onError={media.onError}
                       style={styles.tileImg}
                     />
                   ) : null}
