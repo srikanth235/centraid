@@ -7,7 +7,7 @@ import {
   MONTH_ROW_HEIGHT,
   buildRows,
   describeCounts,
-  describeDay,
+  dayPlace,
   monthHeaderIndices,
   monthLabelAt,
   rowTops,
@@ -47,12 +47,17 @@ describe("month and day labels (handoff §4.3)", () => {
     expect(describeCounts([asset({ id: "p" })])).toBe("1 photograph");
   });
 
-  test("the day sub-label carries a count, and a place when there is one", () => {
+  // The day sub-label carries the PLACE and no tally. The counts left the
+  // timeline entirely (issue 712 iOS parity) — `describeCounts` above is kept
+  // for the Years/Months period cards, which summarise a period the member
+  // cannot see the whole of, and this asserts the timeline no longer prints
+  // one.
+  test("the day sub-label is the place alone, with no count in it", () => {
     const places = new Map([["pl1", "Lyme Regis"]]);
     const dayAtOnePlace = Array.from({ length: 12 }, (_, i) =>
       asset({ id: `a${i}`, placeId: "pl1" })
     );
-    expect(describeDay(dayAtOnePlace, places)).toBe("12 · Lyme Regis");
+    expect(dayPlace(dayAtOnePlace, places)).toBe("Lyme Regis");
   });
 
   test("a day spread across places states no place rather than guessing", () => {
@@ -61,14 +66,18 @@ describe("month and day labels (handoff §4.3)", () => {
       ["pl2", "Charmouth"],
     ]);
     expect(
-      describeDay(
+      dayPlace(
         [
           asset({ id: "a", placeId: "pl1" }),
           asset({ id: "b", placeId: "pl2" }),
         ],
         places
       )
-    ).toBe("2");
+    ).toBe("");
+  });
+
+  test("a day with no known place prints nothing rather than a hedge", () => {
+    expect(dayPlace([asset({ id: "a" })], new Map())).toBe("");
   });
 });
 

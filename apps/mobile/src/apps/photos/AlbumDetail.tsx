@@ -334,7 +334,7 @@ export default function AlbumDetail({
       : { unavailableReason: writeBlockedReason! },
   };
   return (
-    <PhotosScreen current="albums" selection={selectionBar}>
+    <PhotosScreen current="collections" selection={selectionBar}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Photos"

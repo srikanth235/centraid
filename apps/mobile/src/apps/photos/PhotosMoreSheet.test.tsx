@@ -1,16 +1,22 @@
-// Pins the More sheet's anatomy (issue #711):
+// Pins the More sheet's anatomy (issue #711, cut back in #712):
 //
-//  - it carries exactly the five rows `PHOTOS_MORE_ROWS` names — Sharing and
-//    Import are gone, not just unwired, so a stray reintroduction of either
-//    row (without a destination behind it) is caught here even before it
-//    reaches PhotosHome's router
-//  - a row's live meta (count) renders when the sheet has one, and is
-//    omitted — not a placeholder — when it does not (Storage)
+//  - it carries exactly what `PHOTOS_MORE_ROWS` names, which is now ONE row.
+//    The five shelves it used to list — Sharing, Favorites, Places,
+//    Duplicates, Trash — are sections of Collections, on screen with their
+//    own counts, so a row here would be a second hidden door to each. A stray
+//    reintroduction is caught here and in `photos-more-router.test.ts`
+//  - Backup carries no meta: the figure would come from a network round trip
+//    this sheet has no business making, and a placeholder is the lie the old
+//    meta map existed to avoid
 //  - tapping a row calls `onSelect` with that row's OWN key, never a
 //    different one — the same "labelled destination opens something else"
 //    defect class this issue is about, one level up from the router itself
 //  - the foot line is the exact spec copy, and the old invented "More"
 //    eyebrow is gone
+//
+// Tile size is NOT covered here any more — it moved on from this sheet to
+// the Library's own header menu (`photos-library-menu.test.ts` carries the
+// rung rows now); see `PhotosMoreSheet.tsx`'s header for why.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -38,6 +44,7 @@ const mocks = vi.hoisted(() => ({
     line: "#mock-line",
     scrim: "#mock-scrim",
     text: "#mock-text",
+    textDisabled: "#mock-text-disabled",
     textFaint: "#mock-text-faint",
     textSoft: "#mock-text-soft",
   },
@@ -210,36 +217,27 @@ describe("the More sheet's rows, meta and foot", () => {
     container = undefined;
   });
 
-  it("carries exactly the live rows — Sharing first, still no Import", () => {
+  it("carries exactly one row — Backup — and no shelf Collections shows", () => {
     renderSheet();
     const labels = Array.from(container!.querySelectorAll("button"))
       .map((button) => button.getAttribute("aria-label") ?? "")
+      // Close is a CONTROL, not a destination — this count is of
+      // destinations, which is what the cap is about.
       .filter((label) => label !== "Close");
-    // Six rows: Sharing (issue #712 A5, first — proto:4980-4983), Favorites,
-    // Places, Duplicates, Trash, Backup. `Photo access` is gone with P13, and
-    // Import still has no phone destination.
-    expect(labels).toHaveLength(6);
-    expect(labels[0]).toBe("Sharing. 1");
+    // One row. Backup is not a shelf — it is a policy screen in the frame,
+    // about whether this device's bytes have left it, and that policy governs
+    // Docs' scans and Notes' attachments too.
+    expect(labels).toStrictEqual(["Backup"]);
+    for (const shelf of [
+      "Sharing",
+      "Favorites",
+      "Places",
+      "Duplicates",
+      "Trash",
+    ])
+      expect(container!.textContent).not.toContain(shelf);
     expect(container!.textContent).not.toContain("Import");
     expect(container!.textContent).not.toContain("Photo access");
-  });
-
-  it("shows real meta for favorites, trash and duplicates", () => {
-    renderSheet();
-    // 2 favorited-and-not-deleted assets (a1, a2).
-    expect(rowButton("Favorites").getAttribute("aria-label")).toBe(
-      "Favorites. 2"
-    );
-    // 1 deleted asset (a3).
-    expect(rowButton("Trash").getAttribute("aria-label")).toBe(
-      "Trash. 1 · purged in 30 days"
-    );
-    // hash-x has 2 members (a cluster); hash-y has 1 (not a cluster).
-    expect(rowButton("Duplicates").getAttribute("aria-label")).toBe(
-      "Duplicates. 1 cluster"
-    );
-    // 3 place rows from the mocked query.
-    expect(rowButton("Places").getAttribute("aria-label")).toBe("Places. 3");
   });
 
   it("omits Backup's meta rather than inventing a number", () => {
@@ -251,23 +249,9 @@ describe("the More sheet's rows, meta and foot", () => {
     expect(rowButton("Backup").getAttribute("aria-label")).toBe("Backup");
   });
 
-  it("shows Sharing's live count, and nothing when nothing is shared", () => {
-    // The count is the shelf's own size, from the same loaded timeline every
-    // other row's meta reads — never a second fetch, and never a guess.
-    renderSheet();
-    expect(rowButton("Sharing").getAttribute("aria-label")).toBe("Sharing. 1");
-  });
-
   it("calls onSelect with the OWN key of the row tapped, for every row", () => {
     renderSheet();
-    const cases: Array<[string, PhotosMoreRowKey]> = [
-      ["Sharing", "sharing"],
-      ["Favorites", "favorites"],
-      ["Places", "places"],
-      ["Duplicates", "duplicates"],
-      ["Trash", "trash"],
-      ["Backup", "backup"],
-    ];
+    const cases: Array<[string, PhotosMoreRowKey]> = [["Backup", "backup"]];
     for (const [label, key] of cases) {
       onSelect.mockClear();
       act(() =>
@@ -303,5 +287,16 @@ describe("the More sheet's rows, meta and foot", () => {
         (span) => span.textContent === "More"
       )
     ).toBe(false);
+  });
+
+  it("carries no tile-size control — those rows live in the Library header menu now", () => {
+    renderSheet();
+    expect(container!.textContent).not.toContain("Tile size");
+    expect(
+      container!.querySelector('button[aria-label="Larger tiles"]')
+    ).toBeNull();
+    expect(
+      container!.querySelector('button[aria-label="Smaller tiles"]')
+    ).toBeNull();
   });
 });

@@ -16,6 +16,7 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
@@ -32,7 +33,6 @@ import {
 } from "./tile-overlays";
 import type { VaultFacts } from "./tile-overlays";
 import type { PhotoAsset } from "./timeline-model";
-import { useImageFallback } from "./use-image-fallback";
 
 /** The vault rule's thickness (§4.4): a 2px rule on the LEADING edge. */
 const VAULT_RULE = 2;
@@ -124,8 +124,8 @@ function PhotoTileImpl({
             }
             transition={120}
             recyclingKey={media.recyclingKey}
-            onLoad={media.onLoad}
-            onError={media.onError}
+            onLoad={media.handleLoad}
+            onError={media.handleError}
             style={styles.image}
           />
         )}

@@ -1,12 +1,12 @@
 import { File } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { formatBytes } from "@centraid/design";
 
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { density, family, radii, t, useTheme } from "../kit/theme";
 import {
@@ -76,7 +76,7 @@ export default function PhoneStorage({
     );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
           <Icon name="chevron-left" size={26} color={colors.text} />
@@ -200,7 +200,7 @@ export default function PhoneStorage({
           </Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

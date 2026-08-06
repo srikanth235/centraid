@@ -6,7 +6,6 @@ import React, {
   useState,
 } from "react";
 import { View, StyleSheet, BackHandler, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type {
   WebViewErrorEvent,
@@ -19,6 +18,7 @@ import AppHeader from "../kit/components/AppHeader";
 import Button from "../kit/components/Button";
 import { Text } from "../kit/components/NativeText";
 import { clearStatus, postStatus } from "../kit/components/status-line";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { dispatch } from "../lib/bridge/dispatch";
@@ -191,7 +191,7 @@ export default function AppDetailScreen({
   }, [canGoBack]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe}>
       <AppHeader
         title={meta.name}
         subtitle={meta.desc || undefined}
@@ -242,7 +242,7 @@ export default function AppDetailScreen({
           ) : null}
         </View>
       )}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

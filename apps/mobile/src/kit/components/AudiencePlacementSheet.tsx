@@ -1,6 +1,5 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { PlaceableItemType } from "@centraid/blueprints/apps/_shared/placement-registry";
 
@@ -8,6 +7,7 @@ import { useReplica } from "../replica/ReplicaProvider";
 import { borders, family, radii, useTheme } from "../theme";
 import { Text } from "./NativeText";
 import { postStatus } from "./status-line";
+import TopSafeArea from "./TopSafeArea";
 
 export default function AudiencePlacementSheet({
   visible,
@@ -58,7 +58,7 @@ export default function AudiencePlacementSheet({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>
@@ -102,7 +102,7 @@ export default function AudiencePlacementSheet({
             </Pressable>
           ))
         )}
-      </SafeAreaView>
+      </TopSafeArea>
     </Modal>
   );
 }

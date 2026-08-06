@@ -73,6 +73,20 @@ export interface SearchHit {
   /** `12 here` — how much of it is in THESE results. Empty where the number
    *  would not mean anything (an album row states its size, not its overlap). */
   meta: string;
+  /**
+   * The `media_asset` ids this hit REACHES (#712): the album's members, the
+   * person's faces, the place's photographs, the caption's own photograph.
+   *
+   * A member who types "Tahoe" and is shown the album "Tahoe scouting" means
+   * its four photographs, but none of THEM carries the word in its own
+   * `core.content_item.title`, so `session.search` cannot return them and the
+   * grid came back empty under a row that said the album exists. The joins
+   * that answer "which photographs is this row about" are already walked here
+   * — faces by party, entries by collection, assets by place — so the answer
+   * is carried out on the row rather than re-derived by the screen from the
+   * same rows a second time.
+   */
+  assetIds: readonly string[];
   target: SearchHitTarget;
 }
 
@@ -232,6 +246,16 @@ export function groupedSearchHits(sources: SearchHitSources): SearchHit[] {
   );
 }
 
+/**
+ * Every asset id reachable through these rows, deduplicated (#712). The
+ * search grid unions this with the photographs `session.search` matched by
+ * title, so naming an album, a person or a place shows the photographs that
+ * belong to it — which is what naming one of them asks for.
+ */
+export function reachableAssetIds(hits: readonly SearchHit[]): Set<string> {
+  return new Set(hits.flatMap((hit) => [...hit.assetIds]));
+}
+
 function personHits(
   sources: SearchHitSources,
   tokens: readonly string[],
@@ -262,7 +286,8 @@ function personHits(
       if (!id) return [];
       const name = text(party, "display_name", "name");
       if (!name || !matchesTokens(name, tokens)) return [];
-      const count = total.get(id)?.size ?? 0;
+      const seen = total.get(id);
+      const count = seen?.size ?? 0;
       if (count === 0) return [];
       return [
         {
@@ -271,6 +296,7 @@ function personHits(
           label: name,
           sub: `person · ${plural(count)}`,
           meta: `${here.get(id) ?? 0} here`,
+          assetIds: [...(seen ?? [])],
           target: {
             screen: "PhotoStateView" as const,
             params: { mode: "person" as const, partyId: id, personName: name },
@@ -286,9 +312,18 @@ function placeHits(
   tokens: readonly string[]
 ): SearchHit[] {
   const total = new Map<string, number>();
+  // The ids are collected in the same pass as the count, but they are not the
+  // same number: a photograph the replica holds without an `assetId` is still
+  // one of the place's photographs to count, and still not something the grid
+  // can be asked to show.
+  const reachable = new Map<string, string[]>();
   for (const asset of sources.assets) {
     if (!asset.placeId) continue;
     total.set(asset.placeId, (total.get(asset.placeId) ?? 0) + 1);
+    if (!asset.assetId) continue;
+    const ids = reachable.get(asset.placeId) ?? [];
+    ids.push(asset.assetId);
+    reachable.set(asset.placeId, ids);
   }
   const here = new Map<string, number>();
   for (const asset of sources.matches) {
@@ -311,6 +346,7 @@ function placeHits(
           label: name,
           sub: `place · ${plural(count)}`,
           meta: `${here.get(id) ?? 0} here`,
+          assetIds: reachable.get(id) ?? [],
           // The phone has no per-place shelf; Places IS the map (`PlacesMap`,
           // the More-sheet row). Sending the member to the map is the honest
           // reading of "open the place" here — not a filtered grid that does
@@ -327,10 +363,19 @@ function albumHits(
   tokens: readonly string[]
 ): SearchHit[] {
   const sizes = new Map<string, number>();
+  // `target_id` is the member asset. An entry without one still counts toward
+  // the album's stated size — it is a row in the album — but there is nothing
+  // for the grid to show for it.
+  const members = new Map<string, string[]>();
   for (const entry of sources.entries) {
     const id = text(entry, "collection_id");
     if (!id) continue;
     sizes.set(id, (sizes.get(id) ?? 0) + 1);
+    const target = text(entry, "target_id");
+    if (!target) continue;
+    const ids = members.get(id) ?? [];
+    ids.push(target);
+    members.set(id, ids);
   }
 
   return sources.collections
@@ -349,6 +394,7 @@ function albumHits(
           // many of it are here" is not a fact about an album the member asked
           // for by name.
           meta: "",
+          assetIds: members.get(id) ?? [],
           target: {
             screen: "AlbumDetail" as const,
             params: { albumId: id },
@@ -381,6 +427,7 @@ function captionHits(
       label: `“${title}”`,
       sub: `caption · ${captionDate(asset.capturedAt)}`,
       meta: "",
+      assetIds: asset.assetId ? [asset.assetId] : [],
       target: {
         screen: "PhotoLightbox",
         params: { assetId: asset.id },

@@ -32,8 +32,12 @@ export interface ImageFallback {
    * rungs hands expo-image its cached failure for the URL it just gave up on.
    */
   recyclingKey: string;
-  onLoad: () => void;
-  onError: () => void;
+  /** Named `handle*` rather than `on*` because these are the HANDLERS a
+   *  surface passes to `<Image onLoad=… onError=…>`, not events this hook
+   *  raises — the same distinction oxlint's `jsx-handler-names` enforces at
+   *  the call site. */
+  handleLoad: () => void;
+  handleError: () => void;
 }
 
 export function useImageFallback(
@@ -49,7 +53,7 @@ export function useImageFallback(
   const [decoded, setDecoded] = useState(false);
 
   const canFallBack = !fellBack && !!original && original !== preferred;
-  const onError = useCallback(() => {
+  const handleError = useCallback(() => {
     if (canFallBack) setFellBack(true);
     else setFailed(true);
   }, [canFallBack]);
@@ -59,7 +63,7 @@ export function useImageFallback(
     failed,
     decoded,
     recyclingKey: fellBack ? `${key}:original` : key,
-    onLoad: useCallback(() => setDecoded(true), []),
-    onError,
+    handleLoad: useCallback(() => setDecoded(true), []),
+    handleError,
   };
 }

@@ -230,6 +230,25 @@ describe("pending-changes chip visibility (issue #711)", () => {
     expect(container.textContent).not.toContain("Pending changes");
   });
 
+  it("says nothing at all when the replica is current", async () => {
+    // The whole point of the bar mounting on ~20 screens: on a settled
+    // replica it must not draw a row. Sabotage target — make the `label ||
+    // pending.length > 0` guard unconditional and this fails on the border,
+    // or restore the `Updated …`/`Refresh` pair and it fails on the text.
+    replicaMock.reachability = "current";
+    await render();
+    expect(container.textContent).toBe("");
+  });
+
+  it("keeps an action only where pulling the grid would not help", async () => {
+    replicaMock.reachability = "gateway-asleep";
+    await render();
+    expect(container.textContent).toContain("Gateway asleep");
+    expect(container.textContent).toContain("Wake help");
+    // Never the plain word: pull-to-refresh is that control already.
+    expect(container.textContent).not.toContain("Refresh");
+  });
+
   it("shows the pending-changes chip once there is something pending", async () => {
     // Sabotage target: remove the `pending.length > 0 ?` guard around this
     // chip and it renders unconditionally, including at zero — the standing

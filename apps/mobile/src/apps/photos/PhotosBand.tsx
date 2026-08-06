@@ -25,7 +25,7 @@
 //   ├─ capsule  flex:none; 52 wide; radius 12; 1pt lineStrong; ground = the
 //   │           FRAME's neutral page (`colors.bg`), never Photos' mat
 //   └─ group    flex:1; radius 12; 1pt lineStrong; ground `bgElev` (t.surf);
-//               padding 0 2; gap 2 — and the five tabs inside it
+//               padding 0 2; gap 2 — and the four tabs inside it
 //
 // The frame's own band (`screens/home/HomeBand`) is ONE plate of the same
 // rectangle. What the two share — radius, edge, ground, inset — is stated once
@@ -145,7 +145,7 @@ export default function PhotosBand({
         <Icon name={capsule.icon} size={19} color={colors.textSoft} />
       </Pressable>
 
-      {/* Plate two: the app's five destinations, as ONE group on its own
+      {/* Plate two: the app's four destinations, as ONE group on its own
           `t.surf` ground (:4959-4960). The capsule is not in it — the gap
           between the two plates IS the seam, and it is the whole explanation
           for why Home is not a sixth tab. */}

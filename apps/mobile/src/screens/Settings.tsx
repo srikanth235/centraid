@@ -14,7 +14,7 @@ import {
   Pressable,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
@@ -136,6 +136,7 @@ export default function SettingsScreen({
   navigation,
 }: SettingsScreenProps<"Settings">): React.JSX.Element {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [paired, setPaired] = useState(false);
   const [desktopName, setDesktopName] = useState("");
@@ -236,7 +237,16 @@ export default function SettingsScreen({
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    // `useSafeAreaInsets` + an explicit `paddingTop`, NOT `<TopSafeArea
+    // edges={["top"]}>`. Every screen in this app is presented with
+    // `COVER_OPTIONS` (a native `fullScreenModal`), and inside that
+    // presentation the `edges` form resolved to a ZERO top inset here — the
+    // back arrow and the title drew straight through the status bar, over the
+    // clock. The hook is what Photos' own cover screens already use
+    // (`PhotosHome.tsx`, `PhotosScreen.tsx`), and those render correctly, so
+    // this is the form that is known to work under a cover rather than the one
+    // that reads better.
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -449,7 +459,7 @@ export default function SettingsScreen({
           ) : null}
         </SettingsSection>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -463,6 +473,7 @@ function PairScanner({
   onCancel: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -474,7 +485,10 @@ function PairScanner({
   }, [permission, requestPermission]);
 
   return (
-    <SafeAreaView style={styles.scanSafe} edges={["top"]}>
+    // Same reason as the main screen above: a cover gets no top inset from
+    // `<TopSafeArea edges>`, so the scanner's cancel bar landed under the
+    // status bar too.
+    <View style={[styles.scanSafe, { paddingTop: insets.top }]}>
       <View style={styles.bar}>
         <Pressable
           onPress={onCancel}
@@ -514,7 +528,7 @@ function PairScanner({
           <Button label="Back" variant="secondary" onPress={onCancel} />
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

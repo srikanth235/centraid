@@ -108,7 +108,7 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart through media.update_asset (the title lives on the content item; favorite lives on the asset).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item; favorite and archived live on the asset — archiving hides a photo from the timeline without trashing it).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -617,7 +617,7 @@
     },
     {
       "name": "enrichment-status",
-      "description": "Whether face-proposer enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'device' | 'gateway' (issue #712 C5).",
+      "description": "Whether face enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'device' | 'gateway' (issue #712 C5).",
       "input": {
         "type": "object",
         "additionalProperties": false

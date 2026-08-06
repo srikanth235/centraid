@@ -10,10 +10,10 @@
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
@@ -76,10 +76,7 @@ export default function PlacesMap({
       }
     : { latitude: 20, longitude: 0, latitudeDelta: 100, longitudeDelta: 100 };
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.toneMat }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Photos"
@@ -115,7 +112,7 @@ export default function PlacesMap({
           </Text>
         </View>
       )}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

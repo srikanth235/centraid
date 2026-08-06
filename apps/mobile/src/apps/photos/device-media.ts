@@ -15,8 +15,12 @@
 import * as MediaLibrary from "expo-media-library";
 import { Platform } from "react-native";
 
-/** One phrasing, shared by every flow that meets an undownloaded original. */
-export const IN_CLOUD_MESSAGE = "in iCloud — not downloaded on this device";
+import { IN_CLOUD_MESSAGE } from "./photos-backup-copy";
+
+/** One phrasing, shared by every flow that meets an undownloaded original.
+ *  Re-exported so existing importers keep working; the string itself lives in
+ *  `photos-backup-copy.ts`, which pulls in no native module. */
+export { IN_CLOUD_MESSAGE } from "./photos-backup-copy";
 
 /**
  * Raised instead of quietly skipping an asset whose bytes never came down.

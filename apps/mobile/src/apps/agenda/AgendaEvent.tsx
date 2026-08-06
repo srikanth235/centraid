@@ -1,11 +1,11 @@
 import * as Notifications from "expo-notifications";
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -178,7 +178,7 @@ export default function AgendaEvent({
   if (!event)
     return <View style={[styles.safe, { backgroundColor: colors.bg }]} />;
   return (
-    <SafeAreaView
+    <TopSafeArea
       style={[styles.safe, { backgroundColor: colors.bg }]}
       edges={["top", "bottom"]}
     >
@@ -338,7 +338,7 @@ export default function AgendaEvent({
         onClose={() => setEditOpen(false)}
         onWrite={writeEdit}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

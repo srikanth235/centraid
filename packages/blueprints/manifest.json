@@ -764,12 +764,20 @@
         "queries/people.ts",
         "queries/search.ts",
         "queries/storage.ts",
+        "sample/ana-and-marco-table.png",
+        "sample/ana-kitchen-window.png",
+        "sample/ana-porch-evening.png",
+        "sample/ana-profile-doorway.png",
+        "sample/ana-trailhead.png",
         "sample/backyard-last-light.png",
         "sample/cabin-window-morning.png",
         "sample/downtown-blue-hour.png",
         "sample/emerald-bay-overlook.png",
+        "sample/empty-hallway.png",
         "sample/granite-switchback.png",
         "sample/harbor-lights.png",
+        "sample/marco-harbor-wall.png",
+        "sample/marco-workshop.png",
         "sample/sand-harbor-dawn.png",
         "sample/tahoe-dusk-ridge.png",
         "sample/trailhead-sign.png",
@@ -1305,25 +1313,6 @@
       }
     },
     {
-      "id": "photo-captioner",
-      "name": "Photo captions",
-      "desc": "Captions and tags new photos so the library is searchable by what's in the pictures.",
-      "colorKey": "ochre",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🖼️",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/photo-captioner/automation.json",
-        "automations/photo-captioner/handler.js"
-      ]
-    },
-    {
       "id": "doc-text-extractor",
       "name": "Document text",
       "desc": "OCRs scanned documents into searchable text and writes a one-paragraph summary for each.",
@@ -1343,25 +1332,6 @@
       ]
     },
     {
-      "id": "screenshot-extractor",
-      "name": "Screenshot intelligence",
-      "desc": "Turns photographed receipts and bookings into staged ledger and calendar entries you review.",
-      "colorKey": "forest",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧾",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new screenshots arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/screenshot-extractor/automation.json",
-        "automations/screenshot-extractor/handler.js"
-      ]
-    },
-    {
       "id": "doc-filer",
       "name": "Document filing",
       "desc": "Proposes a folder and a readable title for every scan-dump document — you approve, it files.",
@@ -1378,44 +1348,6 @@
         "app.json",
         "automations/doc-filer/automation.json",
         "automations/doc-filer/handler.js"
-      ]
-    },
-    {
-      "id": "face-proposer",
-      "name": "Face proposals",
-      "desc": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
-      "colorKey": "rose",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🙂",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/face-proposer/automation.json",
-        "automations/face-proposer/handler.js"
-      ]
-    },
-    {
-      "id": "trip-albums",
-      "name": "Trip albums",
-      "desc": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
-      "colorKey": "teal",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧳",
-      "category": "Enrichment",
-      "triggerKind": "cron",
-      "triggerLabel": "Daily · 6:00 AM",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/trip-albums/automation.json",
-        "automations/trip-albums/handler.js"
       ]
     },
     {

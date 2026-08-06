@@ -45,7 +45,7 @@ async function writeAutomation(
   m: Manifest,
   handler = "export default async () => ({ ok: true });"
 ): Promise<void> {
-  const dir = path.join(appsDir, "photos", "automations", "face-proposer");
+  const dir = path.join(appsDir, "photos", "automations", "face-finder");
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, "automation.json"),
@@ -90,7 +90,7 @@ describe("enrichment tier gate", () => {
     const opened: OpenDispatchArgs[] = [];
     const result = await runFire(
       {
-        automationRef: "photos/face-proposer",
+        automationRef: "photos/face-finder",
         appsDir,
         journalDbFile,
         ...(options.resolveEnrichPolicy
@@ -190,7 +190,7 @@ describe("enrichment tier gate", () => {
     const opened: OpenDispatchArgs[] = [];
 
     const { outcome } = await runFire(
-      { automationRef: "photos/face-proposer", appsDir, journalDbFile },
+      { automationRef: "photos/face-finder", appsDir, journalDbFile },
       { openDispatch: countingDispatch(opened) }
     );
 
@@ -201,7 +201,7 @@ describe("enrichment tier gate", () => {
 
 describe(decideEnrichmentGate, () => {
   const base = {
-    automationRef: "photos/face-proposer",
+    automationRef: "photos/face-finder",
     domain: "photos",
     capability: "faces",
   } as const;
@@ -215,7 +215,7 @@ describe(decideEnrichmentGate, () => {
 
     expect(decision.allowed).toBe(false);
     expect(decision.allowed === false && decision.reason).toContain(
-      "photos/face-proposer"
+      "photos/face-finder"
     );
     expect(decision.allowed === false && decision.reason).toContain("faces");
   });

@@ -14,11 +14,11 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppHeader from "../../kit/components/AppHeader";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { t, useTheme } from "../../kit/theme";
 import { appQuery, resolveAppMeta } from "../../lib/gateway";
@@ -551,7 +551,7 @@ export default function LockerHome({
   })();
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe}>
       <AppHeader
         title={META.name}
         subtitle="Secrets stay online-only"
@@ -594,6 +594,6 @@ export default function LockerHome({
           <Text style={styles.stateTitle}>Locker is hidden</Text>
         </View>
       ) : null}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

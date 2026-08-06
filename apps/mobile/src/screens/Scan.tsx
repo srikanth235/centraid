@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   OCR_CONSENT_NOTE,
@@ -30,6 +29,7 @@ import { recognizeText } from "../../modules/centraid-ocr";
 import { ConsentGate } from "../kit/components/ConsentGate";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -376,7 +376,7 @@ export default function ScanScreen({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <CloseHeader colors={colors} onClose={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content}>
         {fileUri && ocrConsentReady && !ocrConsent ? (
@@ -607,6 +607,6 @@ export default function ScanScreen({
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

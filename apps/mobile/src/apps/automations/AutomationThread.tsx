@@ -1,16 +1,14 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
@@ -77,7 +75,7 @@ export default function AutomationThread(props: {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={props.onLeave} />
         <View style={styles.headerCopy}>
@@ -117,7 +115,7 @@ export default function AutomationThread(props: {
         // mis-place cells for no gain on a bounded list.
         renderItem={renderTurn}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

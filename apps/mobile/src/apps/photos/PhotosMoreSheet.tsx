@@ -5,6 +5,16 @@
 // one handoff row this sheet still does NOT carry — see the comment on
 // `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one,
 // and why Sharing came back in issue #712 while Import did not.
+//
+// It no longer carries **Tile size**. That stepper passed through here on its
+// way from a permanent toolbar row (44 points over the timeline, for a
+// preference a member sets rarely) to its present home — the Library's own
+// header menu (`photos-library-menu.ts`, drawn as an anchored card by
+// `kit/components/AnchoredMenu.tsx`), opened from the round control beside
+// Select on `PhotosHome`'s header, iOS-Photos-style. It sits there now beside
+// the other things that shape what the grid shows (the filter), which this
+// sheet has no opinion about at all. This sheet is left with exactly one job:
+// Backup, a cross-stack link that menu has no reason to carry.
 
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
@@ -12,14 +22,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
-import { useShareTarget } from "../../kit/share/use-share-target";
 import { borders, family, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { PHOTOS_MORE_FOOT, PHOTOS_MORE_ROWS } from "./photos-band";
 import type { PhotosMoreRowKey } from "./photos-band";
-import { sharedAssets } from "./photos-sharing";
-import { usePhotoTimeline } from "./timeline-source";
 
 export interface PhotosMoreSheetProps {
   visible: boolean;
@@ -27,54 +33,22 @@ export interface PhotosMoreSheetProps {
   onSelect: (key: PhotosMoreRowKey) => void;
 }
 
-/**
- * Live meta counts, keyed by row (proto:4980-4983's mono column). Every
- * value here is a real, already-loaded count — never a placeholder — and a
- * row with no reliable source (Backup: the frame's Backup screen derives its
- * figures from a network round trip and a durable-queue read this sheet has no
- * business making) is simply left out of the map, so its row renders
- * label-only rather than a made-up number.
+/*
+ * NO META MAP HERE ANY MORE.
+ *
+ * This file used to derive live counts for five rows — favourites, trash,
+ * duplicate clusters, places, shared — by reading the timeline, the place
+ * table and the share target, so each row could carry the mono figure the
+ * prototype puts beside it. All five of those rows are sections of
+ * Collections now, where the same counts are stated beside the same shelves,
+ * over the shelf's own covers. Deriving them twice meant two places that had
+ * to agree about what a duplicate cluster is.
+ *
+ * Backup, the one row left, deliberately carries no meta: the figure it would
+ * show comes from a network round trip and a durable-queue read this sheet has
+ * no business making, and a placeholder number is the lie the meta map existed
+ * to avoid.
  */
-function useMoreRowMeta(): Partial<Record<PhotosMoreRowKey, string>> {
-  const { assets } = usePhotoTimeline();
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
-  );
-  // Sharing's count comes from the SAME loaded timeline every other row's
-  // meta reads — the shelf is a filter over it, so the sheet needs no second
-  // fetch to state its size. With no share target chosen the row carries no
-  // meta at all: a `0` would say "nothing of yours is shared", which this
-  // device cannot know when it has not been told where shares go.
-  const shareTargetId = useShareTarget().target?.vaultId;
-  return useMemo(() => {
-    const favoritesCount = assets.filter(
-      (asset) => asset.favorite && !asset.deleted
-    ).length;
-    const trashCount = assets.filter((asset) => asset.deleted).length;
-    // Duplicate CLUSTERS, not flagged assets: group every asset carrying a
-    // phash by that hash and count the groups with more than one member —
-    // the same grouping `duplicateHint` is derived from (timeline-model.ts),
-    // just reported as clusters instead of collapsed to a per-asset boolean.
-    const phashGroups = new Map<string, number>();
-    for (const asset of assets) {
-      if (!asset.phash) continue;
-      phashGroups.set(asset.phash, (phashGroups.get(asset.phash) ?? 0) + 1);
-    }
-    const clusterCount = [...phashGroups.values()].filter(
-      (count) => count > 1
-    ).length;
-    return {
-      ...(shareTargetId
-        ? { sharing: String(sharedAssets(assets, shareTargetId).length) }
-        : {}),
-      favorites: String(favoritesCount),
-      trash: `${trashCount} · purged in 30 days`,
-      places: String(places.rows.length),
-      duplicates: `${clusterCount} cluster${clusterCount === 1 ? "" : "s"}`,
-    };
-  }, [assets, places.rows.length, shareTargetId]);
-}
 
 export default function PhotosMoreSheet({
   visible,
@@ -84,7 +58,6 @@ export default function PhotosMoreSheet({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const meta = useMoreRowMeta();
   return (
     <Modal
       visible={visible}
@@ -114,7 +87,7 @@ export default function PhotosMoreSheet({
           </Pressable>
         </View>
         {PHOTOS_MORE_ROWS.map((row) => {
-          const rowMeta = meta[row.key] ?? row.meta;
+          const rowMeta = row.meta;
           return (
             <Pressable
               key={row.key}

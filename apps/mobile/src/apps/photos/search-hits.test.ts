@@ -5,7 +5,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { captionDate, groupedSearchHits, queryTokens } from "./search-hits";
+import {
+  captionDate,
+  groupedSearchHits,
+  queryTokens,
+  reachableAssetIds,
+} from "./search-hits";
 import type { SearchHitSources } from "./search-hits";
 import type { PhotoAsset } from "./timeline-model";
 
@@ -193,5 +198,54 @@ describe("grouped hits", () => {
 
   it("says nothing at all before anything is typed", () => {
     expect(groupedSearchHits(sources({ query: "" }))).toStrictEqual([]);
+  });
+});
+
+// A query naming an album, a person or a place has to bring that thing's
+// PHOTOGRAPHS with it (#712). None of "The coast road"'s members carries the
+// words "coast road" in its own caption, so a grid built from the title
+// search alone was empty under a row announcing the album — which is the one
+// thing a member who typed the album's name did not ask for.
+describe("the photographs a hit reaches", () => {
+  it("carries an album's members", () => {
+    const [hit] = groupedSearchHits(sources({ query: "coast road" }));
+    expect(hit?.assetIds).toStrictEqual(["asset-1", "asset-2"]);
+  });
+
+  it("carries every photograph a person's faces sit on, once each", () => {
+    const [hit] = groupedSearchHits(sources());
+    expect(hit?.assetIds).toStrictEqual(["asset-1", "asset-2", "asset-5"]);
+  });
+
+  it("carries a place's photographs, not just the matched ones", () => {
+    // Two of Lyme Regis's three are in `matches`; the third is reachable
+    // through the place row and belongs in the grid with them.
+    const [hit] = groupedSearchHits(sources({ query: "Lyme" }));
+    expect(hit?.assetIds).toStrictEqual(["asset-1", "asset-2", "asset-3"]);
+  });
+
+  it("carries a caption hit's own photograph", () => {
+    const [hit] = groupedSearchHits(
+      sources({ matches: [LIBRARY[0]!], parties: [], places: [] })
+    );
+    expect(hit?.assetIds).toStrictEqual(["asset-1"]);
+  });
+
+  it("unions the rows without repeating a photograph two rows share", () => {
+    // Ana reaches 1, 2 and 5; Lyme Regis reaches 1, 2 and 3. The grid must
+    // draw asset-1 once.
+    const hits = groupedSearchHits(sources({ query: "ana lyme" }));
+    expect([...reachableAssetIds(hits)].sort()).toStrictEqual([
+      "asset-1",
+      "asset-2",
+      "asset-3",
+      "asset-5",
+    ]);
+  });
+
+  it("reaches nothing before anything is typed", () => {
+    expect(
+      reachableAssetIds(groupedSearchHits(sources({ query: "" }))).size
+    ).toBe(0);
   });
 });

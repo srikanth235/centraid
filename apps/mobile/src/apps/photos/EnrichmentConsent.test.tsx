@@ -145,6 +145,7 @@ vi.mock(import("react-native-safe-area-context"), async () => {
   return {
     SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
       ReactModule.createElement("section", null, children),
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
   } as unknown as Partial<SafeAreaContext>;
 });
 

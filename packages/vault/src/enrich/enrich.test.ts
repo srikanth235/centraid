@@ -67,7 +67,7 @@ describe("enrich", () => {
       deviceKey: boot.deviceKey,
     };
     const enrolled = enrollAgent(db, {
-      name: "photo-captioner",
+      name: "doc-text-extractor",
       modelRef: "tier:fast",
     });
     agentPartyId = enrolled.partyId;

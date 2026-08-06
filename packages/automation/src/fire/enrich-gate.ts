@@ -58,9 +58,9 @@
  * read as `gateway` — assuming the cheaper lane would be assuming consent.
  *
  * CONSEQUENCE, stated rather than papered over: under `device` every
- * gateway-lane enricher shipped in blueprints (photo-captioner,
- * face-proposer, screenshot-extractor, doc-text-extractor, doc-entity-linker,
- * doc-filer, obligation-extractor) stops running — each of them declares
+ * gateway-lane enricher shipped in blueprints (doc-text-extractor,
+ * doc-entity-linker, doc-filer, obligation-extractor) stops running — each of
+ * them declares
  * `enrich.lane: "gateway"` because each one takes a `ctx.agent` model turn,
  * and every runner in this build's registry routes that turn to a
  * third-party provider. `gateway` is the seeded default for a freshly

@@ -52,6 +52,9 @@ const ALIASES: Record<string, IconName> = {
   maximize: "Maximize",
   menu: "Menu",
   "message-circle": "MessageCircle",
+  // The viewer's floating overflow chip. Horizontal, not vertical: it sits in a
+  // round chip on the stage, where a vertical run of dots reads as a handle.
+  "more-horizontal": "MoreHoriz",
   "more-vertical": "MoreVert",
   paperclip: "Paperclip",
   play: "Play",

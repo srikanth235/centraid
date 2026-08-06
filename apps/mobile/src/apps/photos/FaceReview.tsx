@@ -62,7 +62,6 @@
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   triageCurrent,
@@ -72,9 +71,11 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -96,7 +97,6 @@ import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
 import { usePhotoTimeline } from "./timeline-source";
-import { useImageFallback } from "./use-image-fallback";
 
 export default function FaceReview({
   navigation,
@@ -303,10 +303,7 @@ export default function FaceReview({
     : null;
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Photos"
@@ -353,8 +350,8 @@ export default function FaceReview({
                       source={imageSource(media.source)}
                       {...gridImageProps(media.source)}
                       recyclingKey={media.recyclingKey}
-                      onLoad={media.onLoad}
-                      onError={media.onError}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
                       contentFit="fill"
                       style={[
                         styles.cropImg,
@@ -371,8 +368,8 @@ export default function FaceReview({
                       source={imageSource(media.source)}
                       {...gridImageProps(media.source)}
                       recyclingKey={media.recyclingKey}
-                      onLoad={media.onLoad}
-                      onError={media.onError}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
                       style={styles.tileImg}
                     />
                   ) : null}
@@ -393,8 +390,8 @@ export default function FaceReview({
                       source={imageSource(media.source)}
                       {...gridImageProps(media.source)}
                       recyclingKey={media.recyclingKey}
-                      onLoad={media.onLoad}
-                      onError={media.onError}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
                       style={styles.tileImg}
                     />
                   ) : null}
@@ -641,6 +638,6 @@ export default function FaceReview({
           </Text>
         }
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

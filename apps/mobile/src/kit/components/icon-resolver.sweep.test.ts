@@ -17,13 +17,13 @@
 // call site.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { resolveIconName } from "./icon-resolver";
 
-const SRC = join(__dirname, "../..");
+const SRC = path.join(__dirname, "../..");
 
 /**
  * Two shapes reach the resolver, and only two:
@@ -35,15 +35,15 @@ const SRC = join(__dirname, "../..");
  * A bare `name="x"` is NOT included: most of them are accessibility labels and
  * route names, which have nothing to do with the glyph registry.
  */
-const ICON_PROP = /\bicon(?:=|:\s*)"([a-zA-Z0-9_-]+)"/g;
-const ICON_ELEMENT = /<Icon\b[^>]*?\bname="([a-zA-Z0-9_-]+)"/gs;
+const ICON_PROP = /\bicon(?:=|:\s*)"(?<name>[a-zA-Z0-9_-]+)"/gu;
+const ICON_ELEMENT = /<Icon\b[^>]*?\bname="(?<name>[a-zA-Z0-9_-]+)"/gsu;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) walk(path, out);
+    const child = path.join(dir, entry);
+    if (statSync(child).isDirectory()) walk(child, out);
     else if (/\.tsx?$/u.test(entry) && !/\.test\.tsx?$/u.test(entry))
-      out.push(path);
+      out.push(child);
   }
   return out;
 }
@@ -55,7 +55,7 @@ describe("icon call sites", () => {
       const source = readFileSync(file, "utf8");
       for (const pattern of [ICON_PROP, ICON_ELEMENT])
         for (const match of source.matchAll(pattern))
-          if (match[1]) used.add(match[1]);
+          if (match.groups?.name) used.add(match.groups.name);
     }
 
     // A guard on the guard: if the pattern stops matching, the test would pass
@@ -70,6 +70,6 @@ describe("icon call sites", () => {
         unresolved.push(name);
       }
     }
-    expect(unresolved).toEqual([]);
+    expect(unresolved).toStrictEqual([]);
   });
 });

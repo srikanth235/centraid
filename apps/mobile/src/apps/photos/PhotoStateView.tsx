@@ -276,10 +276,11 @@ export default function PhotoStateView({
       : blocked,
   };
   return (
-    <PhotosScreen
-      current={mode === "person" ? "people" : "more"}
-      selection={selectionBar}
-    >
+    // People is off the band (issue #712): a person's shelf is reached from
+    // Collections or the Library shelf list, never from the band itself, so
+    // `more` is the destination marked current for every mode this screen
+    // takes — including "person" — same as `PlacesView`/`FaceReview`.
+    <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
         <View style={styles.copy}>
           <Text

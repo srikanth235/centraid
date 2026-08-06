@@ -45,7 +45,7 @@ describe("enrichment refusal, as the host receives it", () => {
   beforeEach(async () => {
     appsDir = await tempDir("centraid-enrich-refusal-");
     journalDbFile = path.join(appsDir, "journal.db");
-    const dir = path.join(appsDir, "photos", "automations", "face-proposer");
+    const dir = path.join(appsDir, "photos", "automations", "face-finder");
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
       path.join(dir, "automation.json"),
@@ -70,7 +70,7 @@ describe("enrichment refusal, as the host receives it", () => {
     return runFire(
       {
         appsDir,
-        automationRef: "photos/face-proposer",
+        automationRef: "photos/face-finder",
         journalDbFile,
         resolveEnrichPolicy: () => tier,
       },

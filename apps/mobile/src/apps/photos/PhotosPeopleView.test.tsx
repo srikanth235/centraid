@@ -1,5 +1,8 @@
-// Pins the People destination's defects from issue #711, plus the re-homed
-// consent gate from issue #712 C2:
+// Pins the people roster's defects from issue #711, plus the re-homed
+// consent gate from issue #712 C2. People moved off the band and behind
+// Collections/the Library shelf list later in #712 — see `PhotosScreen`'s
+// stub below — but the claims this file pins about the grid itself did not
+// change:
 //
 //  - a party with no display_name still shows, as "Unnamed" — never dropped
 //    from the grid (README:217, proto:3760)
@@ -228,6 +231,20 @@ vi.mock(
     }) as unknown as Partial<StatusLineModule>
 );
 
+// The shell (issue #712): PhotosPeopleView now draws the band via
+// `PhotosScreen`, which pulls in react-navigation, the band-owner hook and
+// the whole band/selection-bar tree — none of which this file's claims are
+// about. Stubbed to a passthrough of its children, same reasoning as the
+// `ConsentGate` stub below: this file proves PhotosPeopleView's OWN grid/card/
+// gate behaviour, and `PhotosScreen.test.tsx` already owns the shell's.
+vi.mock(import("./PhotosScreen"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement(ReactModule.Fragment, null, children),
+  } as never;
+});
+
 // A stub, not the real renderer (see the file header): exposes just enough
 // of the gate's surface — the two answers and a domain marker — for this
 // file to prove PhotosPeopleView wires the right handlers and gating logic.
@@ -266,11 +283,16 @@ function renderView(): void {
   navigate = vi.fn<(...args: unknown[]) => void>();
   act(() => {
     root = createRoot(container!);
-    root.render(<PhotosPeopleView navigation={{ navigate } as never} />);
+    root.render(
+      <PhotosPeopleView
+        navigation={{ navigate } as never}
+        route={{} as never}
+      />
+    );
   });
 }
 
-describe("the People destination's grid and card behaviour", () => {
+describe("the people roster's grid and card behaviour", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -315,7 +337,7 @@ describe("the People destination's grid and card behaviour", () => {
   });
 });
 
-describe("the People destination's consent gate (issue 712 C2)", () => {
+describe("the people roster's consent gate (issue 712 C2)", () => {
   const facesWithConfirmed = mocks.faces;
 
   beforeEach(() => {

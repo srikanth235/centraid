@@ -116,9 +116,9 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   -- an automation manifest's enrich.capability ("faces", "captions", ...).
   -- The problem it solves: the owner's on-demand ask used to be untagged, so
   -- a face-detection consent handed the SAME queue row to every enabled
-  -- enricher — captioner, screenshot-extractor and the rest all treated one
-  -- member's "detect faces" as their cue. A tagged row is drained only by the
-  -- enricher that owns that capability.
+  -- enricher: every one of them treated a member's "detect faces" as its own
+  -- cue. A tagged row is drained only by the enricher that owns that
+  -- capability.
   -- NULL is reserved for the system signals (search-miss / on-view), which
   -- are not consent and stay broadcast; the CHECK below makes an untagged
   -- OWNER ask impossible rather than merely discouraged.

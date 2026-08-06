@@ -9,7 +9,6 @@ import {
   ScrollView,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { parseWikiLinks } from "@centraid/blueprints/apps/notes/commonmark";
 import type { ReplicaValue } from "@centraid/client/replica/native";
@@ -18,6 +17,7 @@ import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -337,7 +337,7 @@ export default function NotesHome({
   };
 
   return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.fill, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
@@ -450,7 +450,7 @@ export default function NotesHome({
         presentationStyle="pageSheet"
         onRequestClose={closeEditor}
       >
-        <SafeAreaView
+        <TopSafeArea
           accessibilityViewIsModal
           style={[styles.sheet, { backgroundColor: colors.bg }]}
         >
@@ -605,7 +605,7 @@ export default function NotesHome({
               </>
             )}
           </View>
-        </SafeAreaView>
+        </TopSafeArea>
       </Modal>
 
       <Modal
@@ -614,7 +614,7 @@ export default function NotesHome({
         presentationStyle="pageSheet"
         onRequestClose={() => setLinkToken(undefined)}
       >
-        <SafeAreaView
+        <TopSafeArea
           accessibilityViewIsModal
           style={[styles.sheet, { backgroundColor: colors.bg }]}
         >
@@ -664,8 +664,8 @@ export default function NotesHome({
               ))
             )}
           </ScrollView>
-        </SafeAreaView>
+        </TopSafeArea>
       </Modal>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

@@ -41,7 +41,7 @@ let db: VaultDb;
 function gateFor(lane: EnrichLane): ReturnType<typeof decideEnrichmentGate> {
   const tier = readEnrichPolicyTier(db.vault, "photos");
   return decideEnrichmentGate({
-    automationRef: "photos/face-proposer",
+    automationRef: "photos/face-finder",
     capability: "faces",
     domain: "photos",
     lane,
@@ -142,7 +142,7 @@ describe("enrichment tier control", () => {
 
     // No face proposal path runs: the migrated read is the conservative
     // `device`, and `device` cannot reach the `gateway` lane a real
-    // face-proposer manifest declares.
+    // the enricher manifest declares.
     const before = gateFor("gateway");
     expect(before.allowed).toBe(false);
 

@@ -1,8 +1,15 @@
-// The People destination of the claimed band (Photos v4 handoff §3.1, §14,
-// proto:4432-4433). Split out of `PhotosCollectionsView` (which now serves
-// Albums only) because People stopped being a shelf on that screen and
-// became its own band destination — see `PhotosHome.tsx`'s `destination`
-// switch.
+// The people roster (Photos v4 handoff §3.1, §14, proto:4432-4433). Split out
+// of `PhotosCollectionsView` (which now serves Albums only) because People
+// stopped being a shelf on that screen.
+//
+// People is OFF THE BAND (issue #712): it used to be a band destination
+// `PhotosHome` rendered inline, which cost the band a fifth slot for a shelf
+// most visits never open. It is now a pushed route like `PlacesView` and
+// `FaceReview` — reached from Collections' own People section heading
+// (`PhotosCollectionsView.tsx`'s `open()`) and from the Library shelf list's
+// People row alongside `FaceReview` — so it draws its own band via
+// `PhotosScreen`, `current="more"`, the same as every other More-reachable
+// shelf.
 //
 // Three rules this view exists to hold the line on:
 //
@@ -53,6 +60,7 @@ import {
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import PhotosScreen from "./PhotosScreen";
 
 /** A party's identity colour, lowered to the solid tile finish — the same
  *  treatment `PhotosCollectionsView` used, kept because a person's card
@@ -68,13 +76,9 @@ interface PersonCard {
   count: number;
 }
 
-type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
-
 export default function PhotosPeopleView({
   navigation,
-}: {
-  navigation: Nav;
-}): React.JSX.Element {
+}: PhotosScreenProps<"PhotosPeople">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useReplica();
@@ -170,64 +174,77 @@ export default function PhotosPeopleView({
   const showGate = people.length === 0 && !enrichAnswered;
 
   return (
-    <FlatList
-      data={people}
-      keyExtractor={(item) => item.id}
-      numColumns={3}
-      contentContainerStyle={styles.grid}
-      columnWrapperStyle={styles.row}
-      ListEmptyComponent={
-        showGate ? (
-          <View style={styles.gate}>
-            <ConsentGate
-              domain="photos"
-              onDevicePanel={ON_DEVICE_PANEL}
-              onDevice={deviceAnswer}
-              netPanel={CLOUD_PANEL}
-              net={CLOUD_ANSWER}
-              note={ENRICHMENT_NOTE}
-              busy={enrichBusy}
-              answered={enrichAnswered}
-              onRunOnDevice={() => void runOnDevice()}
-              onDecline={declineEnrichment}
+    // The band, via the shell (issue #712). This screen used to be rendered
+    // inline by `PhotosHome` with People marked current on the band itself;
+    // now that People is off the band, it draws the shell like every other
+    // pushed shelf, `current="more"` — same call `PlacesView` and
+    // `PhotoStateView`'s "person" mode already make.
+    <PhotosScreen current="more">
+      <View style={styles.header}>
+        {/* No back chevron, same reasoning as `PlacesView`'s: the band below
+            is the way out, and a second spelling of "leave" in the head is
+            the duplicate affordance §F's one-navigation rule forbids. */}
+        <Text style={styles.title}>People</Text>
+      </View>
+      <FlatList
+        data={people}
+        keyExtractor={(item) => item.id}
+        numColumns={3}
+        contentContainerStyle={styles.grid}
+        columnWrapperStyle={styles.row}
+        ListEmptyComponent={
+          showGate ? (
+            <View style={styles.gate}>
+              <ConsentGate
+                domain="photos"
+                onDevicePanel={ON_DEVICE_PANEL}
+                onDevice={deviceAnswer}
+                netPanel={CLOUD_PANEL}
+                net={CLOUD_ANSWER}
+                note={ENRICHMENT_NOTE}
+                busy={enrichBusy}
+                answered={enrichAnswered}
+                onRunOnDevice={() => void runOnDevice()}
+                onDecline={declineEnrichment}
+              />
+            </View>
+          ) : (
+            <Text style={styles.empty}>
+              No people yet. Faces are proposed on a photograph you open, and a
+              name is only ever yours to confirm.
+            </Text>
+          )
+        }
+        ListFooterComponent={
+          <Text style={styles.note}>
+            {unmatchedCount} faces are not matched to anyone. Face review
+            proposes them one at a time, and nothing is named until you name it.
+          </Text>
+        }
+        renderItem={({ item }) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, ${item.count} photographs`}
+            style={styles.card}
+            onPress={() =>
+              navigation.navigate("PhotoStateView", {
+                mode: "person",
+                partyId: item.id,
+                personName: item.name,
+              })
+            }
+          >
+            <View
+              style={[styles.avatar, { backgroundColor: tintFor(item.id) }]}
             />
-          </View>
-        ) : (
-          <Text style={styles.empty}>
-            No people yet. Faces are proposed on a photograph you open, and a
-            name is only ever yours to confirm.
-          </Text>
-        )
-      }
-      ListFooterComponent={
-        <Text style={styles.note}>
-          {unmatchedCount} faces are not matched to anyone. Face review proposes
-          them one at a time, and nothing is named until you name it.
-        </Text>
-      }
-      renderItem={({ item }) => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${item.count} photographs`}
-          style={styles.card}
-          onPress={() =>
-            navigation.navigate("PhotoStateView", {
-              mode: "person",
-              partyId: item.id,
-              personName: item.name,
-            })
-          }
-        >
-          <View
-            style={[styles.avatar, { backgroundColor: tintFor(item.id) }]}
-          />
-          <Text numberOfLines={2} style={styles.name}>
-            {item.name}
-          </Text>
-          <Text style={styles.count}>{item.count}</Text>
-        </Pressable>
-      )}
-    />
+            <Text numberOfLines={2} style={styles.name}>
+              {item.name}
+            </Text>
+            <Text style={styles.count}>{item.count}</Text>
+          </Pressable>
+        )}
+      />
+    </PhotosScreen>
   );
 }
 
@@ -245,6 +262,13 @@ const makeStyles = (colors: ThemeColors) =>
     },
     gate: { paddingHorizontal: spacing[3], paddingTop: spacing[3] },
     grid: { paddingBottom: spacing[6], paddingTop: spacing[3] },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      minHeight: 48,
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[2],
+    },
     name: {
       ...t("control"),
       color: colors.text,
@@ -261,4 +285,5 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
+    title: { ...t("title"), color: colors.text, flex: 1 },
   });

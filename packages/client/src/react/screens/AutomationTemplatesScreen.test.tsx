@@ -40,7 +40,7 @@ const templates: CatalogTemplate[] = [
     integrations: ["Slack", "GitHub"],
   },
   {
-    id: "photo-captioner",
+    id: "obligation-extractor",
     name: "Photo captions",
     desc: "Captions and tags new photos.",
     colorKey: "ochre",

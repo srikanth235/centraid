@@ -22,16 +22,11 @@
 import type { BandOwner } from "../../kit/band/band-owner";
 
 /** A destination in the claimed band. `more` opens the sheet, not a route. */
-export type BandDestinationKey =
-  | "library"
-  | "albums"
-  | "people"
-  | "search"
-  | "more";
+export type BandDestinationKey = "library" | "collections" | "search" | "more";
 
 export interface BandDestination {
   key: BandDestinationKey;
-  /** Copy is final (handoff §3.1) — these five strings are the band. */
+  /** Copy is final (handoff §3.1) — these four strings are the band. */
   label: string;
   icon: string;
 }
@@ -57,12 +52,21 @@ export const TARGET_MIN = 44;
 // simply draws it twice, once for the capsule and once for the tab group.
 
 /**
- * Photos' five (§3.1). Exactly these, in this order, on every compact surface.
+ * Photos' four (§3.1, issue #712). Exactly these, in this order, on every
+ * compact surface: Library first — the timeline is what a member reaches for
+ * most, and the band is judged by how few taps that costs — then Collections,
+ * then Search, then More. People is not a tab here: it is reached from
+ * Collections' own People section (`PhotosCollectionsView.tsx`'s `open()`)
+ * and from the Library shelf list's People row, both of which land on the
+ * pushed `PhotosPeople` route rather than a band destination.
  */
 export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
   { key: "library", label: "Library", icon: "image" },
-  { key: "albums", label: "Albums", icon: "Layers" },
-  { key: "people", label: "People", icon: "users" },
+  // Collections, not Albums. The destination behind it holds every shelf
+  // Photos has — albums, people, places, favorites, sharing, duplicates,
+  // trash — so "Albums" named one section of it and hid the rest behind the
+  // More sheet. See `PhotosCollectionsView.tsx`.
+  { key: "collections", label: "Collections", icon: "Layers" },
   { key: "search", label: "Search", icon: "search" },
   { key: "more", label: "More", icon: "more-vertical" },
 ];
@@ -74,15 +78,9 @@ export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
  * outside this union fails to typecheck right here, before it ever reaches
  * the router.
  */
-export type PhotosMoreRowKey =
-  | "sharing"
-  | "favorites"
-  | "places"
-  | "duplicates"
-  | "trash"
-  | "backup";
+export type PhotosMoreRowKey = "backup";
 
-/** What the More sheet carries (§3.1) — the shelves the five cannot hold. */
+/** What the More sheet carries (§3.1) — the shelves the four cannot hold. */
 export interface MoreRow {
   key: PhotosMoreRowKey;
   label: string;
@@ -99,36 +97,36 @@ export interface MoreRow {
 }
 
 /**
- * SHARING IS BACK; IMPORT IS STILL NOT (issue #712, A5).
+ * ONE ROW. What this sheet is FOR, after Collections.
  *
- * This table used to carry neither, and the comment here said to add each one
- * "the moment their surfaces ship — not before". Sharing's surface ships in
- * this pass (`SharingShelf.tsx`), so its row is here, FIRST, exactly where the
- * handoff puts it (proto:4980-4983). Import still has no phone surface — no
- * upload / drag / capture flow (proto:3978) — so it is still absent. A missing
- * row is honest; a row that lies about its destination is not, and
- * `resolveMoreRowRoute` below fails to TYPECHECK on a key with no case.
+ * It used to carry six — Sharing, Favorites, Places, Duplicates, Trash and
+ * Backup — because the band could hold five destinations and Photos has more
+ * shelves than that. Collections (`PhotosCollectionsView.tsx`) is now the
+ * landing surface and carries every one of those shelves as a named section
+ * with a live count, on screen, without a sheet in the way. Keeping the rows
+ * here as well would mean two doors to each shelf, of which one is hidden —
+ * and two places to keep their labels and counts honest.
  *
- * `Photo access` is gone from this table (P13). It was never one of the
- * handoff's rows: it existed because the phone's grant belongs to an operating
- * system and a refused grant otherwise left an empty grid with no sentence.
- * The sentence now lives IN the grid's own slot (`PhotoAccessPanel.tsx`, via
- * `photoAccessTakesOverTimeline`), which is where the question is asked — so
- * the buried row that answered it somewhere else is not needed and would be a
- * second, worse route to the same content.
+ * So the sheet keeps exactly what Collections does not carry:
+ *
+ *   - **Backup**, which is not a shelf at all. It is a cross-stack link to a
+ *     FRAME screen (issue #712 B2) about whether this device's bytes have
+ *     left it — a policy that governs Docs' scans and Notes' attachments too.
+ *
+ * Tile size used to be rendered directly by this sheet too; it has since
+ * moved on to the Library's own header menu (`photos-library-menu.ts`),
+ * reached from the header chip rather than from here — see that module's own
+ * header comment.
+ *
+ * `Import` was never here (no phone surface ships one) and `Photo access` was
+ * removed in P13, because the grant's sentence belongs in the grid's own slot
+ * where the question is actually asked.
  */
 export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
-  { key: "sharing", label: "Sharing", icon: "share" },
-  { key: "favorites", label: "Favorites", icon: "heart" },
-  { key: "places", label: "Places", icon: "Pin" },
-  { key: "duplicates", label: "Duplicates", icon: "copy" },
-  { key: "trash", label: "Trash", icon: "trash-2" },
   // "Backup", not "Storage" (issue #712, B1). The screen it opens has always
   // been titled "Backup health" and has always been about whether this device's
   // photographs have left it — the row's old label named the noun the screen
-  // does not discuss. The KEY moved with the label rather than being left as a
-  // stale `storage`: this union is closed and its every reference is in this
-  // package, so a half-rename would have been the only cost of keeping it.
+  // does not discuss.
   { key: "backup", label: "Backup", icon: "archive" },
 ];
 
@@ -153,37 +151,25 @@ export const PHOTOS_MORE_FOOT =
  *      timeline engine, expo-notifications and expo-haptics — none of which
  *      this routing rule depends on.
  */
-export type MoreRowRoute =
-  | { screen: "PhotoStateView"; params: { mode: "trash" | "favorites" } }
-  /**
-   * A CROSS-STACK destination (issue #712, B2). Backup health is a frame
-   * screen now — it lives in Settings beside Phone storage, because nothing on
-   * it is about photographs: the policy it edits governs Docs' scans and
-   * Notes' attachments too. Photos keeps a deep link to it rather than a copy,
-   * the same way `PhotoLightbox`'s `onParked` reaches Approvals.
-   */
-  | { screen: "Settings"; params: { screen: "BackupHealth" } }
-  | { screen: "DuplicatesShelf" | "PlacesView" | "SharingShelf" };
+/**
+ * A CROSS-STACK destination (issue #712, B2), and now the only one. Backup
+ * health is a frame screen — it lives in Settings beside Phone storage,
+ * because nothing on it is about photographs: the policy it edits governs
+ * Docs' scans and Notes' attachments too. Photos keeps a deep link to it
+ * rather than a copy, the same way `PhotoLightbox`'s `onParked` reaches
+ * Approvals.
+ *
+ * Still a union of one rather than a bare object type: the shape is what makes
+ * `resolveMoreRowRoute`'s `never` check load-bearing, and a second row added
+ * to this sheet should have to widen this deliberately.
+ */
+export type MoreRowRoute = {
+  screen: "Settings";
+  params: { screen: "BackupHealth" };
+};
 
 export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
   switch (key) {
-    case "trash":
-      return { screen: "PhotoStateView", params: { mode: "trash" } };
-    case "favorites":
-      return { screen: "PhotoStateView", params: { mode: "favorites" } };
-    case "duplicates":
-      // The SHELF, not the review (proto:4436 vs proto:4291). The row's meta
-      // is a cluster count, so the surface it opens has to be the one that
-      // shows clusters; the review is one control away, from the shelf's own
-      // head, exactly as the prototype's `Review duplicates` primary is.
-      return { screen: "DuplicatesShelf" };
-    case "sharing":
-      return { screen: "SharingShelf" };
-    case "places":
-      // Cards first (proto:4197): the More row opens the place-cards shelf,
-      // not the map directly. The map is one control away, from the shelf's
-      // own head (`PlacesView` → `PlacesMap`).
-      return { screen: "PlacesView" };
     case "backup":
       return { screen: "Settings", params: { screen: "BackupHealth" } };
     default: {

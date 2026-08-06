@@ -9,9 +9,16 @@
  * action's `input` schema is `additionalProperties: false`, so it cannot be
  * spoofed). It is the CONSENT SCOPE: this surface asks a face-detection
  * question and receives a face-detection answer, so the queue row it writes
- * must be drainable by face-proposer ALONE. Before the column existed the
+ * must be drainable by a face detector ALONE. Before the column existed the
  * same untagged row was picked up by every enabled enricher, which turned one
  * consent into consent for captioning, screenshot OCR and the rest.
+ *
+ * NOTHING DRAINS THIS ROW TODAY. The `face-proposer` automation that used to
+ * was deleted in issue #712 — face detection is moving into the Photos app
+ * itself — so a request queued here waits, tagged and un-drained, until that
+ * producer exists. It is queued rather than refused because the tag is the
+ * consent record: the member's answer is what this action is for, and the
+ * work it authorizes is the part that has not shipped.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */

@@ -186,6 +186,7 @@ vi.mock(
     ({
       SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
         React.createElement("div", {}, children),
+      useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     }) as never
 );
 vi.mock(

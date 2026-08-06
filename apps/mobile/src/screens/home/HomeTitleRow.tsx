@@ -1,4 +1,5 @@
-// Home's title row: the route's name, and the two things you can do from it.
+// Home's title row: the route's name, and the rule the scroll region starts
+// under.
 //
 // "Home" is set in the TITLE role (appNameStyle, handoff :5536 — 500 20px/26px
 // sans), not the display serif. The display face is reserved for a route's own
@@ -6,94 +7,43 @@
 // and Home's own name is chrome, the same weight class the app bar draws every
 // other route's name in.
 //
-// The two controls beside it are the view's primacy statement, and there is
-// exactly one of them: **Search everything** is the single FILLED ink element
-// on Home (invariant 3 — primacy is carried by fill-versus-outline alone, never
-// by a hue), and **All apps** is outlined beside it. That ordering is an
-// argument: on a screen made of previews, the thing you most often want is the
-// object you are thinking of, not the app that happens to hold it.
+// It carries NO controls. It used to hold two — a filled "Search everything"
+// and an outlined "All apps" — and both were the second copy of a control the
+// frame already offers: Search is the magnifier in the vault lockup directly
+// above this row (VaultHeader.tsx), and All apps is the band's **More** tab
+// directly below it (HomeBand.tsx). Two chips spanning the width of the screen
+// bought nothing but a shorter first preview, on the one screen whose whole
+// argument is that you see your things before you see the apps holding them.
 //
-// Both are bounded controls rather than bare text. Hover is nothing on a phone,
-// so a word that acts has to look like a control before it is touched.
+// So the filled-ink budget this row used to spend is now unspent on Home. That
+// is deliberate: on a screen made of previews, the loudest thing should be a
+// member's own photograph, not a word.
 
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-
-import { HOME_SEARCH_EVERYTHING } from "@centraid/client/home-copy";
-import { radii } from "@centraid/design";
+import { StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
-import { borders, metrics, pageMargin, t, useTheme } from "../../kit/theme";
+import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const HOME_TITLE = "Home";
-export const ALL_APPS_LABEL = "All apps";
 
-export interface HomeTitleRowProps {
-  onAllApps: () => void;
-  onSearch: () => void;
-}
-
-export default function HomeTitleRow({
-  onAllApps,
-  onSearch,
-}: HomeTitleRowProps): React.JSX.Element {
+export default function HomeTitleRow(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.row}>
       <Text style={styles.title}>{HOME_TITLE}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={ALL_APPS_LABEL}
-        onPress={onAllApps}
-        style={({ pressed }) => [styles.outlined, pressed && styles.dim]}
-      >
-        <Text style={styles.outlinedLabel}>{ALL_APPS_LABEL}</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={HOME_SEARCH_EVERYTHING}
-        onPress={onSearch}
-        style={({ pressed }) => [styles.filled, pressed && styles.dim]}
-      >
-        <Text style={styles.filledLabel}>{HOME_SEARCH_EVERYTHING}</Text>
-      </Pressable>
     </View>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // A press state on the leaf, not a container opacity: both controls are a
-    // single text leaf on a single ground, so the ground is what moves.
-    dim: { backgroundColor: colors.bgPress },
-    // The one filled ink element on this view. Ink, never a hue — if the shell
-    // spends no colour, every colour on Home belongs to an app.
-    filled: {
-      alignItems: "center",
-      backgroundColor: colors.text,
-      borderRadius: radii.md,
-      justifyContent: "center",
-      minHeight: metrics.control,
-      paddingHorizontal: 24,
-    },
-    // The page colour on ink, not white — `--text-inv` is the paper.
-    filledLabel: { ...t("control"), color: colors.onAccent },
-    outlined: {
-      alignItems: "center",
-      borderColor: colors.lineStrong,
-      borderRadius: radii.md,
-      borderWidth: borders.hairline,
-      justifyContent: "center",
-      minHeight: metrics.control,
-      paddingHorizontal: 24,
-    },
-    outlinedLabel: { ...t("control"), color: colors.text },
-    // Fixed chrome now (moved out of the ScrollView, see Home.tsx), so this
-    // row owns its own horizontal margin and the rule the handoff's app bar
-    // draws beneath it (`appBarStyle`, :5532–5533) — the same rule the
-    // prototype's scroll region starts flush under.
+    // Fixed chrome (moved out of the ScrollView, see Home.tsx), so this row
+    // owns its own horizontal margin and the rule the handoff's app bar draws
+    // beneath it (`appBarStyle`, :5532–5533) — the same rule the prototype's
+    // scroll region starts flush under.
     row: {
       alignItems: "center",
       borderBottomColor: colors.line,

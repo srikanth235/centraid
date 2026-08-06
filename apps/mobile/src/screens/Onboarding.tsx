@@ -10,12 +10,10 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text, TextInput } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
@@ -133,7 +131,7 @@ export default function Onboarding({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+    <TopSafeArea style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -166,7 +164,7 @@ export default function Onboarding({
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

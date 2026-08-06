@@ -35,6 +35,20 @@ const LIGHTBOX_SRC = fs.readFileSync(
   path.resolve(import.meta.dirname, "PhotoLightbox.tsx"),
   "utf8"
 );
+// The chip/capsule restyle (#712) moved the target itself into the chrome
+// module, so the hint and the disabled INK now live there while the visible
+// reason and the guard stay with the toolbar that owns the grant.
+const CHROME_SRC = fs.readFileSync(
+  path.resolve(import.meta.dirname, "PhotoLightboxChrome.tsx"),
+  "utf8"
+);
+// The `···` chip's anchored menu (#712) is a THIRD place this vault's
+// read-only truth can be stated — its one writing row, Add to Album, has to
+// import the same constant rather than re-typing a fourth phrasing of it.
+const MENU_SRC = fs.readFileSync(
+  path.resolve(import.meta.dirname, "viewer-menu.ts"),
+  "utf8"
+);
 
 describe("READ_ONLY_VAULT_REASON — one sentence for one truth", () => {
   it("names the vault AND what cannot be written into it — not a stub", () => {
@@ -43,11 +57,18 @@ describe("READ_ONLY_VAULT_REASON — one sentence for one truth", () => {
     );
   });
 
-  it("is what both PhotoLightboxToolbar and PhotoLightbox import — never re-typed", () => {
+  it("is what PhotoLightboxToolbar, PhotoLightbox and the overflow menu import — never re-typed", () => {
     expect(TOOLBAR_SRC).toMatch(
       /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
     );
     expect(LIGHTBOX_SRC).toMatch(
+      /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
+    );
+    // The menu's one writing row (Add to Album) states the same truth when
+    // the grant refuses it — see `viewer-menu.ts`'s own header for why it
+    // rides in the row's label rather than a second visible line the kit's
+    // `MenuActionRow` has no slot for.
+    expect(MENU_SRC).toMatch(
       /import\s*\{[^}]*READ_ONLY_VAULT_REASON[^}]*\}\s*from\s*"\.\/viewer-model"/u
     );
   });
@@ -82,22 +103,43 @@ describe("the viewer bottom bar states the reason inline, never only in a hint (
   });
 
   it("still offers accessibilityHint too — belt and suspenders, not a replacement", () => {
-    expect(TOOLBAR_SRC).toMatch(/accessibilityHint=\{on \? undefined : why\}/u);
+    // The toolbar hands the reason down as `hint`; the chrome target is what
+    // spends it on `accessibilityHint`, and only while the control is refused.
+    expect(TOOLBAR_SRC).toMatch(/\bhint=\{why\}/u);
+    expect(CHROME_SRC).toMatch(
+      /accessibilityHint=\{disabled \? hint : undefined\}/u
+    );
   });
 
   it("keeps naming all five actions — the phone rearranges the viewer, it does not water it down", () => {
     expect(VIEWER_BOTTOM_ACTIONS).toHaveLength(5);
   });
+
+  it("names every target even though the chip/capsule row draws no words", () => {
+    // Dropping the DRAWN labels is only allowed because the accessible name is
+    // still read from `action.label` — the very field they were drawn from.
+    expect(TOOLBAR_SRC).toMatch(/label=\{action\.label\}/u);
+    expect(CHROME_SRC).toMatch(/accessibilityLabel=\{label\}/u);
+  });
+
+  it("greys a refused target with the STAGE's soft ink, never the page's disabled ink", () => {
+    // `--text-disabled` is mixed against paper; on the stage it reads as an
+    // absent control rather than a refused one, and a control that cannot be
+    // seen cannot be asked why.
+    expect(CHROME_SRC).toMatch(/disabled\s*\?\s*colors\.onStageSoft/u);
+    expect(CHROME_SRC).not.toMatch(/colors\.textDisabled/u);
+  });
 });
 
 describe("a disabled viewer control's handler does not fire (§6, §18)", () => {
-  it("guards onPress with the same `on` flag Pressable's `disabled` reads, not the handler alone", () => {
+  it("guards onPress with the same `on` flag the target's `disabled` reads, not the handler alone", () => {
     // Defense in depth, matching the web selection bar's
     // `buildSelectionActions` no-op scrub: `disabled={!on}` is what a tap
     // respects; this guard is what stops `onPress` itself — called directly,
     // bypassing the prop — from reaching a write a read-only grant refused.
+    expect(TOOLBAR_SRC).toMatch(/disabled=\{!on\}/u);
     expect(TOOLBAR_SRC).toMatch(
-      /onPress=\{\(\) => \{\s*if \(!on\) return;\s*run\[action\.id\]\(\);\s*\}\}/u
+      /onPress=\{\(\) => \{\s*if \(!on\) return;\s*run\[id\]\(\);\s*\}\}/u
     );
   });
 });

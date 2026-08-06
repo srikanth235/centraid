@@ -788,6 +788,62 @@ They are recorded here because they were found and fixed under this issue.
 | 5 | Face review's crop and source photograph were empty boxes for the same reason — the member was asked to name a face they could not see. | Same hook. |
 | 6 | Settings' PAIRED branch offered "Pair another" by camera only. The paste field existed solely in the unpaired branch, so adding a second gateway from a simulator or a headless VPS meant unpairing (or reinstalling) first — throwing away a working link to add one. | `TicketPasteField` extracted; both branches now offer both roads. |
 | 7 | Purging the demo scenario reported `sync.import_batch` blocked for ever, because the seed stages face proposals through the ordinary publisher road and nothing cleared the batch's own line items. | `DEPENDENT_ROWS` entry in `vault/gateway/demo.ts`. |
+| 8 | The Search destination rendered TWO `ReplicaStatusBar`s — `PhotosHome` draws one for every band destination and `PhotosSearchView` drew its own — and being mounted at different times they disagreed: "Updated just now" six points above "Updated 11m ago". | Removed from the view; the standalone route keeps its own, since it has no `PhotosHome` above it. |
+| 9 | "Back up to the gateway" over a selection with no DEVICE copy filtered to an empty run, transferred nothing, and fell through to the SUCCESS haptic — a confirmation buzz for work that never happened. | `nothingToBackUpMessage`, in a copy module with no imports so the sentence is assertable without a renderer. |
+| 10 | Home's Photos mosaic asked for the same `?variant=thumb` and had no failure state at all, so it sat on skeleton ground for ever. | `MosaicCell` + the shared ladder; `TilePhoto` gained `originalUri`. |
+| 11 | **Every screen in the app** is presented with `COVER_OPTIONS` (a native `fullScreenModal`), and `<SafeAreaView edges>` resolves to a ZERO inset under that presentation — so 26 screens drew their header through the status bar. Face review's own title, "Face review", was not merely overlapping: it was invisible. | `kit/components/TopSafeArea.tsx` — same prop shape, implemented with `useSafeAreaInsets`, which does report the real inset (and is why Photos' own cover screens always looked right). Seeding the provider with `initialWindowMetrics` was tried first and measured NOT to fix it; that is recorded in the component header so it is not retried. |
+
+### Chrome removed on review (same pass)
+
+Four surfaces were carrying a control or a sentence that another control or
+sentence on the same screen already carried. None of these were bugs; all four
+were rent charged against the member's own content.
+
+| Surface | What was there | What it is now |
+| --- | --- | --- |
+| Home's title row | A filled **Search everything** and an outlined **All apps**, spanning the width directly above the first preview | Nothing. Search is the magnifier in the vault lockup one row above; All apps is the band's **More** tab one row below. Home now spends no filled ink at all — on a screen made of previews, the loudest thing should be a photograph. |
+| Photos' toolbar | `18 photographs`, immediately above `AUGUST 2026  9 photographs` and `Wed, 5 Aug  2` — three mono counts in the first three rows, none counting the same thing | Gone. The timeline's own headers state every count in the place the photographs they describe are; the total was the one with no photographs under it. |
+| Photos' toolbar (the rest of it) | A permanent 44pt row holding one tile-size stepper | The stepper moved into the **More** sheet as `Tile size`, and the row went with it. The grid already takes the same preference by pinch (§4.2). It is drawn as a bounded stepper rather than a meta value, and does NOT dismiss the sheet — a stepper you may press once is not a stepper. `PhotosToolbar.tsx` is deleted. |
+| `ReplicaStatusBar` (≈20 screens) | A standing `Updated 10m ago` with a `Refresh` button, in the settled case | Nothing in the settled case. `Refresh` was a third way to do what pull-to-refresh does; freshness is a fact about the vault, and Home already carries it ambiently (`HomeStatusLine`). Offline, asleep, syncing, first-sync progress, diverging sources, pending changes and out-of-room all render exactly as before — and now have the row to themselves. The action label survives only for the states where pulling would not help ("Wake help", "Check network", "Sync now"). |
+
+### The photos-domain enrichers are deleted
+
+Asking "did you test on-device face detection?" turned up that there is no such
+thing. The only face detector in the repo was the `face-proposer` automation,
+whose whole method is `ctx.agent` — a gateway-lane vision turn. But the tier
+that makes Photos' "Run on this device" answer available is `device`, and
+`device` means *no gateway-lane work* (`packages/vault/src/enrich/policy.ts`:
+the legacy `local` maps DOWN to it precisely because `local` meant "no model
+turn"). So the one automation that could drain a `capability: faces` request
+was refused by the very gate that offered the button — a promise the runtime
+could not keep in either direction.
+
+Removed, with their registrations, gallery rows, health-probe ids and
+behaviour suites:
+
+| Automation | What it did |
+| --- | --- |
+| `face-proposer` | Proposed face regions from a vision turn |
+| `photo-captioner` | Captioned and tagged photographs from a vision turn |
+| `screenshot-extractor` | Read photographed receipts into staged ledger rows |
+| `trip-albums` | Clustered photographs into trip albums by time gap |
+
+That work becomes the Photos app's own. The consent gate and the
+`request-enrichment` action stay — the tag a member's answer writes IS the
+consent record — but `actions/request-enrichment.ts` now states plainly that
+nothing drains the row today, rather than naming a producer that no longer
+exists. Touched: `index.json` (35 → 31 templates) + a regenerated
+`manifest.json`, `ENRICHER_AUTOMATION_IDS`, both v0 gallery lists (8 → 6), and
+the enricher-template fixture set. Fixtures that merely *named* a deleted
+automation were renamed to a synthetic `face-finder`, so no test claims a
+shipped template that isn't there.
+
+Engines verified end to end on the seeded vault: the **triage verb** writes
+`confirmed` / `rejected` / `dismissed` and Skip writes nothing (checked in SQL
+after each tap); the **consent gate** offers the on-device tier and the
+enrichment answer lands; **search** returns caption hits with the honest
+"searched the whole replica on this device" foot; the **face crop** geometry
+isolates the correct face in a two-person frame.
 
 The enrichment tier also has a trap worth recording: `readEnrichSettings` reads
 the JSON settings bag, but APPS read the mirrored `enrich_policy` table. Editing

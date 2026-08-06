@@ -14,9 +14,9 @@
 
 import React from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Text } from "../components/NativeText";
+import TopSafeArea from "../components/TopSafeArea";
 import { borders, radii, spacing, t, useTheme } from "../theme";
 import type { ShareTargetCandidate } from "./use-share-target";
 
@@ -40,7 +40,7 @@ export default function ShareTargetPicker({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={[styles.title, { color: colors.text }]}>
@@ -73,7 +73,7 @@ export default function ShareTargetPicker({
             </Text>
           </Pressable>
         ))}
-      </SafeAreaView>
+      </TopSafeArea>
     </Modal>
   );
 }

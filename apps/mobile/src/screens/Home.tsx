@@ -484,10 +484,7 @@ export default function HomeScreen({
           app bar carries its own hairline rule (`appBarStyle`, :5532–5533),
           which is why the prototype's scrollbar starts below that rule
           rather than under the vault lockup. */}
-      <HomeTitleRow
-        onAllApps={() => setAllAppsOpen(true)}
-        onSearch={() => setSearchOpen(true)}
-      />
+      <HomeTitleRow />
 
       <ScrollView
         contentContainerStyle={styles.content}

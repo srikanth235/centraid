@@ -40,7 +40,7 @@ import type {
 export type PhotosStackParamList = {
   // `destination` names which of the claimed band's shelves to land on. The
   // band is rendered on every Photos surface (`PhotosScreen.tsx`), and its
-  // four shelf destinations all live on this one screen — so a band tap from
+  // three shelf destinations all live on this one screen — so a band tap from
   // a pushed route navigates here WITH the shelf named rather than pushing a
   // second copy of anything. Optional, and `more` never reaches it: More is a
   // sheet, not a route.
@@ -52,7 +52,7 @@ export type PhotosStackParamList = {
   // passes a `BandDestinationKey` straight into this param — a destination
   // added to the band and forgotten here fails to typecheck there.
   PhotosHome:
-    | { destination?: "library" | "albums" | "people" | "search" }
+    | { destination?: "library" | "collections" | "search" }
     | undefined;
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
@@ -70,6 +70,14 @@ export type PhotosStackParamList = {
   PlacesMap: undefined;
   PlaceDetail: { placeKey: string; placeName: string };
   FaceReview: undefined;
+  // The people roster (issue #712). It used to be a band destination rendered
+  // inline by `PhotosHome`; now that People is off the band, it is a pushed
+  // route like every other shelf behind Collections — reached from Collections'
+  // own People section heading (`PhotosCollectionsView.tsx`'s `open()`) and from
+  // the Library shelf list's People row alongside `FaceReview`, which this route
+  // keeps distinct from: `PhotosPeople` browses confirmed identities,
+  // `FaceReview` triages proposed ones.
+  PhotosPeople: undefined;
   // Duplicates is TWO surfaces, as the v4 prototype has it: the shelf lists
   // the clusters (proto:4436), and the review works one cluster at a time
   // (proto:4291). The More sheet's row lands on the shelf; the shelf's own

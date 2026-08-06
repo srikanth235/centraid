@@ -25,6 +25,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
   SafeAreaView,
+  initialWindowMetrics,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
@@ -120,6 +121,9 @@ const DuplicatesShelf = lazyScreen(
   () => import("./src/apps/photos/DuplicatesShelf")
 );
 const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
+const PhotosPeopleView = lazyScreen(
+  () => import("./src/apps/photos/PhotosPeopleView")
+);
 const PhotoPicker = lazyScreen(() => import("./src/apps/photos/PhotoPicker"));
 const PhotoLightbox = lazyScreen(
   () => import("./src/apps/photos/PhotoLightbox")
@@ -217,6 +221,7 @@ function PhotosNavigator(): React.JSX.Element {
       <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
       <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
       <PhotosStack.Screen name="FaceReview" component={FaceReview} />
+      <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
       <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
       <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
       <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
@@ -440,7 +445,12 @@ export default function App(): React.JSX.Element | null {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
+        {/* Seeded with the insets the native side already measured at launch,
+            so the first frame is laid out correctly instead of at zero until
+            the first JS layout pass reports back. NOTE: this alone does NOT
+            fix the cover screens' top inset — that was measured and it does
+            not; see `kit/components/TopSafeArea.tsx`. */}
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <View
             style={{ backgroundColor: colors.bg, flex: 1 }}
             onLayout={onReady}

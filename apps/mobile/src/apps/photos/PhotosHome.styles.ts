@@ -13,8 +13,21 @@
 
 import { StyleSheet } from "react-native";
 
-import { pageMargin, t } from "../../kit/theme";
+import {
+  BAND_BORDER,
+  BAND_HEIGHT,
+  BAND_INSET,
+  BAND_RADIUS,
+  BAND_TOP_GAP,
+} from "../../kit/band-surface";
+import { family, pageMargin, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
+import { BAND_CAPSULE_SIZE } from "./photos-band";
+
+/** The gap between the selection bar's plates — the same value the band's own
+ *  two plates sit apart by (`PhotosBand.tsx`'s `PLATE_GAP`), so the bar this
+ *  replaces and the bar it becomes read as the same piece of furniture. */
+const SELECTION_PLATE_GAP = 8;
 
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -51,7 +64,66 @@ export const makeStyles = (colors: ThemeColors) =>
       width: 44,
     },
     safe: { flex: 1 },
-    selectionCount: { ...t("mono"), color: colors.text },
+    // Select is a WORD, not a 44-square icon target (issue #712) — so it takes
+    // the same 44pt height and the text's own width plus a gutter, rather than
+    // being squeezed into an icon's box.
+    selectChip: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      paddingHorizontal: 8,
+    },
+    selectChipText: { ...t("control"), color: colors.text },
+    // SELECTION BAR (iOS Photos parity, issue #712). Ground it takes over from
+    // the band while a selection is live — same plate anatomy as
+    // `PhotosBand.tsx`'s own two plates (opaque `bgElev`, `lineStrong` edge,
+    // `BAND_RADIUS` corners, held BAND_INSET off the stage edges) rather than
+    // a new kind of bar, because the thing the member sees replacing the band
+    // has to read as the SAME piece of furniture wearing different labels.
+    // Unlike the band, this row is not `flex:none` below the scroll region
+    // itself — PhotosHome's `<View style={styles.body}>` is already the sole
+    // `flex:1` sibling above whichever foot renders, band or bar, so no
+    // second reservation is needed here.
+    selectionBarRow: {
+      alignItems: "stretch",
+      backgroundColor: "transparent",
+      flexDirection: "row",
+      gap: SELECTION_PLATE_GAP,
+      minHeight: BAND_HEIGHT,
+      paddingHorizontal: BAND_INSET,
+      paddingTop: BAND_TOP_GAP,
+    },
+    // The left/right round-ish chips — Add to album and Trash. Square footed
+    // at the capsule's own 52pt so the two rows (band, bar) line up exactly
+    // when a member's thumb moves from one to the other between taps.
+    selectionChip: {
+      alignItems: "center",
+      backgroundColor: colors.bgElev,
+      borderColor: colors.lineStrong,
+      borderRadius: BAND_RADIUS,
+      borderWidth: BAND_BORDER,
+      justifyContent: "center",
+      width: BAND_CAPSULE_SIZE,
+    },
+    // The centre plate: the count, and only the count. `flex:1` the same way
+    // the band's own tab-group plate is, so the three plates share the row
+    // exactly as the band's two do.
+    selectionCountPlate: {
+      alignItems: "center",
+      backgroundColor: colors.bgElev,
+      borderColor: colors.lineStrong,
+      borderRadius: BAND_RADIUS,
+      borderWidth: BAND_BORDER,
+      flex: 1,
+      justifyContent: "center",
+    },
+    // Bold is the heaviest weight the ramp carries (`sansMedium`, see
+    // `kit/theme/index.ts`) — there is no bolder rung to reach for.
+    selectionCountText: {
+      ...t("control"),
+      color: colors.text,
+      fontFamily: family.sansMedium,
+    },
     // The title starts at the page margin now that no ☰ occupies the leading
     // slot; `header`'s own `paddingHorizontal: pageMargin` is that margin, so
     // the title needs no margin of its own — it used to add `spacing[2]` on

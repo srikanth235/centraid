@@ -73,9 +73,9 @@ export interface PhotosSelectionProps {
 }
 
 export interface PhotosScreenProps {
-  /** Which of the app's five this surface belongs under. A More-sheet
+  /** Which of the app's four this surface belongs under. A More-sheet
    *  destination (Trash, Favorites, Duplicates, Storage) is `more`: the sheet
-   *  is how a member got here, and marking one of the other four would point
+   *  is how a member got here, and marking one of the other three would point
    *  at a shelf they are not looking at. */
   current: BandDestinationKey;
   children: React.ReactNode;
@@ -124,13 +124,10 @@ export default function PhotosScreen({
 
   const onMoreRow = (key: PhotosMoreRowKey): void => {
     setMoreOpen(false);
+    // Cross-stack (B2) — Backup health lives in frame Settings now, and it is
+    // the only row this sheet still carries (see `photos-band.ts`).
     const route = resolveMoreRowRoute(key);
-    if (route.screen === "PhotoStateView")
-      navigation.navigate("PhotoStateView", route.params);
-    // Cross-stack (B2) — Backup health lives in frame Settings now.
-    else if (route.screen === "Settings")
-      navigation.navigate("Settings", route.params);
-    else navigation.navigate(route.screen);
+    navigation.navigate(route.screen, route.params);
   };
 
   return (

@@ -1,6 +1,5 @@
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 // THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8, prototype
 // `s==='enrich'`).
@@ -40,6 +39,7 @@ import type { AnswerAvailability } from "@centraid/blueprints/apps/photos/enrich
 import { ConsentGate } from "../../kit/components/ConsentGate";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./EnrichmentConsent.styles";
 
@@ -75,10 +75,7 @@ export default function EnrichmentConsent({
 }: EnrichmentConsentProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.toneMat }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Close face detection consent"
@@ -116,6 +113,6 @@ export default function EnrichmentConsent({
           onChooseNet={onChooseCloud}
         />
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

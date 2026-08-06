@@ -17,11 +17,17 @@ import {
 } from "./photos-band";
 
 describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
-  test("Photos claims exactly Library · Albums · People · Search · More", () => {
+  test("Photos claims exactly Library · Collections · Search · More", () => {
+    // Library leads (issue #712): the timeline is what a member reaches for
+    // most, so it takes the first slot rather than the second. Collections
+    // still replaced Albums — it is the landing destination, and "Albums"
+    // named one of the eight sections the page actually holds while the other
+    // seven sat behind More — but it no longer opens the band. People is off
+    // the band entirely: it is reached from Collections' own People section
+    // and the Library shelf list instead of a fifth tab.
     expect(PHOTOS_BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
       "Library",
-      "Albums",
-      "People",
+      "Collections",
       "Search",
       "More",
     ]);
@@ -34,25 +40,20 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
     expect(() => resolveBand("app")).not.toThrow();
   });
 
-  test("the More sheet carries the shelves the five cannot hold", () => {
-    // Sharing is FIRST (proto:4980-4983) and is here at all only because its
-    // surface shipped in issue #712 (A5) — the table's own comment made that
-    // the condition. Import is still absent: no phone flow exists, and a row
-    // with no destination is a lying label, not a missing feature.
+  test("the More sheet carries only what Collections does not", () => {
+    // ONE row. Every shelf this table used to list — Sharing, Favorites,
+    // Places, Duplicates, Trash — is a named section of Collections now, with
+    // its own live count, on screen. A row here as well would be a second,
+    // hidden door to each, and a second place to keep its label honest.
     //
-    // "Backup", not "Storage" (#712 B1): the screen it opens is titled "Backup
-    // health" and is about whether this device's photographs have left it.
+    // Backup survives because it is NOT a shelf: it is a cross-stack link to a
+    // frame screen about whether this device's bytes have left it, and that
+    // policy governs Docs' scans and Notes' attachments too. "Backup", not
+    // "Storage" (#712 B1) — the screen it opens is titled "Backup health".
     //
     // "Photo access" is gone (#712 P13) — permission is a takeover of the
     // timeline's own slot now, not a buried row to a pushed screen.
-    expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual([
-      "Sharing",
-      "Favorites",
-      "Places",
-      "Duplicates",
-      "Trash",
-      "Backup",
-    ]);
+    expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual(["Backup"]);
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain("Storage");
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain(
       "Photo access"

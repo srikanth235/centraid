@@ -172,7 +172,9 @@ describe("demo-seed", () => {
       )
     ).toBe(8);
     expect(
-      count("SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL")
+      count(
+        "SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL"
+      )
     ).toBe(0);
     // Two people to name a confirmed face as; face review never invents one.
     expect(

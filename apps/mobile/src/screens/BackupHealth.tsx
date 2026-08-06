@@ -47,11 +47,11 @@ import {
   Switch,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../kit/replica/useReplicaRefresh";
@@ -202,7 +202,7 @@ export default function BackupHealth({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Settings"
@@ -516,6 +516,6 @@ export default function BackupHealth({
           </Pressable>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

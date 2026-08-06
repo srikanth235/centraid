@@ -170,7 +170,12 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "6QcKHQTqdn9pZme4V3x1Z3dvUvQF",
     phash: "303878783ce480c0",
-    faces: [{ bbox: { x: 0.3374, y: 0.1795, w: 0.4511, h: 0.4743 }, confidence: 0.94 }],
+    faces: [
+      {
+        bbox: { x: 0.3374, y: 0.1795, w: 0.4511, h: 0.4743 },
+        confidence: 0.94,
+      },
+    ],
   },
   {
     file: "marco-workshop.png",
@@ -181,7 +186,12 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "oSgKDQTod496lmfIV3x1ZzeAdQSI",
     phash: "0070706c70e88080",
-    faces: [{ bbox: { x: 0.2778, y: 0.1769, w: 0.4667, h: 0.4907 }, confidence: 0.94 }],
+    faces: [
+      {
+        bbox: { x: 0.2778, y: 0.1769, w: 0.4667, h: 0.4907 },
+        confidence: 0.94,
+      },
+    ],
   },
   {
     file: "ana-trailhead.png",
@@ -192,7 +202,9 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "pecJHQTXeH+KdmjXSIxlZ0iJgIAI",
     phash: "0070704454c88080",
-    faces: [{ bbox: { x: 0.2478, y: 0.1909, w: 0.4822, h: 0.507 }, confidence: 0.94 }],
+    faces: [
+      { bbox: { x: 0.2478, y: 0.1909, w: 0.4822, h: 0.507 }, confidence: 0.94 },
+    ],
   },
   {
     file: "marco-harbor-wall.png",
@@ -203,7 +215,12 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "IQgKHQjZd495lmfIV3tmaDaAZwN4",
     phash: "0030705064ec80c0",
-    faces: [{ bbox: { x: 0.3191, y: 0.2058, w: 0.4433, h: 0.4661 }, confidence: 0.94 }],
+    faces: [
+      {
+        bbox: { x: 0.3191, y: 0.2058, w: 0.4433, h: 0.4661 },
+        confidence: 0.94,
+      },
+    ],
   },
   {
     file: "ana-and-marco-table.png",
@@ -214,7 +231,13 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "pCgODQKZp3+IuHe4d4lIWFDuBHRO",
     phash: "0000ccccbcba30dc",
-    faces: [{ bbox: { x: 0.1326, y: 0.2868, w: 0.3422, h: 0.3598 }, confidence: 0.94 }, { bbox: { x: 0.5435, y: 0.2938, w: 0.35, h: 0.368 }, confidence: 0.94 }],
+    faces: [
+      {
+        bbox: { x: 0.1326, y: 0.2868, w: 0.3422, h: 0.3598 },
+        confidence: 0.94,
+      },
+      { bbox: { x: 0.5435, y: 0.2938, w: 0.35, h: 0.368 }, confidence: 0.94 },
+    ],
   },
   {
     file: "ana-profile-doorway.png",
@@ -225,7 +248,12 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "IwgOFQSQd2iXd4iYaIl2eISfYOYJ",
     phash: "0060e0a890100000",
-    faces: [{ bbox: { x: 0.1978, y: 0.2485, w: 0.4044, h: 0.4252 }, confidence: 0.61 }],
+    faces: [
+      {
+        bbox: { x: 0.1978, y: 0.2485, w: 0.4044, h: 0.4252 },
+        confidence: 0.61,
+      },
+    ],
   },
   {
     file: "ana-porch-evening.png",
@@ -236,7 +264,12 @@ const PORTRAITS = [
     height: 360,
     thumbhash: "oygKNQaod496hoe3V3yUZ5h/hvlX",
     phash: "007070544cec8086",
-    faces: [{ bbox: { x: 0.3046, y: 0.1807, w: 0.4278, h: 0.4498 }, confidence: 0.94 }],
+    faces: [
+      {
+        bbox: { x: 0.3046, y: 0.1807, w: 0.4278, h: 0.4498 },
+        confidence: 0.94,
+      },
+    ],
   },
   {
     file: "empty-hallway.png",

@@ -1,5 +1,5 @@
 /**
- * Whether face-proposer enrichment is enabled for this vault (issue #352
+ * Whether face enrichment is enabled for this vault (issue #352
  * phase 3/4): a straight read of `enrich.policy` for the photos domain — an
  * app-readable MIRROR of the owner's settings
  * (packages/vault/src/schema/enrich.ts), never the settings bag itself

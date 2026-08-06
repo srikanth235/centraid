@@ -4,7 +4,6 @@ import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
@@ -12,6 +11,7 @@ import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -318,10 +318,7 @@ export default function DocsHome({
 
   return (
     // Docs' declared surface tone is "paper" (freedom table, DESIGN.md).
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.tonePaper }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.tonePaper }]}>
       <View style={styles.header}>
         {folderId ? (
           // In a folder: chevron = up one level, still inside Docs.
@@ -607,6 +604,6 @@ export default function DocsHome({
         }
         onChanged={refreshLibrary}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
