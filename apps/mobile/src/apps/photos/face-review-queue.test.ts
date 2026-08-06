@@ -60,7 +60,7 @@ describe(buildQueue, () => {
     expect(queue.map((q) => q.regionId)).toStrictEqual(["r2"]);
   });
 
-  it("a rejected or dismissed region never comes back to the queue (issue #712)", () => {
+  it("a rejected or dismissed region never comes back to the queue (issue 712)", () => {
     // The whole point of `review_state`. Before it, a rejection deleted the
     // row and a "keep it, do not name it" could not be expressed at all — so
     // the only faces a member could get rid of were the ones they named.

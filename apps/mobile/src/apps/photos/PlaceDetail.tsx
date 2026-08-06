@@ -10,7 +10,6 @@
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -19,6 +18,7 @@ import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -56,10 +56,11 @@ export default function PlaceDetail({
   );
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    // The band, via the shell (issue #712 P8) — and the back chevron STAYS,
+    // because `PlacesView` is this screen's genuine parent, exactly the split
+    // `DuplicatesShelf` states: the shell owns the band, the screen owns its
+    // own head. `current="more"` for the same reason it is on Places.
+    <PhotosScreen current="more">
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Places"
@@ -108,7 +109,7 @@ export default function PlaceDetail({
           </Text>
         </View>
       )}
-    </SafeAreaView>
+    </PhotosScreen>
   );
 }
 
@@ -129,6 +130,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4] - 2,
   },
   meta: { ...t("control"), marginTop: 2 },
-  safe: { flex: 1 },
   title: t("bodyStrong"),
 });

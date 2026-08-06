@@ -5,10 +5,10 @@
  * This is the only surface in Photos where the product tells a member that
  * their photographs can LEAVE THE DEVICE. That sentence is the reason the
  * screen exists, so its words are not a component's business: web
- * (`components/Enrichment.tsx`) and native
- * (`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`) both read this
- * module, and a drift between them is impossible by construction rather than
- * by review.
+ * (`enrichment-gate.ts`, mounted in the People shelf's empty state per issue
+ * #712 C2) and native (`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`)
+ * both read this module, and a drift between them is impossible by
+ * construction rather than by review.
  *
  * The strings are the handoff's, VERBATIM, smart punctuation included, with
  * one settled amendment (S6, docs/decisions.md): the handoff's storage noun
@@ -18,9 +18,10 @@
  * strings beyond that swap: every fact below is a promise about what the
  * library will and will not do, and a paraphrase is a different promise.
  *
- * Deliberately import-free. Native bundles this file straight out of the
- * blueprints package (the same way `apps/notes/commonmark.ts` is bundled), so
- * it must not reach for the web app's DOM/kit modules or its own tokens.
+ * Deliberately import-free but for the shared gate shape below. Native
+ * bundles this file straight out of the blueprints package (the same way
+ * `apps/notes/commonmark.ts` is bundled), so it must not reach for the web
+ * app's DOM/kit modules or its own tokens.
  *
  * WHAT THIS IS NOT (handoff line 4332, and the defect that made this module
  * necessary): a settings toggle. Both clients previously fired the enrichment
@@ -29,30 +30,16 @@
  * ONCE, and receipted; the answer is visible in Privacy afterwards.
  */
 
-/** One `label → value` line in a panel's fact table, rendered in the mono
- *  register. `net` marks the fact as an egress claim — the border-only
- *  `--net` treatment on web, the `net` role on native. It is never a fill and
- *  never a red dot. */
-export interface ConsentFact {
-  readonly label: string;
-  readonly value: string;
-  readonly net?: boolean;
-}
+// The gate's shapes are generic across every consent moment in the product
+// (issue #712 C1) — Docs' capture-time OCR is the second instance — so they
+// live in `apps/_shared/consent-gate.ts` and are re-exported here VERBATIM
+// for every existing importer of this module.
+import type {
+  AnswerAvailability as SharedAnswerAvailability,
+  ConsentPanelCopy,
+} from "../_shared/consent-gate.ts";
 
-/** One consent panel: an eyebrow, a question, one paragraph, the facts, and
- *  the answer(s) it accepts. `net: true` renders the whole panel bordered in
- *  `--net` — the panel itself is about bytes leaving. */
-export interface ConsentPanelCopy {
-  readonly eyebrow: string;
-  readonly title: string;
-  readonly body: string;
-  readonly facts: readonly ConsentFact[];
-  readonly action: string;
-  readonly action2?: string;
-  readonly net?: boolean;
-  readonly dangerous?: boolean;
-  readonly filled?: boolean;
-}
+export type { ConsentFact, ConsentPanelCopy } from "../_shared/consent-gate.ts";
 
 /** The frame's status line while this surface is up (prototype cfg 3968). */
 export const ENRICHMENT_STATUS_LINE =
@@ -199,21 +186,10 @@ export const ENRICHMENT_QUEUED_NOTE =
 export const ENRICHMENT_DECLINED_NOTE =
   "Nothing was run and nothing was written.";
 
-/** The row that leads to this surface, on any client that lists it. It is a
- *  way IN to a question, never the answer itself — the previous mobile row
- *  fired the write on tap, which is the defect this whole module exists to
- *  close. */
-export const ENRICHMENT_ROW = {
-  title: "Face detection",
-  meta: "never run on this library · read what it would do",
-} as const;
-
 /** Whether an answer can be given, and — when it cannot — WHY, in words the
- *  member reads beside the control rather than discovering afterwards. */
-export interface AnswerAvailability {
-  readonly available: boolean;
-  readonly reason?: string;
-}
+ *  member reads beside the control rather than discovering afterwards.
+ *  Re-exported from the shared gate module — see the header. */
+export type AnswerAvailability = SharedAnswerAvailability;
 
 /**
  * Whether the member may answer "run it here", from the vault's standing

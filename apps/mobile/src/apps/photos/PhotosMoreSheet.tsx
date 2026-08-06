@@ -1,10 +1,10 @@
 // The More sheet (Photos v4 handoff §3.1, §H).
 //
-// The band is capped at five destinations, so the shelves that do not fit
-// live here: Favorites, Places, Duplicates, Trash, Storage. Sharing and
-// Import are handoff rows this sheet does NOT carry — see the comment on
-// `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying
-// one.
+// The band is capped at five destinations, so the shelves that do not fit live
+// here: Sharing, Favorites, Places, Duplicates, Trash, Backup. Import is the
+// one handoff row this sheet still does NOT carry — see the comment on
+// `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one,
+// and why Sharing came back in issue #712 while Import did not.
 
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
@@ -13,10 +13,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useShareTarget } from "../../kit/share/use-share-target";
 import { borders, family, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { PHOTOS_MORE_FOOT, PHOTOS_MORE_ROWS } from "./photos-band";
 import type { PhotosMoreRowKey } from "./photos-band";
+import { sharedAssets } from "./photos-sharing";
 import { usePhotoTimeline } from "./timeline-source";
 
 export interface PhotosMoreSheetProps {
@@ -28,10 +30,10 @@ export interface PhotosMoreSheetProps {
 /**
  * Live meta counts, keyed by row (proto:4980-4983's mono column). Every
  * value here is a real, already-loaded count — never a placeholder — and a
- * row with no reliable source (Storage: `BackupHealth.tsx` derives its GB
- * figure from a network round trip this sheet has no business making) is
- * simply left out of the map, so its row renders label-only rather than a
- * made-up number.
+ * row with no reliable source (Backup: the frame's Backup screen derives its
+ * figures from a network round trip and a durable-queue read this sheet has no
+ * business making) is simply left out of the map, so its row renders
+ * label-only rather than a made-up number.
  */
 function useMoreRowMeta(): Partial<Record<PhotosMoreRowKey, string>> {
   const { assets } = usePhotoTimeline();
@@ -39,6 +41,12 @@ function useMoreRowMeta(): Partial<Record<PhotosMoreRowKey, string>> {
     "photos",
     useMemo(() => ({ entity: "core.place" }), [])
   );
+  // Sharing's count comes from the SAME loaded timeline every other row's
+  // meta reads — the shelf is a filter over it, so the sheet needs no second
+  // fetch to state its size. With no share target chosen the row carries no
+  // meta at all: a `0` would say "nothing of yours is shared", which this
+  // device cannot know when it has not been told where shares go.
+  const shareTargetId = useShareTarget().target?.vaultId;
   return useMemo(() => {
     const favoritesCount = assets.filter(
       (asset) => asset.favorite && !asset.deleted
@@ -57,12 +65,15 @@ function useMoreRowMeta(): Partial<Record<PhotosMoreRowKey, string>> {
       (count) => count > 1
     ).length;
     return {
+      ...(shareTargetId
+        ? { sharing: String(sharedAssets(assets, shareTargetId).length) }
+        : {}),
       favorites: String(favoritesCount),
       trash: `${trashCount} · purged in 30 days`,
       places: String(places.rows.length),
       duplicates: `${clusterCount} cluster${clusterCount === 1 ? "" : "s"}`,
     };
-  }, [assets, places.rows.length]);
+  }, [assets, places.rows.length, shareTargetId]);
 }
 
 export default function PhotosMoreSheet({

@@ -298,6 +298,31 @@ export function custodyMeta(
   return (state ? CUSTODY_META[state] : undefined) ?? null;
 }
 
+// Per-row altitude (docs/blueprint-seats.md "Byte custody vocabulary"): a
+// row mark exists for the EXCEPTION only, never the norm. `replicated` and
+// `remote-only` are where bytes are designed to live — a dot on every row
+// (including the steady state) would caption the norm in prose under every
+// document, the anti-pattern Apple Photos and Google Photos both rejected
+// and mobile's `tile-overlays.ts` `stateOverlay` already encodes. `pending-
+// offsite` is the transient window between local-only and replicated, so it
+// falls through with the same nothing `stateOverlay` gives `queued`/
+// `uploading`. `local-only` is the one state a member can lose something to;
+// `missing` is a distinct integrity failure (bytes on NEITHER tier) rather
+// than a custody-location fact, but it is genuinely actionable, so it keeps
+// its row dot too. The full four-state story stays in `custodyMeta` above,
+// read by Details.tsx's per-item chip (the on-demand altitude).
+const CUSTODY_ROW_EXCEPTIONS: ReadonlySet<string> = new Set([
+  "local-only",
+  "missing",
+]);
+
+export function custodyRowMark(
+  state: string | null | undefined
+): CustodyInfo | null {
+  if (!state || !CUSTODY_ROW_EXCEPTIONS.has(state)) return null;
+  return CUSTODY_META[state] ?? null;
+}
+
 // Real activity (issue #352 phase 4, queries/activity.ts): consent.provenance
 // stamps `prov_activity` as `command.<command name>` (execution.ts) — this is
 // the owner-facing gloss for every command documents.ts registers. An

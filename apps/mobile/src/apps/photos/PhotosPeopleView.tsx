@@ -4,7 +4,7 @@
 // became its own band destination — see `PhotosHome.tsx`'s `destination`
 // switch.
 //
-// Two rules this view exists to hold the line on:
+// Three rules this view exists to hold the line on:
 //
 //   1. Everyone shows, including unnamed people. README:217 and proto:3760
 //      are explicit: an unconfirmed-but-grouped party reads as "Unnamed",
@@ -14,14 +14,42 @@
 //      mode "person"), never Face review. Face review is proposal triage;
 //      a person card is a browsable identity, and the two are not the same
 //      destination even though both start from `media.face_region`.
+//   3. THE CONSENT GATE (issue #712 C2). The face-detection consent moment
+//      used to sit behind a "Face detection" row + modal on PhotosLibrary —
+//      built, correct, and nearly unreachable. An empty People shelf IS the
+//      gate's natural body: a member who opens People and sees nothing has
+//      exactly the question "why is this empty, and can I do something about
+//      it" the gate answers. So when the roster is empty AND the question
+//      has not been answered this session, the gate renders in the empty
+//      state instead of a modal reached from elsewhere. Once answered (either
+//      way) or once the roster has faces to show, the empty state reverts to
+//      the plain "no people yet" copy — the gate is a way IN to the question,
+//      not a permanent fixture of an empty shelf.
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
+import {
+  CLOUD_ANSWER,
+  CLOUD_PANEL,
+  deviceAnswerFor,
+  ENRICHMENT_DECLINED_NOTE,
+  ENRICHMENT_NOTE,
+  ENRICHMENT_QUEUED_NOTE,
+  ENRICHMENT_REQUESTED_NOTE,
+  ON_DEVICE_PANEL,
+} from "@centraid/blueprints/apps/photos/enrichment-consent";
 import { identityColor, tileFinish } from "@centraid/design";
 
+import { ConsentGate } from "../../kit/components/ConsentGate";
 import { Text } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
@@ -49,6 +77,7 @@ export default function PhotosPeopleView({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { session } = useReplica();
 
   const faces = useReplicaQuery(
     "photos",
@@ -58,6 +87,52 @@ export default function PhotosPeopleView({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
+  // The tier comes from the replica's `enrich.policy` mirror, the same read
+  // PhotosLibrary.tsx used before this gate moved — the shared
+  // `deviceAnswerFor` decides whether the on-device promise is even true for
+  // this vault, so web and native cannot disagree about it.
+  const policies = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "enrich.policy" }), [])
+  );
+
+  // ---- the consent question, re-homed from PhotosLibrary's footer row ----
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [enrichAnswered, setEnrichAnswered] = useState<
+    "device" | "declined" | null
+  >(null);
+  const enrichPolicy = policies.rows.find((row) => row.domain === "photos");
+  const enrichTier = policies.loading
+    ? null
+    : ((enrichPolicy?.tier as string | undefined) ?? "off");
+  const deviceAnswer = deviceAnswerFor(enrichTier);
+  const runOnDevice = async (): Promise<void> => {
+    // Belt and braces: the button is already unavailable in both of these
+    // cases. A write this consequential does not rely on a disabled prop.
+    if (!session || enrichBusy || enrichAnswered) return;
+    if (!deviceAnswer.available) return;
+    setEnrichBusy(true);
+    try {
+      const result = await session.write("photos", {
+        action: "request-enrichment",
+        input: { entity_type: "media.media_asset" },
+      });
+      if (
+        surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })
+      ) {
+        setEnrichAnswered("device");
+        postStatus(ENRICHMENT_REQUESTED_NOTE);
+      }
+    } catch (error) {
+      surfaceWriteFailure(error, "Face detection was not asked for");
+    } finally {
+      setEnrichBusy(false);
+    }
+  };
+  const declineEnrichment = (): void => {
+    setEnrichAnswered("declined");
+    postStatus(ENRICHMENT_DECLINED_NOTE);
+  };
 
   // Every party that owns at least one confirmed face is a card, in
   // face-count order — unnamed people included, not filtered out.
@@ -89,6 +164,11 @@ export default function PhotosPeopleView({
     [faces.rows]
   );
 
+  // The gate is the empty state's body only while the question is still open
+  // — an empty roster the member has already answered (either way) falls
+  // back to the plain copy below instead of re-asking.
+  const showGate = people.length === 0 && !enrichAnswered;
+
   return (
     <FlatList
       data={people}
@@ -97,10 +177,27 @@ export default function PhotosPeopleView({
       contentContainerStyle={styles.grid}
       columnWrapperStyle={styles.row}
       ListEmptyComponent={
-        <Text style={styles.empty}>
-          No people yet. Faces are proposed on a photograph you open, and a name
-          is only ever yours to confirm.
-        </Text>
+        showGate ? (
+          <View style={styles.gate}>
+            <ConsentGate
+              domain="photos"
+              onDevicePanel={ON_DEVICE_PANEL}
+              onDevice={deviceAnswer}
+              netPanel={CLOUD_PANEL}
+              net={CLOUD_ANSWER}
+              note={ENRICHMENT_NOTE}
+              busy={enrichBusy}
+              answered={enrichAnswered}
+              onRunOnDevice={() => void runOnDevice()}
+              onDecline={declineEnrichment}
+            />
+          </View>
+        ) : (
+          <Text style={styles.empty}>
+            No people yet. Faces are proposed on a photograph you open, and a
+            name is only ever yours to confirm.
+          </Text>
+        )
       }
       ListFooterComponent={
         <Text style={styles.note}>
@@ -146,6 +243,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: spacing[5],
       textAlign: "center",
     },
+    gate: { paddingHorizontal: spacing[3], paddingTop: spacing[3] },
     grid: { paddingBottom: spacing[6], paddingTop: spacing[3] },
     name: {
       ...t("control"),

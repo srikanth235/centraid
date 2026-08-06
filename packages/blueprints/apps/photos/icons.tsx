@@ -53,11 +53,6 @@ export const MenuIcon = make("Menu");
 export const SearchIcon = make("Search");
 export const ZoomOutIcon = make("Grid");
 export const ZoomInIcon = make("Grid");
-// Face detection is "find the PEOPLE in this photo", and it must not be a
-// second sparkle: the kit's Ask control (`kit-ask-btn`) renders a ✦ + "Ask"
-// immediately beside it in the same header, so two adjacent sparkles read as
-// one action spelled twice (#708).
-export const FacesIcon = make("Users");
 export const InfoIcon = make("AlertCircle");
 export const DownloadIcon = make("Download");
 export const ShareIcon = make("Share");

@@ -57,9 +57,8 @@
 //
 // The cursor/progress arithmetic is `@centraid/blueprints`'
 // `apps/photos/triage-session` — the same pure model the web twin and the
-// duplicate review consume, so "1 of 54" cannot mean two different things on
-// two screens. See `session` below for why this screen builds the value per
-// render instead of holding it in state.
+// duplicate review consume, so "1 of 54" cannot mean two different things
+// on two screens; `session` below explains the per-render build.
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
@@ -86,60 +85,17 @@ import {
 import { borders, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { faceCropStyle } from "./face-crop";
+import {
+  ANSWER_FAILURE,
+  ANSWERED_STATE,
+  CROP_PX,
+  formatFirstSeen,
+  safeParseBBox,
+} from "./face-review-model";
 import { buildQueue } from "./face-review-queue";
 import type { AssetRow, FaceRegionRow } from "./face-review-queue";
 import { styles } from "./FaceReview.styles";
 import { usePhotoTimeline } from "./timeline-source";
-
-const CROP_PX = 120;
-
-/** The row state each answer lands in — the same three the vault's
- *  `media_face_region.review_state` CHECK allows. A table, not a branch
- *  chain, so a fourth answer is one row here (docs/coding-standards.md). */
-const ANSWERED_STATE = {
-  confirm: "confirmed",
-  reject: "rejected",
-  dismiss: "dismissed",
-} as const;
-
-/** What a failed answer is called on the status bar. Never a stack trace:
- *  the member asked a question of their own library and deserves a sentence. */
-const ANSWER_FAILURE = {
-  confirm: "Face not confirmed",
-  reject: "Face not rejected",
-  dismiss: "Face not kept",
-} as const;
-
-function safeParseBBox(
-  json: unknown
-): { x: number; y: number; w: number; h: number } | null {
-  if (json == null) return null;
-  try {
-    const v = JSON.parse(String(json));
-    if (
-      v &&
-      typeof v.x === "number" &&
-      typeof v.y === "number" &&
-      typeof v.w === "number" &&
-      typeof v.h === "number"
-    )
-      return v;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function formatFirstSeen(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 export default function FaceReview({
   navigation,

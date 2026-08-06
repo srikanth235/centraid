@@ -1,5 +1,20 @@
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
+/**
+ * The `blob.custody_state` vocabulary (packages/vault/src/blob/custody-state.ts
+ * `CustodyState`), redeclared as a value-free literal union rather than
+ * imported — that module pulls in `node:sqlite` for the gateway-side
+ * projection, which has no business in a mobile bundle. Keeping the tokens
+ * here as a union (not `string`) is what lets `docs-custody.ts` match
+ * exhaustively instead of guessing at an unknown state.
+ */
+export type DocCustodyState =
+  | "pending-offsite"
+  | "local-only"
+  | "replicated"
+  | "remote-only"
+  | "missing";
+
 export interface NativeFolder {
   id: string;
   rawId?: string;
@@ -20,7 +35,7 @@ export interface NativeDocument {
   folderId?: string;
   starred: boolean;
   trashed: boolean;
-  custody?: string;
+  custody?: DocCustodyState;
   sha256?: string;
   sourceVaultId?: string;
   scopeIds?: string[];
@@ -181,7 +196,7 @@ function buildScopeDrive(
   const custodyByContent = new Map(
     custodyRows.map((row) => [
       scalar<string>(row, "content_id"),
-      scalar<string>(row, "state"),
+      scalar<DocCustodyState>(row, "state"),
     ])
   );
   const rootId = scalar<string>(root ?? {}, "concept_id");

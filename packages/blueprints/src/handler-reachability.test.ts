@@ -66,6 +66,11 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
     "duplicates",
     "enrichment-status",
     "search",
+    // The phone's Backup screen is a FRAME surface since #712 B2: it reads
+    // the gateway's storage/status route (which now carries the custody
+    // rollup) rather than dispatching this app query, which remains the web
+    // Storage screen's read path.
+    "storage",
   ],
   tally: ["dashboard", "group"],
   tasks: ["board"],

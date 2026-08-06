@@ -1,27 +1,31 @@
+// The eligibility predicate, the delete-time revalidation, and (issue #712,
+// B3) the rollup-fed OFFER. The module moved from `apps/photos/` to `kit/` in
+// that pass and the fixture moved with it: it is built from the structural
+// `FreeUpAsset` this module declares, not from Photos' `PhotoAsset`, because
+// `kit/` may not import an app — and the shape is exactly what an app has to
+// satisfy to take part.
 import { describe, expect, test } from "vitest";
 
-import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
-import type { DeviceByteProbe, FreeUpCandidate } from "./free-up-space";
-import type { PhotoAsset } from "./timeline-model";
+import {
+  freeUpOffer,
+  revalidateBackedUp,
+  selectFreeUpCandidates,
+} from "./free-up-space";
+import type {
+  DeviceByteProbe,
+  FreeUpAsset,
+  FreeUpCandidate,
+} from "./free-up-space";
 
 const backedUp = (
   id: string,
-  fields: Partial<PhotoAsset> = {}
-): PhotoAsset => ({
-  id,
+  fields: Partial<FreeUpAsset> = {}
+): FreeUpAsset => ({
   assetId: `asset-${id}`,
-  uri: id,
-  previewUri: id,
-  originalUri: id,
   localId: `local-${id}`,
   localIds: [`local-${id}`],
   sha256: `sha-${id}`,
-  capturedAt: "2025-07-16T10:00:00.000Z",
-  kind: "photo",
   fileSize: 1_000,
-  favorite: false,
-  archived: false,
-  deleted: false,
   backupState: "backed-up",
   verifiedCasAck: true,
   source: "merged",
@@ -105,5 +109,53 @@ describe("free-up-space eligibility", () => {
     );
     expect(result.deletableLocalIds).toStrictEqual([]);
     expect(result.missingCount).toBe(1);
+  });
+
+  test("an offer needs a computed rollup — an unrun sweep is not 'nothing'", () => {
+    // The whole reason `computedAt` travels as null on the wire: zeroes from
+    // an unrun sweep read as "you have nothing to free" when the truth is
+    // "nobody has looked". A surface must be able to say those differently.
+    expect(
+      freeUpOffer({ computedAt: null, freeable: { count: 0, bytes: 0 } }, [
+        "photos",
+      ])
+    ).toStrictEqual({ kind: "uncounted" });
+  });
+
+  test("a counted rollup with a freeable bucket becomes an offer of that bucket", () => {
+    expect(
+      freeUpOffer(
+        {
+          computedAt: "2026-08-06T00:00:00.000Z",
+          freeable: { count: 4, bytes: 900 },
+        },
+        ["photos", "docs"]
+      )
+    ).toStrictEqual({ kind: "offer", totals: { count: 4, bytes: 900 } });
+  });
+
+  test("nothing freeable, or zero bytes, is an offer with no effect and so is not one", () => {
+    const computedAt = "2026-08-06T00:00:00.000Z";
+    expect(
+      freeUpOffer({ computedAt, freeable: { count: 0, bytes: 0 } }, ["photos"])
+    ).toStrictEqual({ kind: "nothing" });
+    expect(
+      freeUpOffer({ computedAt, freeable: { count: 3, bytes: 0 } }, ["photos"])
+    ).toStrictEqual({ kind: "nothing" });
+  });
+
+  test("no participating app means no offer — the exclusion lives in the CALLER's list", () => {
+    // Locker (bytes are the secret) and record-only apps are excluded by never
+    // appearing in the list a caller passes. This module enumerates no apps, so
+    // an empty list must be a real answer rather than a vacuous "everything".
+    expect(
+      freeUpOffer(
+        {
+          computedAt: "2026-08-06T00:00:00.000Z",
+          freeable: { count: 9, bytes: 100 },
+        },
+        []
+      )
+    ).toStrictEqual({ kind: "nothing" });
   });
 });

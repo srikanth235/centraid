@@ -15,8 +15,10 @@
 // `src/apps/*`, which nothing here does — the whole point of this module is
 // that it knows about no app at all.
 //
-// This screen's switches will eventually move to frame Settings; see the note
-// at the head of `apps/photos/BackupHealth.tsx`.
+// The switches now render on the FRAME's own Backup screen
+// (`screens/BackupHealth.tsx`, issue #712 B2/P5) — the move
+// docs/blueprint-seats.md's open follow-up asked for. Photos deep-links to it
+// and renders none of them.
 
 import { Store } from "../../storage";
 
@@ -37,6 +39,20 @@ export interface TransferPolicy {
   allowMetered: boolean;
   allowRoaming: boolean;
   chargerOnly: boolean;
+  /**
+   * NEVER — the floor of the whole table (issue #712, P5). Every other switch
+   * narrows WHEN this device may move bytes; this one says it may not, at all,
+   * on any connection, charging or not.
+   *
+   * It is a real gate, not a label: `nativeUploadPolicy().canTransfer()`
+   * refuses on it before it asks a radio anything, so a manual "Back up now"
+   * and the automatic sweep both stop. It is deliberately SEPARATE from the
+   * backup-consent latch (`transfer-consent.ts`), which answers a different
+   * question — that latch decides whether photographs are enqueued
+   * automatically; this decides whether the queue is allowed to drain at all,
+   * for any app.
+   */
+  never: boolean;
 }
 
 /**
@@ -50,6 +66,7 @@ export const DEFAULT_TRANSFER_POLICY: TransferPolicy = {
   allowMetered: false,
   allowRoaming: false,
   chargerOnly: false,
+  never: false,
 };
 
 /** Read from durable storage, filling any field a stored record predates. */
@@ -77,22 +94,44 @@ export interface TransferPolicySwitch {
   label: string;
   /** Inert while this predicate is true of the current record. */
   inert: (policy: TransferPolicy) => boolean;
+  /**
+   * Drawn in `--net` — a 2px rule on the leading edge and `net` ink, never a
+   * fill and never red (§18). Reserved for the switch whose ON state STOPS
+   * this device moving bytes; everything else here only narrows when it may.
+   */
+  net?: true;
 }
 
+/**
+ * The five, in this order, on every surface that renders them (handoff §12).
+ * `never` is last because it is the floor, and it renders in `--net` because
+ * turning it on is the one answer here that halts a transfer already in
+ * flight rather than scheduling it differently.
+ */
 export const TRANSFER_POLICY_SWITCHES: readonly TransferPolicySwitch[] = [
-  { key: "wifiOnly", label: "Wi-Fi only", inert: () => false },
+  { key: "wifiOnly", label: "Wi-Fi only", inert: (policy) => policy.never },
   {
     key: "allowMetered",
     label: "Allow metered or cellular",
     // Meaningless while Wi-Fi-only is on: the stricter rule already answered.
-    inert: (policy) => policy.wifiOnly,
+    inert: (policy) => policy.never || policy.wifiOnly,
   },
   {
     key: "allowRoaming",
     label: "Allow roaming or unknown cellular status",
-    inert: (policy) => policy.wifiOnly || !policy.allowMetered,
+    inert: (policy) => policy.never || policy.wifiOnly || !policy.allowMetered,
   },
-  { key: "chargerOnly", label: "Only while charging", inert: () => false },
+  {
+    key: "chargerOnly",
+    label: "Only while charging",
+    inert: (policy) => policy.never,
+  },
+  {
+    key: "never",
+    label: "Never move bytes off this device",
+    inert: () => false,
+    net: true,
+  },
 ];
 
 /**
@@ -101,6 +140,8 @@ export const TRANSFER_POLICY_SWITCHES: readonly TransferPolicySwitch[] = [
  * Present tense and specific — "on Wi-Fi" is a promise, "when possible" is not.
  */
 export function describeTransferPolicy(policy: TransferPolicy): string {
+  if (policy.never)
+    return "Never. Nothing leaves this device until you change that.";
   const network = policy.wifiOnly
     ? "On Wi-Fi only"
     : policy.allowMetered

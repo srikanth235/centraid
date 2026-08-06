@@ -1,4 +1,4 @@
-// PERMISSION IS A SCREEN, NOT AN ERROR (Photos v4 handoff §13, CHANGELOG A.6,
+// PERMISSION IS A SURFACE, NOT AN ERROR (Photos v4 handoff §13, CHANGELOG A.6,
 // proto:4335-4349 — the prototype's dedicated `permission` tab).
 //
 // The prototype states the grammar: a display headline, one paragraph in the
@@ -18,8 +18,9 @@
 //
 // This module is free of `react-native` and `expo-media-library` imports so
 // every state's copy and every offered action can be asserted directly
-// (`photo-access.test.ts`). `PhotoPermission.tsx` renders them and owns the
-// handlers.
+// (`photo-access.test.ts`). `PhotoAccessPanel.tsx` renders them and owns the
+// handlers; `PhotosHome` asks `photoAccessTakesOverTimeline` (below) whether
+// the panel replaces the grid.
 
 /** What the operating system currently allows, reduced to the four cases the
  *  screen has distinct copy for. */
@@ -47,6 +48,44 @@ export function photoAccessState(
   if (permission.accessPrivileges === "limited") return "limited";
   if (permission.status === "granted") return "granted";
   return permission.status === "denied" ? "denied" : "undetermined";
+}
+
+/**
+ * WHETHER THE PERMISSION CONTENT REPLACES THE GRID (issue #712, P13).
+ *
+ * The rule this predicate exists to make assertable: a timeline that cannot be
+ * produced must SAY so where it would have been drawn. Never a dead grid, and
+ * never a banner over one — §13 makes the ungranted grant a designed state, so
+ * it takes the whole content slot while the band above and below it stays
+ * exactly where it was.
+ *
+ * Every branch is a refusal to guess:
+ *
+ *   - `null` is the frame before the OS has answered. Unknown is not denied,
+ *     and a takeover that appears for one frame and vanishes is worse than the
+ *     grid's own skeleton, which is the honest loading state (§14).
+ *   - `loading` is the device walk still running. Same reason.
+ *   - `limited` takes over ONLY when the chosen set is empty. A member who
+ *     picked twelve photographs should see those twelve; the panel would be
+ *     hiding the very thing they granted.
+ *   - `denied` and `undetermined` always take over: there is nothing on the
+ *     device Photos may read, so there is no grid to compete with.
+ */
+export function photoAccessTakesOverTimeline({
+  state,
+  deviceReadableCount,
+  loading,
+}: {
+  state: PhotoAccessState | null;
+  /** Photographs Photos is reading off THIS device right now. */
+  deviceReadableCount: number;
+  /** The device walk has not finished. */
+  loading: boolean;
+}): boolean {
+  if (state === null || state === "granted") return false;
+  if (loading) return false;
+  if (state === "limited") return deviceReadableCount === 0;
+  return true;
 }
 
 /** One ruled row (proto:4339-4341): what it is about, what is true, and the

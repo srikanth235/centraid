@@ -7,7 +7,11 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { bootstrapVault, openVaultDb } from "@centraid/vault";
+import {
+  bootstrapVault,
+  openVaultDb,
+  refreshCustodyRollup,
+} from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
 import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
@@ -477,6 +481,10 @@ describe("storage-routes", () => {
     backpressureEvents: number;
   }
 
+  interface StatusCustodyDTO {
+    computedAt: string | null;
+    buckets: Record<string, { count: number; bytes: number }>;
+  }
   test("GET status carries the #405 §7 cache block per vault; in-memory vault reports an unlimited (null) budget with live spool + hit counters", async () => {
     const dir = await tempDir();
     const storageConnections = await openStorageConnectionStore(dir);
@@ -513,6 +521,74 @@ describe("storage-routes", () => {
     expect(cache?.bytesServedRemote).toBe(0);
     expect(cache?.evictedBlobs).toBe(0);
     expect(cache?.backpressureEvents).toBe(0);
+  });
+
+  // issue #712 B3 — mobile read `blob_custody_state` counts off this route
+  // while web read the ROLLUP (`blob.custody_rollup`), so the two clients could
+  // disagree about what may be released. The route carries the rollup itself
+  // now, and `computedAt` is the load-bearing part: null must reach a client AS
+  // null, or the surface renders zeroes as facts.
+  test("GET status carries the custody rollup — null computedAt before the sweep, the sweep's own numbers after", async () => {
+    const dir = await tempDir();
+    const storageConnections = await openStorageConnectionStore(dir);
+    const recoveryKit = new RecoveryKitStateStore(dir);
+    const db = openVaultDb();
+    cleanups.push(() => db.close());
+    bootstrapVault(db, { ownerName: "Tester" });
+    const base = await startHandlerServer(
+      makeStorageRouteHandler({
+        storageConnections,
+        recoveryKit,
+        vaults: vaultsFrom([planeFromDb("Main", "v1", db)]),
+        storageUsage: new StorageUsagePoller({ storageConnections }),
+      })
+    );
+    const read = async (): Promise<StatusCustodyDTO> => {
+      const res = await fetch(`${base}/centraid/_gateway/storage/status`);
+      expect(res.status).toBe(200);
+      const out = (await res.json()) as {
+        vaults: Array<{ custody: StatusCustodyDTO }>;
+      };
+      return out.vaults[0]!.custody;
+    };
+
+    const before = await read();
+    expect(before.computedAt).toBeNull();
+    // Both buckets a free-up offer is decided by are present and zeroed, never
+    // absent — a client must not have to invent a `?? 0` for either.
+    expect(before.buckets.freeable).toStrictEqual({ count: 0, bytes: 0 });
+    expect(before.buckets["local-unproven"]).toStrictEqual({
+      count: 0,
+      bytes: 0,
+    });
+
+    const blob = Buffer.from("custody-rollup-fixture-blob");
+    const { sha256 } = db.blobs.ingestSync(blob);
+    const now = new Date().toISOString();
+    db.vault.exec(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES ('content-1', 'image/png', 'blob:sha256:${sha256}', '${sha256}', ${blob.length}, '${now}');
+       INSERT INTO blob_custody_state (content_id, sha256, custody_state, checked_at)
+       VALUES ('content-1', '${sha256}', 'local-only', '${now}');`
+    );
+    const written = refreshCustodyRollup(db);
+
+    // Read, never recomputed: rebuilding a whole-library projection per
+    // request would be O(vault-size) on the request path.
+    const after = await read();
+    expect(after.computedAt).toBe(written.computedAt);
+    expect(after.buckets["local-only"]).toStrictEqual({
+      count: 1,
+      bytes: blob.length,
+    });
+    // No remote tier is configured, so the local copy is UNPROVEN and nothing
+    // is freeable — the rollup's safety rule, visible end-to-end on the wire.
+    expect(after.buckets["local-unproven"]).toStrictEqual({
+      count: 1,
+      bytes: blob.length,
+    });
+    expect(after.buckets.freeable).toStrictEqual({ count: 0, bytes: 0 });
   });
 
   test("GET status surfaces a real (non-null) budget when blob_cache.budgetBytes is set explicitly", async () => {

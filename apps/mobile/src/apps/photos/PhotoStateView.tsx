@@ -18,12 +18,12 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import {
   NO_DOWNLOAD_REASON,
-  NO_SHARE_DESTINATION_REASON,
   batchFavorite,
   batchPurge,
   batchRestore,
@@ -39,6 +39,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useCopyToSharing } from "./use-copy-to-sharing";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
@@ -151,6 +152,13 @@ export default function PhotoStateView({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(assets, selection);
+  // One handler for the third selection target, shared by every Photos shelf
+  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // cannot drift between them.
+  const sharing = useCopyToSharing(
+    () => selected,
+    () => setSelection(new Set())
+  );
   // Empty trash acts on the WHOLE shelf rather than the selection, so it gets
   // its own targets and its own refusal — the selection bar's answer is about
   // whatever happens to be ticked, which is a different question.
@@ -247,7 +255,10 @@ export default function PhotoStateView({
         ? "Add to album from the library, where the albums are."
         : writeBlockedReason!,
     },
-    share: { unavailableReason: NO_SHARE_DESTINATION_REASON },
+    // The real thing since issue #712 A5: a live control that places
+    // `media.media_asset` into the member's share target — or, when they
+    // have not chosen one yet, asks at the moment of intent (A3).
+    share: sharing.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canWrite
       ? {
@@ -374,6 +385,12 @@ export default function PhotoStateView({
           </Text>
         </View>
       )}
+      <ShareTargetPicker
+        visible={sharing.picking}
+        candidates={sharing.candidates}
+        onChoose={(vaultId) => sharing.choose(vaultId)}
+        onClose={() => sharing.dismiss()}
+      />
     </PhotosScreen>
   );
 }

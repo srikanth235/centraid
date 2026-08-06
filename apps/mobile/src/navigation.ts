@@ -2,7 +2,7 @@
 //
 //   RootStack (native stack, springboard model)
 //   ├─ Home          → HomeScreen                      (launcher, root)
-//   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/backup)
+//   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/sharing)
 //   ├─ Docs          → DocsStack    (drive, viewer)
 //   ├─ Agenda        → AgendaStack  (calendar, event)
 //   ├─ Locker        → LockerHome   (native authenticated secrets cover)
@@ -16,7 +16,8 @@
 //   ├─ Scan          → ScanScreen (camera/share OCR review)
 //   ├─ Automations   → AutomationsScreen (list + run the vault's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
-//   └─ Settings      → SettingsStack (Settings, Approvals)
+//   └─ Settings      → SettingsStack (Settings, Approvals, PhoneStorage,
+//                                     BackupHealth)
 //
 // There is no bottom-tab navigator: the apps are full-screen covers that slide
 // up over Home and dismiss with the native swipe-down gesture. Each nested-stack
@@ -56,7 +57,9 @@ export type PhotosStackParamList = {
   PhotoLightbox: { assetId: string };
   PhotosLibrary: undefined;
   PhotosSearch: undefined;
-  BackupHealth: undefined;
+  // The Sharing shelf (issue #712 A5): the photographs whose rows live in the
+  // member's share-target vault. Reached from the More sheet's FIRST row.
+  SharingShelf: undefined;
   // Places' shelf (cards first, proto:4197): `PlacesView` is where the More
   // sheet's "Places" row lands; `PlacesMap` is the full-screen map it opens
   // on demand from the shelf head's Map control, and `PlaceDetail` is what a
@@ -77,8 +80,11 @@ export type PhotosStackParamList = {
   // The picker (§10) — full screen on the phone. Its picked set is its own,
   // so the album it commits to is a route param rather than shared state.
   PhotoPicker: { albumId: string };
-  // The OS photo-library grant as a designed screen (§13), not an error.
-  PhotoPermission: undefined;
+  // There is no `PhotoPermission` route (issue #712 P13). The OS
+  // photo-library grant is a designed STATE of the timeline, not a screen a
+  // member has to go and find: `PhotosHome` renders the permission content in
+  // the grid's own slot (`PhotoAccessPanel.tsx`) when the grant cannot produce
+  // a timeline. A route to it would be a second, worse way to the same words.
   // Person is a distinct case: it needs the party to filter by AND the name
   // already resolved (the view has no other route to a display name for an
   // id it did not already have on hand). `archive` has no client affordance
@@ -106,6 +112,12 @@ export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
   PhoneStorage: undefined;
+  // Backup health (issue #712 B2) — a FRAME screen, beside Phone storage. It
+  // used to live in the Photos stack, which was always a compromise: the policy
+  // it edits governs Docs' scans and Notes' attachments too, and nothing on it
+  // is Photos-specific. Photos deep-links across to it from the More sheet's
+  // "Backup" row rather than keeping a copy.
+  BackupHealth: undefined;
 };
 
 export type RootStackParamList = {

@@ -26,6 +26,7 @@ type ThemeModule = typeof import("../../kit/theme");
 type IconModule = typeof import("../../kit/components/Icon");
 type UseReplicaQueryModule = typeof import("../../kit/hooks/useReplicaQuery");
 type TimelineSourceModule = typeof import("./timeline-source");
+type ShareTargetModule = typeof import("../../kit/share/use-share-target");
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -46,8 +47,24 @@ const mocks = vi.hoisted(() => ({
   // number that is NOT simply "how many assets exist".
   assets: [
     { id: "a1", favorite: true, deleted: false, phash: "hash-x" },
-    { id: "a2", favorite: true, deleted: false, phash: "hash-x" },
-    { id: "a3", favorite: false, deleted: true, phash: "hash-y" },
+    // The one row that sits in the share target — so Sharing's meta reads a
+    // number that is NOT the library size and NOT the favourite count.
+    {
+      id: "a2",
+      favorite: true,
+      deleted: false,
+      phash: "hash-x",
+      sourceVaultId: "v-share",
+    },
+    // Trashed, and ALSO in the share target: the shelf is a filter over the
+    // live timeline, so this must not be counted.
+    {
+      id: "a3",
+      favorite: false,
+      deleted: true,
+      phash: "hash-y",
+      scopeIds: ["v-share"],
+    },
     { id: "a4", favorite: false, deleted: false, phash: undefined },
   ],
   places: [{ place_id: "p1" }, { place_id: "p2" }, { place_id: "p3" }],
@@ -133,6 +150,20 @@ vi.mock(
 );
 
 vi.mock(
+  import("../../kit/share/use-share-target"),
+  () =>
+    ({
+      useShareTarget: () => ({
+        hydrated: true,
+        target: { vaultId: "v-share", label: "Household" },
+        candidates: [{ vaultId: "v-share", label: "Household" }],
+        reason: null,
+        choose: () => undefined,
+      }),
+    }) as unknown as Partial<ShareTargetModule>
+);
+
+vi.mock(
   import("./timeline-source"),
   () =>
     ({
@@ -179,16 +210,18 @@ describe("the More sheet's rows, meta and foot", () => {
     container = undefined;
   });
 
-  it("carries exactly the live rows — no Sharing, no Import", () => {
+  it("carries exactly the live rows — Sharing first, still no Import", () => {
     renderSheet();
     const labels = Array.from(container!.querySelectorAll("button"))
       .map((button) => button.getAttribute("aria-label") ?? "")
       .filter((label) => label !== "Close");
-    // Five shelves plus Photo access — §13's permission screen, which has no
-    // other route on the phone (`PHOTOS_MORE_ROWS`).
+    // Six rows: Sharing (issue #712 A5, first — proto:4980-4983), Favorites,
+    // Places, Duplicates, Trash, Backup. `Photo access` is gone with P13, and
+    // Import still has no phone destination.
     expect(labels).toHaveLength(6);
-    expect(container!.textContent).not.toContain("Sharing");
+    expect(labels[0]).toBe("Sharing. 1");
     expect(container!.textContent).not.toContain("Import");
+    expect(container!.textContent).not.toContain("Photo access");
   });
 
   it("shows real meta for favorites, trash and duplicates", () => {
@@ -209,19 +242,31 @@ describe("the More sheet's rows, meta and foot", () => {
     expect(rowButton("Places").getAttribute("aria-label")).toBe("Places. 3");
   });
 
-  it("omits Storage's meta rather than inventing a number", () => {
+  it("omits Backup's meta rather than inventing a number", () => {
+    // The row is labelled "Backup" now (#712 B1) and its meta is still absent:
+    // the figure it would carry comes from a network round trip this sheet has
+    // no business making, and a placeholder number is the lie the whole meta
+    // map exists to avoid.
     renderSheet();
-    expect(rowButton("Storage").getAttribute("aria-label")).toBe("Storage");
+    expect(rowButton("Backup").getAttribute("aria-label")).toBe("Backup");
+  });
+
+  it("shows Sharing's live count, and nothing when nothing is shared", () => {
+    // The count is the shelf's own size, from the same loaded timeline every
+    // other row's meta reads — never a second fetch, and never a guess.
+    renderSheet();
+    expect(rowButton("Sharing").getAttribute("aria-label")).toBe("Sharing. 1");
   });
 
   it("calls onSelect with the OWN key of the row tapped, for every row", () => {
     renderSheet();
     const cases: Array<[string, PhotosMoreRowKey]> = [
+      ["Sharing", "sharing"],
       ["Favorites", "favorites"],
       ["Places", "places"],
       ["Duplicates", "duplicates"],
       ["Trash", "trash"],
-      ["Storage", "storage"],
+      ["Backup", "backup"],
     ];
     for (const [label, key] of cases) {
       onSelect.mockClear();

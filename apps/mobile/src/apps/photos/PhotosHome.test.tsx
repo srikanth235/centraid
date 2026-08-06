@@ -12,6 +12,14 @@
 //     opens, the surface paints packed placeholder tiles at the geometry the
 //     real rows will take — never a centred sentence the grid then replaces,
 //     and the toolbar stays mounted rather than appearing when the data lands.
+//
+//  3. A REFUSED GRANT TAKES OVER THE GRID, NOT A MENU ROW (§13; issue #712
+//     P13). The timeline never read the OS permission before this: a member
+//     who refused the camera-roll prompt got an empty grid with no sentence,
+//     and the only surface that said anything was a screen behind the bottom
+//     row of the More sheet. The takeover renders in the grid's own slot, and
+//     the band stays exactly where it was — the way out is never what a
+//     refusal takes away.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -30,6 +38,13 @@ const mocks = vi.hoisted(() => ({
     error: undefined as string | undefined,
     loading: true,
     sections: [] as unknown[],
+  },
+  // `null` is the frame before the OS has answered — genuinely unknown, and
+  // the state the takeover predicate must decline to act on.
+  permission: null as null | {
+    status: "granted" | "denied" | "undetermined";
+    accessPrivileges?: "all" | "limited" | "none";
+    canAskAgain: boolean;
   },
 }));
 
@@ -94,6 +109,8 @@ vi.mock(import("react-native"), async () => {
         "data-position": position(style),
         role: accessibilityRole,
       }),
+    ScrollView: ({ children }: { children?: React.ReactNode }) =>
+      element("div", { children }),
     useWindowDimensions: () => ({ height: 800, width: 390 }),
   } as never;
 });
@@ -103,6 +120,14 @@ vi.mock(
   () =>
     ({
       useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+    }) as never
+);
+
+vi.mock(
+  import("expo-media-library"),
+  () =>
+    ({
+      usePermissions: () => [mocks.permission, vi.fn<() => void>()],
     }) as never
 );
 
@@ -415,6 +440,9 @@ describe("PhotosHome behavior", () => {
     mocks.timeline.loading = true;
     mocks.timeline.assets = [];
     mocks.timeline.sections = [];
+    // The default every other test in this file assumes: a grant that can
+    // produce a timeline, so nothing takes the grid over.
+    mocks.permission = { status: "granted", canAskAgain: false };
   });
 
   afterEach(() => {
@@ -472,6 +500,71 @@ describe("PhotosHome behavior", () => {
       expect(
         container!.querySelector('[aria-label="Opening your library"]')
       ).toBeNull();
+    });
+  });
+
+  describe("permission is a takeover of the grid (§13, issue 712 P13)", () => {
+    it("renders the refusal grammar where the grid would have been", () => {
+      mocks.timeline.loading = false;
+      mocks.permission = { status: "denied", canAskAgain: true };
+      render();
+      // What was tried, why it was refused, what to do — the three parts §13
+      // asks for, all inside the content slot.
+      expect(container!.textContent).toContain(
+        "Photos cannot reach your camera roll"
+      );
+      expect(container!.textContent).toContain("Nothing has been lost");
+      expect(
+        container!.querySelector('button[aria-label="Allow access"]')
+      ).toBeTruthy();
+    });
+
+    it("keeps the band up and drops the tile-size stepper", () => {
+      mocks.timeline.loading = false;
+      mocks.permission = { status: "denied", canAskAgain: true };
+      render();
+      expect(container!.querySelector('[data-testid="band"]')).toBeTruthy();
+      // A rung stepper over no tiles is a control for a thing that is not there.
+      expect(container!.querySelector('[data-testid="toolbar"]')).toBeNull();
+    });
+
+    it("SABOTAGE: a denied grant never leaves a dead grid behind", () => {
+      mocks.timeline.loading = false;
+      mocks.permission = { status: "denied", canAskAgain: false };
+      render();
+      // The empty-library sentence is for a granted-but-empty library. Showing
+      // it here is exactly the lie P13 removed: it invites the member to take
+      // photographs the app would still not be allowed to read.
+      expect(container!.textContent).not.toContain("Your library starts here");
+      expect(
+        container!.querySelector('[aria-label="Opening your library"]')
+      ).toBeNull();
+    });
+
+    it("a limited grant that CAN show photographs shows them, not the panel", () => {
+      // The member picked a set; hiding it behind the panel would hide the
+      // very thing they granted.
+      mocks.timeline.loading = false;
+      mocks.timeline.assets = [{ id: "a1", source: "device" }];
+      mocks.timeline.sections = [{ day: "2026-07-30" }];
+      mocks.permission = {
+        status: "granted",
+        accessPrivileges: "limited",
+        canAskAgain: false,
+      };
+      render();
+      expect(container!.querySelector('[data-testid="timeline"]')).toBeTruthy();
+      expect(container!.textContent).not.toContain(
+        "Photos can reach some of your camera roll"
+      );
+    });
+
+    it("says nothing while the OS has not answered — unknown is not denied", () => {
+      mocks.timeline.loading = false;
+      mocks.permission = null;
+      render();
+      expect(container!.textContent).not.toContain("camera roll");
+      expect(container!.querySelector('[data-testid="toolbar"]')).toBeTruthy();
     });
   });
 

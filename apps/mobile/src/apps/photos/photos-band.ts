@@ -73,12 +73,12 @@ export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
  * the router.
  */
 export type PhotosMoreRowKey =
+  | "sharing"
   | "favorites"
   | "places"
   | "duplicates"
   | "trash"
-  | "storage"
-  | "access";
+  | "backup";
 
 /** What the More sheet carries (§3.1) — the shelves the five cannot hold. */
 export interface MoreRow {
@@ -97,32 +97,37 @@ export interface MoreRow {
 }
 
 /**
- * Sharing and Import are deliberately ABSENT from this table. The handoff
- * (proto:4980-4983) lists both as More-sheet rows, but neither has a
- * destination on mobile today: there is no Sharing surface (a second vault a
- * photograph sits in, per proto:3955-3958) and no Import flow (upload / drag
- * / capture, per proto:3978) built for the phone. A row that opens something
- * else — or that "opens" nowhere — is exactly the class of bug this file
- * exists to prevent (see PhotosHome's `onMoreRow`, which is now exhaustive
- * over this table and fails to typecheck on an unhandled key). A missing row
- * is honest; a row that lies about its destination is not. Add Sharing and
- * Import back here the moment their surfaces ship — not before.
+ * SHARING IS BACK; IMPORT IS STILL NOT (issue #712, A5).
+ *
+ * This table used to carry neither, and the comment here said to add each one
+ * "the moment their surfaces ship — not before". Sharing's surface ships in
+ * this pass (`SharingShelf.tsx`), so its row is here, FIRST, exactly where the
+ * handoff puts it (proto:4980-4983). Import still has no phone surface — no
+ * upload / drag / capture flow (proto:3978) — so it is still absent. A missing
+ * row is honest; a row that lies about its destination is not, and
+ * `resolveMoreRowRoute` below fails to TYPECHECK on a key with no case.
+ *
+ * `Photo access` is gone from this table (P13). It was never one of the
+ * handoff's rows: it existed because the phone's grant belongs to an operating
+ * system and a refused grant otherwise left an empty grid with no sentence.
+ * The sentence now lives IN the grid's own slot (`PhotoAccessPanel.tsx`, via
+ * `photoAccessTakesOverTimeline`), which is where the question is asked — so
+ * the buried row that answered it somewhere else is not needed and would be a
+ * second, worse route to the same content.
  */
 export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
+  { key: "sharing", label: "Sharing", icon: "share" },
   { key: "favorites", label: "Favorites", icon: "heart" },
   { key: "places", label: "Places", icon: "Pin" },
   { key: "duplicates", label: "Duplicates", icon: "copy" },
   { key: "trash", label: "Trash", icon: "trash-2" },
-  { key: "storage", label: "Storage", icon: "archive" },
-  // NOT one of proto:4980-4983's rows, and deliberately so. §13 makes the
-  // permission screen a whole surface rather than a banner, and on the phone
-  // the grant in question is the OPERATING SYSTEM's photo-library grant — a
-  // thing the desktop and the PWA do not have and therefore never needed a
-  // route to. The three answers a phone can get (denied, limited, granted) are
-  // not reachable from any other Photos surface, and a member who refused the
-  // camera-roll prompt otherwise gets an empty grid with no sentence and no way
-  // back. This row is that way back.
-  { key: "access", label: "Photo access", icon: "Lock" },
+  // "Backup", not "Storage" (issue #712, B1). The screen it opens has always
+  // been titled "Backup health" and has always been about whether this device's
+  // photographs have left it — the row's old label named the noun the screen
+  // does not discuss. The KEY moved with the label rather than being left as a
+  // stale `storage`: this union is closed and its every reference is in this
+  // package, so a half-rename would have been the only cost of keeping it.
+  { key: "backup", label: "Backup", icon: "archive" },
 ];
 
 /** The sheet's foot line (proto:4979), verbatim. */
@@ -146,15 +151,19 @@ export const PHOTOS_MORE_FOOT =
  *      timeline engine, expo-notifications and expo-haptics — none of which
  *      this routing rule depends on.
  */
-export function resolveMoreRowRoute(key: PhotosMoreRowKey):
+export type MoreRowRoute =
   | { screen: "PhotoStateView"; params: { mode: "trash" | "favorites" } }
-  | {
-      screen:
-        | "DuplicatesShelf"
-        | "PlacesView"
-        | "BackupHealth"
-        | "PhotoPermission";
-    } {
+  /**
+   * A CROSS-STACK destination (issue #712, B2). Backup health is a frame
+   * screen now — it lives in Settings beside Phone storage, because nothing on
+   * it is about photographs: the policy it edits governs Docs' scans and
+   * Notes' attachments too. Photos keeps a deep link to it rather than a copy,
+   * the same way `PhotoLightbox`'s `onParked` reaches Approvals.
+   */
+  | { screen: "Settings"; params: { screen: "BackupHealth" } }
+  | { screen: "DuplicatesShelf" | "PlacesView" | "SharingShelf" };
+
+export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
   switch (key) {
     case "trash":
       return { screen: "PhotoStateView", params: { mode: "trash" } };
@@ -166,15 +175,15 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey):
       // shows clusters; the review is one control away, from the shelf's own
       // head, exactly as the prototype's `Review duplicates` primary is.
       return { screen: "DuplicatesShelf" };
-    case "access":
-      return { screen: "PhotoPermission" };
+    case "sharing":
+      return { screen: "SharingShelf" };
     case "places":
       // Cards first (proto:4197): the More row opens the place-cards shelf,
       // not the map directly. The map is one control away, from the shelf's
       // own head (`PlacesView` → `PlacesMap`).
       return { screen: "PlacesView" };
-    case "storage":
-      return { screen: "BackupHealth" };
+    case "backup":
+      return { screen: "Settings", params: { screen: "BackupHealth" } };
     default: {
       const exhaustive: never = key;
       throw new Error(`Unhandled More-sheet row: ${String(exhaustive)}`);

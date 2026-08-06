@@ -53,10 +53,20 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
     });
   });
 
-  it("access opens the permission screen (§13), the only route to the OS grant", () => {
-    expect(resolveMoreRowRoute("access")).toStrictEqual({
-      screen: "PhotoPermission",
+  it("sharing opens the Sharing shelf — the row is back because the surface is", () => {
+    // issue #712 A5. `PHOTOS_MORE_ROWS` refused to carry this row until a
+    // destination existed for it; it exists now, and it is the sheet's FIRST
+    // row (proto:4980-4983).
+    expect(resolveMoreRowRoute("sharing")).toStrictEqual({
+      screen: "SharingShelf",
     });
+  });
+
+  it("carries no `access` row: permission is a takeover of the timeline now", () => {
+    // issue #712 P13. The permission content is rendered in the GRID's slot by
+    // `PhotosHome`, so a More row pointing at a pushed screen would be a
+    // second, worse route to the same words — and there is no screen left.
+    expect(PHOTOS_MORE_ROWS.map((row) => row.key)).not.toContain("access");
   });
 
   it("places opens PlacesView, the place-cards shelf, not the map directly", () => {
@@ -67,9 +77,14 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
     });
   });
 
-  it("storage opens BackupHealth", () => {
-    expect(resolveMoreRowRoute("storage")).toStrictEqual({
-      screen: "BackupHealth",
+  it("backup deep-links ACROSS stacks to frame Settings, not to a Photos route", () => {
+    // issue #712 B1/B2: the row is labelled "Backup" (the screen it opens is
+    // titled "Backup health"), and the screen itself moved to frame Settings
+    // beside Phone storage. A Photos-stack route name here would not resolve
+    // at all — which is the point of routing through this one function.
+    expect(resolveMoreRowRoute("backup")).toStrictEqual({
+      screen: "Settings",
+      params: { screen: "BackupHealth" },
     });
   });
 
@@ -78,14 +93,16 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
     // know about (cast past the type system, the way a stale build or a
     // future unwired row would arrive at runtime) must fail loudly rather
     // than falling through to some default screen.
-    expect(() => resolveMoreRowRoute("sharing" as PhotosMoreRowKey)).toThrow(
+    expect(() => resolveMoreRowRoute("import" as PhotosMoreRowKey)).toThrow(
       /Unhandled More-sheet row/u
     );
   });
 
-  it("PHOTOS_MORE_ROWS never carries sharing or import — no destination exists for either yet", () => {
-    const keys = PHOTOS_MORE_ROWS.map((row) => row.key);
-    expect(keys).not.toContain("sharing");
-    expect(keys).not.toContain("import");
+  it("PHOTOS_MORE_ROWS still carries no import — no phone destination exists yet", () => {
+    // Sharing came back in issue #712 because its surface shipped. Import did
+    // not: there is no upload / drag / capture flow for the phone
+    // (proto:3978), and a row that opens nowhere is the defect this table
+    // exists to prevent.
+    expect(PHOTOS_MORE_ROWS.map((row) => row.key)).not.toContain("import");
   });
 });

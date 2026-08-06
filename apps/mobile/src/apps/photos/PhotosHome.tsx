@@ -19,13 +19,7 @@
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
@@ -51,6 +45,8 @@ import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
+import { photoAccessTakesOverTimeline } from "./photo-access";
+import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
 import {
   inCloudMessage,
   runBackup,
@@ -67,10 +63,9 @@ import type {
   PhotosMoreRowKey,
 } from "./photos-band";
 import { usePhotosRung } from "./photos-rung-store";
-import { rungHeight } from "./photos-rungs";
-import type { Rung } from "./photos-rungs";
 import PhotosBand from "./PhotosBand";
 import PhotosCollectionsView from "./PhotosCollectionsView";
+import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import PhotosPeopleView from "./PhotosPeopleView";
 import { PhotosSearchView } from "./PhotosSearch";
@@ -80,7 +75,6 @@ import {
   pinnedThumbnailCandidates,
   pinnedThumbnailSignature,
 } from "./pinned-thumbnails";
-import { skeletonRows, skeletonTileCount } from "./skeleton-rows";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -101,6 +95,18 @@ export default function PhotosHome({
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
+  // §13 / P13. The OS grant, read HERE rather than on a screen a member has to
+  // go and find: the timeline is the surface that goes blank when the grant is
+  // refused, so the timeline is the surface that has to say why.
+  const grant = usePhotoAccessGrant();
+  const deviceReadable = timeline.assets.filter(
+    (asset) => asset.source !== "replica"
+  ).length;
+  const accessTakeover = photoAccessTakesOverTimeline({
+    state: grant.state,
+    deviceReadableCount: deviceReadable,
+    loading: timeline.loading,
+  });
 
   // The band on a PUSHED Photos screen (PhotosScreen) navigates here with the
   // destination it wants rather than pushing a second copy of Home. React
@@ -349,6 +355,11 @@ export default function PhotosHome({
     const nextRoute = resolveMoreRowRoute(key);
     if (nextRoute.screen === "PhotoStateView")
       navigation.navigate("PhotoStateView", nextRoute.params);
+    // The one cross-stack row (B2): Backup health is a frame screen now, so
+    // this leaves the Photos cover for the Settings cover rather than pushing
+    // a Photos route that no longer exists.
+    else if (nextRoute.screen === "Settings")
+      navigation.navigate("Settings", nextRoute.params);
     else navigation.navigate(nextRoute.screen);
   };
 
@@ -475,6 +486,22 @@ export default function PhotosHome({
           <PhotosPeopleView navigation={navigation} />
         ) : destination === "search" ? (
           <PhotosSearchView navigation={navigation} />
+        ) : accessTakeover && grant.state ? (
+          // THE TAKEOVER (§13, P13). The grid's own slot carries the refusal
+          // grammar — what was tried, why it was refused, what to do — instead
+          // of an empty grid with no sentence and no way back. The band below
+          // is untouched: the way out of Photos is never what a refusal takes
+          // away. No toolbar either: a tile-size stepper over no tiles is a
+          // control for a thing that is not there.
+          <PhotoAccessPanel
+            state={grant.state}
+            canAskAgain={grant.canAskAgain}
+            // Only the limited state prints it, and only once the walk has
+            // finished: a count read mid-walk is true for a second and wrong
+            // after.
+            readableCount={timeline.loading ? null : deviceReadable}
+            onRequest={() => grant.request()}
+          />
         ) : (
           <>
             {/* The toolbar stays up while the library opens (§14): the rung is
@@ -568,61 +595,6 @@ export default function PhotosHome({
   );
 }
 
-/**
- * The library, opening. Packed by `justify()` at the member's own rung from a
- * FIXED aspect sequence (`skeleton-rows.ts`), painted in `--skel`. No shimmer
- * and no randomness: motion in a placeholder says something is happening when
- * nothing is, and a grid that repacks itself on every render is the reflow §14
- * exists to forbid.
- *
- * Deliberately not a `FlashList` — there is nothing to virtualise, and one
- * screenful is all that is ever drawn.
- */
-function PhotosGridSkeleton({ rung }: { rung: Rung }): React.JSX.Element {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { width, height } = useWindowDimensions();
-  const target = rungHeight(rung, "phone");
-  // The window's full height, not the slot's: the slot is now genuinely shorter
-  // than the window (the band is a sibling that takes its own room), so this
-  // packs at most a row or two more than fit — and `styles.skeleton` clips
-  // them. Overshooting a placeholder is invisible; undershooting leaves a bare
-  // strip above the band while the library opens.
-  const rows = useMemo(
-    () => skeletonRows(width, target, skeletonTileCount(width, target, height)),
-    [height, target, width]
-  );
-
-  return (
-    <View
-      accessibilityLabel="Opening your library"
-      accessibilityRole="progressbar"
-      style={styles.skeleton}
-      pointerEvents="none"
-    >
-      {rows.map((row, index) => (
-        // Row index is the only identity a placeholder row has, and the list is
-        // fixed for the life of the loading state.
-        <View key={`skeleton-row-${index}`} style={styles.skeletonRow}>
-          {row.map((tile) => (
-            <View
-              key={tile.asset.id}
-              style={[
-                styles.skeletonTile,
-                {
-                  backgroundColor: colors.skel,
-                  height: tile.height,
-                  width: tile.width,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     // The scroll region takes what is left after the head and the band; the
@@ -659,11 +631,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     safe: { flex: 1 },
     selectionCount: { ...t("mono"), color: colors.text },
-    // The same 2px gutter the real grid uses, on both axes — the placeholder
-    // and the photographs occupy identical boxes.
-    skeleton: { flex: 1, overflow: "hidden" },
-    skeletonRow: { flexDirection: "row", gap: 2, marginBottom: 2 },
-    skeletonTile: { borderRadius: 2 },
     // The title starts at the page margin now that no ☰ occupies the leading
     // slot; `header`'s own `paddingHorizontal: pageMargin` is that margin, so
     // the title needs no margin of its own — it used to add `spacing[2]` on

@@ -24,6 +24,7 @@ import {
   optimisticValues,
 } from "../../lib/replica/optimistic";
 import type { DocsScreenProps } from "../../navigation";
+import { custodySentence } from "./docs-custody";
 import type { NativeDocument } from "./docs-model";
 import { useDocsLibrary } from "./useDocsLibrary";
 
@@ -238,7 +239,7 @@ export default function DocumentViewer({
         </Pressable>
         <Text style={[styles.meta, { color: colors.textSoft }]}>
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
-          · {document.custody ?? "local"}
+          · {custodySentence(document.custody)}
         </Text>
         <Pressable
           accessibilityLabel="Add document to another vault"

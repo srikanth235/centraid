@@ -311,6 +311,23 @@ export default function SettingsScreen({
             <Text style={styles.rowLabel}>Vault storage on this phone</Text>
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
+          {/* Backup health moved here from the Photos stack (issue #712 B2).
+              The two rows are the same question from opposite ends: what this
+              phone is HOLDING, and whether what it holds has left it. The
+              policy the second one edits governs every byte-bearing app, not
+              photographs — which is exactly why it stopped living inside one. */}
+          <View style={styles.rowGap} />
+          <Pressable
+            onPress={() => navigation.navigate("BackupHealth")}
+            style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+            accessibilityLabel="Backup health"
+          >
+            <Icon name="upload-cloud" size={18} color={colors.textSoft} />
+            <Text style={styles.rowLabel}>
+              Backup health and transfer rules
+            </Text>
+            <Icon name="ChevronRight" size={16} color={colors.textFaint} />
+          </Pressable>
         </SettingsSection>
 
         <ShareTargetSection />
@@ -512,6 +529,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
+    rowGap: { height: spacing[2] },
     rowLabel: { ...t("body"), color: colors.text, flex: 1 },
     safe: { backgroundColor: colors.bg, flex: 1 },
     scanDenied: { padding: spacing[5] },

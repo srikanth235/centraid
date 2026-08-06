@@ -64,7 +64,6 @@ export interface ChromeSlots {
   lightbox: ReactNode;
   slideshow: ReactNode;
   picker: ReactNode;
-  enrichment: ReactNode;
   /**
    * The permission screen (§13), or null while access is granted. It is a
    * SCREEN and not a strip, so it replaces the live region rather than sitting
@@ -106,11 +105,6 @@ export function Chrome({ narrow, slots }: ChromeProps): ReactNode {
         <div id="live" className={styles.live} hidden={denied}>
           <div id="shelfStripMount">{slots.shelfStrip}</div>
           <div id="toolbarMount">{slots.toolbar}</div>
-          {/* Face-proposer (issue #352) — its own self-contained React region,
-              rendered once into this slot at boot. */}
-          <div id="enrichmentMount" className={styles.enrichment}>
-            {slots.enrichment}
-          </div>
 
           <div id="scrollPane" className={styles.scroll}>
             {slots.banner}

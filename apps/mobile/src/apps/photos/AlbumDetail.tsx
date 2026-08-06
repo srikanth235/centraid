@@ -30,6 +30,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
@@ -38,7 +39,6 @@ import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import {
   NO_DOWNLOAD_REASON,
-  NO_SHARE_DESTINATION_REASON,
   batchAddToAlbum,
   batchFavorite,
   batchTrash,
@@ -48,6 +48,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useCopyToSharing } from "./use-copy-to-sharing";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
@@ -241,6 +242,13 @@ export default function AlbumDetail({
     }
   };
   const selectedVaultAssets = vaultAssets(assets, selection);
+  // One handler for the third selection target, shared by every Photos shelf
+  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // cannot drift between them.
+  const sharing = useCopyToSharing(
+    () => selectedVaultAssets,
+    () => setSelection(new Set())
+  );
   /** Add to ANOTHER album. The phone has no room for an inline popover, so
    *  the album list is the platform's own list-of-choices (§6's phone note
    *  reaches the same answer on the web with a sheet). */
@@ -307,7 +315,10 @@ export default function AlbumDetail({
     addToAlbum: canChangeAlbum
       ? { run: () => addToAnotherAlbum() }
       : { unavailableReason: writeBlockedReason! },
-    share: { unavailableReason: NO_SHARE_DESTINATION_REASON },
+    // The real thing since issue #712 A5: a live control that places
+    // `media.media_asset` into the member's share target — or, when they
+    // have not chosen one yet, asks at the moment of intent (A3).
+    share: sharing.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canChangeAlbum
       ? {
@@ -575,6 +586,12 @@ export default function AlbumDetail({
         )}
         noun="Album"
         onClose={() => setShareOpen(false)}
+      />
+      <ShareTargetPicker
+        visible={sharing.picking}
+        candidates={sharing.candidates}
+        onChoose={(vaultId) => sharing.choose(vaultId)}
+        onClose={() => sharing.dismiss()}
       />
     </PhotosScreen>
   );

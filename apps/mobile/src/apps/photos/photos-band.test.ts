@@ -35,21 +35,28 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   });
 
   test("the More sheet carries the shelves the five cannot hold", () => {
-    // Sharing and Import are handoff rows this table deliberately does NOT
-    // carry (issue #711): neither has a destination on mobile today, and a
-    // row with no destination is a lying label, not a missing feature. See
-    // the comment on `PHOTOS_MORE_ROWS` for the full reasoning.
+    // Sharing is FIRST (proto:4980-4983) and is here at all only because its
+    // surface shipped in issue #712 (A5) — the table's own comment made that
+    // the condition. Import is still absent: no phone flow exists, and a row
+    // with no destination is a lying label, not a missing feature.
+    //
+    // "Backup", not "Storage" (#712 B1): the screen it opens is titled "Backup
+    // health" and is about whether this device's photographs have left it.
+    //
+    // "Photo access" is gone (#712 P13) — permission is a takeover of the
+    // timeline's own slot now, not a buried row to a pushed screen.
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual([
+      "Sharing",
       "Favorites",
       "Places",
       "Duplicates",
       "Trash",
-      "Storage",
-      // Not one of the handoff's rows: the phone is the only surface whose
-      // grant belongs to an operating system, and §13's permission screen has
-      // no other route on it (see the row's own comment).
-      "Photo access",
+      "Backup",
     ]);
+    expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain("Storage");
+    expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain(
+      "Photo access"
+    );
   });
 
   test("exactly one band exists at any moment, never two", () => {

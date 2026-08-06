@@ -7,15 +7,6 @@ import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 
-import {
-  CLOUD_ANSWER,
-  deviceAnswerFor,
-  ENRICHMENT_DECLINED_NOTE,
-  ENRICHMENT_QUEUED_NOTE,
-  ENRICHMENT_REQUESTED_NOTE,
-  ENRICHMENT_ROW,
-} from "@centraid/blueprints/apps/photos/enrichment-consent";
-
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
@@ -29,6 +20,11 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import {
+  revalidateBackedUp,
+  selectFreeUpCandidates,
+} from "../../kit/storage/free-up-space";
+import type { DeviceByteProbe } from "../../kit/storage/free-up-space";
 import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
 import { sha256OfFile } from "../../lib/upload/enqueue";
@@ -41,9 +37,6 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
-import EnrichmentConsent from "./EnrichmentConsent";
-import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
-import type { DeviceByteProbe } from "./free-up-space";
 import { styles } from "./PhotosLibrary.styles";
 import PhotosScreen from "./PhotosScreen";
 import type { PhotoAsset } from "./timeline-source";
@@ -124,10 +117,6 @@ export default function PhotosLibrary({
     "photos",
     useMemo(() => ({ entity: "core.place" }), [])
   );
-  const policies = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
-  );
   const entries = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.collection_entry" }), [])
@@ -136,13 +125,6 @@ export default function PhotosLibrary({
   const [pinsReady, setPinsReady] = useState(false);
   const [freeing, setFreeing] = useState(false);
   const [newAlbum, setNewAlbum] = useState(false);
-  // The consent question is a surface the member OPENS; `enrichAnswered`
-  // latches their answer so it is asked once and answered once.
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [enrichBusy, setEnrichBusy] = useState(false);
-  const [enrichAnswered, setEnrichAnswered] = useState<
-    "device" | "declined" | null
-  >(null);
   const [title, setTitle] = useState("");
   useFocusEffect(
     useCallback(() => {
@@ -351,53 +333,6 @@ export default function PhotosLibrary({
       ]
     );
   };
-  // ---- face detection: a consent moment, not a settings toggle ----
-  //
-  // THE LOAD-BEARING RULE. This row used to fire `request-enrichment` on a
-  // single tap. It now opens a question (EnrichmentConsent.tsx) and the write
-  // below is reachable from exactly ONE place: the `Run on this device`
-  // answer. Opening the surface, reading the policy, closing it and answering
-  // `Not now` all write nothing. The answer is latched so a double tap cannot
-  // answer twice.
-  //
-  // The tier comes from the replica's `enrich.policy` mirror; the shared
-  // `deviceAnswerFor` decides whether the on-device promise in Panel A is
-  // even true for this vault, so web and native cannot disagree about it.
-  const enrichPolicy = policies.rows.find((row) => row.domain === "photos");
-  const enrichTier = policies.loading
-    ? null
-    : ((enrichPolicy?.tier as string | undefined) ?? "off");
-  const deviceAnswer = deviceAnswerFor(enrichTier);
-  const runOnDevice = async (): Promise<void> => {
-    // Belt and braces: the button is already unavailable in both of these
-    // cases. A write this consequential does not rely on a disabled prop.
-    if (!session || enrichBusy || enrichAnswered) return;
-    if (!deviceAnswer.available) return;
-    setEnrichBusy(true);
-    try {
-      const result = await session.write("photos", {
-        action: "request-enrichment",
-        input: { entity_type: "media.media_asset" },
-      });
-      if (
-        surfaceWriteOutcome(result, { queuedMessage: ENRICHMENT_QUEUED_NOTE })
-      ) {
-        setEnrichAnswered("device");
-        postStatus(ENRICHMENT_REQUESTED_NOTE);
-        setConsentOpen(false);
-      }
-    } catch (error) {
-      surfaceWriteFailure(error, "Face detection was not asked for");
-    } finally {
-      setEnrichBusy(false);
-    }
-  };
-  const declineEnrichment = (): void => {
-    setEnrichAnswered("declined");
-    postStatus(ENRICHMENT_DECLINED_NOTE);
-    setConsentOpen(false);
-  };
-
   return (
     // The band is the way out now (§F, proto:4953-4954), so the head carries
     // NO back chevron: this surface is the band's `Library` destination, and a
@@ -531,7 +466,11 @@ export default function PhotosLibrary({
             <Pressable
               accessibilityLabel="Open backup health"
               accessibilityRole="button"
-              onPress={() => navigation.navigate("BackupHealth")}
+              onPress={() =>
+                // Cross-stack since issue #712 B2: Backup health is a frame
+                // screen in Settings now, not a Photos route.
+                navigation.navigate("Settings", { screen: "BackupHealth" })
+              }
             >
               <Row
                 icon="cloud"
@@ -560,44 +499,9 @@ export default function PhotosLibrary({
                 colors={colors}
               />
             </Pressable>
-            {/* A way IN to a question, never the answer. This row used to
-                fire the enrichment write on a single tap — see the gate
-                above. It says what it opens, not what it would do. */}
-            <Pressable
-              accessibilityLabel="Read what face detection would do"
-              accessibilityRole="button"
-              onPress={() => setConsentOpen(true)}
-            >
-              <Row
-                icon="zap"
-                title={ENRICHMENT_ROW.title}
-                meta={ENRICHMENT_ROW.meta}
-                colors={colors}
-              />
-            </Pressable>
           </View>
         }
       />
-      {/* The consent question. A full screen, not a sheet or an alert: it
-          carries two panels, nine facts and a note, and a member reads it
-          before answering. Closing it is NOT an answer — nothing is written
-          and it can be opened again. */}
-      <Modal
-        animationType="slide"
-        visible={consentOpen}
-        onRequestClose={() => setConsentOpen(false)}
-      >
-        <EnrichmentConsent
-          count={assets.length}
-          onDevice={deviceAnswer}
-          cloud={CLOUD_ANSWER}
-          busy={enrichBusy}
-          answered={enrichAnswered}
-          onRunOnDevice={() => void runOnDevice()}
-          onDecline={declineEnrichment}
-          onClose={() => setConsentOpen(false)}
-        />
-      </Modal>
       <Modal
         transparent
         animationType="fade"

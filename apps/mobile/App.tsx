@@ -113,7 +113,6 @@ const LockerHome = lazyScreen(() => import("./src/apps/locker/LockerHome"));
 const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
 const PeopleHome = lazyScreen(() => import("./src/apps/people/PeopleHome"));
 const AlbumDetail = lazyScreen(() => import("./src/apps/photos/AlbumDetail"));
-const BackupHealth = lazyScreen(() => import("./src/apps/photos/BackupHealth"));
 const DuplicateReview = lazyScreen(
   () => import("./src/apps/photos/DuplicateReview")
 );
@@ -121,9 +120,6 @@ const DuplicatesShelf = lazyScreen(
   () => import("./src/apps/photos/DuplicatesShelf")
 );
 const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
-const PhotoPermission = lazyScreen(
-  () => import("./src/apps/photos/PhotoPermission")
-);
 const PhotoPicker = lazyScreen(() => import("./src/apps/photos/PhotoPicker"));
 const PhotoLightbox = lazyScreen(
   () => import("./src/apps/photos/PhotoLightbox")
@@ -139,10 +135,15 @@ const PhotoStateView = lazyScreen(
 const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
 const PlacesView = lazyScreen(() => import("./src/apps/photos/PlacesView"));
 const PlaceDetail = lazyScreen(() => import("./src/apps/photos/PlaceDetail"));
+const SharingShelf = lazyScreen(() => import("./src/apps/photos/SharingShelf"));
 const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
 const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
 const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
 const ApprovalsScreen = lazyScreen(() => import("./src/screens/Approvals"));
+// A FRAME screen since issue #712 B2 — it moved out of the Photos stack whole.
+const BackupHealthScreen = lazyScreen(
+  () => import("./src/screens/BackupHealth")
+);
 const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
 const PhoneStorageScreen = lazyScreen(
   () => import("./src/screens/PhoneStorage")
@@ -211,7 +212,7 @@ function PhotosNavigator(): React.JSX.Element {
       />
       <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
       <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="BackupHealth" component={BackupHealth} />
+      <PhotosStack.Screen name="SharingShelf" component={SharingShelf} />
       <PhotosStack.Screen name="PlacesView" component={PlacesView} />
       <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
       <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
@@ -220,7 +221,6 @@ function PhotosNavigator(): React.JSX.Element {
       <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
       <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
       <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
-      <PhotosStack.Screen name="PhotoPermission" component={PhotoPermission} />
       <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
     </PhotosStack.Navigator>
   );
@@ -271,6 +271,10 @@ function SettingsNavigator(): React.JSX.Element {
       <SettingsStack.Screen
         name="PhoneStorage"
         component={PhoneStorageScreen}
+      />
+      <SettingsStack.Screen
+        name="BackupHealth"
+        component={BackupHealthScreen}
       />
     </SettingsStack.Navigator>
   );

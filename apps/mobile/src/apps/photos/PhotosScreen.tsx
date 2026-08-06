@@ -135,6 +135,9 @@ export default function PhotosScreen({
     const route = resolveMoreRowRoute(key);
     if (route.screen === "PhotoStateView")
       navigation.navigate("PhotoStateView", route.params);
+    // Cross-stack (B2) — Backup health lives in frame Settings now.
+    else if (route.screen === "Settings")
+      navigation.navigate("Settings", route.params);
     else navigation.navigate(route.screen);
   };
 

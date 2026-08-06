@@ -23,6 +23,7 @@ import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
+import { countLocalOnly, DOCS_CUSTODY_SHELF_SUFFIX } from "./docs-custody";
 import { driveItemKey, FILTERS } from "./docs-library-shelves";
 import type { LibraryFilter, ViewMode } from "./docs-library-shelves";
 import type { NativeDocument, NativeFolder } from "./docs-model";
@@ -186,6 +187,10 @@ export default function DocsHome({
       ),
     [drive.folders, filter, folderId, searching]
   );
+  // The per-shelf altitude (docs/blueprint-seats.md "Byte custody
+  // vocabulary"): the population fact, as a count, over the same set of
+  // documents the "N documents" count above already describes.
+  const localOnlyCount = useMemo(() => countLocalOnly(documents), [documents]);
   // Memoised: this array is the list's `data`, and rebuilding it inline gave
   // FlatList a new identity on every keystroke and refresh toggle.
   const items = useMemo<DriveItem[]>(
@@ -427,6 +432,9 @@ export default function DocsHome({
           <Text style={[styles.libraryMeta, { color: colors.textSoft }]}>
             {documents.length} documents
             {folders.length ? ` · ${folders.length} folders` : ""}
+            {localOnlyCount
+              ? ` · ${localOnlyCount} ${DOCS_CUSTODY_SHELF_SUFFIX}`
+              : ""}
           </Text>
         </View>
         <View style={[styles.viewSwitch, { backgroundColor: colors.bgSunken }]}>

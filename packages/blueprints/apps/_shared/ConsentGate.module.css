@@ -1,4 +1,7 @@
-/* The enrichment consent surface (v4 handoff §8).
+/* The §8 consent gate (issue #712 C1) — lifted out of Photos'
+   EnrichmentConsent.module.css, byte-for-byte, so the one visual change is
+   zero: both call sites (Photos' face detection, Docs' capture-time OCR)
+   read this file now instead of each carrying their own copy.
 
    Two panels of paper and ink, then the note. Nothing here is a fill except
    the one filled answer (`kit-btn primary`), because a consent question is
@@ -6,7 +9,7 @@
    alert.
 
    `--net` is a BORDER and a 2px rule, never a fill and never a red dot: the
-   cloud panel carries it on its whole box (the panel is about bytes leaving)
+   net panel carries it on its whole box (the panel is about bytes leaving)
    and the egress fact carries it on its leading edge (that line is the single
    most important sentence on the screen). Same treatment as the refusal rule
    in Permission.module.css, for the same reason.
@@ -30,7 +33,7 @@
   background: var(--bg-elev);
 }
 
-/* The cloud panel. The whole box is bordered in `--net` — the panel IS the
+/* The net panel. The whole box is bordered in `--net` — the panel IS the
    egress disclosure, so the mark belongs to the panel, not to a badge. */
 .panel[data-net="true"] {
   border-color: var(--net);
@@ -115,7 +118,8 @@
   gap: var(--sp-2);
 }
 
-/* The note under both panels: "this is not a settings toggle". */
+/* The note under both panels: "this is not a settings toggle" (Photos) /
+   the declined-scan-still-saves statement (Docs). */
 .note {
   margin: 0;
   font: var(--t-small);

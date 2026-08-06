@@ -367,7 +367,7 @@ describe("Face review (native)", () => {
     expect(container!.textContent).not.toMatch(/\d+ photos\b/u);
   });
 
-  it("Keep unnamed fires a real dismiss answer (issue #712)", async () => {
+  it("Keep unnamed fires a real dismiss answer (issue 712)", async () => {
     await renderScreen();
     const keep = Array.from(container!.querySelectorAll("button")).find(
       (b) => b.getAttribute("aria-label") === "Keep unnamed"
