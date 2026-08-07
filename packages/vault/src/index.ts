@@ -590,6 +590,13 @@ export {
   type EnrichDomain,
 } from "./enrich/policy.js";
 export {
+  compareModelIds,
+  isSupersededBy,
+  makeModelId,
+  parseModelId,
+  type ModelId,
+} from "./enrich/model-id.js";
+export {
   hexHamming,
   registerHammingFn,
   encodeVector,
@@ -619,6 +626,14 @@ export {
   type StageFileOptions,
   type StageFileResult,
 } from "./ingest/stage-file.js";
+export {
+  isMediaPath,
+  parseTakeoutSidecar,
+  planTakeout,
+  type SidecarFacts,
+  type TakeoutMediaEntry,
+  type TakeoutPlan,
+} from "./ingest/takeout-sidecar.js";
 export {
   parseMbox,
   threadKey,

@@ -99,6 +99,7 @@
     "typescript": "catalog:"
   },
   "op-sqlite": {
-    "fts5": true
+    "fts5": true,
+    "sqliteVec": true
   }
 }

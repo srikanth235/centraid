@@ -28,10 +28,13 @@
 // screenshot or a selfie from any other photograph today — see the header
 // comment of `photos-collections.ts` for why a shelf that would sometimes come
 // back empty by construction is worse than a shelf that does not exist.
-// `PhotoAsset.kind` DOES carry "video" honestly, but Videos was left out of
-// the first cut here too: Collections has no video-only shelf either, and
-// adding the one filter row Collections does not already answer is a separate,
-// deliberate call rather than a gap in this pass.
+// `PhotoAsset.kind` DOES carry "video" honestly, and Collections grew a
+// Videos shelf on that fact (issue #721 B3) — but this Filter row did not
+// grow a matching entry alongside it: this menu narrows the SECTIONS the
+// Years/Months grains are built from, and Videos already has its own door
+// (Collections' shelf, and `PhotoStateView`'s `videos` mode); adding a second
+// path to the same filter here is a separate, deliberate call rather than a
+// gap in this pass.
 //
 // TILE SIZE came here from `PhotosMoreSheet.tsx` by way of the bottom sheet
 // this menu replaced — see that file's header for why it left the More sheet,

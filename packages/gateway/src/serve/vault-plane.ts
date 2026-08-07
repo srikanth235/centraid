@@ -144,6 +144,10 @@ import type {
   WalShipperOptions,
 } from "@centraid/vault";
 
+import { resolveEmbedder } from "../enrich/embedder.js";
+import type { Embedder } from "../enrich/embedder.js";
+import { runPhotoEmbeddingSweep } from "../enrich/photo-embeddings.js";
+import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { canWrite } from "./enrollment-store.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
@@ -269,6 +273,14 @@ export interface VaultPlaneOptions {
    * Omitted for hosts/tests without one: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
+  /**
+   * The host's photo embedder (issue #721 E2), or `null` for "this host has
+   * none" — which is the shipped default until an operator sets
+   * `CENTRAID_EMBEDDER_PATH`. Resolved from the environment when omitted.
+   * With no embedder the indexing pass never runs and semantic search answers
+   * `unavailable`; nothing else changes.
+   */
+  embedder?: Embedder | null;
   /** Post-journal-commit data-trigger hint; the host supplies vault scoping. */
   onProvenanceCommitted?: (
     vaultId: string,
@@ -560,6 +572,15 @@ export class VaultPlane {
     VaultPlaneOptions["walShipper"]
   >;
   private readonly shouldDeferBackgroundWork: () => boolean;
+  /** The host's photo embedder (issue #721 E2), or null when none is configured. */
+  private readonly embedder: Embedder | null;
+  /**
+   * True while a detached embedding pass is in flight. Indexing spawns a child
+   * process per photograph, so a slow embedder must not have the hourly clock
+   * stacking passes on top of it — a skipped tick simply finds the same open
+   * rows next hour, because the queue is the database.
+   */
+  private embeddingSweepRunning = false;
   /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
   private readonly onSweepPass:
     | ((info: { durationMs: number }) => void)
@@ -641,6 +662,10 @@ export class VaultPlane {
       options.shouldDeferBackgroundWork ?? (() => false);
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
+    // Host configuration, read once: a plane that resolved the environment per
+    // sweep could serve two different model ids across one process's life.
+    this.embedder =
+      options.embedder === undefined ? resolveEmbedder() : options.embedder;
     this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
     this.vaultLimitBytes = options.vaultLimitBytes ?? (() => null);
     this.dir = options.dir;
@@ -662,6 +687,18 @@ export class VaultPlane {
       // Preview backstop codec (issue #405 §2) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.
       ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
+      // Vector search extension (issue #721 E3). The vault package ships no
+      // native binaries, so the gateway supplies the loader; a platform
+      // without the extension logs once and searches with the exact JS cosine
+      // scan instead. Never fails the open.
+      loadExtensions: (db) => {
+        loadSqliteVec(db, (reason) => {
+          this.logger.info(
+            `vault plane: vector search extension unavailable (${reason}) — ` +
+              "semantic search falls back to the exact cosine scan"
+          );
+        });
+      },
       shouldDeferBackgroundWork: this.shouldDeferBackgroundWork,
       ...(options.replicationConcurrency === undefined
         ? {}
@@ -2689,6 +2726,13 @@ export class VaultPlane {
       } else {
         this.runBlobSweep();
       }
+      // Photo embedding index (issue #721 E2), detached for the same reason
+      // the blob sweep is: it spawns a child process per photograph, and no
+      // amount of model latency may hold up the lifecycle duties above.
+      // Ordered AFTER the blob sweep on purpose — that pass is what generates
+      // the thumb/preview derivatives this one feeds the embedder, so a fresh
+      // import gets its rungs first and is indexed on the following tick.
+      this.runEmbeddingSweep();
       // Journal segment archival (issue #367 §E2): slow-cadence — at most
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
@@ -2857,6 +2901,43 @@ export class VaultPlane {
     } finally {
       this.onSweepPass?.({ durationMs: Date.now() - sweepStartedAt });
     }
+  }
+
+  /**
+   * The photo embedding half of `runSweep` (issue #721 E2), detached. Holds no
+   * state between passes beyond the in-flight guard: what a killed pass left
+   * undone is still an open `enrich_request` row or an asset with no embedding
+   * for the current model, so the next pass simply finds it again.
+   */
+  private runEmbeddingSweep(): void {
+    if (!this.embedder || this.embeddingSweepRunning) return;
+    this.embeddingSweepRunning = true;
+    void runPhotoEmbeddingSweep(this.db, {
+      embedder: this.embedder,
+      onFailure: (assetId, reason) => {
+        this.logger.warn(
+          `vault plane: embedding failed for asset ${assetId}: ${reason}`
+        );
+      },
+    })
+      .then((result) => {
+        if (result.embedded + result.drained + result.failed > 0) {
+          this.logger.info(
+            `vault plane: photo embeddings model=${result.model} ` +
+              `scanned=${result.scanned} embedded=${result.embedded} ` +
+              `drained=${result.drained} skippedNoDerivative=${result.skippedNoDerivative} ` +
+              `failed=${result.failed}`
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `vault plane: photo embedding sweep failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        this.embeddingSweepRunning = false;
+      });
   }
 
   /**

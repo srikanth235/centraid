@@ -345,6 +345,37 @@ test("2.6c — Photos opens into the app view and yields the #712 UI evidence", 
   }
 });
 
+test("2.6d — Photos opens into the app view and yields the #721 UI evidence", async () => {
+  // Same contract as 2.6b/2.6c: the evidence frame is the surface the change
+  // set touched. #721's structural core lands in Photos — the Takeout import
+  // door, the semantic search hit group, the honored key photo, the Videos
+  // shelf — so Photos-open is the honest frame. The native-only surfaces
+  // (mobile search, shelves) have no e2e harness of their own; this frame
+  // evidences the shared Photos surface those changes feed.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-721-photos-north-star.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

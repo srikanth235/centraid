@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -58,8 +58,12 @@ if (process.argv[1] === import.meta.filename) {
       encoding: "utf8",
     }).split("\n"),
   ].filter(Boolean);
+  // `git diff --name-only` lists deletions too; a receipt renamed away (a
+  // waived doc-integrity migration) must not crash the gate — the surviving
+  // receipt is the one that carries the evidence.
+  const present = changed.filter((file) => existsSync(path.join(root, file)));
   const errors = validateUiReceipt({
-    changed,
+    changed: present,
     readText: (file) => readFileSync(path.join(root, file), "utf8"),
   });
   if (errors.length) {

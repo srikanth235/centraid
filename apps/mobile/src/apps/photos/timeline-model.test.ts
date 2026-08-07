@@ -1,8 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { makePhotosFixture } from "./photos-fixtures";
+import { buildPeriods } from "./timeline-grains";
 import {
   addDragSelection,
+  captureLocalDay,
   mergePhotoAssets,
   onThisDay,
   sectionPhotoAssets,
@@ -185,5 +187,105 @@ describe("native Photos timeline model", () => {
     const afterFirst = addDragSelection(new Set(["before"]), "first");
     const afterSecond = addDragSelection(afterFirst, "second");
     expect([...afterSecond]).toStrictEqual(["before", "first", "second"]);
+  });
+});
+
+describe("capture-local day across the date line and the device-local fallback (issue #721 C2)", () => {
+  // process.env.TZ swaps the host's local zone at runtime (POSIX) — the same
+  // technique packages/client/src/app-format.test.ts uses to pin conversions
+  // without mocking Date. Restored after every test so it never leaks into a
+  // sibling test file.
+  const realTz = process.env.TZ;
+  afterEach(() => {
+    if (realTz === undefined) delete process.env.TZ;
+    else process.env.TZ = realTz;
+  });
+
+  test("date-line-crossing sections stay in capture-local order, never raw UTC order", () => {
+    const fixture = makePhotosFixture("date-line");
+    // Every row's raw UTC capturedAt slice disagrees with its capture-local
+    // day (see photos-fixtures.ts's header on this fixture) — sectioning must
+    // follow tzOffsetMin, not a naive Date.parse(capturedAt) slice, and must
+    // keep the newest-capture-local-first order the fixture was authored in.
+    expect(fixture.sections.map((section) => section.day)).toStrictEqual([
+      "2026-01-01",
+      "2025-12-31",
+    ]);
+    expect(fixture.sections[0]?.assets.map((asset) => asset.id)).toStrictEqual([
+      "utc-11-jan1-0030",
+      "utc+1-jan1-0000",
+    ]);
+    expect(fixture.sections[1]?.assets.map((asset) => asset.id)).toStrictEqual([
+      "utc13-dec31-2330",
+      "utc-2-dec31-2300",
+    ]);
+  });
+
+  test("the date-line fixture buckets into the right YEAR periods, not the year its raw UTC instant suggests", () => {
+    const fixture = makePhotosFixture("date-line");
+    const years = buildPeriods(fixture.sections, "years");
+    // The Jan-1-local pair must land in 2026, not 2025, even though two of
+    // those rows' raw capturedAt instants are technically still 2025 in UTC —
+    // exactly the "wrong YEAR" trap timeline-grains.ts's header warns about.
+    expect(years.map((period) => period.key)).toStrictEqual(["2026", "2025"]);
+    expect(years[0]?.count).toBe("2 photographs");
+    expect(years[1]?.count).toBe("2 photographs");
+  });
+
+  test("onThisDay and sectionPhotoAssets agree about which day a date-line capture belongs to", () => {
+    process.env.TZ = "UTC";
+    // Raw UTC slice says Dec 31 2024; tzOffsetMin +60 puts the capture-local
+    // day at Jan 1 2025 — a year before "now" below, so it must surface as a
+    // memory, filed under the exact day sectioning would give it alone.
+    const dateLineMemory = photo("dateline-memory", {
+      capturedAt: "2024-12-31T23:00:00.000Z",
+      tzOffsetMin: 60,
+    });
+    expect(sectionPhotoAssets([dateLineMemory])[0]?.day).toBe("2025-01-01");
+    expect(
+      onThisDay([dateLineMemory], new Date("2026-01-01T12:00:00Z")).map(
+        (row) => row.id
+      )
+    ).toStrictEqual(["dateline-memory"]);
+  });
+
+  test("captureLocalDay falls back to the viewing device's own calendar day when tzOffsetMin is absent", () => {
+    // Kiritimati carries a fixed UTC+14 all year (no DST), which flips this
+    // instant's calendar day relative to its raw UTC slice — proving the
+    // fallback took the device-local branch rather than silently slicing the
+    // UTC string.
+    process.env.TZ = "Pacific/Kiritimati";
+    const capturedAt = "2026-07-16T23:00:00.000Z";
+    expect(capturedAt.slice(0, 10)).toBe("2026-07-16"); // the raw UTC day
+    expect(captureLocalDay(capturedAt)).toBe("2026-07-17");
+    expect(captureLocalDay(capturedAt, undefined)).toBe("2026-07-17");
+  });
+
+  test("the fallback branch and the explicit-tzOffsetMin branch agree once the offset matches the pinned zone", () => {
+    process.env.TZ = "Pacific/Kiritimati";
+    const capturedAt = "2026-07-16T23:00:00.000Z";
+    expect(captureLocalDay(capturedAt)).toBe(
+      captureLocalDay(capturedAt, 14 * 60)
+    );
+  });
+
+  test("wrong-camera-clock fixture files a wiped-clock 2003 capture on its own day via the device-local fallback", () => {
+    process.env.TZ = "UTC";
+    const fixture = makePhotosFixture("wrong-camera-clock");
+    const days = fixture.sections.map((section) => section.day);
+    expect(days).toStrictEqual(
+      expect.arrayContaining(["2003-01-01", "2003-06-15"])
+    );
+    expect(
+      fixture.sections.find((section) => section.day === "2003-01-01")?.assets
+    ).toHaveLength(1);
+    // None of the wrong-clock rows carry a tzOffsetMin — every one of them
+    // exercised the fallback branch, not the one the rest of this suite
+    // covers.
+    expect(
+      fixture.assets
+        .filter((asset) => asset.id.startsWith("clock-wrong"))
+        .every((asset) => asset.tzOffsetMin === undefined)
+    ).toBe(true);
   });
 });

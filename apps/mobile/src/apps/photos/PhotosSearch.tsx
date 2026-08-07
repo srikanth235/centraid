@@ -62,6 +62,7 @@ import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
+import { authHeader } from "../../lib/gateway";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
 import PhotosSearchRestingState from "./PhotosSearchRestingState";
@@ -110,6 +111,15 @@ const UNREACHABLE_FACTS: readonly (readonly [string, string])[] = [
   ["what does not", "search, people, places"],
 ];
 
+/** One embedding-scored hit, straight off `POST …/enrich/semantic-search`
+ *  (issue #721 B4) — the shape `search-hits.ts`'s `SearchHitSources.
+ *  semanticHits` carries. */
+interface SemanticHit {
+  assetId: string;
+  contentId: string;
+  score: number;
+}
+
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
 /**
@@ -138,13 +148,21 @@ export function PhotosSearchView({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { session } = useReplica();
+  const { session, gatewayBase } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
   const [term, setTerm] = useState("");
   const [contentIds, setContentIds] = useState<Set<string>>();
   const [searching, setSearching] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
+  // Derived data enriches, never gates (issue #721 B4): `undefined` covers
+  // every reason the semantic row might have nothing to show — nothing typed
+  // yet, no gateway, the model saying `"unavailable"`, or the request simply
+  // failing — and every one of those reads the same to `search-hits.ts`. This
+  // state never feeds `unreachable`/`searching` above: the FTS grid and the
+  // person/place/album/caption rows must stay exactly as capable regardless
+  // of whether this fetch ever lands.
+  const [semanticHits, setSemanticHits] = useState<SemanticHit[]>();
   // Bumped by Retry. The query effect depends on it, so pressing Retry re-runs
   // the SAME query rather than sending the member somewhere else — the old
   // "Search online" control navigated to AppDetail, which is not a retry and
@@ -221,6 +239,50 @@ export function PhotosSearchView({
     };
   }, [attempt, session, term]);
 
+  // The semantic row's own fetch, debounced alongside the FTS effect above
+  // rather than folded into it: this is a SEPARATE gateway route
+  // (`enrich/semantic-search`), and its outcome must never touch `searching`/
+  // `unreachable` — a member with no semantic model configured still gets a
+  // fully working person/place/album/caption search (issue #721 B4).
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = term.trim();
+    const timeout = setTimeout(() => {
+      if (!trimmed || !session || !gatewayBase) {
+        setSemanticHits(undefined);
+        return;
+      }
+      void fetch(`${gatewayBase}/centraid/_vault/enrich/semantic-search`, {
+        method: "POST",
+        headers: { ...authHeader(), "content-type": "application/json" },
+        body: JSON.stringify({ query: trimmed, limit: 30 }),
+      })
+        .then((response) =>
+          response.ok
+            ? (response.json() as Promise<{
+                status: string;
+                hits?: SemanticHit[];
+              }>)
+            : Promise.reject(
+                new Error(`semantic search failed (HTTP ${response.status})`)
+              )
+        )
+        .then((body) => {
+          if (cancelled) return;
+          setSemanticHits(body.status === "ok" ? (body.hits ?? []) : undefined);
+        })
+        .catch(() => {
+          // A network failure or an "unavailable" model both read the same
+          // way here: the semantic group is simply not present this time.
+          if (!cancelled) setSemanticHits(undefined);
+        });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [attempt, gatewayBase, session, term]);
+
   const matches = useMemo(
     () =>
       contentIds
@@ -255,6 +317,7 @@ export function PhotosSearchView({
         parties: parties.rows,
         places: places.rows,
         query: term,
+        ...(semanticHits ? { semanticHits } : {}),
       }),
     [
       assets,
@@ -265,6 +328,7 @@ export function PhotosSearchView({
       matches,
       parties.rows,
       places.rows,
+      semanticHits,
       term,
     ]
   );

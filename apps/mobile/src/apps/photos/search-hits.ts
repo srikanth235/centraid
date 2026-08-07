@@ -26,6 +26,17 @@
 //   `media.asset_phash`, and nothing else. There is nothing to count, so there
 //   is no row. Add it here the moment an enrichment publisher lands labels.
 //
+// SEMANTIC (issue #721 B4) is not that publisher, and not a THINGS row either
+// — it does not name discrete labels a photograph carries, it ranks the whole
+// library against the query by a gateway embedding model
+// (`POST …/enrich/semantic-search`) and hands back scored photograph ids. One
+// row stands for that whole ranked set ("Photos that look like …"), broadest
+// of the five because it is not about any one person/place/album/caption —
+// see `SEARCH_HIT_ENTITIES` for where it sits. It is DERIVED DATA, never a
+// gate: absent, `"unavailable"`, or a failed fetch all read as "the group
+// simply is not here" (`semanticEntityHits`, below) — the other four rows and
+// the grid beneath them are exactly as capable either way.
+//
 // ORDERING AND CAPPING (issue #712 S1) route through the web blueprints'
 // shared `groupSearchHits` combinator — the same "find, then cap, then
 // order" the web scaffold's Photos and Tally consumers use
@@ -44,8 +55,17 @@ import type { PhotoAsset } from "./timeline-model";
 /** A replica row, as the query hooks hand it over. */
 type Row = Record<string, unknown>;
 
-/** The four groups the phone can actually answer, in proto:4258-4265's order. */
-export type SearchHitKind = "person" | "place" | "album" | "caption";
+/**
+ * The groups the phone can actually answer. The first four are proto:4258-
+ * 4265's order; `semantic` (issue #721 B4) is a fifth, added after them —
+ * see `SEARCH_HIT_ENTITIES` for why it is broadest and therefore last.
+ */
+export type SearchHitKind =
+  | "person"
+  | "place"
+  | "album"
+  | "caption"
+  | "semantic";
 
 /**
  * Where a hit's `Open →` goes. Every one of these is a REAL surface that owns
@@ -111,6 +131,19 @@ export interface SearchHitSources {
    *  the replica's own FTS surface indexes (`REPLICA_LOCAL_SEARCH`), so it is
    *  exactly what a caption hit hit. */
   contentTitles: ReadonlyMap<string, string>;
+  /**
+   * The gateway's embedding match for this query (issue #721 B4), present
+   * only once `POST …/enrich/semantic-search` has answered `status: "ok"`.
+   * `undefined` covers every other reason there is nothing to show — no
+   * gateway, the model reporting `"unavailable"`, or the request simply
+   * failing — and every one of those reads exactly the same here: the group
+   * is absent, not broken (see the file header).
+   */
+  semanticHits?: readonly {
+    assetId: string;
+    contentId: string;
+    score: number;
+  }[];
 }
 
 /**
@@ -217,16 +250,27 @@ const CAPTION_ENTITY: SearchEntity<HitSource, SearchHit> = {
   label: "caption",
   match: (term, source) => captionHits(source, queryTokens(term)),
 };
+const SEMANTIC_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "semantic",
+  label: "semantic",
+  // Ignores `term` entirely — the gateway's embedding model already decided
+  // which photographs match `source.query`, so re-matching by substring here
+  // would be exactly the token search this row exists to go beyond.
+  match: (_term, source) => semanticEntityHits(source),
+};
 
-/** Person → place → album → caption, proto:4258-4265's order and also
- *  narrowest-to-broadest: a person is one identity, a caption is one
- *  photograph's words. Declared as data (`SEARCH_HIT_ENTITIES`), not a
- *  branch, the same rule the web scaffold's own entity configs follow. */
+/** Person → place → album → caption → semantic. The first four are
+ *  proto:4258-4265's order and also narrowest-to-broadest: a person is one
+ *  identity, a caption is one photograph's words. Semantic is broadest of
+ *  all — a ranked slice of the whole library, not one named thing — so it is
+ *  appended last. Declared as data (`SEARCH_HIT_ENTITIES`), not a branch, the
+ *  same rule the web scaffold's own entity configs follow. */
 const SEARCH_HIT_ENTITIES: readonly SearchEntity<HitSource, SearchHit>[] = [
   PERSON_ENTITY,
   PLACE_ENTITY,
   ALBUM_ENTITY,
   CAPTION_ENTITY,
+  SEMANTIC_ENTITY,
 ];
 
 /**
@@ -439,4 +483,55 @@ function captionHits(
     });
   }
   return hits;
+}
+
+/**
+ * The ONE semantic row (issue #721 B4) — "Photos that look like …", standing
+ * for the gateway's whole ranked set rather than one row per scored hit
+ * (unlike person/place/album, which are genuinely many named things; a
+ * ranked list of photographs is one thing, scored).
+ *
+ * `sources.assets` is what resolves a bare `assetId` the network returned
+ * into a real timeline row: a hit the timeline has not (yet) loaded is
+ * dropped rather than reaching the grid as a dangling id `reachableAssetIds`
+ * cannot turn into a tile. `target` opens the single strongest match — the
+ * same "one real destination" rule every other row here follows — while
+ * `assetIds` still carries the WHOLE resolved set into the grid below,
+ * regardless of whether the row itself is ever tapped.
+ */
+function semanticEntityHits(sources: SearchHitSources): SearchHit[] {
+  const hits = sources.semanticHits;
+  if (!hits?.length) return [];
+  const byAssetId = new Map(
+    sources.assets.flatMap((asset) =>
+      asset.assetId ? [[asset.assetId, asset] as const] : []
+    )
+  );
+  const ranked = [...hits]
+    .sort((a, b) => b.score - a.score)
+    .flatMap((hit) => {
+      const asset = byAssetId.get(hit.assetId);
+      return asset ? [asset] : [];
+    });
+  const top = ranked[0];
+  if (!top) return [];
+  return [
+    {
+      key: "semantic",
+      kind: "semantic",
+      label: `Photos that look like “${sources.query.trim()}”`,
+      sub: `semantic · ${plural(ranked.length)}`,
+      // No "N here" — unlike person/place, the network already scoped its
+      // answer to this exact query; a second count would restate the same
+      // number under a different name.
+      meta: "",
+      assetIds: ranked.flatMap((asset) =>
+        asset.assetId ? [asset.assetId] : []
+      ),
+      target: {
+        screen: "PhotoLightbox",
+        params: { assetId: top.id },
+      },
+    },
+  ];
 }

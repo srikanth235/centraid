@@ -278,6 +278,12 @@ export default function PhotosCollectionsView({
           (entry) => String(entry.collection_id) === String(row.collection_id)
         )
         .map((entry) => String(entry.target_id)),
+      // Issue #721 B5: the member's own key-photo choice, straight off the
+      // collection row — `chosenCover` (`photos-collections.ts`) is what
+      // turns this into a tile, in preference to the newest member.
+      ...(row.cover_content_id
+        ? { coverContentId: String(row.cover_content_id) }
+        : {}),
     }));
     // Only CONFIRMED faces make a person: a proposed region is the enricher's
     // candidate, and a candidate is not somebody the member has said is in
@@ -366,6 +372,12 @@ export default function PhotosCollectionsView({
         break;
       case "favorites":
         navigation.navigate("PhotoStateView", { mode: "favorites" });
+        break;
+      case "videos":
+        // Same door as Favorites (issue #721 B3): a filter over the same
+        // shelf screen, not a bespoke grid — `PhotoStateView` already knows
+        // how to be "the timeline, filtered", and Videos is nothing else.
+        navigation.navigate("PhotoStateView", { mode: "videos" });
         break;
       case "sharing":
         navigation.navigate("SharingShelf");

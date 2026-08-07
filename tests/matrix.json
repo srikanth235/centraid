@@ -2392,6 +2392,15 @@
       "minimumTests": 1
     },
     {
+      "id": "photos.scale-50k",
+      "name": "Photos media-asset queries hold up at 50k assets plus a 10k-one-day degenerate corpus",
+      "surface": "mobile",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/photos-timeline.scale.test.ts",
+      "minimumTests": 1
+    },
+    {
       "id": "vault-atlas-census",
       "name": "Atlas census and schema projection stay in step with the ontology",
       "surface": "vault-core",

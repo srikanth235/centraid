@@ -28,6 +28,21 @@
 //   row spends the ONE text slot the kit component gives an action row to
 //   carry that reason anyway.
 //
+//   Make key photo (issue #721 B5) — the same `set-album-cover` write
+//   `AlbumDetail.tsx`'s selection-bar "Make cover" fires, reached here without
+//   leaving the viewer. It sits beside Add to Album because it is the same
+//   kind of fact about the same relationship (which album, which cover) and
+//   takes the same refusal ladder. It renders only when `albums` (this
+//   photograph's OWN album memberships, resolved by the caller the same way
+//   `PhotoLightbox.tsx` already resolves them for the info sheet's Albums
+//   chips) is non-empty: a photograph in no album has nothing for the row to
+//   set a cover ON, and that is a fact about the library, not a permission —
+//   so the row is left out rather than shown permanently disabled, the same
+//   omission rule `search-hits.ts` states for a group with nothing behind it.
+//   Which album, when there is more than one, is the SAME picker idiom Add to
+//   Album uses one row up — the consumer's `Alert.alert`, not a second
+//   `AnchoredMenu` submenu for the reason already argued above.
+//
 //   Adjust Location — OPENS the info sheet rather than growing a second place
 //   editor in the menu. `PhotoInfoSheet.tsx` already owns place (`placeName`,
 //   `placeSetByYou`, `onRemovePlace`); a second editor for the one fact would
@@ -105,8 +120,28 @@ export interface ViewerOverflowMenuInput {
   hasVaultAsset: boolean;
   /** `PhotoAsset.archived` — which label the row shows, Hide or Unhide. */
   archived: boolean;
+  /**
+   * The albums THIS photograph already belongs to, resolved by the caller
+   * from `core.collection_entry` — the same join `PhotoLightbox.tsx` already
+   * walks for the info sheet's Albums chips (issue #721 B5). Empty when the
+   * photograph is in no album, in which case there is no album for "Make key
+   * photo" to set a cover ON — the row is omitted entirely rather than shown
+   * permanently disabled with a reason nobody asked for (`search-hits.ts`'s
+   * own rule: a row with nothing behind it is left out, never faked).
+   */
+  albums: readonly { id: string; label: string }[];
   onSlideshow: () => void;
   onAddToAlbum: () => void;
+  /**
+   * "Make key photo" (issue #721 B5): the same `set-album-cover` write
+   * `AlbumDetail.tsx`'s "Make cover" control fires, aimed at whichever of
+   * `albums` the member means. Takes no argument, the same shape
+   * `onAddToAlbum` already has here — WHICH album is a picker concern the
+   * consumer owns (an `Alert.alert` list when `albums.length > 1`, a direct
+   * fire when there is exactly one), never this pure module's, exactly the
+   * division `onAddToAlbum`'s own comment above argues for its own picker.
+   */
+  onMakeKeyPhoto: () => void;
   onAdjustLocation: () => void;
   onHide: () => void;
   onDownload: () => void;
@@ -150,6 +185,13 @@ export function viewerOverflowMenuGroups(
   const hideReason = writeRefusalReason(input);
   const canHide = hideReason === undefined;
   const hideVerb = input.archived ? "Unhide" : "Hide";
+  // Same refusal ladder as Add to Album — read-only beats no-vault-row, either
+  // beats a plain grant — because setting a cover is the same kind of write
+  // against the same photograph. Album MEMBERSHIP is a separate, third gate:
+  // it is not a write refusal at all, so it is handled by simply not adding
+  // the row (below) rather than folded into this reason string.
+  const makeKeyPhotoReason = writeRefusalReason(input);
+  const canMakeKeyPhoto = makeKeyPhotoReason === undefined;
 
   return [
     {
@@ -194,6 +236,22 @@ export function viewerOverflowMenuGroups(
           disabled: !canAddToAlbum,
           onSelect: input.onAddToAlbum,
         },
+        // "Make key photo" only when the photograph is IN an album already —
+        // see `ViewerOverflowMenuInput.albums`'s own comment for why an empty
+        // set omits the row instead of showing it disabled with a reason.
+        ...(input.albums.length
+          ? [
+              {
+                key: "make-key-photo",
+                label: canMakeKeyPhoto
+                  ? "Make key photo"
+                  : `Make key photo — ${makeKeyPhotoReason}`,
+                icon: "Star",
+                disabled: !canMakeKeyPhoto,
+                onSelect: input.onMakeKeyPhoto,
+              },
+            ]
+          : []),
       ],
     },
     {

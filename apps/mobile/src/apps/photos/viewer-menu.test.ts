@@ -24,6 +24,7 @@ function baseInput(
   overrides: Partial<Parameters<typeof viewerOverflowMenuGroups>[0]> = {}
 ) {
   return {
+    albums: [],
     archived: false,
     hasVaultAsset: true,
     writable: true,
@@ -32,6 +33,7 @@ function baseInput(
     onDelete: noop,
     onDownload: noop,
     onHide: noop,
+    onMakeKeyPhoto: noop,
     onSendCopy: noop,
     onSlideshow: noop,
     ...overrides,
@@ -192,6 +194,80 @@ describe("viewerOverflowMenuGroups — the read-only grant", () => {
     const row = rows.find((candidate) => candidate.key === "hide");
     expect(row?.disabled).toBe(true);
     expect(row?.label).toContain(NOT_IN_A_VAULT_YET_REASON);
+  });
+});
+
+describe("viewerOverflowMenuGroups — Make key photo (issue #721 B5)", () => {
+  const ONE_ALBUM = [{ id: "album-1", label: "The coast road" }];
+  const TWO_ALBUMS = [
+    { id: "album-1", label: "The coast road" },
+    { id: "album-2", label: "Kitchen" },
+  ];
+
+  test("is omitted entirely when the photograph is in no album", () => {
+    const rows = flatten(viewerOverflowMenuGroups(baseInput({ albums: [] })));
+    expect(rows.find((row) => row.key === "make-key-photo")).toBeUndefined();
+  });
+
+  test("renders once the photograph is in at least one album", () => {
+    const rows = flatten(
+      viewerOverflowMenuGroups(baseInput({ albums: ONE_ALBUM }))
+    );
+    const row = rows.find((candidate) => candidate.key === "make-key-photo");
+    expect(row?.label).toBe("Make key photo");
+    expect(row?.disabled).toBeFalsy();
+  });
+
+  test("still renders once, not once per album, when the photograph is in several", () => {
+    const rows = flatten(
+      viewerOverflowMenuGroups(baseInput({ albums: TWO_ALBUMS }))
+    );
+    expect(rows.filter((row) => row.key === "make-key-photo")).toHaveLength(1);
+  });
+
+  test("sits directly after Add to Album, in the same group", () => {
+    const groups = viewerOverflowMenuGroups(baseInput({ albums: ONE_ALBUM }));
+    const albumGroup = groups.find((group) => group.key === "album")!;
+    expect(albumGroup.rows.map((row) => row.key)).toStrictEqual([
+      "add-to-album",
+      "make-key-photo",
+    ]);
+  });
+
+  test("disables with READ_ONLY_VAULT_REASON on a read-only grant, same as Add to Album", () => {
+    const rows = flatten(
+      viewerOverflowMenuGroups(
+        baseInput({ albums: ONE_ALBUM, writable: false })
+      )
+    );
+    const row = rows.find((candidate) => candidate.key === "make-key-photo");
+    expect(row?.disabled).toBe(true);
+    expect(row?.label).toContain(READ_ONLY_VAULT_REASON);
+  });
+
+  test("disables with NOT_IN_A_VAULT_YET_REASON when the photograph has no vault row yet", () => {
+    const rows = flatten(
+      viewerOverflowMenuGroups(
+        baseInput({ albums: ONE_ALBUM, hasVaultAsset: false })
+      )
+    );
+    const row = rows.find((candidate) => candidate.key === "make-key-photo");
+    expect(row?.disabled).toBe(true);
+    expect(row?.label).toContain(NOT_IN_A_VAULT_YET_REASON);
+  });
+
+  test("fires onMakeKeyPhoto, not a copy of it", () => {
+    const calls: string[] = [];
+    const rows = flatten(
+      viewerOverflowMenuGroups(
+        baseInput({
+          albums: ONE_ALBUM,
+          onMakeKeyPhoto: () => calls.push("make-key-photo"),
+        })
+      )
+    );
+    rows.find((row) => row.key === "make-key-photo")?.onSelect();
+    expect(calls).toStrictEqual(["make-key-photo"]);
   });
 });
 

@@ -16,6 +16,25 @@
 //     One row per (entity, model); vectors are little-endian float32 BLOBs.
 //     Nothing else depends on it: FTS over captions is the primary search
 //     plane, embeddings only ever add recall.
+//
+//     MODEL IDENTITY CARRIES VERSION (issue #721 E1). `model` is the string
+//     `"<name>@<version>"` — see `enrich/model-id.ts` for the make/parse/
+//     compare helpers and the full argument. The consequence for this DDL is
+//     that a model upgrade is a BACKFILL, never a migration: re-derive the
+//     rows whose parsed version is below the current one and let the UNIQUE
+//     (target_type, target_id, model) key hold both generations meanwhile.
+//     There is deliberately NO `model_version` column — SQLite's ADD COLUMN
+//     cannot be written re-runnably (see the sidecar argument above), so the
+//     column would have cost a rebuild across media_face_region's live FK to
+//     express something a parseable key already expresses exactly.
+//
+//     There is likewise no content-hash column, because re-derivation is
+//     ALREADY content-stable: a row targets an entity whose content item
+//     carries `sha256` and dedupes on it, so re-importing the same bytes
+//     lands on the same content row and therefore the same target — nothing
+//     to re-key. Different bytes are a different content row with its own
+//     derivation. The only thing that invalidates an embedding is the model
+//     changing, and the key above records exactly that.
 //   - `enrich_request` — the on-demand priority queue (issue #299 phase 5):
 //     a search that found nothing, or an owner opening an unenriched item,
 //     records what was wanted; enrichers drain this queue before the backlog.

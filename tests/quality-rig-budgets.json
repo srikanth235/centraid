@@ -101,6 +101,10 @@
       "lane": "scale",
       "volume": "10,000 photos + 5,000 contacts + 1,000 notes, then daily-use queries"
     },
+    "tests/scale/photos-timeline.scale.test.ts": {
+      "lane": "scale",
+      "volume": "50,000 media assets spread over 3 years + a 10,000-photo one-calendar-day degenerate corpus, then their own ordered/bucketed reads"
+    },
     "tests/scale/phash-clustering.scale.test.ts": {
       "lane": "scale",
       "volume": "90,000 photo assets, 3,000 near-duplicate families — cold sweep + idle sweep",

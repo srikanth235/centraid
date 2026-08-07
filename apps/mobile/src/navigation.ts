@@ -98,9 +98,12 @@ export type PhotosStackParamList = {
   // id it did not already have on hand). `archive` has no client affordance
   // that ever sets it (nothing writes `archived`/`archived_at` true), but
   // `PhotosLibrary.tsx` still reads it back out — left in place until that
-  // caller is retired, not deleted blind.
+  // caller is retired, not deleted blind. `videos` is Collections' Videos
+  // shelf (issue #721 B3) — the same "filter over the one shared timeline"
+  // shape as `favorites`, so it grew this union rather than a screen of
+  // its own.
   PhotoStateView:
-    | { mode: "favorites" | "archive" | "trash" }
+    | { mode: "favorites" | "archive" | "trash" | "videos" }
     | { mode: "person"; partyId: string; personName: string };
 };
 

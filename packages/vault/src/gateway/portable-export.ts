@@ -12,6 +12,11 @@
 // answered a face proposal (a rejection stopped being a row deletion). A
 // restore that dropped it would hand the member back a review queue they had
 // already worked through.
+// Schema/export audit #721: the schema fingerprint moved on comment-only edits
+// to schema/enrich.ts (the model-versioning convention is documented in its
+// header; no table, column, or CHECK changed). `enrich_embedding` and its
+// sibling tables were already carried by the canonical table walk, so export
+// completeness is unchanged — derived rows restore exactly like any other row.
 
 import { createHash } from "node:crypto";
 
