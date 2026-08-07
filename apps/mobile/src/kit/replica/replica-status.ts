@@ -89,7 +89,8 @@ export function replicaStatusRow(
         actionable: false,
         label: "Syncing recent changes…",
       };
-    default:
+    case "current":
+    case "device-offline":
       return SILENT;
   }
 }
