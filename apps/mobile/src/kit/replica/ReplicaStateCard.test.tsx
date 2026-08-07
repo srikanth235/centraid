@@ -137,16 +137,25 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     container.remove();
   });
 
-  it("renders a visible explanation for the offline connection state, not null", async () => {
-    // This is the sabotage target: swap `connection: "offline"` back to a
-    // path the old `connection !== "unavailable" && !error` guard treated as
-    // "nothing to say" and this assertion goes red.
+  it("says nothing at all when the gateway is merely unreachable", async () => {
+    // Offline renders NOTHING: a vault is a local replica, so offline the grid
+    // renders from bytes already on the phone. Carding that as an incident
+    // over-announces the product's own premise.
     await renderCard({ connection: "offline", noun: "Notes" });
-    expect(container.textContent).toContain("Notes is offline");
-    expect(container.textContent?.length).toBeGreaterThan(0);
+    expect(container.innerHTML).toBe("");
   });
 
-  it("renders a visible explanation for the unavailable connection state", async () => {
+  it("shows the error message and 'could not be loaded' when offline WITH error", async () => {
+    await renderCard({
+      connection: "offline",
+      noun: "Notes",
+      error: "Read failed",
+    });
+    expect(container.textContent).toContain("Notes could not be loaded");
+    expect(container.textContent).toContain("Read failed");
+  });
+
+  it("shows 'is not connected' for the unavailable state", async () => {
     await renderCard({ connection: "unavailable", noun: "Tasks" });
     expect(container.textContent).toContain("Tasks is not connected");
   });
@@ -156,17 +165,21 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("draws the bordered --net block, not a filled icon card", async () => {
-    await renderCard({ connection: "offline", noun: "Notes" });
+  it("unavailable card has borderColor #mock-net and role alert", async () => {
+    await renderCard({ connection: "unavailable", noun: "Tally" });
     const card = container.querySelector<HTMLElement>("div[data-style]");
     const style = JSON.parse(card?.dataset.style ?? "{}");
     expect(style.borderColor).toBe("#mock-net");
-    expect(style.backgroundColor).toBeUndefined();
+    expect(card?.getAttribute("role")).toBe("alert");
   });
 
-  it("renders an outlined Retry, not a filled 'Try again'", async () => {
+  it("Retry button works for unavailable state", async () => {
     const onRetry = vi.fn<() => void>();
-    await renderCard({ connection: "offline", noun: "Notes", onRetry });
+    await renderCard({
+      connection: "unavailable",
+      noun: "Tasks",
+      onRetry,
+    });
     const button = container.querySelector("button");
     expect(button?.textContent).toBe("Retry");
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

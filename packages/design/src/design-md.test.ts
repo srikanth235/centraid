@@ -38,8 +38,6 @@ import {
   STAGE_LINE,
   SUCCESS,
   SUCCESS_LIGHT,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
   WARNING,
   WARNING_LIGHT,
 } from "./themes/shared.js";
@@ -165,16 +163,6 @@ describe("DESIGN.md front matter", () => {
       );
       expect(frontMatterValue(`c-${key}-text-dark`)).toBe(
         paletteText.dark[paletteKey]
-      );
-    }
-    // The tone axis is a design decision an app consumes, so it is pinned like
-    // any other value rather than described.
-    for (const tone of SURFACE_TONE_NAMES) {
-      expect(frontMatterValue(`tone-${tone}`), tone).toBe(
-        SURFACE_TONES[tone].light
-      );
-      expect(frontMatterValue(`tone-${tone}-dark`), tone).toBe(
-        SURFACE_TONES[tone].dark
       );
     }
   });
@@ -321,11 +309,13 @@ describe("DESIGN.md body", () => {
 
   test("publishes the freedom table an app is judged against", () => {
     expect(body).toContain("What an app may set for itself");
-    for (const tone of SURFACE_TONE_NAMES) expect(body).toContain(tone);
     for (const tier of Object.keys(DENSITY_TIERS)) expect(body).toContain(tier);
-    expect(body).toContain("`data-tone`");
     expect(body).toContain("`data-density`");
     expect(body).toContain("Never on a control");
+    // The tone axis is retired — one page, for the shell and every app in
+    // it. The freedom table no longer offers a surface tone row, though the
+    // prose may still legitimately name the retired axis while explaining it.
+    expect(body).not.toContain("| Surface tone |");
   });
 
   test("records the brief-to-repo mapping and the app hue table", () => {

@@ -38,6 +38,17 @@ Adding a third preset therefore means moving those rules onto a resolved-kind at
 5. **Deep imports** like `@centraid/design/src/themes/centraid` — use package exports / barrel (governance no-deep-imports).
 6. **Font-family overrides** in app CSS — UI grounding forbids arbitrary `font-family`; token stacks own type.
 
+## There is ONE page, and an app does not retune it
+
+A per-app surface-tone axis shipped once: an app set `data-tone` (neutral / paper / mat / cool / warm) and only `--bg` (`--bg-tone-*`) moved. It was removed entirely, for two measured reasons:
+
+1. **Retuning `--bg` alone inverted the paper metaphor.** `--bg-elev` / `--bg-sunken` / `--skel` stayed pinned while only the page moved, and the system's rule is that raised paper is darker-in-light and lighter-in-dark. Photos, on a retuned page, drew its cards LIGHTER than its page in light mode — exactly backwards, because a card is a sheet laid on the page and the sheet did not move with it.
+2. **The axis was imperceptible.** Measured on device, four of the five tones sat within 0.7 L* of neutral, and dark mode's whole five-tone spread was 2.4 L*.
+
+The rule now: the shell and every app share ONE page colour, `--bg` / `colors.bg`. If a page tone ever returns, it must carry its whole surface SET — page, elev, sunken, and skel together — never `--bg` alone; a tone that moves one rung of the paper stack and pins the rest is how the inversion happened the first time. `PAGE` and `WALL` in `packages/design/src/themes/shared.ts` are deliberately not re-exported from the package barrel: reaching for the literal instead of the `--bg` role is the same per-app page retune this rule exists to prevent.
+
+- [ ] Grounding a page? Read `--bg` / `colors.bg` — never a per-app page colour, and never a new `data-tone`.
+
 ## Checklist
 
 - [ ] Change tokens in `packages/design/src`, not in a one-off CSS file under `apps/`

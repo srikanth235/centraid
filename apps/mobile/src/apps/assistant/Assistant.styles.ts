@@ -129,8 +129,9 @@ export const makeStyles = (colors: ThemeColors) =>
     pendingText: { ...t("body"), color: colors.textFaint, fontStyle: "italic" },
     rowLeft: { alignItems: "flex-start" },
     rowRight: { alignItems: "flex-end" },
-    // Assistant's declared surface tone is "warm" (freedom table, DESIGN.md).
-    safe: { backgroundColor: colors.toneWarm, flex: 1 },
+    // There is one page for the shell and every app in it — no per-app
+    // surface tone (docs/traps/design-tokens.md).
+    safe: { backgroundColor: colors.bg, flex: 1 },
     sendButton: {
       alignItems: "center",
       backgroundColor: colors.accent,

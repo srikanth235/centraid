@@ -26,11 +26,12 @@ import {
   LINK_DARK,
   NET,
   NET_DARK,
+  PAGE,
   RING,
   RING_DARK,
   SUCCESS,
   SUCCESS_LIGHT,
-  SURFACE_TONES,
+  WALL,
   WARNING,
   WARNING_LIGHT,
 } from "./shared";
@@ -43,19 +44,20 @@ export const lightTheme: Theme = {
   accentHover: ACCENT_HOVER,
   accentLight: ACCENT_LIGHT,
   accentText: BRAND,
-  // The page is the `neutral` tone; an app may retune THIS role and nothing
-  // else on the surface axis.
-  bg: SURFACE_TONES.neutral.light,
-  // The wall behind the frame is the deepest paper an app may declare, which
-  // is also why `mat` is the surface every solved ink rung is scored against.
-  bgApp: SURFACE_TONES.mat.light,
+  // ONE PAGE. The shell and every app in it share this one colour — see
+  // `PAGE`/`WALL` in shared.ts for why the per-app tone axis was retired.
+  bg: PAGE.light,
+  // The wall behind the frame is the deepest paper the system paints, which
+  // is also why `WALL` is the surface every solved ink rung is scored
+  // against.
+  bgApp: WALL.light,
   // `surf` — tiles, the today cell, the hover ground.
   bgElev: "#F5F4F2",
   // A recessed track sits between the page and the raised paper: deep enough
   // to read as a groove, light enough that `--text-faint` still clears AA on
   // it. Deeper than this and the metadata ramp starts failing.
   bgSunken: "#F9F8F6",
-  bgWall: SURFACE_TONES.mat.light,
+  bgWall: WALL.light,
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
@@ -73,7 +75,7 @@ export const lightTheme: Theme = {
   textGhost: INK_RAMP.light.ghost,
   textDisabled: INK_RAMP.light.disabled,
   // Ink ON a filled ink control — the page colour, not pure white.
-  textInv: SURFACE_TONES.neutral.light,
+  textInv: PAGE.light,
   // `line` is the hairline (separators, tile borders); `lineStrong` is the
   // explicit boundary (control borders, section rules).
   line: "#EFEEEB",
@@ -109,13 +111,13 @@ export const darkTheme: Theme = {
   accentHover: ACCENT_HOVER_DARK,
   accentLight: ACCENT_LIGHT_DARK,
   accentText: BRAND_DARK,
-  bg: SURFACE_TONES.neutral.dark,
-  bgApp: "#060606",
+  bg: PAGE.dark,
+  bgApp: WALL.dark,
   // `surf` — LIGHTER than the page here, which is why `--text-faint` is
   // validated against this surface and not against `--bg`.
   bgElev: "#171716",
   bgSunken: "#121211",
-  bgWall: SURFACE_TONES.mat.dark,
+  bgWall: WALL.dark,
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), " +
@@ -126,7 +128,7 @@ export const darkTheme: Theme = {
   textFaint: INK_RAMP.dark.faint,
   textGhost: INK_RAMP.dark.ghost,
   textDisabled: INK_RAMP.dark.disabled,
-  textInv: SURFACE_TONES.neutral.dark,
+  textInv: PAGE.dark,
   line: "#1B1B1A",
   lineStrong: "#232322",
   link: LINK_DARK,

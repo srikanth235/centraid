@@ -47,7 +47,10 @@ export type BackupProgress = TransferProgress;
  *  engine, which passes it straight back to `send`. */
 interface PhotoRecord {
   kind: PhotoAsset["kind"];
-  capturedAt: string;
+  /** Absent when the device's media store recorded no timestamp at all
+   *  (`timeline-model.ts`). The field is omitted from the upload rather than
+   *  sent empty — the vault stores the fact the device had, or nothing. */
+  capturedAt?: string;
   captureGroupId?: string;
   width?: number;
   height?: number;
@@ -62,7 +65,9 @@ export interface BackupRunDeps {
     mediaType: string;
     plaintextSize: number;
     kind: PhotoAsset["kind"];
-    capturedAt: string;
+    /** Optional, matching `backupDeviceMedia`: an asset with no capture time
+     *  uploads without one rather than being held back from backup. */
+    capturedAt?: string;
     captureGroupId?: string;
     width?: number;
     height?: number;
@@ -118,7 +123,10 @@ function photoEntry(
           },
           record: {
             kind: asset.kind,
-            capturedAt: asset.capturedAt,
+            // OMITTED, never sent as `undefined`: the vault records the fact
+            // the device had, and "no capture time" is carried by the absence
+            // of the field rather than by a null the reader has to interpret.
+            ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
             // The capture's true UTC offset isn't in MediaLibrary metadata, so
             // we record none rather than fabricating the device's offset.
             ...(companion ? { captureGroupId: `live:${localId}` } : {}),
@@ -144,7 +152,7 @@ function photoEntry(
           },
           record: {
             kind: "video",
-            capturedAt: asset.capturedAt,
+            ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
             captureGroupId: `live:${localId}`,
           },
         });

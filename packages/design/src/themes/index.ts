@@ -8,6 +8,11 @@
 
 import { darkTheme, lightTheme } from "./centraid";
 
+// `PAGE` and `WALL` are deliberately NOT re-exported here (or from the
+// package root). A consumer reaching for the literal instead of the `--bg`
+// role is exactly the per-app page retune the one-page rule exists to
+// prevent — see docs/traps/design-tokens.md, "There is ONE page, and an app
+// does not retune it."
 export type { Theme } from "./shared";
 export {
   ACCENT_HOVER,
@@ -31,10 +36,7 @@ export {
   STAGE,
   STAGE_LINE,
   STAGE_SUNKEN,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
 } from "./shared";
-export type { SurfaceTone } from "./shared";
 
 export { darkTheme, lightTheme } from "./centraid";
 

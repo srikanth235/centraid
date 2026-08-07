@@ -173,12 +173,67 @@ export function apiHeaders(
 }
 
 /**
+ * How long a cold start waits for the tunnel to answer before falling
+ * through to the manual-URL path / cached base. `startTunnel()` itself has no
+ * timeout — dialling a desktop that is asleep or unreachable can hang for the
+ * lifetime of the launch — so SOMETHING here has to own a budget, or a cold
+ * start with no reachable gateway waits forever and never opens the replica
+ * it already has on disk (the defect this constant exists to make impossible;
+ * see replica-mount.ts / mount-plan.ts for the phase-A/phase-B split this
+ * feeds into).
+ */
+const TUNNEL_START_BUDGET_MS = 4_000;
+
+/**
+ * Race `work` against a timer of `ms`, resolving `undefined` if the timer
+ * wins. This is a BUDGET, not a cancellation: `work` is never aborted, only
+ * abandoned. That distinction is the whole safety argument —
+ *
+ *   - `resolveGatewayBase()` writes nothing itself, so an abandoned start
+ *     landing late has nothing of ours to corrupt;
+ *   - `ensureTunnelStarted()`'s own `startInFlight` memoization means the
+ *     NEXT call (a manual retry, a later reachability pass) joins the same
+ *     in-flight start instead of dialling a second time;
+ *   - once the abandoned start finishes, the tunnel IS running, and the next
+ *     pass through `ensureTunnelStarted()` reads `status.state === "running"`
+ *     and takes the port straight off the status call, no new dial needed.
+ *
+ * `work.catch(() => undefined)` is attached up front — before the race can
+ * give up on it — so a late rejection from the abandoned promise can never
+ * surface as an unhandled rejection; the caller of `withBudget` never sees
+ * it, because by then this function has already settled from the timer side.
+ */
+function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+  work.catch(() => undefined);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    work
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timer);
+        reject(error as Error);
+      });
+  });
+}
+
+/**
  * Resolve the base URL for every gateway request: paired tunnel first,
  * manual URL second. `undefined` when neither is configured; throws
  * PhoneLinkError when the device is paired but the tunnel fails to start.
+ *
+ * The tunnel start is budgeted (`withBudget`) for the TIMEOUT dimension only:
+ * a start that genuinely fails — bad ticket, module unavailable — still
+ * rejects and its PhoneLinkError still reaches the pairing screens verbatim.
+ * Only "did not answer within the budget" resolves `undefined` here.
  */
 export async function resolveGatewayBase(): Promise<string | undefined> {
-  const tunnel = await ensureTunnelStarted();
+  const tunnel = await withBudget(
+    ensureTunnelStarted(),
+    TUNNEL_START_BUDGET_MS
+  );
   if (tunnel) return tunnel.baseUrl;
   const manual = await hydrateGatewayUrl();
   if (!manual) return undefined;

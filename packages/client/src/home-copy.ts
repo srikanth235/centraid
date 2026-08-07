@@ -45,13 +45,9 @@ export function homeDayOneFoot(appsInstalled: number, things: number): string {
   return `${appsInstalled} apps installed · ${things} things · sample content can be removed in one action`;
 }
 
-/**
- * The offline banner, verbatim from the handoff (`offlineCopy`, :5563). Shared
- * because a route reachable from both surfaces should not risk two spellings
- * of the same fact — see this module's header.
- */
-export const HOME_OFFLINE_BANNER =
-  "Offline · changes stay on this device and commits are disabled until the gateway is back";
+// The surviving load-bearing offline copy is `OFFLINE_COMMIT_REASON` in
+// react/shell/commitAvailability.tsx, which the UI surfaces contextually
+// during write attempts rather than as a permanent banner on the vault index.
 
 /**
  * How many first moves the day-one treatment draws.

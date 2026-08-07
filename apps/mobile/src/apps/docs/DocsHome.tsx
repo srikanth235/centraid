@@ -317,8 +317,9 @@ export default function DocsHome({
   const listData = drive.connection === "unavailable" ? NO_ITEMS : items;
 
   return (
-    // Docs' declared surface tone is "paper" (freedom table, DESIGN.md).
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.tonePaper }]}>
+    // There is one page for the shell and every app in it — no per-app
+    // surface tone (docs/traps/design-tokens.md).
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         {folderId ? (
           // In a folder: chevron = up one level, still inside Docs.

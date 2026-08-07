@@ -60,15 +60,13 @@ describe("shell CSS lowering", () => {
     );
   });
 
-  test("puts the tone and density axes on attributes, not on components", () => {
-    // An app declares a tone and a tier; ONLY `--bg` moves on the tone axis,
-    // and only row height and content padding on the density axis. A control
-    // below 34px stops being hittable, so control size is not on either.
-    for (const tone of ["neutral", "paper", "mat", "cool", "warm"]) {
-      expect(css).toContain(
-        `[data-tone='${tone}'] {\n  --bg: var(--bg-tone-${tone});\n}`
-      );
-    }
+  test("puts the density axis on an attribute, and emits no tone axis", () => {
+    // An app declares a density tier; ONLY row height and content padding
+    // move. A control below 34px stops being hittable, so control size is
+    // not on this axis. There is no surface-tone axis at all — one page, for
+    // the shell and every app in it.
+    expect(css).not.toContain("data-tone");
+    expect(css).not.toContain("--bg-tone");
     expect(css).toContain("[data-density='compact'] {");
     expect(css).toContain("[data-density='dense'] {");
     const dense = blockFor("[data-density='dense']");

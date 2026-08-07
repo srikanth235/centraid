@@ -4,11 +4,14 @@
 // custom-property sheet.  It deliberately emits solved values and adapters;
 // clients do not need a CSS parser or a second semantic vocabulary.
 //
-// Three things this file owns that no component may re-own:
-//   • the surface-tone axis — an app sets `data-tone`, and only `--bg` moves;
+// Two things this file owns that no component may re-own:
 //   • the density axis — an app sets `data-density`, and only row height and
 //     content padding move (never control size);
 //   • `prefers-reduced-motion`, honoured in ONE global rule.
+//
+// There is no surface-tone axis. The shell and every app share ONE page
+// colour (`--bg`); see docs/traps/design-tokens.md, "There is ONE page, and
+// an app does not retune it."
 
 import { DENSITY_TIERS, metrics, spacing } from "./density";
 import { library } from "./library";
@@ -23,8 +26,6 @@ import {
   STAGE,
   STAGE_LINE,
   STAGE_SUNKEN,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
   themes,
 } from "./themes";
 import type { Theme, ThemeName } from "./themes";
@@ -103,9 +104,6 @@ function themeProps(theme: Theme): Record<string, string> {
     "--text-soft": theme.textSoft,
     "--warning": theme.warning,
   };
-  for (const tone of SURFACE_TONE_NAMES) {
-    out[`--bg-tone-${tone}`] = SURFACE_TONES[tone][theme.kind];
-  }
   for (const [key, value] of Object.entries(paletteFor(theme.kind))) {
     out[`--c-${key}`] = value;
   }
@@ -113,13 +111,6 @@ function themeProps(theme: Theme): Record<string, string> {
     out[`--c-${key}-text`] = value;
   }
   return out;
-}
-
-/** The surface-tone axis. An app declares a tone; ONLY the page moves. */
-function toneBlocks(): string {
-  return SURFACE_TONE_NAMES.map((tone) =>
-    block(`[data-tone='${tone}']`, { "--bg": `var(--bg-tone-${tone})` })
-  ).join("\n\n");
 }
 
 /** The density axis. Tiers scale row height and content padding only — a
@@ -219,6 +210,6 @@ export function toCss(): string {
   for (const name of Object.keys(themes) as ThemeName[]) {
     blocks.push(block(`[data-theme='${name}']`, themeProps(themes[name])));
   }
-  blocks.push(toneBlocks(), densityBlocks(), REDUCED_MOTION);
+  blocks.push(densityBlocks(), REDUCED_MOTION);
   return `${blocks.join("\n\n")}\n`;
 }

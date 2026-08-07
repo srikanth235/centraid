@@ -140,7 +140,6 @@ vi.mock(
           textDisabled: "#disabled",
           textFaint: "#faint",
           textSoft: "#soft",
-          toneMat: "#mat",
         },
       }),
     }) as never

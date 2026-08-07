@@ -76,7 +76,7 @@ export default function PlacesMap({
       }
     : { latitude: 20, longitude: 0, latitudeDelta: 100, longitudeDelta: 100 };
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Photos"

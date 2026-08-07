@@ -34,6 +34,7 @@ import ScrubRail from "./ScrubRail";
 import { addDragSelection } from "./timeline-model";
 import {
   buildRows,
+  dayAtOffset,
   monthHeaderIndices,
   monthLabelAt,
   rowTops,
@@ -148,20 +149,24 @@ export interface PhotoTimelineProps {
   placeNames?: ReadonlyMap<string, string>;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The gateway is not answering. Passed straight through to every tile,
-   *  where it turns `on the gateway` from steady-state provenance into the
-   *  explanation for a tile that cannot paint. */
-  unreachable?: boolean;
-  /** A `PhotoSection.day` to land on — how the zoom drawer's Years and Months
-   *  grains hand a period back to All (`photos-zoom.ts`). Applied once per
-   *  distinct value, so a member who then scrolls away is not yanked back on
-   *  the next render. */
+  /** A `PhotoSection.day` to land on — how the Years and Months grains hand a
+   *  period back to All (`timeline-grains.ts`). Applied once per distinct
+   *  value, so a member who then scrolls away is not yanked back on the next
+   *  render. */
   scrollToDay?: string;
-  /** Bumped on every scroll gesture, so the zoom drawer can arm its hide
-   *  timer. Deliberately NOT wired to `onScroll`: that fires every frame, and
-   *  a state bump per frame would re-render the drawer sixty times a second to
-   *  say the one thing it already knows. */
-  onScrollActivity?: () => void;
+  /** The day the member has scrolled to, reported so a switch UP to Years or
+   *  Months can land on the period holding it (`timeline-grains.ts`).
+   *
+   *  Deliberately NOT wired to `onScroll`: that fires every frame, and a state
+   *  bump per frame would re-render the whole screen sixty times a second to
+   *  say something only read when the grain changes. Scroll END is when the
+   *  member has arrived, and arriving is the only moment the answer changes in
+   *  a way anyone acts on. */
+  onVisibleDay?: (day: string) => void;
+  /** Room to leave at the foot for a control floating over this grid — the
+   *  Library's permanent grain control (`TimelineGrainControl.tsx`). Zero
+   *  everywhere else, because everywhere else nothing floats there. */
+  footerInset?: number;
 }
 
 export default function PhotoTimeline({
@@ -172,9 +177,9 @@ export default function PhotoTimeline({
   placeNames,
   refreshing = false,
   onRefresh,
-  unreachable = false,
   scrollToDay,
-  onScrollActivity,
+  onVisibleDay,
+  footerInset = 0,
 }: PhotoTimelineProps): React.JSX.Element {
   // The rung and the vault facts are read here, not passed in: a shelf is the
   // same timeline under a filter (§5), so every one of them must show the size
@@ -247,6 +252,30 @@ export default function PhotoTimeline({
   // Landing on a period handed over by the zoom drawer. The row list has to
   // exist first — `rows` is rebuilt whenever the width, rung or sections change
   // — so this reads it from the same render rather than firing on mount alone.
+  // The MOUNT landing takes FlashList's own `initialScrollIndex`, not the
+  // effect below: a grain switch remounts this list, and a `scrollToIndex`
+  // fired from an effect lands before the list has measured anything — it
+  // no-ops silently, which read on device as "tapped July 2025, arrived at
+  // the top of 2026". `initialScrollIndex` is applied by the list itself at
+  // layout time, which is the one moment that cannot be too early. Lazy
+  // useState so it is computed exactly once, from the first render's rows.
+  // The COARSE first paint. FlashList reads this only while mounting, so a
+  // plain memo is right: recomputing on later renders costs a findIndex and
+  // changes nothing, whereas a ref would be read during render and a state
+  // pair would carry a setter that must never be called.
+  const initialLanding = useMemo(() => {
+    if (!scrollToDay) return undefined;
+    const monthKey = `m:${scrollToDay.slice(0, 7)}`;
+    const index = rows.findIndex(
+      (row) => row.key === monthKey || row.key === `d:${scrollToDay}`
+    );
+    return index < 0 ? undefined : index;
+  }, [rows, scrollToDay]);
+  // Deliberately NOT pre-marked as landed: `initialScrollIndex` positions by
+  // ESTIMATED row heights, and over a long variable-height timeline the
+  // estimate drifts by whole years (observed: tapped July 2025, first paint
+  // landed in August 2012). The effect below runs after mount with real
+  // measurements around the coarse position and corrects the landing.
   const landedDay = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!scrollToDay || landedDay.current === scrollToDay) return;
@@ -261,12 +290,28 @@ export default function PhotoTimeline({
     );
     if (index < 0) return;
     landedDay.current = scrollToDay;
-    void list.current?.scrollToIndex({
-      animated: false,
-      index,
-      viewPosition: 0,
+    // A frame later, not now: on a fresh mount this effect fires before the
+    // list has measured anything and a synchronous scrollToIndex silently
+    // no-ops. One frame is enough because `initialScrollIndex` already
+    // painted the neighbourhood, so real item sizes exist to scroll against.
+    const frame = requestAnimationFrame(() => {
+      void list.current?.scrollToIndex({
+        animated: false,
+        index,
+        viewPosition: 0,
+      });
     });
+    return () => cancelAnimationFrame(frame);
   }, [rows, scrollToDay]);
+
+  // Where the member has come to rest, in the one vocabulary the summary
+  // grains also speak — a `PhotoSection.day`. Reported on scroll end only; see
+  // `onVisibleDay`'s own comment for why not on every frame.
+  const notePlace = (): void => {
+    if (!onVisibleDay) return;
+    const day = dayAtOffset(rows, tops, scrollOffset.current);
+    if (day !== undefined) onVisibleDay(day);
+  };
 
   const scrub = (ratio: number): void => {
     const index = Math.min(
@@ -291,6 +336,7 @@ export default function PhotoTimeline({
     >
       <View style={styles.fill}>
         <FlashList
+          initialScrollIndex={initialLanding}
           ref={list}
           data={rows}
           keyExtractor={(item) => item.key}
@@ -345,7 +391,6 @@ export default function PhotoTimeline({
                     selected={selection.has(tile.asset.id)}
                     selecting={selecting}
                     vaults={vaults}
-                    unreachable={unreachable}
                     onOpen={handleOpen}
                     onSelect={toggle}
                   />
@@ -353,11 +398,10 @@ export default function PhotoTimeline({
               </View>
             )
           }
-          onScrollBeginDrag={() => {
-            setScrubLabel("");
-            onScrollActivity?.();
-          }}
-          onMomentumScrollEnd={() => onScrollActivity?.()}
+          onScrollBeginDrag={() => setScrubLabel("")}
+          onMomentumScrollEnd={notePlace}
+          onScrollEndDrag={notePlace}
+          contentContainerStyle={{ paddingBottom: footerInset }}
           refreshing={refreshing}
           onRefresh={onRefresh}
           onScroll={(event) => {
@@ -398,7 +442,7 @@ const makeStyles = (colors: ThemeColors) =>
     month: {
       alignItems: "baseline",
       // Sticky over the grid, so it needs the page's own opaque ground.
-      backgroundColor: colors.toneMat,
+      backgroundColor: colors.bg,
       flexDirection: "row",
       gap: 8,
       height: 46,

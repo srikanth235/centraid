@@ -25,26 +25,30 @@ import type { Palette } from "../palette";
 //
 // `ink3` (`--text-faint`) is the rung that decides whether this system is
 // honest. It is validated against the WORST surface it can land on — in light
-// that is the `mat` tone (`#F0EFED`), which is deeper than both the page and
-// the raised paper, and in dark it is the raised paper (`#171716`), which is
-// LIGHTER than the page. The brief specifies `#70706D` for light and validates
-// it against `surf` alone; on the mat tone that measures 4.32:1, so the
-// shipped value is deepened one step to `#6C6C69` (4.58:1 on mat, 5.18:1 on
-// the page). That is the only place this package departs from the brief's
-// colour table, and `contrast.test.ts` is what would catch it drifting back.
+// that is `WALL` (`#F0EFED`), the deepest paper the system paints, deeper than
+// both the page and the raised paper, and in dark it is the raised paper
+// (`#171716`), which is LIGHTER than the page. The brief specifies `#70706D`
+// for light and validates it against `surf` alone; on `WALL` that measures
+// 4.32:1, so the shipped value is deepened. Variant C deepens the whole ramp
+// one further rung — `ink3` ships as `#5A5A58` — because the same one-page
+// decision that retired the tone axis (see `PAGE`/`WALL` below) also removed
+// the last excuse for a borderline rung: with one page and one deepest paper
+// to clear, there is no tone-by-tone trade-off left to protect. That is the
+// only place this package departs from the brief's colour table, and
+// `contrast.test.ts` is what would catch it drifting back.
 export const BRAND = "#141414";
 export const BRAND_DARK = "#EDEDEC";
-const INK_2 = "#5A5A58";
-const INK_2_DARK = "#9A9A98";
-const INK_3 = "#6C6C69";
-const INK_3_DARK = "#878785";
+const INK_2 = "#4A4A48";
+const INK_2_DARK = "#ADADAB";
+const INK_3 = "#5A5A58";
+const INK_3_DARK = "#9A9A98";
 // Below the ramp: placeholders and disabled glyphs. WCAG 1.4.3 exempts
 // inactive controls, and these two rungs exist precisely so a recessive state
 // gets its own colour token on the LEAF element instead of an `opacity` on the
 // container — opacity composites every descendant and silently invalidates
 // token-level contrast.
-const INK_GHOST = "#888885";
-const INK_GHOST_DARK = "#656563";
+const INK_GHOST = "#6C6C69";
+const INK_GHOST_DARK = "#878785";
 const INK_DISABLED = "#9C9C99";
 const INK_DISABLED_DARK = "#565654";
 
@@ -131,28 +135,34 @@ export const STAGE_SUNKEN = "#1A1A19";
 // floating above it.
 
 /**
- * The per-app surface tones. An app declares one; it retunes `--bg` only —
- * the raised paper, the hairlines and the ink are invariant, which is what
- * keeps five differently-toned apps recognisably one product.
+ * ONE PAGE. The shell and every app share this single colour — there is no
+ * per-app surface tone. The `data-tone` axis (`--bg-tone-*`, five tones
+ * neutral/paper/mat/cool/warm) shipped and was retired for two measured
+ * reasons:
+ *
+ *   1. Retuning `--bg` alone while `--bg-elev` / `--bg-sunken` / `--skel`
+ *      stayed pinned INVERTED the paper metaphor. The system's rule is that
+ *      raised paper is darker-in-light and lighter-in-dark; Photos, on a
+ *      retuned page, drew its cards LIGHTER than its page in light mode —
+ *      exactly backwards, because only the page moved and the surfaces above
+ *      it did not move with it.
+ *   2. Measured on device, four of the five tones sat within 0.7 L* of
+ *      neutral, and dark mode's whole five-tone spread was 2.4 L* — an axis
+ *      nobody could perceive.
+ *
+ * The rule going forward: if a page tone ever returns, it must carry its
+ * whole surface SET (page + elev + sunken + skel) together, never `--bg`
+ * alone. See docs/traps/design-tokens.md, "There is ONE page, and an app does
+ * not retune it."
  */
-export const SURFACE_TONES = {
-  cool: { dark: "#0D0E0F", light: "#FBFCFC" },
-  mat: { dark: "#0A0A0A", light: "#F0EFED" },
-  neutral: { dark: "#0E0E0E", light: "#FDFDFC" },
-  paper: { dark: "#12110E", light: "#FCFBF8" },
-  warm: { dark: "#131110", light: "#FDFBF7" },
-} as const;
-
-export type SurfaceTone = keyof typeof SURFACE_TONES;
-
-/** Tone order, as the tone axis is documented and emitted. */
-export const SURFACE_TONE_NAMES = [
-  "neutral",
-  "paper",
-  "mat",
-  "cool",
-  "warm",
-] as const satisfies readonly SurfaceTone[];
+export const PAGE = { dark: "#0E0E0E", light: "#FDFDFC" } as const;
+/**
+ * The wall behind the frame — deeper than the page, and the deepest paper in
+ * the system. Not a tone an app may declare: it is the surface the frame
+ * floats ON, and it is why the ink ramp is solved against `#F0EFED` rather
+ * than against the page.
+ */
+export const WALL = { dark: "#060606", light: "#F0EFED" } as const;
 
 // ── Semantic states ────────────────────────────────────────────────────────
 //

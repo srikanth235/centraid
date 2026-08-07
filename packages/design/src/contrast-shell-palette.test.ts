@@ -27,19 +27,10 @@ import { palette, paletteDark } from "./palette.js";
 
 const AA_BODY = 4.5;
 
-/** Every opaque surface the shell can paint a foreground on, including the
- *  five per-app surface tones — an app may declare any of them. */
-const SURFACE_NAMES = [
-  "--bg",
-  "--bg-app",
-  "--bg-elev",
-  "--bg-sunken",
-  "--bg-tone-neutral",
-  "--bg-tone-paper",
-  "--bg-tone-mat",
-  "--bg-tone-cool",
-  "--bg-tone-warm",
-] as const;
+/** Every opaque surface the shell can paint a foreground on. There is no
+ *  per-app surface tone axis — one page, for the shell and every app in
+ *  it. */
+const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"] as const;
 
 /** A palette ink is almost never on a bare surface — it sits on a weak wash of
  *  its own FILL (a chip, a badge, an identity tile), which has already walked

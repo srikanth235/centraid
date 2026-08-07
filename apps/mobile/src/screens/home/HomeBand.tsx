@@ -41,7 +41,7 @@ import {
 } from "../../kit/band-surface";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { borders, family, metrics, useTheme } from "../../kit/theme";
+import { borders, family, metrics, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
 import type { BandTab, BandTarget } from "./band";
@@ -161,15 +161,20 @@ const makeStyles = (colors: ThemeColors) =>
       // does not clip by default, and a long name simply ran into its
       // neighbour: "Connectors" and "Analytics" sat with no gap between them.
       // The handoff truncates to "Connect…" for exactly this reason.
+      ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      fontFamily: family.sansRegular,
-      fontSize: 11,
-      lineHeight: 14,
+      // NO `fontFamily` OVERRIDE. `t("control")` already resolves to
+      // sansMedium — 13/17/500 — and re-pinning sansRegular here put the two
+      // bands back to 400, which is the deviation the ramp exists to prevent.
+      // The active state lives in the COLOUR (`textSoft` → `text`) and in the
+      // 2pt ink rule above the tab; weight is not a third channel saying the
+      // same thing, and a band whose labels change width on tap is a band that
+      // reflows when a member is looking straight at it.
       marginTop: 3,
       textAlign: "center",
     },
-    labelActive: { color: colors.text, fontFamily: family.sansMedium },
+    labelActive: { color: colors.text },
     // The handoff's band icon sits in `glyph(30)` — a 30×30 square with
     // `border-radius: round(30 * 0.26) = 8` (:5156-5157, :5165), NOT the 26pt
     // launcher-row glyph and not a bare 24-tall line box. The wrap is what
@@ -200,11 +205,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     moreLabel: {
+      ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      fontFamily: family.sansRegular,
-      fontSize: 11,
-      lineHeight: 14,
       marginTop: 3,
       textAlign: "center",
     },

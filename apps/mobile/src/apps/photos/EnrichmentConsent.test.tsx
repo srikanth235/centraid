@@ -52,6 +52,7 @@ type IconModule = typeof import("../../kit/components/Icon");
 const mocks = vi.hoisted(() => ({
   colors: {
     accentFill: "#mock-accent-fill",
+    bg: "#mock-bg",
     bgElev: "#mock-bg-elev",
     bgSunken: "#mock-bg-sunken",
     line: "#mock-line",
@@ -61,7 +62,6 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
     textInv: "#mock-text-inv",
     textSoft: "#mock-text-soft",
-    toneMat: "#mock-tone-mat",
   },
 }));
 

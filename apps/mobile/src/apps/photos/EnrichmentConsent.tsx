@@ -75,7 +75,7 @@ export default function EnrichmentConsent({
 }: EnrichmentConsentProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Close face detection consent"

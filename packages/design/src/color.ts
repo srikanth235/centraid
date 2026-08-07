@@ -189,11 +189,12 @@ export function walkUntil(
 
 /**
  * The surface every solved rung is scored against: the HARDEST one the system
- * paints ink on in that theme. Light is the `mat` surface tone (`#F0EFED`) —
- * the deepest paper an app may declare, so every lighter surface gains. Dark
- * is the raised paper (`#171716`) — the LIGHTEST dark surface, for the same
- * reason in the other direction. Both emitters now share one surface ramp, so
- * one pair covers the shell, the blueprint layer and native alike.
+ * paints ink on in that theme. Light is `WALL` (`#F0EFED`) — the deepest
+ * paper the system paints, deeper than the page or any raised surface, so
+ * every lighter surface gains. Dark is the raised paper (`#171716`) — the
+ * LIGHTEST dark surface, for the same reason in the other direction. Both
+ * emitters now share one surface ramp, so one pair covers the shell, the
+ * blueprint layer and native alike.
  */
 export const SOLVE_SURFACE = {
   dark: "#171716",

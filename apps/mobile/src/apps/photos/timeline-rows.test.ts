@@ -6,8 +6,9 @@ import {
   DAY_ROW_HEIGHT,
   MONTH_ROW_HEIGHT,
   buildRows,
-  describeCounts,
+  dayAtOffset,
   dayPlace,
+  describeCounts,
   monthHeaderIndices,
   monthLabelAt,
   rowTops,
@@ -126,6 +127,23 @@ describe("the row list", () => {
     );
     // A row before any header still resolves to a month rather than blank.
     expect(monthLabelAt(rows, 0)).not.toBe("");
+  });
+
+  test("a scroll offset resolves to the section day the member is looking at", () => {
+    // The grain control asks this to keep a member's place when they switch to
+    // Years or Months, so the answer has to be a `PhotoSection.day` and it has
+    // to track the scroll rather than the sticky month header above it.
+    const tops = rowTops(rows);
+    // The top of the list is the newest day, whatever rows precede it.
+    expect(dayAtOffset(rows, tops, 0)).toBe("2026-08-04");
+    // Deep enough to have passed into July: the July month header is sticky
+    // over its own days, but the day underneath is what is reported.
+    const july = rows.findIndex((row) => row.key === "d:2026-07-30");
+    expect(dayAtOffset(rows, tops, tops[july]!)).toBe("2026-07-30");
+    expect(dayAtOffset(rows, tops, tops[july]! + 4)).toBe("2026-07-30");
+    // Past the end of the content still names the last day, never undefined —
+    // an over-scrolled list has not left the library.
+    expect(dayAtOffset(rows, tops, 999_999)).toBe("2026-07-30");
   });
 
   test("changing the rung repacks without losing or reordering assets", () => {

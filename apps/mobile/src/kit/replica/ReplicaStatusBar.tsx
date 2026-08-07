@@ -21,6 +21,7 @@ import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
 import { borders, family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
+import { replicaStatusRow } from "./replica-status";
 import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
@@ -73,28 +74,15 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     newest !== undefined &&
     oldest !== undefined &&
     newest - oldest >= DIVERGENCE_MS;
-  // `undefined` is the settled case — see the doc comment: a reachable,
-  // up-to-date replica has nothing to say, so it says nothing.
-  const label = useMemo(() => {
-    if (reachability === "device-offline") return "Offline on this phone";
-    if (reachability === "gateway-asleep") return "Gateway asleep";
-    if (reachability === "syncing") return "Syncing recent changes…";
-    return undefined;
-  }, [reachability]);
-  // Only ever drawn beside a `label`, and every state that has one is a state
-  // worth marking.
-  const tint = colors.danger;
-  // No plain "Refresh": pull-to-refresh is the gesture, and these three are
-  // the states where pulling is not what would actually help.
-  const action =
-    reachability === "device-offline"
-      ? "Check network"
-      : reachability === "gateway-asleep"
-        ? "Wake help"
-        : reachability === "syncing"
-          ? "Sync now"
-          : undefined;
+  // The replica bar's copy lives in a pure module, tested independently.
+  const { label, action, actionable } = useMemo(
+    () => replicaStatusRow(reachability),
+    [reachability]
+  );
+  // Red when the member can act on it, neutral when they are waiting.
+  const tint = actionable ? colors.danger : colors.textFaint;
   const refreshReplica = (): void => {
+    // Wake-help is gated to gateway-asleep; other actions use pull-to-refresh.
     if (reachability !== "gateway-asleep") {
       void refresh?.();
       return;
@@ -156,8 +144,9 @@ export default function ReplicaStatusBar(): React.JSX.Element {
 
   return (
     <>
-      {/* The whole row is conditional, not just its parts: an empty bordered
-          strip is chrome, and on a settled replica that is all this would be. */}
+      {/* When `label` is undefined, render nothing for this state (offline is
+          one such state). The row is conditional in its entirety unless pending
+          changes exist. */}
       {label || pending.length > 0 ? (
         <View style={[styles.wrap, { borderColor: colors.line }]}>
           {label ? (

@@ -134,7 +134,8 @@ export default function PhotosScreen({
     <View
       style={[
         styles.frame,
-        { backgroundColor: colors.toneMat, paddingTop: insets.top },
+        // One page for the shell and every app in it (docs/traps/design-tokens.md).
+        { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
       {/* Content ends ABOVE the bar (§G) STRUCTURALLY: the slot is `flex:1`
@@ -279,7 +280,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       minHeight: SELECTION_ACTION_TARGET,
       paddingHorizontal: 4,
-      ...bandSurfaceStyle(colors.toneMat, colors.line, BAND_BORDER),
+      ...bandSurfaceStyle(colors.bg, colors.line, BAND_BORDER),
     },
     selectionLabel: { ...t("control"), textAlign: "center" },
     selectionReason: {

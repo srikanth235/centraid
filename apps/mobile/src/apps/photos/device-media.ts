@@ -75,20 +75,32 @@ export async function liveVideoUri(
 }
 
 /**
- * Capture instant of a media-store row. Both timestamps are nullable in the
- * Next API — the store does not always record them — and filing a photo under
- * 1970 is worse than filing it by when it was last written, so modification
- * time stands in before the epoch does.
+ * Capture instant of a media-store row, or `undefined` when the store recorded
+ * neither timestamp.
+ *
+ * Both timestamps are nullable in the Next API — the store does not always
+ * record them — and modification time stands in for a missing creation time,
+ * because when a photo was last written is a real fact about it.
+ *
+ * WHAT IT WILL NOT DO IS INVENT ONE. The predecessor fell through to `?? 0`
+ * and filed those rows under 1970-01-01, which is not a hedge but a wrong
+ * answer: it put photographs at the far end of the timeline, gave them a day
+ * header, and would have given them a 1970 card in Years. `undefined` says the
+ * true thing — no capture date — and `sectionPhotoAssets` files those rows in
+ * one "Undated" section instead (`timeline-model.ts`).
+ *
+ * A recorded `0` is read as absent too. This media store has been seen
+ * substituting 0 for "not recorded", and taking it literally would file the
+ * same 1970 defect back in under a different value.
  */
 export function capturedAtIso(
   metadata: Pick<
     MediaLibrary.AssetMetadata,
     "creationTime" | "modificationTime"
   >
-): string {
-  return new Date(
-    metadata.creationTime ?? metadata.modificationTime ?? 0
-  ).toISOString();
+): string | undefined {
+  const recorded = metadata.creationTime || metadata.modificationTime;
+  return recorded ? new Date(recorded).toISOString() : undefined;
 }
 
 /**

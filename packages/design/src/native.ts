@@ -23,7 +23,6 @@ import {
   STAGE_LINE,
   STAGE_SUNKEN,
 } from "./themes";
-import type { Theme } from "./themes";
 import { nativeTypeStyle, typeForProfile } from "./typography";
 import type { TypeKey } from "./typography";
 
@@ -71,8 +70,6 @@ export interface NativeColors {
   textInv: string;
   textSoft: string;
   warning: string;
-  /** The surface-tone axis, resolved. An app picks one; only `bg` moves. */
-  [key: `tone${string}`]: string;
   [key: `c${string}`]: string;
 }
 
@@ -125,24 +122,6 @@ function identityRing(scheme: NativeScheme): Record<`c${string}`, string> {
   ) as Record<`c${string}`, string>;
 }
 
-function surfaceTones(theme: Theme): Record<`tone${string}`, string> {
-  // Resolved from the same table the CSS emitters read, so a tone can never
-  // mean one paper on the phone and another in the shell.
-  const tones = {
-    cool: theme.kind === "dark" ? "#0D0E0F" : "#FBFCFC",
-    mat: theme.kind === "dark" ? "#0A0A0A" : "#F0EFED",
-    neutral: theme.bg,
-    paper: theme.kind === "dark" ? "#12110E" : "#FCFBF8",
-    warm: theme.kind === "dark" ? "#131110" : "#FDFBF7",
-  };
-  return Object.fromEntries(
-    Object.entries(tones).map(([key, value]) => [
-      `tone${key.slice(0, 1).toUpperCase()}${key.slice(1)}`,
-      value,
-    ])
-  ) as Record<`tone${string}`, string>;
-}
-
 /** `rgba()` for an alpha wash of a hex — the concrete form of the emitters'
  *  `color-mix(… N%, transparent)`, evaluated here rather than at render. */
 function rgbaHex(hex: string, alpha: number): string {
@@ -176,7 +155,6 @@ function colorsFor(scheme: NativeScheme): NativeColors {
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const colors: NativeColors = {
     ...identityRing(scheme),
-    ...surfaceTones(theme),
     accent: theme.accent,
     accentDeep: theme.accentDeep,
     accentFill: theme.accentDeep,

@@ -47,10 +47,10 @@ describe(statusSentence, () => {
     expect(statusSentence(facts({ total: 0 }))).toContain("0 things");
   });
 
-  it("says the gateway is not answering, and that local reads still work", () => {
+  it("states offline as a schedule for writes, not as a failed read", () => {
     const line = statusSentence(facts({ offline: true }));
-    expect(line).toContain("home-gateway.local is not answering");
-    expect(line).toContain("still reads");
+    expect(line).toContain("changes sync when home-gateway.local is back");
+    expect(line).not.toContain("not answering");
     // Never claims a backup while it cannot reach the thing that runs them.
     expect(line).not.toContain("Backups run");
   });

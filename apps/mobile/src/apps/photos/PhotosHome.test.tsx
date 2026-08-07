@@ -10,6 +10,7 @@ import { resolveTheme } from "../../kit/theme";
 import CollectionShelfBody from "./CollectionShelfBody";
 import PhotoAccessPanel from "./PhotoAccessPanel";
 import { PhotoFilmstrip } from "./PhotoFilmstrip";
+import PhotoGrainView from "./PhotoGrainView";
 import { ViewerTopChrome } from "./PhotoLightboxChrome";
 import { makePhotosFixture } from "./photos-fixtures";
 import PhotosGridSkeleton from "./PhotosGridSkeleton";
@@ -18,7 +19,7 @@ import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
 import PhotosSearchRestingState from "./PhotosSearchRestingState";
 import PhotosSelectChip from "./PhotosSelectChip";
 import ScrubRail from "./ScrubRail";
-import TimelineZoomDrawer from "./TimelineZoomDrawer";
+import TimelineGrainControl from "./TimelineGrainControl";
 
 const homeMocks = vi.hoisted(() => ({
   timeline: {
@@ -272,7 +273,8 @@ describe("Photos native component coverage", () => {
     expect(
       new Set(
         makePhotosFixture("year-spanning").assets.map((asset) =>
-          asset.capturedAt.slice(0, 4)
+          // Every fixture asset in this corpus carries a real capturedAt.
+          asset.capturedAt!.slice(0, 4)
         )
       ).size
     ).toBe(3);
@@ -288,33 +290,57 @@ describe("Photos native component coverage", () => {
     ).toBe(true);
   });
 
-  it("keeps the zoom drawer hidden, activity-timed, and pinned by grain", async () => {
+  it("keeps the grain control on screen at rest, with no timer to wait out", async () => {
+    // THE DEFECT THIS PINS: its predecessor appeared only while the member was
+    // scrolling and withdrew 3.2s after the last gesture, and the feature
+    // behind it was never found at all. Time passing must change nothing here.
     const clock = useFakeClock("2026-08-06T00:00:00.000Z");
-    const onLevel =
-      vi.fn<React.ComponentProps<typeof TimelineZoomDrawer>["onLevel"]>();
+    const onGrain =
+      vi.fn<React.ComponentProps<typeof TimelineGrainControl>["onGrain"]>();
     const screen = render(
-      <TimelineZoomDrawer level="all" activity={0} onLevel={onLevel} />
+      <TimelineGrainControl grain="all" onGrain={onGrain} />
     );
-    expect(screen.queryAllByRole("tab")).toHaveLength(0);
-
-    screen.rerender(
-      <TimelineZoomDrawer level="all" activity={1} onLevel={onLevel} />
-    );
-    await act(async () => undefined);
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(screen.getByRole("tab", { name: "All" }).props).toMatchObject({
       accessibilityState: { selected: true },
     });
-    fireEvent.press(screen.getByRole("tab", { name: "Months" }));
-    expect(onLevel).toHaveBeenCalledExactlyOnceWith("months");
 
-    await act(async () => clock.advance(3200));
-    expect(screen.queryAllByRole("tab")).toHaveLength(0);
-    screen.rerender(
-      <TimelineZoomDrawer level="months" activity={1} onLevel={onLevel} />
-    );
-    await act(async () => undefined);
-    await act(async () => clock.advance(3200));
+    await act(async () => clock.advance(60_000));
     expect(screen.getAllByRole("tab")).toHaveLength(3);
+
+    fireEvent.press(screen.getByRole("tab", { name: "Months" }));
+    expect(onGrain).toHaveBeenCalledExactlyOnceWith("months");
+
+    screen.rerender(<TimelineGrainControl grain="months" onGrain={onGrain} />);
+    await act(async () => clock.advance(60_000));
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("tab", { name: "Months" }).props).toMatchObject({
+      accessibilityState: { selected: true },
+    });
+  });
+
+  it("says plainly when a grain has no periods, rather than showing a blank surface", () => {
+    // A library whose photographs are ALL undated: they exist, and they are in
+    // All, but not one of them holds a position in the calendar — so Years has
+    // nothing to summarise. ONE QUIET LINE, never a card standing in for a
+    // period that does not exist, and never an empty void.
+    // (The populated grains are asserted in `timeline-grains.test.ts`: the
+    // cards are drawn by a FlashList, which cannot mount in this renderer.)
+    const undatedOnly = makePhotosFixture("undated-mixed").sections.filter(
+      (section) => section.day === "undated"
+    );
+    const screen = render(
+      <PhotoGrainView
+        sections={undatedOnly}
+        grain="years"
+        onOpenPeriod={vi.fn<
+          React.ComponentProps<typeof PhotoGrainView>["onOpenPeriod"]
+        >()}
+      />
+    );
+    expect(
+      screen.getByText(/carry no capture date, so they have no year or month/u)
+    ).toBeTruthy();
   });
 
   it("maps scrub offsets to ratios and positions the month bubble", () => {

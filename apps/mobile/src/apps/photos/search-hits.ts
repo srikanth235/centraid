@@ -425,7 +425,11 @@ function captionHits(
       key: `caption:${asset.id}`,
       kind: "caption",
       label: `“${title}”`,
-      sub: `caption · ${captionDate(asset.capturedAt)}`,
+      // A caption on an undated photograph is still a caption worth finding;
+      // the date is simply left off rather than printed as a guess.
+      sub: asset.capturedAt
+        ? `caption · ${captionDate(asset.capturedAt)}`
+        : "caption",
       meta: "",
       assetIds: asset.assetId ? [asset.assetId] : [],
       target: {

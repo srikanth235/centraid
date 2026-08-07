@@ -25,7 +25,7 @@ function baseInput(
     onFilter: vi.fn<(filter: LibraryFilter) => void>(),
     onRung: vi.fn<(rung: 0 | 1 | 2 | 3) => void>(),
     rung: 2 as const,
-    zoom: "all" as const,
+    grain: "all" as const,
     ...overrides,
   };
 }
@@ -92,18 +92,18 @@ describe("the Library header menu's model at the All grain", () => {
 
 describe("the Library header menu's model at the Years and Months grains", () => {
   it("drops View Options at Years — a rung control may not sit over a grid it cannot resize", () => {
-    const groups = libraryMenuGroups(baseInput({ zoom: "years" }));
+    const groups = libraryMenuGroups(baseInput({ grain: "years" }));
     expect(groups[0]!.rows.map((row) => row.key)).toStrictEqual(["filter"]);
   });
 
   it("drops View Options at Months, for the same reason", () => {
-    const groups = libraryMenuGroups(baseInput({ zoom: "months" }));
+    const groups = libraryMenuGroups(baseInput({ grain: "months" }));
     expect(groups[0]!.rows.map((row) => row.key)).toStrictEqual(["filter"]);
   });
 
   it("keeps Filter at every grain — it narrows what the periods are built from", () => {
-    for (const zoom of ["years", "months", "all"] as const) {
-      const groups = libraryMenuGroups(baseInput({ zoom }));
+    for (const grain of ["years", "months", "all"] as const) {
+      const groups = libraryMenuGroups(baseInput({ grain }));
       expect(groups[0]!.rows.some((row) => row.key === "filter")).toBe(true);
     }
   });
@@ -111,8 +111,8 @@ describe("the Library header menu's model at the Years and Months grains", () =>
 
 describe("the Library header menu's model has no Sort section", () => {
   it("at any grain — this vault has no field independent of Date Captured to sort by", () => {
-    for (const zoom of ["years", "months", "all"] as const) {
-      const groups = libraryMenuGroups(baseInput({ zoom }));
+    for (const grain of ["years", "months", "all"] as const) {
+      const groups = libraryMenuGroups(baseInput({ grain }));
       expect(groups).toHaveLength(1);
       expect(groups[0]!.rows.some((row) => row.key === "sort")).toBe(false);
     }

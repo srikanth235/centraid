@@ -187,8 +187,9 @@ export default function AgendaHome({
     });
   };
   return (
-    // Agenda's declared surface tone is "cool" (freedom table, DESIGN.md).
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneCool }]}>
+    // There is one page for the shell and every app in it — no per-app
+    // surface tone (docs/traps/design-tokens.md).
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>

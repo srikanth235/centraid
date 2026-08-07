@@ -1,24 +1,15 @@
-// The kit's own explanation block for a replica a member cannot currently
-// read (Photos v4 handoff §14, README:333: "a grey mosaic with no explanation
-// is a bug").
-//
-// Two defects this file used to carry, both load-bearing for every app that
-// mounts it (Tally, People, Tasks, Photos, Notes, Agenda, Docs):
-//
-//   1. `connection === "offline"` fell through the old early-return (it only
-//      excluded "unavailable"), so the one moment this card exists to cover —
-//      a member who lost the gateway mid-session — rendered nothing at all.
-//      Fixed by widening the guard to both no-data connection states.
-//   2. The rendered shape was a filled elevated card with a 28px danger icon
-//      and a filled accent button — the alarm grammar the handoff reserves
-//      for something actually wrong, not for "this device can't reach the
-//      gateway right now" (spec :4867-4873: bordered `--net` block, no fill,
-//      no icon, sans body in ink, an OUTLINED retry).
+// The kit's own explanation block for a replica with NOTHING to show and no
+// prospect of getting it — `unavailable` (no gateway ever paired) and `error`
+// (a read that failed; an empty grid that is a bug). `offline` is deliberately
+// not one of them: a vault is a local replica, offline it renders from bytes
+// already on the phone, and carding the product's own premise as an incident —
+// in a block holding ~45% of the screen on every app that mounts it — was the
+// over-announcement this change removes. Offline is stated once by the replica
+// bar (Gateway asleep · Wake help) for members who can act on it.
 //
 // Kept app-agnostic on purpose: this is a kit component, not a Photos one, so
 // its copy names no app-specific noun ("photographs") — `noun` is the only
-// thing a caller supplies, and the offline sentence stays generic to whatever
-// `noun` names.
+// thing a caller supplies.
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -40,23 +31,15 @@ export default function ReplicaStateCard({
   onRetry?: () => void;
 }): React.JSX.Element | null {
   const { colors } = useTheme();
-  const noData = connection === "unavailable" || connection === "offline";
-  if (!noData && !error) return null;
   const unavailable = connection === "unavailable";
+  if (!unavailable && !error) return null;
   const title = unavailable
     ? `${noun} is not connected`
-    : error
-      ? `${noun} could not be loaded`
-      : `${noun} is offline`;
-  // Adapted honestly from the handoff's offline-banner copy (:4871), which
-  // names the gateway/device split directly — kept app-agnostic (no
-  // "photographs", "captions", "albums") so it reads true for any `noun`
-  // this card is ever mounted under.
+    : `${noun} could not be loaded`;
   const message = unavailable
     ? (unavailableReason ??
       "Pair or reconnect a gateway. An unavailable vault is never treated as an empty one.")
-    : (error ??
-      "The gateway is unreachable. What renders here comes from this device; its bytes stay on the gateway until it's reachable again.");
+    : (error ?? "");
   return (
     <View
       accessibilityRole="alert"

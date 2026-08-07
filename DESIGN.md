@@ -65,24 +65,14 @@ colors:
   c-slate-text-dark: "#7ea7dc"
   c-teal-text-dark: "#58b4c4"
   c-violet-text-dark: "#be92c8"
-  tone-neutral: "#FDFDFC"
-  tone-paper: "#FCFBF8"
-  tone-mat: "#F0EFED"
-  tone-cool: "#FBFCFC"
-  tone-warm: "#FDFBF7"
-  tone-neutral-dark: "#0E0E0E"
-  tone-paper-dark: "#12110E"
-  tone-mat-dark: "#0A0A0A"
-  tone-cool-dark: "#0D0E0F"
-  tone-warm-dark: "#131110"
   light-bg: "#FDFDFC"
   light-bg-app: "#F0EFED"
   light-bg-elev: "#F5F4F2"
   light-bg-sunken: "#F9F8F6"
   light-text: "#141414"
-  light-text-soft: "#5A5A58"
-  light-text-faint: "#6C6C69"
-  light-text-ghost: "#888885"
+  light-text-soft: "#4A4A48"
+  light-text-faint: "#5A5A58"
+  light-text-ghost: "#6C6C69"
   light-text-disabled: "#9C9C99"
   light-text-inv: "#FDFDFC"
   light-line: "#EFEEEB"
@@ -92,9 +82,9 @@ colors:
   dark-bg-elev: "#171716"
   dark-bg-sunken: "#121211"
   dark-text: "#EDEDEC"
-  dark-text-soft: "#9A9A98"
-  dark-text-faint: "#878785"
-  dark-text-ghost: "#656563"
+  dark-text-soft: "#ADADAB"
+  dark-text-faint: "#9A9A98"
+  dark-text-ghost: "#878785"
   dark-text-disabled: "#565654"
   dark-text-inv: "#0E0E0E"
   dark-line: "#1B1B1A"
@@ -330,7 +320,6 @@ This list is as important as the invariants. An app that stays inside it needs n
 
 | Property | Freedom | Token |
 | --- | --- | --- |
-| Surface tone | Free — neutral, paper, mat, cool, or warm. Only the page moves. | `data-tone` → `--bg-tone-*` |
 | Density tier | Free — comfortable, compact, or dense. Row height and content padding only. | `data-density` → `--density-row`, `--density-pad` |
 | Layout | Free. Full-bleed grid, reading measure, 7-column table, message stack. No constraint. | — |
 | Primary register | Declared, not invented: reading, scanning, or none, chosen from the ramp. | `--t-reading` / `--t-small` |
@@ -346,7 +335,7 @@ The Binding Layer brief names its roles differently from this repo. The values p
 | --- | --- | --- |
 | `ink` | `--text` | Primary ink; also `--accent`, because the accent IS the ink. |
 | `ink2` | `--text-soft` | Secondary ink and inactive navigation labels. |
-| `ink3` | `--text-faint` | Validated against the deepest surface tone, not against `--bg`. |
+| `ink3` | `--text-faint` | Validated against the deepest surface in the system, not against `--bg`. |
 | `surf` | `--bg-elev` | Raised paper. Darker than the page in light, lighter in dark. |
 | `line` | `--line-strong` | The brief's `line` is the EXPLICIT boundary, which is this repo's strong rung. |
 | `lineS` | `--line` | The brief's hairline is this repo's light rung — the names already ordered this way. |
@@ -379,9 +368,9 @@ Three hues are reserved and named. `--link` is prose links and text selection, a
 
 `--stage` and `--on-stage` are the opaque media ground and its ink for a viewer, a slideshow, and an editor (the Photos v4 handoff, §2.2/§B) — `#0B0B0B` / `#EDEDEC`, **the same literal in both themes**, because the media ground does not follow the theme: a viewer that lightened under "light mode" would blow out the photograph it is framing. `--stage-line` (`#2A2A29`) is the hairline between chrome and media ON the stage, because `--line` is invisible against near-black. `--stage-sunken` (`#1A1A19`) is the recess cut INTO the stage — the media transport's unplayed track and any other trough whose fill is `--on-stage` — because `--bg-sunken` follows the PAGE and would punch a near-white hole in the media ground, while `--stage-line` is tuned to be seen as an edge where a trough is tuned to recede. `--skel` (`#E4E3E0` / `#1E1E1D`) is the ground a tile paints before its bytes arrive; `--bg-elev` reads as a card, and an absence is not a card, so a loading tile gets its own rung rather than borrowing one that implies content already landed. None of the three moves a token that existed before it, and none is a new hue.
 
-The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, `--bg-sel`, and the five tone roles `--bg-tone-neutral` / `-paper` / `-mat` / `-cool` / `-warm`. Surfaces are PAPER, not elevation: in light the raised surface is darker than the page, in dark it is lighter — a tile is a sheet laid on the page, not a plane floating above it. An app's declared tone retunes `--bg` and nothing else.
+The surface roles are `--bg`, `--bg-app`, `--bg-elev`, `--bg-sunken`, `--bg-wall`, `--bg-chrome`, `--bg-hud`, `--bg-hover`, `--bg-press`, and `--bg-sel`. **There is one page, and an app does not retune it.** A per-app surface-tone axis (`data-tone` → `--bg-tone-*`, five tones) shipped and was retired for two reasons, both measured: retuning `--bg` alone while `--bg-elev`/`--bg-sunken`/`--skel` stayed pinned inverted the paper metaphor — Photos drew cards LIGHTER than its page in light mode, where the system's rule is that raised paper is darker-in-light and lighter-in-dark — and, on device, four of the five tones sat within 0.7 L* of neutral while dark mode's whole spread was 2.4 L*, an axis nobody could perceive. If a page tone ever returns, it must carry its whole surface SET — page, elev, sunken, and skel together — never `--bg` alone. Surfaces are PAPER, not elevation: in light the raised surface is darker than the page, in dark it is lighter — a tile is a sheet laid on the page, not a plane floating above it.
 
-The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface tone, not against `--bg`** — in dark every raised surface is lighter than the page, and in light the `mat` tone is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
+The ink roles are `--text`, `--text-soft`, `--text-faint`, `--text-ghost`, `--text-inv`, `--on-accent`, and `--text-disabled`. **`--text-faint` is validated against the deepest surface in the system, not against `--bg`** — in dark every raised surface is lighter than the page, and in light `--bg-wall` is deeper than both, so measuring on the page alone guarantees a failure the moment text lands on a card. Lines are `--line` (hairline separators, tile borders), `--line-strong` (control borders, section rules), and `--line-sel`. Focus is `--focus-ring` plus `--focus-ring-color` on web and blueprint; native owns its platform focus treatment.
 
 The semantic states are `--success`, `--warning`, and `--danger`. Each is solved per theme against the hardest surface it lands on AND against a 12% wash of itself; hue separation is measured in Oklab, so a merely legible grey is not a status colour. Disabled text uses `--text-disabled`; non-text disabled affordances use `--o-disabled: 0.45` once, on the LEAF, never on a container — opacity composites every descendant and silently invalidates token-level contrast.
 
@@ -454,7 +443,7 @@ The local responsive constitution is explicit: SH-c is the compact shell at 720p
 
 ## Agent Prompt Guide
 
-When authoring an app, start with a recipe and a moment, then choose only roles from [packages/design/src/roles.ts](packages/design/src/roles.ts). Declare your surface tone, your density tier and your register; do not invent a fourth axis. Use `primary` once per viewport and `secondary` for ordinary actions. Use `--accent-text` for the action colour on type, `--text-inv` for published fills, `--link` for prose links only, `--net` for anything that leaves the device, and a status role only for status. Put every number in `--t-mono`. Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
+When authoring an app, start with a recipe and a moment, then choose only roles from [packages/design/src/roles.ts](packages/design/src/roles.ts). Declare your density tier and your register; do not retune the page — there is one — and do not invent a new axis. Use `primary` once per viewport and `secondary` for ordinary actions. Use `--accent-text` for the action colour on type, `--text-inv` for published fills, `--link` for prose links only, `--net` for anything that leaves the device, and a status role only for status. Put every number in `--t-mono`. Pick an iconKey from the shared registry. Use `formatRelativeTime`, `formatBytes`, `identityInitials`, and `identityColor`; do not write local copies. For an unsupported surface capability, state why in the recipe/profile matrix. Run `bun run check:pr`, the affected contract tests, and the screenshot lane before presenting work.
 
 ## Do's and Don'ts
 

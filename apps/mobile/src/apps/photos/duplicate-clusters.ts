@@ -67,7 +67,12 @@ export function duplicateClusters(
  */
 export function clusterWindow(assets: readonly PhotoAsset[]): string | null {
   if (assets.length < 2) return null;
-  const times = assets.map((asset) => new Date(asset.capturedAt).getTime());
+  // "EVERY copy carries a real timestamp" now includes assets whose
+  // `capturedAt` is absent entirely (`timeline-model.ts`): an undated copy is
+  // a missing timestamp, not a zero one, and `new Date(undefined)` would make
+  // it NaN only by accident. Refused explicitly instead.
+  if (assets.some((asset) => asset.capturedAt === undefined)) return null;
+  const times = assets.map((asset) => new Date(asset.capturedAt!).getTime());
   if (times.some((time) => !Number.isFinite(time))) return null;
   const seconds = Math.round((Math.max(...times) - Math.min(...times)) / 1_000);
   if (seconds <= 1) return "within 1 second";

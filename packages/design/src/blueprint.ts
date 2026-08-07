@@ -26,8 +26,6 @@ import {
   STAGE,
   STAGE_LINE,
   STAGE_SUNKEN,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
 } from "./themes";
 import type { Theme } from "./themes";
 import {
@@ -97,9 +95,6 @@ function themeProps(theme: Theme): Record<string, string> {
     "--text-soft": theme.textSoft,
     "--warning": theme.warning,
   };
-  for (const tone of SURFACE_TONE_NAMES) {
-    props[`--bg-tone-${tone}`] = SURFACE_TONES[tone][theme.kind];
-  }
   for (const [name, value] of Object.entries(paletteFor(theme.kind))) {
     props[`--c-${name}`] = value;
   }
@@ -148,9 +143,6 @@ export function toBlueprintCss(): string {
   const darkLines = Object.entries(dark)
     .map(([key, value]) => `    ${key}: ${value};`)
     .join("\n");
-  const tones = SURFACE_TONE_NAMES.map((tone) =>
-    block(`:root[data-tone='${tone}']`, { "--bg": `var(--bg-tone-${tone})` })
-  ).join("\n\n");
   const densities = Object.entries(DENSITY_TIERS)
     .map(([tier, value]) =>
       block(`:root[data-density='${tier}']`, {
@@ -171,7 +163,6 @@ export function toBlueprintCss(): string {
       "  }",
       "}",
     ].join("\n"),
-    tones,
     densities,
     "@media (pointer: fine) { :root { --target-min: 32px; } }",
     [
