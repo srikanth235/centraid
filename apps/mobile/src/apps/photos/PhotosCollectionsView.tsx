@@ -334,17 +334,19 @@ export default function PhotosCollectionsView({
    * One switch over the closed key union: a section added to the model
    * without a destination fails to typecheck right here.
    *
-   * `tile` absent means the HEADING was pressed — "show me all of these". Two
-   * sections have no such destination and say so by opening the tile's own
-   * photograph instead of inventing a shelf: Memories is a filter over today,
-   * not a place, and Favorites/Trash reach their shelf either way.
+   * `tile` absent means the HEADING was pressed — "show me all of these".
+   * Favorites/Trash have no such destination and say so by opening the
+   * tile's own photograph instead (they reach their shelf either way via
+   * the tile, or PhotoStateView`'s own filter). Memories DOES have one now
+   * (issue #724 W7, `MemoriesView.tsx`): the heading opens the full surface
+   * (On this day, Trips, Similar moments), and a tile keeps opening straight
+   * to the photograph it already did.
    */
   const open = (key: CollectionSectionKey, tile?: CollectionTile): void => {
     switch (key) {
       case "memories":
-        // No "all memories" shelf exists in this product, so the heading does
-        // what the only real affordance does: opens the photograph.
         if (tile) navigation.navigate("PhotoLightbox", { assetId: tile.id });
+        else navigation.navigate("PhotosMemories");
         break;
       case "albums":
         if (tile) navigation.navigate("AlbumDetail", { albumId: tile.id });

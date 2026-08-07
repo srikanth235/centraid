@@ -150,6 +150,13 @@ export const styles = StyleSheet.create({
   /** The transport: play, a determinate track, a clock, a kind label. */
   track: { borderRadius: radii.pill, flex: 1, height: 3 },
   trackFill: { borderRadius: radii.pill, height: 3 },
+  /** The scrub-preview strip (issue #724 B2b) — a row of real poster frames
+   *  above the Live Photo transport's track, letting a member see the motion
+   *  before pressing play. Absent (not a placeholder box) wherever
+   *  `expo-video-thumbnails` cannot honestly produce one — see
+   *  `video-scrub-strip-native.ts`. */
+  scrubStrip: { flexDirection: "row", gap: 2, paddingHorizontal: spacing[3] },
+  scrubStripFrame: { borderRadius: 3, height: 34, width: 34 },
   transport: {
     alignItems: "center",
     flexDirection: "row",

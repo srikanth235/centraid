@@ -10,11 +10,11 @@
 // these field names; changing one is a protocol change, not a rename (see
 // docs/protocol.md C1 — the two-contract rule).
 //
-// `unavailable` IS A 200. A gateway with no embedder configured, or one whose
-// index is still empty, is not broken and its member is not looking at an
-// error — they are looking at a capability that is not switched on here. Only
-// a malformed request (400) or a genuinely failed embed (500) leaves the 2xx
-// band. This is "derived data enriches, it never gates" spelled as a status
+// `unavailable` IS A 200. A gateway with no enrichment service configured, one
+// whose service does not offer embedding, or one whose index is still empty,
+// is not broken and its member is not looking at an error — they are looking
+// at a capability that is not switched on here. Only a malformed request (400)
+// or a genuinely failed embed (500) leaves the 2xx band. This is "derived data enriches, it never gates" spelled as a status
 // code: no photo surface may show a failure because the index is cold.
 //
 // OWNER-ONLY, BY CONSTRUCTION. Like the import and blob routes, this handler
@@ -32,36 +32,37 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { resolveEmbedder } from "../enrich/embedder.js";
-import type { Embedder } from "../enrich/embedder.js";
 import { searchPhotosByText } from "../enrich/semantic-search.js";
+import { readEnrichServiceConfig } from "../enrich/service-client.js";
+import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendError, sendJson } from "./route-helpers.js";
 
 export const SEMANTIC_SEARCH_PATH = "/centraid/_vault/enrich/semantic-search";
 
-/** A query is a phrase, not a document — an embedder's text window is small. */
+/** A query is a phrase, not a document — a text encoder's window is small. */
 const MAX_QUERY_CHARS = 512;
 
 export interface EnrichSearchRouteOptions {
   /**
-   * The host's embedder. Resolved from the environment when omitted; passed
-   * explicitly by tests and by hosts that wire their own. `null` is a valid
-   * value meaning "this host has none", which the route answers honestly.
+   * The host's enrichment service. Resolved from the environment when omitted;
+   * passed explicitly by tests and by hosts that wire their own. `null` is a
+   * valid value meaning "this host has none", which the route answers
+   * honestly.
    */
-  embedder?: Embedder | null;
+  enrich?: EnrichServiceConfig | null;
 }
 
 export function makeEnrichSearchRouteHandler(
   vaults: Pick<VaultRegistry, "current">,
   options: EnrichSearchRouteOptions = {}
 ): RouteHandler {
-  // Resolved ONCE at wiring time: the embedder is host configuration, not
+  // Resolved ONCE at wiring time: the service is host configuration, not
   // per-request state, and re-reading process.env per request would let a
   // half-configured restart serve two different answers.
-  const embedder =
-    options.embedder === undefined ? resolveEmbedder() : options.embedder;
+  const config =
+    options.enrich === undefined ? readEnrichServiceConfig() : options.enrich;
   return async (
     req: IncomingMessage,
     res: ServerResponse
@@ -85,14 +86,14 @@ export function makeEnrichSearchRouteHandler(
 
     try {
       const outcome = await searchPhotosByText(vaults.current().db, {
-        embedder,
+        config,
         query,
         ...(typeof body.limit === "number" ? { limit: body.limit } : {}),
       });
       return sendJson(res, 200, outcome);
     } catch (error) {
-      // The one genuine failure: a configured embedder that ran and failed
-      // (crashed, timed out, produced garbage). That is an operator fault the
+      // The one genuine failure: a configured service that ran and refused
+      // the query (crashed, produced garbage). That is an operator fault the
       // surface must be able to report, so it does NOT masquerade as
       // `unavailable` — a member who set this up deserves to know it broke.
       return sendError(res, error);

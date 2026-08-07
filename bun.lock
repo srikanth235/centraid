@@ -403,6 +403,15 @@
         "typescript": "catalog:",
       },
     },
+    "tools/enrichment-service": {
+      "name": "@centraid/enrichment-service",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
+        "typescript": "catalog:",
+      },
+    },
   },
   "overrides": {
     "shell-quote": "1.8.4",
@@ -689,6 +698,8 @@
     "@centraid/design": ["@centraid/design@workspace:packages/design"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
+
+    "@centraid/enrichment-service": ["@centraid/enrichment-service@workspace:tools/enrichment-service"],
 
     "@centraid/extension": ["@centraid/extension@workspace:apps/extension"],
 

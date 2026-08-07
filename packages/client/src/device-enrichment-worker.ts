@@ -22,9 +22,14 @@ import type {
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
 const DRAIN_INTERVAL_MS = 1_000;
 const INITIAL_DELAY_MS = 10_000;
-// The host advertisement is authoritative: web filters transcript out, while
-// desktop enables it only after its device-local file-ASR adapter answers.
-const WORK_CAPABILITIES = ["poster", "pdfText", "transcript"] as const;
+// The device lane's leaseable work (narrowed by issue #724): model-shaped
+// capabilities — transcription, OCR, embedding — moved to the gateway's
+// enrichment service, so a browser is asked only for what its own platform
+// already does. The host advertisement stays authoritative on top of this
+// list: a host that says it cannot rasterize a poster is not handed one, and
+// a device advertising compute this lane no longer leases simply never
+// matches.
+const WORK_CAPABILITIES = ["poster", "pdfText"] as const;
 
 export interface DeviceWorkConditions {
   charging: boolean;

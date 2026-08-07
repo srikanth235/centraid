@@ -46,7 +46,23 @@
 // neither. The rows also state where the ends are — at XS there is visibly
 // nothing below it — which the stepper could only say by disabling a chevron.
 
+// DETECT FACES (issue #724 W5) is the one row here that is not a view option.
+// It is in this menu because the Library header is where a member is LOOKING at
+// the photographs the ask is about, and because the consent moment it leads to
+// (`PhotosPeopleView`'s gate) was otherwise reachable only by opening an empty
+// People shelf — built, correct, and nearly unreachable, which is exactly the
+// state issue #712 C2 moved it out of once already.
+//
+// THE ROW OPENS THE QUESTION; IT DOES NOT ANSWER IT. `onDetectFaces` must lead
+// to the consent gate, never straight to the `request-enrichment` write. A
+// single tap that started model work without telling the member where it runs
+// or what is written is the regression `EnrichmentConsent.tsx`'s header records
+// being fixed, and a menu row is the easiest place in the product to
+// reintroduce it. The row is also OMITTED entirely when the caller passes no
+// handler — a row with nothing behind it is left out, never faked.
+
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
+import type { DetectFacesAvailability } from "./people-model";
 import { RUNGS, RUNG_LABELS } from "./photos-rungs";
 import type { Rung } from "./photos-rungs";
 import type { TimelineGrain } from "./timeline-grains";
@@ -68,6 +84,17 @@ export interface LibraryMenuInput {
   /** The grain on screen (`timeline-grains.ts`). View Options is dropped at
    *  the Years and Months grains — see below. */
   grain: TimelineGrain;
+  /**
+   * Face detection (issue #724 W5). Omitted ⇒ no row at all. `availability`
+   * comes from `people-model.ts`'s `detectFacesFor`, which reads the gateway
+   * rung — the one that can actually answer the ask — and its `reason` is what
+   * the row says instead of pretending to be actionable.
+   */
+  detectFaces?: {
+    availability: DetectFacesAvailability;
+    /** Opens the consent gate. NEVER the enrichment write — see the header. */
+    onDetectFaces: () => void;
+  };
 }
 
 /**
@@ -93,8 +120,29 @@ export function libraryMenuGroups({
   rung,
   onRung,
   grain,
+  detectFaces,
 }: LibraryMenuInput): MenuGroup[] {
   return [
+    ...(detectFaces
+      ? [
+          {
+            key: "enrichment",
+            rows: [
+              {
+                key: "detect-faces",
+                // One text slot per row (AnchoredMenu), so a refusal rides
+                // after an em dash — the same shape `viewer-menu.ts` uses.
+                label: detectFaces.availability.available
+                  ? "Detect faces"
+                  : `Detect faces — ${detectFaces.availability.reason ?? "not available yet"}`,
+                icon: "users",
+                disabled: !detectFaces.availability.available,
+                onSelect: detectFaces.onDetectFaces,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       key: "library",
       rows: [

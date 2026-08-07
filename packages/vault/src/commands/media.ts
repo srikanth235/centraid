@@ -1097,7 +1097,14 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
     ctx.wrote("core.collection", collection.collection_id);
   }
   // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they
-  // go by hand — the same pair the lifecycle sweep deletes in duties.ts.
+  // go by hand — the same pair the lifecycle sweep deletes in duties.ts, with
+  // the same face-region poly sweep (issue #724 W5) so no orphan face vector
+  // outlives the photograph it was cut from.
+  const faceRegions = ctx.db
+    .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
+    .all(input.asset_id) as { region_id: string }[];
+  for (const region of faceRegions)
+    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
   ctx.db
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(input.asset_id);
@@ -1741,6 +1748,152 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
   return { album_id: input.album_id, asset_id: input.asset_id };
 }
 
+/**
+ * THE FACE-DELETE GATE (issue #724 W5; SECURITY.md, "Derived data and
+ * sensitive enrichments"). Face data is the most sensitive derived class this
+ * product holds, and the condition for shipping face detection at all was that
+ * "delete this person" provably cascades through every derived row keyed to
+ * that identity — not soft-deletes, not hides, not leaves a vector behind that
+ * a later search can resurface.
+ *
+ * WHAT IT FORGETS, AND WHY THAT IS FOUR TABLES AND NOT ONE. A person's face
+ * data is spread across four mechanisms, each of which is enough on its own to
+ * reconstruct the fact this command destroys:
+ *
+ *   - `media_face_region` — the boxes. Both party columns are matched, not
+ *     just `party_id`: a row the member CONFIRMED carries their identity in
+ *     `confirmed_by_party_id` too, and a cascade that cleared one column would
+ *     leave the other saying the person is in the photograph.
+ *   - `enrich_embedding` (`media.face_region` targets) — the vectors. An
+ *     orphan face vector is the worst leftover of the four: it is the thing
+ *     that lets a NEW photograph of the same person be matched back to them
+ *     after they were forgotten.
+ *   - `enrich_derivation` — the stamps. Left behind, they tell the next sweep
+ *     those regions are current, so the faces are never re-derived and the
+ *     member's own library disagrees with itself about whether it looked.
+ *   - `media_face_cluster` — the grouping projection. Rebuildable, but a stale
+ *     row names a deleted region as a group member.
+ *
+ * WHAT IT DOES NOT DO. It does not delete the `core_party`. Forgetting who is
+ * in your photographs and deleting a person from your address book are two
+ * different acts, and conflating them would make the destructive one a side
+ * effect of the reversible one. `people.trash_person` owns the other.
+ *
+ * WHY `high` AND WHY A `once`-SHAPED POSTCONDITION. There is no undo: the
+ * vectors are gone and the boxes with them. An agent proposing it parks for
+ * the owner, structurally, exactly as `sync.set_connection_trust` does. The
+ * postcondition asserts ZERO rows across all four tables — the same
+ * "nothing may still point at the row" shape `media.purge_asset` uses, so a
+ * fifth mechanism added later without a clause here fails at the gate rather
+ * than in a member's library six months on.
+ */
+const FORGET_PERSON: CommandDefinition = {
+  name: "media.forget_person",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["party_id"],
+    additionalProperties: false,
+    properties: { party_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["party_id", "regions_forgotten"],
+    properties: {
+      party_id: { type: "string" },
+      regions_forgotten: { type: "integer" },
+      embeddings_forgotten: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "party_exists",
+      sql: `SELECT count(*) AS n FROM core_party WHERE party_id = :party_id`,
+      column: "n",
+      op: "eq",
+      value: 1,
+      message:
+        "That person is not in this library, so there is no face data to forget.",
+    },
+  ],
+  postconditions: [
+    {
+      // The gate, in one predicate. Every table that can name the party
+      // through a face, counted together: a non-zero total is an incomplete
+      // cascade and the command refuses to commit.
+      name: "no_face_data_names_the_party",
+      sql: `SELECT (
+              (SELECT count(*) FROM media_face_region
+                WHERE party_id = :party_id OR confirmed_by_party_id = :party_id)
+            + (SELECT count(*) FROM enrich_embedding
+                WHERE target_type = 'media.face_region'
+                  AND target_id NOT IN (SELECT region_id FROM media_face_region))
+            + (SELECT count(*) FROM enrich_derivation
+                WHERE target_type = 'media.face_region'
+                  AND target_id NOT IN (SELECT region_id FROM media_face_region))
+            + (SELECT count(*) FROM media_face_cluster
+                WHERE region_id NOT IN (SELECT region_id FROM media_face_region))
+            ) AS n`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  // Retry-safe rather than `once`: a second call finds nothing left and says
+  // so with a zero count. Refusing it as a replay would leave a member who is
+  // unsure whether the first one landed with no way to make sure.
+  idempotency: "retry-safe",
+  risk: "high",
+  confirm: true,
+  handler: forgetPerson,
+};
+
+function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { party_id: string };
+  const regions = ctx.db
+    .prepare(
+      `SELECT region_id FROM media_face_region
+        WHERE party_id = ? OR confirmed_by_party_id = ?
+        ORDER BY region_id`
+    )
+    .all(input.party_id, input.party_id) as { region_id: string }[];
+
+  const countVectors = ctx.db.prepare(
+    `SELECT count(*) AS n FROM enrich_embedding
+      WHERE target_type = 'media.face_region' AND target_id = ?`
+  );
+  let embeddings = 0;
+  for (const region of regions) {
+    embeddings += Number(
+      (countVectors.get(region.region_id) as { n: number }).n
+    );
+    // The projection first (it FKs the region), then the region, then the
+    // registry sweep for every polymorphic pointer at it — which is what
+    // carries the vectors and the stamps away, through the one registry that
+    // is complete by construction rather than by a remembered clause here.
+    ctx.db
+      .prepare("DELETE FROM media_face_cluster WHERE region_id = ?")
+      .run(region.region_id);
+    ctx.db
+      .prepare("DELETE FROM media_face_region WHERE region_id = ?")
+      .run(region.region_id);
+    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
+    // One provenance entry per forgotten region — the audit trail of a
+    // destructive act is the one thing that must survive it.
+    ctx.wrote("media.face_region", region.region_id);
+  }
+  ctx.cite({
+    claim: `every face naming party ${input.party_id} was forgotten: ${regions.length} region(s), their vectors, their derivation stamps and their grouping`,
+    entityType: "core.party",
+    entityId: input.party_id,
+  });
+  return {
+    party_id: input.party_id,
+    regions_forgotten: regions.length,
+    embeddings_forgotten: embeddings,
+  };
+}
+
 /** Register the media domain's commands on a gateway. */
 export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
@@ -1758,4 +1911,5 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(RESTORE_ALBUM);
   gateway.registerCommand(ADD_TO_ALBUM);
   gateway.registerCommand(REMOVE_FROM_ALBUM);
+  gateway.registerCommand(FORGET_PERSON);
 }

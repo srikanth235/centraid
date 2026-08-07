@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import { makePhotosFixture } from "./photos-fixtures";
+import { kindOverlay } from "./tile-overlays";
 import { buildPeriods } from "./timeline-grains";
 import {
   addDragSelection,
@@ -169,6 +170,40 @@ describe("native Photos timeline model", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "still", liveVideoUri: "motion.mov" });
+  });
+
+  // Issue #724 B2(a): the same collapse a device Live Photo gets must also
+  // apply to a Takeout-imported capture group (`takeout:<hash>`,
+  // `takeout-sidecar.ts`'s `pairingKey`) — `mergePhotoAssets` folds groups by
+  // `captureGroupId` alone, with no branch on WHICH prefix minted it, so this
+  // pins that generality rather than assuming it. Both rows arrive as REMOTE
+  // (replica) assets here, matching how a Takeout import actually surfaces —
+  // there is no device copy of an imported archive's photographs.
+  test("a Takeout capture group collapses to one timeline cell with a `live` badge", () => {
+    const rows = mergePhotoAssets(
+      [],
+      [
+        photo("elba-still", {
+          captureGroupId: "takeout:9f3a",
+          originalUri: "https://gateway/elba-still.jpg",
+          source: "replica",
+          backupState: "backed-up",
+        }),
+        photo("elba-motion", {
+          captureGroupId: "takeout:9f3a",
+          kind: "video",
+          originalUri: "https://gateway/elba-still.mov",
+          source: "replica",
+          backupState: "backed-up",
+        }),
+      ]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "elba-still",
+      liveVideoUri: "https://gateway/elba-still.mov",
+    });
+    expect(kindOverlay(rows[0]!, 3)).toBe("live");
   });
 
   test("memories are prior years on the same calendar day", () => {

@@ -385,6 +385,42 @@ describe("takeout photo import", () => {
     });
   });
 
+  test("a single dropped photo carries the CALLER's capture group (issue #724 A2)", () => {
+    // The mobile camera-roll importer stages a Live Photo's still and its
+    // paired video as two separate single-file imports (there is no archive
+    // here for `planTakeout`'s own pairing to run over), so it passes the
+    // group id it already computed (`live:<localId>`, `photos-backup.ts`'s
+    // convention) straight through on both calls.
+    const still = stageFile(db, owner, {
+      filename: "IMG_1234.HEIC",
+      data: exifJpeg("2026:07:30 12:00:00"),
+      captureGroupId: "live:device-42",
+    });
+    expect(publishBatch(db, owner, still.batchId, PUBLISHERS).created).toBe(1);
+    const motion = stageFile(db, owner, {
+      filename: "IMG_1234.MOV",
+      data: quicktime("live-motion"),
+      captureGroupId: "live:device-42",
+    });
+    expect(publishBatch(db, owner, motion.batchId, PUBLISHERS).created).toBe(1);
+
+    const rows = assets();
+    expect(rows).toHaveLength(2);
+    const stillRow = rows.find((r) => r.kind === "photo")!;
+    const motionRow = rows.find((r) => r.kind === "video")!;
+    expect(stillRow.capture_group_id).toBe("live:device-42");
+    expect(motionRow.capture_group_id).toBe("live:device-42");
+  });
+
+  test("a single dropped photo with no caller-supplied group stays ungrouped", () => {
+    const staged = stageFile(db, owner, {
+      filename: "sunset.jpg",
+      data: exifJpeg("2022:07:04 19:30:00"),
+    });
+    publishBatch(db, owner, staged.batchId, PUBLISHERS);
+    expect(assets()[0]!.capture_group_id).toBeNull();
+  });
+
   test("a media extension is a claim; the bytes settle it", () => {
     // Bare drop: not a photograph, so it is not routed as one.
     expect(() =>

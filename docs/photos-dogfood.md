@@ -49,7 +49,14 @@ Run this motion:
    - [ ] Key photo appears on the Collection tile.
    - [ ] Offline, the cached key photo still renders.
 
-9. **Check for four specific stuck states** (from prior regressions):
+9. **Enrichment service (#724).** Run the reference service locally (`bun run --cwd tools/enrichment-service setup && bun run --cwd tools/enrichment-service serve`) and point the gateway at it (`CENTRAID_ENRICH_URL=http://127.0.0.1:8787`). Verify:
+   - [ ] OCR a receipt or a photo of a sign, then search for a word from it — the text hit appears once the OCR sweep has run.
+   - [ ] Consent-scan faces from the People shelf's empty-state gate (or "Detect faces"); verify the review queue fills with proposed regions on your own library.
+   - [ ] Name an unnamed cluster and confirm a proposal onto a known person; verify the person's photos are browsable from their card.
+   - [ ] Forget a person (`media.forget_person`) and verify their regions disappear from the review queue and no photo still shows their name.
+   - [ ] Check the Memories shelves (on-this-day, trip, similar) render with real dates and groupings, and show nothing rather than a wrong grouping when your library has none for a kind.
+
+10. **Check for four specific stuck states** (from prior regressions):
    - [ ] **Stuck sync bar:** a sync-in-progress indicator that never clears. Check mobile background sync — a hung upload queue or unreachable-gateway loop makes this visible. `docs/logs.md` → gateway and mobile logs should show steady progress or a clear "offline" message, never silent hangs.
    - [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. Mobile's `kit/replica/mount-plan.ts` prevents waiting for the network before opening local data — if the offline line repeats, the banner logic has drifted.
    - [ ] **Undiscoverable grain control:** the slider exists but scrolls past the bottom of the screen. Check mobile portrait orientation; the Media Viewer must keep the slider in the safe area. Desktop may scroll; phone must not.

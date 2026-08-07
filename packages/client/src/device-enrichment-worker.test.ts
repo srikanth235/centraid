@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { DeviceWorkContribution } from "./device-enrichment-compute.js";
-import { computeDeviceWorkContributions } from "./device-enrichment-compute.js";
 import { runDeviceEnrichmentWorkerOnce } from "./device-enrichment-worker.js";
 import type { DeviceWorkerApi } from "./device-enrichment-worker.js";
 import type {
@@ -175,99 +174,14 @@ describe("device-enrichment-worker", () => {
     expect(api.release).toHaveBeenCalledWith("vault-1", lease);
   });
 
-  test("desktop file-ASR adapter turns an existing media Blob into a transcript contribution", async () => {
-    const original = window.CentraidApi;
-    window.CentraidApi = {
-      transcribeMedia: vi
-        .fn<NonNullable<typeof window.CentraidApi.transcribeMedia>>()
-        .mockResolvedValue("adapter-backed starlight transcript"),
-    } as unknown as typeof window.CentraidApi;
-    const transcriptLease: DeviceEnrichmentLease = {
-      ...lease,
-      requestId: "transcript-job",
-      capability: "transcript",
-      contributionVariant: "transcript",
-      detail: JSON.stringify({
-        contentId: "content-1",
-        sha256: SHA,
-        mediaType: "audio/wav",
-      }),
-    };
-    try {
-      const contributions = await computeDeviceWorkContributions(
-        transcriptLease,
-        new Blob(["RIFF-voice"], { type: "audio/wav" })
-      );
-      expect(window.CentraidApi.transcribeMedia).toHaveBeenCalledOnce();
-      expect(contributions).toHaveLength(1);
-      expect(contributions[0]).toMatchObject({
-        variant: "transcript",
-        mediaType: "text/plain",
-      });
-      expect(contributions[0]!.body.size).toBe(
-        new TextEncoder().encode("adapter-backed starlight transcript")
-          .byteLength
-      );
-    } finally {
-      window.CentraidApi = original;
-    }
-  });
-
-  test("transcript-capable desktop leases, computes, stages, and completes the job", async () => {
-    const original = window.CentraidApi;
-    window.CentraidApi = {
-      transcribeMedia: vi
-        .fn<NonNullable<typeof window.CentraidApi.transcribeMedia>>()
-        .mockResolvedValue("worker starlight transcript"),
-    } as unknown as typeof window.CentraidApi;
-    const transcriptDevice = device(true, true);
-    const transcriptLease: DeviceEnrichmentLease = {
-      ...lease,
-      requestId: "transcript-job",
-      capability: "transcript",
-      contributionVariant: "transcript",
-      detail: JSON.stringify({
-        contentId: "content-1",
-        sha256: SHA,
-        mediaType: "audio/wav",
-      }),
-    };
-    const api = workerApi({
-      devices: vi
-        .fn<DeviceWorkerApi["devices"]>()
-        .mockResolvedValue([transcriptDevice]),
-      advertise: vi
-        .fn<DeviceWorkerApi["advertise"]>()
-        .mockResolvedValue(transcriptDevice),
-      lease: vi
-        .fn<DeviceWorkerApi["lease"]>()
-        .mockResolvedValue(transcriptLease),
-      read: vi
-        .fn<DeviceWorkerApi["read"]>()
-        .mockResolvedValue(new Blob(["RIFF-voice"], { type: "audio/wav" })),
-      compute: computeDeviceWorkContributions,
-    });
-    try {
-      await expect(runDeviceEnrichmentWorkerOnce(api)).resolves.toStrictEqual({
-        status: "completed",
-        requestId: "transcript-job",
-      });
-      expect(api.lease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          capabilities: ["poster", "pdfText", "transcript"],
-        })
-      );
-      expect(api.stage).toHaveBeenCalledWith(
-        "vault-1",
-        SHA,
-        expect.objectContaining({
-          variant: "transcript",
-          mediaType: "text/plain",
-        })
-      );
-      expect(api.finish).toHaveBeenCalledWith("vault-1", transcriptLease);
-    } finally {
-      window.CentraidApi = original;
-    }
+  test("model-shaped work is not offered to a device at all", async () => {
+    // Issue #724's lane split, asserted where a member would feel it: the
+    // browser asks the gateway for format work only, so a transcript job can
+    // never be handed to whichever phone happened to be charging.
+    const api = workerApi();
+    await runDeviceEnrichmentWorkerOnce(api);
+    expect(api.lease).toHaveBeenCalledWith(
+      expect.objectContaining({ capabilities: ["poster", "pdfText"] })
+    );
   });
 });

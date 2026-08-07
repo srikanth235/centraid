@@ -54,9 +54,10 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
 | [docs/oauth-assist.md](docs/oauth-assist.md) | Assist code-courier architecture, privacy, scopes, BYO, reconnect |
 | [docs/mobile-offline.md](docs/mobile-offline.md) | Native multi-vault replicas, background sync, storage, privacy, and performance guardrails |
-| [docs/photos-derived-ledger.md](docs/photos-derived-ledger.md) | Derived-intelligence foundation (E1/E2/E3): ledger tables, model-versioned backfill, external embedder, sqlite-vec load rules, deferred E4/E6 |
+| [docs/photos-derived-ledger.md](docs/photos-derived-ledger.md) | Derived-intelligence foundation (E1/E2/E3): ledger tables, model-versioned backfill, the enrichment service client, sqlite-vec load rules, faces (E4) shipped, Memories v0, E6 (device-side indexing) dead by decision |
 | [docs/photos-dogfood.md](docs/photos-dogfood.md) | Discovery ritual (D2): maintainer real-library import checklist, known stuck-state regression classes, cadence, findings log |
 | [docs/photos-switcher-walkthrough.md](docs/photos-switcher-walkthrough.md) | Day-one switcher script (D3): Google Photos refugee walkthrough (import → timeline → search → share → offload → key photo), honest shipped/partial/gap status per step |
+| [docs/enrichment-service.md](docs/enrichment-service.md) | The one ML seam (#724): wire contract, config, per-capability sweep table, provenance/backfill, faces, the reference service, and the deletions it replaced |
 | [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md) | Google/Cloudflare production and verification evidence gates |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |

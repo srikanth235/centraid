@@ -55,6 +55,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
+| **enrichment service** | The one HTTP seam between the gateway and every model that derives something from a member's bytes (embeddings, OCR, faces, transcripts) — loopback-only, configured via `CENTRAID_ENRICH_URL`. Apps never call it directly; they enqueue `enrich_request` rows or read the vault tables a sweep populated. | `packages/gateway/src/enrich/service-client.ts`; `packages/gateway/src/enrich/capability-sweep.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
@@ -110,6 +111,7 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 
 | Avoid | Prefer |
 | --- | --- |
+| "ML layer" / "sidecar" for the enrichment service | **enrichment service** — one seam, one config, one wire contract |
 | "database" for the personal ontology | **vault** (`vault.db` is the file) |
 | "server" for the product backend | **gateway** |
 | "template app" after install | **app** (blueprint is the shipped source) |

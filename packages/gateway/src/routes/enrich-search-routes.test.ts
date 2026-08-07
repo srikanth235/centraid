@@ -13,7 +13,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { encodeVector, nowIso, uuidv7 } from "@centraid/vault";
 
-import type { Embedder } from "../enrich/embedder.js";
+import { startFakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
+import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import { companionRequestAllowed } from "../serve/companion-access.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -22,7 +23,8 @@ import {
   makeEnrichSearchRouteHandler,
 } from "./enrich-search-routes.js";
 
-const MODEL = "test-clip@1";
+/** What the fake advertises for `embed-image` — the index's key. */
+const MODEL = "fake-clip@1";
 
 const silentLogger = {
   info: () => undefined,
@@ -35,13 +37,15 @@ const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
 ];
 
-/** Query `[1, 0]`: the first planted photograph must win. */
-function stubEmbedder(): Embedder {
-  return {
-    model: MODEL,
-    embedImage: () => Promise.reject(new Error("not used by search")),
-    embedText: () => Promise.resolve([1, 0]),
-  };
+/** A service whose text encoder answers `[1, 0]`: the first photograph wins. */
+async function searchService(
+  text: () => unknown = () => ({ vector: [1, 0] })
+): Promise<EnrichServiceConfig> {
+  const service = await startFakeEnrichService({
+    capabilities: { "embed-image": {}, "embed-text": { result: text } },
+  });
+  cleanups.push(() => service.close());
+  return service.config;
 }
 
 interface SearchResponse {
@@ -60,7 +64,7 @@ describe("enrich-search-routes", () => {
     );
   });
 
-  async function fixture(embedder: Embedder | null): Promise<{
+  async function fixture(enrich: EnrichServiceConfig | null): Promise<{
     url: string;
     plane: VaultPlane;
     assetIds: string[];
@@ -72,7 +76,7 @@ describe("enrich-search-routes", () => {
       dir,
       logger: silentLogger,
       ownerName: "Priya",
-      embedder: null,
+      enrich: null,
     });
     cleanups.push(() => plane.stop());
 
@@ -112,7 +116,7 @@ describe("enrich-search-routes", () => {
 
     const handler = makeEnrichSearchRouteHandler(
       { current: () => plane },
-      { embedder }
+      { enrich }
     );
     const server = http.createServer((req, res) => {
       void handler(req, res).then((handled) => {
@@ -152,12 +156,12 @@ describe("enrich-search-routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as SearchResponse;
     expect(body.status).toBe("unavailable");
-    expect(body.reason).toContain("CENTRAID_EMBEDDER_PATH");
+    expect(body.reason).toContain("CENTRAID_ENRICH_URL");
     expect(body.hits).toBeUndefined();
   });
 
   test("hits come back in the contracted shape, ordered by score", async () => {
-    const { url, assetIds } = await fixture(stubEmbedder());
+    const { url, assetIds } = await fixture(await searchService());
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as SearchResponse;
@@ -175,7 +179,7 @@ describe("enrich-search-routes", () => {
   });
 
   test("limit narrows the result set", async () => {
-    const { url, assetIds } = await fixture(stubEmbedder());
+    const { url, assetIds } = await fixture(await searchService());
     const body = (await (
       await search(url, { query: "a dog on a beach", limit: 1 })
     ).json()) as SearchResponse;
@@ -183,7 +187,7 @@ describe("enrich-search-routes", () => {
   });
 
   test("a missing or oversized query is a 400, not an empty result", async () => {
-    const { url } = await fixture(stubEmbedder());
+    const { url } = await fixture(await searchService());
     expect((await search(url, {})).status).toBe(400);
     expect((await search(url, { query: "   " })).status).toBe(400);
     expect((await search(url, { query: "x".repeat(513) })).status).toBe(400);
@@ -193,17 +197,14 @@ describe("enrich-search-routes", () => {
   });
 
   test("only POST reaches the search", async () => {
-    const { url } = await fixture(stubEmbedder());
+    const { url } = await fixture(await searchService());
     expect((await fetch(url)).status).toBe(405);
   });
 
-  test("a configured embedder that fails is a 500, not a silent unavailable", async () => {
-    const broken: Embedder = {
-      model: MODEL,
-      embedImage: () => Promise.reject(new Error("nope")),
-      embedText: () => Promise.reject(new Error("the model crashed")),
-    };
-    const { url } = await fixture(broken);
+  test("a configured service that fails is a 500, not a silent unavailable", async () => {
+    const { url } = await fixture(
+      await searchService(() => ({ error: "the model crashed" }))
+    );
     const res = await search(url, { query: "a dog on a beach" });
     expect(res.status).toBe(500);
     await expect(res.text()).resolves.toContain("the model crashed");

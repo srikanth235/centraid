@@ -652,6 +652,7 @@
         "actions/tag-asset.ts",
         "actions/untag-asset.ts",
         "actions/update-asset.ts",
+        "actions/upload.test.ts",
         "actions/upload.ts",
         "activity.ts",
         "albums-actions.ts",

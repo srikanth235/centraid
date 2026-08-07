@@ -5,11 +5,6 @@ import { resolveAppRevealDir, resetAppSessions } from "./app-sessions.js";
 import { resetAppsStoreAuthCache } from "./apps-store-client.js";
 import { refreshAuthInjector } from "./auth-injector.js";
 import { getChangelog } from "./changelog.js";
-import {
-  deviceTranscriptionAvailable,
-  transcribeDeviceMedia,
-} from "./device-transcription.js";
-import type { DeviceTranscriptionInput } from "./device-transcription.js";
 import { testGatewayConnection } from "./gateway-connectivity.js";
 import type {
   ConnectivityReport,
@@ -156,14 +151,6 @@ export function registerIpcHandlers(): void {
       return next;
     }
   );
-  ipcMain.handle(Channel.DEVICE_TRANSCRIPT_AVAILABLE, () =>
-    deviceTranscriptionAvailable()
-  );
-  ipcMain.handle(
-    Channel.DEVICE_TRANSCRIBE,
-    (_e, input: DeviceTranscriptionInput) => transcribeDeviceMedia(input)
-  );
-
   // ----- Gateways (issue #109) -----
   // The local gateway is always present and can't be removed; remote
   // gateways are added/removed/renamed through the Settings → Gateways

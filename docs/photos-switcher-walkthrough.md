@@ -23,11 +23,11 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
 
 5. **Search by caption, person, place, album.**
    - Grouped hits with counts and a door into the owning surface; caption matches ride device-local FTS, so this works offline.
-   - **Status: SHIPPED** (pre-#721). People hits name only consent-named people; there is no face pipeline behind the naming UI yet (E4, below).
+   - **Status: SHIPPED** (pre-#721; caption/place/album). People naming now has a real pipeline behind it (#724, faces below) rather than only consent-named people with nothing to detect.
 
-6. **Search by what is _in_ the picture (semantic).**
-   - Type "beach sunset"; scored matches appear as a "Photos that look like…" hit group and join the grid.
-   - **Status: PARTIAL (E1/E2/E3 shipped, this PR)** — the derived ledger, the gateway indexer (opt-in external embedder via `CENTRAID_EMBEDDER_PATH`), the semantic-search route, and the mobile hit group are all live. Without a configured embedder the gateway answers honestly `unavailable` and the group is simply absent — search never degrades elsewhere. Offline semantic ranking over replicated vectors is **E6, next version**; OCR text search is **B4, open** (the consent rails exist; the OCR sweep does not — see [docs/photos-derived-ledger.md](photos-derived-ledger.md)).
+6. **Search by what is _in_ the picture (semantic and text-in-photo).**
+   - Type "beach sunset"; scored matches appear as a "Photos that look like…" hit group and join the grid. Type a word that appears as text inside a photograph (a sign, a receipt) and it can match too.
+   - **Status: SHIPPED when a service is configured (E1/E2/E3 from #721; OCR from #724 W4)** — the derived ledger, the gateway sweep, the semantic-search route, and the mobile hit group are all live, now running on issue #724's enrichment service (`CENTRAID_ENRICH_URL`) rather than the earlier spawned-embedder design. Photo OCR ([docs/enrichment-service.md](enrichment-service.md)) lands extracted text into the same FTS plane captions already use, so a receipt or sign's text becomes searchable once OCR has run over it. Without a configured service the gateway answers honestly `unavailable` and the semantic hit group is simply absent — search never degrades elsewhere. Offline semantic ranking over replicated vectors remains open; device-side model inference is dead by decision (E6 — see [docs/photos-derived-ledger.md](photos-derived-ledger.md)).
 
 7. **Share one photograph.**
    - Copy to a shared vault; custody marks stay honest per seat.
@@ -45,9 +45,9 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
     - A Videos shelf sits in Collections as first-class navigation.
     - **Status: PARTIAL (B3, this PR)** — Videos shipped (`kind === "video"` is an honest signal). **Screenshots and Panoramas are deferred**: the bulk metadata path the 50k-asset timeline walk uses exposes no media-subtype field, and per-asset async lookups across a library are the round-trip pattern the timeline engine forbids. **Selfies are deferred** with no honest signal at all. The deferral and its reasons are recorded in the code where the shelves would live.
 
-11. **Review faces.**
-    - "Is this the same person?" confirmation, never a wall of unlabelled clusters.
-    - **Status: GAP (E4)** — the consent-gated naming UI exists; the detect → embed → cluster pipeline does not. Scheduling is blocked on clearing a permissively-licensed detector/embedder pair (weights carry their own licences), and [SECURITY.md](../SECURITY.md) commits E4 to a proven delete-this-person cascade before it ships.
+11. **Review faces, name people.**
+    - "Is this the same person?" confirmation, never a wall of unlabelled clusters. Confirm a proposal onto a party, name an unnamed cluster, or forget a person entirely.
+    - **Status: SHIPPED (E4, #724 W5)** — consent-gated detection → embedding → party-anchored matching → stranger clustering, on the reference service's YuNet/SFace pair; `media.forget_person` gives the proven delete cascade [SECURITY.md](../SECURITY.md) required before this could ship. **Partial: People shelf wiring** ([`apps/mobile/src/apps/photos/PhotosPeopleView.tsx`](../apps/mobile/src/apps/photos/PhotosPeopleView.tsx)) is an integration leftover — the roster, review queue, and forget-person command all work; remaining shelf-wiring polish is open.
 
 12. **Edit a photograph.**
     - Crop, rotate, straighten — non-destructive, round-tripping with desktop.
@@ -60,11 +60,11 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
 | Takeout export → import | A1 | **SHIPPED (this PR)**; A2 camera-roll first-run open |
 | Timeline, grain, scrub | — | SHIPPED; now fixture-proven at 50k (C1/D1) |
 | Caption/person/place/album search | — | SHIPPED |
-| Semantic search | E1/E2/E3 | **SHIPPED (this PR)**, embedder opt-in; E6 device-side next version; B4 OCR open |
+| Semantic + text-in-photo search | E1/E2/E3, OCR (#724 W4) | **SHIPPED when a service is configured**; E6 device-side inference dead by decision |
 | Sharing, backup, custody | — | SHIPPED; C3 offloaded-at-scale pass open |
 | Key photo | B5 | **SHIPPED (this PR)** (albums) |
 | Media-type shelves | B3 | **PARTIAL (this PR)**: Videos shipped; Screenshots/Panoramas/Selfies deferred honestly |
-| Faces | E4 | GAP — blocked on model licensing + delete cascade |
+| Faces | E4 (#724 W5) | **SHIPPED**; People shelf wiring partial |
 | Enhance / video depth | B1/B2 | GAP |
 
 ## Related
@@ -72,3 +72,4 @@ Photos' north star is **iOS Photos** ([docs/blueprint-seats.md](blueprint-seats.
 - [docs/blueprint-seats.md](blueprint-seats.md) — seats, custody, and the north-star rule (Photos' north star is iOS Photos).
 - [docs/photos-dogfood.md](photos-dogfood.md) — the ritual that walks this script against a real library.
 - [docs/photos-derived-ledger.md](photos-derived-ledger.md) — the E1/E2/E3 substrate behind steps 6 and 11.
+- [docs/enrichment-service.md](enrichment-service.md) — the enrichment service configured for step 6 and step 11.

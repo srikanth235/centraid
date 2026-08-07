@@ -566,6 +566,22 @@ export {
   type AgentContentVariant,
 } from "./enrich/content.js";
 export {
+  FACE_CLUSTER_MAX_DISTANCE,
+  FACE_MIN_CLUSTER_SIZE,
+  FACE_PARTY_MAX_DISTANCE,
+  FACE_REGION_TARGET_TYPE,
+  rebuildFaceClusters,
+  type FaceClusterResult,
+} from "./enrich/face-clusters.js";
+export {
+  stampDerivation,
+  stampedModel,
+  supersededTargets,
+  type DerivationStamp,
+  type SupersededQuery,
+  type SupersededTarget,
+} from "./enrich/derivation.js";
+export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
   ENRICHMENT_CAPABILITIES,
   MAX_ENRICHMENT_LEASE_TTL_MS,

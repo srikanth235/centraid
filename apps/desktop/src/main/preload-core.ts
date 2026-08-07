@@ -69,20 +69,11 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
   return {
     onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
-    // File ASR is backed by an explicitly configured loopback model service in
-    // the main process; capability stays false until that adapter answers.
-    getHostCapabilities: async () => {
-      const transcript = await bridge
-        .invoke(Channel.DEVICE_TRANSCRIPT_AVAILABLE)
-        .then((value) => value === true)
-        .catch(() => false);
-      return hostCapabilities(transcript);
-    },
-    transcribeMedia: (input: {
-      bytes: ArrayBuffer;
-      mediaType: string;
-      filename?: string;
-    }) => bridge.invoke(Channel.DEVICE_TRANSCRIBE, input),
+    // Desktop file-ASR (device-transcription.ts, the on-device probe this
+    // used to make) is gone (issue #724 W6) — transcription now runs on the
+    // gateway's enrichment service, never on a member's desktop, so this is
+    // a pure synchronous snapshot again.
+    getHostCapabilities: async () => hostCapabilities(),
 
     // Settings
     getSettings: () => bridge.invoke(Channel.SETTINGS_GET),

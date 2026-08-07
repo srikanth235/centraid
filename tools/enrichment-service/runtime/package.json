@@ -1,0 +1,10 @@
+{
+  "name": "centraid-enrichment-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deliberately NOT a Bun workspace package (issue #724 W8). tools/enrichment-service IS a workspace package so oxlint/typecheck/vitest/knip gates apply to its TS source, but this nested runtime/ directory holds the one native/ML dependency (onnxruntime-node) plus the image-decode companion it needs (sharp) — the pair that would otherwise force every `bun install` at the repo root to compile/download a native ML module for packages that never touch it. `bun run --cwd tools/enrichment-service setup` runs `bun install` in THIS directory (never at the root) and downloads model weights next to it. src/onnx.ts and src/preprocess.ts resolve these two packages from here via `createRequire` + `import(pathToFileURL(...))` at first use, not via a normal workspace import, so nothing here is ever a candidate for root dependency resolution.",
+  "dependencies": {
+    "onnxruntime-node": "^1.27.0",
+    "sharp": "^0.35.3"
+  }
+}

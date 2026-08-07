@@ -115,7 +115,8 @@ import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
-import { recognizeWithTesseract } from "../capture/tesseract-ocr.js";
+import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { readEnrichServiceConfig } from "../enrich/service-client.js";
 import {
   closeJournalConversationStores,
   journalConversationStore,
@@ -4087,7 +4088,7 @@ export async function buildGateway(
       "/centraid/_gateway/capture",
       makeCaptureRouteHandler({
         classify: classifyCapture,
-        recognizeOcr: recognizeWithTesseract,
+        recognizeOcr: makeCaptureOcrRecognizer(readEnrichServiceConfig()),
       })
     ),
     // A single JSON document a user can save + hand to support: version,

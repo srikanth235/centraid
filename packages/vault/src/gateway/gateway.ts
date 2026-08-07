@@ -28,11 +28,13 @@ import type {
   AgentContentOutcome,
   AgentContentVariant,
 } from "../enrich/content.js";
+import { rebuildFaceClusters } from "../enrich/face-clusters.js";
 import {
   drainSatisfiedEnrichmentRequests,
   queueMissingDeviceEnrichmentBacklog,
   releaseExpiredEnrichmentLeases,
 } from "../enrich/leases.js";
+import { rebuildMemories } from "../enrich/memories.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { importIcsEvents, importVcardParties } from "../ingest/import.js";
 import type { ImportResult } from "../ingest/import.js";
@@ -1376,6 +1378,17 @@ export class Gateway {
     // fully rebuildable recompute; riding the same standing clock as
     // everything else in duties.ts keeps it fresh without a bespoke timer.
     recomputeDuplicateClusters(this.db.vault);
+    // Memories v0 (issue #724 W7) — same rebuildable-projection mold as the
+    // cluster recompute just above; it reads media_asset_phash.cluster_id
+    // AFTER that recompute so a phash grouping that changed this sweep is
+    // reflected in the same pass's 'similar' memories rather than a sweep
+    // behind.
+    rebuildMemories(this.db.vault);
+    // Face grouping (issue #724 W5) — the third rebuildable projection on this
+    // clock. It reads media_face_region and the face vectors the gateway's
+    // faces sweep wrote, so it runs AFTER nothing in particular here: a pass
+    // that finds no new faces writes nothing at all.
+    rebuildFaceClusters(this.db.vault);
     // Device work rides the same bounded standing clock: seed jobs for old
     // video/audio/PDF content and clear vanished ownership so a gateway
     // backstop that looks for NULL leases can resume immediately.

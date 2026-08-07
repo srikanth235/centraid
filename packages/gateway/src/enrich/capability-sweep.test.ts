@@ -1,11 +1,15 @@
-// The photo embedding indexer (issue #721 E2) — behaviour, not mechanism: what
-// a pass claims, what it writes, what it drains, what it refuses, and that a
-// killed gateway resumes because the queue is the database.
+// The capability sweep (issue #724 W3) driven through its first spec, the
+// photo embedder — behaviour, not mechanism: what a pass claims, what it
+// writes, what it stamps, what it drains, what it refuses, and that a killed
+// gateway resumes because the queue is the database.
+//
+// Every case runs against the FAKE ENRICHMENT SERVICE over a real socket. The
+// point of #724 is that model work is now a wire contract, so a suite that
+// stubbed the client would be testing the wrong thing.
 
 import { describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   bootstrapVault,
   createGateway,
@@ -15,16 +19,20 @@ import {
   registerEnrichCommands,
   registerMediaCommands,
   shaOfBlobUri,
+  stampedModel,
   uuidv7,
 } from "@centraid/vault";
 import type { Credential, VaultDb } from "@centraid/vault";
 
-import type { Embedder } from "./embedder.js";
-import { resolveEmbedder } from "./embedder.js";
-import { stubVectorFor, writeStubEmbedder } from "./embedder.test-fixtures.js";
-import { runPhotoEmbeddingSweep } from "./photo-embeddings.js";
+import { runCapabilitySweep } from "./capability-sweep.js";
+import { EMBEDDING_SWEEP_SPEC } from "./embedding-sweep.js";
+import {
+  fakeVectorFor,
+  startFakeEnrichService,
+} from "./fake-enrich-service.test-fixtures.js";
+import type { FakeEnrichService } from "./fake-enrich-service.test-fixtures.js";
 
-const MODEL = "test-clip@1";
+const MODEL = "fake-clip@1";
 
 /** Distinct pixel data URIs so each mints its OWN asset (sha256 differs). */
 const PIXELS = [
@@ -116,25 +124,10 @@ function fixture(tier: "off" | "device" | "gateway" = "gateway"): Fixture {
   };
 }
 
-/** An in-process embedder that records what it was handed. */
-function recordingEmbedder(model = MODEL): Embedder & { seen: Buffer[] } {
-  const seen: Buffer[] = [];
-  return {
-    model,
-    seen,
-    embedImage: (bytes) => {
-      seen.push(Buffer.from(bytes));
-      return Promise.resolve(stubVectorFor(bytes));
-    },
-    embedText: (text) => Promise.resolve(stubVectorFor(text)),
-  };
-}
-
 /**
  * The vector as the ledger stores it. `enrich_embedding.vector` is float32, so
  * a JS double round-trips to a nearby-but-unequal double — rounding the
- * EXPECTATION through the same width keeps the assertion exact instead of
- * approximate.
+ * EXPECTATION through the same width keeps the assertion exact.
  */
 function storedAs(values: readonly number[]): number[] {
   return Array.from(Float32Array.from(values));
@@ -154,48 +147,90 @@ function embeddingsFor(db: VaultDb, model: string): Map<string, number[]> {
   );
 }
 
-describe("photo-embeddings", () => {
-  test("the backfill embeds live assets from their derivative bytes and versions the row by model", async () => {
+function stampOf(db: VaultDb, assetId: string): string | null {
+  return stampedModel(db.vault, {
+    targetType: "media.media_asset",
+    targetId: assetId,
+    variant: "embedding",
+  });
+}
+
+/** The bytes one call actually put on the wire, decoded. */
+function sentBytes(service: FakeEnrichService, call = 0): Buffer[] {
+  return (service.calls[call]?.items ?? []).map((item) =>
+    Buffer.from(String(item["bytes"]), "base64")
+  );
+}
+
+async function sweep(
+  db: VaultDb,
+  service: FakeEnrichService | null,
+  options: {
+    batchSize?: number;
+    onFailure?: (id: string, reason: string) => void;
+  } = {}
+): ReturnType<typeof runCapabilitySweep> {
+  return runCapabilitySweep(db, EMBEDDING_SWEEP_SPEC, {
+    config: service?.config ?? null,
+    call: { timeoutMs: 2_000 },
+    ...options,
+  });
+}
+
+describe("capability-sweep (photo embeddings)", () => {
+  test("the backfill derives live assets from their derivative bytes and stamps what produced them", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     const thumb = Buffer.from([9, 8, 7, 6, 5, 4]);
     const assetId = f.addAsset(0, "thumb", thumb);
 
-    const embedder = recordingEmbedder();
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder });
+    const result = await sweep(f.db, service);
 
     expect(result.status).toBe("ok");
-    expect(result.embedded).toBe(1);
+    expect(result.derived).toBe(1);
     expect(embeddingsFor(f.db, MODEL).get(assetId)).toStrictEqual(
-      storedAs(stubVectorFor(thumb))
+      storedAs(fakeVectorFor(thumb))
     );
-    // The row is keyed by the versioned model id, which is what makes an
-    // upgrade a backfill (issue #721 E1).
     const row = f.db.vault
       .prepare("SELECT model, dim FROM enrich_embedding WHERE target_id = ?")
       .get(assetId) as { model: string; dim: number };
-    expect(row.model).toBe("test-clip@1");
+    expect(row.model).toBe(MODEL);
     expect(row.dim).toBe(4);
+    // The provenance stamp is what makes a later model bump a query (#724 W2).
+    expect(stampOf(f.db, assetId)).toBe(MODEL);
+    const stamp = f.db.vault
+      .prepare(
+        "SELECT capability, payload_json FROM enrich_derivation WHERE target_id = ?"
+      )
+      .get(assetId) as { capability: string; payload_json: string };
+    expect(stamp.capability).toBe("embed-image");
+    expect(JSON.parse(stamp.payload_json)).toStrictEqual({ dim: 4 });
+
+    await service.close();
     f.db.close();
   });
 
-  test("the original photograph is never handed to the embedder", async () => {
+  test("the original photograph never reaches the enrichment service", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     const preview = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);
     const assetId = f.addAsset(0, "preview", preview);
     const original = f.originalBytesOf(assetId);
     expect(original.equals(preview)).toBe(false);
 
-    const embedder = recordingEmbedder();
-    await runPhotoEmbeddingSweep(f.db, { embedder });
+    await sweep(f.db, service);
 
-    expect(embedder.seen).toHaveLength(1);
-    expect(embedder.seen[0]!.equals(preview)).toBe(true);
-    expect(embedder.seen.some((seen) => seen.equals(original))).toBe(false);
+    const sent = sentBytes(service);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.equals(preview)).toBe(true);
+    expect(sent.some((bytes) => bytes.equals(original))).toBe(false);
+    await service.close();
     f.db.close();
   });
 
   test("the preview rung is preferred over the thumb when both exist", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     const preview = Buffer.from([200, 100, 50, 25]);
     const assetId = f.addAsset(0, "preview", preview);
     const thumbSha = f.db.blobs.ingestSync(Buffer.from([1, 1, 1, 1])).sha256;
@@ -212,25 +247,28 @@ describe("photo-embeddings", () => {
       )
       .run(uuidv7(), contentId, thumbSha, nowIso());
 
-    const embedder = recordingEmbedder();
-    await runPhotoEmbeddingSweep(f.db, { embedder });
-    expect(embedder.seen[0]!.equals(preview)).toBe(true);
+    await sweep(f.db, service);
+    expect(sentBytes(service)[0]!.equals(preview)).toBe(true);
+    await service.close();
     f.db.close();
   });
 
   test("an asset with no derivative yet is skipped, not read from its original", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     f.addBareAsset(0);
-    const embedder = recordingEmbedder();
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder });
-    expect(result.skippedNoDerivative).toBe(1);
-    expect(result.embedded).toBe(0);
-    expect(embedder.seen).toHaveLength(0);
+    const result = await sweep(f.db, service);
+    expect(result.skipped).toBe(1);
+    expect(result.derived).toBe(0);
+    // Nothing was worth a round trip, so none was made.
+    expect(service.calls).toHaveLength(0);
+    await service.close();
     f.db.close();
   });
 
-  test("an open embedding request is claimed and drained in the same pass", async () => {
+  test("an open request is claimed and drained in the same pass as its row", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     const assetId = f.addAsset(0, "thumb", Buffer.from([4, 4, 4, 4]));
     const requestId = uuidv7();
     f.db.vault
@@ -241,22 +279,23 @@ describe("photo-embeddings", () => {
       )
       .run(requestId, assetId, nowIso());
 
-    const result = await runPhotoEmbeddingSweep(f.db, {
-      embedder: recordingEmbedder(),
-    });
-    expect(result.embedded).toBe(1);
+    const result = await sweep(f.db, service);
+    expect(result.derived).toBe(1);
     expect(result.drained).toBe(1);
-    const drainedAt = (
-      f.db.vault
-        .prepare("SELECT drained_at FROM enrich_request WHERE request_id = ?")
-        .get(requestId) as { drained_at: string | null }
-    ).drained_at;
-    expect(drainedAt).not.toBeNull();
+    expect(
+      (
+        f.db.vault
+          .prepare("SELECT drained_at FROM enrich_request WHERE request_id = ?")
+          .get(requestId) as { drained_at: string | null }
+      ).drained_at
+    ).not.toBeNull();
+    await service.close();
     f.db.close();
   });
 
   test("a domain-wide request drains only once the backfill has nothing left", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     f.addAsset(0, "thumb", Buffer.from([1, 2, 3, 4]));
     f.addAsset(1, "thumb", Buffer.from([5, 6, 7, 8]));
     const requestId = uuidv7();
@@ -268,148 +307,174 @@ describe("photo-embeddings", () => {
       )
       .run(requestId, nowIso());
 
-    const embedder = recordingEmbedder();
     // A pass that fills its whole batch cannot know it reached the end.
-    const first = await runPhotoEmbeddingSweep(f.db, { embedder, limit: 1 });
-    expect(first.embedded).toBe(1);
+    const first = await sweep(f.db, service, { batchSize: 1 });
+    expect(first.derived).toBe(1);
     expect(first.drained).toBe(0);
-    // The next pass sees one asset left against a batch of two, so the library
-    // is fully indexed and the standing ask is answered.
-    const second = await runPhotoEmbeddingSweep(f.db, { embedder, limit: 2 });
-    expect(second.embedded).toBe(1);
+    const second = await sweep(f.db, service, { batchSize: 2 });
+    expect(second.derived).toBe(1);
     expect(second.drained).toBe(1);
+    await service.close();
     f.db.close();
   });
 
-  test("nothing runs while the photos domain is not at the gateway tier", async () => {
+  test("nothing runs — and nothing is asked — while the domain is not at the gateway tier", async () => {
     await forEachSequentially(["off", "device"] as const, async (tier) => {
       const f = fixture(tier);
+      const service = await startFakeEnrichService();
       f.addAsset(0, "thumb", Buffer.from([1, 2, 3, 4]));
-      const embedder = recordingEmbedder();
-      const result = await runPhotoEmbeddingSweep(f.db, { embedder });
+      const result = await sweep(f.db, service);
       expect(result.status).toBe("policy");
-      expect(result.embedded).toBe(0);
-      expect(embedder.seen).toHaveLength(0);
+      expect(result.derived).toBe(0);
+      // Consent is read BEFORE the network: `off` is not observable as traffic.
+      expect(service.probes()).toBe(0);
+      expect(service.calls).toHaveLength(0);
       expect(embeddingsFor(f.db, MODEL).size).toBe(0);
+      await service.close();
       f.db.close();
     });
   });
 
-  test("no configured embedder means an idle indexer, never a fake vector", async () => {
+  test("no enrichment service means an idle indexer, never a fake vector", async () => {
     const f = fixture();
     f.addAsset(0, "thumb", Buffer.from([1, 2, 3, 4]));
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder: null });
-    expect(result.status).toBe("no-embedder");
-    const stored = f.db.vault
-      .prepare("SELECT count(*) AS n FROM enrich_embedding")
-      .get() as { n: number };
-    expect(stored.n).toBe(0);
+    const result = await sweep(f.db, null);
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toContain("CENTRAID_ENRICH_URL");
+    expect(
+      (
+        f.db.vault
+          .prepare("SELECT count(*) AS n FROM enrich_embedding")
+          .get() as { n: number }
+      ).n
+    ).toBe(0);
     f.db.close();
   });
 
-  test("a fresh worker resumes the remaining work after a crash mid-library", async () => {
+  test("a service that does not offer this capability is unavailable, not an error", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService({
+      capabilities: { transcript: {} },
+    });
+    f.addAsset(0, "thumb", Buffer.from([1, 2, 3, 4]));
+    const result = await sweep(f.db, service);
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toContain("embed-image");
+    expect(service.calls).toHaveLength(0);
+    await service.close();
+    f.db.close();
+  });
+
+  test("a fresh pass resumes the remaining work after a crash mid-library", async () => {
+    const f = fixture();
+    const service = await startFakeEnrichService();
     const assets = [
       f.addAsset(0, "thumb", Buffer.from([1, 1, 1, 1])),
       f.addAsset(1, "thumb", Buffer.from([2, 2, 2, 2])),
       f.addAsset(2, "thumb", Buffer.from([3, 3, 3, 3])),
     ];
-    // One asset indexed, then the "process dies" — nothing is handed to the
-    // next pass but the vault itself.
-    const first = await runPhotoEmbeddingSweep(f.db, {
-      embedder: recordingEmbedder(),
-      limit: 1,
-    });
-    expect(first.embedded).toBe(1);
+    const first = await sweep(f.db, service, { batchSize: 1 });
+    expect(first.derived).toBe(1);
 
-    const resumed = recordingEmbedder();
-    const second = await runPhotoEmbeddingSweep(f.db, { embedder: resumed });
-    expect(second.embedded).toBe(2);
-    // The already-indexed asset is not re-embedded: the LEFT JOIN found its row.
-    expect(resumed.seen).toHaveLength(2);
+    const second = await sweep(f.db, service);
+    expect(second.derived).toBe(2);
+    // The already-indexed asset is not re-sent: the LEFT JOIN found its row.
+    expect(sentBytes(service, 1)).toHaveLength(2);
     expect([...embeddingsFor(f.db, MODEL).keys()].toSorted()).toStrictEqual(
       assets.toSorted()
     );
 
-    // And a third pass over a fully indexed library does nothing at all.
-    const idle = recordingEmbedder();
-    const third = await runPhotoEmbeddingSweep(f.db, { embedder: idle });
-    expect(third.embedded).toBe(0);
-    expect(idle.seen).toHaveLength(0);
+    const third = await sweep(f.db, service);
+    expect(third.derived).toBe(0);
+    expect(service.calls).toHaveLength(2);
+    await service.close();
     f.db.close();
   });
 
-  test("a model version bump re-derives the library without invalidating the old rows", async () => {
+  test("a model version bump re-derives the library and re-stamps the provenance", async () => {
     const f = fixture();
+    const first = await startFakeEnrichService();
     const assetId = f.addAsset(0, "thumb", Buffer.from([7, 7, 7, 7]));
-    await runPhotoEmbeddingSweep(f.db, { embedder: recordingEmbedder() });
+    await sweep(f.db, first);
+    await first.close();
 
-    const upgraded = recordingEmbedder("test-clip@2");
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder: upgraded });
-    expect(result.embedded).toBe(1);
-    expect(upgraded.seen).toHaveLength(1);
+    const upgraded = await startFakeEnrichService({
+      capabilities: { "embed-image": { model: "fake-clip@2" } },
+    });
+    const result = await sweep(f.db, upgraded);
+    expect(result.derived).toBe(1);
     // Both generations coexist under the UNIQUE(target, model) key, so the old
-    // index keeps answering searches while the new one fills in.
-    expect(embeddingsFor(f.db, "test-clip@1").has(assetId)).toBe(true);
-    expect(embeddingsFor(f.db, "test-clip@2").has(assetId)).toBe(true);
+    // index keeps answering searches while the new one fills in...
+    expect(embeddingsFor(f.db, "fake-clip@1").has(assetId)).toBe(true);
+    expect(embeddingsFor(f.db, "fake-clip@2").has(assetId)).toBe(true);
+    // ...while the stamp names only what produced the current output.
+    expect(stampOf(f.db, assetId)).toBe("fake-clip@2");
+    await upgraded.close();
     f.db.close();
   });
 
-  test("one photograph the embedder refuses does not sink the batch", async () => {
+  test("one photograph the service refuses does not sink the batch", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService({
+      capabilities: {
+        "embed-image": {
+          result: (item, index) =>
+            index === 0
+              ? { error: "decode failed" }
+              : {
+                  vector: fakeVectorFor(
+                    Buffer.from(String(item["bytes"]), "base64")
+                  ),
+                },
+        },
+      },
+    });
     f.addAsset(0, "thumb", Buffer.from([1, 1, 1, 1]));
     f.addAsset(1, "thumb", Buffer.from([2, 2, 2, 2]));
     const failures: string[] = [];
-    let calls = 0;
-    const flaky: Embedder = {
-      model: MODEL,
-      embedImage: (bytes) => {
-        calls += 1;
-        return calls === 1
-          ? Promise.reject(new Error("decode failed"))
-          : Promise.resolve(stubVectorFor(bytes));
-      },
-      embedText: (text) => Promise.resolve(stubVectorFor(text)),
-    };
-    const result = await runPhotoEmbeddingSweep(f.db, {
-      embedder: flaky,
+    const result = await sweep(f.db, service, {
       onFailure: (_assetId, reason) => failures.push(reason),
     });
     expect(result.failed).toBe(1);
-    expect(result.embedded).toBe(1);
+    expect(result.derived).toBe(1);
     expect(failures).toStrictEqual(["decode failed"]);
+    // The refused photograph keeps no stamp, so the next pass finds it again.
+    expect(
+      (
+        f.db.vault
+          .prepare("SELECT count(*) AS n FROM enrich_derivation")
+          .get() as { n: number }
+      ).n
+    ).toBe(1);
+    await service.close();
+    f.db.close();
+  });
+
+  test("a service that dies between the probe and the batch writes nothing", async () => {
+    const f = fixture();
+    const service = await startFakeEnrichService({
+      capabilities: { "embed-image": { misbehave: "server-error" } },
+    });
+    f.addAsset(0, "thumb", Buffer.from([1, 1, 1, 1]));
+    const result = await sweep(f.db, service);
+    expect(result.status).toBe("unavailable");
+    expect(result.derived).toBe(0);
+    expect(embeddingsFor(f.db, MODEL).size).toBe(0);
+    await service.close();
     f.db.close();
   });
 
   test("trashed assets are left out of the backfill entirely", async () => {
     const f = fixture();
+    const service = await startFakeEnrichService();
     const assetId = f.addAsset(0, "thumb", Buffer.from([1, 2, 3, 4]));
     f.db.vault
       .prepare("UPDATE media_media_asset SET deleted_at = ? WHERE asset_id = ?")
       .run(nowIso(), assetId);
-    const embedder = recordingEmbedder();
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder });
+    const result = await sweep(f.db, service);
     expect(result.scanned).toBe(0);
-    expect(embedder.seen).toHaveLength(0);
-    f.db.close();
-  });
-
-  test("end to end against a real embedder COMMAND, spawned per photograph", async () => {
-    const f = fixture();
-    const dir = await tempDir("photo-embeddings-");
-    const embedder = resolveEmbedder({
-      CENTRAID_EMBEDDER_PATH: await writeStubEmbedder(dir),
-      CENTRAID_EMBEDDER_MODEL: "stub-clip@1",
-    });
-    const bytes = Buffer.from([11, 22, 33, 44]);
-    const assetId = f.addAsset(0, "thumb", bytes);
-
-    const result = await runPhotoEmbeddingSweep(f.db, { embedder });
-    expect(result.status).toBe("ok");
-    expect(result.embedded).toBe(1);
-    expect(embeddingsFor(f.db, "stub-clip@1").get(assetId)).toStrictEqual(
-      storedAs(stubVectorFor(bytes))
-    );
+    expect(service.calls).toHaveLength(0);
+    await service.close();
     f.db.close();
   });
 });

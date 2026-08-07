@@ -105,6 +105,12 @@
       "lane": "scale",
       "volume": "50,000 media assets spread over 3 years + a 10,000-photo one-calendar-day degenerate corpus, then their own ordered/bucketed reads"
     },
+    "tests/scale/photos-memories.scale.test.ts": {
+      "lane": "scale",
+      "volume": "50,000 media assets over a 3-year span (~27 trip blocks, ~1,500 capture-group/phash 'similar' pairs), then one rebuildMemories pass",
+      "_measured": "Three consecutive 2026-08-07 development-host runs measured 1,153 ms / 14,921 ms / 2,399 ms (365 on-this-day, 28 trip, 1,000 similar memories, 58,394 member rows every run) — a shared, loaded dev host, not a clean bench. budgetMs is set as a catastrophic-failure ceiling well above the observed spread rather than tight headroom over the lowest sample; the 30-sample/1.5x drift gate (once it has history) is what actually tracks steady-state cost.",
+      "budgetMs": 20000
+    },
     "tests/scale/phash-clustering.scale.test.ts": {
       "lane": "scale",
       "volume": "90,000 photo assets, 3,000 near-duplicate families — cold sweep + idle sweep",

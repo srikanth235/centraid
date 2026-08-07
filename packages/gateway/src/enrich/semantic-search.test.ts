@@ -3,8 +3,12 @@
 // answer the same query with the same photographs in the same order. If they
 // ever diverge, the extension has stopped being an optimization and become a
 // feature the fifth platform does not have.
+//
+// The query vector now comes from the enrichment service over a real socket
+// (issue #724 W1), so each case plants the vectors it wants that service to
+// return rather than stubbing a function.
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import {
@@ -18,11 +22,13 @@ import {
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import type { Embedder } from "./embedder.js";
+import { startFakeEnrichService } from "./fake-enrich-service.test-fixtures.js";
+import type { FakeEnrichService } from "./fake-enrich-service.test-fixtures.js";
 import { searchPhotosByText } from "./semantic-search.js";
 import { hasSqliteVec, loadSqliteVec } from "./sqlite-vec.js";
 
-const MODEL = "test-clip@1";
+/** The fake advertises this for `embed-image`; it is the index's key. */
+const MODEL = "fake-clip@1";
 
 const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -43,12 +49,20 @@ const PLANTED: readonly (readonly [string, number[]])[] = [
 
 const QUERY_VECTOR = [1, 0];
 
-function textOnlyEmbedder(vector: readonly number[] = QUERY_VECTOR): Embedder {
-  return {
-    model: MODEL,
-    embedImage: () => Promise.reject(new Error("not used by search")),
-    embedText: () => Promise.resolve([...vector]),
-  };
+const services: FakeEnrichService[] = [];
+
+/** A service whose `embed-text` answers with one planted query vector. */
+async function textService(
+  vector: readonly number[] = QUERY_VECTOR
+): Promise<FakeEnrichService> {
+  const service = await startFakeEnrichService({
+    capabilities: {
+      "embed-image": {},
+      "embed-text": { result: () => ({ vector: [...vector] }) },
+    },
+  });
+  services.push(service);
+  return service;
 }
 
 interface Planted {
@@ -99,34 +113,76 @@ function plantedVault(options: { withVec: boolean }): Planted {
 }
 
 describe("semantic-search", () => {
-  test("no embedder is an honest unavailable, never an error", async () => {
+  afterEach(async () => {
+    await forEachSequentially(services.splice(0), (service) => service.close());
+  });
+
+  test("no enrichment service is an honest unavailable, never an error", async () => {
     const { db } = plantedVault({ withVec: false });
     const outcome = await searchPhotosByText(db, {
-      embedder: null,
+      config: null,
       query: "a dog on a beach",
     });
     expect(outcome.status).toBe("unavailable");
     expect(outcome).toStrictEqual(
-      expect.objectContaining({ reason: expect.stringContaining("embedder") })
+      expect.objectContaining({
+        reason: expect.stringContaining("CENTRAID_ENRICH_URL"),
+      })
     );
     db.close();
   });
 
-  test("an embedder with an empty index is unavailable, not an empty result", async () => {
+  test("a service with an empty index is unavailable, not an empty result", async () => {
     const db = openVaultDb();
     bootstrapVault(db, { ownerName: "Priya" });
     const outcome = await searchPhotosByText(db, {
-      embedder: textOnlyEmbedder(),
+      config: (await textService()).config,
       query: "anything",
     });
     expect(outcome.status).toBe("unavailable");
     db.close();
   });
 
+  test("a service that cannot embed a query at all is unavailable", async () => {
+    const { db } = plantedVault({ withVec: false });
+    const imageOnly = await startFakeEnrichService({
+      capabilities: { "embed-image": {} },
+    });
+    services.push(imageOnly);
+    const outcome = await searchPhotosByText(db, {
+      config: imageOnly.config,
+      query: "a wide sunny shore",
+    });
+    expect(outcome).toStrictEqual(
+      expect.objectContaining({
+        reason: expect.stringContaining("embed-text"),
+      })
+    );
+    db.close();
+  });
+
+  test("a service that ran and refused the query is a failure, not an absence", async () => {
+    const { db } = plantedVault({ withVec: false });
+    const broken = await startFakeEnrichService({
+      capabilities: {
+        "embed-image": {},
+        "embed-text": { result: () => ({ error: "the model crashed" }) },
+      },
+    });
+    services.push(broken);
+    await expect(
+      searchPhotosByText(db, {
+        config: broken.config,
+        query: "a wide sunny shore",
+      })
+    ).rejects.toThrow(/the model crashed/u);
+    db.close();
+  });
+
   test("hits come back ordered by score, best first", async () => {
     const { db, assetIds } = plantedVault({ withVec: false });
     const outcome = await searchPhotosByText(db, {
-      embedder: textOnlyEmbedder(),
+      config: (await textService()).config,
       query: "a wide sunny shore",
     });
     expect(outcome.status).toBe("ok");
@@ -157,12 +213,13 @@ describe("semantic-search", () => {
         [-1, 0],
       ],
       async (query) => {
+        const service = await textService(query);
         const vec = await searchPhotosByText(withVec.db, {
-          embedder: textOnlyEmbedder(query),
+          config: service.config,
           query: "same phrase either way",
         });
         const scan = await searchPhotosByText(withoutVec.db, {
-          embedder: textOnlyEmbedder(query),
+          config: service.config,
           query: "same phrase either way",
         });
         if (vec.status !== "ok" || scan.status !== "ok")
@@ -192,7 +249,7 @@ describe("semantic-search", () => {
         )
         .run(nowIso(), planted.assetIds[0]!);
       const outcome = await searchPhotosByText(planted.db, {
-        embedder: textOnlyEmbedder(),
+        config: (await textService()).config,
         query: "a wide sunny shore",
       });
       if (outcome.status !== "ok") throw new Error("unreachable");
@@ -221,7 +278,7 @@ describe("semantic-search", () => {
         nowIso()
       );
     const outcome = await searchPhotosByText(planted.db, {
-      embedder: textOnlyEmbedder(),
+      config: (await textService()).config,
       query: "a wide sunny shore",
     });
     expect(outcome.status).toBe("ok");
@@ -230,8 +287,9 @@ describe("semantic-search", () => {
 
   test("limit is honoured and clamped", async () => {
     const { db, assetIds } = plantedVault({ withVec: false });
+    const service = await textService();
     const one = await searchPhotosByText(db, {
-      embedder: textOnlyEmbedder(),
+      config: service.config,
       query: "a wide sunny shore",
       limit: 1,
     });
@@ -239,7 +297,7 @@ describe("semantic-search", () => {
     expect(one.hits.map((hit) => hit.assetId)).toStrictEqual([assetIds[0]]);
 
     const zero = await searchPhotosByText(db, {
-      embedder: textOnlyEmbedder(),
+      config: service.config,
       query: "a wide sunny shore",
       limit: 0,
     });

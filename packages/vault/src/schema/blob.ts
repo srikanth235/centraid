@@ -44,9 +44,22 @@ const DOCUMENT_BODY = (ref: string) =>
     (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
       WHERE ci.content_id = ${ref}."current_content_id"))`);
 
-/** Core content search text: the owner's title plus spoken-word transcript. */
+/**
+ * Core content search text: the owner's title plus whichever spoken/visible
+ * text a content item carries. `text` AND `transcript` are concatenated,
+ * not COALESCEd to one winner — a recorded talk can legitimately carry BOTH
+ * (a slide deck's extracted text layer alongside the speaker's transcript;
+ * `derivatives.test.ts` covers exactly this), so folding in only the first
+ * present would silently drop the other's words from the index. Added for
+ * issue #724 W4/W6: before photo OCR and audio/video transcripts existed,
+ * this content-item-generic index only ever saw `transcript` (video/audio's
+ * captions, wired earlier) — `text` was absent because nothing wrote it for
+ * a non-document content item yet.
+ */
 const CONTENT_ITEM_SEARCH_TEXT = (ref: string) =>
   truncateForIndex(`trim(COALESCE(${ref}."title", '') || ' ' || COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = ${ref}."content_id" AND dv.variant = 'text'), '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."content_id" AND dv.variant = 'transcript'), ''))`);
 
@@ -266,16 +279,27 @@ WHEN OLD.variant IN ('text','transcript')
 BEGIN${REFRESH_DOCUMENT_FTS("OLD.content_id")}
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_ai AFTER INSERT ON core_content_derivative
-WHEN NEW.variant = 'transcript'
+-- Renamed from trg_fts_content_transcript_* (issue #724 W4/W6): the WHEN
+-- clause now covers 'text' as well as 'transcript' (see
+-- CONTENT_ITEM_SEARCH_TEXT's header — photo OCR and document text are the
+-- same variant, and a non-document content item's OCR text belongs in this
+-- generic index too), so the old name would now describe less than the
+-- trigger does. Triggers are DDL, not data — DROP + CREATE under a new name
+-- is a safe rung, unlike the CHECK-constraint/ADD-COLUMN cases elsewhere in
+-- this file that cannot be rewritten in place.
+DROP TRIGGER IF EXISTS trg_fts_content_transcript_ai;
+DROP TRIGGER IF EXISTS trg_fts_content_transcript_au;
+DROP TRIGGER IF EXISTS trg_fts_content_transcript_ad;
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_derivative_ai AFTER INSERT ON core_content_derivative
+WHEN NEW.variant IN ('text','transcript')
 BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
 END;
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_au AFTER UPDATE ON core_content_derivative
-WHEN NEW.variant = 'transcript'
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_derivative_au AFTER UPDATE ON core_content_derivative
+WHEN NEW.variant IN ('text','transcript')
 BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
 END;
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_ad AFTER DELETE ON core_content_derivative
-WHEN OLD.variant = 'transcript'
+CREATE TRIGGER IF NOT EXISTS trg_fts_content_item_derivative_ad AFTER DELETE ON core_content_derivative
+WHEN OLD.variant IN ('text','transcript')
 BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}
 END;
 ${BLOB_CACHE_DDL}`;

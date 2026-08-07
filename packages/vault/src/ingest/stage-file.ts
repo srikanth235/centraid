@@ -61,6 +61,16 @@ export interface StageFileOptions {
   accountName?: string;
   /** Currency for statement rows that carry none (default: vault base). */
   currency?: string;
+  /**
+   * Live Photo / motion-photo pairing for a SINGLE dropped media file (issue
+   * #724 A2). A Takeout zip derives its own capture-group id from the
+   * archive's own file-name pairing (`takeout-sidecar.ts`'s `pairingKey`) —
+   * there is no archive here to pair within, so a caller that already knows
+   * two device uploads are one shutter click (the camera-roll import's own
+   * `live:<localId>` convention, `photos-backup.ts`) passes it straight
+   * through. Ignored for a zip import, whose own pairing wins.
+   */
+  captureGroupId?: string;
 }
 
 export interface StageFileResult extends StageResult {
@@ -427,7 +437,9 @@ export function stageFile(
     }
   } else if (isMediaFile(options.filename, input)) {
     // A single dropped photo is a one-photo import: same publisher, same
-    // dedupe, no archive around it to carry a sidecar or an album.
+    // dedupe, no archive around it to carry a sidecar or an album. Its
+    // capture group (if any) has to come from the CALLER instead — see
+    // `StageFileOptions.captureGroupId`.
     kind = `file.${extension(options.filename)}`;
     const path = normalizeArchivePath(options.filename);
     candidates.push(
@@ -438,7 +450,7 @@ export function stageFile(
           sidecarPath: null,
           sidecar: NO_SIDECAR_FACTS,
           album: null,
-          captureGroupId: null,
+          captureGroupId: options.captureGroupId ?? null,
         },
         input,
         keepLocation,

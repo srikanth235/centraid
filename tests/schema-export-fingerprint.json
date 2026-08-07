@@ -1,6 +1,6 @@
 {
   "algorithm": "sha256-of-sorted-file-sha256",
-  "schemaFingerprint": "bc8fe1ce7d3960afafed68740cb26698547fbed4d30ebab53e87d368121dfc3c",
+  "schemaFingerprint": "0e384eaea9c5b9eaeb3bb3a8a5a2d9fc13776bb56ba1ef0ea8b4729ba396b580",
   "exportOwner": "packages/vault/src/gateway/portable-export.ts",
   "approvedDeviation": null
 }

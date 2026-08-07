@@ -1,0 +1,29 @@
+{
+  "name": "@centraid/enrichment-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference enrichment service (issue #724 W8): a standalone HTTP service that serves embed-image, embed-text, ocr, faces, and transcript capabilities over the frozen gateway wire contract. Pure TypeScript on Bun/Node — no Python anywhere. The one ML native dependency (onnxruntime-node) and its image-decode companion (sharp) live in the NON-workspace runtime/ directory (see runtime/package.json), installed and populated with model weights by `bun run setup`. This package's own dependency graph stays clean so a root `bun install` never pulls a native ML module.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "tools/enrichment-service"
+  },
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c ../../oxlint.config.ts --disable-nested-config --deny-warnings .",
+    "serve": "bun run src/server.ts",
+    "setup": "bun run setup.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@types/node": "^26.1.2",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.15"
+  }
+}

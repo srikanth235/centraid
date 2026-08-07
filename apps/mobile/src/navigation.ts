@@ -84,6 +84,12 @@ export type PhotosStackParamList = {
   // primary control is the way into the review.
   DuplicatesShelf: undefined;
   DuplicateReview: undefined;
+  // The full Memories surface (issue #724 W7) — On this day, Trips, and
+  // Similar moments, read off the vault's `media.memory` projection. Reached
+  // from Collections' own Memories section heading
+  // (`PhotosCollectionsView.tsx`'s `open()`), which used to have nowhere to
+  // send that tap because no "all memories" screen existed.
+  PhotosMemories: undefined;
   AlbumDetail: { albumId: string };
   // The picker (§10) — full screen on the phone. Its picked set is its own,
   // so the album it commits to is a route param rather than shared state.

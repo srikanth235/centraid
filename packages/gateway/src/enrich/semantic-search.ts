@@ -1,7 +1,15 @@
 // Semantic photo search (issue #721 E3): the query half of the embedding
-// index. A phrase becomes a vector through the SAME external embedder that
-// wrote the rows (`embedder.ts`, text mode), and the vector is ranked against
-// `enrich_embedding` by cosine.
+// index. A phrase becomes a vector through the SAME enrichment service that
+// wrote the rows (`service-client.ts`, `embed-text`), and the vector is ranked
+// against `enrich_embedding` by cosine.
+//
+// TWO CAPABILITIES, ONE SPACE (issue #724 W1). The rows are keyed by the
+// `embed-image` model, because that is what produced them; the query rides
+// `embed-text`. A service that offers both is promising they share a vector
+// space — a text query is compared to image vectors by cosine, so a service
+// whose two capabilities disagree returns confident nonsense. That is the
+// operator's contract to keep; nothing here can check it, and this paragraph
+// is the warning that used to sit on the spawned embedder.
 //
 // TWO ENGINES, ONE ANSWER. When the host loaded `sqlite-vec` into this vault
 // handle, ranking is `vec_distance_cosine` inside SQLite, which filters trashed
@@ -32,8 +40,15 @@
 import { scanEmbeddings } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import { EMBEDDER_UNCONFIGURED_REASON } from "./embedder.js";
-import type { Embedder } from "./embedder.js";
+import {
+  enrichBatch,
+  isEnrichFailure,
+  probeEnrichService,
+} from "./service-client.js";
+import type {
+  EnrichCallOptions,
+  EnrichServiceConfig,
+} from "./service-client.js";
 import { hasSqliteVec } from "./sqlite-vec.js";
 
 const TARGET_TYPE = "media.media_asset";
@@ -65,47 +80,68 @@ export type PhotoSearchOutcome =
   | { status: "unavailable"; reason: string };
 
 export interface PhotoSearchOptions {
-  embedder: Embedder | null;
+  /** The host's enrichment service, or `null` for "this host has none". */
+  config: EnrichServiceConfig | null;
   query: string;
   limit?: number;
+  /** Test seam: a lowered timeout, an injected fetch. */
+  call?: EnrichCallOptions;
 }
 
 /**
  * Rank live photographs against a text query.
  *
- * `unavailable` is a 200-level ANSWER, not an error: no embedder configured,
- * or nothing indexed for this model yet. Both are ordinary states of a gateway
- * whose owner has not opted into enrichment, and a surface must be able to say
- * "not available here" without rendering a failure. Derived data enriches, it
- * never gates.
+ * `unavailable` is a 200-level ANSWER, not an error: no service configured,
+ * one that does not offer embedding, or nothing indexed for its model yet. All
+ * are ordinary states of a gateway whose owner has not opted into enrichment,
+ * and a surface must be able to say "not available here" without rendering a
+ * failure. Derived data enriches, it never gates.
+ *
+ * A service that RAN and refused the query is the one genuine failure and it
+ * THROWS, so the route can answer 500: a member who configured this deserves
+ * to know it broke rather than to be told it was never switched on.
  */
 export async function searchPhotosByText(
   db: VaultDb,
   options: PhotoSearchOptions
 ): Promise<PhotoSearchOutcome> {
-  const { embedder } = options;
-  if (!embedder)
-    return { status: "unavailable", reason: EMBEDDER_UNCONFIGURED_REASON };
+  const call = options.call ?? {};
+  // The index is keyed by the model that WROTE it, so availability is asked of
+  // `embed-image` even though the query itself is text.
+  const index = await probeEnrichService(options.config, "embed-image", call);
+  if (index.status === "unavailable") return index;
   const indexed = db.vault
     .prepare(
       "SELECT count(*) AS n FROM enrich_embedding WHERE target_type = ? AND model = ?"
     )
-    .get(TARGET_TYPE, embedder.model) as { n: number };
+    .get(TARGET_TYPE, index.model) as { n: number };
   if (indexed.n === 0) {
     return {
       status: "unavailable",
-      reason: `no photos are indexed for ${embedder.model} yet — the gateway indexes them in the background`,
+      reason: `no photos are indexed for ${index.model} yet — the gateway indexes them in the background`,
     };
   }
   const limit = Math.min(
     Math.max(1, Math.trunc(options.limit ?? DEFAULT_SEARCH_LIMIT)),
     MAX_SEARCH_LIMIT
   );
-  const vector = await embedder.embedText(options.query);
+  const embedded = await enrichBatch(
+    options.config,
+    "embed-text",
+    [{ id: "query", text: options.query }],
+    call
+  );
+  if (embedded.status === "unavailable") return embedded;
+  const result = embedded.results[0];
+  if (!result || isEnrichFailure(result)) {
+    throw new Error(
+      `the enrichment service could not embed the query: ${result ? result.error : "no result"}`
+    );
+  }
   const hits = hasSqliteVec(db.vault)
-    ? rankWithVec(db, embedder.model, vector, limit)
-    : rankWithScan(db, embedder.model, vector, limit);
-  return { status: "ok", model: embedder.model, hits };
+    ? rankWithVec(db, index.model, result.vector, limit)
+    : rankWithScan(db, index.model, result.vector, limit);
+  return { status: "ok", model: index.model, hits };
 }
 
 function rankWithVec(

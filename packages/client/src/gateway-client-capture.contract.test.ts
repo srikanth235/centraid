@@ -30,7 +30,7 @@ describe("capture assist seam", () => {
     await expect(capture.recognizeCaptureImage(file)).resolves.toStrictEqual({
       text: "hi",
       confidence: 0.9,
-      engine: "tesseract",
+      engine: "enrichment-service",
     });
     const request = sent("POST /centraid/_gateway/capture/ocr");
     expect(request.body).toBe(file);

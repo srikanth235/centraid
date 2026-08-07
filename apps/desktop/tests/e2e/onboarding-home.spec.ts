@@ -376,6 +376,39 @@ test("2.6d — Photos opens into the app view and yields the #721 UI evidence", 
   }
 });
 
+test("2.6e — Photos opens into the app view and yields the #724 UI evidence", async () => {
+  // Same contract as 2.6d, one issue on. #724's user-visible surfaces are
+  // native-only (the People roster and its Detect-faces consent gate, the
+  // Memories rails, the camera-roll import offer) and have no e2e harness of
+  // their own; Photos-open is the shared surface every one of them feeds, so
+  // it is the honest frame for this change set too. The gateway-side half of
+  // #724 — the enrichment service seam, OCR and faces sweeps — has no pixels
+  // by construction: it answers honestly unavailable until an owner configures
+  // a service, which is exactly what this frame shows.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-724-enrichment-service.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

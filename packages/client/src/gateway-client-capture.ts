@@ -17,7 +17,7 @@ export interface AgentCaptureCandidate {
 export interface CaptureOcrExtraction {
   text: string;
   confidence: number;
-  engine: "tesseract";
+  engine: "enrichment-service";
 }
 
 export async function recognizeCaptureImage(

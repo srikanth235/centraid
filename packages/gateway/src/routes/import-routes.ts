@@ -163,6 +163,12 @@ export function makeImportRouteHandler(
           ...(typeof body.currency === "string"
             ? { currency: body.currency }
             : {}),
+          // Live Photo pairing for a single dropped photo/video (issue #724
+          // A2) — see `StageFileOptions.captureGroupId`. Absent for anything
+          // that is not the mobile camera-roll importer's own convention.
+          ...(typeof body.captureGroupId === "string"
+            ? { captureGroupId: body.captureGroupId }
+            : {}),
         });
         return sendJson(res, 200, result);
       }

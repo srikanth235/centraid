@@ -56,13 +56,12 @@ export interface DeviceEnrichmentLease {
   entityId: string | null;
   reason: "search-miss" | "on-view" | "manual";
   detail: string | null;
-  capability:
-    | "previews"
-    | "poster"
-    | "pdfText"
-    | "ocr"
-    | "transcript"
-    | "embedding";
+  /**
+   * The wire twin of the gateway's `EnrichmentCapability`, narrowed by issue
+   * #724 to the device lane: model-shaped work runs on the gateway's
+   * enrichment service and is never leased to a device.
+   */
+  capability: "previews" | "poster" | "pdfText";
   contributionVariant: string | null;
   deviceId: string;
   token: string;
