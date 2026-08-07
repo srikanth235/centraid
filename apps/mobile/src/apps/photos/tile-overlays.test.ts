@@ -5,7 +5,6 @@ import type { VaultFacts } from "./tile-overlays";
 import {
   CUSTODY_MIN_RUNG,
   STATE_COULD_NOT_DECODE,
-  STATE_ON_GATEWAY,
   formatDuration,
   kindOverlay,
   marksVault,
@@ -144,25 +143,28 @@ describe("the state slot", () => {
     ).toBeUndefined();
   });
 
-  test("`on the gateway` is scoped to an unreachable gateway, where it is news", () => {
-    // Same words, opposite information content: when the gateway answers this
-    // describes the product working; when it does not, it is the whole
-    // explanation for a tile that cannot paint.
-    expect(
-      stateOverlay(asset({ backupState: "remote-only" }), M, {
-        unreachable: true,
-      })
-    ).toStrictEqual({ form: "line", text: STATE_ON_GATEWAY, tone: "normal" });
+  test("an unreachable gateway adds nothing to any tile", () => {
+    // THE OVER-ANNOUNCEMENT THIS PINS. `on the gateway` used to render on
+    // every `remote-only` tile the moment the gateway stopped answering: an
+    // ambient fact printed through a per-tile slot, forty times a screenful.
+    // The replica bar states it once, at the top; a tile speaks only for
+    // itself.
+    for (const backupState of [
+      "remote-only",
+      "local-only",
+      "backed-up",
+    ] as const) {
+      const line = stateOverlay(asset({ backupState }), M);
+      expect(line?.form === "line" && line.text).not.toBe("on the gateway");
+    }
   });
 
-  test("an unreachable gateway says nothing about bytes that are HERE", () => {
-    // `local-only` needs no gateway to paint, so being offline changes
-    // nothing about it — it keeps the custody mark rather than gaining a line.
-    expect(
-      stateOverlay(asset({ backupState: "local-only" }), M, {
-        unreachable: true,
-      })
-    ).toStrictEqual({ form: "custody" });
+  test("bytes on this device keep their MARK regardless of the gateway", () => {
+    // `local-only` needs no gateway to paint, so nothing about reachability
+    // changes it — the custody mark is about this photograph's own bytes.
+    expect(stateOverlay(asset({ backupState: "local-only" }), M)).toStrictEqual(
+      { form: "custody" }
+    );
   });
 
   test("bytes here and nowhere else take the MARK, never a caption", () => {
@@ -214,14 +216,10 @@ describe("the state slot", () => {
     // tile can never stack a glyph under a caption at its own foot. Every
     // case that produces a line is one where custody is not the actionable
     // fact, so the line winning is right on the merits too.
-    for (const context of [{ decodeFailed: true }, { unreachable: true }]) {
-      const resolved = stateOverlay(
-        asset({ backupState: "local-only" }),
-        M,
-        context
-      );
-      expect(resolved?.form === "custody" && "text" in resolved).toBe(false);
-    }
+    const resolved = stateOverlay(asset({ backupState: "local-only" }), M, {
+      decodeFailed: true,
+    });
+    expect(resolved?.form === "custody" && "text" in resolved).toBe(false);
   });
 
   test("the seconds in between say nothing — no flickering mark", () => {

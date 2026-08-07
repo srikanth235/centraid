@@ -27,8 +27,6 @@ import {
   STAGE,
   STAGE_LINE,
   STAGE_SUNKEN,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
 } from "./themes";
 import { fontStacks, type, typeKeyToKebab } from "./typography";
 
@@ -257,7 +255,7 @@ const roleTable: RoleDef[] = [
   role(
     "--bg",
     "color",
-    "The page. The one surface role an app retunes, by declaring a surface tone.",
+    "The page. ONE colour, for the shell and every app in it — there is no per-app surface tone, and an app does not retune it.",
     "all text roles must clear their declared floor",
     allSurfaces,
     everywhere(lightTheme.bg)
@@ -352,21 +350,11 @@ const roleTable: RoleDef[] = [
       shell: literal(lightTheme.bgWall),
     }
   ),
-  ...SURFACE_TONE_NAMES.map((tone) =>
-    role(
-      `--bg-tone-${tone}` as `--${string}`,
-      "color",
-      `The ${tone} surface tone. An app declares one and it retunes --bg only; the raised paper, hairlines and ink stay invariant, which is what keeps differently-toned apps one product.`,
-      "every ink role clears its floor on the deepest tone",
-      allSurfaces,
-      everywhere(SURFACE_TONES[tone].light)
-    )
-  ),
   role(
     "--text",
     "color",
     "Primary content ink.",
-    "body text AA on every surface tone",
+    "AA on every surface it can land on",
     allSurfaces,
     everywhere(lightTheme.text),
     4.5
@@ -375,7 +363,7 @@ const roleTable: RoleDef[] = [
     "--text-soft",
     "color",
     "Secondary content ink for supporting prose and inactive navigation labels; navigation never falls to the tertiary rung.",
-    "small text AA on every surface tone",
+    "small text AA on every surface it can land on",
     allSurfaces,
     everywhere(lightTheme.textSoft),
     4.5
@@ -384,7 +372,7 @@ const roleTable: RoleDef[] = [
     "--text-faint",
     "color",
     "Metadata ink and quiet labels.",
-    "small text AA on the deepest surface tone, not merely on --bg",
+    "small text AA on the deepest surface in the system, not merely on --bg",
     allSurfaces,
     everywhere(lightTheme.textFaint),
     4.5
@@ -471,7 +459,7 @@ const roleTable: RoleDef[] = [
     "--focus-ring-color",
     "color",
     "The reserved focus hue; native uses the platform focus ring.",
-    "3:1 non-text boundary against every surface tone",
+    "3:1 non-text boundary against every surface it can land on",
     allSurfaces,
     everywhere(lightTheme.ring),
     3

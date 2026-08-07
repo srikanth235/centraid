@@ -57,7 +57,7 @@ import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { photoAccessTakesOverTimeline } from "./photo-access";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
-import PhotoPeriodGrid from "./PhotoPeriodGrid";
+import PhotoGrainView from "./PhotoGrainView";
 import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
 import { inCloudMessage, nothingToBackUpMessage } from "./photos-backup-copy";
 import { resolveMoreRowRoute } from "./photos-band";
@@ -69,8 +69,6 @@ import { libraryMenuGroups } from "./photos-library-menu";
 import type { LibraryFilter } from "./photos-library-menu";
 import { usePhotosRung } from "./photos-rung-store";
 import { batchTrash, vaultAssets } from "./photos-selection-writes";
-import { drillInto } from "./photos-zoom";
-import type { PeriodGroup, TimelineZoom } from "./photos-zoom";
 import PhotosBand from "./PhotosBand";
 import PhotosCollectionsView from "./PhotosCollectionsView";
 import PhotosGridSkeleton from "./PhotosGridSkeleton";
@@ -83,10 +81,14 @@ import {
   pinnedThumbnailCandidates,
   pinnedThumbnailSignature,
 } from "./pinned-thumbnails";
+import { anchorForGrain } from "./timeline-grains";
+import type { GrainPeriod, TimelineGrain } from "./timeline-grains";
 import type { PhotoSection } from "./timeline-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import TimelineZoomDrawer from "./TimelineZoomDrawer";
+import TimelineGrainControl, {
+  GRAIN_CONTROL_SLOT,
+} from "./TimelineGrainControl";
 
 /** `favorites` over the section list, dropping any day that empties out —
  *  the same shape iOS' own Favorites filter takes, and cheap enough to run on
@@ -187,29 +189,21 @@ export default function PhotosHome({
   // in beyond `bandOwner` and the rung, both of which already stretch that
   // reality about as far as it should go.
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
-  // THE TEMPORAL GRAIN (issue #712 iOS parity, `photos-zoom.ts`). Session
+  // THE TEMPORAL GRAIN (issue #712 iOS parity, `timeline-grains.ts`). Session
   // state, for the same reason the filter above is: this repo has no
   // member-preference plane to spend a third device-local key in, and iOS
-  // itself returns to All between visits.
-  const [zoom, setZoom] = useState<TimelineZoom>("all");
-  // The day All was told to land on by the grain above it. Held here rather
-  // than passed through the drawer because it outlives the tap: the grid
-  // mounts after the grain changes, and the value has to still be there when
-  // it does.
-  const [landingDay, setLandingDay] = useState<string | undefined>(undefined);
-  // A counter, not a flag — see `TimelineZoomDrawer`'s own prop comment for
-  // why a boolean cannot re-arm a hide timer.
-  const [scrollActivity, setScrollActivity] = useState(0);
-  const noteScroll = useCallback(
-    (): void => setScrollActivity((count) => count + 1),
-    []
-  );
-  const openPeriod = useCallback((period: PeriodGroup): void => {
-    setLandingDay(period.anchorDay);
-    // `drillInto` IS the updater: Years → Months → All, read off the grain
-    // actually on screen rather than off a captured copy of it.
-    setZoom(drillInto);
-  }, []);
+  // itself returns to All between visits. That argument survives the rebuild
+  // of the control unchanged — what changed is that the control is now
+  // permanently visible, not what its value is scoped to.
+  const [grain, setGrain] = useState<TimelineGrain>("all");
+  // THE MEMBER'S PLACE IN THE LIBRARY, in the one vocabulary all three grains
+  // speak — a `PhotoSection.day`. Every grain writes it (a card tap, a scroll
+  // coming to rest) and every grain reads it, which is what lets a switch keep
+  // the member where they were in BOTH directions. Held here rather than
+  // inside a grain's own view because it has to outlive the view: the next
+  // grain mounts after the switch, and the value has to still be there when it
+  // does.
+  const [placeDay, setPlaceDay] = useState<string | undefined>(undefined);
   // Collections' own fold state, LIFTED here from `PhotosCollectionsView.tsx`
   // (issue #712): the header's trailing chip is now the ONE place Show All /
   // Collapse All live, so it has to drive the same set the per-section
@@ -290,6 +284,42 @@ export default function PhotosHome({
     () => filterSections(timeline.sections, libraryFilter),
     [timeline.sections, libraryFilter]
   );
+  // A GRAIN SWITCH FROM THE CONTROL, in either direction. `anchorForGrain`
+  // re-expresses wherever the member is now as a day the target grain can land
+  // on — the reverse-anchoring rule in `timeline-grains.ts`. Without it,
+  // switching up a grain dumps a member who had scrolled back to 2019 at the
+  // top of the library, which is the half the drill-down-only predecessor
+  // never did.
+  const changeGrain = useCallback(
+    (next: TimelineGrain): void => {
+      setPlaceDay((current) => anchorForGrain(visibleSections, next, current));
+      setGrain(next);
+    },
+    [visibleSections]
+  );
+  // LEAVING THE LIBRARY RESETS THE GRAIN. The grain is a property of the
+  // Library grid and of nothing else; a member who goes to Collections and
+  // comes back has ended that visit, and iOS returns to All between visits for
+  // the same reason. The PLACE goes with it — a day anchored in a grid that is
+  // no longer on screen is not a place, and restoring it later would scroll a
+  // member somewhere they last were long enough ago to have forgotten.
+  // Deferred out of the effect body for the reason every other setState in
+  // this file is: a synchronous one there is the shape react-compiler rejects.
+  useEffect(() => {
+    if (destination === "library") return;
+    queueMicrotask(() => {
+      setGrain("all");
+      setPlaceDay(undefined);
+    });
+  }, [destination]);
+  // A CARD TAP: one grain narrower, positioned at that period's first day.
+  const openPeriod = useCallback((period: GrainPeriod): void => {
+    setPlaceDay(period.anchorDay);
+    // Read off the grain actually on screen rather than off a captured copy:
+    // Years opens Months, Months opens All, and nothing below All can be
+    // opened because there are no cards there to tap.
+    setGrain((current) => (current === "years" ? "months" : "all"));
+  }, []);
   // THE ONE TRAILING CONTROL, DESTINATION-SCOPED (issue #712). iOS Photos
   // carries exactly one options chip on its title row, and its contents
   // change per page — never a control that stays put while the surface under
@@ -309,7 +339,7 @@ export default function PhotosHome({
         onFilter: setLibraryFilter,
         onRung: setRung,
         rung,
-        zoom,
+        grain,
       });
     }
     if (destination === "collections") {
@@ -324,7 +354,7 @@ export default function PhotosHome({
       });
     }
     return [];
-  }, [destination, libraryFilter, rung, setRung, zoom]);
+  }, [destination, grain, libraryFilter, rung, setRung]);
 
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
@@ -586,8 +616,13 @@ export default function PhotosHome({
   };
 
   return (
-    // Photos' declared surface tone is "mat" (freedom table, DESIGN.md) —
-    // only the page moves; every other role still reads from the shared ramp.
+    // THE PAGE, the same one the frame and every other app draws. This used to
+    // name `colors.toneMat` — Photos' declared surface tone — which grounded
+    // the page and nothing else: every card below it kept drawing the SHELL's
+    // `bgElev`, so a `#F9F8F6` card sat on an `#F0EFED` page, lighter than the
+    // page it was laid on. The tone axis is gone (see `PAGE` in
+    // `packages/design/src/themes/shared.ts`); one page is what makes that
+    // unrepresentable rather than merely fixed.
     // Explicit inset, not SafeAreaView-with-edges: inside the fullScreenModal
     // cover this stack presents, the edges variant intermittently resolves a
     // zero top inset while `useSafeAreaInsets()` stays correct (the viewer
@@ -595,7 +630,7 @@ export default function PhotosHome({
     <View
       style={[
         styles.safe,
-        { backgroundColor: colors.toneMat, paddingTop: insets.top },
+        { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
       {selecting ? (
@@ -816,19 +851,17 @@ export default function PhotosHome({
                   Photographs you mark as a favorite appear here.
                 </Text>
               </View>
-            ) : zoom === "all" ? (
+            ) : grain === "all" ? (
               <PhotoTimeline
                 sections={visibleSections}
                 selection={selection}
                 refreshing={refreshing}
-                // The one surface that holds the connection signal, so the one
-                // surface that can honestly tell a tile the gateway is down.
-                unreachable={
-                  collections.connection === "offline" ||
-                  collections.connection === "unavailable"
-                }
-                scrollToDay={landingDay}
-                onScrollActivity={noteScroll}
+                scrollToDay={placeDay}
+                onVisibleDay={setPlaceDay}
+                // The grain control floats permanently over this grid's foot,
+                // so the grid owes it the room — but only while the control is
+                // actually there (the same condition it mounts under below).
+                footerInset={selecting ? 0 : GRAIN_CONTROL_SLOT}
                 onRefresh={() => void refreshLibrary()}
                 onSelectionChange={setSelection}
                 onOpen={(asset) =>
@@ -837,33 +870,34 @@ export default function PhotosHome({
               />
             ) : (
               // A SUMMARY GRAIN. The same sections the grid above would draw,
-              // grouped into periods — never a different query, so the two
+              // grouped into periods — never a different query, so the three
               // grains cannot disagree about what the library holds.
-              <PhotoPeriodGrid
+              <PhotoGrainView
                 sections={visibleSections}
-                grain={zoom}
+                grain={grain}
+                focusDay={placeDay}
                 refreshing={refreshing}
                 onRefresh={() => void refreshLibrary()}
-                onScrollActivity={noteScroll}
                 onOpenPeriod={openPeriod}
               />
             )}
           </>
         )}
-        {/* THE ZOOM DRAWER (issue #712 iOS parity). Inside the grid's own slot
-            rather than beside the band, because it belongs to the Library
-            surface: it moves between grains of THAT list, and it must vanish
-            with it. Hidden while a selection is live — the selection bar has
-            already taken the foot, and two floating controls stacked there
-            would be two answers to "what does the bottom of this screen do".
-            Hidden on an empty library too: three grains of nothing is three
-            doors onto the same blank page. */}
+        {/* THE GRAIN CONTROL (issue #712 iOS parity). PERMANENT while the
+            Library is the destination — see `TimelineGrainControl.tsx` on the
+            discoverability defect its scroll-armed predecessor caused. Inside
+            the grid's own slot rather than beside the band, because it belongs
+            to the Library surface: it moves between grains of THAT list, and
+            it must go when the list does.
+
+            The three conditions are the only ones it may be absent under, and
+            none of them is a timer. Not the Library: there is no grid to
+            re-grain. Mid-selection: the selection bar has already taken the
+            foot, and two floating controls stacked there would be two answers
+            to "what does the bottom of this screen do". An empty grid: three
+            grains of nothing is three doors onto the same blank page. */}
         {destination === "library" && !selecting && visibleSections.length ? (
-          <TimelineZoomDrawer
-            level={zoom}
-            onLevel={setZoom}
-            activity={scrollActivity}
-          />
+          <TimelineGrainControl grain={grain} onGrain={changeGrain} />
         ) : null}
       </View>
 

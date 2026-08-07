@@ -46,7 +46,7 @@ import {
 import type { BandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { family, useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { BAND_CAPSULE, resolveBand } from "./photos-band";
 import type { BandDestinationKey } from "./photos-band";
@@ -224,12 +224,13 @@ const makeStyles = (colors: ThemeColors) =>
     },
     capsule: {
       alignItems: "center",
-      // The FRAME's neutral page colour (:4963's `phostBg()`), never Photos'
-      // mat and never the app's paper: the capsule is the frame's control
-      // sitting inside the app's band, and its ground is the one thing that
-      // says so. It used to wear `toneMat` on a `bg` band — the two colours
-      // swapped, which made the capsule read as the app's and the band as the
-      // frame's, the opposite of the truth.
+      // The page colour (:4963's `phostBg()`). There is one page for the
+      // shell and every app in it (no per-app surface tone), so `colors.bg`
+      // is the frame's page and Photos' page at once: the capsule is the
+      // frame's control sitting inside the app's band, and its ground is the
+      // one thing that says so. It used to wear `toneMat` on a `bg` band —
+      // the two colours swapped, which made the capsule read as the app's
+      // and the band as the frame's, the opposite of the truth.
       backgroundColor: colors.bg,
       borderColor: colors.lineStrong,
       borderRadius: BAND_RADIUS,
@@ -249,19 +250,23 @@ const makeStyles = (colors: ThemeColors) =>
       gap: GROUP_GUTTER,
       paddingHorizontal: GROUP_GUTTER,
     },
-    // 11px, 400 → 500 when active (:4975) — the same pair HomeBand's label
-    // draws, because the frame's band and a claimed band say "you are here" the
-    // same way. This used to be the `control` role (13px/500 always), which
-    // both oversized the band and left the weight carrying no state.
+    // The `control` role (:4975), size and line-height drawn from the ramp —
+    // the same pair HomeBand's label draws, because the frame's band and a
+    // claimed band say "you are here" the same way.
     label: {
+      ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      fontFamily: family.sansRegular,
-      fontSize: 11,
-      lineHeight: 14,
+      // NO `fontFamily` OVERRIDE. `t("control")` already resolves to
+      // sansMedium — 13/17/500 — and re-pinning sansRegular here put the two
+      // bands back to 400, which is the deviation the ramp exists to prevent.
+      // The active state lives in the COLOUR (`textSoft` → `text`) and in the
+      // 2pt ink rule above the tab; weight is not a third channel saying the
+      // same thing, and a band whose labels change width on tap is a band that
+      // reflows when a member is looking straight at it.
       textAlign: "center",
     },
-    labelActive: { color: colors.text, fontFamily: family.sansMedium },
+    labelActive: { color: colors.text },
     ruleHidden: { backgroundColor: "transparent" },
     tab: {
       alignItems: "center",

@@ -149,14 +149,7 @@ export default function VaultHeader({
           <Text numberOfLines={1} style={styles.vault}>
             {name}
           </Text>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.gateway,
-              // A recessive/alarming state takes its own token on the LEAF.
-              offline ? { color: colors.net } : undefined,
-            ]}
-          >
+          <Text numberOfLines={1} style={styles.gateway}>
             {line}
           </Text>
         </View>

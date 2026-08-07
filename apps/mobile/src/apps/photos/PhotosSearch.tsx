@@ -124,7 +124,7 @@ export default function PhotosSearch({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <ReplicaStatusBar />
       <PhotosSearchView navigation={navigation as unknown as Nav} />
     </TopSafeArea>

@@ -26,7 +26,13 @@ export interface PhotoAsset {
   sha256?: string;
   phash?: string;
   thumbhash?: string;
-  capturedAt: string;
+  /**
+   * `undefined` when the device's media store recorded neither a creation
+   * nor a modification time for this asset (see `device-media.ts`'s
+   * `capturedAtIso`). Every date-ordered feature — sectioning, Years/Months,
+   * "newest" comparisons — must treat that as "no fact", never as 1970.
+   */
+  capturedAt?: string;
   tzOffsetMin?: number;
   kind: "photo" | "video" | "audio" | "scan";
   width?: number;
@@ -165,11 +171,21 @@ export function mergePhotoAssets(
         asset.duplicateHint ||
         Boolean(asset.phash && (phashCounts.get(asset.phash) ?? 0) > 1),
     }))
-    // `capturedAt` is always an ISO-8601 UTC string, which sorts correctly by
-    // raw code-unit comparison — no per-comparison Date.parse across 50k rows.
-    .sort((a, b) =>
-      a.capturedAt < b.capturedAt ? 1 : a.capturedAt > b.capturedAt ? -1 : 0
-    );
+    // `capturedAt`, when present, is always an ISO-8601 UTC string, which
+    // sorts correctly by raw code-unit comparison — no per-comparison
+    // Date.parse across 50k rows. An asset with no capturedAt has no instant
+    // to compare, so it is treated as older than everything and sinks to the
+    // bottom rather than interleaving arbitrarily among dated rows.
+    .sort((a, b) => {
+      if (a.capturedAt === undefined && b.capturedAt === undefined) return 0;
+      if (a.capturedAt === undefined) return 1;
+      if (b.capturedAt === undefined) return -1;
+      return a.capturedAt < b.capturedAt
+        ? 1
+        : a.capturedAt > b.capturedAt
+          ? -1
+          : 0;
+    });
   const liveVideos = new Map(
     sorted.flatMap((asset) =>
       asset.captureGroupId && asset.kind === "video"
@@ -226,14 +242,30 @@ export function captureLocalDay(
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * The section `PhotoAsset`s with no `capturedAt` are filed under — see
+ * `sectionPhotoAssets`. Exported so every other date-grained view (Years,
+ * Months) can recognise and exclude it by the same key, rather than each
+ * re-deriving its own notion of "the undated one".
+ */
+export const UNDATED_SECTION_DAY = "undated";
+
 export function sectionPhotoAssets(
   assets: PhotoAsset[],
   now = new Date()
 ): PhotoSection[] {
   const sections = new Map<string, PhotoAsset[]>();
+  // Assets with no capturedAt cannot be placed in the calendar at all — they
+  // are collected separately and appended as one "Undated" section below,
+  // unconditionally last, rather than fabricating a day for them.
+  const undated: PhotoAsset[] = [];
   for (const asset of assets.filter(
     (item) => !item.archived && !item.deleted
   )) {
+    if (asset.capturedAt === undefined) {
+      undated.push(asset);
+      continue;
+    }
     const day = captureLocalDay(asset.capturedAt, asset.tzOffsetMin);
     const bucket = sections.get(day) ?? [];
     bucket.push(asset);
@@ -257,7 +289,7 @@ export function sectionPhotoAssets(
     year: "numeric",
   });
   const currentYear = now.getFullYear();
-  return [...sections.entries()].map(([day, rows]) => {
+  const dated = [...sections.entries()].map(([day, rows]) => {
     const sameYear = new Date(day).getFullYear() === currentYear;
     return {
       day,
@@ -271,6 +303,17 @@ export function sectionPhotoAssets(
       assets: rows,
     };
   });
+  if (undated.length === 0) return dated;
+  return [
+    ...dated,
+    {
+      day: UNDATED_SECTION_DAY,
+      title: "Undated",
+      month: UNDATED_SECTION_DAY,
+      monthTitle: "Undated",
+      assets: undated,
+    },
+  ];
 }
 
 export function onThisDay(
@@ -280,6 +323,10 @@ export function onThisDay(
   const month = now.getMonth() + 1;
   const day = now.getDate();
   return assets.filter((asset) => {
+    // An asset with no capture time cannot say which calendar day it belongs
+    // to, so it cannot be a memory of today — it is excluded rather than
+    // guessed into (or out of) the list.
+    if (asset.capturedAt === undefined) return false;
     // Same capture-local reference as sectioning, so a memory and its timeline
     // row never disagree about which day the photo belongs to.
     const [year, capturedMonth, capturedDay] = captureLocalDay(

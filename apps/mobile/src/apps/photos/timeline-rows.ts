@@ -144,6 +144,58 @@ export function rowTops(rows: readonly TimelineRow[]): number[] {
   return tops;
 }
 
+/**
+ * The `PhotoSection.day` at a scroll offset — where the member currently IS.
+ *
+ * The grain control needs an answer to "which day is on screen" to keep a
+ * member's place when they switch to Years or Months (`timeline-grains.ts`), and
+ * the answer has to be in the same vocabulary a period card speaks: a section
+ * day, never a row index or a pixel. Day and asset rows both carry the day in
+ * their key (`d:2026-08-06`, `r:2026-08-06:0:112`), so the walk back from the
+ * row at the offset finds it without a second pass over the sections.
+ *
+ * Month headers carry no day of their own, so the walk steps off them: back
+ * first, to the day the member has already scrolled past — a sticky header is
+ * on screen for its whole month, and answering from it would report the first
+ * day of the month however far into it the member had scrolled — and forward
+ * only when there is nothing behind, which happens exactly once, at the very
+ * top of the list where the first row IS a month header.
+ */
+export function dayAtOffset(
+  rows: readonly TimelineRow[],
+  tops: readonly number[],
+  offset: number
+): string | undefined {
+  let lo = 0;
+  let hi = rows.length - 1;
+  let at = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (tops[mid]! <= offset) {
+      at = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  const start = Math.min(at, rows.length - 1);
+  for (let cursor = start; cursor >= 0; cursor -= 1) {
+    const day = dayOfRow(rows[cursor]);
+    if (day !== undefined) return day;
+  }
+  for (let cursor = start + 1; cursor < rows.length; cursor += 1) {
+    const day = dayOfRow(rows[cursor]);
+    if (day !== undefined) return day;
+  }
+  return undefined;
+}
+
+/** The section day a row belongs to, read off its own key — `d:2026-08-06`
+ *  and `r:2026-08-06:0:112` both carry it, a month header does not. */
+function dayOfRow(row: TimelineRow | undefined): string | undefined {
+  if (row?.type === "day") return row.key.slice(2);
+  if (row?.type === "assets") return row.key.split(":")[1];
+  return undefined;
+}
+
 /** The month a row belongs to, for the scrub rail's bubble. */
 export function monthLabelAt(
   rows: readonly TimelineRow[],

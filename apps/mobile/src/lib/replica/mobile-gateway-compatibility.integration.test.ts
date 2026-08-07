@@ -1,28 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
-
-const storage = vi.hoisted(() => new Map<string, string>());
-
-vi.mock(
-  import("@react-native-async-storage/async-storage") as Promise<unknown>,
-  () => ({
-    default: {
-      getItem: vi.fn<(key: string) => Promise<string | null>>(
-        async (key) => storage.get(key) ?? null
-      ),
-      removeItem: vi.fn<(key: string) => Promise<void>>(async (key) => {
-        storage.delete(key);
-      }),
-      setItem: vi.fn<(key: string, value: string) => Promise<void>>(
-        async (key, value) => {
-          storage.set(key, value);
-        }
-      ),
-    },
-  })
-);
 
 vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
@@ -45,15 +24,11 @@ const supportedInfo = {
 };
 
 describe("mobile gateway compatibility handshake", () => {
-  beforeEach(() => {
-    storage.clear();
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  test("judges the live info response, caches support, and admits an offline restart", async () => {
+  test("judges the live info response and admits a supported gateway", async () => {
     const fetchInfo = vi.fn<() => Promise<Response>>(async () =>
       Response.json(supportedInfo)
     );
@@ -62,7 +37,6 @@ describe("mobile gateway compatibility handshake", () => {
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "gateway/one",
         online: true,
       })
     ).resolves.toBeUndefined();
@@ -70,17 +44,24 @@ describe("mobile gateway compatibility handshake", () => {
       new URL("http://127.0.0.1:18789/centraid/_gateway/info"),
       { headers: { Authorization: "Bearer test-mobile" } }
     );
+  });
 
+  // THE ONE THIS FILE EXISTS TO HOLD. The predecessor cached an online
+  // verdict (keyed, worse, by an ephemeral tunnel port) and walled every
+  // offline start whose cache came up empty behind "Reconnect once" — local
+  // reads gated on the network, observed on a device whose replica held the
+  // member's whole vault. An unanswered question is not a judgment: offline
+  // fails open, and the wall is re-raised the moment a gateway answers.
+  test("an offline start is admitted — absence of an answer is not a judgment", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn<() => Promise<Response>>(async () => {
-        throw new Error("offline");
+        throw new Error("must not be called offline");
       })
     );
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "gateway/one",
         online: false,
       })
     ).resolves.toBeUndefined();
@@ -101,11 +82,6 @@ describe("mobile gateway compatibility handshake", () => {
       }),
       disposition: "update-app",
     },
-    {
-      name: "a transient server failure asks for a reconnect",
-      response: new Response("failed", { status: 503 }),
-      disposition: "reconnect",
-    },
   ] as const)("$name", async ({ response, disposition }) => {
     vi.stubGlobal(
       "fetch",
@@ -114,23 +90,30 @@ describe("mobile gateway compatibility handshake", () => {
 
     const result = requireMobileOfflineGateway({
       baseUrl: "http://127.0.0.1:18789",
-      gatewayId: "gateway-two",
       online: true,
     });
     await expect(result).rejects.toBeInstanceOf(
       MobileGatewayCompatibilityError
     );
     await expect(result).rejects.toMatchObject({ disposition });
-    expect(storage.size).toBe(0);
   });
 
-  test("an uncached offline start never guesses compatibility", async () => {
+  test("a transient server failure is the offline case wearing a status code", async () => {
+    // 503 proves the gateway is unwell, not that it is incompatible — the
+    // only status that IS a judgment by itself is 404 (the info route does
+    // not exist on gateways that old). Anything else fails open, same as no
+    // answer at all.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(
+        async () => new Response("failed", { status: 503 })
+      )
+    );
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "unknown-gateway",
-        online: false,
+        online: true,
       })
-    ).rejects.toMatchObject({ disposition: "reconnect" });
+    ).resolves.toBeUndefined();
   });
 });

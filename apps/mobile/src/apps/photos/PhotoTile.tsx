@@ -45,11 +45,6 @@ export interface PhotoTileProps {
   selected: boolean;
   selecting: boolean;
   vaults: ReadonlyMap<string, VaultFacts>;
-  /** The gateway is not answering. Ambient — it belongs to the surface, not to
-   *  this photograph — which is why it arrives as a prop rather than being read
-   *  off the record. Optional, and false by default: a shelf with no
-   *  connection signal must not invent one. */
-  unreachable?: boolean;
   onOpen: (asset: PhotoAsset) => void;
   onSelect: (asset: PhotoAsset) => void;
 }
@@ -62,7 +57,6 @@ function PhotoTileImpl({
   selected,
   selecting,
   vaults,
-  unreachable = false,
   onOpen,
   onSelect,
 }: PhotoTileProps): React.JSX.Element {
@@ -81,10 +75,7 @@ function PhotoTileImpl({
     colors.cAmber ?? colors.line
   );
   const kindLine = kindOverlay(asset, rung);
-  const state = stateOverlay(asset, rung, {
-    decodeFailed: failed,
-    unreachable,
-  });
+  const state = stateOverlay(asset, rung, { decodeFailed: failed });
   const name = asset.filename ?? `Photograph from ${asset.capturedAt}`;
 
   return (
@@ -168,7 +159,7 @@ function PhotoTileImpl({
           belonging to the ROW rather than a mark belonging to this tile. */}
       {state?.form === "line" ? (
         <View
-          style={[styles.state, { backgroundColor: colors.toneMat }]}
+          style={[styles.state, { backgroundColor: colors.bg }]}
           pointerEvents="none"
         >
           <Text
@@ -191,7 +182,7 @@ function PhotoTileImpl({
           the kind line is bottom-trailing. */}
       {state?.form === "custody" ? (
         <View
-          style={[styles.custody, { backgroundColor: colors.toneMat }]}
+          style={[styles.custody, { backgroundColor: colors.bg }]}
           pointerEvents="none"
         >
           <Icon name={CUSTODY_ICON} size={13} color={colors.textSoft} />

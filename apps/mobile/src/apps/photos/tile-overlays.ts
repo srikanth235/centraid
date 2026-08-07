@@ -128,11 +128,10 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
 // phone into line with the surface it drifted from rather than inventing a
 // third grammar.
 
-/** Copy is final (§4.4). This is the only string the state slot still owns
- *  besides Trash's countdown — and it fires ONLY when the gateway cannot be
- *  reached, where it explains why a tile is grey. As steady-state provenance
- *  it was a label on the water, read by the fish. */
-export const STATE_ON_GATEWAY = "on the gateway";
+/** Copy is final (§4.4). The only string the state slot still owns besides
+ *  Trash's countdown, and it is about THIS tile's own bytes — which is the
+ *  whole bar for entry into this slot. (`on the gateway` used to live here for
+ *  an unreachable gateway; see `stateOverlay` for why it is gone.) */
 export const STATE_COULD_NOT_DECODE = "could not decode";
 
 /** The rung from which the custody mark is drawn. Below S a 13px stroke glyph
@@ -201,14 +200,13 @@ export type StateOverlay =
     }
   | { form: "custody" };
 
-/** What the tile knows about the world around it, as opposed to about its own
- *  bytes. Both default to false: a surface with no connection signal must not
- *  invent one. */
+/** What the tile knows beyond its own record. Deliberately holds nothing
+ *  AMBIENT: a fact equally true of every tile on screen belongs to the
+ *  screen, not to forty tiles. Defaults to false — a surface with no signal
+ *  must not invent one. */
 export interface StateContext {
   /** This tile's own bytes failed to decode — terminal, and about the tile. */
   decodeFailed?: boolean;
-  /** The gateway is not answering — ambient, and about every tile at once. */
-  unreachable?: boolean;
 }
 
 export function stateOverlay(
@@ -227,14 +225,12 @@ export function stateOverlay(
   if (days !== undefined) {
     return { form: "line", text: purgeNote(days), tone: "normal" };
   }
-  // `on the gateway`, scoped to the one case where it is NEWS. When the
-  // gateway answers, a `remote-only` photograph opens on tap and the line
-  // would be describing the product working as designed; when it does not,
-  // the same line is the whole explanation for a grey tile. Same words,
-  // opposite information content — the scope is what makes it worth a slot.
-  if (context.unreachable && asset.backupState === "remote-only") {
-    return { form: "line", text: STATE_ON_GATEWAY, tone: "normal" };
-  }
+  // NO `on the gateway` LINE. It used to render on every `remote-only` tile
+  // whenever the gateway stopped answering — an ambient condition (one fact
+  // about the whole app) printed through a per-tile slot, so a screenful said
+  // the same sentence forty times. Forty copies of one sentence is not an
+  // explanation, it is wallpaper. The replica bar states it once, at the top,
+  // where an ambient fact belongs; this slot speaks only for THIS tile.
   // The mark: bytes are HERE and nowhere else. The mobile seat is an origin,
   // so this is the one custody state a member can lose something to — and the
   // only one worth marking, because the other two are the norm.

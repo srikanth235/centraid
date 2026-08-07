@@ -46,7 +46,7 @@
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import { RUNGS, RUNG_LABELS } from "./photos-rungs";
 import type { Rung } from "./photos-rungs";
-import type { TimelineZoom } from "./photos-zoom";
+import type { TimelineGrain } from "./timeline-grains";
 
 /** The two facts this vault can answer honestly — see the header comment for
  *  why the set stops here rather than growing to iOS' full filter list. */
@@ -62,9 +62,9 @@ export interface LibraryMenuInput {
   onFilter: (filter: LibraryFilter) => void;
   rung: Rung;
   onRung: (rung: Rung) => void;
-  /** The grain on screen (`photos-zoom.ts`). View Options is dropped at the
-   *  Years and Months grains — see below. */
-  zoom: TimelineZoom;
+  /** The grain on screen (`timeline-grains.ts`). View Options is dropped at
+   *  the Years and Months grains — see below. */
+  grain: TimelineGrain;
 }
 
 /**
@@ -89,7 +89,7 @@ export function libraryMenuGroups({
   onFilter,
   rung,
   onRung,
-  zoom,
+  grain,
 }: LibraryMenuInput): MenuGroup[] {
   return [
     {
@@ -109,7 +109,7 @@ export function libraryMenuGroups({
             onSelect: () => onFilter(row.key),
           })),
         },
-        ...(zoom === "all"
+        ...(grain === "all"
           ? [
               {
                 key: "view-options",
@@ -120,7 +120,7 @@ export function libraryMenuGroups({
                   key: RUNG_LABELS[index]!,
                   label: RUNG_LABELS[index]!,
                   onSelect: () => onRung(index as Rung),
-                  // iOS' zoom rows keep the menu up: a member steps a rung,
+                  // iOS' tile-size rows keep the menu up: a member steps a rung,
                   // sees the grid behind the card change, and steps again.
                   // Closing after each one would cost three taps per rung.
                   staysOpen: true,

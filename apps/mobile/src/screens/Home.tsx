@@ -29,17 +29,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  HOME_OFFLINE_BANNER,
-  homeDayOneFoot,
-} from "@centraid/client/home-copy";
-import { radii } from "@centraid/design";
+import { homeDayOneFoot } from "@centraid/client/home-copy";
 import type { AppMetaResolved } from "@centraid/design";
 
-import Icon from "../kit/components/Icon";
-import { Text } from "../kit/components/NativeText";
 import { useReplica } from "../kit/replica/ReplicaProvider";
-import { borders, pageMargin, t, useTheme } from "../kit/theme";
+import { pageMargin, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
   apiHeaders,
@@ -497,7 +491,9 @@ export default function HomeScreen({
           />
         }
       >
-        {offline ? <OfflineBanner colors={colors} /> : null}
+        {/* The offline banner said offline three ways in --net red for a state
+            the status line already covers in one neutral clause; an offline-first
+            product does not present its premise as an incident. */}
         {springboard === "first-run" ? (
           <DayOne
             // Real counts, on a vault that holds nothing: the foot is honest
@@ -551,47 +547,6 @@ export default function HomeScreen({
     </View>
   );
 }
-
-/**
- * The offline banner (handoff :597–622, :5559–5563).
- *
- * Sits between the title row and the grid — a second, PLACED fact beside the
- * status line's ambient one. They are not redundant: the status line is the
- * screen's one continuous channel and covers every state, offline included;
- * this banner is what tells a member who has not read the status line yet
- * that today's Home is reading from the local replica, not the gateway, and
- * that writes are queued rather than committed. It disappears the moment the
- * gateway answers again — never a dismiss control, because there is nothing
- * to dismiss once the fact stops being true.
- */
-function OfflineBanner({ colors }: { colors: ThemeColors }): React.JSX.Element {
-  return (
-    <View
-      style={[bannerStyles.banner, { borderColor: colors.net }]}
-      accessibilityRole="text"
-    >
-      <Icon name="CloudOff" size={15} color={colors.net} />
-      <Text style={[bannerStyles.copy, { color: colors.textSoft }]}>
-        {HOME_OFFLINE_BANNER}
-      </Text>
-    </View>
-  );
-}
-
-const bannerStyles = StyleSheet.create({
-  banner: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: borders.hairline,
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  copy: { ...t("mono"), flex: 1 },
-});
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({

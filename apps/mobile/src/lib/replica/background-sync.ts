@@ -55,7 +55,6 @@ export async function runBackgroundReplicaSync(): Promise<void> {
   if (!baseUrl) return;
   await requireMobileOfflineGateway({
     baseUrl,
-    gatewayId: active.gatewayId,
     online: true,
   });
   const storageLocation = replicaStorageDirectory();

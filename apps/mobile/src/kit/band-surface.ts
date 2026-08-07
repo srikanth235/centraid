@@ -44,6 +44,25 @@ export const BAND_BORDER = borders.hairline;
 export const BAND_TAB_MIN_HEIGHT = 52;
 
 /**
+ * THE ACTIVE MARK, shared by both bands (:4974).
+ *
+ * A 2px ink rule across the tab's top edge, held off each side — square ends,
+ * so it reads as a rule and not as a pill. It lives here rather than in either
+ * band because "you are here" is one piece of grammar, and the two bands must
+ * say it identically or the Binding Layer's one-band promise is only true of
+ * the plate.
+ *
+ * It is now the ONLY visual carrier of selection besides ink colour. Both bands
+ * draw their labels from the `control` role, which is weight 500 throughout, so
+ * the 400→500 flip that used to mark the active tab is gone — see either band's
+ * `label` style for why the role is not negotiable.
+ */
+export const BAND_ACTIVE_RULE = 2;
+/** How far the active rule is held off each side of its tab (:4974 —
+ *  `inset-inline:14px`). */
+export const BAND_ACTIVE_RULE_INSET = 14;
+
+/**
  * How much vertical room a band occupies, before the home-indicator inset.
  *
  * The band's own floor, derived from its parts rather than typed as a number:

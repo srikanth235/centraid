@@ -38,14 +38,11 @@ export default function HomeStatusLine(
       accessibilityLiveRegion="polite"
       style={styles.row}
     >
-      <View
-        style={[
-          styles.dot,
-          {
-            backgroundColor: props.offline ? colors.net : colors.textFaint,
-          },
-        ]}
-      />
+      {/* ONE NEUTRAL DOT, offline included — --net is reserved for "this leaves
+          the device", and offline is precisely when nothing does; red on the
+          most ordinary state the product has taught members to fear their own
+          premise. */}
+      <View style={[styles.dot, { backgroundColor: colors.textFaint }]} />
       <Text numberOfLines={1} ellipsizeMode="tail" style={styles.text}>
         {text}
       </Text>

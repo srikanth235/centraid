@@ -86,22 +86,12 @@ describe("shell token contrast floors", () => {
   const light = declarations(css, ":root");
   const dark = { ...light, ...declarations(css, "[data-theme='dark']") };
 
-  // Every opaque surface a foreground can be painted on — including the five
-  // per-app surface TONES, because an app may declare any of them and the deep
-  // ones are where the ink ramp is genuinely hard. The dark ramp used to be a
+  // Every opaque surface a foreground can be painted on. There is no per-app
+  // surface tone axis — one page, for the shell and every app in it — so
+  // this is the shell's fixed surface set. The dark ramp used to be a
   // `--bg-l` calc that only a browser could resolve; both ramps are literal
   // now, so nothing needs substituting.
-  const SURFACE_NAMES = [
-    "--bg",
-    "--bg-app",
-    "--bg-elev",
-    "--bg-sunken",
-    "--bg-tone-neutral",
-    "--bg-tone-paper",
-    "--bg-tone-mat",
-    "--bg-tone-cool",
-    "--bg-tone-warm",
-  ];
+  const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"];
 
   describe.each([
     ["light", light, {}],

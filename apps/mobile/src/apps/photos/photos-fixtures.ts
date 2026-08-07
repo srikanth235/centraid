@@ -7,7 +7,8 @@ export type PhotosFixtureName =
   | "multi-month"
   | "year-spanning"
   | "video-mixed"
-  | "place-tagged";
+  | "place-tagged"
+  | "undated-mixed";
 
 export interface PhotosFixture {
   assets: PhotoAsset[];
@@ -24,13 +25,13 @@ const CAPTURES = {
 
 function asset(
   id: string,
-  capturedAt: string,
+  capturedAt: string | undefined,
   patch: Partial<PhotoAsset> = {}
 ): PhotoAsset {
   return {
     archived: false,
     backupState: "backed-up",
-    capturedAt,
+    ...(capturedAt === undefined ? {} : { capturedAt }),
     deleted: false,
     favorite: false,
     filename: `${id}.jpg`,
@@ -80,6 +81,13 @@ export function makePhotosFixture(name: PhotosFixtureName): PhotosFixture {
     "place-tagged": [
       asset("place-tahoe", CAPTURES.newest, { placeId: "place-tahoe" }),
       asset("place-home", CAPTURES.previousDay, { placeId: "place-home" }),
+    ],
+    // A device row whose media store recorded neither timestamp
+    // (`device-media.ts`'s `capturedAtIso` returns `undefined`, never 1970).
+    // Exercises the Undated section end to end alongside a normally-dated row.
+    "undated-mixed": [
+      asset("undated-a", CAPTURES.newest),
+      asset("undated-b", undefined, { source: "device" }),
     ],
   };
   const assets = byName[name].map((entry) => ({ ...entry }));

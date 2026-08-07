@@ -106,12 +106,18 @@ export function PhotoInfoSheet(
     props.vaultPersonal === undefined
       ? undefined
       : vaultLine(props.vaultPersonal, props.vaultLabel);
+  // An asset the device's media store gave no timestamp for has no capture
+  // date to print. It says so rather than formatting `new Date(undefined)`,
+  // which renders "Invalid Date" — a fact the sheet does not have, dressed as
+  // one it does.
   const capture = useMemo(
     () =>
-      new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(asset.capturedAt)),
+      asset.capturedAt === undefined
+        ? "no capture date recorded"
+        : new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(asset.capturedAt)),
     [asset.capturedAt]
   );
   const timezone =

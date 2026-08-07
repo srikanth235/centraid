@@ -56,10 +56,7 @@ export {
   RING_DARK,
   STAGE,
   STAGE_LINE,
-  SURFACE_TONE_NAMES,
-  SURFACE_TONES,
 } from "./themes";
-export type { SurfaceTone } from "./themes";
 
 // Contrast/oklab maths lives behind the `@centraid/design/oklab` subpath, NOT
 // this barrel: it is measurement machinery, not a token, and `packages/client`

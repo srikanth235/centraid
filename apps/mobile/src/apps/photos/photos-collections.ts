@@ -148,8 +148,20 @@ function tileFor(
  *  member, the same rule the timeline sorts by. */
 function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
   let newest: PhotoAsset | undefined;
-  for (const asset of assets)
-    if (!newest || asset.capturedAt > newest.capturedAt) newest = asset;
+  for (const asset of assets) {
+    // An undated asset has no instant to compare, so it can never win the
+    // "newest" contest — but it can still be the cover of a shelf that holds
+    // nothing else, which is better than a shelf with no cover at all.
+    if (asset.capturedAt === undefined) {
+      newest ??= asset;
+      continue;
+    }
+    if (
+      newest?.capturedAt === undefined ||
+      asset.capturedAt > newest.capturedAt
+    )
+      newest = asset;
+  }
   return newest;
 }
 
@@ -175,7 +187,10 @@ function memoriesByYear(
 ): Array<[string, PhotoAsset[]]> {
   const byYear = new Map<string, PhotoAsset[]>();
   for (const asset of memories) {
-    if (asset.deleted) continue;
+    // `onThisDay` already drops undated assets — nothing with no capture time
+    // can be a memory of today — so this guard is belt and braces rather than
+    // a live branch, and it keeps the year off `undefined.slice`.
+    if (asset.deleted || asset.capturedAt === undefined) continue;
     const year = asset.capturedAt.slice(0, 4);
     const group = byYear.get(year);
     if (group) group.push(asset);
