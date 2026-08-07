@@ -9,21 +9,32 @@ import { justify } from "./justify";
 import type { JustifiedTile } from "./justify";
 import type { PhotoAsset, PhotoSection } from "./timeline-model";
 
+// NO COUNTS ON THE TIMELINE (issue 712 iOS parity). The month and day headers
+// used to carry `86 photographs · 4 videos` and a bare `12`. They are gone:
+// iOS' own Library states neither, and the reason holds here — the tally of a
+// month is not what a member scrolls a timeline to find out, and printing it
+// on every header puts a number in the reading path of every single row. The
+// counts still exist where a count IS the question: the period cards of the
+// Years and Months grains (`photos-zoom.ts`, which still calls
+// `describeCounts` below) summarise a period the member cannot see the whole
+// of, and the Collections shelves state their own sizes.
+//
+// The day's PLACE survives, because it is not a tally — it says where you
+// were, which is the one thing about a day a row of thumbnails cannot show.
 export type TimelineRow =
   | {
       type: "month";
       key: string;
       title: string;
-      /** The mono count beside the month label, already worded. */
-      count: string;
       height: number;
     }
   | {
       type: "day";
       key: string;
       title: string;
-      /** Mono count, plus an optional place: `12 · Lyme Regis`. */
-      count: string;
+      /** The day's place, when one is known for the whole day — `Lyme Regis`,
+       *  or empty. Never a count; see above. */
+      place: string;
       assets: PhotoAsset[];
       height: number;
     }
@@ -57,10 +68,11 @@ export function describeCounts(assets: readonly PhotoAsset[]): string {
   return parts.join(" · ") || "0 photographs";
 }
 
-/** `12` or `12 · Lyme Regis` — the day's count, and the place when one is
- *  known for the whole day. A place that varies through the day is not the
- *  day's place, so it is left off rather than guessed at. */
-export function describeDay(
+/** The day's place — `Lyme Regis`, or empty when there is not one. A place
+ *  that varies through the day is not the day's place, so it is left off
+ *  rather than guessed at, and an unknown place prints nothing rather than a
+ *  hedge. */
+export function dayPlace(
   assets: readonly PhotoAsset[],
   placeNames: ReadonlyMap<string, string>
 ): string {
@@ -68,8 +80,7 @@ export function describeDay(
     assets.flatMap((asset) => (asset.placeId ? [asset.placeId] : []))
   );
   const only = places.size === 1 ? [...places][0] : undefined;
-  const place = only ? placeNames.get(only) : undefined;
-  return place ? `${assets.length} · ${place}` : String(assets.length);
+  return (only ? placeNames.get(only) : undefined) ?? "";
 }
 
 /**
@@ -84,16 +95,6 @@ export function buildRows(
   placeNames: ReadonlyMap<string, string> = new Map()
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
-  // Month counts span every day in the month, so they are accumulated first —
-  // the header states what the month holds, not what its first day holds.
-  const byMonth = new Map<string, PhotoAsset[]>();
-  for (const section of sections) {
-    byMonth.set(section.month, [
-      ...(byMonth.get(section.month) ?? []),
-      ...section.assets,
-    ]);
-  }
-
   let previousMonth: string | undefined;
   for (const section of sections) {
     if (section.month !== previousMonth) {
@@ -102,7 +103,6 @@ export function buildRows(
         type: "month",
         key: `m:${section.month}`,
         title: section.monthTitle,
-        count: describeCounts(byMonth.get(section.month) ?? []),
         height: MONTH_ROW_HEIGHT,
       });
     }
@@ -110,7 +110,7 @@ export function buildRows(
       type: "day",
       key: `d:${section.day}`,
       title: section.title,
-      count: describeDay(section.assets, placeNames),
+      place: dayPlace(section.assets, placeNames),
       assets: section.assets,
       height: DAY_ROW_HEIGHT,
     });

@@ -25,7 +25,31 @@ import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
-/** Human status only: no cursor, epoch, replica, or internal storage jargon. */
+/**
+ * Human status only: no cursor, epoch, replica, or internal storage jargon.
+ *
+ * **It says nothing when there is nothing wrong.** This bar mounts on roughly
+ * twenty app screens, and in the settled case it drew a permanent row reading
+ * `Updated 10m ago` with a `Refresh` button on the other end — above Photos'
+ * own count, above the first photograph. Neither half earned that row:
+ *
+ *  - **Refresh** is the third way to do the same thing. Every screen carrying
+ *    this bar scrolls, and pull-to-refresh is the gesture a phone already has;
+ *    a labelled button for it is a control that exists because the desktop had
+ *    one. The action label is kept for the states where the gesture would NOT
+ *    help — a sleeping gateway needs waking, not pulling — and those states are
+ *    the only ones that still render it.
+ *  - **Updated 10m ago** is a fact about the vault, not about Photos, and the
+ *    vault has one screen: Home already carries an ambient line saying how much
+ *    is in it and whether the gateway is answering
+ *    (screens/home/HomeStatusLine.tsx). Repeating a per-route copy of it made
+ *    freshness look like something each app owns separately.
+ *
+ * So `current` renders no row at all. Everything that is genuinely worth
+ * interrupting a member for — offline, asleep, syncing, first-sync progress,
+ * sources disagreeing by a day, pending changes, out of room — still renders
+ * exactly as before, and now has the row to itself.
+ */
 export default function ReplicaStatusBar(): React.JSX.Element {
   const { colors } = useTheme();
   const {
@@ -49,15 +73,19 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     newest !== undefined &&
     oldest !== undefined &&
     newest - oldest >= DIVERGENCE_MS;
+  // `undefined` is the settled case — see the doc comment: a reachable,
+  // up-to-date replica has nothing to say, so it says nothing.
   const label = useMemo(() => {
     if (reachability === "device-offline") return "Offline on this phone";
     if (reachability === "gateway-asleep") return "Gateway asleep";
     if (reachability === "syncing") return "Syncing recent changes…";
-    return newest
-      ? `Updated ${formatRelativeTime(newest)}`
-      : "Available offline";
-  }, [newest, reachability]);
-  const tint = reachability === "current" ? colors.accent : colors.danger;
+    return undefined;
+  }, [reachability]);
+  // Only ever drawn beside a `label`, and every state that has one is a state
+  // worth marking.
+  const tint = colors.danger;
+  // No plain "Refresh": pull-to-refresh is the gesture, and these three are
+  // the states where pulling is not what would actually help.
   const action =
     reachability === "device-offline"
       ? "Check network"
@@ -65,7 +93,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
         ? "Wake help"
         : reachability === "syncing"
           ? "Sync now"
-          : "Refresh";
+          : undefined;
   const refreshReplica = (): void => {
     if (reachability !== "gateway-asleep") {
       void refresh?.();
@@ -128,44 +156,60 @@ export default function ReplicaStatusBar(): React.JSX.Element {
 
   return (
     <>
-      <View style={[styles.wrap, { borderColor: colors.line }]}>
-        <View style={[styles.dot, { backgroundColor: tint }]} />
-        <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
-        <Pressable
-          accessibilityLabel={action}
-          disabled={!refresh}
-          onPress={refreshReplica}
-          style={styles.refresh}
-        >
-          {/* No spinning glyph while syncing — the label above already says
-              "Syncing recent changes…", and the bootstrap line below carries
-              the one exact count this operation actually has. */}
-          <Text style={[styles.refreshText, { color: colors.accent }]}>
-            {action}
-          </Text>
-        </Pressable>
-        {/* A standing badge at zero is exactly what §18 forbids — "0 pending
-            changes" is not information a member needs to see permanently, so
-            this chip renders only once there is something to report. */}
-        {pending.length > 0 ? (
-          <Pressable
-            accessibilityLabel={`Pending changes ${pending.length}`}
-            onPress={() => {
-              refreshPending();
-              setOpen(true);
-            }}
-            style={[styles.pending, { backgroundColor: colors.bgSunken }]}
-          >
-            <Text style={[styles.pendingText, { color: colors.text }]}>
-              Pending changes{" "}
-              <Text style={[t("mono"), { color: colors.text }]}>
-                {pending.length.toLocaleString()}
+      {/* The whole row is conditional, not just its parts: an empty bordered
+          strip is chrome, and on a settled replica that is all this would be. */}
+      {label || pending.length > 0 ? (
+        <View style={[styles.wrap, { borderColor: colors.line }]}>
+          {label ? (
+            <>
+              <View style={[styles.dot, { backgroundColor: tint }]} />
+              <Text style={[styles.label, { color: colors.textSoft }]}>
+                {label}
               </Text>
-            </Text>
-            <Icon name="chevron-right" size={14} color={colors.textFaint} />
-          </Pressable>
-        ) : null}
-      </View>
+            </>
+          ) : (
+            // Nothing to say, but something to show: the chip keeps the
+            // trailing edge it has whenever a label is present.
+            <View style={styles.spacer} />
+          )}
+          {action ? (
+            <Pressable
+              accessibilityLabel={action}
+              disabled={!refresh}
+              onPress={refreshReplica}
+              style={styles.refresh}
+            >
+              {/* No spinning glyph while syncing — the label above already says
+                  "Syncing recent changes…", and the bootstrap line below carries
+                  the one exact count this operation actually has. */}
+              <Text style={[styles.refreshText, { color: colors.accent }]}>
+                {action}
+              </Text>
+            </Pressable>
+          ) : null}
+          {/* A standing badge at zero is exactly what §18 forbids — "0 pending
+              changes" is not information a member needs to see permanently, so
+              this chip renders only once there is something to report. */}
+          {pending.length > 0 ? (
+            <Pressable
+              accessibilityLabel={`Pending changes ${pending.length}`}
+              onPress={() => {
+                refreshPending();
+                setOpen(true);
+              }}
+              style={[styles.pending, { backgroundColor: colors.bgSunken }]}
+            >
+              <Text style={[styles.pendingText, { color: colors.text }]}>
+                Pending changes{" "}
+                <Text style={[t("mono"), { color: colors.text }]}>
+                  {pending.length.toLocaleString()}
+                </Text>
+              </Text>
+              <Icon name="chevron-right" size={14} color={colors.textFaint} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {bootstrap ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
           <Icon name="download-cloud" size={13} color={colors.accent} />
@@ -404,6 +448,7 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   source: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 4 },
+  spacer: { flex: 1 },
   subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   title: { fontFamily: family.sansMedium, fontSize: 22 },
   wrap: {

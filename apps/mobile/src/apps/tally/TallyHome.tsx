@@ -8,13 +8,13 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -287,7 +287,7 @@ export default function TallyHome({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View>
@@ -543,6 +543,6 @@ export default function TallyHome({
         noun="Tally group"
         onClose={() => setShareOpen(false)}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

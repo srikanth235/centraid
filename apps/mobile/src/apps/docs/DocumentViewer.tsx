@@ -4,13 +4,13 @@ import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
 import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
@@ -24,6 +24,7 @@ import {
   optimisticValues,
 } from "../../lib/replica/optimistic";
 import type { DocsScreenProps } from "../../navigation";
+import { custodySentence } from "./docs-custody";
 import type { NativeDocument } from "./docs-model";
 import { useDocsLibrary } from "./useDocsLibrary";
 
@@ -187,7 +188,7 @@ export default function DocumentViewer({
   if (!document)
     return <View style={[styles.viewer, { backgroundColor: colors.bg }]} />;
   return (
-    <SafeAreaView
+    <TopSafeArea
       style={[styles.safe, { backgroundColor: colors.bg }]}
       edges={["top", "bottom"]}
     >
@@ -238,7 +239,7 @@ export default function DocumentViewer({
         </Pressable>
         <Text style={[styles.meta, { color: colors.textSoft }]}>
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
-          · {document.custody ?? "local"}
+          · {custodySentence(document.custody)}
         </Text>
         <Pressable
           accessibilityLabel="Add document to another vault"
@@ -311,7 +312,7 @@ export default function DocumentViewer({
         onSelect={(vaultId) => void place(vaultId)}
         onClose={() => setPlacementKind(undefined)}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

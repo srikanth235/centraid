@@ -1,4 +1,5 @@
 // What the phone viewer *is*, as data — separate from what draws it.
+// governance: allow-repo-hygiene file-size-limit The #712 declarative viewer catalog is intentionally kept together so ordering and capability invariants stay auditable.
 //
 // The phone rearranges the desktop viewer; it does not water it down. Same five
 // actions, same names, same order, same marks — moved to where a thumb is. The
@@ -53,6 +54,82 @@ export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
 export const VIEWER_ACTION_TARGET = 56;
 
 /**
+ * THE BOTTOM ROW'S ANATOMY: chip · capsule · chip.
+ *
+ * The five actions did not change — this is where they SIT. A single bar of
+ * five equal cells gives the destructive action the same weight as Info, and
+ * puts the one control a member reaches for by reflex (Share) in the same
+ * undifferentiated queue as the rest. Grouping separates them by consequence:
+ * the two ends are chips carrying one action each — Share, which leaves the
+ * app, and Trash, which is the only destructive one — and the middle capsule
+ * carries the three that change nothing outside this photograph.
+ *
+ * The ORDER is untouched: flattening these groups reproduces
+ * `VIEWER_BOTTOM_ACTIONS` exactly, which is what keeps the phone's arrangement
+ * a rearrangement of the desktop bar rather than a different set of controls
+ * (CHANGELOG §D). That equality is asserted, not remembered.
+ */
+export interface ViewerActionGroup {
+  /** `chip` is one round plate around one action; `capsule` is a pill that
+   *  carries several, divided by nothing but their own targets. */
+  shape: "chip" | "capsule";
+  actions: readonly ViewerActionId[];
+}
+
+export const VIEWER_BOTTOM_GROUPS: readonly ViewerActionGroup[] = [
+  { actions: ["sharing"], shape: "chip" },
+  { actions: ["favorite", "info", "edit"], shape: "capsule" },
+  { actions: ["trash"], shape: "chip" },
+] as const;
+
+/** The action a group names. Throws rather than rendering an empty target: a
+ *  group naming an id the list does not carry is a wiring bug, not a state. */
+export function viewerAction(id: ViewerActionId): ViewerAction {
+  const action = VIEWER_BOTTOM_ACTIONS.find((candidate) => candidate.id === id);
+  if (!action) throw new Error(`No viewer action named ${id}`);
+  return action;
+}
+
+/**
+ * The floating chrome's round chip — 44, the touch floor EXACTLY, and
+ * deliberately not the bar's 56.
+ *
+ * A 56 circle sitting on a photograph is a plate, not a chip: the old bar
+ * earned its 56 by being a full-width strip where the target and its label
+ * shared one cell, and nothing floating over the stage has that excuse. The
+ * three-up capsule keeps 56 per target (`VIEWER_ACTION_TARGET`) because those
+ * targets are neighbours and 44 side by side is where mis-taps start.
+ */
+export const VIEWER_CHROME_CHIP = 44;
+
+/** How far the floating chrome stands off the stage's edges. Stated once so
+ *  the layout and `viewerChromeHeight` cannot drift apart. */
+export const VIEWER_CHROME_INSET = 8;
+
+/**
+ * The three floating elements at the stage's head, in leading→trailing order.
+ *
+ * There is no top BAR any more. A full-width strip is a second ground laid over
+ * the photograph, and it charged the stage its own height on every screen; three
+ * elements standing on the stage cost only the plates they occupy. The stamp is
+ * the middle one because it is the only one that is not a control — a member
+ * scanning for something to press skips the centre.
+ */
+export const VIEWER_TOP_CHROME = ["back", "stamp", "overflow"] as const;
+
+/**
+ * What the floating chrome claims at the head of the stage.
+ *
+ * The stage runs UNDER it — that is the whole point of floating — so the viewer
+ * never subtracts this. The editor does: it has its own controls at the top of
+ * its own body, and a chip floating over them would be one control obscuring
+ * another.
+ */
+export function viewerChromeHeight(insetTop: number): number {
+  return insetTop + VIEWER_CHROME_CHIP + VIEWER_CHROME_INSET * 2;
+}
+
+/**
  * Why a write control disables in a read-only vault — the ONE sentence for
  * this truth on the phone (v4 handoff §6, §18, issue #711 item M). Two
  * different stub strings used to say the same thing in two places
@@ -63,9 +140,6 @@ export const VIEWER_ACTION_TARGET = 56;
  */
 export const READ_ONLY_VAULT_REASON =
   "This vault is read-only for you, so meaning cannot be written into it.";
-
-/** The top bar keeps the exit and the overflow only. */
-export const VIEWER_TOP_BAR_HEIGHT = 52;
 
 /**
  * The filmstrip, kept on the phone. Swipe and the strip are the same control
@@ -147,15 +221,14 @@ export function slideshowPosition(
 }
 
 // ---------------------------------------------------------------------------
-// What the viewer's top bar says
+// What the floating stamp says
 // ---------------------------------------------------------------------------
 
 /**
- * The top bar carries the photograph's CAPTION over its capture line (§7.1,
- * proto 4510–4511) — never `IMG_4913.HEIC` over `12 of 184`, which is what the
- * phone used to show. A filename is a fact about storage and a position is a
- * fact about the list; neither is a fact about the photograph, and the top bar
- * is the one place the photograph gets to say what it is.
+ * The name the photograph answers to. It is no longer the stamp's first line —
+ * WHEN outranks WHAT there (see `captureStamp`) — but it is still the accessible
+ * name of the stamp, and it is still the visible first line for a photograph
+ * that has no capture time to show instead.
  *
  * The timeline flattens a vault row's `title` column into `filename` (see
  * `timeline-engine.ts`), so the caption and the file name arrive in the same
@@ -175,32 +248,51 @@ export function viewerTitle(input: {
 }
 
 /**
- * `30 July 2026 · 17:42 · Lyme Regis` — the second line of the top bar.
+ * `30 July 2026` over `17:42 · Lyme Regis` — the floating stamp, in two lines.
  *
- * The mobile twin of the web viewer's `captureLine` (blueprints `viewer.ts`),
- * with the place appended because the phone has no info RAIL beside the stage
- * to carry it. A photograph with no capture time says nothing rather than
- * inventing one; a photograph with no place simply stops after the time.
+ * This used to be one run of text (`captureLine`) under the caption, and it read
+ * as a footnote. WHEN a photograph was taken is the fact a member is actually
+ * looking for when they open one, so it takes the stamp's first line and the
+ * emphasis; the clock and the place follow beneath it in the numeric register,
+ * where a time and a place name belong.
+ *
+ * Composition still matches the web viewer's `captureLine` (blueprints
+ * `viewer.ts`) field for field — same date parts, same clock, same place — so
+ * the two clients cannot describe one photograph differently. Only the LINE
+ * BREAK is the phone's, and the phone earns it: it has no info rail beside the
+ * stage, so the stamp is the whole answer rather than a summary of one.
+ *
+ * A photograph with no capture time says nothing rather than inventing one —
+ * both fields come back empty and the caller shows the name instead.
  */
-export function captureLine(input: {
+export interface CaptureStamp {
+  /** `30 July 2026` — the first line, and the one that carries the weight. */
+  date: string;
+  /** `17:42 · Lyme Regis` — the second, soft. The place simply stops the line
+   *  short when there is none, rather than leaving a dangling separator. */
+  time: string;
+}
+
+export function captureStamp(input: {
   capturedAt?: string;
   placeName?: string;
-}): string {
-  const when = input.capturedAt ? new Date(input.capturedAt) : undefined;
-  const parts: string[] = [];
-  if (when && !Number.isNaN(when.getTime())) {
-    parts.push(
-      when.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-      when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    );
-  }
+}): CaptureStamp {
+  const parsed = input.capturedAt ? new Date(input.capturedAt) : undefined;
+  const when = parsed && !Number.isNaN(parsed.getTime()) ? parsed : undefined;
   const place = input.placeName?.trim();
-  if (place) parts.push(place);
-  return parts.join(" · ");
+  const clock = when
+    ? when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return {
+    date: when
+      ? when.toLocaleDateString(undefined, {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : "",
+    time: [clock, place].filter(Boolean).join(" · "),
+  };
 }
 
 // ---------------------------------------------------------------------------

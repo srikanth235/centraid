@@ -1,3 +1,4 @@
+import type { SearchGroupRow } from "../../_shared/search-scaffold.ts";
 // Search is a SHELF (v4 handoff §9), not a field the app draws in a header of
 // its own. It is reached from the compact band and from the frame; on the PWA
 // the browser claims ⌘K, so the band's Search control is the way in.
@@ -20,8 +21,16 @@
 // so a failed reach takes a bordered `--net` panel naming what still works,
 // a Retry, never the "no matches" line, which would be a claim nobody
 // verified.
+//
+// THE FOUR STATES THEMSELVES now render through `_shared/SearchScaffold.tsx`
+// (issue #712 S1) — this file keeps only what is genuinely Photos-specific:
+// the field, the "whole library, not the loaded window" line under it, and
+// the photo grid this shelf sits above (passed through as `children`). The
+// text every state prints is unchanged (`view-copy.ts`'s `SEARCH_COPY`), so
+// this is a rendering-owner change, not a copy change —
+// `photos-shelves-v4.test.ts`'s string assertions pin that.
+import { SearchScaffold } from "../../_shared/SearchScaffold.tsx";
 import type { SearchGroupHit } from "../search-groups.ts";
-import { searchGroupOpenLabel } from "../search-groups.ts";
 import type { SearchStatus } from "../search.ts";
 import type { ShelfId } from "../shelves.ts";
 import { SEARCH_COPY, SEARCH_EXAMPLES } from "../view-copy.ts";
@@ -29,6 +38,26 @@ import { SEARCH_COPY, SEARCH_EXAMPLES } from "../view-copy.ts";
 import styles from "./SearchShelf.module.css";
 
 const EMPTY_GROUPS: readonly SearchGroupHit[] = [];
+
+/** Photos' own `SearchGroupHit` (search-groups.ts) carries `targetShelf` and
+ *  a closed `SearchGroupKind`; the scaffold's `SearchGroupRow` is the
+ *  rendering-only shape every app's rows get mapped down to. Kept as an
+ *  adapter at this render boundary rather than widening either type —
+ *  `search-groups.ts` and its own test stay untouched. */
+function toGroupRow(hit: SearchGroupHit): SearchGroupRow {
+  return {
+    kind: hit.kind,
+    key: hit.key,
+    title: hit.title,
+    meta: hit.meta,
+    here: hit.here,
+    // `targetShelf`'s declared type (`ShelfId = string | null`, shelves.ts)
+    // is wider than what `search-groups.ts` ever actually produces — every
+    // one of its four kinds resolves a real shelf id or the `PLACES`
+    // constant, never `null`. The fallback is for the type, not a real case.
+    openTarget: hit.targetShelf ?? "",
+  };
+}
 
 export function SearchShelf({
   query,
@@ -59,20 +88,6 @@ export function SearchShelf({
   /** The hits, once there are any. */
   children?: React.ReactNode;
 }) {
-  const searching = Boolean(query) && status === "searching";
-  const unreachable = Boolean(query) && status === "unreachable";
-  // A miss means EVERYTHING the miss body claims was checked came back
-  // empty — not just the photo grid. `groups` (search-groups.ts) matches
-  // people/places/albums/things independently of the FTS title/caption hits
-  // `count` carries, so a query that names a real person with no matching
-  // caption (say) still has a group hit to show. Calling that "no results"
-  // while a person row sat unrendered would contradict the miss body's own
-  // claim that people were searched too.
-  const hasGroups = groups.length > 0;
-  const none =
-    Boolean(query) && status === "ready" && count === 0 && !hasGroups;
-  const showResults =
-    Boolean(query) && status === "ready" && (count > 0 || hasGroups);
   return (
     <div className={styles.shelf}>
       <search className={`kit-search ${styles.field}`}>
@@ -103,124 +118,35 @@ export function SearchShelf({
           hits. */}
       <p className={styles.scope}>the whole library, not the loaded window</p>
 
-      {query ? null : (
-        <div className={styles.panel}>
-          <p className={styles.eyebrow}>{SEARCH_COPY.resting.eyebrow}</p>
-          <h2 className={styles.title}>{SEARCH_COPY.resting.title}</h2>
-          <p className={styles.body}>{SEARCH_COPY.resting.body}</p>
-          <div className={styles.examples}>
-            {SEARCH_EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                className={`kit-chip quiet ${styles.example}`}
-                onClick={() => onQuery(example)}
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* The honesty line (§9, ~3959-3961): search.ts's `run()` is a live
+          `window.centraid.readAll`/`read` round trip to the gateway's index
+          on every keystroke, never a read of the loaded window — so "the live
+          library" is the literal, seat-honest scope string
+          (docs/blueprint-seats.md §Worked example: search) — a literal claim,
+          not a hopeful one.
 
-      {searching ? (
-        <p className={styles.working}>
-          Searching your whole library.{" "}
-          <span className={styles.num}>{count}</span>{" "}
-          {count === 1 ? "match" : "matches"} from what is loaded on this device
-          so far.
-        </p>
-      ) : null}
-
-      {unreachable ? (
-        <div className={styles.unreachable}>
-          <p className={styles.eyebrow}>{SEARCH_COPY.unreachable.eyebrow}</p>
-          <h2 className={styles.unreachableTitle}>
-            {SEARCH_COPY.unreachable.title}
-          </h2>
-          <p className={styles.body}>
-            It lives on the gateway. Nothing below has been searched for you —
-            what you can see is the match over the photographs already loaded on
-            this device, which is a smaller question than the one you asked.
-          </p>
-          <dl className={styles.facts}>
-            {SEARCH_COPY.unreachable.facts.map((fact) => (
-              <div key={fact.label} className={styles.fact}>
-                <dt className={styles.factLabel}>{fact.label}</dt>
-                <dd className={styles.factValue}>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <button
-            type="button"
-            className="kit-btn"
-            disabled={!onRetry}
-            onClick={onRetry}
-          >
-            {SEARCH_COPY.unreachable.retry}
-          </button>
-        </div>
-      ) : null}
-
-      {none ? (
-        <div className={styles.panel}>
-          <p className={styles.eyebrow}>{SEARCH_COPY.miss.eyebrow}</p>
-          <h2 className={styles.title}>{SEARCH_COPY.miss.title(query)}</h2>
-          <p className={styles.body}>{SEARCH_COPY.miss.body}</p>
-          <button type="button" className="kit-btn" onClick={onClear}>
-            {SEARCH_COPY.miss.clear}
-          </button>
-        </div>
-      ) : null}
-
-      {showResults ? (
-        // The honesty line (§9, ~3959-3961): search.ts's `run()` is a live
-        // `window.centraid.readAll`/`read` round trip to the gateway's index
-        // on every keystroke, never a read of the loaded window — so "the
-        // live library" is a literal claim, not a hopeful one. There is no
-        // subtitle slot on the frame's app bar (`InlineAppBarContribution`
-        // carries only `title`/`count`/`actions`), so this line lives on the
-        // shelf itself rather than reaching into shared frame chrome for one
-        // feature.
-        //
-        // RECONCILED AGAINST MOBILE (issue #711): mobile's `session.search`
-        // resolves against the on-device replica, so its honest foot line is
-        // "…searched the whole replica on this device" — a genuinely
-        // different fact. This client's query (queries/search.ts) runs FTS5
-        // over `core.content_item` on the gateway itself with no replica in
-        // the path, so the handoff's literal "the live library" is kept
-        // verbatim here rather than borrowed from mobile's wording.
-        <p className={styles.resultsHead}>
-          <span className={styles.num}>{count}</span>{" "}
-          {count === 1 ? "result" : "results"} · searched the live library
-        </p>
-      ) : null}
-
-      {showResults && groups.length > 0 ? (
-        <ul className={styles.groups}>
-          {groups.map((hit) => (
-            <li key={`${hit.kind}:${hit.key}`} className={styles.groupRow}>
-              <div className={styles.groupText}>
-                <p className={styles.groupTitle}>{hit.title}</p>
-                <p className={styles.groupMeta}>{hit.meta}</p>
-              </div>
-              {hit.here ? (
-                <span className={styles.groupHere}>{hit.here}</span>
-              ) : null}
-              <button
-                type="button"
-                className={styles.groupOpen}
-                aria-label={searchGroupOpenLabel(hit)}
-                onClick={() => onOpenGroup?.(hit.targetShelf)}
-              >
-                Open →
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {query && !none ? children : null}
+          RECONCILED AGAINST MOBILE (issue #711): mobile's `session.search`
+          resolves against the on-device replica, so its honest foot line is
+          "…searched the whole replica on this device" — a genuinely
+          different fact. This client's query (queries/search.ts) runs FTS5
+          over `core.content_item` on the gateway itself with no replica in
+          the path, so the handoff's literal "the live library" is kept
+          verbatim here rather than borrowed from mobile's wording. */}
+      <SearchScaffold
+        query={query}
+        status={status}
+        count={count}
+        scope="the live library"
+        copy={SEARCH_COPY}
+        examples={SEARCH_EXAMPLES}
+        groups={groups.map(toGroupRow)}
+        onQuery={onQuery}
+        onClear={onClear}
+        onRetry={onRetry}
+        onOpenGroup={(target) => onOpenGroup?.(target as ShelfId)}
+      >
+        {children}
+      </SearchScaffold>
     </div>
   );
 }

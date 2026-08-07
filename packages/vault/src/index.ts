@@ -126,6 +126,17 @@ export {
   type BlobSweepStatus,
   type RemoteTier,
 } from "./blob/custody.js";
+// The custody ROLLUP projection (issue #711) — the aggregate every owner-facing
+// storage surface reads. Exported so the gateway's `storage/status` route can
+// answer with the same buckets an app reads through `blob.custody_rollup`,
+// rather than each client deriving its own idea of "freeable" (issue #712 B3).
+export {
+  custodyRollup,
+  refreshCustodyRollup,
+  type CustodyRollup,
+  type CustodyRollupBucket,
+  type CustodyRollupBucketTotals,
+} from "./blob/custody-rollup.js";
 export {
   BlobCache,
   readBlobCacheSettings,

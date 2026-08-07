@@ -109,6 +109,16 @@
   color: var(--text-faint);
 }
 
+/* Who agreed this is them (issue #712 P6b) — rendered only when the group
+   spans more than one answerer, so this rule paints on very few cards. Faint,
+   below the count: it is provenance about the CLAIM, not about the person, and
+   it must never compete with the name. */
+.confirmedBy {
+  font: var(--t-small);
+  color: var(--text-faint);
+  text-align: start;
+}
+
 /* What this shelf does NOT show, said once rather than implied by an absence. */
 .note {
   margin: 0;

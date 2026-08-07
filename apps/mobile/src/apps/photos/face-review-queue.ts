@@ -23,6 +23,8 @@ export interface FaceRegionRow {
   confidence?: unknown;
   confirmed_by_party_id?: unknown;
   bbox_json?: unknown;
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  review_state?: unknown;
 }
 
 export interface AssetRow {
@@ -44,8 +46,15 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Every unconfirmed region, in a deterministic order (no timestamp exists to
- *  sort on, so region_id is the tiebreak — same choice the web query makes). */
+/** Every UNANSWERED region, in a deterministic order (no timestamp exists to
+ *  sort on, so region_id is the tiebreak — same choice the web query makes).
+ *
+ *  "Unanswered", not "unconfirmed" (issue #712): a rejected region — which
+ *  used to be a deleted row and is now a remembered decision — and one the
+ *  member deliberately left unnamed are both finished with. Filtering on
+ *  `confirmed_by_party_id` alone would put every one of them back in front of
+ *  the member on the next replica pull, which is the exact bug that made this
+ *  queue impossible to empty. */
 export function buildQueue(
   faceRows: readonly FaceRegionRow[],
   assetRows: readonly AssetRow[]
@@ -86,7 +95,7 @@ export function buildQueue(
   }
 
   return faceRows
-    .filter((row) => row.confirmed_by_party_id == null)
+    .filter((row) => row.review_state === "proposed")
     .map((row) => ({
       regionId: str(row.region_id),
       assetId: str(row.asset_id),

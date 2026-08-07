@@ -13,25 +13,30 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 
 /*
  * Settings → Enrichment — the owner's control over the per-domain enrichment
- * tier (`core_vault.settings_json.enrich`, mirrored into `enrich_policy`).
+ * tier (`core_vault.settings_json.enrich`, mirrored into `enrich_policy`),
+ * on the `off | device | gateway` axis (issue #712 C5, renamed from
+ * `off | local | model`).
  *
  * WHY THIS PAGE EXISTS. The tier is enforced on the execution path
- * (`packages/automation/src/fire/enrich-gate.ts`): under `local` — the seeded
- * default — every enricher that takes a model turn is refused before it
+ * (`packages/automation/src/fire/enrich-gate.ts`): under `device`, every
+ * enricher that needs the `gateway` lane (a model turn) is refused before it
  * starts. Until this page there was no way to change the tier from any client
  * surface at all, so the enforcement had no counterpart: a member could ask
  * for face proposals and simply never get them, with the owner holding no
  * control that would let them.
  *
- * WHY THE COPY READS THE WAY IT DOES. The gate's header states the strictest
- * honest reading of `local`: there is NO local model provider in this runtime.
- * Every runner in the registry is a coding-agent harness talking to a remote
- * provider, and the gateway's own process is not "local" for this promise —
- * it is the thing that performs the egress. So `local` is "deterministic and
- * device-lease work only", never "runs a model on your machine", and this
- * page must not imply otherwise. Raising a domain to `model` is a CONSENT act
- * — it permits photographs and documents to leave the member's devices — so
- * it is confirmed in plain words BEFORE the write, not announced after it.
+ * WHY THE COPY READS THE WAY IT DOES. The gate's header draws the line at
+ * THIRD-PARTY PROVIDER EGRESS, not at the gateway itself: the member's own
+ * gateway is part of their trust domain, same as their phone. Every runner in
+ * the registry is, today, a coding-agent harness talking to a remote
+ * provider — that is a fact about the current roster, not a definition, and
+ * it is why raising a domain to `gateway` still costs a photograph or
+ * document leaving the member's devices in practice. So `device` is
+ * "deterministic and device-lease work only", never "runs a model on your
+ * machine", and `gateway` is "my own gateway may do whatever it is already
+ * wired to" — which today always ends at a provider. Raising a domain to
+ * `gateway` is a CONSENT act, so it is confirmed in plain words BEFORE the
+ * write, not announced after it.
  *
  * SCOPE NAMING (#599 / decision S6). The tier is authored per SCOPE and
  * applies to every app mounted over that scope, so the copy names the scope by
@@ -40,26 +45,26 @@ import styles from "./SettingsEnrichmentScreen.module.css";
  * moment a household has more than one scope.
  */
 
-const TIERS: readonly EnrichTier[] = ["off", "local", "model"];
+const TIERS: readonly EnrichTier[] = ["off", "device", "gateway"];
 
 const TIER_LABELS: Record<EnrichTier, string> = {
-  local: "On your devices",
-  model: "Model provider",
+  device: "On your devices",
+  gateway: "Model provider",
   off: "Off",
 };
 
 /**
  * What each tier ACTUALLY does, grounded in `decideEnrichmentGate`. The
- * `local` line names the enrichers it stops rather than leaving the member to
- * discover the silence — that silence is the defect this page closes.
+ * `device` line names the enrichers it stops rather than leaving the member
+ * to discover the silence — that silence is the defect this page closes.
  */
 const TIER_MEANING: Record<EnrichTier, string> = {
-  local:
+  device:
     "Only work that stays on your own devices: duplicate fingerprints, grouping, " +
     "and text your phone or laptop recognises itself. Nothing is sent to a model " +
     "provider. Centraid has no on-device model, so captions, face proposals, and " +
     "document extraction do not run at this setting.",
-  model:
+  gateway:
     "Everything above, plus enrichment that takes a model turn. Every model turn " +
     "in Centraid goes to a remote provider over the network, so the photograph or " +
     "document itself leaves your devices each time one runs.",
@@ -69,7 +74,7 @@ const TIER_MEANING: Record<EnrichTier, string> = {
 interface DomainCopy {
   label: string;
   hint: (scopeLabel: string) => string;
-  /** What the member sees leave the device at the `model` tier. */
+  /** What the member sees leave the device at the `gateway` tier. */
   sentNoun: string;
 }
 
@@ -138,7 +143,7 @@ export default function SettingsEnrichmentScreen({
   showToast,
 }: SettingsEnrichmentScreenProps): JSX.Element {
   // `null` while the first read is in flight. There is deliberately no
-  // optimistic default: rendering "local" before the vault answered would
+  // optimistic default: rendering "device" before the vault answered would
   // show a privacy state that may not be the member's, which is exactly the
   // class of lie this page exists to stop.
   const [policy, setPolicy] = useState<EnrichPolicy | null>(null);
@@ -170,7 +175,7 @@ export default function SettingsEnrichmentScreen({
       // The consent question is asked BEFORE the write, and only for the tier
       // that permits egress. Declining leaves the vault untouched — the
       // control re-renders from `policy`, which never moved.
-      if (next === "model") {
+      if (next === "gateway") {
         const agreed = await confirmEgress(
           egressConsentCopy(domain, scopeLabel)
         );

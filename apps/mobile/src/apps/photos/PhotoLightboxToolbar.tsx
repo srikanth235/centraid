@@ -1,23 +1,43 @@
-// The phone's viewer bar. On the desktop the five actions sit in the top bar;
-// here they sit where a thumb is, as five 56px targets. Same five names, same
-// marks, same order — the phone rearranges the viewer, it does not water it
-// down (CHANGELOG §D).
+// The phone's viewer controls. On the desktop the five actions sit in the top
+// bar; here they sit where a thumb is. Same five names, same marks, same order —
+// the phone rearranges the viewer, it does not water it down (CHANGELOG §D).
 //
-// The top bar keeps the exit and the overflow only, so this is the *only* place
-// a write starts from in the viewer. Every target is labelled; Trash is the one
-// destructive action and it takes `--net` as ink on the stage, not as a fill.
+// ANATOMY: chip · capsule · chip, not one bar of five equal cells. The grouping
+// is `VIEWER_BOTTOM_GROUPS` and the argument for it is stated there: the two
+// ends carry the actions with consequences outside this photograph (Share, which
+// leaves the app; Trash, the only destructive one), and the capsule carries the
+// three that do not. Flattening the groups still reproduces the desktop order.
+//
+// THE LABELS ARE GONE FROM THE SCREEN, AND THAT IS THE ONE THING THIS COSTS.
+// Five drawn words under five marks is what the v4 handoff asked for; the iOS
+// arrangement we are copying draws none, and at chip size there is nowhere to
+// put them that does not turn a 44 target into a 70 one. What survives is the
+// contract underneath the words: every target still takes its `accessibilityLabel`
+// from `action.label`, the same field the label was drawn from, so nothing an
+// assistive technology says has changed. What must NOT be traded away with them
+// is a REASON — a refusal is a sentence a sighted member has to be able to read,
+// so `READ_ONLY_VAULT_REASON` is still rendered inline under the row, in visible
+// `--net` mono, exactly as before (§6, §18).
+//
+// The floating chrome above the stage keeps the back and the overflow only, so
+// this is still the ONLY place a write starts from in the viewer. Trash takes
+// `--net` as ink, never as a fill.
 
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Alert, View } from "react-native";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useTheme } from "../../kit/theme";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import { styles } from "./PhotoLightbox.styles";
+import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
 import type { PhotoAsset } from "./timeline-model";
-import { READ_ONLY_VAULT_REASON, VIEWER_BOTTOM_ACTIONS } from "./viewer-model";
+import {
+  READ_ONLY_VAULT_REASON,
+  VIEWER_BOTTOM_GROUPS,
+  viewerAction,
+} from "./viewer-model";
 import type { ViewerActionId } from "./viewer-model";
 
 interface PhotoLightboxToolbarProps {
@@ -114,67 +134,51 @@ export function PhotoLightboxToolbar({
   };
   return (
     <>
-      <View
-        style={[styles.actionBar, { borderTopColor: colors.stageLine }]}
-        accessibilityRole="toolbar"
-      >
-        {VIEWER_BOTTOM_ACTIONS.map((action) => {
-          const on = enabled[action.id];
-          const why = reason[action.id];
-          const selected =
-            action.id === "favorite" ? asset.favorite : undefined;
-          // One colour for the mark and the label under it: they are one
-          // control, and a lit icon over a greyed word would read as a target
-          // that is half available.
-          const ink = on
-            ? action.tone === "net" || selected === true
-              ? colors.net
-              : colors.onStage
-            : colors.textDisabled;
-          return (
-            <Pressable
-              // The hint still reaches a screen reader that lands directly on
-              // the control; it is never the ONLY place the reason lives —
-              // see the visible line below, which is what a sighted member
-              // reads (§6, §18: a refusal is stated inline, never only in a
-              // tooltip — and `accessibilityHint` IS that tooltip pattern for
-              // a touch surface).
-              accessibilityHint={on ? undefined : why}
-              accessibilityLabel={action.label}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !on, selected }}
-              disabled={!on}
-              key={action.id}
-              // Defense in depth (matches the web selection bar's
-              // `buildSelectionActions`, §6, §18): `disabled` is what stops a
-              // tap or an assistive-tech activation; this guard is what stops
-              // anything that calls `onPress` directly from reaching a write
-              // a read-only grant refused.
-              onPress={() => {
-                if (!on) return;
-                run[action.id]();
-              }}
-              style={styles.actionTarget}
-            >
-              <Icon name={action.icon} size={23} color={ink} />
-              {/* The label the handoff draws under every mark (proto 4611).
-                  It is not decoration: five icon-only targets is five
-                  guesses, and the accessible name is read from the SAME
-                  field, so what a screen reader says and what the screen
-                  shows cannot drift (WCAG 2.5.3). */}
-              <Text
-                numberOfLines={1}
-                style={[styles.actionLabel, { color: ink }]}
-              >
-                {action.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.actionRow} accessibilityRole="toolbar">
+        {VIEWER_BOTTOM_GROUPS.map((group) => (
+          <ViewerChromePlate colors={colors} key={group.actions.join("-")}>
+            {group.actions.map((id) => {
+              const action = viewerAction(id);
+              const on = enabled[id];
+              const why = reason[id];
+              const selected = id === "favorite" ? asset.favorite : undefined;
+              return (
+                <ViewerChromeTarget
+                  colors={colors}
+                  disabled={!on}
+                  // The hint still reaches a screen reader that lands directly
+                  // on the control; it is never the ONLY place the reason lives
+                  // — see the visible line below, which is what a sighted member
+                  // reads (§6, §18: a refusal is stated inline, never only in a
+                  // tooltip — and `accessibilityHint` IS that tooltip pattern
+                  // for a touch surface).
+                  hint={why}
+                  icon={action.icon}
+                  key={id}
+                  label={action.label}
+                  // Defense in depth (matches the web selection bar's
+                  // `buildSelectionActions`, §6, §18): `disabled` is what stops
+                  // a tap or an assistive-tech activation; this guard is what
+                  // stops anything that calls `onPress` directly from reaching a
+                  // write a read-only grant refused.
+                  onPress={() => {
+                    if (!on) return;
+                    run[id]();
+                  }}
+                  selected={selected}
+                  tone={action.tone}
+                  wide={group.shape === "capsule"}
+                />
+              );
+            })}
+          </ViewerChromePlate>
+        ))}
       </View>
-      {/* The read-only reason, stated inline under the bar in `--net` mono —
+      {/* The read-only reason, stated inline under the row in `--net` mono —
           the same sentence the write-refusal panel gives elsewhere in the
-          viewer (READ_ONLY_VAULT_REASON), never carried only in a hint. */}
+          viewer (READ_ONLY_VAULT_REASON), never carried only in a hint. This is
+          what makes dropping the drawn labels honest: a NAME can move into the
+          accessible layer, a REASON cannot. */}
       {writable ? null : (
         <Text style={[styles.viewerReadOnlyReason, { color: colors.net }]}>
           {READ_ONLY_VAULT_REASON}

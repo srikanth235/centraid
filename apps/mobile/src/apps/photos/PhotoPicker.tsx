@@ -143,7 +143,7 @@ export default function PhotoPicker({
     // The picker passes NO selection to the shell: its picked set is its own
     // (proto:3963), and the band's five-target selection bar belongs to the
     // library's selection, not to this one.
-    <PhotosScreen current="albums">
+    <PhotosScreen current="collections">
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Cancel"

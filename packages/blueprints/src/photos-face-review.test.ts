@@ -13,6 +13,11 @@
 //      must not repeat (see PR review notes on FaceReview.tsx's old
 //      `partyId ? <Confirm/> : null`): a proposal with no proposed person
 //      still offers Not this person / Someone else / Unknown person / Skip.
+//   4. THE QUEUE CAN BE FINISHED (issue #712) — "Keep unnamed" writes a real
+//      `dismiss` answer instead of setting an apologetic note, Skip is the
+//      only control that still writes nothing, and an empty queue reaches
+//      "No faces need review right now." rather than cycling the ones the
+//      member kept skipping.
 //
 // `outcomes.ts` mocked by string specifier — see photos-faces.test.ts's own
 // note on why (TS6059/TS2307 if imported typed).
@@ -141,6 +146,48 @@ describe("Face review surface", () => {
     expect(buttons).toContain("Skip");
     expect(buttons).toContain("Name →");
     expect(buttons).toContain("Keep unnamed");
+  });
+
+  it("Keep unnamed fires a real dismiss answer (issue #712)", async () => {
+    const { container } = await mount(QUEUE);
+    const keep = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Keep unnamed"
+    );
+    await act(async () => {
+      keep!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // ONE action, carrying the answer as its discriminant — not a second
+    // endpoint, and not the note this button used to set instead of writing.
+    expect(acts).toStrictEqual([
+      { action: "answer-face", input: { region_id: "r1", answer: "dismiss" } },
+    ]);
+    expect(container.textContent).not.toMatch(/isn't wired up yet/u);
+  });
+
+  it("confirm and reject ride the same one verb", async () => {
+    const { container } = await mount(QUEUE);
+    const reject = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Not this person"
+    );
+    await act(async () => {
+      reject!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(acts).toStrictEqual([
+      { action: "answer-face", input: { region_id: "r1", answer: "reject" } },
+    ]);
+  });
+
+  it("a fully answered library reaches the zero-remaining state", async () => {
+    // Nothing left to review is a state this surface must be able to REACH —
+    // before issue #712 a skipped stranger had no answer that removed it, so
+    // the queue was only ever empty on a vault that had never proposed a face.
+    const { container } = await mount([]);
+    expect(container.textContent).toMatch(/No faces need review right now\./u);
+    expect(container.textContent).toMatch(/0 to go/u);
   });
 
   it("Skip never fires a write", async () => {

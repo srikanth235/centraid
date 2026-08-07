@@ -15,7 +15,16 @@
  * carries what this needs, because every proposal for one person shares that
  * person's `party_id`.
  *
- * TWO FACTS THE PROTOTYPE ASKS FOR THAT THIS SCHEMA CANNOT HONESTLY STATE —
+ * THE QUEUE IS ANSWERABLE (issue #712). It filters on `review_state`, not on
+ * `confirmed_by_party_id`, and that is the whole difference between a queue
+ * that can be finished and one that cannot. Every region the owner has
+ * answered — confirmed, rejected, or dismissed ("reviewed, deliberately left
+ * unnamed") — leaves this list for good, and the enricher may not put it
+ * back (`ingest/enrich-publishers.ts` only refreshes a still-`proposed`
+ * region). `rejectedTotal` is therefore a real number now, which is what
+ * lets the surface's status note say what the prototype asks it to.
+ *
+ * ONE FACT THE PROTOTYPE ASKS FOR THAT THIS SCHEMA STILL CANNOT STATE —
  * flagged here rather than faked:
  *
  *  - `first seen` (4310) reads as the EARLIEST CAPTURE DATE among the
@@ -23,16 +32,6 @@
  *    enricher first proposed this face" — `media_face_region` has no
  *    `created_at` column, so that fact does not exist in this schema today.
  *    Capture date is the closest true substitute, not an invented one.
- *  - The prototype's "rejected 3" note count and "a rejection is remembered
- *    so the same face is not proposed twice" (4309, 3967) are NOT
- *    implementable from this file: `actions/reject-face.ts` calls
- *    `media.reject_face`, which DELETES the region row outright (see that
- *    command's own doc comment — "derived, re-derivable data"). A deleted
- *    row leaves nothing to count as "rejected" and nothing to stop a re-run
- *    of the enricher proposing the same face again. Fixing that needs a
- *    vault-side tombstone (a status column or a rejection table) — outside
- *    packages/blueprints, not invented here. The status note therefore reads
- *    `confirmed N · M to go`, two parts instead of three.
  *
  * @type {import('@centraid/app-engine').QueryHandler}
  */
@@ -50,6 +49,8 @@ interface RawRegion {
   party_id?: string | null;
   confidence?: number | null;
   confirmed_by_party_id?: string | null;
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  review_state?: string | null;
 }
 interface RawParty {
   party_id: string;
@@ -87,10 +88,21 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
-    const unconfirmed = regions.filter((r) => r.confirmed_by_party_id == null);
-    const confirmedTotal = regions.length - unconfirmed.length;
+    // UNANSWERED, not merely unconfirmed (issue #712). A rejected or
+    // dismissed region is a decision the owner already made; re-offering it
+    // is the bug this queue existed to have.
+    const pending = regions.filter((r) => r.review_state === "proposed");
+    const confirmedTotal = regions.filter(
+      (r) => r.review_state === "confirmed"
+    ).length;
+    const rejectedTotal = regions.filter(
+      (r) => r.review_state === "rejected"
+    ).length;
+    const dismissedTotal = regions.filter(
+      (r) => r.review_state === "dismissed"
+    ).length;
     // Deterministic order (no created_at to sort on): region_id, ascending.
-    const queueSlice = [...unconfirmed]
+    const queueSlice = [...pending]
       .sort((a, b) => (a.region_id < b.region_id ? -1 : 1))
       .slice(0, QUEUE_LIMIT);
 
@@ -179,8 +191,10 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
       status: 200,
       body: {
         queue,
-        unmatchedTotal: unconfirmed.length,
+        unmatchedTotal: pending.length,
         confirmedTotal,
+        rejectedTotal,
+        dismissedTotal,
         people: persons.map((p) => ({
           party_id: p.party_id,
           name: p.display_name,
@@ -198,6 +212,8 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
         queue: [],
         unmatchedTotal: 0,
         confirmedTotal: 0,
+        rejectedTotal: 0,
+        dismissedTotal: 0,
         people: [],
         error: String(e.message ?? error),
       },

@@ -20,11 +20,9 @@
 import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { imageSource } from "../../kit/media/media-source";
@@ -32,6 +30,8 @@ import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import PhotosScreen from "./PhotosScreen";
+import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
 
 interface PlaceCard {
@@ -92,19 +92,18 @@ export default function PlacesView({
   }, [assets, placeById]);
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    // The band, via the shell (issue #712 P8). This screen used to draw a bare
+    // `SafeAreaView` with a back chevron and NO band, so the only way out of
+    // Photos from here was the OS gesture — the §F dead end `PhotosScreen`
+    // exists to make unrepresentable. `current="more"` because the More
+    // sheet's Places row is how a member arrives.
+    <PhotosScreen current="more">
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-          style={styles.headerBtn}
-        >
-          <Icon name="chevron-left" size={24} color={colors.text} />
-        </Pressable>
+        {/* No back chevron. It was this screen's ONLY exit; the band below now
+            provides two (the Places row's siblings, and the frame's Home
+            capsule), and a third spelling of "leave" in the head is the kind
+            of duplicate affordance §F's one-navigation rule forbids — the same
+            call the Backup screen made when it gained the band. */}
         <Text style={styles.title}>Places</Text>
         {/* Places · N — the shelf's own size, in mono because a count is a
             numeral (proto:3939). Never "N of M geotagged" here; that
@@ -146,7 +145,25 @@ export default function PlacesView({
               })
             }
           >
-            <View style={[styles.cover, { backgroundColor: colors.skel }]}>
+            {/* THE GROUND (issue #712 P9). `--skel` is defined as "the ground
+                a tile paints BEFORE its bytes arrive" (packages/design/src/
+                roles.ts) — it is the absence, not the surface. This card used
+                to pin it forever, so a place whose cover had decoded still
+                stood on the placeholder. `tileGround` is the app's own
+                contract for exactly this (PhotoTile.tsx): skel while there is
+                nothing to show, `--bg-sunken` once there is. */}
+            <View
+              style={[
+                styles.cover,
+                {
+                  backgroundColor: tileGround(
+                    Boolean(item.coverUri),
+                    colors.skel,
+                    colors.bgSunken
+                  ),
+                },
+              ]}
+            >
               {item.coverUri ? (
                 <Image
                   source={imageSource(item.coverUri)}
@@ -163,7 +180,7 @@ export default function PlacesView({
           </Pressable>
         )}
       />
-    </SafeAreaView>
+    </PhotosScreen>
   );
 }
 
@@ -180,7 +197,10 @@ const makeStyles = (colors: ThemeColors) =>
     count: { ...t("mono"), color: colors.textSoft, marginEnd: spacing[3] },
     cover: {
       aspectRatio: 4 / 3,
-      borderRadius: radii.md,
+      // 12, not `radii.md` (7) — the shelf-card radius the handoff states and
+      // the one `PhotosCollectionsView`'s album tile already uses. A shelf of
+      // cards has one corner, and this was the only card cutting a tighter one.
+      borderRadius: radii.lg,
       overflow: "hidden",
     },
     coverImage: { height: "100%", width: "100%" },
@@ -202,14 +222,8 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       minHeight: 48,
       paddingEnd: spacing[4],
-      paddingStart: spacing[2],
+      paddingStart: spacing[4] - 2,
       paddingTop: spacing[2],
-    },
-    headerBtn: {
-      alignItems: "center",
-      height: 44,
-      justifyContent: "center",
-      width: 44,
     },
     mapChip: {
       borderRadius: 999,
@@ -219,6 +233,5 @@ const makeStyles = (colors: ThemeColors) =>
     },
     mapChipText: { ...t("mono") },
     row: { gap: spacing[4] },
-    safe: { flex: 1 },
     title: { ...t("title"), color: colors.text, flex: 1 },
   });

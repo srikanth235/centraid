@@ -79,6 +79,18 @@ export interface InlineScope {
   color?: string;
   icon?: string;
   canWrite: boolean;
+  /**
+   * Everyone who holds a role here, name and role — the P7 grant roster
+   * (issue #712, folded into Engine A by default ruling). Before this an app
+   * had `InlineScope` and nothing else, so "who else can see this" had no
+   * answer anywhere in an app's reach (see `packages/blueprints/apps/photos
+   * /components/Sharing.tsx`'s former header, which documented the gap by
+   * name). Absent — never `[]` — on a host that does not answer the
+   * question: an empty roster and an unasked one are different facts, and an
+   * app must not render "nobody else can see this" when the truth is "this
+   * host did not say".
+   */
+  audience?: readonly { memberId: string; name: string; role: string }[];
 }
 
 /**

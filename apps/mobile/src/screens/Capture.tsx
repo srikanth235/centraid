@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   applyAgentCaptureKind,
@@ -10,6 +9,7 @@ import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -156,7 +156,7 @@ export default function CaptureScreen({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -330,7 +330,7 @@ export default function CaptureScreen({
           </>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

@@ -13,34 +13,23 @@ import { radii, spacing, t } from "../../kit/theme";
 import {
   FILMSTRIP,
   VIEWER_ACTION_TARGET,
-  VIEWER_TOP_BAR_HEIGHT,
+  VIEWER_CHROME_CHIP,
+  VIEWER_CHROME_INSET,
 } from "./viewer-model";
 
 export const styles = StyleSheet.create({
-  /** The five thumb targets. `space-between` would strand the outer two. */
-  actionBar: {
+  /** The bottom row: chip · capsule · chip, with NOTHING behind them. The row
+   *  itself is transparent — `space-between` is what pushes the two single
+   *  actions to the thumbs and leaves the capsule centred, which is the whole
+   *  arrangement (`VIEWER_BOTTOM_GROUPS`). A background here would put the
+   *  full-width bar straight back. */
+  actionRow: {
     alignItems: "center",
     flexDirection: "row",
-    height: VIEWER_ACTION_TARGET,
-    justifyContent: "space-around",
-    paddingHorizontal: spacing[3],
+    justifyContent: "space-between",
+    paddingHorizontal: VIEWER_CHROME_INSET,
+    paddingVertical: VIEWER_CHROME_INSET,
   },
-  /** Mark over label, filling a fifth of the bar each (proto 4608–4613). The
-   *  56 is the TOTAL target — the label lives inside it, it does not sit under
-   *  it and make the row 70 tall. `flex: 1` rather than a 56 width so five
-   *  labels share the screen evenly instead of colliding at 390px. */
-  actionTarget: {
-    alignItems: "center",
-    flex: 1,
-    gap: 3,
-    justifyContent: "center",
-    minHeight: VIEWER_ACTION_TARGET,
-    minWidth: 0,
-  },
-  /** The handoff draws these at 11px; the native scale's smallest labelled
-   *  rung is `control`, and the token layer — not a literal here — is what
-   *  decides what 11px means on a phone at 200% text scale. */
-  actionLabel: { ...t("control") },
   /** The read-only reason under the viewer's bottom bar (§6, §18): stated
    *  inline, in `--net` mono, never carried only in an accessibility hint —
    *  colour is applied at the call site, same pattern as `statusText`. */
@@ -169,15 +158,72 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing[2],
   },
   transportClock: { ...t("mono") },
-  topbar: {
-    alignItems: "center",
+  /** The three floating elements at the head of the stage. Absolute, so the
+   *  photograph runs underneath rather than being pushed down by a bar; the
+   *  logical inset pair (never the legacy `start`/`end`, which type but do not
+   *  lay out — see scripts/lint-logical-insets.mjs) is what mirrors it. The
+   *  safe-area top is added at the call site, because only the component knows
+   *  the insets. */
+  chromeTop: {
+    alignItems: "flex-start",
     flexDirection: "row",
-    height: VIEWER_TOP_BAR_HEIGHT,
+    gap: spacing[2],
+    insetInlineEnd: 0,
+    insetInlineStart: 0,
     justifyContent: "space-between",
+    paddingBottom: VIEWER_CHROME_INSET,
+    paddingHorizontal: VIEWER_CHROME_INSET,
+    position: "absolute",
+    top: 0,
+    zIndex: 2,
+  },
+  /** The plate a chip or a capsule IS. `radii.pill` rounds a 44-square plate
+   *  to a circle and a wider one to a capsule, so there is one style, not two
+   *  that can drift apart. Ground and edge come from the stage ramp at the
+   *  call site (`--stage-sunken` / `--stage-line`), opaque, never glass. */
+  chromePlate: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    // The stamp's line can be long — the editor's live sentence, a place name —
+    // and the row it sits in has two chips it must not push off the screen.
+    // `minWidth: 0` is what lets the clamp inside actually take effect; without
+    // it a flex child refuses to shrink below its content and the row overflows.
+    flexShrink: 1,
+    minHeight: VIEWER_CHROME_CHIP,
+    minWidth: 0,
+    overflow: "hidden",
+  },
+  /** Holds the trailing slot open while the editor suppresses its control, so
+   *  the stamp does not slide off centre when the mode changes. */
+  chromeSpacer: { height: VIEWER_CHROME_CHIP, width: VIEWER_CHROME_CHIP },
+  chromeStamp: {
+    alignItems: "center",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+  },
+  /** The capture date carries the stamp's weight; `smallStrong` is the scale's
+   *  emphatic body rung, and the token layer decides what it means at 200%. */
+  chromeStampDate: { ...t("smallStrong") },
+  /** `17:42 · Lyme Regis` — mono and tabular, because a clock is a number. */
+  chromeStampTime: { ...t("mono") },
+  chromeTarget: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: VIEWER_CHROME_CHIP,
+    minWidth: VIEWER_CHROME_CHIP,
+  },
+  /** Inside a capsule: neighbours at 44 is where mis-taps start (§7.1). */
+  chromeTargetWide: { minWidth: VIEWER_ACTION_TARGET },
+  /** A worded target in a plate — the slideshow's `Leave`, which is the one
+   *  control here that is a verb rather than a mark. */
+  chromeTextTarget: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: VIEWER_CHROME_CHIP,
     paddingHorizontal: spacing[3],
   },
-  topbarTitle: { ...t("control"), flex: 1, marginHorizontal: spacing[2] },
-  topbarCapture: { ...t("mono") },
   /** The video's kind label — `video · 4K · 0:24` — where the hand-rolled
    *  transport used to be. Centred under the frame, micro-caps, and the only
    *  thing we say about a recording the platform's own controls are playing. */

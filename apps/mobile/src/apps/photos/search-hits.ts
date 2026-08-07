@@ -25,6 +25,19 @@
 //   — the media domain is `media.media_asset`, `media.face_region` and
 //   `media.asset_phash`, and nothing else. There is nothing to count, so there
 //   is no row. Add it here the moment an enrichment publisher lands labels.
+//
+// ORDERING AND CAPPING (issue #712 S1) route through the web blueprints'
+// shared `groupSearchHits` combinator — the same "find, then cap, then
+// order" the web scaffold's Photos and Tally consumers use
+// (`packages/blueprints/apps/_shared/search-scaffold.ts`) — instead of a
+// fourth hand-inlined `[...a(), ...b(), ...c(), ...d()]`. The MATCHING stays
+// entirely in this file (token search over replica rows is a genuinely
+// different algorithm from the two web apps' plain substring match, per that
+// module's own header note); only the "run each kind, cap it, concatenate in
+// order" shell is shared. This is a pure-logic import with no UI change —
+// this file already had zero react-native imports, and stays that way.
+import { groupSearchHits } from "@centraid/blueprints/apps/_shared/search-scaffold";
+import type { SearchEntity } from "@centraid/blueprints/apps/_shared/search-scaffold";
 
 import type { PhotoAsset } from "./timeline-model";
 
@@ -60,6 +73,20 @@ export interface SearchHit {
   /** `12 here` — how much of it is in THESE results. Empty where the number
    *  would not mean anything (an album row states its size, not its overlap). */
   meta: string;
+  /**
+   * The `media_asset` ids this hit REACHES (#712): the album's members, the
+   * person's faces, the place's photographs, the caption's own photograph.
+   *
+   * A member who types "Tahoe" and is shown the album "Tahoe scouting" means
+   * its four photographs, but none of THEM carries the word in its own
+   * `core.content_item.title`, so `session.search` cannot return them and the
+   * grid came back empty under a row that said the album exists. The joins
+   * that answer "which photographs is this row about" are already walked here
+   * — faces by party, entries by collection, assets by place — so the answer
+   * is carried out on the row rather than re-derived by the screen from the
+   * same rows a second time.
+   */
+  assetIds: readonly string[];
   target: SearchHitTarget;
 }
 
@@ -162,25 +189,71 @@ function text(row: Row, ...keys: string[]): string | undefined {
   return undefined;
 }
 
+/** `SearchHitSources` plus the one value the person entity needs that is
+ *  cheaper to compute once than per-entity: which assets are already among
+ *  the loaded hits. */
+interface HitSource extends SearchHitSources {
+  matchedAssetIds: ReadonlySet<string>;
+}
+
+const PERSON_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "person",
+  label: "person",
+  match: (term, source) =>
+    personHits(source, queryTokens(term), source.matchedAssetIds),
+};
+const PLACE_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "place",
+  label: "place",
+  match: (term, source) => placeHits(source, queryTokens(term)),
+};
+const ALBUM_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "album",
+  label: "album",
+  match: (term, source) => albumHits(source, queryTokens(term)),
+};
+const CAPTION_ENTITY: SearchEntity<HitSource, SearchHit> = {
+  key: "caption",
+  label: "caption",
+  match: (term, source) => captionHits(source, queryTokens(term)),
+};
+
+/** Person → place → album → caption, proto:4258-4265's order and also
+ *  narrowest-to-broadest: a person is one identity, a caption is one
+ *  photograph's words. Declared as data (`SEARCH_HIT_ENTITIES`), not a
+ *  branch, the same rule the web scaffold's own entity configs follow. */
+const SEARCH_HIT_ENTITIES: readonly SearchEntity<HitSource, SearchHit>[] = [
+  PERSON_ENTITY,
+  PLACE_ENTITY,
+  ALBUM_ENTITY,
+  CAPTION_ENTITY,
+];
+
 /**
  * The rows above the grid. Ordered person → place → album → caption, which is
  * proto:4258-4265's order and is also narrowest-to-broadest: a person is one
  * identity, a caption is one photograph's words.
  */
 export function groupedSearchHits(sources: SearchHitSources): SearchHit[] {
-  const tokens = queryTokens(sources.query);
-  if (tokens.length === 0) return [];
-
   const matchedAssetIds = new Set(
     sources.matches.flatMap((asset) => (asset.assetId ? [asset.assetId] : []))
   );
+  return groupSearchHits(
+    sources.query,
+    { ...sources, matchedAssetIds },
+    SEARCH_HIT_ENTITIES,
+    PER_KIND_CAP
+  );
+}
 
-  return [
-    ...personHits(sources, tokens, matchedAssetIds),
-    ...placeHits(sources, tokens),
-    ...albumHits(sources, tokens),
-    ...captionHits(sources, tokens),
-  ];
+/**
+ * Every asset id reachable through these rows, deduplicated (#712). The
+ * search grid unions this with the photographs `session.search` matched by
+ * title, so naming an album, a person or a place shows the photographs that
+ * belong to it — which is what naming one of them asks for.
+ */
+export function reachableAssetIds(hits: readonly SearchHit[]): Set<string> {
+  return new Set(hits.flatMap((hit) => [...hit.assetIds]));
 }
 
 function personHits(
@@ -213,7 +286,8 @@ function personHits(
       if (!id) return [];
       const name = text(party, "display_name", "name");
       if (!name || !matchesTokens(name, tokens)) return [];
-      const count = total.get(id)?.size ?? 0;
+      const seen = total.get(id);
+      const count = seen?.size ?? 0;
       if (count === 0) return [];
       return [
         {
@@ -222,6 +296,7 @@ function personHits(
           label: name,
           sub: `person · ${plural(count)}`,
           meta: `${here.get(id) ?? 0} here`,
+          assetIds: [...(seen ?? [])],
           target: {
             screen: "PhotoStateView" as const,
             params: { mode: "person" as const, partyId: id, personName: name },
@@ -229,8 +304,7 @@ function personHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function placeHits(
@@ -238,9 +312,18 @@ function placeHits(
   tokens: readonly string[]
 ): SearchHit[] {
   const total = new Map<string, number>();
+  // The ids are collected in the same pass as the count, but they are not the
+  // same number: a photograph the replica holds without an `assetId` is still
+  // one of the place's photographs to count, and still not something the grid
+  // can be asked to show.
+  const reachable = new Map<string, string[]>();
   for (const asset of sources.assets) {
     if (!asset.placeId) continue;
     total.set(asset.placeId, (total.get(asset.placeId) ?? 0) + 1);
+    if (!asset.assetId) continue;
+    const ids = reachable.get(asset.placeId) ?? [];
+    ids.push(asset.assetId);
+    reachable.set(asset.placeId, ids);
   }
   const here = new Map<string, number>();
   for (const asset of sources.matches) {
@@ -263,6 +346,7 @@ function placeHits(
           label: name,
           sub: `place · ${plural(count)}`,
           meta: `${here.get(id) ?? 0} here`,
+          assetIds: reachable.get(id) ?? [],
           // The phone has no per-place shelf; Places IS the map (`PlacesMap`,
           // the More-sheet row). Sending the member to the map is the honest
           // reading of "open the place" here — not a filtered grid that does
@@ -271,8 +355,7 @@ function placeHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function albumHits(
@@ -280,10 +363,19 @@ function albumHits(
   tokens: readonly string[]
 ): SearchHit[] {
   const sizes = new Map<string, number>();
+  // `target_id` is the member asset. An entry without one still counts toward
+  // the album's stated size — it is a row in the album — but there is nothing
+  // for the grid to show for it.
+  const members = new Map<string, string[]>();
   for (const entry of sources.entries) {
     const id = text(entry, "collection_id");
     if (!id) continue;
     sizes.set(id, (sizes.get(id) ?? 0) + 1);
+    const target = text(entry, "target_id");
+    if (!target) continue;
+    const ids = members.get(id) ?? [];
+    ids.push(target);
+    members.set(id, ids);
   }
 
   return sources.collections
@@ -302,6 +394,7 @@ function albumHits(
           // many of it are here" is not a fact about an album the member asked
           // for by name.
           meta: "",
+          assetIds: members.get(id) ?? [],
           target: {
             screen: "AlbumDetail" as const,
             params: { albumId: id },
@@ -309,17 +402,21 @@ function albumHits(
         },
       ];
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .slice(0, PER_KIND_CAP);
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function captionHits(
   sources: SearchHitSources,
   tokens: readonly string[]
 ): SearchHit[] {
+  // No early break at `PER_KIND_CAP` here — `groupedSearchHits` caps every
+  // entity uniformly via the shared `groupSearchHits` combinator, after this
+  // returns every real match in order. Capping first and matching second
+  // would be the same result for this loop's own single pass, but a second
+  // cap point is one more place the number could drift from the other three
+  // entities'.
   const hits: SearchHit[] = [];
   for (const asset of sources.matches) {
-    if (hits.length >= PER_KIND_CAP) break;
     const title = asset.contentId
       ? sources.contentTitles.get(asset.contentId)
       : undefined;
@@ -330,6 +427,7 @@ function captionHits(
       label: `“${title}”`,
       sub: `caption · ${captionDate(asset.capturedAt)}`,
       meta: "",
+      assetIds: asset.assetId ? [asset.assetId] : [],
       target: {
         screen: "PhotoLightbox",
         params: { assetId: asset.id },

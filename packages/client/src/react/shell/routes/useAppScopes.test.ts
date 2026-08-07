@@ -172,6 +172,35 @@ describe("resolveAppScopes", () => {
     ]);
   });
 
+  // Issue #712, P7 — the grant roster rides through exactly as the gateway
+  // answered it: present when named, absent (not `[]`) when not.
+  it("carries a scope's audience through untouched", async () => {
+    readAppScopePlane.mockResolvedValue(
+      plane([
+        {
+          ...entry("vault-family", "Family", "write"),
+          audience: [
+            { memberId: "m-priya", name: "Priya", role: "admin" },
+            { memberId: "m-sid", name: "Sid", role: "read" },
+          ],
+        },
+      ])
+    );
+    const { scopes } = await resolveAppScopes("photos");
+    expect(scopes[0]!.scope.audience).toStrictEqual([
+      { memberId: "m-priya", name: "Priya", role: "admin" },
+      { memberId: "m-sid", name: "Sid", role: "read" },
+    ]);
+  });
+
+  it("leaves audience absent when the gateway did not answer it", async () => {
+    readAppScopePlane.mockResolvedValue(
+      plane([entry("vault-family", "Family", "write")])
+    );
+    const { scopes } = await resolveAppScopes("photos");
+    expect(scopes[0]!.scope).not.toHaveProperty("audience");
+  });
+
   it("leaves a scope UNMARKED when the gateway did not answer the marker", async () => {
     // An older gateway omits `personal`; marking every tile would say
     // something untrue, so unknown reads as the member's own.

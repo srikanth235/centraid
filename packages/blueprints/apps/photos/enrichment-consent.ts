@@ -5,10 +5,10 @@
  * This is the only surface in Photos where the product tells a member that
  * their photographs can LEAVE THE DEVICE. That sentence is the reason the
  * screen exists, so its words are not a component's business: web
- * (`components/Enrichment.tsx`) and native
- * (`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`) both read this
- * module, and a drift between them is impossible by construction rather than
- * by review.
+ * (`enrichment-gate.ts`, mounted in the People shelf's empty state per issue
+ * #712 C2) and native (`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`)
+ * both read this module, and a drift between them is impossible by
+ * construction rather than by review.
  *
  * The strings are the handoff's, VERBATIM, smart punctuation included, with
  * one settled amendment (S6, docs/decisions.md): the handoff's storage noun
@@ -18,9 +18,10 @@
  * strings beyond that swap: every fact below is a promise about what the
  * library will and will not do, and a paraphrase is a different promise.
  *
- * Deliberately import-free. Native bundles this file straight out of the
- * blueprints package (the same way `apps/notes/commonmark.ts` is bundled), so
- * it must not reach for the web app's DOM/kit modules or its own tokens.
+ * Deliberately import-free but for the shared gate shape below. Native
+ * bundles this file straight out of the blueprints package (the same way
+ * `apps/notes/commonmark.ts` is bundled), so it must not reach for the web
+ * app's DOM/kit modules or its own tokens.
  *
  * WHAT THIS IS NOT (handoff line 4332, and the defect that made this module
  * necessary): a settings toggle. Both clients previously fired the enrichment
@@ -29,30 +30,16 @@
  * ONCE, and receipted; the answer is visible in Privacy afterwards.
  */
 
-/** One `label → value` line in a panel's fact table, rendered in the mono
- *  register. `net` marks the fact as an egress claim — the border-only
- *  `--net` treatment on web, the `net` role on native. It is never a fill and
- *  never a red dot. */
-export interface ConsentFact {
-  readonly label: string;
-  readonly value: string;
-  readonly net?: boolean;
-}
+// The gate's shapes are generic across every consent moment in the product
+// (issue #712 C1) — Docs' capture-time OCR is the second instance — so they
+// live in `apps/_shared/consent-gate.ts` and are re-exported here VERBATIM
+// for every existing importer of this module.
+import type {
+  AnswerAvailability as SharedAnswerAvailability,
+  ConsentPanelCopy,
+} from "../_shared/consent-gate.ts";
 
-/** One consent panel: an eyebrow, a question, one paragraph, the facts, and
- *  the answer(s) it accepts. `net: true` renders the whole panel bordered in
- *  `--net` — the panel itself is about bytes leaving. */
-export interface ConsentPanelCopy {
-  readonly eyebrow: string;
-  readonly title: string;
-  readonly body: string;
-  readonly facts: readonly ConsentFact[];
-  readonly action: string;
-  readonly action2?: string;
-  readonly net?: boolean;
-  readonly dangerous?: boolean;
-  readonly filled?: boolean;
-}
+export type { ConsentFact, ConsentPanelCopy } from "../_shared/consent-gate.ts";
 
 /** The frame's status line while this surface is up (prototype cfg 3968). */
 export const ENRICHMENT_STATUS_LINE =
@@ -167,8 +154,18 @@ export const ENRICHMENT_UNAVAILABLE = {
     "Not available from here: whether photographs may go to a model provider is decided in Settings → Enrichment — Photos cannot name a helper on its own.",
   offTier:
     "Not available: enrichment for photographs is switched off in Settings → Enrichment, so nothing would run.",
+  // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
+  // reads it by this name) even though the tier it now describes is named
+  // `gateway` (issue #712 C5, renamed from `model`) — the CONTENT below is
+  // what changed. `gateway` does not by itself mean "reaches a provider": it
+  // means the vault's own gateway may do whatever it is already wired to,
+  // which for a capability that needs a model turn is a provider egress
+  // gated separately per call (#567) and per capability (decision S9). This
+  // answer is withheld regardless, because the specific promise Panel A
+  // states — "what leaves the device: nothing" — is not one this module can
+  // vouch for once the vault has widened past `device`.
   modelTier:
-    "Not available: enrichment for photographs is already set to a model provider in Settings → Enrichment, so a run from here would not stay on this device.",
+    "Not available: enrichment for photographs is already set to the gateway tier in Settings → Enrichment, so a run from here would not stay on this device the way the on-device answer promises.",
   denied:
     "Photos cannot read the enrichment setting for photographs, so it cannot tell you what a run would do. It is in Settings → Enrichment.",
 } as const;
@@ -189,21 +186,10 @@ export const ENRICHMENT_QUEUED_NOTE =
 export const ENRICHMENT_DECLINED_NOTE =
   "Nothing was run and nothing was written.";
 
-/** The row that leads to this surface, on any client that lists it. It is a
- *  way IN to a question, never the answer itself — the previous mobile row
- *  fired the write on tap, which is the defect this whole module exists to
- *  close. */
-export const ENRICHMENT_ROW = {
-  title: "Face detection",
-  meta: "never run on this library · read what it would do",
-} as const;
-
 /** Whether an answer can be given, and — when it cannot — WHY, in words the
- *  member reads beside the control rather than discovering afterwards. */
-export interface AnswerAvailability {
-  readonly available: boolean;
-  readonly reason?: string;
-}
+ *  member reads beside the control rather than discovering afterwards.
+ *  Re-exported from the shared gate module — see the header. */
+export type AnswerAvailability = SharedAnswerAvailability;
 
 /**
  * Whether the member may answer "run it here", from the vault's standing
@@ -211,32 +197,34 @@ export interface AnswerAvailability {
  * that a run is offerable.
  *
  * The tier is the OWNER's setting, mirrored into `enrich.policy`
- * (packages/vault/src/schema/enrich.ts). It is not this consent — it is the
- * envelope this consent lives inside:
+ * (packages/vault/src/schema/enrich.ts), on the `off | device | gateway`
+ * axis (issue #712 C5, renamed from `off | local | model`). It is not this
+ * consent — it is the envelope this consent lives inside:
  *
- *   * `local` — the on-device promise in Panel A is true, so the answer is
+ *   * `device` — the on-device promise in Panel A is true, so the answer is
  *     offered;
- *   * `model` — this vault's enrichment already points at a remote model, so
- *     `what leaves the device → nothing` would be FALSE. The answer is
- *     withheld with that reason named, rather than printed beside a live
- *     button;
+ *   * `gateway` — this vault's enrichment may reach a runner that takes a
+ *     model turn, and every runner shipped today routes that turn to a
+ *     third-party provider, so `what leaves the device → nothing` would be
+ *     FALSE. The answer is withheld with that reason named, rather than
+ *     printed beside a live button;
  *   * `off` — a request would sit in the queue forever;
  *   * denied / not yet read — the client cannot say what it would be
  *     consenting to, so it offers nothing.
  *
- * THE TIER IS NOW ENFORCED, so `local` above states a fact rather than a hope.
- * It used to be written by Settings and read by nobody on the execution path:
- * enrichment automations fired and took model turns whatever the tier said,
- * which is why this module could only ever hedge. The gate is server-side, at
- * the one place enrichment automations are fired
- * (`packages/automation/src/fire/fire.ts`, deciding through
+ * THE TIER IS NOW ENFORCED, so `device` above states a fact rather than a
+ * hope. It used to be written by Settings and read by nobody on the
+ * execution path: enrichment automations fired and took model turns
+ * whatever the tier said, which is why this module could only ever hedge.
+ * The gate is server-side, at the one place enrichment automations are
+ * fired (`packages/automation/src/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by
- * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `local`
- * refuses any run that would take a model turn — and seals `ctx.agent` shut
- * for the ones it does allow — and an unreadable policy refuses too. Nothing
- * here enforces anything; withholding an answer is still the right UI, but it
- * is no longer the only thing standing between a `local` vault and a
- * provider.
+ * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
+ * refuses any run that would need the `gateway` lane — and seals `ctx.agent`
+ * shut for the ones it does allow — and an unreadable policy refuses too.
+ * Nothing here enforces anything; withholding an answer is still the right
+ * UI, but it is no longer the only thing standing between a `device` vault
+ * and a provider.
  */
 export function deviceAnswerFor(
   tier: string | null | undefined,
@@ -244,8 +232,14 @@ export function deviceAnswerFor(
 ): AnswerAvailability {
   if (denied)
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.denied };
-  if (tier === "local") return { available: true };
-  if (tier === "model")
+  // COMPAT(enrich-tier-rename #712): `local`/`model` are the pre-rename tier
+  // strings. `packages/vault/src/enrich/policy.ts`'s own read maps them the
+  // same way, but the raw mirror row can also reach this module directly
+  // (`queries/enrichment-status.ts` reads `enrich.policy` straight, not
+  // through that helper), so this comparison accepts both spellings rather
+  // than assume every caller normalized first.
+  if (tier === "device" || tier === "local") return { available: true };
+  if (tier === "gateway" || tier === "model")
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.modelTier };
   if (tier == null) return { available: false };
   return { available: false, reason: ENRICHMENT_UNAVAILABLE.offTier };

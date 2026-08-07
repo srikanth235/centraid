@@ -10,7 +10,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { Asset } from "./types.ts";
-import { editorSourceLine } from "./viewer.ts";
+import { editorSourceLine, originParagraph } from "./viewer.ts";
 
 function asset(fields: Partial<Asset> & { asset_id: string }): Asset {
   return fields as Asset;
@@ -78,5 +78,51 @@ describe(editorSourceLine, () => {
     expect(editorSourceLine(edited, wrong)).toBe(
       "from an edit of another photograph in this library"
     );
+  });
+});
+
+// PER-COPY PROVENANCE (issue #712 P6a). The panel's one prose sentence about
+// where the original lives used to be three `if`s and a trailing `return`, and
+// that trailing branch fired for three different worlds — `local-only`,
+// `pending-offsite`, and NO custody row at all. The last is the defect being
+// pinned here: with the gateway's blob sweep not yet run there is no fact to
+// report, and the panel asserted a location anyway.
+describe(originParagraph, () => {
+  const GATEWAY = "the gateway";
+
+  test("each custody state gets its own sentence", () => {
+    const said = new Set(
+      (
+        [
+          "replicated",
+          "remote-only",
+          "missing",
+          "pending-offsite",
+          "local-only",
+        ] as const
+      ).map((state) =>
+        originParagraph(
+          asset({ asset_id: "a1", custody_state: state }),
+          GATEWAY
+        )
+      )
+    );
+    expect(said.size).toBe(5);
+  });
+
+  test("a queued copy is not reported as a copy", () => {
+    const pending = originParagraph(
+      asset({ asset_id: "a1", custody_state: "pending-offsite" }),
+      GATEWAY
+    );
+    expect(pending).toContain("queued");
+    expect(pending).toContain("on this device only");
+  });
+
+  test("no custody row claims no location", () => {
+    const unknown = originParagraph(asset({ asset_id: "a1" }), GATEWAY);
+    expect(unknown).toContain("has not been checked yet");
+    // The bug: the absent-row case used to borrow local-only's sentence.
+    expect(unknown).not.toContain("The original is on this device");
   });
 });

@@ -21,6 +21,18 @@ export interface Person {
   count: number;
   /** Which ones, so the person's own timeline needs no second read. */
   asset_ids: string[];
+  /**
+   * The distinct parties whose confirmations built this group (issue #712
+   * P6b) — `media_face_region.confirmed_by_party_id`, which is a different
+   * axis from the `party_id` the group is keyed by. A group MAY span more
+   * than one, and when it does the two confirmers stay separate entries here:
+   * the shelf says who agreed, and nothing anywhere merges them into each
+   * other or into the person they agreed about.
+   *
+   * Optional so a caller reading an older gateway's `people` response renders
+   * the roster it always did rather than an empty attribution.
+   */
+  confirmed_by?: Array<{ party_id: string; name: string | null }>;
 }
 
 /** One unconfirmed face proposal, as the shelf shows it (issue #711 review).

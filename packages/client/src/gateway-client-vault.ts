@@ -1,7 +1,6 @@
 /*
  * Renderer-side client for the gateway's owner consent surface
  * (`/centraid/_vault/*`, duaility §12). Everything here is an OWNER act
- * governance: allow-repo-hygiene file-size-limit #711 The vault protocol adapter remains a cohesive client surface.
  * executed by the gateway with the owner-device credential — apps never
  * see these routes; their door is `ctx.vault` inside handlers.
  *
@@ -63,6 +62,15 @@ export interface VaultListEntry {
  * Order is the gateway's: oldest vault first, which puts the member's own
  * (primary) scope first. `installed` is present only when `app` was named.
  */
+/** One person who can see a scope, and the role they hold there — the P7
+ *  grant roster (issue #712), mirrored from the gateway route's
+ *  `AudienceMember` (`scopes-routes.ts`). */
+export interface AppScopeAudienceMember {
+  memberId: string;
+  name: string;
+  role: string;
+}
+
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
@@ -79,6 +87,9 @@ export interface AppScopeEntry {
   /** The calling member's role in this scope. `read` cannot write. */
   role: string;
   installed?: boolean;
+  /** Everyone holding a role in this scope (issue #712, P7) — absent on a
+   *  gateway that answers no roster, never a lie in place of one. */
+  audience?: readonly AppScopeAudienceMember[];
 }
 
 /**
@@ -455,143 +466,6 @@ export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
     headers: authHeaders(token),
   });
   return readJson<{ rows: number }>(res, "load demo data");
-}
-
-/** One staged import batch as the shell lists it (issue #290 phase 2). */
-export interface VaultImportBatch {
-  batchId: string;
-  status: "draft" | "published" | "discarded";
-  createdAt: string;
-  resolvedAt: string | null;
-  summary: Record<string, number>;
-  kind: string | null;
-  label: string | null;
-}
-
-/** One staged row for review. */
-export interface VaultImportRow {
-  seq: number;
-  entityType: string;
-  externalId: string;
-  disposition: "create" | "update" | "skip" | "merge-candidate";
-  note: string | null;
-  publishedEntityId: string | null;
-  mapping: string;
-}
-
-/** Stage a dropped file into a reviewable draft batch. */
-export async function vaultImportStage(input: {
-  filename?: string;
-  text?: string;
-  base64?: string;
-  directoryName?: string;
-  files?: { path: string; text: string }[];
-  accountName?: string;
-  currency?: string;
-}): Promise<{
-  batchId: string;
-  kind: string;
-  staged: Record<string, number>;
-  total: number;
-  unrouted: string[];
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
-    method: "POST",
-    headers: authHeaders(token, "application/json"),
-    body: JSON.stringify(input),
-  });
-  return readJson(res, "stage import");
-}
-
-/** Download the verified all-data portable bundle. */
-export async function vaultPortableExport(): Promise<{
-  blob: Blob;
-  filename: string;
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports/export", {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) {
-    await readJson(res, "export portable vault");
-    throw new Error("portable export failed");
-  }
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const filename =
-    /filename="(?<filename>[^"]+)"/u.exec(disposition)?.groups?.filename ??
-    "centraid-vault.zip";
-  return { blob: await res.blob(), filename };
-}
-
-/** Batches, newest first. */
-export async function vaultImportsList(): Promise<VaultImportBatch[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ batches: VaultImportBatch[] }>(
-    res,
-    "list imports"
-  );
-  return body.batches;
-}
-
-/** The staged rows of one batch, for review. */
-export async function vaultImportRows(
-  batchId: string
-): Promise<VaultImportRow[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}`,
-    {
-      method: "GET",
-      headers: authHeaders(token),
-    }
-  );
-  const body = await readJson<{ rows: VaultImportRow[] }>(
-    res,
-    "read import batch"
-  );
-  return body.rows;
-}
-
-/** Publish a reviewed draft batch. */
-export async function vaultImportPublish(batchId: string): Promise<{
-  created: number;
-  updated: number;
-  skipped: number;
-  failed: unknown[];
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}/publish`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-    }
-  );
-  return readJson(res, "publish import");
-}
-
-/** Discard a draft batch. */
-export async function vaultImportDiscard(
-  batchId: string
-): Promise<{ receiptId: string }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}/discard`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-    }
-  );
-  return readJson(res, "discard import");
 }
 
 /** One connection's health (issue #290 phase 4). */

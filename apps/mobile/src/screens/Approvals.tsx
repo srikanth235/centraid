@@ -7,12 +7,12 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import OutboxDecisionCard from "../components/OutboxDecisionCard";
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -129,7 +129,7 @@ export default function ApprovalsScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe}>
       <View style={styles.bar}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -222,7 +222,7 @@ export default function ApprovalsScreen({
           act,
         })}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

@@ -10,12 +10,10 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text, TextInput } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
@@ -133,9 +131,10 @@ export default function Onboarding({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+    <TopSafeArea style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -166,7 +165,7 @@ export default function Onboarding({
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 
@@ -298,8 +297,6 @@ function ConnectionStep({
             onChangeText={setCode}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
-            multiline
-            textAlignVertical="top"
             style={styles.phrase}
             autoCapitalize="none"
             autoCorrect={false}

@@ -75,7 +75,7 @@ import {
   countThings,
   springboardState,
   tileEarnsGrid,
-} from "./home/tile-model";
+} from "./home/springboard-policy";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultHeader from "./home/VaultHeader";
 import VaultsSwitcher from "./home/VaultsSwitcher";
@@ -484,10 +484,7 @@ export default function HomeScreen({
           app bar carries its own hairline rule (`appBarStyle`, :5532–5533),
           which is why the prototype's scrollbar starts below that rule
           rather than under the vault lockup. */}
-      <HomeTitleRow
-        onAllApps={() => setAllAppsOpen(true)}
-        onSearch={() => setSearchOpen(true)}
-      />
+      <HomeTitleRow />
 
       <ScrollView
         contentContainerStyle={styles.content}

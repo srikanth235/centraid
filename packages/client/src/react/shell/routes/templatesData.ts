@@ -31,8 +31,6 @@ export const V0_AUTOMATION_TEMPLATE_IDS = [
   "google-drive-pull",
   "obligation-extractor",
   "renewal-reminders",
-  "screenshot-extractor",
-  "photo-captioner",
 ] as const;
 
 const V0_AUTOMATION_TEMPLATE_ID_SET = new Set<string>(
@@ -59,7 +57,6 @@ const OVERVIEW_SUGGESTION_IDS = [
   "obligation-extractor",
   "google-gmail-pull",
   "renewal-reminders",
-  "screenshot-extractor",
 ] as const;
 
 /** Curated 3–4 automation templates for the fleet empty state. */

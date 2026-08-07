@@ -8,21 +8,26 @@
 // EVERY NUMBER IS COUNTED OFF THE ROWS THIS APP ALREADY HOLDS, in the manner
 // components/Storage.tsx established. Where a fact is not knowable from them
 // this screen says nothing rather than a plausible thing — and one whole
-// section of the prototype is missing for exactly that reason:
+// section of the prototype used to be missing for exactly that reason:
 //
 //   * WHO HOLDS A GRANT (proto 4243-4248: "Ana Whitcombe · read · since 14
-//     March") IS NOT DRAWN. The shell hands an inline app `InlineScope`, which
-//     carries an id, a label, whether it is the member's own and whether they
-//     may write — and nothing whatsoever about who else can reach it. There is
-//     no roster, no grant record and no `since` date anywhere in this app's
-//     reach, so the section is omitted entirely. Rendering it with the scope
-//     count in place of a person, or with an empty list implying nobody holds
-//     one, would both be lies. The gap is reported, not stubbed.
-//   * MOVE INTO SHARING (proto 4250) IS NOT OFFERED. The three ways in are
-//     copy, move and remove; `copy-into-scope` and `remove-from-scope` are
-//     what selection-actions.ts fires, and no move command exists on either
-//     the gateway or the vault. An offer with nothing behind it is worse than
-//     a missing one, so the row is absent.
+//     March") IS NOW DRAWN, WHERE THE HOST ANSWERS IT (issue #712, P7). The
+//     shell hands an inline app `InlineScope.audience` — name + role per
+//     member holding a role in that scope — resolved gateway-side by
+//     `MemberStore.membersOf` and threaded through the scopes plane. There is
+//     still no `since` date anywhere in this app's reach, so that half of the
+//     prototype's line stays unsaid; and a scope whose `audience` the host
+//     left undefined (an older gateway, one that answers no roster at all)
+//     draws NOTHING for that place, never an empty list implying nobody holds
+//     one — the gap is reported, not papered over.
+//   * MOVE INTO SHARING (proto 4250) IS STILL NOT OFFERED, but not because
+//     nothing exists to fire: `moveOutOfVault` (packages/vault/src/share
+//     /placement.ts) and the gateway's placement route's `kind: "move"`
+//     (packages/gateway/src/routes/placement-routes.ts) both exist and are
+//     wired end to end. This app simply never calls them — the three ways IN
+//     it fires are copy and remove (`copy-into-scope` / `remove-from-scope` in
+//     selection-actions.ts), and a control this shelf does not yet drive is
+//     worse than a missing one, so the row stays absent until it does.
 //
 // WHAT THE FACTS LIST IS. The prototype's panel carries four fact pairs, two
 // of which are per-place counts ("your personal vault · 6,214 photographs",
@@ -50,6 +55,9 @@ export interface SharingPlace {
   canWrite: boolean;
   /** Is this where the member's own shares go (`shareTargetVaultId`)? */
   isDestination: boolean;
+  /** Who holds a role here — the P7 grant roster (issue #712). Absent, never
+   *  `[]`, when the host does not answer the question. */
+  audience?: readonly { memberId: string; name: string; role: string }[];
 }
 
 /** What the Sharing shelf may say about itself, read off the loaded rows. */
@@ -90,6 +98,7 @@ export function sharingFacts(input: {
       count: counts.get(scope.id) ?? 0,
       canWrite: scope.canWrite,
       isDestination: scope.id === input.shareTargetId,
+      ...(scope.audience === undefined ? {} : { audience: scope.audience }),
     }));
   return {
     ownLabel:
@@ -116,6 +125,10 @@ const SHARING_COPY = {
   title: "Sharing is a place, not a switch on a photograph",
   lede: "Your own library is reachable by nothing. Sharing is somewhere else, so other people can be given something without being given your library. A photograph is shared because it sits there — and it stops being shared the moment it leaves, with no permission left behind to forget about.",
   countsHead: "What is where",
+  /** Only drawn for a place whose `audience` the host actually answered
+   *  (issue #712, P7) — see the header note on why an unanswered place stays
+   *  silent rather than reading as "nobody else". */
+  rosterHead: "Who has access",
   windowNote: (shown: number) =>
     `These counts cover the ${shown} photographs loaded here. Older ones are still in your library — open Show more on the timeline to reach them.`,
   readOnly: "read only",
@@ -233,6 +246,30 @@ export function SharingBody({
         <p className={styles.note}>
           {SHARING_COPY.windowNote(facts.ownCount + facts.total)}
         </p>
+      ) : null}
+
+      {facts.places.some((place) => place.audience !== undefined) ? (
+        <>
+          <Head label={SHARING_COPY.rosterHead} />
+          <dl className={styles.rows}>
+            {facts.places.flatMap((place) =>
+              (place.audience ?? []).map((member) => (
+                <div
+                  className={styles.row}
+                  key={`${place.id}-${member.memberId}`}
+                >
+                  <dt className={styles.rowLabel}>
+                    {member.name}
+                    {facts.places.length > 1 ? (
+                      <span className={styles.rowNote}> · {place.label}</span>
+                    ) : null}
+                  </dt>
+                  <dd className={styles.rowValue}>{member.role}</dd>
+                </div>
+              ))
+            )}
+          </dl>
+        </>
       ) : null}
 
       <Head label={SHARING_COPY.waysHead} meta={SHARING_COPY.waysMeta} />

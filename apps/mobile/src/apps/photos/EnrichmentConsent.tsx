@@ -1,6 +1,5 @@
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 // THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8, prototype
 // `s==='enrich'`).
@@ -14,19 +13,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 // the product says photographs can leave the device at all, did not exist on
 // this client.
 //
-// Now: two panels shown BEFORE anything runs, then the note. The copy is the
-// web app's copy — literally the same module
-// (`@centraid/blueprints/apps/photos/enrichment-consent`) — so the two
-// clients cannot drift on a promise about a member's photographs.
+// Now: a header (back chevron, title, status line) around the shared §8 gate
+// (`kit/components/ConsentGate.tsx`, issue #712 C1) — the panels/facts/
+// actions used to be inline here, and moved so Docs' capture-time OCR consent
+// (the second instance of this product law) can read the same renderer. This
+// file supplies only Photos' own chrome and copy — literally the same copy
+// module the web client renders
+// (`@centraid/blueprints/apps/photos/enrichment-consent`), so the two clients
+// cannot drift on a promise about a member's photographs.
 //
 // A PURE VIEW: it holds no state, reads nothing and writes nothing. Every
 // answer leaves through a callback, so "can an enrichment write be issued
 // without an explicit answer" is a question about this file's props. The gate
 // lives in PhotosLibrary.tsx.
-//
-// ONE FILLED ELEMENT (§18): `Run on this device`. `Not now` is plain and the
-// cloud action is OUTLINED in `net` — egress and destructive ink are never a
-// fill.
 import {
   CLOUD_PANEL,
   ENRICHMENT_NOTE,
@@ -35,14 +34,12 @@ import {
   ON_DEVICE_PANEL,
   onDeviceTitle,
 } from "@centraid/blueprints/apps/photos/enrichment-consent";
-import type {
-  AnswerAvailability,
-  ConsentFact,
-  ConsentPanelCopy,
-} from "@centraid/blueprints/apps/photos/enrichment-consent";
+import type { AnswerAvailability } from "@centraid/blueprints/apps/photos/enrichment-consent";
 
+import { ConsentGate } from "../../kit/components/ConsentGate";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./EnrichmentConsent.styles";
 
@@ -65,75 +62,6 @@ export interface EnrichmentConsentProps {
   onClose: () => void;
 }
 
-function Facts({
-  facts,
-  colors,
-}: {
-  facts: readonly ConsentFact[];
-  colors: ReturnType<typeof useTheme>["colors"];
-}): React.JSX.Element {
-  return (
-    <View>
-      {facts.map((fact) => (
-        <View
-          key={fact.label}
-          style={[
-            styles.fact,
-            { borderBottomColor: colors.line },
-            // The egress fact carries a 2px `net` rule on its leading edge and
-            // nothing else — never a fill, never a red dot (§18).
-            fact.net
-              ? { borderLeftColor: colors.net, borderLeftWidth: 2 }
-              : null,
-            fact.net ? styles.factFlagged : null,
-          ]}
-        >
-          <Text style={[styles.factLabel, { color: colors.textSoft }]}>
-            {fact.label}
-          </Text>
-          <Text style={[styles.factValue, { color: colors.text }]}>
-            {fact.value}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function Panel({
-  copy,
-  title,
-  colors,
-  children,
-}: {
-  copy: ConsentPanelCopy;
-  title?: string;
-  colors: ReturnType<typeof useTheme>["colors"];
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <View
-      style={[
-        styles.panel,
-        { backgroundColor: colors.bgElev, borderColor: colors.line },
-        // The cloud panel's whole box is bordered in `net`: the panel IS the
-        // egress disclosure, so the mark belongs to the panel.
-        copy.net ? { borderColor: colors.net } : null,
-      ]}
-    >
-      <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
-        {copy.eyebrow}
-      </Text>
-      <Text style={[styles.panelTitle, { color: colors.text }]}>
-        {title ?? copy.title}
-      </Text>
-      <Text style={[styles.body, { color: colors.textSoft }]}>{copy.body}</Text>
-      <Facts facts={copy.facts} colors={colors} />
-      {children}
-    </View>
-  );
-}
-
 export default function EnrichmentConsent({
   count,
   onDevice,
@@ -146,13 +74,8 @@ export default function EnrichmentConsent({
   onClose,
 }: EnrichmentConsentProps): React.JSX.Element {
   const { colors } = useTheme();
-  const deviceReady = onDevice.available && !busy && !answered;
-  const cloudReady = cloud.available && !busy && !answered && !!onChooseCloud;
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.toneMat }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Close face detection consent"
@@ -175,94 +98,21 @@ export default function EnrichmentConsent({
         {ENRICHMENT_STATUS_LINE}
       </Text>
       <ScrollView contentContainerStyle={styles.content}>
-        <Panel
-          copy={ON_DEVICE_PANEL}
-          colors={colors}
-          title={count == null ? undefined : onDeviceTitle(count)}
-        >
-          {onDevice.reason ? (
-            <Text style={[styles.unavailable, { color: colors.textSoft }]}>
-              {onDevice.reason}
-            </Text>
-          ) : null}
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityLabel={ON_DEVICE_PANEL.action}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !deviceReady }}
-              disabled={!deviceReady}
-              {...(deviceReady ? { onPress: onRunOnDevice } : {})}
-              style={[
-                styles.action,
-                styles.filled,
-                {
-                  backgroundColor: deviceReady
-                    ? colors.accentFill
-                    : colors.bgSunken,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: deviceReady ? colors.textInv : colors.textDisabled },
-                ]}
-              >
-                {ON_DEVICE_PANEL.action}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel={ON_DEVICE_PANEL.action2 ?? "Not now"}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !!busy }}
-              disabled={!!busy}
-              {...(busy ? {} : { onPress: onDecline })}
-              style={[styles.action, { borderColor: colors.line }]}
-            >
-              <Text style={[styles.actionText, { color: colors.text }]}>
-                {ON_DEVICE_PANEL.action2}
-              </Text>
-            </Pressable>
-          </View>
-        </Panel>
-
-        <Panel copy={CLOUD_PANEL} colors={colors}>
-          {cloud.reason ? (
-            <Text style={[styles.unavailable, { color: colors.textSoft }]}>
-              {cloud.reason}
-            </Text>
-          ) : null}
-          <View style={styles.actions}>
-            {/* Outlined in `net`, never filled, and NEVER ABSENT: a member who
-                cannot take this option still has to be told what it would
-                cost. `onPress` is the callback or nothing — a disabled control
-                that still carries a handler is one edit away from firing. */}
-            <Pressable
-              accessibilityLabel={CLOUD_PANEL.action}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !cloudReady }}
-              disabled={!cloudReady}
-              {...(cloudReady && onChooseCloud
-                ? { onPress: onChooseCloud }
-                : {})}
-              style={[styles.action, { borderColor: colors.net }]}
-            >
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: cloudReady ? colors.net : colors.textDisabled },
-                ]}
-              >
-                {CLOUD_PANEL.action}
-              </Text>
-            </Pressable>
-          </View>
-        </Panel>
-
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          {ENRICHMENT_NOTE}
-        </Text>
+        <ConsentGate
+          domain="photos"
+          onDevicePanel={ON_DEVICE_PANEL}
+          onDeviceTitle={count == null ? undefined : onDeviceTitle(count)}
+          onDevice={onDevice}
+          netPanel={CLOUD_PANEL}
+          net={cloud}
+          note={ENRICHMENT_NOTE}
+          busy={busy}
+          answered={answered}
+          onRunOnDevice={onRunOnDevice}
+          onDecline={onDecline}
+          onChooseNet={onChooseCloud}
+        />
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

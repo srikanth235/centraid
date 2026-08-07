@@ -103,11 +103,25 @@ async function reconcileOnce(
   }
 }
 
+/**
+ * Drain now, and SAY what happened (issue #712, P5). The frame's Backup screen
+ * has a "Back up now" control, and a control that returns void cannot honour
+ * the fallible-action contract — the member pressed it, so the member is owed
+ * the count. Same lock, same reconcile, same policy gate as every other entry
+ * point; the only difference is that the summary is handed back instead of
+ * being dropped on the floor.
+ */
+export function drainUploadQueueNow(
+  session?: MobileReplicaSession
+): Promise<ReconcileSummary> {
+  return withDrainLock(() => reconcileOnce(session));
+}
+
 /** Registered as an Android Headless JS task by index.ts. Never touches the FGS. */
 export async function drainUploadQueueInBackground(
   session?: MobileReplicaSession
 ): Promise<void> {
-  await withDrainLock(() => reconcileOnce(session));
+  await drainUploadQueueNow(session);
 }
 
 /** Coalesces repeated foreground events into at most one queued reconcile. */

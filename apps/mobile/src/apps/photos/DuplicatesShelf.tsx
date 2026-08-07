@@ -39,6 +39,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
@@ -54,7 +55,6 @@ import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import {
   NO_DOWNLOAD_REASON,
-  NO_SHARE_DESTINATION_REASON,
   batchFavorite,
   batchTrash,
   vaultAssets,
@@ -64,6 +64,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTile from "./PhotoTile";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useCopyToSharing } from "./use-copy-to-sharing";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /** The shelf's copy when there is nothing to review. The web's own sentence
@@ -94,6 +95,13 @@ export default function DuplicatesShelf({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(shown, selection);
+  // One handler for the third selection target, shared by every Photos shelf
+  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // cannot drift between them.
+  const sharing = useCopyToSharing(
+    () => selected,
+    () => setSelection(new Set())
+  );
   const writeBlockedReason = session
     ? selected.some((asset) => asset.canWrite === false)
       ? READ_ONLY_VAULT_REASON
@@ -125,7 +133,10 @@ export default function DuplicatesShelf({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    share: { unavailableReason: NO_SHARE_DESTINATION_REASON },
+    // The real thing since issue #712 A5: a live control that places
+    // `media.media_asset` into the member's share target — or, when they
+    // have not chosen one yet, asks at the moment of intent (A3).
+    share: sharing.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     // The shelf's own verb (proto:4437 — "selecting a copy marks it for
     // trash"). Same confirm the rest of Photos asks for, so the two ways to
@@ -210,6 +221,12 @@ export default function DuplicatesShelf({
           />
         ))}
       </ScrollView>
+      <ShareTargetPicker
+        visible={sharing.picking}
+        candidates={sharing.candidates}
+        onChoose={(vaultId) => sharing.choose(vaultId)}
+        onClose={() => sharing.dismiss()}
+      />
     </PhotosScreen>
   );
 }

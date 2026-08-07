@@ -16,10 +16,10 @@ import React, {
 } from "react";
 import { FlatList, Modal, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import type { useTheme } from "../../kit/theme";
 import { mergeCandidates } from "./merge-candidates";
 import { styles } from "./PeopleHome.styles";
@@ -81,7 +81,7 @@ export function MergePicker({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.detailTitle, { color: colors.text }]}>
@@ -128,7 +128,7 @@ export function MergePicker({
             </Text>
           }
         />
-      </SafeAreaView>
+      </TopSafeArea>
     </Modal>
   );
 }

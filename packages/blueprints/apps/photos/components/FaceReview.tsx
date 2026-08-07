@@ -17,25 +17,41 @@
 //   2. One face at a time (v4 3967 "One face at a time") — `current` below
 //      is always exactly one entry; nothing here loops the queue into a list.
 //
-// WHAT IS AND ISN'T WIRED TO A REAL WRITE (see queries/face-queue.ts's own
-// header for the schema-level reasons):
-//   * Confirm / Not this person: real writes (confirm-face / reject-face).
-//   * Someone else → an inline picker over people ALREADY confirmed
-//     elsewhere in this vault (reusing confirm-face with that party_id) —
-//     the prototype's "name this face yourself" implies minting a BRAND NEW
-//     person, and there is no action-plane command to create one
-//     (app.json has no create-party action). Picking an existing person is
-//     the honest subset of "Someone else" this app can actually do today.
-//   * Unknown person / Keep unnamed: there is no command to confirm a region
-//     as "reviewed, deliberately left unnamed" — confirm-face requires a
-//     party_id and reject-face DELETES the row (queries/face-queue.ts's
-//     header). Clicking it says so instead of pretending to write.
-//   * Skip: genuinely local — nothing is written, so "it stays in the
+// EVERY CONTROL HERE IS A REAL WRITE, AND THAT IS NEW (issue #712). Four of
+// the five used to be, and the fifth was an apology:
+//   * Confirm / Not this person / Someone else → `answer-face` with
+//     `confirm` or `reject`. "Someone else" opens an inline picker over
+//     people ALREADY confirmed elsewhere in this vault; the prototype's
+//     "name this face yourself" implies minting a BRAND NEW person and there
+//     is no action-plane command to create one (app.json has no create-party
+//     action), so picking an existing person is the honest subset.
+//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. This
+//     button used to set a note reading "isn't wired up yet — there's no
+//     command for it. Skip for now.", because confirm demanded a party_id
+//     and reject DELETED the row. That gap is why this queue could not be
+//     finished: every stranger the member deliberately declined to name came
+//     back on the next load, for ever. `media.answer_face_proposal` now has
+//     an answer for it, and a dismissed face stays dismissed.
+//   * Skip: still genuinely local — nothing is written, so "it stays in the
 //     queue" (4315) is exactly true, not just a promise.
+//
+// THE CURSOR/PROGRESS/COUNTS STATE MACHINE IS NOT WRITTEN HERE. It is
+// `../triage-session.ts`, shared with the duplicate review and the native
+// twin — see that file's header for what the three flows do and do not have
+// in common.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { faceCropStyle } from "../face-crop.ts";
 import { act, narrate } from "../outcomes.ts";
+import {
+  openTriage,
+  triageAnswer,
+  triageCurrent,
+  triageProgress,
+  triageRefill,
+  triageSkip,
+} from "../triage-session.ts";
+import type { TriageSession } from "../triage-session.ts";
 
 import styles from "./FaceReview.module.css";
 
@@ -63,10 +79,17 @@ interface FaceQueueData {
   queue?: QueueEntry[];
   unmatchedTotal?: number;
   confirmedTotal?: number;
+  /** Real counts since issue #712 — a rejection is a state, not a deletion. */
+  rejectedTotal?: number;
+  dismissedTotal?: number;
   people?: Array<{ party_id: string; name: string | null }>;
   denied?: boolean;
   reason?: string;
 }
+
+/** The three answers `actions/answer-face.ts` forwards, and the outcome names
+ *  the session counts them under. */
+type FaceAnswer = "confirm" | "reject" | "dismiss";
 
 function formatFirstSeen(iso: string | null): string | null {
   if (!iso) return null;
@@ -143,7 +166,12 @@ export function FaceReview({
   focusRegionId?: string;
 }) {
   const [data, setData] = useState<FaceQueueData | null>(null);
-  const [cursor, setCursor] = useState(0);
+  // The cursor, the frozen denominator and the per-answer counts all live in
+  // one immutable value (../triage-session.ts) rather than three useStates
+  // that have to be kept in step by hand. `null` = nothing loaded yet.
+  const [session, setSession] = useState<TriageSession<QueueEntry> | null>(
+    null
+  );
   // A ref, not state: applying the focus is a one-shot side effect of a
   // successful load, not something a render needs to react to itself — so
   // flipping it must not itself trigger another render (the pattern the
@@ -153,13 +181,6 @@ export function FaceReview({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Frozen at first load so the numerator counts UP as the member works
-  // (v4 4306 "1 of 54 unmatched") instead of the denominator sliding around
-  // as other proposals arrive mid-session.
-  const [sessionStartTotal, setSessionStartTotal] = useState<number | null>(
-    null
-  );
-  const [actedCount, setActedCount] = useState(0);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -167,25 +188,34 @@ export function FaceReview({
         query: "face-queue",
       });
       setData(result ?? {});
-      setSessionStartTotal((prev) => prev ?? result?.unmatchedTotal ?? 0);
+      const queue = result?.queue ?? [];
       // Land on the requested proposal exactly once (issue #711 review's
       // People-shelf routing) — found or not, this only ever fires on the
-      // FIRST load: a region confirmed/rejected elsewhere before this loads
-      // (and so already missing from the queue) leaves the member on
-      // whatever the queue's own order lands on, not stuck retrying a jump
-      // that can never succeed, and a later reload (after Confirm/Skip)
-      // never re-jumps out from under the member's own navigation.
+      // FIRST load: a region answered elsewhere before this loads (and so
+      // already missing from the queue) leaves the member on whatever the
+      // queue's own order lands on, not stuck retrying a jump that can never
+      // succeed, and a later reload (after an answer or a Skip) never
+      // re-jumps out from under the member's own navigation.
+      let at = 0;
       if (!focusApplied.current && focusRegionId) {
         focusApplied.current = true;
-        const index = (result?.queue ?? []).findIndex(
-          (entry) => entry.region_id === focusRegionId
+        at = Math.max(
+          queue.findIndex((entry) => entry.region_id === focusRegionId),
+          0
         );
-        setCursor(Math.max(index, 0));
-      } else {
-        setCursor(0);
       }
+      // A functional update, so a reload never has to name the session it is
+      // replacing — the FIRST load opens it (freezing the denominator at the
+      // whole backlog, not this page), every later one refills it and keeps
+      // the total and the answer counts the member has been watching.
+      setSession((previous) =>
+        previous
+          ? triageRefill(previous, queue, { at })
+          : openTriage(queue, { total: result?.unmatchedTotal ?? 0, at })
+      );
     } catch {
       setData({ queue: [], unmatchedTotal: 0, confirmedTotal: 0 });
+      setSession((previous) => previous ?? openTriage<QueueEntry>([]));
     }
   }, [focusRegionId]);
 
@@ -193,49 +223,71 @@ export function FaceReview({
     queueMicrotask(() => void load());
   }, [load]);
 
-  const queue = data?.queue ?? [];
-  const current = queue[cursor % Math.max(queue.length, 1)];
+  const current = session ? triageCurrent(session) : undefined;
 
   const people = useMemo(() => data?.people ?? [], [data]);
 
-  async function confirm(partyId: string, name: string | null): Promise<void> {
+  /**
+   * The ONE write behind every answer on this screen (issue #712). It used to
+   * be two actions with two shapes; the answer is now the discriminant, so
+   * adding "keep unnamed" was a new member of a union rather than a new
+   * endpoint — and Skip stayed the only control that writes nothing.
+   */
+  async function answer(
+    kind: FaceAnswer,
+    copy: {
+      /** `confirm` only — the vault refuses a party on the other two. */
+      partyId?: string;
+      /** What the member is told it did. Blank where the queue moving on
+       *  says it better than a sentence would (a rejection). */
+      done?: string;
+      failed: string;
+    }
+  ): Promise<void> {
     if (!current) return;
     setBusy(true);
-    const outcome = await act("confirm-face", {
+    const outcome = await act("answer-face", {
       region_id: current.region_id,
-      party_id: partyId,
+      answer: kind,
+      ...(copy.partyId ? { party_id: copy.partyId } : {}),
     });
     setBusy(false);
     if (narrate(outcome)) {
-      setNote(name ? `Confirmed as ${name}.` : "Confirmed.");
-      setActedCount((n) => n + 1);
+      setNote(copy.done ?? "");
+      setSession((previous) =>
+        previous ? triageAnswer(previous, kind) : previous
+      );
       setPickerOpen(false);
       await load();
     } else {
-      setNote("Could not confirm that face.");
+      setNote(copy.failed);
     }
+  }
+
+  async function confirm(partyId: string, name: string | null): Promise<void> {
+    await answer("confirm", {
+      partyId,
+      done: name ? `Confirmed as ${name}.` : "Confirmed.",
+      failed: "Could not confirm that face.",
+    });
   }
 
   async function reject(): Promise<void> {
-    if (!current) return;
-    setBusy(true);
-    const outcome = await act("reject-face", {
-      region_id: current.region_id,
+    await answer("reject", { failed: "Could not reject that face." });
+  }
+
+  /** "Unknown person → Keep unnamed": reviewed, kept, deliberately unnamed —
+   *  and, unlike Skip, it does not come back. */
+  async function dismiss(): Promise<void> {
+    await answer("dismiss", {
+      done: "Kept, and left unnamed.",
+      failed: "Could not keep that face unnamed.",
     });
-    setBusy(false);
-    if (narrate(outcome)) {
-      setNote("");
-      setActedCount((n) => n + 1);
-      await load();
-    } else {
-      setNote("Could not reject that face.");
-    }
   }
 
   function skip(): void {
-    if (queue.length === 0) return;
     setNote("");
-    setCursor((c) => (c + 1) % queue.length);
+    setSession((previous) => (previous ? triageSkip(previous) : previous));
   }
 
   if (data?.denied) {
@@ -252,22 +304,23 @@ export function FaceReview({
     return <div className={styles.screen} aria-busy="true" />;
   }
 
-  if (!current) {
+  const progress = session ? triageProgress(session) : null;
+  if (!current || !progress) {
     return (
       <div className={styles.screen}>
         <div className={styles.head}>
           <h2 className={styles.heading}>Face review</h2>
         </div>
+        {/* REACHABLE, as of issue #712: with every face confirmed, rejected
+            or deliberately left unnamed, the queue is genuinely empty rather
+            than cycling the ones the member kept skipping. */}
         <p className={styles.body}>No faces need review right now.</p>
-        <p className={styles.note}>
-          confirmed {data.confirmedTotal ?? 0} · 0 to go
-        </p>
+        <p className={styles.note}>{statusNote(data, 0)}</p>
       </div>
     );
   }
 
-  const total = sessionStartTotal ?? data.unmatchedTotal ?? 1;
-  const position = Math.min(actedCount + 1, Math.max(total, 1));
+  const { position, total } = progress;
   const firstSeen = formatFirstSeen(current.firstSeenAt);
   const proposedName = current.person_name;
 
@@ -380,11 +433,7 @@ export function FaceReview({
             type="button"
             className="kit-btn"
             disabled={busy}
-            onClick={() =>
-              setNote(
-                "Keeping a face unnamed isn't wired up yet — there's no command for it. Skip for now."
-              )
-            }
+            onClick={() => void dismiss()}
           >
             Keep unnamed
           </button>
@@ -403,8 +452,28 @@ export function FaceReview({
       </div>
 
       <p className={styles.note}>
-        confirmed {data.confirmedTotal ?? 0} · {data.unmatchedTotal ?? 0} to go
+        {statusNote(data, data.unmatchedTotal ?? 0)}
       </p>
     </div>
   );
+}
+
+/**
+ * The foot note (v4 3966/4316). Three parts at last — the prototype asks for
+ * `confirmed N · rejected M · K to go` and this surface could only ever say
+ * two of them, because a rejection DELETED the region and left nothing to
+ * count (issue #712, and queries/face-queue.ts's old header).
+ *
+ * The middle clause reads `reviewed`, not `rejected`, and counts rejections
+ * AND dismissals together: both are "the member answered this and it is not
+ * a person in your library", and splitting them into two more numerals would
+ * be four clauses of arithmetic on one quiet line. It is dropped entirely
+ * when it would read 0 — omit rather than pad (§14).
+ */
+function statusNote(data: FaceQueueData, toGo: number): string {
+  const parts = [`confirmed ${data.confirmedTotal ?? 0}`];
+  const answeredAway = (data.rejectedTotal ?? 0) + (data.dismissedTotal ?? 0);
+  if (answeredAway > 0) parts.push(`reviewed ${answeredAway}`);
+  parts.push(`${toGo} to go`);
+  return parts.join(" · ");
 }

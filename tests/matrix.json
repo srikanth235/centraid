@@ -2058,6 +2058,51 @@
       "minimumTests": 3
     },
     {
+      "id": "mobile-photos-library",
+      "name": "Native Photos temporal library and zoom drill-down",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-photos-viewer",
+      "name": "Native Photos viewer paging and capability menu",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/photos-viewer.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-photos-search",
+      "name": "Native Photos grouped search to viewer",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-photos-select-write",
+      "name": "Native Photos trash and restore write journey",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-photos-permissions",
+      "name": "Native Photos denied-permission empty-vault takeover",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+      "minimumTests": 1
+    },
+    {
       "id": "mobile-template-gate",
       "name": "Native template gate journey (clone/install/open UI templates)",
       "surface": "mobile",

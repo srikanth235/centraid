@@ -40,7 +40,8 @@ import type { Scheme, ThemeColors } from "../../kit/theme";
 import { durations } from "../../kit/theme/tokens.generated";
 import type { LauncherItem } from "./catalog";
 import { packTiles } from "./grid-packing";
-import { isWideTile, TILE_PAD } from "./tile-model";
+import { isWideTile } from "./springboard-policy";
+import { TILE_PAD } from "./tile-model";
 import type { TileData } from "./tile-model";
 import TileBody from "./TileBody";
 

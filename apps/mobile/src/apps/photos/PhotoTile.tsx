@@ -9,13 +9,14 @@
 // a terminal failure keeps its geometry instead of vanishing.
 
 import { Image } from "expo-image";
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { Rung } from "./photos-rungs";
@@ -67,9 +68,11 @@ function PhotoTileImpl({
 }: PhotoTileProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // A decode failure is terminal for this tile's bytes; the tile stays.
-  const [failed, setFailed] = useState(false);
-  const [decoded, setDecoded] = useState(false);
+  // A missing DERIVATIVE is not a missing PHOTOGRAPH: the tile asks for
+  // `?variant=thumb`, falls back to the original once, and only then is the
+  // failure terminal (`use-image-fallback.ts` carries the full reasoning).
+  const media = useImageFallback(asset.uri, asset.originalUri, asset.id);
+  const { failed, decoded } = media;
 
   const vaultMark = vaultMarkFor(
     asset,
@@ -114,15 +117,15 @@ function PhotoTileImpl({
       >
         {failed ? null : (
           <Image
-            source={imageSource(asset.uri)}
-            {...gridImageProps(asset.uri)}
+            source={imageSource(media.source)}
+            {...gridImageProps(media.source)}
             placeholder={
               asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
             }
             transition={120}
-            recyclingKey={asset.id}
-            onLoad={() => setDecoded(true)}
-            onError={() => setFailed(true)}
+            recyclingKey={media.recyclingKey}
+            onLoad={media.handleLoad}
+            onError={media.handleError}
             style={styles.image}
           />
         )}

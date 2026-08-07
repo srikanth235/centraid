@@ -194,15 +194,15 @@ describe("the band is on every Photos surface", () => {
   beforeEach(mount);
   afterEach(unmount);
 
-  it("renders the five destinations and the frame's Home capsule", () => {
+  it("renders the four destinations and the frame's Home capsule", () => {
     render(<PhotosScreen current="more">{null}</PhotosScreen>);
-    for (const label of ["Library", "Albums", "People", "Search", "More"])
+    for (const label of ["Library", "Collections", "Search", "More"])
       expect(control(label)).toBeTruthy();
     expect(control("Home")).toBeTruthy();
   });
 
   it("SABOTAGE: the capsule POPS home, never back and never navigate", () => {
-    render(<PhotosScreen current="albums">{null}</PhotosScreen>);
+    render(<PhotosScreen current="collections">{null}</PhotosScreen>);
     press("Home");
     // `goBack()` is a no-op when Photos was entered by deep link, which left
     // the one frame control on the surface doing nothing at all.

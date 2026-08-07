@@ -675,35 +675,48 @@ describe("vault-routes", () => {
   // owner has just changed is a second silent lie.
   test("the enrichment tier route writes the mirror the gate reads and retires the stale refusal card", async () => {
     const { base, plane } = await setup();
+    // Start both domains at `device` (a fresh vault's bootstrap default is
+    // `gateway` since issue #712 C5 — lower them explicitly so the PUT below
+    // has a real change to make, same as a member who narrowed the tier
+    // once already).
+    const patch: Partial<Record<"photos" | "docs", "device">> = {
+      photos: "device",
+      docs: "device",
+    };
+    await fetch(`${base}/centraid/_vault/enrich`, {
+      body: JSON.stringify(patch),
+      headers: { "content-type": "application/json" },
+      method: "PUT",
+    });
     const stale = plane.notices.put({
       kind: "enrichment",
       sourceRef: "photos",
       headline: "Photo enrichment is limited to your devices",
       severity: "info",
-      detail: { sourceType: "app", enrichDomain: "photos", tier: "local" },
+      detail: { sourceType: "app", enrichDomain: "photos", tier: "device" },
     });
     const untouched = plane.notices.put({
       kind: "enrichment",
       sourceRef: "docs",
       headline: "Document enrichment is limited to your devices",
       severity: "info",
-      detail: { sourceType: "app", enrichDomain: "docs", tier: "local" },
+      detail: { sourceType: "app", enrichDomain: "docs", tier: "device" },
     });
 
     const res = await fetch(`${base}/centraid/_vault/enrich`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ photos: "model" }),
+      body: JSON.stringify({ photos: "gateway" }),
     });
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toStrictEqual({
-      enrich: { photos: "model", docs: "local" },
+      enrich: { photos: "gateway", docs: "device" },
     });
     const mirrored = plane.db.vault
       .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
       .get("photos") as { tier: string };
-    expect(mirrored.tier).toBe("model");
+    expect(mirrored.tier).toBe("gateway");
     // Archived, not deleted — the record of what was refused stays readable.
     expect(
       plane.notices.getBySource("enrichment", "photos")?.archivedAt

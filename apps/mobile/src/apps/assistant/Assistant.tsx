@@ -16,15 +16,13 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
 import type { AssistantScreenProps } from "../../navigation";
 import { makeStyles } from "./Assistant.styles";
@@ -171,7 +169,7 @@ export default function AssistantScreen({
       : 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -391,7 +389,7 @@ export default function AssistantScreen({
           onClose={() => setPicker(null)}
         />
       ) : null}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

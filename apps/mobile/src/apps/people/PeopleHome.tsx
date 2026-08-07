@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
@@ -16,6 +15,7 @@ import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus, showUndoStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import {
   combineReplicaQueryStates,
   useReplicaQuery,
@@ -285,7 +285,7 @@ export default function PeopleHome({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View>
@@ -498,6 +498,6 @@ export default function PeopleHome({
         onClose={closeMerge}
         onPick={merge}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

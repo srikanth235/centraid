@@ -191,11 +191,6 @@ export async function runBackup(
   };
 }
 
-/** The one line the status line shows when a run finishes with leftovers. */
-export function inCloudMessage(count: number): string {
-  return `${count} selected item${count === 1 ? " is" : "s are"} ${IN_CLOUD_MESSAGE}; still selected for retry.`;
-}
-
 // ── The automatic path (S4) ────────────────────────────────────────────────
 
 /**

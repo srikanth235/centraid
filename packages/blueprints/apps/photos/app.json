@@ -32,8 +32,7 @@
       { "schema": "media", "table": "remove_from_album", "verbs": "act" },
       { "schema": "media", "table": "face_region", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "media", "table": "confirm_face", "verbs": "act" },
-      { "schema": "media", "table": "reject_face", "verbs": "act" },
+      { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
       { "schema": "core", "table": "tag_item", "verbs": "act" },
@@ -109,7 +108,7 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart through media.update_asset (the title lives on the content item; favorite lives on the asset).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item; favorite and archived live on the asset — archiving hides a photo from the timeline without trashing it).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -359,38 +358,20 @@
       "writes": []
     },
     {
-      "name": "confirm-face",
-      "description": "Confirm one enricher face proposal as a person through media.confirm_face (issue #299) — the owner half of the propose-and-confirm loop.",
+      "name": "answer-face",
+      "description": "Answer one enricher face proposal through media.answer_face_proposal (issue #712) — one verb, three answers: confirm names the person, reject refuses it for good, dismiss keeps the face and deliberately leaves it unnamed. Replaces confirm-face/reject-face, which between them could not express an answer that finishes a review queue.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "region_id": { "type": "string", "minLength": 1 },
+          "answer": {
+            "type": "string",
+            "enum": ["confirm", "reject", "dismiss"]
+          },
           "party_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["region_id", "party_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      },
-      "writes": []
-    },
-    {
-      "name": "reject-face",
-      "description": "Reject one enricher face proposal through media.reject_face (issue #299); the derived region row deletes and can always re-derive.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "region_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["region_id"],
+        "required": ["region_id", "answer"],
         "additionalProperties": false
       },
       "output": {
@@ -636,7 +617,7 @@
     },
     {
       "name": "enrichment-status",
-      "description": "Whether face-proposer enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'local' | 'model'.",
+      "description": "Whether face enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'device' | 'gateway' (issue #712 C5).",
       "input": {
         "type": "object",
         "additionalProperties": false

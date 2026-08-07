@@ -1,6 +1,6 @@
 # Agent-driven exploratory QA — mobile
 
-This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The three stable journeys are also run nightly, while ad-hoc agent exploration remains its primary authoring loop.
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The committed journeys run nightly, while ad-hoc agent exploration remains its primary authoring loop.
 
 The structural payoff matches the desktop layer: the device (sim, emulator, or real) outlives the runner, so an agent (Claude Code) can attach, inspect the screen, take ad-hoc actions, screenshot, and resume. Maestro ships a first-party **MCP server** that exposes exactly that surface to Claude Code.
 
@@ -98,7 +98,7 @@ await runFlow("my-flow", async (ctx) => {
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
-    visible: { text: "Your apps, ready" }
+    visible: { text: "Home ready" }
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: home
 `,
@@ -120,6 +120,7 @@ ctx surface:
 - `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call spawns `maestro test` once (~hundreds of ms overhead), so batch many directives per call rather than one-per-action. The harness uses the internal `sensitive` option only for capability-bearing input; it suppresses console/debug retention and keeps the live value in a `MAESTRO_*` variable.
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with a 300ms pre-stop delay (analogous to the desktop harness's flushMs before SIGTERM, gives AsyncStorage time to flush).
 - `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique write-role member ticket from the declared gateway, redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
+- `ctx.ensureDemo(appId)` — idempotently load the named gateway demo scenario before pairing. Each seeded Photos journey calls it when run independently. In `run-photos-suite.mjs`, the permissions journey first proves the empty-vault denial state, the library journey then seeds and pairs Photos, and the remaining journeys reuse that paired app state so the suite shares one boot and seed.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes` in `verdict.md`.
 
 Authoring rules of thumb (carried over from desktop):
@@ -134,7 +135,7 @@ Authoring rules of thumb (carried over from desktop):
 | --- | --- | --- |
 | Agent-driven exploratory | Claude Code ⇄ Maestro MCP | "try this journey, tell me what breaks" — no committed flow needed |
 | Committed regression (this dir) | `node flows/<slug>.mjs` → `maestro test` | flows that stabilized and you want runnable |
-| CI-grade native invariants | Detox (not wired up) | hard invariants that must never flake |
+| CI-grade native invariants | committed Maestro flows in this directory | hard runtime, gesture, accessibility, and OS-state claims that unit/component layers cannot falsify |
 
 For tight DOM-level assertions inside the in-app WebView (the `AppDetail` screen), `apps/desktop/tests/e2e/`-style Playwright over CDP against the WebView's debug port is the right tier, not Maestro.
 

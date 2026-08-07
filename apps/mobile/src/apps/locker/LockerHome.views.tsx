@@ -1,8 +1,8 @@
 import React from "react";
 import { FlatList, Modal, Pressable, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Text, TextInput } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import type { LockerStyles } from "./LockerHome.styles";
 import type { LockerItem, LockerRow } from "./LockerHome.types";
 import { visibleFields } from "./LockerHome.types";
@@ -116,13 +116,11 @@ export function ItemDetailModal({
   styles,
   onClose,
   onCopy,
-  onShare,
 }: {
   item: LockerItem | null;
   styles: LockerStyles;
   onClose: () => void;
   onCopy: (value: string) => void;
-  onShare: (itemId: string) => void;
 }): React.JSX.Element {
   return (
     <Modal
@@ -131,7 +129,7 @@ export function ItemDetailModal({
       presentationStyle="pageSheet"
       visible={item !== null}
     >
-      <SafeAreaView style={styles.detailSafe}>
+      <TopSafeArea style={styles.detailSafe}>
         <View style={styles.detailHeader}>
           <View>
             <Text style={styles.detailTitle}>{item?.title}</Text>
@@ -141,16 +139,6 @@ export function ItemDetailModal({
             <Text style={styles.lockNow}>Done</Text>
           </Pressable>
         </View>
-        {item ? (
-          <Pressable
-            accessibilityLabel={`Share ${item.title} with household`}
-            accessibilityRole="button"
-            onPress={() => onShare(item.item_id)}
-            style={styles.secondary}
-          >
-            <Text style={styles.secondaryText}>Share family item</Text>
-          </Pressable>
-        ) : null}
         <FlatList
           contentContainerStyle={styles.detailList}
           data={item ? visibleFields(item) : []}
@@ -174,7 +162,7 @@ export function ItemDetailModal({
             </View>
           )}
         />
-      </SafeAreaView>
+      </TopSafeArea>
     </Modal>
   );
 }

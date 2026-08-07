@@ -48,9 +48,10 @@ const RAIL_TOP = 8;
  *  long-press drag-select so both agree on geometry.
  *
  * `x` arrives in the GESTURE layer's coordinates, which span the whole stage;
- * the tiles start one page margin in. Forgetting that subtraction is silent —
- * every tap simply resolves to the tile one position to its left, and only at
- * the very edge of a row does it resolve to nothing at all. */
+ * the tile ROW now starts flush with that same stage — full-bleed, no page
+ * margin — so `x` already IS row-relative. If the row ever regains an inset
+ * (a `paddingHorizontal` on `styles.row`), this must subtract it again or
+ * every tap resolves to the tile one position to its left. */
 function assetAt(
   rows: readonly TimelineRow[],
   tops: readonly number[],
@@ -75,7 +76,7 @@ function assetAt(
   }
   const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
   if (!row || row.type !== "assets") return undefined;
-  let position = Math.max(0, x - pageMargin);
+  let position = Math.max(0, x);
   for (const tile of row.tiles) {
     if (position <= tile.width) return tile.asset;
     position -= tile.width + 2;
@@ -151,6 +152,16 @@ export interface PhotoTimelineProps {
    *  where it turns `on the gateway` from steady-state provenance into the
    *  explanation for a tile that cannot paint. */
   unreachable?: boolean;
+  /** A `PhotoSection.day` to land on — how the zoom drawer's Years and Months
+   *  grains hand a period back to All (`photos-zoom.ts`). Applied once per
+   *  distinct value, so a member who then scrolls away is not yanked back on
+   *  the next render. */
+  scrollToDay?: string;
+  /** Bumped on every scroll gesture, so the zoom drawer can arm its hide
+   *  timer. Deliberately NOT wired to `onScroll`: that fires every frame, and
+   *  a state bump per frame would re-render the drawer sixty times a second to
+   *  say the one thing it already knows. */
+  onScrollActivity?: () => void;
 }
 
 export default function PhotoTimeline({
@@ -162,6 +173,8 @@ export default function PhotoTimeline({
   refreshing = false,
   onRefresh,
   unreachable = false,
+  scrollToDay,
+  onScrollActivity,
 }: PhotoTimelineProps): React.JSX.Element {
   // The rung and the vault facts are read here, not passed in: a shelf is the
   // same timeline under a filter (§5), so every one of them must show the size
@@ -183,14 +196,13 @@ export default function PhotoTimeline({
   }, [selection]);
 
   const target = rungHeight(rung, "phone");
-  // The grid is packed to the CONTENT column, not to the stage. The handoff is
-  // explicit: `contentW = stageW - pad*2` (proto:4656) with `pad = R.margin.m`
-  // = 18 on the phone, and the whole scroll column carries that margin
-  // (proto:5566 — `padding: 16px 18px 24px`). Packing to the full window width
-  // instead ran the tiles edge to edge while the month and day headers stayed
-  // inset, so the grid and its own headers disagreed about where the page
-  // begins — and every row was justified 36pt too wide.
-  const contentWidth = Math.max(1, width - 2 * pageMargin);
+  // The grid is packed to the full STAGE width, not the content column: iOS
+  // Photos' own Library tab runs the photographs edge to edge, and the
+  // photographs are the content the member came for — the edge is theirs.
+  // Only the month/day HEADERS (labels about the content) keep the page's own
+  // `pageMargin`, in their own styles below, so they read as text on a page
+  // while the grid beneath them reads as a wall of photographs.
+  const contentWidth = Math.max(1, width);
   const rows = useMemo(
     () => buildRows(sections, contentWidth, target, placeNames),
     [contentWidth, placeNames, sections, target]
@@ -232,6 +244,30 @@ export default function PhotoTimeline({
     else handleOpen(asset);
   };
 
+  // Landing on a period handed over by the zoom drawer. The row list has to
+  // exist first — `rows` is rebuilt whenever the width, rung or sections change
+  // — so this reads it from the same render rather than firing on mount alone.
+  const landedDay = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!scrollToDay || landedDay.current === scrollToDay) return;
+    // The period's own MONTH header, not its first day row: a period always
+    // starts at a month boundary (`buildPeriods` anchors on the first section
+    // of the group), and landing on the header means the member arrives with
+    // the label that names where they are already on screen. The day row is
+    // the fallback for a filtered grid whose header was packed away.
+    const monthKey = `m:${scrollToDay.slice(0, 7)}`;
+    const index = rows.findIndex(
+      (row) => row.key === monthKey || row.key === `d:${scrollToDay}`
+    );
+    if (index < 0) return;
+    landedDay.current = scrollToDay;
+    void list.current?.scrollToIndex({
+      animated: false,
+      index,
+      viewPosition: 0,
+    });
+  }, [rows, scrollToDay]);
+
   const scrub = (ratio: number): void => {
     const index = Math.min(
       rows.length - 1,
@@ -263,11 +299,10 @@ export default function PhotoTimeline({
           renderItem={({ item }) =>
             item.type === "month" ? (
               <View style={styles.month}>
+                {/* The month's NAME and nothing else — see `timeline-rows.ts`
+                    on why the tally left the timeline. */}
                 <Text style={styles.monthTitle} numberOfLines={1}>
                   {item.title}
-                </Text>
-                <Text style={styles.count} numberOfLines={1}>
-                  {item.count}
                 </Text>
               </View>
             ) : item.type === "day" ? (
@@ -275,9 +310,11 @@ export default function PhotoTimeline({
                 <Text style={styles.dayTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={styles.count} numberOfLines={1}>
-                  {item.count}
-                </Text>
+                {item.place ? (
+                  <Text style={styles.place} numberOfLines={1}>
+                    {item.place}
+                  </Text>
+                ) : null}
                 {selecting ? (
                   <Pressable
                     accessibilityRole="button"
@@ -316,7 +353,11 @@ export default function PhotoTimeline({
               </View>
             )
           }
-          onScrollBeginDrag={() => setScrubLabel("")}
+          onScrollBeginDrag={() => {
+            setScrubLabel("");
+            onScrollActivity?.();
+          }}
+          onMomentumScrollEnd={() => onScrollActivity?.()}
           refreshing={refreshing}
           onRefresh={onRefresh}
           onScroll={(event) => {
@@ -342,7 +383,9 @@ export default function PhotoTimeline({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    count: { ...t("mono"), color: colors.textSoft },
+    // A place is prose, not a figure — so it takes the day label's own sans
+    // face rather than the mono/tabular register the counts used to sit in.
+    place: { ...t("small"), color: colors.textFaint },
     day: {
       alignItems: "baseline",
       flexDirection: "row",
@@ -367,9 +410,10 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 2,
       marginBottom: 2,
-      // The same margin the month and day headers carry, so the grid's edge
-      // and its headers' edge are one line down the page.
-      paddingHorizontal: pageMargin,
+      // No horizontal padding, deliberately: the tiles are full-bleed (see
+      // `contentWidth` above). The month and day headers below keep their own
+      // `paddingHorizontal: pageMargin` — this row must NOT share their style,
+      // or the tiles would be pulled back in with them.
     },
     selectDay: { ...t("control"), color: colors.text },
     selectDayTarget: { justifyContent: "center", minHeight: 44 },

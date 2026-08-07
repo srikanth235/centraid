@@ -8,8 +8,9 @@
 
 1. Launch the platform-specific development app with `clearState: true`, wiping the device profile and any prior pairing.
 2. Wait up to `FIRST_LAUNCH_TIMEOUT_MS` for `"Connect your gateway."`.
-3. Assert the pairing-code field and `"Continue with pasted code"` action.
-4. Take screenshot `ticket-only-onboarding`.
+3. Assert and open the `"Can't scan? Paste a code instead"` fallback.
+4. Assert the pairing-code field and `"Connect"` action.
+5. Take screenshot `ticket-only-onboarding`.
 
 **Expectations:** the run dir contains `screenshots/01-home-fresh-ticket-only-onboarding.png`, `flows/01-home-fresh.yaml`, `state.json`, and a PASS `verdict.md`.
 

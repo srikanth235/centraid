@@ -23,9 +23,11 @@
  * never confirmed as them. Regions that share a non-null `party_id` are one
  * proposal (the model's own claim that they are the same face, across
  * however many photographs). A region with no candidate at all is its own
- * proposal of one — which is *every* region today, because the only
- * enricher shipped so far (`automations/face-proposer`) is "deliberately
- * identity-blind" (its own header) and never sets `party_id`. That is not
+ * proposal of one — which is *every* region today: no shipped producer of
+ * face regions sets `party_id` at all. (The `face-proposer` automation that
+ * used to write them was deleted in issue #712 — face detection is becoming
+ * the Photos app's own, and it will be identity-blind for the same reason:
+ * naming a person is the owner's assertion, made in the app.) That is not
  * this query approximating anything: there is no face-similarity signal in
  * this schema to group strangers by today, so every unconfirmed face
  * honestly IS its own proposal until an identity-matching enricher ships —
@@ -33,9 +35,11 @@
  * change needed here.
  *
  * `unmatchedTotal` is the same count `queries/face-queue.ts` derives for the
- * Face Review surface (same entity, same `confirmed_by_party_id IS NULL`
- * filter) — computed once here so the People shelf's pending note no longer
- * needs its own separate read of a different query to say a true number.
+ * Face Review surface (same entity, same `review_state = 'proposed'` filter,
+ * issue #712 — an answered region, rejected or deliberately left unnamed, is
+ * not pending on either surface) — computed once here so the People shelf's
+ * pending note no longer needs its own separate read of a different query to
+ * say a true number.
  *
  * `asset_ids` rides along so one read serves both halves of the shelf — the
  * card grid AND one person's own timeline sub-state — without a second round
@@ -54,6 +58,8 @@ interface RawRegion {
   bbox_json?: unknown;
   party_id?: string | null;
   confirmed_by_party_id?: string | null;
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  review_state?: string | null;
 }
 
 interface RawParty {
@@ -124,7 +130,7 @@ export default async function people({ ctx }: HandlerArgs) {
     // whatever the shelf is ordered on, so no order is asserted here.
     const byParty = new Map<
       string,
-      { asset_ids: string[]; seen: Set<string> }
+      { asset_ids: string[]; seen: Set<string>; confirmers: Set<string> }
     >();
     for (const region of regions) {
       if (region.confirmed_by_party_id == null) continue;
@@ -133,9 +139,21 @@ export default async function people({ ctx }: HandlerArgs) {
       if (!partyId || !assetId || !nameOf.has(partyId)) continue;
       let entry = byParty.get(partyId);
       if (!entry) {
-        entry = { asset_ids: [], seen: new Set() };
+        entry = { asset_ids: [], seen: new Set(), confirmers: new Set() };
         byParty.set(partyId, entry);
       }
+      // WHO SAID SO (issue #712 P6b). A group is keyed by the party the faces
+      // ARE (`party_id`); `confirmed_by_party_id` is a different axis — the
+      // party who answered the proposal — and the DDL pins it to exist on
+      // exactly the confirmed rows. Collecting it here is what lets one
+      // person's group span two members' confirmations WITHOUT merging them:
+      // the confirmers stay a set beside the group, never folded into the
+      // subject, so "Ana, confirmed by you and by Sam" is expressible and
+      // "Ana and Sam are the same person" is not. Every confirmed region is
+      // counted here, including the second one in a photograph the count
+      // above deliberately skips — the question is who answered, not how
+      // many photographs.
+      entry.confirmers.add(region.confirmed_by_party_id);
       // Two confirmed regions of one person in one photograph is one
       // photograph, not two — a count that double-counted them would disagree
       // with the tiles the shelf then shows.
@@ -145,7 +163,9 @@ export default async function people({ ctx }: HandlerArgs) {
     }
 
     // ── unconfirmed proposals — grouped, never named (see file header) ──
-    const unconfirmed = regions.filter((r) => r.confirmed_by_party_id == null);
+    // Still-open proposals only: a rejected or dismissed region has been
+    // answered, so it is neither a person's face nor anybody's backlog.
+    const unconfirmed = regions.filter((r) => r.review_state === "proposed");
     const proposalGroups = new Map<string, ProposalGroup>();
     for (const region of unconfirmed) {
       if (!region.asset_id) continue; // no photograph, nothing to show
@@ -238,6 +258,15 @@ export default async function people({ ctx }: HandlerArgs) {
         name: nameOf.get(partyId) ?? null,
         count: entry.asset_ids.length,
         asset_ids: entry.asset_ids,
+        // The distinct parties who answered, each carrying whatever name
+        // `core.party` holds for them — `null` where the confirmer is not a
+        // `kind = 'person'` party this read named (a device or a service that
+        // acted for the owner), which the view renders as "someone else on
+        // this library" rather than as an invented name.
+        confirmed_by: [...entry.confirmers].sort().map((confirmerId) => ({
+          party_id: confirmerId,
+          name: nameOf.get(confirmerId) ?? null,
+        })),
       })),
       proposals,
       // Same derivation as face-queue.ts's `unmatchedTotal` — the pending

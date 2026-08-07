@@ -47,7 +47,11 @@ describe("templatesData", () => {
   });
 
   describe("templatesData", () => {
-    it("pins the exact eight-template v0 automation gallery", () => {
+    it("pins the exact six-template v0 automation gallery", () => {
+      // Was eight. `screenshot-extractor` and `photo-captioner` were deleted
+      // in issue #712 along with the other two photos-domain enrichers —
+      // that work is becoming the Photos app's own rather than a gallery
+      // automation taking a model turn over a member's photographs.
       expect(V0_AUTOMATION_TEMPLATE_IDS).toStrictEqual([
         "google-gmail-pull",
         "google-calendar-pull",
@@ -55,10 +59,8 @@ describe("templatesData", () => {
         "google-drive-pull",
         "obligation-extractor",
         "renewal-reminders",
-        "screenshot-extractor",
-        "photo-captioner",
       ]);
-      expect(V0_AUTOMATION_TEMPLATE_IDS).toHaveLength(8);
+      expect(V0_AUTOMATION_TEMPLATE_IDS).toHaveLength(6);
     });
 
     it("loadAppTemplates keeps only non-automation entries", async () => {
@@ -84,7 +86,7 @@ describe("templatesData", () => {
     it("loadAutomationTemplates passes data/condition triggerKind through unchanged", async () => {
       const dataAuto = {
         ...auto,
-        id: "photo-captioner",
+        id: "obligation-extractor",
         triggerKind: "data",
       } satisfies TemplateMetaEntry;
       const conditionAuto = {

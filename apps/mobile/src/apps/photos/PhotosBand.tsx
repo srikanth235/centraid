@@ -25,7 +25,7 @@
 //   ├─ capsule  flex:none; 52 wide; radius 12; 1pt lineStrong; ground = the
 //   │           FRAME's neutral page (`colors.bg`), never Photos' mat
 //   └─ group    flex:1; radius 12; 1pt lineStrong; ground `bgElev` (t.surf);
-//               padding 0 2; gap 2 — and the five tabs inside it
+//               padding 0 2; gap 2 — and the four tabs inside it
 //
 // The frame's own band (`screens/home/HomeBand`) is ONE plate of the same
 // rectangle. What the two share — radius, edge, ground, inset — is stated once
@@ -43,12 +43,13 @@ import {
   BAND_TAB_MIN_HEIGHT,
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
+import type { BandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { family, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { resolveBand } from "./photos-band";
-import type { BandDestinationKey, BandOwner } from "./photos-band";
+import { BAND_CAPSULE, resolveBand } from "./photos-band";
+import type { BandDestinationKey } from "./photos-band";
 
 /** The GROUP PLATE's inner gutter (:4959 — `padding:0 2px`, `gap:2px`). The 2pt
  *  the capsule used to carry as a `marginStart` lives here instead. */
@@ -73,8 +74,9 @@ export interface PhotosBandProps {
 
 /**
  * Renders the band Photos has claimed. When the member has handed the band
- * back (`owner === "host"`) this renders nothing at all — the frame's own band
- * takes over, and exactly one band exists at any moment, never two.
+ * back (`owner === "host"`, from frame Settings) the app's TAB GROUP goes and
+ * the frame's capsule stays — exactly one band exists at any moment, never
+ * two, and the way home is never one of the things that disappears.
  */
 export default function PhotosBand({
   owner,
@@ -86,7 +88,30 @@ export default function PhotosBand({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const band = resolveBand(owner);
-  if (band.owner !== "app") return null;
+  if (band.owner !== "app") {
+    // HANDED BACK, BUT NOT STRANDED (issue #712 E3). This used to `return
+    // null` outright, on the premise that "the frame's own band takes over" —
+    // true on web, where the shell renders its stem band underneath, and false
+    // on the phone, where the frame's band lives on Home and a Photos stack
+    // screen has none. Rendering nothing left the member inside Photos with no
+    // way out but the OS back gesture, and §3.1 says the way home is the one
+    // thing an app may never take away. So the capsule stays: the app's tab
+    // group is what the member handed back, not the frame's control.
+    return (
+      <View
+        style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={BAND_CAPSULE.label}
+          onPress={onHome}
+          style={[styles.capsule, { width: BAND_CAPSULE.size }]}
+        >
+          <Icon name={BAND_CAPSULE.icon} size={19} color={colors.textSoft} />
+        </Pressable>
+      </View>
+    );
+  }
 
   const { capsule } = band;
   return (
@@ -120,7 +145,7 @@ export default function PhotosBand({
         <Icon name={capsule.icon} size={19} color={colors.textSoft} />
       </Pressable>
 
-      {/* Plate two: the app's five destinations, as ONE group on its own
+      {/* Plate two: the app's four destinations, as ONE group on its own
           `t.surf` ground (:4959-4960). The capsule is not in it — the gap
           between the two plates IS the seam, and it is the whole explanation
           for why Home is not a sixth tab. */}

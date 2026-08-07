@@ -1,12 +1,13 @@
 /*
  * The enrichment tier gate — the privacy promise as behaviour.
  *
- * `enrich_policy` says what a vault allows per domain (`off | local |
- * model`); Photos tells the member "what leaves the device: nothing" when the
- * tier is `local`. These tests pin that the FIRE PATH keeps that promise: an
- * enricher fire is refused with a stated reason under `off`, refused under
- * `local` when it takes a model turn, and — critically — refused when the
- * policy cannot be read at all, because an unreadable policy is not consent.
+ * `enrich_policy` says what a vault allows per domain (`off | device |
+ * gateway`); Photos tells the member "what leaves the device: nothing" when
+ * the tier is `device`. These tests pin that the FIRE PATH keeps that
+ * promise: an enricher fire is refused with a stated reason under `off`,
+ * refused under `device` when it needs the `gateway` lane (a model turn),
+ * and — critically — refused when the policy cannot be read at all, because
+ * an unreadable policy is not consent.
  *
  * The gate is exercised through `runFire` with a stub dispatch surface, so a
  * refusal is observable exactly as the ledger sees it: `outcome.skipped` with
@@ -44,7 +45,7 @@ async function writeAutomation(
   m: Manifest,
   handler = "export default async () => ({ ok: true });"
 ): Promise<void> {
-  const dir = path.join(appsDir, "photos", "automations", "face-proposer");
+  const dir = path.join(appsDir, "photos", "automations", "face-finder");
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, "automation.json"),
@@ -89,7 +90,7 @@ describe("enrichment tier gate", () => {
     const opened: OpenDispatchArgs[] = [];
     const result = await runFire(
       {
-        automationRef: "photos/face-proposer",
+        automationRef: "photos/face-finder",
         appsDir,
         journalDbFile,
         ...(options.resolveEnrichPolicy
@@ -103,7 +104,7 @@ describe("enrichment tier gate", () => {
 
   it("refuses the fire when the owner switched enrichment off, naming the reason", async () => {
     const { outcome, record, opened } = await fire({
-      lane: "model",
+      lane: "gateway",
       resolveEnrichPolicy: () => "off",
     });
 
@@ -117,20 +118,20 @@ describe("enrichment tier gate", () => {
     expect(opened).toStrictEqual([]);
   });
 
-  it("refuses a model-routed enricher when the tier is local, because every runner is remote", async () => {
+  it("refuses a gateway-lane enricher when the tier is device, because every runner is remote", async () => {
     const { outcome, opened } = await fire({
-      lane: "model",
-      resolveEnrichPolicy: () => "local",
+      lane: "gateway",
+      resolveEnrichPolicy: () => "device",
     });
 
     expect(outcome.skipped).toBe(true);
-    expect(outcome.error).toContain('set to "local"');
-    expect(outcome.error).toContain("off this device");
+    expect(outcome.error).toContain('set to "device"');
+    expect(outcome.error).toContain("leave this member's trust domain");
     expect(opened).toStrictEqual([]);
   });
 
   it("fails closed when the host wired no policy seam at all", async () => {
-    const { outcome, opened } = await fire({ lane: "model" });
+    const { outcome, opened } = await fire({ lane: "gateway" });
 
     expect(outcome.skipped).toBe(true);
     expect(outcome.error).toContain("could not be read");
@@ -139,7 +140,7 @@ describe("enrichment tier gate", () => {
 
   it("fails closed when reading the policy throws", async () => {
     const { outcome, opened } = await fire({
-      lane: "model",
+      lane: "gateway",
       resolveEnrichPolicy: () => Promise.reject(new Error("vault is locked")),
     });
 
@@ -148,10 +149,10 @@ describe("enrichment tier gate", () => {
     expect(opened).toStrictEqual([]);
   });
 
-  it("lets a model-routed enricher run when the owner set the tier to model", async () => {
+  it("lets a gateway-lane enricher run when the owner set the tier to gateway", async () => {
     const { outcome, opened } = await fire({
-      lane: "model",
-      resolveEnrichPolicy: () => "model",
+      lane: "gateway",
+      resolveEnrichPolicy: () => "gateway",
       handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'find faces' }) });`,
     });
 
@@ -160,15 +161,16 @@ describe("enrichment tier gate", () => {
     expect(opened).toHaveLength(1);
   });
 
-  it("runs a device-lane enricher under local but seals ctx.agent shut", async () => {
+  it("runs a device-lane enricher under device but seals ctx.agent shut", async () => {
     const { outcome } = await fire({
       lane: "device",
-      resolveEnrichPolicy: () => "local",
+      resolveEnrichPolicy: () => "device",
       handler: `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'sneak a model turn' }) });`,
     });
 
-    // The fire was allowed to start (deterministic work is local work), and
-    // the model turn inside it failed loudly rather than reaching a provider.
+    // The fire was allowed to start (deterministic work is device-tier
+    // work), and the model turn inside it failed loudly rather than
+    // reaching a provider.
     expect(outcome.skipped).toBeUndefined();
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toContain("ctx.agent is refused");
@@ -188,7 +190,7 @@ describe("enrichment tier gate", () => {
     const opened: OpenDispatchArgs[] = [];
 
     const { outcome } = await runFire(
-      { automationRef: "photos/face-proposer", appsDir, journalDbFile },
+      { automationRef: "photos/face-finder", appsDir, journalDbFile },
       { openDispatch: countingDispatch(opened) }
     );
 
@@ -199,7 +201,7 @@ describe("enrichment tier gate", () => {
 
 describe(decideEnrichmentGate, () => {
   const base = {
-    automationRef: "photos/face-proposer",
+    automationRef: "photos/face-finder",
     domain: "photos",
     capability: "faces",
   } as const;
@@ -207,34 +209,47 @@ describe(decideEnrichmentGate, () => {
   it("names the automation and the capability in every refusal", () => {
     const decision = decideEnrichmentGate({
       ...base,
-      lane: "model",
+      lane: "gateway",
       tier: "off",
     });
 
     expect(decision.allowed).toBe(false);
     expect(decision.allowed === false && decision.reason).toContain(
-      "photos/face-proposer"
+      "photos/face-finder"
     );
     expect(decision.allowed === false && decision.reason).toContain("faces");
   });
 
-  it("allows the model tier without sealing model turns", () => {
+  it("allows the gateway tier without sealing model turns", () => {
     const decision = decideEnrichmentGate({
       ...base,
-      lane: "model",
-      tier: "model",
+      lane: "gateway",
+      tier: "gateway",
     });
 
     expect(decision).toStrictEqual({ allowed: true, sealModelTurns: false });
   });
 
-  it("allows the device lane under local, with model turns sealed", () => {
+  it("allows the device lane under device, with model turns sealed", () => {
     const decision = decideEnrichmentGate({
       ...base,
       lane: "device",
-      tier: "local",
+      tier: "device",
     });
 
     expect(decision).toStrictEqual({ allowed: true, sealModelTurns: true });
+  });
+
+  it("[C5] the gate is rank(lane) <= rank(tier) — device lane is allowed even under the off tier's neighbour, gateway", () => {
+    // A device-lane enricher never needs more than `device`, so it is also
+    // allowed under the wider `gateway` tier — the rank comparison, not a
+    // per-tier branch, is what decides this.
+    const decision = decideEnrichmentGate({
+      ...base,
+      lane: "device",
+      tier: "gateway",
+    });
+
+    expect(decision).toStrictEqual({ allowed: true, sealModelTurns: false });
   });
 });

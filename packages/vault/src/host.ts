@@ -195,22 +195,45 @@ export function updateBlobStoreSettings(
   return settings;
 }
 
-/** Enrichment tier per domain (issue #299 §2). Absent means `local`. */
-export type EnrichTier = "off" | "local" | "model";
+/**
+ * Enrichment tier per domain (issue #299 §2, renamed off|local|model →
+ * off|device|gateway by issue #712 C5 — one axis: `off` (nothing runs),
+ * `device` (the member's own phone/laptop, plus deterministic gateway
+ * work), `gateway` (the member's own gateway may additionally do whatever
+ * it is already wired to, including a model turn — see
+ * `packages/automation/src/fire/enrich-gate.ts` for what that widens and
+ * does not). Absent means `gateway`, the seeded bootstrap default.
+ */
+export type EnrichTier = "off" | "device" | "gateway";
 
 export interface EnrichSettings {
   photos: EnrichTier;
   docs: EnrichTier;
 }
 
-const ENRICH_TIERS: readonly EnrichTier[] = ["off", "local", "model"];
+const ENRICH_TIERS: readonly EnrichTier[] = ["off", "device", "gateway"];
+
+// COMPAT(enrich-tier-rename #712): a settings bag written before this
+// rename may still hold the old `local`/`model` strings — `settings_json`
+// is a free-form JSON column with no CHECK constraint, so nothing rewrites
+// it on its own. `model` already meant "this domain may take a model
+// turn", which is what `gateway` means now, so it maps up with no
+// widening. `local` meant NO model turn; there is no per-capability
+// consent gate on the execution path yet (decision S9) that would catch a
+// model-lane automation the instant `local` was reinterpreted as the
+// wider `gateway`, so it maps to the conservative `device` — the same "no
+// gateway-lane work" behaviour the vault already had, under the new name.
+const LEGACY_TIER: Readonly<Record<string, EnrichTier>> = {
+  local: "device",
+  model: "gateway",
+};
 
 /**
- * The owner's enrichment policy out of the settings bag. `local` is the
+ * The owner's enrichment policy out of the settings bag. `gateway` is the
  * default on both domains: Tier-0 derivation (EXIF, thumbs, text
- * extraction, phash) never leaves the vault, so it needs no opt-in;
- * `model` — bytes leaving for an inference provider — is a deliberate,
- * per-domain gesture (issue #299 §2).
+ * extraction, phash) never leaves the member's trust domain, so it needs no
+ * opt-in; a THIRD-PARTY PROVIDER seeing bytes is gated separately, per call
+ * (#567) and per capability (decision S9), independently of this tier.
  */
 export function readEnrichSettings(db: VaultDb): EnrichSettings {
   const bag = readVaultSettings(db).enrich;
@@ -218,10 +241,16 @@ export function readEnrichSettings(db: VaultDb): EnrichSettings {
     bag !== null && typeof bag === "object" && !Array.isArray(bag)
       ? (bag as Record<string, unknown>)
       : {};
-  const tier = (v: unknown): EnrichTier =>
-    typeof v === "string" && (ENRICH_TIERS as readonly string[]).includes(v)
-      ? (v as EnrichTier)
-      : "local";
+  const tier = (v: unknown): EnrichTier => {
+    if (
+      typeof v === "string" &&
+      (ENRICH_TIERS as readonly string[]).includes(v)
+    )
+      return v as EnrichTier;
+    if (typeof v === "string" && v in LEGACY_TIER)
+      return LEGACY_TIER[v] as EnrichTier;
+    return "gateway";
+  };
   return { photos: tier(e.photos), docs: tier(e.docs) };
 }
 

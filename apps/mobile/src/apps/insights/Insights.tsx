@@ -9,10 +9,7 @@
 
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Circle,
   Defs,
@@ -26,6 +23,7 @@ import { palette } from "@centraid/design";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -87,7 +85,7 @@ function InsightsOverview({
   const { state, refreshing, refresh } = useInsights();
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Insights</Text>
         <Text style={styles.subtitle}>Your gateway and vault, at a glance</Text>
@@ -111,7 +109,7 @@ function InsightsOverview({
       </ScrollView>
 
       <HomeKey variant="floating" onPress={() => navigation.goBack()} />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

@@ -1,4 +1,5 @@
 // Search on the phone (Photos v4 handoff §9, §14, §18, proto:4256-4276).
+// governance: allow-repo-hygiene file-size-limit The #712 search destination remains one cohesive query/results state machine; #716 extracts its reusable empty states.
 //
 // Search is a BAND DESTINATION, not a pushed screen. `PhotosHome` renders
 // `PhotosSearchView` in place of the timeline exactly as it renders Albums and
@@ -25,15 +26,36 @@
 // The copy here is the web shell's copy verbatim wherever the handoff gives a
 // string, so the two clients teach one fact. Where it does not — see
 // `SEARCH_SCOPE` — the wording states what this code actually does.
+//
+// The query field docks at the BOTTOM of this view, not the top (#712, iOS
+// Photos parity). This is the only control the surface has, and on a phone
+// the bottom is where a one-control surface belongs: it is where the thumb
+// already rests, and it is what sits directly above the keyboard once typing
+// starts — no reach up the screen to see what was typed. State content
+// (the resting panel, the searching line, the grouped hits and grid, the no-
+// results panel) fills the space above the field and scrolls there; the
+// example chips stay anchored just above the field itself, because they are
+// the field's own suggestions, not part of the scrolling read. `PhotosHome`
+// sizes this view as a flex sibling above `PhotosBand` (see that file's
+// `styles.body`), so the field lands flush against the band, not the bottom
+// of the physical screen — exactly where iOS Photos puts it, above the tab
+// bar that never leaves.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -41,8 +63,10 @@ import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
+import PhotosSearchRestingState from "./PhotosSearchRestingState";
 import PhotoTimeline from "./PhotoTimeline";
-import { groupedSearchHits } from "./search-hits";
+import { groupedSearchHits, reachableAssetIds } from "./search-hits";
 import type { SearchHit } from "./search-hits";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -75,25 +99,6 @@ const SEARCH_EXAMPLES: readonly string[] = [
  */
 const SEARCH_SCOPE = "searched the whole replica on this device";
 
-const RESTING_EYEBROW = "Nothing typed";
-const RESTING_TITLE = "Search the whole library";
-const RESTING_BODY =
-  "Not the photographs that happen to be loaded. Try one of these.";
-
-const NONE_EYEBROW = "No results";
-/**
- * proto:4271's body is `Nothing in captions, people, places, things or album
- * names. Two letters short of a place you have been.` Two words of it are not
- * available to this client and are therefore not said:
- *
- *   - "things" — the vault has no scene/label entity (see `search-hits.ts`),
- *     so nothing here looked at things and the sentence must not claim it did
- *   - the second sentence is a fact about the mock's particular query
- *     ("ana at the coas"), not about any query a member might type
- */
-const NONE_BODY = "Nothing in captions, people, places or album names.";
-const NONE_ACTION = "Clear the query";
-
 const UNREACHABLE_EYEBROW = "Cannot reach the vault";
 const UNREACHABLE_TITLE = "Search needs the gateway";
 /** proto:4274, with the mock's gateway name generalised — this client does not
@@ -119,12 +124,10 @@ export default function PhotosSearch({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.toneMat }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.toneMat }]}>
+      <ReplicaStatusBar />
       <PhotosSearchView navigation={navigation as unknown as Nav} />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 
@@ -227,7 +230,6 @@ export function PhotosSearchView({
         : [],
     [assets, contentIds]
   );
-  const sections = useMemo(() => sectionPhotoAssets(matches), [matches]);
 
   const contentTitles = useMemo(() => {
     const titles = new Map<string, string>();
@@ -267,6 +269,36 @@ export function PhotosSearchView({
     ]
   );
 
+  // The photographs the grid draws: the ones `session.search` matched by
+  // title, PLUS the ones reachable through a group the query hit (#712).
+  // Typing "Tahoe" hits the album "Tahoe scouting"; its four photographs do
+  // not carry the word in their own titles, so a title-only grid was empty
+  // underneath a row saying the album exists — iOS Photos returns the album
+  // AND its photographs. Filtering the library once (rather than appending
+  // the reached assets to `matches`) is what keeps the union deduplicated and
+  // in the timeline's own newest-first order, which is the order
+  // `sectionPhotoAssets` then sections.
+  const reached = useMemo(() => reachableAssetIds(hits), [hits]);
+  const shown = useMemo(() => {
+    if (!reached.size) return matches;
+    const matched = new Set(matches.map((asset) => asset.id));
+    return assets.filter(
+      (asset) =>
+        matched.has(asset.id) ||
+        Boolean(asset.assetId && reached.has(asset.assetId))
+    );
+  }, [assets, matches, reached]);
+  const sections = useMemo(() => sectionPhotoAssets(shown), [shown]);
+
+  /**
+   * What the header and the foot line both count: every row on the screen —
+   * the grouped hits and the photographs under them. `matches.length` counted
+   * only the title matches, so "Tahoe" drew `RESULTS 0` directly above a real
+   * album row, a screen contradicting itself. One total is the honest shape:
+   * the member asked what was found, and what was found is what is displayed.
+   */
+  const resultCount = hits.length + shown.length;
+
   const openHit = (hit: SearchHit): void => {
     const target = hit.target;
     // Each branch names its own screen and params — a single dynamic
@@ -283,10 +315,139 @@ export function PhotosSearchView({
   };
 
   const asked = Boolean(term.trim());
+  // The examples live just above the field (iOS Photos anchors suggestions
+  // to the field that offers them), and only make sense before anything has
+  // been typed or while the vault cannot be reached.
+  const showExamples = !asked && !unreachable;
 
   return (
-    <View style={styles.fill}>
-      {/* One query box (proto:4257). Nothing else is a control on this shelf. */}
+    <KeyboardAvoidingView
+      style={styles.fill}
+      // "padding" pushes this view's own bottom content up as the keyboard
+      // rises — the same idiom the Assistant composer uses (Assistant.tsx) —
+      // so the field stays directly above the keys instead of sliding under
+      // them. Android resizes the window itself, so there is nothing for this
+      // component to do there.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {/* NO `<ReplicaStatusBar/>` here. `PhotosHome` renders one above this
+          view for EVERY band destination, so this one made the search surface
+          the only place in Photos with two — and they did not even agree:
+          mounted at different times, one read "Updated just now" while the
+          other read "Updated 11m ago", which is two contradictory answers to
+          "how fresh is this?" stacked six points apart. The standalone route
+          below owns its own bar, because it has no `PhotosHome` above it. */}
+
+      {/* State content fills the space above the field and scrolls there —
+          the field itself never moves. */}
+      <View style={styles.fill}>
+        {unreachable ? (
+          <ScrollView contentContainerStyle={styles.contentPad}>
+            <Panel
+              styles={styles}
+              net
+              eyebrow={UNREACHABLE_EYEBROW}
+              title={UNREACHABLE_TITLE}
+              body={UNREACHABLE_BODY}
+              facts={UNREACHABLE_FACTS}
+              action="Retry"
+              onAction={() => {
+                setSearching(true);
+                setAttempt((value) => value + 1);
+              }}
+            />
+          </ScrollView>
+        ) : asked ? (
+          searching ? (
+            // Determinate: the library's size is known, so it is stated. There
+            // is no spinner anywhere in this product (§18).
+            <View style={styles.center}>
+              <Text style={styles.status}>
+                Searching {assets.length}{" "}
+                {assets.length === 1 ? "photograph" : "photographs"}…
+              </Text>
+            </View>
+          ) : resultCount ? (
+            <View style={styles.fill}>
+              <View style={styles.head}>
+                <Text style={styles.headTitle}>Results</Text>
+                <Text style={styles.headCount}>{resultCount}</Text>
+              </View>
+              {/* The grouped hits are the substance of §9: a member who types
+                  a name gets the PERSON, the PLACE, the ALBUM — each with the
+                  surface that owns it one tap away — above the photographs. */}
+              {hits.map((hit) => (
+                <Pressable
+                  key={hit.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${hit.label}`}
+                  onPress={() => openHit(hit)}
+                  style={styles.hit}
+                >
+                  <View style={styles.hitText}>
+                    <Text numberOfLines={1} style={styles.hitLabel}>
+                      {hit.label}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.hitSub}>
+                      {hit.sub}
+                    </Text>
+                  </View>
+                  {hit.meta ? (
+                    <Text style={styles.hitMeta}>{hit.meta}</Text>
+                  ) : null}
+                  <Text style={styles.hitOpen}>Open →</Text>
+                </Pressable>
+              ))}
+              <PhotoTimeline
+                sections={sections}
+                selection={new Set()}
+                onSelectionChange={() => undefined}
+                onOpen={(asset) =>
+                  navigation.navigate("PhotoLightbox", { assetId: asset.id })
+                }
+                refreshing={refreshing}
+                onRefresh={refreshNow}
+              />
+              <Text style={styles.foot}>
+                {resultCount} {resultCount === 1 ? "result" : "results"} ·{" "}
+                {SEARCH_SCOPE}
+              </Text>
+            </View>
+          ) : (
+            <PhotosSearchEmptyState
+              query={term.trim()}
+              onClear={() => setTerm("")}
+            />
+          )
+        ) : (
+          <PhotosSearchRestingState />
+        )}
+      </View>
+
+      {/* The examples dock just above the field that they fill — iOS Photos
+          anchors its suggestions to the bottom field the same way, so a
+          member never has to look away from the field to find them. Only the
+          resting state offers them: once a term is typed there is a real
+          answer to show, and while the vault is unreachable a fresh example
+          would just start a search that cannot run. */}
+      {showExamples ? (
+        <View style={styles.examples}>
+          {SEARCH_EXAMPLES.map((example) => (
+            <Pressable
+              key={example}
+              accessibilityRole="button"
+              accessibilityLabel={`Search for ${example}`}
+              onPress={() => onTerm(example)}
+              style={styles.example}
+            >
+              <Text style={styles.exampleText}>{example}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {/* One query box (proto:4257), docked at the BOTTOM of the surface
+          (#712). Nothing else is a control on this shelf. */}
       <View style={styles.fieldRow}>
         <View style={styles.field}>
           <Icon name="search" size={16} color={colors.textSoft} />
@@ -314,113 +475,7 @@ export function PhotosSearchView({
           ) : null}
         </View>
       </View>
-
-      <ReplicaStatusBar />
-
-      {unreachable ? (
-        <Panel
-          styles={styles}
-          net
-          eyebrow={UNREACHABLE_EYEBROW}
-          title={UNREACHABLE_TITLE}
-          body={UNREACHABLE_BODY}
-          facts={UNREACHABLE_FACTS}
-          action="Retry"
-          onAction={() => {
-            setSearching(true);
-            setAttempt((value) => value + 1);
-          }}
-        />
-      ) : asked ? (
-        searching ? (
-          // Determinate: the library's size is known, so it is stated. There is
-          // no spinner anywhere in this product (§18).
-          <View style={styles.center}>
-            <Text style={styles.status}>
-              Searching {assets.length}{" "}
-              {assets.length === 1 ? "photograph" : "photographs"}…
-            </Text>
-          </View>
-        ) : matches.length || hits.length ? (
-          <View style={styles.fill}>
-            <View style={styles.head}>
-              <Text style={styles.headTitle}>Results</Text>
-              <Text style={styles.headCount}>{matches.length}</Text>
-            </View>
-            {/* The grouped hits are the substance of §9: a member who types a
-                name gets the PERSON, the PLACE, the ALBUM — each with the
-                surface that owns it one tap away — above the photographs. */}
-            {hits.map((hit) => (
-              <Pressable
-                key={hit.key}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${hit.label}`}
-                onPress={() => openHit(hit)}
-                style={styles.hit}
-              >
-                <View style={styles.hitText}>
-                  <Text numberOfLines={1} style={styles.hitLabel}>
-                    {hit.label}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.hitSub}>
-                    {hit.sub}
-                  </Text>
-                </View>
-                {hit.meta ? (
-                  <Text style={styles.hitMeta}>{hit.meta}</Text>
-                ) : null}
-                <Text style={styles.hitOpen}>Open →</Text>
-              </Pressable>
-            ))}
-            <PhotoTimeline
-              sections={sections}
-              selection={new Set()}
-              onSelectionChange={() => undefined}
-              onOpen={(asset) =>
-                navigation.navigate("PhotoLightbox", { assetId: asset.id })
-              }
-              refreshing={refreshing}
-              onRefresh={refreshNow}
-            />
-            <Text style={styles.foot}>
-              {matches.length} {matches.length === 1 ? "result" : "results"} ·{" "}
-              {SEARCH_SCOPE}
-            </Text>
-          </View>
-        ) : (
-          <Panel
-            styles={styles}
-            eyebrow={NONE_EYEBROW}
-            title={`Nothing matches “${term.trim()}”`}
-            body={NONE_BODY}
-            action={NONE_ACTION}
-            onAction={() => setTerm("")}
-          />
-        )
-      ) : (
-        <ScrollView contentContainerStyle={styles.resting}>
-          <Panel
-            styles={styles}
-            eyebrow={RESTING_EYEBROW}
-            title={RESTING_TITLE}
-            body={RESTING_BODY}
-          />
-          <View style={styles.examples}>
-            {SEARCH_EXAMPLES.map((example) => (
-              <Pressable
-                key={example}
-                accessibilityRole="button"
-                accessibilityLabel={`Search for ${example}`}
-                onPress={() => onTerm(example)}
-                style={styles.example}
-              >
-                <Text style={styles.exampleText}>{example}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
-      )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -501,11 +556,21 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: 34,
       paddingHorizontal: spacing[3],
     },
+    // Sits between the scrolling content and the docked field — a border
+    // above marks it as the field's own row, not one more thing that scrolls.
+    contentPad: {
+      gap: spacing[4],
+      paddingBottom: spacing[4],
+      paddingTop: spacing[4],
+    },
     examples: {
+      borderTopColor: colors.line,
+      borderTopWidth: borders.hairline,
       flexDirection: "row",
       flexWrap: "wrap",
       gap: spacing[2],
       paddingHorizontal: spacing[4],
+      paddingTop: spacing[3],
     },
     exampleText: { ...t("mono"), color: colors.textSoft },
     eyebrow: { ...t("eyebrow"), color: colors.textSoft },
@@ -566,12 +631,22 @@ const makeStyles = (colors: ThemeColors) =>
     hitOpen: { ...t("control"), color: colors.link },
     hitSub: { ...t("small"), color: colors.textSoft },
     hitText: { flex: 1, minWidth: 0 },
+    // The typed word has to sit on the magnifier's line (#712). A TextInput
+    // stretched to the field's full 34px centres its text against the CONTROL
+    // box, which on iOS is offset from the glyph box the `body` role's
+    // `lineHeight` describes, so the icon and the text ended up on two
+    // different lines. Giving the input exactly one line's height — with no
+    // vertical padding and Android's extra font padding off — makes the box
+    // the line, and the row's `alignItems: "center"` then centres icon, text
+    // and Clear on the same axis.
     input: {
       ...t("body"),
       color: colors.text,
       flex: 1,
-      height: "100%",
+      height: t("body").lineHeight,
+      includeFontPadding: false,
       paddingVertical: 0,
+      textAlignVertical: "center",
     },
     panel: {
       borderColor: colors.line,
@@ -584,7 +659,6 @@ const makeStyles = (colors: ThemeColors) =>
     panelBody: { ...t("small"), color: colors.textSoft },
     panelNet: { borderColor: colors.net },
     panelTitle: { ...t("display"), color: colors.text },
-    resting: { gap: spacing[4], paddingBottom: spacing[6] },
     safe: { flex: 1 },
     status: { ...t("mono"), color: colors.textSoft },
   });

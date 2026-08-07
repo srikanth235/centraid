@@ -34,10 +34,23 @@
 //     readEnrichSettings/updateEnrichSettings). The settings bag itself is
 //     owner-only (GET/PATCH /centraid/_vault/enrich); apps have no reach into
 //     JSON settings fields through the consent-checked read path, so this
-//     table is the one column of it apps may read — "is photos/docs
-//     enrichment allowed to leave the vault" — kept in sync by
+//     table is the one column of it apps may read — "how far may
+//     photos/docs enrichment run: off | device | gateway" — kept in sync by
 //     updateEnrichSettings on every owner change, seeded at bootstrap and
 //     backfilled below for vaults that predate this table.
+//
+//     TIER RENAME (issue #712 C5): `off|local|model` became
+//     `off|device|gateway` — see `packages/automation/src/fire/enrich-gate.ts`
+//     for the axis and `packages/vault/src/enrich/policy.ts` for the
+//     COMPAT read-time mapping of legacy stored values. The CHECK below
+//     keeps accepting the legacy tokens: this is a pre-release,
+//     single-rung, edit-in-place schema (`schema/migrate.ts`), so an
+//     already-created `enrich_policy` table keeps whatever CHECK it was
+//     created with regardless of what this DDL text says now, and a
+//     legacy value already sitting in such a row must stay a legal SELECT
+//     forever — only application code translates it. Nothing in this
+//     runtime writes the legacy tokens; the CHECK simply refuses to be the
+//     thing that turns an old row unreadable.
 //   - the `vision` and `doctype` concept schemes — machine-tag vocabularies
 //     (issue #299 §4). Concepts are created on demand by the tag publisher.
 //     Fresh vaults seed the schemes at bootstrap; the guarded inserts below
@@ -58,17 +71,19 @@ CREATE INDEX IF NOT EXISTS idx_media_asset_phash_cluster
 
 CREATE TABLE IF NOT EXISTS enrich_policy (
   domain     TEXT PRIMARY KEY CHECK (domain IN ('photos','docs')),
-  tier       TEXT NOT NULL CHECK (tier IN ('off','local','model')),
+  -- 'local' and 'model' are the pre-#712 tier names, kept legal here as a
+  -- read compatibility shim only — see the header comment above.
+  tier       TEXT NOT NULL CHECK (tier IN ('off','device','gateway','local','model')),
   updated_at TEXT NOT NULL
 ) STRICT;
 -- Backfill for vaults that predate this table (bootstrap seeds fresh ones);
 -- guarded the same way as the vision/doctype schemes below.
 INSERT INTO enrich_policy (domain, tier, updated_at)
-SELECT 'photos', 'local', datetime('now')
+SELECT 'photos', 'gateway', datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM enrich_policy WHERE domain = 'photos')
    AND EXISTS (SELECT 1 FROM core_vault);
 INSERT INTO enrich_policy (domain, tier, updated_at)
-SELECT 'docs', 'local', datetime('now')
+SELECT 'docs', 'gateway', datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM enrich_policy WHERE domain = 'docs')
    AND EXISTS (SELECT 1 FROM core_vault);
 
@@ -101,9 +116,9 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   -- an automation manifest's enrich.capability ("faces", "captions", ...).
   -- The problem it solves: the owner's on-demand ask used to be untagged, so
   -- a face-detection consent handed the SAME queue row to every enabled
-  -- enricher — captioner, screenshot-extractor and the rest all treated one
-  -- member's "detect faces" as their cue. A tagged row is drained only by the
-  -- enricher that owns that capability.
+  -- enricher: every one of them treated a member's "detect faces" as its own
+  -- cue. A tagged row is drained only by the enricher that owns that
+  -- capability.
   -- NULL is reserved for the system signals (search-miss / on-view), which
   -- are not consent and stay broadcast; the CHECK below makes an untagged
   -- OWNER ask impossible rather than merely discouraged.

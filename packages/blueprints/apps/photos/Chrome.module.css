@@ -101,16 +101,6 @@
   composes: kit-app-main from global;
 }
 
-/* The face-proposer's own region. It used to sit among the header's icon
-   buttons; with the header retired it is a row of its own above the grid, and
-   it collapses when it has nothing to propose so it costs no height. */
-.enrichment {
-  flex-shrink: 0;
-}
-.enrichment:empty {
-  display: none;
-}
-
 /* #live wraps the shelf strip, the toolbar row + scroll pane; it must be a
    bounded flex column so
    `.scroll` (flex:1) scrolls inside the pane. */

@@ -4,7 +4,6 @@ import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 
@@ -12,6 +11,7 @@ import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -23,6 +23,7 @@ import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
+import { countLocalOnly, DOCS_CUSTODY_SHELF_SUFFIX } from "./docs-custody";
 import { driveItemKey, FILTERS } from "./docs-library-shelves";
 import type { LibraryFilter, ViewMode } from "./docs-library-shelves";
 import type { NativeDocument, NativeFolder } from "./docs-model";
@@ -186,6 +187,10 @@ export default function DocsHome({
       ),
     [drive.folders, filter, folderId, searching]
   );
+  // The per-shelf altitude (docs/blueprint-seats.md "Byte custody
+  // vocabulary"): the population fact, as a count, over the same set of
+  // documents the "N documents" count above already describes.
+  const localOnlyCount = useMemo(() => countLocalOnly(documents), [documents]);
   // Memoised: this array is the list's `data`, and rebuilding it inline gave
   // FlatList a new identity on every keystroke and refresh toggle.
   const items = useMemo<DriveItem[]>(
@@ -313,10 +318,7 @@ export default function DocsHome({
 
   return (
     // Docs' declared surface tone is "paper" (freedom table, DESIGN.md).
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.tonePaper }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.tonePaper }]}>
       <View style={styles.header}>
         {folderId ? (
           // In a folder: chevron = up one level, still inside Docs.
@@ -427,6 +429,9 @@ export default function DocsHome({
           <Text style={[styles.libraryMeta, { color: colors.textSoft }]}>
             {documents.length} documents
             {folders.length ? ` · ${folders.length} folders` : ""}
+            {localOnlyCount
+              ? ` · ${localOnlyCount} ${DOCS_CUSTODY_SHELF_SUFFIX}`
+              : ""}
           </Text>
         </View>
         <View style={[styles.viewSwitch, { backgroundColor: colors.bgSunken }]}>
@@ -599,6 +604,6 @@ export default function DocsHome({
         }
         onChanged={refreshLibrary}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

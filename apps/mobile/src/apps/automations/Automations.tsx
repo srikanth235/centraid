@@ -8,15 +8,13 @@ import React, {
 } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { spacing, useTheme } from "../../kit/theme";
 import {
   cloneAutomationTemplate,
@@ -107,7 +105,7 @@ function AutomationsList({
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
@@ -153,7 +151,7 @@ function AutomationsList({
         // description (up to 3 lines) and the focused banner.
         renderItem={renderRow}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

@@ -1229,7 +1229,7 @@ function validateVault(raw: unknown): ManifestVault | undefined {
 
 /**
  * The `enrich` block. Every field is required except `lane`, which defaults
- * to the EXPENSIVE reading (`model`) — a manifest is agent-writable, so an
+ * to the EXPENSIVE reading (`gateway`) — a manifest is agent-writable, so an
  * omitted lane must never be the one that escapes the gate.
  */
 function validateEnrich(raw: unknown): ManifestEnrich | undefined {
@@ -1266,7 +1266,7 @@ function validateEnrich(raw: unknown): ManifestEnrich | undefined {
   return {
     domain: e.domain as EnrichDomain,
     capability,
-    lane: (e.lane as EnrichLane | undefined) ?? "model",
+    lane: (e.lane as EnrichLane | undefined) ?? "gateway",
   };
 }
 

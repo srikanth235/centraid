@@ -20,7 +20,12 @@
  *   POST   /centraid/_gateway/storage/connections/<id>/test  — real signed HEAD probe against a freshly granted
  *                                                              bucket, plus the provider's home-profile status
  *   GET    /centraid/_gateway/storage/status                 — per-vault replication progress: configured,
- *                                                              replicated/backlog (count + bytes), lastSweep,
+ *                                                              replicated/backlog (count + bytes), a `custody`
+ *                                                              block carrying the whole `blob.custody_rollup`
+ *                                                              projection (issue #712 B3 — `computedAt`, which
+ *                                                              is `null` until the sweep has run, plus every
+ *                                                              bucket including `freeable` and
+ *                                                              `local-unproven`), lastSweep,
  *                                                              throttleBytesPerSec, and (issue #405 §7) a
  *                                                              `cache` block making the bounded storage tier
  *                                                              visible: spool occupancy vs. budget
@@ -61,6 +66,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { requestCasGrant } from "@centraid/backup";
 import {
   S3BlobStore,
+  custodyRollup,
   custodyStateByteCounts,
   custodyStateCounts,
   readBackupPolicy,
@@ -215,6 +221,14 @@ function storageStatus(plane: StoragePlane) {
   const sweep = plane.db.blobs.sweepStatus();
   const metrics = plane.db.blobs.metrics();
   const outbox = plane.db.blobTransfers.status();
+  // The ROLLUP, read (never recomputed) here — the standing blob sweep owns
+  // rebuilding it (`gateway.ts` → `refreshCustodyRollup`), and a route that
+  // rebuilt a whole-library projection per request would be O(vault-size) on
+  // the request path. `computedAt: null` travels as null and MUST reach the
+  // client as null: it is the difference between "nothing is freeable" and
+  // "nobody has looked yet", and a client that renders zeroes for the second
+  // tells a member their library is safe on the strength of an unrun sweep.
+  const rollup = custodyRollup(plane.db.vault);
   return {
     vaultId: plane.boot.vaultId,
     name: plane.name,
@@ -234,6 +248,13 @@ function storageStatus(plane: StoragePlane) {
       lastError: outbox.lastError,
     },
     localOnly: { count: counts["local-only"], bytes: bytes["local-only"] },
+    // Every number a storage/backup surface prints traces to one of these
+    // buckets (issue #712 B3) — `freeable` and `local-unproven` above all,
+    // which are the only two in this repo that license, or refuse, releasing a
+    // local copy. The five custody-state buckets ride along so a client never
+    // has to reconcile this block against the `replicated`/`localOnly` pairs
+    // above, which are the same arithmetic from `blob_custody_state`.
+    custody: { computedAt: rollup.computedAt, buckets: rollup.buckets },
     casAck: policy.casAck,
     outboxBudgetBytes: policy.outboxBudgetBytes,
     reservedHeadroomBytes: policy.reservedHeadroomBytes,

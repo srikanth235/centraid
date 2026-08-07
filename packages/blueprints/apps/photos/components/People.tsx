@@ -20,11 +20,23 @@
 // and a person (or proposal) whose cover is outside the loaded window keeps
 // the same square rather than collapsing — the same contract the tile holds
 // (§14).
+//
+// THE CONSENT GATE, RE-HOMED (issue #712 C2). The face-detection consent
+// question used to open from a toolbar icon + `<dialog>`
+// (components/Enrichment.tsx, retired) — built, correct, and nearly
+// unreachable. A member who opens People and finds it empty has exactly the
+// question the gate answers, so while the roster (and its proposals) are
+// empty AND the question is still open this session, `gate` renders in place
+// of the grid/note — the empty shelf IS the gate's body. `app-root.tsx`
+// decides when that is true (`enrichment-gate.ts`); this component stays a
+// pure view either way, same as `EnrichmentConsent` itself.
 import { faceCropStyle } from "../face-crop.ts";
 import { mountMedia } from "../media.ts";
 import type { FaceProposal, Person } from "../people.ts";
 import type { Asset } from "../types.ts";
-import { peoplePendingNote } from "../view-copy.ts";
+import { peopleConfirmedByNote, peoplePendingNote } from "../view-copy.ts";
+import { EnrichmentConsent } from "./EnrichmentConsent.tsx";
+import type { EnrichmentConsentProps } from "./EnrichmentConsent.tsx";
 
 import styles from "./People.module.css";
 
@@ -104,6 +116,7 @@ export function PeopleShelf({
   onOpen,
   onReview,
   onNameProposal,
+  gate,
 }: {
   people: readonly Person[];
   /** Unconfirmed face proposals, grouped and never named — see
@@ -125,13 +138,28 @@ export function PeopleShelf({
    *  proposal card's route to naming it, the same queue `onReview` opens,
    *  just already on the face the member tapped. */
   onNameProposal?: (regionId: string) => void;
+  /** The consent gate's props (issue #712 C2), present only while the roster
+   *  is empty and the question has not been answered this session — see the
+   *  file header. Renders IN PLACE of the grid/note. */
+  gate?: EnrichmentConsentProps;
 }) {
+  if (gate) {
+    return (
+      <div className={styles.shelf}>
+        <EnrichmentConsent {...gate} />
+      </div>
+    );
+  }
   const note = peoplePendingNote(unmatchedCount ?? null);
   return (
     <div className={styles.shelf}>
       <div className={styles.grid}>
         {people.map((person) => {
           const cover = coverFor(person, assets);
+          // Only when the group actually spans more than one answerer — see
+          // `peopleConfirmedByNote`. Null on every ordinary card, so nothing
+          // is added to the common case's geometry.
+          const confirmedBy = peopleConfirmedByNote(person.confirmed_by ?? []);
           // NOT a fallback string. `queries/people.ts` only ever names a
           // party already in `core.party` with `kind = 'person'`, and the
           // one command that can mint one (`people.create`,
@@ -159,6 +187,9 @@ export function PeopleShelf({
               />
               <span className={styles.name}>{person.name}</span>
               <span className={styles.count}>{person.count}</span>
+              {confirmedBy ? (
+                <span className={styles.confirmedBy}>{confirmedBy}</span>
+              ) : null}
             </button>
           );
         })}

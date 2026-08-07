@@ -23,6 +23,14 @@
 
 ## Resolved
 
+- #716 — Fixed replica-intent attribution across the gateway's cached vault
+  bridge. The bridge deferred vault lookup until an app-worker callback, after
+  the originating AsyncLocalStorage scopes had unwound, so connected mobile
+  Photos writes could be rejected as belonging to the wrong device/app. Bridge
+  construction now captures an existing vault and intent scope and re-enters
+  both around deferred callbacks, while deliberately unscoped bridges retain
+  dynamic multi-vault resolution. A focused registry regression and the native
+  trash/restore journey cover both sides.
 - #711 — Closed the enrichment-tier enforcement gap. The vault's per-domain
   `enrich_policy` (`off | local | model`) was written by Settings and read by
   nothing on the execution path, so Photos' "what leaves the device: nothing"

@@ -19,17 +19,14 @@
 // This module is deliberately free of `react-native` imports so the rules can
 // be asserted directly. `PhotosBand.tsx` renders them and adds nothing.
 
+import type { BandOwner } from "../../kit/band/band-owner";
+
 /** A destination in the claimed band. `more` opens the sheet, not a route. */
-export type BandDestinationKey =
-  | "library"
-  | "albums"
-  | "people"
-  | "search"
-  | "more";
+export type BandDestinationKey = "library" | "collections" | "search" | "more";
 
 export interface BandDestination {
   key: BandDestinationKey;
-  /** Copy is final (handoff §3.1) — these five strings are the band. */
+  /** Copy is final (handoff §3.1) — these four strings are the band. */
   label: string;
   icon: string;
 }
@@ -55,12 +52,21 @@ export const TARGET_MIN = 44;
 // simply draws it twice, once for the capsule and once for the tab group.
 
 /**
- * Photos' five (§3.1). Exactly these, in this order, on every compact surface.
+ * Photos' four (§3.1, issue #712). Exactly these, in this order, on every
+ * compact surface: Library first — the timeline is what a member reaches for
+ * most, and the band is judged by how few taps that costs — then Collections,
+ * then Search, then More. People is not a tab here: it is reached from
+ * Collections' own People section (`PhotosCollectionsView.tsx`'s `open()`)
+ * and from the Library shelf list's People row, both of which land on the
+ * pushed `PhotosPeople` route rather than a band destination.
  */
 export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
   { key: "library", label: "Library", icon: "image" },
-  { key: "albums", label: "Albums", icon: "Layers" },
-  { key: "people", label: "People", icon: "users" },
+  // Collections, not Albums. The destination behind it holds every shelf
+  // Photos has — albums, people, places, favorites, sharing, duplicates,
+  // trash — so "Albums" named one section of it and hid the rest behind the
+  // More sheet. See `PhotosCollectionsView.tsx`.
+  { key: "collections", label: "Collections", icon: "Layers" },
   { key: "search", label: "Search", icon: "search" },
   { key: "more", label: "More", icon: "more-vertical" },
 ];
@@ -72,15 +78,9 @@ export const PHOTOS_BAND_DESTINATIONS: readonly BandDestination[] = [
  * outside this union fails to typecheck right here, before it ever reaches
  * the router.
  */
-export type PhotosMoreRowKey =
-  | "favorites"
-  | "places"
-  | "duplicates"
-  | "trash"
-  | "storage"
-  | "access";
+export type PhotosMoreRowKey = "backup";
 
-/** What the More sheet carries (§3.1) — the shelves the five cannot hold. */
+/** What the More sheet carries (§3.1) — the shelves the four cannot hold. */
 export interface MoreRow {
   key: PhotosMoreRowKey;
   label: string;
@@ -97,32 +97,37 @@ export interface MoreRow {
 }
 
 /**
- * Sharing and Import are deliberately ABSENT from this table. The handoff
- * (proto:4980-4983) lists both as More-sheet rows, but neither has a
- * destination on mobile today: there is no Sharing surface (a second vault a
- * photograph sits in, per proto:3955-3958) and no Import flow (upload / drag
- * / capture, per proto:3978) built for the phone. A row that opens something
- * else — or that "opens" nowhere — is exactly the class of bug this file
- * exists to prevent (see PhotosHome's `onMoreRow`, which is now exhaustive
- * over this table and fails to typecheck on an unhandled key). A missing row
- * is honest; a row that lies about its destination is not. Add Sharing and
- * Import back here the moment their surfaces ship — not before.
+ * ONE ROW. What this sheet is FOR, after Collections.
+ *
+ * It used to carry six — Sharing, Favorites, Places, Duplicates, Trash and
+ * Backup — because the band could hold five destinations and Photos has more
+ * shelves than that. Collections (`PhotosCollectionsView.tsx`) is now the
+ * landing surface and carries every one of those shelves as a named section
+ * with a live count, on screen, without a sheet in the way. Keeping the rows
+ * here as well would mean two doors to each shelf, of which one is hidden —
+ * and two places to keep their labels and counts honest.
+ *
+ * So the sheet keeps exactly what Collections does not carry:
+ *
+ *   - **Backup**, which is not a shelf at all. It is a cross-stack link to a
+ *     FRAME screen (issue #712 B2) about whether this device's bytes have
+ *     left it — a policy that governs Docs' scans and Notes' attachments too.
+ *
+ * Tile size used to be rendered directly by this sheet too; it has since
+ * moved on to the Library's own header menu (`photos-library-menu.ts`),
+ * reached from the header chip rather than from here — see that module's own
+ * header comment.
+ *
+ * `Import` was never here (no phone surface ships one) and `Photo access` was
+ * removed in P13, because the grant's sentence belongs in the grid's own slot
+ * where the question is actually asked.
  */
 export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
-  { key: "favorites", label: "Favorites", icon: "heart" },
-  { key: "places", label: "Places", icon: "Pin" },
-  { key: "duplicates", label: "Duplicates", icon: "copy" },
-  { key: "trash", label: "Trash", icon: "trash-2" },
-  { key: "storage", label: "Storage", icon: "archive" },
-  // NOT one of proto:4980-4983's rows, and deliberately so. §13 makes the
-  // permission screen a whole surface rather than a banner, and on the phone
-  // the grant in question is the OPERATING SYSTEM's photo-library grant — a
-  // thing the desktop and the PWA do not have and therefore never needed a
-  // route to. The three answers a phone can get (denied, limited, granted) are
-  // not reachable from any other Photos surface, and a member who refused the
-  // camera-roll prompt otherwise gets an empty grid with no sentence and no way
-  // back. This row is that way back.
-  { key: "access", label: "Photo access", icon: "Lock" },
+  // "Backup", not "Storage" (issue #712, B1). The screen it opens has always
+  // been titled "Backup health" and has always been about whether this device's
+  // photographs have left it — the row's old label named the noun the screen
+  // does not discuss.
+  { key: "backup", label: "Backup", icon: "archive" },
 ];
 
 /** The sheet's foot line (proto:4979), verbatim. */
@@ -146,35 +151,27 @@ export const PHOTOS_MORE_FOOT =
  *      timeline engine, expo-notifications and expo-haptics — none of which
  *      this routing rule depends on.
  */
-export function resolveMoreRowRoute(key: PhotosMoreRowKey):
-  | { screen: "PhotoStateView"; params: { mode: "trash" | "favorites" } }
-  | {
-      screen:
-        | "DuplicatesShelf"
-        | "PlacesView"
-        | "BackupHealth"
-        | "PhotoPermission";
-    } {
+/**
+ * A CROSS-STACK destination (issue #712, B2), and now the only one. Backup
+ * health is a frame screen — it lives in Settings beside Phone storage,
+ * because nothing on it is about photographs: the policy it edits governs
+ * Docs' scans and Notes' attachments too. Photos keeps a deep link to it
+ * rather than a copy, the same way `PhotoLightbox`'s `onParked` reaches
+ * Approvals.
+ *
+ * Still a union of one rather than a bare object type: the shape is what makes
+ * `resolveMoreRowRoute`'s `never` check load-bearing, and a second row added
+ * to this sheet should have to widen this deliberately.
+ */
+export type MoreRowRoute = {
+  screen: "Settings";
+  params: { screen: "BackupHealth" };
+};
+
+export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
   switch (key) {
-    case "trash":
-      return { screen: "PhotoStateView", params: { mode: "trash" } };
-    case "favorites":
-      return { screen: "PhotoStateView", params: { mode: "favorites" } };
-    case "duplicates":
-      // The SHELF, not the review (proto:4436 vs proto:4291). The row's meta
-      // is a cluster count, so the surface it opens has to be the one that
-      // shows clusters; the review is one control away, from the shelf's own
-      // head, exactly as the prototype's `Review duplicates` primary is.
-      return { screen: "DuplicatesShelf" };
-    case "access":
-      return { screen: "PhotoPermission" };
-    case "places":
-      // Cards first (proto:4197): the More row opens the place-cards shelf,
-      // not the map directly. The map is one control away, from the shelf's
-      // own head (`PlacesView` → `PlacesMap`).
-      return { screen: "PlacesView" };
-    case "storage":
-      return { screen: "BackupHealth" };
+    case "backup":
+      return { screen: "Settings", params: { screen: "BackupHealth" } };
     default: {
       const exhaustive: never = key;
       throw new Error(`Unhandled More-sheet row: ${String(exhaustive)}`);
@@ -183,18 +180,21 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey):
 }
 
 /**
- * Who owns the band right now. The member may hand it back to the frame; the
- * shipped web shell persists this PER DEVICE (`shell.bandOwner.<appId>` in
- * local storage) because this repo has no server-side member-preference plane.
- * Mobile matches that reality rather than inventing a sync path.
+ * Who owns the band right now — THE FRAME'S LATCH, not Photos'
+ * (`kit/band/band-owner.ts`, issue #712 E3). This module used to define the
+ * type, the default and the storage key itself, under `photos.bandOwner.*`,
+ * while the web shell kept the same concept under `shell.bandOwner.*`. Two
+ * namespaces for one preference, owned by an app, for a decision the frame
+ * makes. Mobile adopted web's key; see that module's header for what that
+ * costs and why it is safe here.
+ *
+ * NOTHING is re-exported from here — every consumer imports the type, the
+ * hook and the key straight from `kit/band/band-owner`. This file only
+ * CONSUMES the type (in `resolveBand`'s signature) and stays free of
+ * react-native and storage imports, so its rules can be asserted as plain
+ * values (`photos-band.test.ts`) without dragging AsyncStorage into that
+ * test's module graph.
  */
-export type BandOwner = "app" | "host";
-
-export const DEFAULT_BAND_OWNER: BandOwner = "app";
-
-/** Where a member's band-owner choice lives on this device. */
-export const bandOwnerKey = (appId: string): string =>
-  `photos.bandOwner.${appId}`;
 
 /** The frame's capsule — a frame control, never one of the app's tabs. */
 export interface BandCapsule {

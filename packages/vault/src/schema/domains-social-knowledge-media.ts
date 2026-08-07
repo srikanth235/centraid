@@ -166,7 +166,28 @@ CREATE TABLE media_face_region (
   bbox_json             TEXT NOT NULL CHECK (json_valid(bbox_json)),
   party_id              TEXT REFERENCES core_party(party_id),
   confidence            REAL CHECK (confidence BETWEEN 0 AND 1),
-  confirmed_by_party_id TEXT REFERENCES core_party(party_id)
+  confirmed_by_party_id TEXT REFERENCES core_party(party_id),
+  -- WHERE A REVIEW QUEUE ENDS (issue #712). Before this column the table could
+  -- only say "confirmed or not", so two of the three answers a member actually
+  -- gives had nowhere to live: "reviewed, deliberately left unnamed" was not
+  -- expressible at all, and "rejected" was a DELETE — which is not a state, so
+  -- the enricher's next run was free to propose the same stranger again and
+  -- the queue could never be finished. media.answer_face_proposal writes
+  -- this; nothing else does.
+  review_state          TEXT NOT NULL DEFAULT 'proposed'
+                          CHECK (review_state IN ('proposed','confirmed','rejected','dismissed')),
+  -- ONE SOURCE OF TRUTH, STRUCTURALLY. "confirmed" is already derivable from
+  -- confirmed_by_party_id, so the two facts are pinned to each other here
+  -- rather than left to agree by convention: a writer cannot mark a region
+  -- confirmed without naming who confirmed it, and cannot name a confirmer
+  -- without the state saying so. Readers may use either and never disagree.
+  CHECK ((review_state = 'confirmed') = (confirmed_by_party_id IS NOT NULL)),
+  -- A PARTY IS AN ASSERTION, NOT A LEFTOVER. party_id on a proposed region is
+  -- the enricher's candidate; on a confirmed one it is the owner's word.
+  -- A rejected or dismissed region asserts neither, so it carries no party --
+  -- which is what keeps rejected rows (now that they survive) out of every
+  -- per-person count that falls back from confirmed_by_party_id to party_id.
+  CHECK (review_state IN ('proposed','confirmed') OR party_id IS NULL)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_face_region_asset ON media_face_region(asset_id);
 CREATE INDEX IF NOT EXISTS idx_face_region_party ON media_face_region(party_id);

@@ -18,12 +18,12 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import {
   NO_DOWNLOAD_REASON,
-  NO_SHARE_DESTINATION_REASON,
   batchFavorite,
   batchPurge,
   batchRestore,
@@ -36,9 +36,11 @@ import {
   emptyTrashSummary,
 } from "./photos-trash";
 import PhotosScreen from "./PhotosScreen";
+import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useCopyToSharing } from "./use-copy-to-sharing";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
@@ -151,6 +153,13 @@ export default function PhotoStateView({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(assets, selection);
+  // One handler for the third selection target, shared by every Photos shelf
+  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // cannot drift between them.
+  const sharing = useCopyToSharing(
+    () => selected,
+    () => setSelection(new Set())
+  );
   // Empty trash acts on the WHOLE shelf rather than the selection, so it gets
   // its own targets and its own refusal — the selection bar's answer is about
   // whatever happens to be ticked, which is a different question.
@@ -247,7 +256,10 @@ export default function PhotoStateView({
         ? "Add to album from the library, where the albums are."
         : writeBlockedReason!,
     },
-    share: { unavailableReason: NO_SHARE_DESTINATION_REASON },
+    // The real thing since issue #712 A5: a live control that places
+    // `media.media_asset` into the member's share target — or, when they
+    // have not chosen one yet, asks at the moment of intent (A3).
+    share: sharing.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canWrite
       ? {
@@ -265,10 +277,11 @@ export default function PhotoStateView({
       : blocked,
   };
   return (
-    <PhotosScreen
-      current={mode === "person" ? "people" : "more"}
-      selection={selectionBar}
-    >
+    // People is off the band (issue #712): a person's shelf is reached from
+    // Collections or the Library shelf list, never from the band itself, so
+    // `more` is the destination marked current for every mode this screen
+    // takes — including "person" — same as `PlacesView`/`FaceReview`.
+    <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
         <View style={styles.copy}>
           <Text
@@ -295,39 +308,52 @@ export default function PhotoStateView({
           >
             <Text style={[styles.action, { color: colors.text }]}>Done</Text>
           </Pressable>
-        ) : mode === "trash" && assets.length ? (
-          // OUTLINED `--net`, never filled (proto:4800-4803) — the one
-          // irreversible control in the app must not look louder than Import.
-          // Pressing it opens the confirm; only the confirm destroys anything.
-          <Pressable
-            accessibilityLabel="Empty trash"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: emptyTrashReason !== null }}
-            accessibilityHint={emptyTrashReason ?? EMPTY_TRASH_NOTE}
-            disabled={emptyTrashReason !== null}
-            onPress={runEmptyTrash}
-            style={[
-              styles.emptyTrash,
-              {
-                borderColor:
-                  emptyTrashReason === null ? colors.net : colors.textDisabled,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.action,
-                {
-                  color:
-                    emptyTrashReason === null
-                      ? colors.net
-                      : colors.textDisabled,
-                },
-              ]}
-            >
-              Empty trash
-            </Text>
-          </Pressable>
+        ) : assets.length ? (
+          <View style={styles.headerActions}>
+            {mode === "trash" ? (
+              // OUTLINED `--net`, never filled (proto:4800-4803) — the one
+              // irreversible control in the app must not look louder than Import.
+              // Pressing it opens the confirm; only the confirm destroys anything.
+              <Pressable
+                accessibilityLabel="Empty trash"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: emptyTrashReason !== null }}
+                accessibilityHint={emptyTrashReason ?? EMPTY_TRASH_NOTE}
+                disabled={emptyTrashReason !== null}
+                onPress={runEmptyTrash}
+                style={[
+                  styles.emptyTrash,
+                  {
+                    borderColor:
+                      emptyTrashReason === null
+                        ? colors.net
+                        : colors.textDisabled,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.action,
+                    {
+                      color:
+                        emptyTrashReason === null
+                          ? colors.net
+                          : colors.textDisabled,
+                    },
+                  ]}
+                >
+                  Empty trash
+                </Text>
+              </Pressable>
+            ) : null}
+            <PhotosSelectChip
+              disabled={false}
+              onPress={() => {
+                const first = assets[0];
+                if (first) setSelection(new Set([first.id]));
+              }}
+            />
+          </View>
         ) : null}
       </View>
       <ReplicaStatusBar />
@@ -374,6 +400,12 @@ export default function PhotoStateView({
           </Text>
         </View>
       )}
+      <ShareTargetPicker
+        visible={sharing.picking}
+        candidates={sharing.candidates}
+        onChoose={(vaultId) => sharing.choose(vaultId)}
+        onClose={() => sharing.dismiss()}
+      />
     </PhotosScreen>
   );
 }
@@ -401,6 +433,11 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     minWidth: 44,
+  },
+  headerActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing[2],
   },
   meta: { ...t("control"), marginTop: 2 },
   note: {

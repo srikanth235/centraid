@@ -33,6 +33,7 @@ import {
   readFailed,
 } from "./kit.ts";
 import { createLogic } from "./logic.ts";
+import { tallySearchGroups } from "./search-groups.ts";
 import type {
   AppState,
   Dash,
@@ -69,6 +70,7 @@ function makeState(): AppState {
     groupId: null,
     friendId: null,
     search: "",
+    searchStatus: "resting",
     narrow: false,
     viewData: null,
     detail: null,
@@ -373,13 +375,33 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   // ---- Main content (mirrors app.tsx render) ----
   let content: ReactNode = null;
   if (q) {
+    // Group/person rows above the expense list (issue #712 S1,
+    // `search-groups.ts`) — matched client-side against the dashboard
+    // snapshot already loaded, the same way Photos matches people/places/
+    // albums against data it already holds rather than round-tripping for
+    // them separately.
+    const searchGroupRows = tallySearchGroups(q, {
+      groups: dash.groups,
+      friends: dash.friends,
+    });
     content = (
       <SearchResults
         viewData={state.viewData}
+        status={state.searchStatus}
         search={q}
         currency={dash.currency}
+        groups={searchGroupRows}
         onOpenDetail={handleOpenDetail}
         onClearSearch={() => logic.clearSearch()}
+        onRetry={() => logic.retrySearch()}
+        onQuery={(value) => logic.searchFor(value)}
+        onOpenGroup={(target, row) => {
+          if (row.kind === "group") {
+            navTo({ view: "group", groupId: target, search: "" });
+          } else {
+            navTo({ view: "friend", friendId: target, search: "" });
+          }
+        }}
       />
     );
   } else if (state.view === "dashboard") {

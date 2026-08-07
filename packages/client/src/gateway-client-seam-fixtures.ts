@@ -139,12 +139,12 @@ const ROUTES: Record<string, Responder> = {
   // vault back after writing, and a client that rendered its own patch would
   // show a tier the vault may never have accepted.
   "GET /centraid/_vault/enrich": () =>
-    json({ enrich: { photos: "local", docs: "local" } }),
+    json({ enrich: { photos: "gateway", docs: "gateway" } }),
   "PUT /centraid/_vault/enrich": (request) =>
     json({
       enrich: {
-        docs: "local",
-        photos: "local",
+        docs: "gateway",
+        photos: "gateway",
         ...(JSON.parse(String(request.body)) as Record<string, unknown>),
       },
     }),

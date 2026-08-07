@@ -5,9 +5,9 @@
 // `updateEnrichSettings` and seeded at bootstrap. Until this module existed
 // the mirror had exactly two readers — the settings surface that wrote it and
 // the Photos app's `enrichment-status` query — and NOTHING on the execution
-// path. That made `local` ("what leaves the device → nothing") a claim the
-// backend never kept: enrichment automations fired and called `ctx.agent`
-// regardless of the tier.
+// path. That made the on-device tier's "what leaves the device → nothing"
+// claim one the backend never kept: enrichment automations fired and called
+// `ctx.agent` regardless of the tier.
 //
 // This is the tier read the enforcement choke point uses (see
 // `packages/automation/src/fire/enrich-gate.ts` for the decision and
@@ -31,11 +31,41 @@ import type { EnrichTier } from "../host.js";
 export const ENRICH_DOMAINS = ["photos", "docs"] as const;
 export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 
-const TIERS = new Set(["off", "local", "model"]);
+const TIERS = new Set(["off", "device", "gateway"]);
 
-/** Validation guard for a persisted string claiming to be a tier. */
+/** Validation guard for a persisted string claiming to be a (canonical,
+ *  post-rename) tier. Does NOT accept the legacy `local`/`model` strings —
+ *  see `normalizeTier` for those. */
 export function isEnrichTier(value: unknown): value is EnrichTier {
   return typeof value === "string" && TIERS.has(value);
+}
+
+// COMPAT(enrich-tier-rename #712): a table row written before the
+// off|local|model → off|device|gateway rename keeps whatever string it was
+// last written with — the mirror table's own CHECK constraint is fixed at
+// `CREATE TABLE` time (see schema/enrich.ts), so an already-migrated vault's
+// physical row does not rewrite itself just because this build's DDL text
+// changed. `model` already meant "this domain may take a model turn", which
+// is what `gateway` means now, so it maps up with no widening. `local` meant
+// NO model turn, and there is no per-capability consent gate on the
+// execution path yet (decision S9) that would catch a gateway-lane
+// automation the instant `local` was reinterpreted as the wider `gateway` —
+// so it maps down to the conservative `device`, the same "no gateway-lane
+// work" behaviour the vault already had, under the new name. See
+// `packages/vault/src/schema/enrich.ts` and issue #712's C5 receipt for the
+// full reasoning and the sabotage test that pins it.
+const LEGACY_TIER: Readonly<Record<string, EnrichTier>> = {
+  local: "device",
+  model: "gateway",
+};
+
+/** Canonicalizes a raw stored value into a tier this build can honour, or
+ *  `undefined` when it names neither a current nor a legacy tier. */
+function normalizeTier(value: unknown): EnrichTier | undefined {
+  if (isEnrichTier(value)) return value;
+  if (typeof value === "string" && value in LEGACY_TIER)
+    return LEGACY_TIER[value];
+  return undefined;
 }
 
 /**
@@ -50,5 +80,5 @@ export function readEnrichPolicyTier(
   const row = vault
     .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
     .get(domain) as { tier?: unknown } | undefined;
-  return isEnrichTier(row?.tier) ? row.tier : undefined;
+  return normalizeTier(row?.tier);
 }

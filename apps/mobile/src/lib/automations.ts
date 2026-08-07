@@ -86,8 +86,6 @@ const V0_TEMPLATE_IDS = new Set([
   "google-drive-pull",
   "obligation-extractor",
   "renewal-reminders",
-  "screenshot-extractor",
-  "photo-captioner",
 ]);
 
 /**

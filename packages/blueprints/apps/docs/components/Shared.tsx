@@ -2,7 +2,7 @@
 // Details and QuickLook components. Pure functions of props — no app state.
 import type { MouseEvent } from "react";
 
-import { custodyMeta } from "../format.ts";
+import { custodyRowMark } from "../format.ts";
 import { I } from "../icons.ts";
 import type { CustodyTone } from "../types.ts";
 
@@ -68,9 +68,12 @@ const CUSTODY_DOT_TONE: Record<CustodyTone, string> = {
 // cards and List rows — the full-text chip version lives inline in
 // Details.tsx, where there's room for the label. Renders nothing for a
 // custody-less row (an inline document, or the standing sweep hasn't run
-// yet) rather than claim a state the vault never asserted.
+// yet) rather than claim a state the vault never asserted, AND nothing for
+// the two steady states (`replicated`/`remote-only`) — this is the per-row
+// altitude, so it marks the EXCEPTION only (docs/blueprint-seats.md "Byte
+// custody vocabulary"). `custodyRowMark`, not `custodyMeta`.
 export function CustodyDot({ state }: { state: string | null }) {
-  const meta = custodyMeta(state);
+  const meta = custodyRowMark(state);
   if (!meta) return null;
   return (
     // The label is real text (visually hidden) rather than an `aria-label` on a

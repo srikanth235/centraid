@@ -811,6 +811,9 @@ export * from "./gateway-client-conversation.js";
 // lives in `gateway-client-vault.ts`. Re-exported here so the per-app
 // Vault tab imports it from the same barrel.
 export * from "./gateway-client-vault.js";
+// The staged-import workflow half of that same plane (issue #712 P18) — one
+// lifecycle rather than one act per call; see its header for the seam.
+export * from "./gateway-client-vault-imports.js";
 export * from "./gateway-client-atlas.js";
 
 // The broker-owned OAuth / BYO-client connections surface (issue #304)

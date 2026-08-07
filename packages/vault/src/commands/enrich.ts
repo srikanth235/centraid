@@ -7,8 +7,10 @@
 //     content item's inline `text` derivative, so the existing FTS triggers
 //     index the PARENT document in-transaction (issue #296's rule). This is
 //     how a scanned PDF becomes searchable.
-//   - `media.confirm_face` / `media.reject_face`: the owner's half of the
-//     face proposal loop the schema always carried (`confirmed_by_party_id`).
+//   - `media.answer_face_proposal`: the owner's half of the face proposal
+//     loop, as ONE verb with three answers. It replaces the `confirm_face` /
+//     `reject_face` pair outright (issue #712) — see that command's own
+//     header for why two verbs could not finish a review queue.
 //   - `sync.set_connection_trust`: the owner's standing-consent lever — an
 //     `auto-publish` enrichment connection is what lets captions land
 //     without a review click. Risk `high`: an agent proposing to widen its
@@ -120,22 +122,57 @@ export function writeExtractedText(
   return { content_id: contentId, replaced: existing ? 1 : 0 };
 }
 
-const CONFIRM_FACE: CommandDefinition = {
-  name: "media.confirm_face",
+/**
+ * THE TRIAGE VERB (issue #712). One answer to one proposal, discriminated on
+ * `answer` — not three commands that each write a different corner of the
+ * same row.
+ *
+ * WHY THE `confirm_face` / `reject_face` PAIR IS GONE RATHER THAN KEPT BESIDE
+ * THIS. Between them they could express two of the three answers a member
+ * actually gives, and a review queue needs all three to ever be finishable:
+ *
+ *   - `confirm` REQUIRED a party_id, so "yes, I looked at this stranger's
+ *     face and I am deliberately not naming it" had nowhere to land. The
+ *     member's only exit was Skip, which writes nothing — so every skipped
+ *     face came back on the next load, for ever.
+ *   - `reject` DELETED the row. A deletion is not a state: nothing was left
+ *     to say "the owner said no", nothing to count, and nothing standing in
+ *     the enricher's way when it next proposed the same face.
+ *
+ * Both were also the same act — the owner answering a derived proposal — so
+ * keeping a thin delegate for each would have left three registered verbs and
+ * three app actions writing one column. `media_face_region.review_state` is
+ * the state; this is the only verb that writes it.
+ *
+ * THE UNION IS ENFORCED, NOT DOCUMENTED. `confirm` carries a `party_id`;
+ * `reject` and `dismiss` must not. gateway/json-schema.ts is a deliberate
+ * JSON-Schema SUBSET with no `oneOf`, so the pairing rides a precondition
+ * (declarative, journaled as a check row, and the member gets the sentence)
+ * rather than an undeclarable schema branch — the same choice
+ * `enrich.request_enrichment` makes just below for its own conditional field.
+ */
+const ANSWER_FACE_PROPOSAL: CommandDefinition = {
+  name: "media.answer_face_proposal",
   ownerSchema: "media",
   inputSchema: {
     type: "object",
-    required: ["region_id", "party_id"],
+    required: ["region_id", "answer"],
     additionalProperties: false,
     properties: {
       region_id: { type: "string", minLength: 1 },
+      /** The discriminant (protocol.md C3): one clear field, three members. */
+      answer: { type: "string", enum: ["confirm", "reject", "dismiss"] },
+      /** `confirm` only — who the face is. See the precondition below. */
       party_id: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
     type: "object",
-    required: ["region_id"],
-    properties: { region_id: { type: "string" } },
+    required: ["region_id", "review_state"],
+    properties: {
+      region_id: { type: "string" },
+      review_state: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -146,96 +183,110 @@ const CONFIRM_FACE: CommandDefinition = {
       value: 1,
     },
     {
-      name: "party_exists",
-      sql: `SELECT count(*) AS n FROM core_party WHERE party_id = :party_id`,
+      // The union rule, in one predicate: `confirm` names a party that exists
+      // in this vault; `reject` and `dismiss` name none at all. An optional
+      // input binds as NULL here (contract.ts), which is what lets one
+      // condition branch on the discriminant instead of two conflicting ones.
+      name: "answer_names_a_party_iff_confirm",
+      sql: `SELECT CASE
+                     WHEN :answer = 'confirm'
+                       THEN (SELECT count(*) FROM core_party WHERE party_id = :party_id)
+                     ELSE (CASE WHEN :party_id IS NULL THEN 1 ELSE 0 END)
+                   END AS n`,
       column: "n",
       op: "eq",
       value: 1,
+      message:
+        "a 'confirm' answer must name a party that exists in this vault, and 'reject'/'dismiss' must name none",
     },
   ],
   postconditions: [
     {
-      name: "region_confirmed",
-      sql: `SELECT count(*) AS n FROM media_face_region WHERE region_id = :region_id AND confirmed_by_party_id IS NOT NULL`,
+      name: "answer_recorded",
+      sql: `SELECT count(*) AS n FROM media_face_region
+             WHERE region_id = :region_id
+               AND review_state = (CASE :answer
+                                     WHEN 'confirm' THEN 'confirmed'
+                                     WHEN 'reject'  THEN 'rejected'
+                                     ELSE 'dismissed' END)`,
       column: "n",
       op: "eq",
       value: 1,
     },
   ],
+  // Retry-safe, and NOT `once`: answering the same region twice is how a
+  // member corrects themself ("that was not Ana after all"), so the second
+  // answer must land rather than be refused as a replay.
   idempotency: "retry-safe",
-  // Low by design: confirm/reject operate on DERIVED proposals — the same
-  // curation class as captioning (media.update_asset) — so the in-app
-  // loop stays live under the app ceiling instead of parking every click.
+  // Low by design: this curates DERIVED proposals — the same class as
+  // captioning (media.update_asset) — so the in-app loop stays live under the
+  // app ceiling instead of parking every click.
   risk: "low",
-  handler: confirmFace,
+  handler: answerFaceProposal,
 };
 
-function confirmFace(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { region_id: string; party_id: string };
-  const confirmer = ctx.identity.partyId ?? ownerPartyId(ctx);
+/** The three answers, keyed by discriminant — a table, not a branch chain
+ *  (coding-standards.md), so a fourth answer is one row rather than an edit
+ *  to every site that reads the verb. `keepsParty` is the invariant the DDL
+ *  also enforces: only proposed and confirmed regions carry a party. */
+const FACE_ANSWERS = {
+  confirm: {
+    state: "confirmed",
+    keepsParty: true,
+    claim: (partyId: string | null) =>
+      `face region confirmed as party ${partyId}`,
+  },
+  reject: {
+    state: "rejected",
+    keepsParty: false,
+    claim: () =>
+      "face proposal rejected — the region is remembered as answered so it is never proposed again",
+  },
+  dismiss: {
+    state: "dismissed",
+    keepsParty: false,
+    claim: () =>
+      "face reviewed and deliberately left unnamed — the region stays, the queue does not",
+  },
+} as const satisfies Record<
+  string,
+  {
+    state: string;
+    keepsParty: boolean;
+    claim: (partyId: string | null) => string;
+  }
+>;
+
+type FaceAnswer = keyof typeof FACE_ANSWERS;
+
+function answerFaceProposal(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as {
+    region_id: string;
+    answer: FaceAnswer;
+    party_id?: string;
+  };
+  const answer = FACE_ANSWERS[input.answer];
+  // The confirmer is the acting party — the owner when an app or a device
+  // calls. Only a confirm has one, and the DDL refuses the pair coming apart.
+  const confirmer = answer.keepsParty
+    ? (ctx.identity.partyId ?? ownerPartyId(ctx))
+    : null;
+  const partyId = answer.keepsParty ? (input.party_id ?? null) : null;
   ctx.db
     .prepare(
-      "UPDATE media_face_region SET party_id = ?, confirmed_by_party_id = ? WHERE region_id = ?"
+      `UPDATE media_face_region
+          SET review_state = ?, party_id = ?, confirmed_by_party_id = ?
+        WHERE region_id = ?`
     )
-    .run(input.party_id, confirmer, input.region_id);
+    .run(answer.state, partyId, confirmer, input.region_id);
   ctx.wrote("media.face_region", input.region_id);
   ctx.cite({
-    claim: `face region confirmed as party ${input.party_id}`,
+    claim: answer.claim(partyId),
     entityType: "media.face_region",
     entityId: input.region_id,
   });
-  return { region_id: input.region_id };
+  return { region_id: input.region_id, review_state: answer.state };
 }
-
-const REJECT_FACE: CommandDefinition = {
-  name: "media.reject_face",
-  ownerSchema: "media",
-  inputSchema: {
-    type: "object",
-    required: ["region_id"],
-    additionalProperties: false,
-    properties: { region_id: { type: "string", minLength: 1 } },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["region_id"],
-    properties: { region_id: { type: "string" } },
-  },
-  preconditions: [
-    {
-      name: "region_exists",
-      sql: `SELECT count(*) AS n FROM media_face_region WHERE region_id = :region_id`,
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-  ],
-  postconditions: [
-    {
-      name: "region_gone",
-      sql: `SELECT count(*) AS n FROM media_face_region WHERE region_id = :region_id`,
-      column: "n",
-      op: "eq",
-      value: 0,
-    },
-  ],
-  idempotency: "once",
-  risk: "low",
-  handler: (ctx) => {
-    const input = ctx.input as { region_id: string };
-    ctx.db
-      .prepare("DELETE FROM media_face_region WHERE region_id = ?")
-      .run(input.region_id);
-    ctx.wrote("media.face_region", input.region_id);
-    ctx.cite({
-      claim:
-        "face proposal rejected — the region is derived data and re-derivable",
-      entityType: "media.face_region",
-      entityId: input.region_id,
-    });
-    return { region_id: input.region_id };
-  },
-};
 
 const SET_CONNECTION_TRUST: CommandDefinition = {
   name: "sync.set_connection_trust",
@@ -524,8 +575,7 @@ function ownerPartyId(ctx: HandlerCtx): string {
 
 export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_EXTRACTED_TEXT);
-  gateway.registerCommand(CONFIRM_FACE);
-  gateway.registerCommand(REJECT_FACE);
+  gateway.registerCommand(ANSWER_FACE_PROPOSAL);
   gateway.registerCommand(SET_CONNECTION_TRUST);
   gateway.registerCommand(REQUEST_ENRICHMENT);
   gateway.registerCommand(UPSERT_EMBEDDING);

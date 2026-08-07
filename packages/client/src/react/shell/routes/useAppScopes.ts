@@ -78,6 +78,10 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
       ...(entry.personal === undefined ? {} : { personal: entry.personal }),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.icon ? { icon: entry.icon } : {}),
+      // The P7 grant roster (issue #712), carried through exactly as
+      // answered: absent stays absent rather than becoming `[]`, so an app
+      // can tell "nobody else" from "this gateway does not say".
+      ...(entry.audience === undefined ? {} : { audience: entry.audience }),
       canWrite: roleCanWrite(entry.role),
     },
     identity: { gatewayId, vaultId: entry.vaultId },

@@ -1,16 +1,18 @@
 // The viewer, on the stage.
-// governance: allow-repo-hygiene file-size-limit #711 Photos v4 viewer surface remains a cohesive interaction module.
+// governance: allow-repo-hygiene file-size-limit The #712 viewer coordinates one gesture/chrome state machine and is tracked as a single handoff surface.
 //
 // The stage is full-bleed `--stage` in BOTH themes with `--on-stage` ink and
 // `--stage-line` hairlines; it covers the entire screen. Focus and selection
 // affordances take their colour from those tokens rather than inheriting, or
 // they vanish here (§7).
 //
-// The phone's arrangement, not a reduced desktop: a 52px top bar carrying the
-// exit and the overflow only, the five actions moved to a bottom bar where a
-// thumb is, the filmstrip kept at 58px, the info rail turned into a 64% sheet,
-// and one status line inside the stage saying what is true about the bytes.
-// Slideshow is a *different mode* — no filmstrip, no info, determinate position.
+// The phone's arrangement, not a reduced desktop: THREE FLOATING ELEMENTS at the
+// head of the stage (back chip, capture stamp, overflow chip — the top BAR is
+// gone, see `PhotoLightboxChrome`), the five actions moved to a chip · capsule ·
+// chip row where a thumb is, the filmstrip kept at 58px directly above that row,
+// the info rail turned into a 64% sheet, and one status line inside the stage
+// saying what is true about the bytes. Slideshow is a *different mode* — no
+// filmstrip, no info, determinate position.
 
 import * as MediaLibrary from "expo-media-library";
 import { useNetworkState } from "expo-network";
@@ -23,6 +25,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   FlatList,
   Pressable,
   Share,
@@ -33,8 +36,8 @@ import type { ListRenderItemInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
-import { Text } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
@@ -60,33 +63,28 @@ import { PhotoFilmstrip } from "./PhotoFilmstrip";
 import { PhotoInfoSheet } from "./PhotoInfoSheet";
 import type { InfoChip } from "./PhotoInfoSheet";
 import { styles } from "./PhotoLightbox.styles";
+import { ViewerStatusLine, ViewerTopChrome } from "./PhotoLightboxChrome";
 import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
+import { batchAddToAlbum } from "./photos-selection-writes";
+import type { VaultAsset } from "./photos-selection-writes";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { viewerOverflowMenuGroups } from "./viewer-menu";
 import {
-  LOAD_THE_ORIGINAL,
   READ_ONLY_VAULT_REASON,
-  SLIDESHOW_ACTION,
   SLIDESHOW_INTERVAL_MS,
   SLIDESHOW_TITLE,
-  VIEWER_TOP_BAR_HEIGHT,
-  captureLine,
+  captureStamp,
   originalStatus,
   resolveOriginalPlacement,
   slideshowMeta,
+  viewerChromeHeight,
   viewerStatus,
   viewerTitle,
 } from "./viewer-model";
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
 // for why the builder chains must stay outside component render bodies.
-
-/** What the top bar's overflow carries — everything not in the five. */
-const OVERFLOW_OPTIONS = [
-  { id: "slideshow", label: "Slideshow" },
-  { id: "download", label: "Download" },
-  { id: "export", label: "Send a copy" },
-] as const;
 
 export default function PhotoLightbox({
   route,
@@ -133,6 +131,13 @@ export default function PhotoLightbox({
   const [infoOpen, setInfoOpen] = useState(false);
   const [slideshow, setSlideshow] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  // The `···` chip's own rectangle, measured on the press that opens the
+  // menu — see `useMenuAnchor` for why `onLayout` cannot answer this instead.
+  const {
+    anchor: overflowAnchor,
+    anchorRef: overflowAnchorRef,
+    measureAnchor: measureOverflowAnchor,
+  } = useMenuAnchor();
   // The editor is a MODE of this screen, never a route: keeping it in local
   // state is what stops the photograph unmounting mid-edit, and what makes
   // "nothing is written until Save" a property of one component's lifetime
@@ -305,6 +310,118 @@ export default function PhotoLightbox({
     );
   };
 
+  /**
+   * The overflow menu's "Add to Album" — the same write the grid's selection
+   * bar fires (`batchAddToAlbum`, `photos-selection-writes.ts`), aimed at a
+   * selection of exactly this one photograph. The album CHOICE is a plain
+   * `Alert.alert`, the same idiom `PhotosHome.tsx`'s own "Add to album" uses
+   * (see that file for the pattern this parallels — it is not shared code,
+   * since that file belongs to another pass right now, but it is the same
+   * write and the same picker idiom). The menu row itself is disabled before
+   * this ever runs when the grant or the vault row is missing — see
+   * `viewer-menu.ts` — so by the time this fires, both are known to hold.
+   */
+  const addToAlbum = (): void => {
+    if (!session || !current || !current.assetId) return;
+    const asset = current as VaultAsset;
+    const albums = collections.rows;
+    if (!albums.length) {
+      navigation.navigate("PhotosLibrary");
+      return;
+    }
+    Alert.alert("Add to Album", photographName, [
+      ...albums.map((album) => ({
+        text: String(album.name ?? "Album"),
+        onPress: () => {
+          const albumId = String(album.collection_id);
+          // The new entry lands after the album's existing ones, matching
+          // `PhotoPicker.tsx`'s own count-then-append.
+          const firstPosition = entries.rows.filter(
+            (row) => String(row.collection_id) === albumId
+          ).length;
+          void batchAddToAlbum(
+            session,
+            [asset],
+            albumId,
+            firstPosition,
+            surfaceWriteOutcome
+          ).catch((error: unknown) =>
+            surfaceWriteFailure(error, "Photo not added")
+          );
+        },
+      })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
+  /**
+   * The overflow menu's Hide / Unhide — the same `update-asset` write the
+   * toolbar's favorite heart fires, aimed at `archived` instead. The row is
+   * disabled before this ever runs when the grant or the vault row is
+   * missing (`viewer-menu.ts`), so both are known to hold by the time this
+   * fires. `archived_at` is what the vault command actually writes
+   * (`media.update_asset`, `packages/vault/src/commands/media.ts`), so the
+   * optimistic upsert mirrors that column rather than a boolean, the same
+   * discipline `PhotoLightboxToolbar.tsx`'s favorite write uses for
+   * `favorite`. The status line says where the photograph went: hiding pulls
+   * it out of `PhotosHome.tsx`'s sectioned grid (`sectionPhotoAssets` filters
+   * `archived` rows) onto the "Open archived photos" shelf
+   * (`PhotosLibrary.tsx`), never off the device.
+   */
+  const hideAsset = (): void => {
+    if (!current?.assetId) return;
+    const hiding = !current.archived;
+    void writeReason(
+      "update-asset",
+      { asset_id: current.assetId, archived: hiding ? 1 : 0 },
+      [
+        {
+          op: "upsert",
+          entity: "media.media_asset",
+          rowId: current.assetId,
+          values: { archived_at: hiding ? new Date().toISOString() : null },
+        },
+      ]
+    ).then((reason) => {
+      if (reason) return;
+      postStatus(
+        hiding
+          ? "Moved to the archived shelf — the device original is untouched."
+          : "Back in your library."
+      );
+    });
+  };
+
+  // The menu's Delete row (issue 712 iOS parity — see `viewer-menu.ts` on why
+  // the verb now sits in the menu as well as on the toolbar's trash chip).
+  // The CONFIRM is where the safety is, and it is the toolbar's own wording
+  // verbatim: two doors onto one destructive act must not describe that act
+  // two different ways.
+  const trashAsset = (): void => {
+    if (!current?.assetId) return;
+    const assetId = current.assetId;
+    Alert.alert(
+      "Move to trash?",
+      "The device original is never deleted by this action.",
+      [
+        { text: "Cancel" },
+        {
+          text: "Trash",
+          style: "destructive",
+          onPress: () =>
+            void writeReason("delete-asset", { asset_id: assetId }, [
+              {
+                op: "upsert",
+                entity: "media.media_asset",
+                rowId: assetId,
+                values: { deleted_at: new Date().toISOString() },
+              },
+            ]),
+        },
+      ]
+    );
+  };
+
   const exportAsset = async (save: boolean): Promise<void> => {
     if (!current) return;
     // The same resolution the editor uses (download an http original, resolve a
@@ -370,21 +487,28 @@ export default function PhotoLightbox({
     kind: current.kind,
     scale: zoomScale,
   });
-  // The top bar says what the photograph IS, then when and where it was taken
-  // (§7.1, proto 4510–4511). The position index is NOT here any more: it is a
-  // fact about the list, and it now lives only in the slideshow's meta line,
-  // which is the one mode where "how far through" is the question.
+  // The floating stamp says WHEN the photograph was taken, then at what time and
+  // where (§7.1, proto 4510–4511, restyled for #712). The position index is NOT
+  // here: it is a fact about the list, and it lives only in the slideshow's meta
+  // line, the one mode where "how far through" is the question. The photograph's
+  // NAME is still computed — it is the stamp's accessible name, and its visible
+  // first line for a photograph that carries no capture time to show instead.
   const placeName = currentPlace ? String(currentPlace.name ?? "") : undefined;
-  const barTitle = editing
+  const photographName = viewerTitle({
+    caption: current.filename,
+    filename: current.filename,
+  });
+  const stamp = captureStamp({ capturedAt: current.capturedAt, placeName });
+  const stampTitle = editing
     ? EDITOR_TITLE
     : slideshow
       ? SLIDESHOW_TITLE
-      : viewerTitle({ caption: current.filename, filename: current.filename });
-  const barMeta = editing
+      : stamp.date || photographName;
+  const stampMeta = editing
     ? editorMeta(current.capturedAt)
     : slideshow
       ? slideshowMeta(index, assets.length)
-      : captureLine({ capturedAt: current.capturedAt, placeName });
+      : stamp.time;
   // Why the editor's commit cannot fire, if it cannot. Computed here because
   // the vault grant and the gateway are this screen's facts, not the editor's.
   const editRefusal =
@@ -403,82 +527,17 @@ export default function PhotoLightbox({
           bar below and the toolbar at the foot — so nothing lands under the
           clock while the ground still covers the screen. */}
       <View style={[styles.fill, { backgroundColor: colors.stage }]}>
-        {/* 52px, exit and overflow only — the five actions live below. */}
-        <View
-          style={[
-            styles.topbar,
-            {
-              borderBottomColor: colors.stageLine,
-              height: VIEWER_TOP_BAR_HEIGHT + insets.top,
-              paddingTop: insets.top,
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityLabel="Close photo viewer"
-            accessibilityRole="button"
-            hitSlop={12}
-            onPress={() => navigation.goBack()}
-          >
-            {/* ✕, not a chevron (proto 2601). A chevron-down describes the
-                swipe-down dismissal, which still works — but the CONTROL is a
-                close, and a mark that describes the gesture beside it rather
-                than its own effect is a mark pointing at the wrong thing. */}
-            <Icon name="x" size={26} color={colors.onStage} />
-          </Pressable>
-          <View style={styles.topbarTitle}>
-            <Text numberOfLines={1} style={{ color: colors.onStage }}>
-              {barTitle}
-            </Text>
-            {/* `--on-stage-soft`, never `--text-soft`: the stage is one
-                colour in BOTH themes, so a token that softens against the
-                page's background lands at 2.85:1 here in light mode. This is
-                the token that exists to be soft ON the stage and still clear
-                AA. Same for the status line below. */}
-            <Text
-              numberOfLines={1}
-              style={[styles.topbarCapture, { color: colors.onStageSoft }]}
-            >
-              {barMeta}
-            </Text>
-          </View>
-          {/* The slideshow's ONE action, LABELLED. It used to wear a pause
-              glyph and exit the slideshow — a control whose mark promised one
-              thing and whose press did another. Label and effect are now read
-              from the same value (`SLIDESHOW_ACTION`), so they cannot drift
-              apart again; the missing transport is a recorded non-goal, stated
-              beside that value. The editor suppresses this slot entirely: its
-              way out is `Cancel`, beside the commit it is the alternative to. */}
-          {editing ? null : slideshow ? (
-            <Pressable
-              accessibilityLabel={SLIDESHOW_ACTION.label}
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => {
-                if (SLIDESHOW_ACTION.effect === "leave") setSlideshow(false);
-              }}
-            >
-              <Text style={[styles.statusAction, { color: colors.onStage }]}>
-                {SLIDESHOW_ACTION.label}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityLabel="More actions"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => setOverflowOpen(true)}
-            >
-              <Icon name="more-vertical" size={22} color={colors.onStage} />
-            </Pressable>
-          )}
-        </View>
-
         {/* The editor takes the whole body: no pager arrows, no swipe target,
             no filmstrip below (proto 4518, 4599, 4606). A member mid-edit is
-            never one gesture away from a different photograph. */}
+            never one gesture away from a different photograph.
+
+            It is also the ONE body that does not run under the floating chrome:
+            the stage is a photograph and a chip standing on it obscures nothing
+            that matters, but the editor's own controls live at the top of its
+            body, so it is pushed clear by exactly the chrome's height. */}
         {editing ? (
           <View style={styles.fill}>
+            <View style={{ height: viewerChromeHeight(insets.top) }} />
             <PhotoEditor
               asset={current}
               onCancel={() => setEditing(false)}
@@ -561,42 +620,20 @@ export default function PhotoLightbox({
           </View>
         )}
 
-        {/* One status line inside the stage: what is true about the bytes,
-            with the single inline action. No toast, no spinner. While the
-            editor is open it carries the editor's live sentence instead —
-            `Crop 3 : 2 · rotation −2° · nothing written yet` — which is the
-            promise the whole mode rests on (proto 4632–4645). */}
-        <View style={[styles.statusLine, { borderTopColor: colors.stageLine }]}>
-          <Text
-            numberOfLines={2}
-            style={[styles.statusText, { color: colors.onStageSoft }]}
-          >
-            {editing
+        <ViewerStatusLine
+          colors={colors}
+          text={
+            editing
               ? editorLine
               : slideshow
                 ? "Leaving the slideshow keeps the photograph you stopped on"
-                : status.text}
-          </Text>
-          {/* The ONE offer to spend the bytes lives here (proto 4645). The
-              page used to render a second `Load the original` chip over the
-              photograph; two controls for one fetch is two states to keep in
-              step, and they did not stay in step. This tap unlocks the gate
-              AND climbs the page's quality ladder, which is exactly what the
-              chip did — the stated choice is unchanged, it just has one
-              home. */}
-          {!slideshow && !editing && status.action ? (
-            <Pressable
-              accessibilityLabel={LOAD_THE_ORIGINAL}
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={() => setFullQualityUnlocked(true)}
-            >
-              <Text style={[styles.statusAction, { color: colors.link }]}>
-                {status.action}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+                : status.text
+          }
+          actionLabel={
+            !slideshow && !editing && status.action ? status.action : null
+          }
+          onAction={() => setFullQualityUnlocked(true)}
+        />
 
         {/* Slideshow is a different mode: no filmstrip, no info, no bar. The
             home-indicator inset therefore has to land on whichever control is
@@ -624,6 +661,28 @@ export default function PhotoLightbox({
             </View>
           </>
         )}
+
+        {/* LAST in the tree, not first: the three floating elements stand ON
+            the stage, and paint order is what puts them there. `zIndex` alone
+            is not enough on every Android surface. */}
+        <ViewerTopChrome
+          colors={colors}
+          insets={insets}
+          title={stampTitle}
+          meta={stampMeta}
+          name={photographName}
+          editing={editing}
+          slideshow={slideshow}
+          onClose={() => navigation.goBack()}
+          onLeaveSlideshow={() => setSlideshow(false)}
+          onOverflow={() => {
+            // Measured on the press, never cached — a rotation between two
+            // openings would hang the card off a stale rectangle.
+            measureOverflowAnchor();
+            setOverflowOpen(true);
+          }}
+          overflowRef={overflowAnchorRef}
+        />
 
         <PhotoInfoSheet
           asset={current}
@@ -670,15 +729,21 @@ export default function PhotoLightbox({
           visible={infoOpen}
         />
 
-        <OptionSheet
+        <AnchoredMenu
           visible={overflowOpen}
-          title="More"
-          options={OVERFLOW_OPTIONS.map((option) => ({ ...option }))}
-          onSelect={(id) => {
-            setOverflowOpen(false);
-            if (id === "slideshow") setSlideshow(true);
-            else runExport(id === "download");
-          }}
+          anchor={overflowAnchor}
+          groups={viewerOverflowMenuGroups({
+            archived: current.archived,
+            hasVaultAsset: Boolean(current.assetId),
+            writable: current.canWrite === true,
+            onAddToAlbum: addToAlbum,
+            onAdjustLocation: openInfo,
+            onDelete: trashAsset,
+            onDownload: () => runExport(true),
+            onHide: hideAsset,
+            onSendCopy: () => runExport(false),
+            onSlideshow: () => setSlideshow(true),
+          })}
           onClose={() => setOverflowOpen(false)}
         />
 

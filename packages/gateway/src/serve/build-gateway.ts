@@ -4458,6 +4458,7 @@ export async function buildGateway(
     listVaults: () => vaultRegistry.list(),
     defaultShareTarget: (memberId) =>
       readDefaultShareTarget(gatewayDatabase, memberId),
+    membersOf: (vaultId) => enrollmentStore.members.membersOf(vaultId),
     installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
     ensureAppInstalled: ensureBundledAppInstalled,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),

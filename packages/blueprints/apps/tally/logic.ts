@@ -153,30 +153,70 @@ export function createLogic({
   }
 
   // ---------- Search ----------
+  //
+  // Status tracking (issue #712 S1): `state.searchStatus` is the same four-
+  // state union Photos' `search.ts` derives (`_shared/search-scaffold.ts`'s
+  // `SearchStatus`), so `components/Search.tsx` renders through the shared
+  // `SearchScaffold` instead of Tally growing its own "no results" grammar.
+  // `reached` mirrors Photos' own `try { } catch { reached = false }` — a
+  // thrown read means the gateway could not be reached, not that nothing
+  // matched, and the two must never collapse into the same sentence.
 
   let searchSeq = 0;
-  const applySearch = debounce(async () => {
-    const q = ($("searchInput") as HTMLInputElement).value.trim();
-    if (q === state.search) return;
-    state.search = q;
+
+  async function runSearch(q: string): Promise<void> {
     const seq = ++searchSeq;
-    if (!q) {
-      state.viewData = null;
-      await loadView();
-      return;
-    }
+    state.searchStatus = "searching";
     render(); // paint the "Results for…" chrome + skeleton
     let res: ViewData | null = null;
+    let reached = true;
     try {
       res = await read("search", { term: q });
     } catch {
       res = { results: [] };
+      reached = false;
     }
-    if (seq !== searchSeq) return;
+    if (seq !== searchSeq) return; // superseded by a newer keystroke or retry
     if (res?.me) dash.me = res.me;
     state.viewData = res;
+    state.searchStatus = reached ? "ready" : "unreachable";
     render();
+  }
+
+  const applySearch = debounce(async () => {
+    const q = ($("searchInput") as HTMLInputElement).value.trim();
+    if (q === state.search) return;
+    state.search = q;
+    if (!q) {
+      state.viewData = null;
+      state.searchStatus = "resting";
+      searchSeq += 1;
+      await loadView();
+      return;
+    }
+    await runSearch(q);
   }, 150);
+
+  // Re-runs the CURRENT query rather than navigating anywhere — the
+  // `unreachable` panel's only control, and the one place a stale `reached:
+  // false` gets a chance to become true without the member retyping.
+  function retrySearch(): void {
+    const q = state.search.trim();
+    if (!q) return;
+    void runSearch(q);
+  }
+
+  // Fills the field and searches immediately — the resting panel's example
+  // chips (`components/Search.tsx`'s `onQuery`). The field itself is
+  // uncontrolled (Chrome.tsx has no `value` prop; `applySearch` reads it live
+  // off the DOM), so a chip click has to write the DOM value too, the same
+  // way `clearSearch` already does for the opposite direction.
+  function searchFor(term: string): void {
+    const input = $("searchInput") as HTMLInputElement;
+    input.value = term;
+    state.search = term;
+    void runSearch(term);
+  }
 
   function clearSearch() {
     const input = $("searchInput") as HTMLInputElement;
@@ -184,6 +224,7 @@ export function createLogic({
     input.value = "";
     searchSeq += 1;
     state.search = "";
+    state.searchStatus = "resting";
     void loadView();
   }
 
@@ -749,6 +790,8 @@ export function createLogic({
     shortName,
     setNav,
     applySearch,
+    retrySearch,
+    searchFor,
     clearSearch,
     openDetail,
     closeDetail,

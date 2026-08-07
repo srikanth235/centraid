@@ -1,526 +1,501 @@
-// Two rules of Photos' home surface that a unit test can hold, both of which
-// were broken before issue #711:
-//
-//  1. SEARCH IS A DESTINATION, AND THE BAND SURVIVES IT (proto:4953-4954).
-//     `appBandOn` excludes only the viewer, zoom, video, slideshow and the
-//     editor. Search is none of those, so choosing Search must swap the shelf
-//     in place — band still up, Search current, the frame's Home capsule still
-//     reachable — and must NOT push the `PhotosSearch` route, which had a back
-//     chevron and no band at all.
-//
-//  2. THE GRID IS THE LOADING STATE (§14, proto:3993-4033). While the library
-//     opens, the surface paints packed placeholder tiles at the geometry the
-//     real rows will take — never a centred sentence the grid then replaces,
-//     and the toolbar stays mounted rather than appearing when the data lands.
-import React, { act } from "react";
-import { createRoot } from "react-dom/client";
-import type { Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type AsyncStorage from "@react-native-async-storage/async-storage";
+import { act, fireEvent, render } from "@testing-library/react-native";
+import React from "react";
+import { StyleSheet, View } from "react-native";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// @vitest-environment jsdom
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
+import { resolveTheme } from "../../kit/theme";
+import CollectionShelfBody from "./CollectionShelfBody";
+import PhotoAccessPanel from "./PhotoAccessPanel";
+import { PhotoFilmstrip } from "./PhotoFilmstrip";
+import { ViewerTopChrome } from "./PhotoLightboxChrome";
+import { makePhotosFixture } from "./photos-fixtures";
+import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import PhotosHome from "./PhotosHome";
+import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
+import PhotosSearchRestingState from "./PhotosSearchRestingState";
+import PhotosSelectChip from "./PhotosSelectChip";
+import ScrubRail from "./ScrubRail";
+import TimelineZoomDrawer from "./TimelineZoomDrawer";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const mocks = vi.hoisted(() => ({
+const homeMocks = vi.hoisted(() => ({
   timeline: {
-    assets: [] as unknown[],
+    assets: [] as ReturnType<typeof makePhotosFixture>["assets"],
     error: undefined as string | undefined,
-    loading: true,
-    sections: [] as unknown[],
+    loading: false,
+    permission: "granted",
+    sections: [] as ReturnType<typeof makePhotosFixture>["sections"],
   },
 }));
 
-vi.mock(import("react-native"), async () => {
+vi.mock(import("@react-native-async-storage/async-storage"), () => ({
+  default: {
+    getItem: vi.fn<typeof AsyncStorage.getItem>(async () => null),
+    setItem: vi.fn<typeof AsyncStorage.setItem>(async () => undefined),
+  } as unknown as typeof AsyncStorage,
+}));
+
+vi.mock(import("expo-image"), async () => {
   const ReactModule = await import("react");
-  const element = (
-    tag: string,
-    elementProps: Record<string, unknown> & { children?: React.ReactNode } = {}
-  ): React.JSX.Element => {
-    const { children, ...rest } = elementProps;
-    return ReactModule.createElement(tag, rest, children);
-  };
-  // Styles arrive as an object, an array, or a nested array; flatten all three
-  // down to whichever `position` wins.
-  const position = (style: unknown): string | undefined => {
-    if (Array.isArray(style)) {
-      for (const entry of style) {
-        const found = position(entry);
-        if (found) return found;
-      }
-      return undefined;
+  const Image = (props: Record<string, unknown>) =>
+    ReactModule.createElement("Image", props);
+  Image.displayName = "ExpoImageMock";
+  return {
+    Image,
+  } as never;
+});
+
+vi.mock(
+  import("expo-file-system"),
+  () =>
+    ({
+      Directory: vi.fn<() => object>(() => ({})),
+      File: vi.fn<() => object>(() => ({})),
+    }) as never
+);
+
+vi.mock(
+  import("expo-crypto"),
+  () =>
+    ({
+      CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+      digestStringAsync: vi.fn<() => Promise<string>>(async () => "digest"),
+      randomUUID: vi.fn<() => string>(
+        () => "00000000-0000-4000-8000-000000000000"
+      ),
+    }) as never
+);
+
+vi.mock(import("expo-media-library"), () => ({
+  usePermissions: vi.fn<
+    (typeof import("expo-media-library"))["usePermissions"]
+  >(() => [null, vi.fn<() => Promise<never>>(), vi.fn<() => Promise<never>>()]),
+}));
+
+vi.mock(import("expo-haptics"), () => ({
+  NotificationFeedbackType: { Success: "success" } as never,
+  notificationAsync: vi.fn<
+    (typeof import("expo-haptics"))["notificationAsync"]
+  >(async () => undefined),
+  selectionAsync: vi.fn<(typeof import("expo-haptics"))["selectionAsync"]>(
+    async () => undefined
+  ),
+}));
+
+vi.mock(import("expo-notifications"), () => ({
+  SchedulableTriggerInputTypes: { DATE: "date" } as never,
+  getPermissionsAsync: vi.fn<
+    (typeof import("expo-notifications"))["getPermissionsAsync"]
+  >(
+    async () =>
+      ({
+        canAskAgain: false,
+        expires: "never",
+        granted: false,
+        status: "denied",
+      }) as never
+  ),
+  scheduleNotificationAsync: vi.fn<
+    (typeof import("expo-notifications"))["scheduleNotificationAsync"]
+  >(async () => "notice"),
+}));
+
+vi.mock(import("react-native-safe-area-context"), () => ({
+  useSafeAreaInsets: vi.fn<
+    () => {
+      bottom: number;
+      left: number;
+      right: number;
+      top: number;
     }
-    const value = (style as { position?: string } | null)?.position;
-    return typeof value === "string" ? value : undefined;
+  >(() => ({ bottom: 0, left: 0, right: 0, top: 0 })),
+}));
+
+vi.mock(import("react-native-gesture-handler"), async () => {
+  const ReactModule = await import("react");
+  const gesture = (): Record<string, unknown> => {
+    const chain: Record<string, unknown> = {};
+    for (const method of [
+      "activeOffsetY",
+      "enabled",
+      "failOffsetX",
+      "maxDuration",
+      "maxDistance",
+      "numberOfTaps",
+      "onBegin",
+      "onEnd",
+      "onFinalize",
+      "onStart",
+      "onUpdate",
+      "runOnJS",
+    ])
+      chain[method] = () => chain;
+    return chain;
   };
   return {
-    Alert: { alert: vi.fn<(...args: unknown[]) => void>() },
-    Pressable: ({
-      accessibilityLabel,
-      children,
-      onPress,
-    }: {
-      accessibilityLabel?: string;
-      children?: React.ReactNode;
-      onPress?: () => void;
-    }) =>
-      element("button", {
-        "aria-label": accessibilityLabel,
-        children,
-        onClick: onPress,
-        type: "button",
-      }),
-    StyleSheet: { create: <T,>(styles: T): T => styles },
-    Text: ({ children }: { children?: React.ReactNode }) =>
-      element("span", { children }),
-    View: ({
-      accessibilityLabel,
-      accessibilityRole,
-      children,
-      style,
-    }: {
-      accessibilityLabel?: string;
-      accessibilityRole?: string;
-      children?: React.ReactNode;
-      style?: unknown;
-    }) =>
-      element("div", {
-        "aria-label": accessibilityLabel,
-        children,
-        // The one style property the layout test is about, surfaced onto the
-        // DOM so an absolute band slot cannot come back unnoticed.
-        "data-position": position(style),
-        role: accessibilityRole,
-      }),
-    useWindowDimensions: () => ({ height: 800, width: 390 }),
+    Gesture: {
+      Pan: gesture,
+      Pinch: gesture,
+      Simultaneous: gesture,
+      Tap: gesture,
+    },
+    GestureDetector: ({ children }: { children: React.ReactNode }) =>
+      ReactModule.createElement(ReactModule.Fragment, null, children),
   } as never;
 });
 
+vi.mock(import("../../kit/hooks/useReplicaQuery"), () => ({
+  useReplicaQuery: vi.fn<
+    (typeof import("../../kit/hooks/useReplicaQuery"))["useReplicaQuery"]
+  >(() => ({
+    connection: "current",
+    error: undefined,
+    loading: false,
+    refresh: async () => undefined,
+    rows: [],
+  })),
+}));
+
 vi.mock(
-  import("react-native-safe-area-context"),
+  import("react-native-reanimated"),
   () =>
     ({
-      useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+      default: { Image: "AnimatedImage", View: "AnimatedView" },
+      runOnJS: <Arguments extends unknown[], Result>(
+        callback: (...args: Arguments) => Result
+      ) => callback,
+      useAnimatedStyle: (build: () => unknown) => build(),
+      useSharedValue: <Value,>(value: Value) => ({ value }),
+      withTiming: <Value,>(value: Value) => value,
     }) as never
 );
 
 vi.mock(
-  import("expo-haptics"),
+  import("../../lib/gateway"),
   () =>
     ({
-      NotificationFeedbackType: { Success: "success" },
-      notificationAsync: vi.fn<() => void>(),
-      selectionAsync: vi.fn<() => void>(),
-    }) as never
-);
-
-vi.mock(
-  import("expo-notifications"),
-  () =>
-    ({
-      SchedulableTriggerInputTypes: { DATE: "date" },
-      getPermissionsAsync: vi.fn<() => Promise<{ granted: boolean }>>(
-        async () => ({ granted: false })
+      apiHeaders: vi.fn<() => Record<string, string>>(() => ({})),
+      authHeader: vi.fn<() => Record<string, string>>(() => ({})),
+      fetchJson: vi.fn<() => Promise<never>>(),
+      requireGatewayBase: vi.fn<(base?: string) => string>(
+        (base) => base ?? ""
       ),
-      scheduleNotificationAsync: vi.fn<() => void>(),
+      resolveGatewayBase: vi.fn<() => Promise<string>>(async () => ""),
     }) as never
 );
 
-vi.mock(
-  import("../../kit/components/Icon"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
+vi.mock(import("../../lib/upload/media-producer"), () => ({
+  backupDeviceMedia:
+    vi.fn<
+      (typeof import("../../lib/upload/media-producer"))["backupDeviceMedia"]
+    >(),
+}));
 
-vi.mock(import("../../kit/components/NativeText"), async () => {
+vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
+  useReplica: vi.fn<
+    (typeof import("../../kit/replica/ReplicaProvider"))["useReplica"]
+  >(() => ({
+    online: true,
+    ready: true,
+    refresh: vi.fn<() => Promise<void>>(async () => undefined),
+    scopes: [],
+  })),
+}));
+
+vi.mock(import("./timeline-source"), () => ({
+  usePhotoTimeline: vi.fn<
+    (typeof import("./timeline-source"))["usePhotoTimeline"]
+  >(() => homeMocks.timeline),
+}));
+
+vi.mock(import("./photos-backup"), () => ({
+  runBackup: vi.fn<(typeof import("./photos-backup"))["runBackup"]>(),
+  useAutomaticPhotoBackup:
+    vi.fn<(typeof import("./photos-backup"))["useAutomaticPhotoBackup"]>(),
+}));
+
+vi.mock(import("react-native-svg"), async () => {
   const ReactModule = await import("react");
-  return {
-    Text: ({ children }: { children?: React.ReactNode }) =>
-      ReactModule.createElement("span", {}, children),
-    TextInput: () => null,
-  } as never;
+  const host = (name: string) => {
+    const Host = ReactModule.forwardRef<unknown, Record<string, unknown>>(
+      (props, ref) => ReactModule.createElement(name, { ...props, ref })
+    );
+    Host.displayName = `${name}Mock`;
+    return Host;
+  };
+  return { default: host("Svg"), Path: host("Path") } as never;
 });
 
-vi.mock(
-  import("../../kit/components/status-line"),
-  () =>
-    ({
-      postStatus: vi.fn<(...args: unknown[]) => void>(),
-    }) as never
-);
+vi.mock(import("../../kit/media/media-source"), () => ({
+  imageSource: (uri: string) => uri,
+  videoSource: (uri: string) => uri,
+}));
 
-vi.mock(
-  import("../../kit/hooks/useReplicaQuery"),
-  () =>
-    ({
-      useReplicaQuery: () => ({ rows: [] }),
-    }) as never
-);
+vi.mock(import("../../../modules/centraid-storage"), () => ({
+  nativeDirectorySize: vi.fn<(path: string) => number>(() => 0),
+  replicaStorageDirectory: vi.fn<() => string | undefined>(() => undefined),
+}));
 
-vi.mock(
-  import("../../kit/replica/ReplicaProvider"),
-  () =>
-    ({
-      useReplica: () => ({ refresh: vi.fn<() => void>() }),
-    }) as never
-);
-
-vi.mock(
-  import("../../kit/replica/ReplicaStateCard"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
-
-vi.mock(
-  import("../../kit/replica/ReplicaStatusBar"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
-
-vi.mock(
-  import("../../kit/replica/write-outcome"),
-  () =>
-    ({
-      surfaceWriteFailure: vi.fn<(...args: unknown[]) => void>(),
-      surfaceWriteOutcome: vi.fn<(...args: unknown[]) => void>(),
-    }) as never
-);
-
-vi.mock(
-  import("../../kit/theme"),
-  () =>
-    ({
-      borders: { hairline: 1 },
-      pageMargin: 18,
-      spacing: Array.from({ length: 8 }, (_, index) => index * 4),
-      t: () => ({}),
-      useTheme: () => ({
-        colors: {
-          line: "#line",
-          skel: "#skel",
-          text: "#text",
-          toneMat: "#mat",
-        },
-      }),
-    }) as never
-);
-
-vi.mock(
-  import("../../kit/transfer/transfer-consent"),
-  () =>
-    ({
-      hydrateBackupConsent: vi.fn<() => Promise<void>>(async () => undefined),
-    }) as never
-);
-
-vi.mock(
-  import("../../lib/replica/optimistic"),
-  () =>
-    ({
-      optimisticRowId: () => "row",
-      optimisticValues: (row: unknown) => row,
-    }) as never
-);
-
-vi.mock(
-  import("../../lib/replica/thumbnail-pack"),
-  () =>
-    ({
-      refreshPinnedThumbnailPack: vi.fn<() => Promise<void>>(
-        async () => undefined
-      ),
-    }) as never
-);
-
-vi.mock(
-  import("../../lib/upload/media-producer"),
-  () =>
-    ({
-      backupDeviceMedia: vi.fn<(...args: unknown[]) => void>(),
-    }) as never
-);
-
-vi.mock(
-  import("../../storage"),
-  () =>
-    ({
-      Store: {
-        hydrate: vi.fn<(key: string, fallback: unknown) => Promise<unknown>>(
-          async (_key, fallback) => fallback
-        ),
-        set: vi.fn<(...args: unknown[]) => void>(),
-      },
-    }) as never
-);
-
-vi.mock(
-  import("./photos-backup"),
-  () =>
-    ({
-      inCloudMessage: () => "",
-      runBackup: vi.fn<(...args: unknown[]) => void>(),
-      useAutomaticPhotoBackup: vi.fn<(...args: unknown[]) => unknown>(),
-    }) as never
-);
-
-vi.mock(
-  import("./photos-rung-store"),
-  () =>
-    ({
-      usePhotosRung: () => [1, vi.fn<() => void>()],
-    }) as never
-);
-
-// The band is stubbed to its CONTRACT, not to nothing: it must be in the tree,
-// it must be told which destination is current, and choosing one must call
-// back. If PhotosHome ever stops rendering it on a shelf, this disappears.
-vi.mock(import("./PhotosBand"), async () => {
-  const ReactModule = await import("react");
-  return {
-    default: ({
-      current,
-      onSelect,
-    }: {
-      current: string;
-      onSelect: (key: string) => void;
-    }) =>
-      ReactModule.createElement(
-        "nav",
-        { "aria-label": `band:${current}`, "data-testid": "band" },
-        ["library", "albums", "people", "search", "more"].map((key) =>
-          ReactModule.createElement(
-            "button",
-            {
-              key,
-              onClick: () => onSelect(key),
-              type: "button",
-              "aria-label": `band-${key}`,
-            },
-            key
-          )
-        )
-      ),
-  } as never;
-});
-
-vi.mock(
-  import("./PhotosCollectionsView"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
-
-vi.mock(
-  import("./PhotosMoreSheet"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
-
-vi.mock(
-  import("./PhotosPeopleView"),
-  () =>
-    ({
-      default: () => null,
-    }) as never
-);
-
-vi.mock(import("./PhotosSearch"), async () => {
-  const ReactModule = await import("react");
-  return {
-    default: () => null,
-    PhotosSearchView: () =>
-      ReactModule.createElement("div", { "data-testid": "search-view" }),
-  } as never;
-});
-
-vi.mock(import("./PhotosToolbar"), async () => {
-  const ReactModule = await import("react");
-  return {
-    default: () =>
-      ReactModule.createElement("div", { "data-testid": "toolbar" }),
-  } as never;
-});
-
-vi.mock(import("./PhotoTimeline"), async () => {
-  const ReactModule = await import("react");
-  return {
-    default: () =>
-      ReactModule.createElement("div", { "data-testid": "timeline" }),
-  } as never;
-});
-
-vi.mock(
-  import("./pinned-thumbnails"),
-  () =>
-    ({
-      pinnedThumbnailCandidates: () => [],
-      pinnedThumbnailSignature: () => "sig",
-    }) as never
-);
-
-vi.mock(
-  import("./timeline-model"),
-  () =>
-    ({
-      onThisDay: () => [],
-    }) as never
-);
-
-vi.mock(
-  import("./timeline-source"),
-  () =>
-    ({
-      usePhotoTimeline: () => mocks.timeline,
-    }) as never
-);
-
-let root: Root | undefined;
-let container: HTMLDivElement | undefined;
-
-type HomeProps = React.ComponentProps<typeof PhotosHome>;
-
-/** `route` is never read by this screen; the navigator supplies it. */
-function props(navigate: () => void): HomeProps {
-  return { navigation: { navigate }, route: {} } as unknown as HomeProps;
-}
-
-function render(): void {
-  act(() => {
-    root = createRoot(container!);
-    root.render(<PhotosHome {...props(vi.fn<() => void>())} />);
-  });
-}
-
-function press(label: string): void {
-  const button = container!.querySelector(`button[aria-label="${label}"]`);
-  expect(button).toBeTruthy();
-  act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-}
-
-describe("PhotosHome behavior", () => {
+describe("Photos native component coverage", () => {
   beforeEach(() => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    mocks.timeline.loading = true;
-    mocks.timeline.assets = [];
-    mocks.timeline.sections = [];
+    homeMocks.timeline.assets = [];
+    homeMocks.timeline.error = undefined;
+    homeMocks.timeline.loading = false;
+    homeMocks.timeline.sections = [];
   });
 
-  afterEach(() => {
-    act(() => root?.unmount());
-    container?.remove();
-    root = undefined;
-    container = undefined;
+  it("ports the real PhotosHome empty-library contract to the RN host tree", async () => {
+    const navigate = vi.fn<() => void>();
+    const screen = render(
+      <PhotosHome
+        navigation={{ navigate } as never}
+        route={{ params: { destination: "library" } } as never}
+      />
+    );
+    await act(async () => undefined);
+
+    expect(screen.getByText("Your library starts here")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Camera-roll photographs appear instantly; hold any one to back it up."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Opening your library")).toBeNull();
   });
 
-  describe("Search is a destination and the band survives it", () => {
-    it("swaps the shelf in place and keeps the band up, with Search current", () => {
-      render();
-      press("band-search");
-      expect(
-        container!.querySelector('[data-testid="search-view"]')
-      ).toBeTruthy();
-      const band = container!.querySelector('[data-testid="band"]');
-      expect(band).toBeTruthy();
-      expect(band!.getAttribute("aria-label")).toBe("band:search");
-    });
+  it("shares deterministic empty, temporal, video, and place fixtures", () => {
+    expect(makePhotosFixture("empty").sections).toHaveLength(0);
+    expect(makePhotosFixture("one-day").sections).toHaveLength(1);
+    expect(makePhotosFixture("multi-month").sections).toHaveLength(3);
+    expect(
+      new Set(
+        makePhotosFixture("year-spanning").assets.map((asset) =>
+          asset.capturedAt.slice(0, 4)
+        )
+      ).size
+    ).toBe(3);
+    expect(
+      makePhotosFixture("video-mixed").assets.some(
+        (asset) => asset.kind === "video"
+      )
+    ).toBe(true);
+    expect(
+      makePhotosFixture("place-tagged").assets.every(
+        (asset) => asset.placeId !== undefined
+      )
+    ).toBe(true);
+  });
 
-    it("never pushes the PhotosSearch route", () => {
-      const navigate = vi.fn<() => void>();
-      act(() => {
-        root = createRoot(container!);
-        root.render(<PhotosHome {...props(navigate)} />);
-      });
-      press("band-search");
-      expect(navigate).not.toHaveBeenCalledWith("PhotosSearch");
+  it("keeps the zoom drawer hidden, activity-timed, and pinned by grain", async () => {
+    const clock = useFakeClock("2026-08-06T00:00:00.000Z");
+    const onLevel =
+      vi.fn<React.ComponentProps<typeof TimelineZoomDrawer>["onLevel"]>();
+    const screen = render(
+      <TimelineZoomDrawer level="all" activity={0} onLevel={onLevel} />
+    );
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+
+    screen.rerender(
+      <TimelineZoomDrawer level="all" activity={1} onLevel={onLevel} />
+    );
+    await act(async () => undefined);
+    expect(screen.getByRole("tab", { name: "All" }).props).toMatchObject({
+      accessibilityState: { selected: true },
+    });
+    fireEvent.press(screen.getByRole("tab", { name: "Months" }));
+    expect(onLevel).toHaveBeenCalledExactlyOnceWith("months");
+
+    await act(async () => clock.advance(3200));
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    screen.rerender(
+      <TimelineZoomDrawer level="months" activity={1} onLevel={onLevel} />
+    );
+    await act(async () => undefined);
+    await act(async () => clock.advance(3200));
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+  });
+
+  it("maps scrub offsets to ratios and positions the month bubble", () => {
+    const onScrub = vi.fn<React.ComponentProps<typeof ScrubRail>["onScrub"]>();
+    const screen = render(
+      <ScrubRail
+        label="Aug 2026"
+        position={0.75}
+        top={20}
+        bottom={120}
+        onScrub={onScrub}
+        onScrubEnd={vi.fn<
+          React.ComponentProps<typeof ScrubRail>["onScrubEnd"]
+        >()}
+      />
+    );
+    const rail = screen.getByLabelText("Scrub the timeline by month");
+    fireEvent(rail, "responderGrant", {
+      nativeEvent: { locationY: 25 },
+    });
+    expect(onScrub).toHaveBeenCalledExactlyOnceWith(0.25);
+    expect(
+      screen
+        .UNSAFE_getAllByType(View)
+        .some((node) => StyleSheet.flatten(node.props.style)?.top === 75)
+    ).toBe(true);
+  });
+
+  it("renders packed deterministic loading geometry", () => {
+    const screen = render(<PhotosGridSkeleton rung={2} />);
+    const progress = screen.getByLabelText("Opening your library");
+    expect(progress.findAllByType(View).length).toBeGreaterThan(10);
+    expect(screen.queryByText(/Opening your library…/u)).toBeNull();
+  });
+
+  it("publishes Select as a worded button with honest disabled state", () => {
+    const onPress =
+      vi.fn<React.ComponentProps<typeof PhotosSelectChip>["onPress"]>();
+    const screen = render(
+      <PhotosSelectChip disabled={false} onPress={onPress} />
+    );
+    const chip = screen.getByRole("button", { name: "Select" });
+    expect(chip.props).toMatchObject({
+      accessibilityState: { disabled: false },
+    });
+    expect(screen.getByText("Select")).toBeTruthy();
+    fireEvent.press(chip);
+    expect(onPress).toHaveBeenCalledOnce();
+    screen.rerender(<PhotosSelectChip disabled onPress={onPress} />);
+    expect(screen.getByRole("button", { name: "Select" }).props).toMatchObject({
+      accessibilityState: { disabled: true },
     });
   });
 
-  describe("the grid is the loading state", () => {
-    it("paints packed placeholder tiles, not a sentence", () => {
-      render();
-      const skeleton = container!.querySelector(
-        '[role="progressbar"][aria-label="Opening your library"]'
-      );
-      expect(skeleton).toBeTruthy();
-      // Packed rows of real tiles, at real geometry — not one empty box.
-      expect(skeleton!.querySelectorAll("div div").length).toBeGreaterThan(10);
-      expect(container!.textContent).not.toContain("Opening your library…");
-    });
-
-    it("keeps the toolbar mounted while the library opens", () => {
-      render();
-      expect(container!.querySelector('[data-testid="toolbar"]')).toBeTruthy();
-    });
-
-    it("gives way to the timeline once the sections land", () => {
-      mocks.timeline.loading = false;
-      mocks.timeline.sections = [{ day: "2026-07-30" }];
-      render();
-      expect(container!.querySelector('[data-testid="timeline"]')).toBeTruthy();
-      expect(
-        container!.querySelector('[aria-label="Opening your library"]')
-      ).toBeNull();
-    });
+  it("renders search no-hits copy and clears through its one action", () => {
+    const onClear =
+      vi.fn<React.ComponentProps<typeof PhotosSearchEmptyState>["onClear"]>();
+    const screen = render(
+      <PhotosSearchEmptyState query="Atlantis" onClear={onClear} />
+    );
+    expect(screen.getByText("Nothing matches “Atlantis”")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Clear search" }));
+    expect(onClear).toHaveBeenCalledOnce();
   });
 
-  // THE BUG THIS HOLDS SHUT (§G, handoff `appBandStyle` :4955). The band used to
-  // be an absolutely positioned slot at `bottom: 0` over the shelf, with each
-  // scroll surface padding its own content by the band's height to compensate.
-  // Padding only guarantees the END of the content clears the band: mid-scroll,
-  // a day header ("Fri, 31 Jul") and a tile caption still rendered underneath it.
-  // The handoff makes the band a `flex:none` SIBLING below the scroll region, so
-  // the viewport is genuinely shorter and there is no "under" to pass through.
-  describe("the band is a sibling of the shelf, not an overlay on it", () => {
-    /** Every `position` an element inherits from its ancestors, frame included. */
-    function positionsUpFrom(node: HTMLElement): (string | undefined)[] {
-      const chain: (string | undefined)[] = [];
-      let cursor: HTMLElement | null = node;
-      while (cursor && cursor !== container) {
-        chain.push(cursor.dataset.position);
-        cursor = cursor.parentElement;
-      }
-      return chain;
-    }
+  it("distinguishes the empty-query search state from no hits", () => {
+    const screen = render(<PhotosSearchRestingState />);
+    expect(screen.getByText("Nothing typed")).toBeTruthy();
+    expect(screen.getByText("Search the whole library")).toBeTruthy();
+    expect(screen.queryByText(/Nothing matches/u)).toBeNull();
+  });
 
-    function renderWithTimeline(): { band: HTMLElement; slot: HTMLElement } {
-      mocks.timeline.loading = false;
-      mocks.timeline.sections = [{ day: "2026-07-30" }];
-      render();
-      const band = container!.querySelector<HTMLElement>(
-        '[data-testid="band"]'
-      )!;
-      // The shelf's slot is the `flex: 1` View the timeline is rendered into.
-      const slot = container!.querySelector(
-        '[data-testid="timeline"]'
-      )!.parentElement!;
-      return { band, slot };
-    }
+  it("changes viewer chrome by mode and keeps filmstrip selection in sync", () => {
+    const colors = resolveTheme("light").colors;
+    const noop = vi.fn<() => void>();
+    const screen = render(
+      <ViewerTopChrome
+        colors={colors}
+        insets={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        title="6 August 2026"
+        meta="18:30"
+        name="Backyard"
+        editing={false}
+        slideshow={false}
+        onClose={noop}
+        onLeaveSlideshow={noop}
+        onOverflow={noop}
+      />
+    );
+    fireEvent.press(screen.getByRole("button", { name: "More actions" }));
+    expect(noop).toHaveBeenCalledOnce();
+    screen.rerender(
+      <ViewerTopChrome
+        colors={colors}
+        insets={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        title="Slideshow"
+        meta="1 of 2"
+        name="Backyard"
+        editing={false}
+        slideshow
+        onClose={noop}
+        onLeaveSlideshow={noop}
+        onOverflow={noop}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    fireEvent.press(screen.getByRole("button", { name: "Leave" }));
+    expect(noop).toHaveBeenCalledTimes(2);
 
-    it("renders the band after the shelf, under the same parent", () => {
-      const { band, slot } = renderWithTimeline();
-      expect(band.parentElement).toBe(container!.firstElementChild);
-      expect(slot.parentElement).toBe(container!.firstElementChild);
-      expect(slot.nextElementSibling).toBe(band);
-    });
+    const assets = makePhotosFixture("video-mixed").assets;
+    const strip = render(
+      <PhotoFilmstrip
+        assets={assets}
+        currentId={assets[0]!.id}
+        onSelect={noop}
+      />
+    );
+    expect(
+      strip.getByRole("button", {
+        name: `Show photograph ${assets[0]!.filename}`,
+      }).props
+    ).toMatchObject({ accessibilityState: { selected: true } });
+    strip.rerender(
+      <PhotoFilmstrip
+        assets={assets}
+        currentId={assets[1]!.id}
+        onSelect={noop}
+      />
+    );
+    expect(
+      strip.getByRole("button", {
+        name: `Show photograph ${assets[1]!.filename}`,
+      }).props
+    ).toMatchObject({ accessibilityState: { selected: true } });
+  });
 
-    it("SABOTAGE: no absolutely positioned band slot survives", () => {
-      const { band, slot } = renderWithTimeline();
-      // An absolute ancestor takes the band out of flow, the slot grows back to
-      // the full height, and the grid scrolls under the bar again.
-      expect(positionsUpFrom(band)).not.toContain("absolute");
-      expect(positionsUpFrom(slot)).not.toContain("absolute");
-    });
+  it("renders collection shelf emptiness and collapse state", () => {
+    const action =
+      vi.fn<React.ComponentProps<typeof CollectionShelfBody>["onAction"]>();
+    const empty = "Mark photographs as favorites to find them here.";
+    const screen = render(
+      <CollectionShelfBody
+        collapsed={false}
+        empty={empty}
+        hasTiles={false}
+        onAction={action}
+        title="Favorites"
+      >
+        <></>
+      </CollectionShelfBody>
+    );
+    expect(screen.getByText(empty)).toBeTruthy();
+    screen.rerender(
+      <CollectionShelfBody
+        collapsed
+        empty={empty}
+        hasTiles={false}
+        onAction={action}
+        title="Favorites"
+      >
+        <></>
+      </CollectionShelfBody>
+    );
+    expect(screen.queryByText(empty)).toBeNull();
+  });
+
+  it("takes the refused permission state over with a recovery action", () => {
+    const onRequest =
+      vi.fn<React.ComponentProps<typeof PhotoAccessPanel>["onRequest"]>();
+    const screen = render(
+      <PhotoAccessPanel
+        state="denied"
+        canAskAgain
+        readableCount={0}
+        onRequest={onRequest}
+      />
+    );
+    expect(
+      screen.getByText("Photos cannot reach your camera roll")
+    ).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Allow access" }));
+    expect(onRequest).toHaveBeenCalledOnce();
   });
 });

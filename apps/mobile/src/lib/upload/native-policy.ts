@@ -16,6 +16,11 @@ export function nativeUploadPolicy(): UploadPolicy {
   return {
     async canTransfer() {
       const rules = await hydrateTransferPolicy();
+      // `never` is the floor of the table (#712 P5) and is asked FIRST — before
+      // a radio, a battery or a roaming probe. A switch that reported "never"
+      // while the drain kept running on Wi-Fi would be the exact class of lying
+      // control the policy table exists to prevent.
+      if (rules.never) return false;
       const network = await Network.getNetworkStateAsync();
       if (!network.isConnected) return false;
       if (rules.wifiOnly && network.type !== Network.NetworkStateType.WIFI)

@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { family, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -71,7 +69,7 @@ export default function GatewayAlerts(props: {
 
   const rows = state.kind === "ready" ? state.rows : [];
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={props.onLeave} />
         <View style={styles.headerCopy}>
@@ -154,7 +152,7 @@ export default function GatewayAlerts(props: {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

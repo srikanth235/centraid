@@ -22,17 +22,16 @@
 //
 // jsdom for the whole file: the panel view is asserted through
 // `renderToStaticMarkup` (it is a pure view over its props, so the markup IS
-// the behaviour), while the GATE is driven for real with `createRoot`,
-// because "did a click write" is a question only a driven DOM can answer.
+// the behaviour), while the GATE (`enrichment-gate.ts`) is a plain closure
+// over `window.centraid` — driven directly, because "did a call write" is a
+// question the closure's own return value answers without a mounted DOM.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { act, createElement } from "react";
+import { createElement } from "react";
 import type { ComponentType } from "react";
-import { createRoot } from "react-dom/client";
-import type { Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const app = (rel: string): string =>
   pathToFileURL(path.resolve(import.meta.dirname, ".", rel)).href;
@@ -51,8 +50,9 @@ interface ConsentProps {
   onDecline: () => void;
   onChooseCloud?: () => void;
 }
-interface PanelProps {
-  photographCount?: number | null;
+interface EnrichmentGate {
+  ensurePolicyLoaded: () => void;
+  props: (count: number) => ConsentProps | null;
 }
 interface ConsentCopy {
   ON_DEVICE_PANEL: {
@@ -89,9 +89,9 @@ const copy = (await import(app("enrichment-consent.ts"))) as ConsentCopy;
 const { EnrichmentConsent } = (await import(
   app("components/EnrichmentConsent.tsx")
 )) as { EnrichmentConsent: ComponentType<ConsentProps> };
-const { EnrichmentPanel } = (await import(
-  app("components/Enrichment.tsx")
-)) as { EnrichmentPanel: ComponentType<PanelProps> };
+const { createEnrichmentGate } = (await import(app("enrichment-gate.ts"))) as {
+  createEnrichmentGate: (opts: { onData: () => void }) => EnrichmentGate;
+};
 
 /** Every fact the two panels must state — the handoff's nine, verbatim. */
 const NINE_FACTS: readonly [string, string][] = [
@@ -176,85 +176,80 @@ describe("the enrichment consent surface", () => {
     );
   });
 
-  it("withholds the device answer when the library points at a remote model", () => {
+  it("withholds the device answer when the library points at the gateway tier", () => {
     // "what leaves the device: nothing" is FALSE for such a library, so the
     // answer is not offered and the reason is named.
+    expect(copy.deviceAnswerFor("gateway").available).toBe(false);
+    expect(copy.deviceAnswerFor("gateway").reason).toBe(
+      copy.ENRICHMENT_UNAVAILABLE.modelTier
+    );
+    expect(copy.deviceAnswerFor("off").available).toBe(false);
+    expect(copy.deviceAnswerFor("device").available).toBe(true);
+    expect(copy.deviceAnswerFor(null).available).toBe(false);
+    expect(copy.deviceAnswerFor("device", true).available).toBe(false);
+  });
+
+  it("[C5] also accepts the pre-rename 'local'/'model' spellings, the same way", () => {
+    // A raw `enrich.policy` row can reach this module without going through
+    // packages/vault's own normalizing read (queries/enrichment-status.ts
+    // reads the table directly) — see this file's C5 COMPAT comment.
+    expect(copy.deviceAnswerFor("local").available).toBe(true);
     expect(copy.deviceAnswerFor("model").available).toBe(false);
     expect(copy.deviceAnswerFor("model").reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.modelTier
     );
-    expect(copy.deviceAnswerFor("off").available).toBe(false);
-    expect(copy.deviceAnswerFor("local").available).toBe(true);
-    expect(copy.deviceAnswerFor(null).available).toBe(false);
-    expect(copy.deviceAnswerFor("local", true).available).toBe(false);
   });
 });
 
-describe("the enrichment gate", () => {
-  let host: HTMLDivElement;
-  let root: Root;
+describe("the enrichment gate (issue #712 C2, re-homed into People's empty state)", () => {
+  // `enrichment-gate.ts` is the retired toolbar dialog's state machine,
+  // lifted so it can drive `PeopleShelf`'s `gate` prop instead — a plain
+  // closure over `window.centraid`, so these tests drive it directly rather
+  // than through a mounted component. THE LOAD-BEARING RULE is unchanged:
+  // no enrichment write without an explicit answer.
   const write = vi.fn<(intent: unknown) => Promise<{ status: string }>>(
     async () => ({ status: "executed" })
   );
   const read = vi.fn<(query: unknown) => Promise<{ tier: string }>>(
     async () => ({
-      tier: "local",
+      tier: "device",
     })
   );
+  const onData = vi.fn<() => void>();
 
   beforeEach(() => {
     write.mockClear();
     read.mockClear();
+    onData.mockClear();
     (window as unknown as { centraid: unknown }).centraid = { read, write };
-    host = document.createElement("div");
-    document.body.append(host);
-    root = createRoot(host);
   });
 
-  afterEach(() => {
-    act(() => root.unmount());
-    host.remove();
-  });
-
-  async function mount(): Promise<void> {
-    await act(async () => {
-      root.render(createElement(EnrichmentPanel, { photographCount: 6214 }));
-    });
-  }
-
-  function click(label: string): Promise<void> {
-    const button = [...host.querySelectorAll("button")].find(
-      (b) => b.textContent?.trim() === label || b.ariaLabel === label
-    );
-    expect(button, `no control labelled ${label}`).toBeTruthy();
-    return act(async () => {
-      button?.click();
-    });
-  }
-
-  it("writes nothing on mount, and nothing on opening the question", async () => {
-    await mount();
+  it("writes nothing on creation, and nothing on reading the policy", async () => {
+    const gate = createEnrichmentGate({ onData });
     expect(write).not.toHaveBeenCalled();
-    await click("Enrichment");
-    expect(host.textContent).toContain("Run face detection over 6,214");
-    // Opening reads the policy; it does not write.
+    gate.ensurePolicyLoaded();
     expect(write).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
+    expect(gate.props(6214)?.onDevice.available).toBe(true);
   });
 
   it("writes nothing when the member declines", async () => {
-    await mount();
-    await click("Enrichment");
-    await click("Not now");
+    const gate = createEnrichmentGate({ onData });
+    gate.ensurePolicyLoaded();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
+    gate.props(6214)?.onDecline();
     expect(write).not.toHaveBeenCalled();
-    // Declining closes the question rather than leaving a half-answered one up.
-    expect(host.textContent).not.toContain("Run face detection over");
+    // Declining answers the question — the caller falls back to its own
+    // plain empty copy rather than leaving a half-answered gate up.
+    expect(gate.props(6214)).toBeNull();
   });
 
   it("issues the request only from the explicit on-device answer", async () => {
-    await mount();
-    await click("Enrichment");
+    const gate = createEnrichmentGate({ onData });
+    gate.ensurePolicyLoaded();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     expect(write).not.toHaveBeenCalled();
-    await click("Run on this device");
+    gate.props(6214)?.onRunOnDevice();
     expect(write).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         action: "request-enrichment",
@@ -263,20 +258,24 @@ describe("the enrichment gate", () => {
     );
   });
 
-  it("takes one answer, not two — a second click writes nothing more", async () => {
-    await mount();
-    await click("Enrichment");
-    await click("Run on this device");
-    await click("Run on this device");
+  it("takes one answer, not two — a second call writes nothing more", async () => {
+    const gate = createEnrichmentGate({ onData });
+    gate.ensurePolicyLoaded();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
+    gate.props(6214)?.onRunOnDevice();
+    gate.props(6214)?.onRunOnDevice();
     expect(write).toHaveBeenCalledOnce();
   });
 
   it("refuses the answer outright when the library's tier cannot honour it", async () => {
-    read.mockResolvedValueOnce({ tier: "model" });
-    await mount();
-    await click("Enrichment");
-    expect(host.textContent).toContain(copy.ENRICHMENT_UNAVAILABLE.modelTier);
-    await click("Run on this device");
+    read.mockResolvedValueOnce({ tier: "gateway" });
+    const gate = createEnrichmentGate({ onData });
+    gate.ensurePolicyLoaded();
+    await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
+    const props = gate.props(6214);
+    expect(props?.onDevice.available).toBe(false);
+    expect(props?.onDevice.reason).toBe(copy.ENRICHMENT_UNAVAILABLE.modelTier);
+    props?.onRunOnDevice();
     expect(write).not.toHaveBeenCalled();
   });
 });

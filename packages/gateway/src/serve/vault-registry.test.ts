@@ -11,6 +11,10 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
+import {
+  replicaIntentContext,
+  runWithReplicaIntent,
+} from "./replica-intent-context.js";
 import { runWithVaultContext } from "./vault-context.js";
 import { openVaultRegistry, VaultRegistryError } from "./vault-registry.js";
 import type { VaultRegistry } from "./vault-registry.js";
@@ -257,6 +261,41 @@ describe("vault-registry scenarios", () => {
     ]);
     expect(a.ok).toBe(true);
     expect(b.ok).toBe(false);
+  });
+
+  test("an app-worker bridge carries request attribution into its later callback", async () => {
+    const root = await tempDir();
+    const registry = openRegistry(root);
+    const personal = registry.list()[0]!;
+    const work = registry.create("Work");
+    const observed: Array<{
+      vaultId: string;
+      intent: ReturnType<typeof replicaIntentContext>;
+    }> = [];
+    for (const plane of registry.planesList()) {
+      vi.spyOn(plane, "bridgeFor").mockReturnValue(async () => {
+        observed.push({
+          vaultId: registry.current().boot.vaultId,
+          intent: replicaIntentContext(),
+        });
+        return { ok: true };
+      });
+    }
+    const intent = {
+      intentId: "offline-write-1",
+      appId: "photos",
+      deviceId: "sid-phone",
+      memberId: "member-sid",
+    };
+    const bridge = runWithVaultContext({ vaultId: work.vaultId }, () =>
+      runWithReplicaIntent(intent, () => registry.bridgeFor("photos"))
+    );
+
+    // The worker message arrives after both ambient scopes have unwound.
+    await bridge({ op: "read", payload: {} });
+
+    expect(observed).toStrictEqual([{ vaultId: work.vaultId, intent }]);
+    expect(observed[0]?.vaultId).not.toBe(personal.vaultId);
   });
 
   test("a vault created out of band (admin CLI) mounts on first lookup", async () => {

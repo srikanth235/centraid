@@ -45,11 +45,11 @@ describe("enrichment refusal, as the host receives it", () => {
   beforeEach(async () => {
     appsDir = await tempDir("centraid-enrich-refusal-");
     journalDbFile = path.join(appsDir, "journal.db");
-    const dir = path.join(appsDir, "photos", "automations", "face-proposer");
+    const dir = path.join(appsDir, "photos", "automations", "face-finder");
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
       path.join(dir, "automation.json"),
-      JSON.stringify(enricherManifest("model"), null, 2)
+      JSON.stringify(enricherManifest("gateway"), null, 2)
     );
     await fs.writeFile(
       path.join(dir, "handler.js"),
@@ -70,7 +70,7 @@ describe("enrichment refusal, as the host receives it", () => {
     return runFire(
       {
         appsDir,
-        automationRef: "photos/face-proposer",
+        automationRef: "photos/face-finder",
         journalDbFile,
         resolveEnrichPolicy: () => tier,
       },
@@ -79,13 +79,13 @@ describe("enrichment refusal, as the host receives it", () => {
   }
 
   it("law: a tier refusal carries the domain, the capability, and the tier in force", async () => {
-    const { outcome } = await fire("local");
+    const { outcome } = await fire("device");
 
     expect(outcome.skipped).toBe(true);
     expect(outcome.enrichRefusal).toStrictEqual({
       capability: "faces",
       domain: "photos",
-      tier: "local",
+      tier: "device",
     });
   });
 
@@ -101,7 +101,7 @@ describe("enrichment refusal, as the host receives it", () => {
   });
 
   it("law: an ALLOWED fire carries no refusal — the card is raised only on refusal", async () => {
-    const { outcome } = await fire("model");
+    const { outcome } = await fire("gateway");
 
     expect(outcome.skipped).toBeUndefined();
     expect(outcome.enrichRefusal).toBeUndefined();

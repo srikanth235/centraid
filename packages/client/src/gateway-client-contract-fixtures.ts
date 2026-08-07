@@ -309,6 +309,7 @@ vi.stubGlobal("fetch", fetchMock);
 
 export const client = await import("./gateway-client.js");
 export const vault = await import("./gateway-client-vault.js");
+export const vaultImports = await import("./gateway-client-vault-imports.js");
 export const editing = await import("./gateway-client-automation-editing.js");
 export const outbox = await import("./gateway-client-outbox.js");
 export const logs = await import("./gateway-client-logs.js");

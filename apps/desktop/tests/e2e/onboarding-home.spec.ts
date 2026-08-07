@@ -316,6 +316,35 @@ test("2.6b — Photos opens into the app view and yields the #711 UI evidence", 
   }
 });
 
+test("2.6c — Photos opens into the app view and yields the #712 UI evidence", async () => {
+  // Same contract as 2.6b: the ui-receipt gate wants the evidence frame to be
+  // the surface the change set touched. #712's engine consumers (the sharing
+  // roster, the triage queue, the search scaffold) all live inside Photos'
+  // app view, so Photos-open is the honest frame here too.
+  gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
+  await seedRemoteGateway(env, gateway);
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await openTile(page, "photos");
+    const appView = page.locator(
+      '[data-testid="app-view"], [data-testid="inline-app-view"]'
+    );
+    await expect(appView).toBeVisible();
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-712-shared-engines.png"),
+      fullPage: true,
+    });
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("2.7 — the stem nav is present and All apps is reachable", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

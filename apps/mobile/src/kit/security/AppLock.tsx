@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react";
 import { AppState, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   appLockEnabled,
@@ -19,6 +18,7 @@ import {
 } from "../../lib/app-lock";
 import { clearSecureCache } from "../../lib/secure-storage";
 import { Text } from "../components/NativeText";
+import TopSafeArea from "../components/TopSafeArea";
 import { family, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 
@@ -124,10 +124,10 @@ export function AppLockProvider({
   // case (see App.tsx's own note on the lazy-screen Suspense fallback for the
   // same reasoning): a blank themed fill never registers as more than the one
   // flash a spinner would have been, and it costs no motion.
-  if (!hydrated) return <SafeAreaView style={styles.screen} />;
+  if (!hydrated) return <TopSafeArea style={styles.screen} />;
   if (enabled && !unlocked)
     return (
-      <SafeAreaView style={styles.screen}>
+      <TopSafeArea style={styles.screen}>
         <View accessibilityViewIsModal style={styles.card}>
           <Text style={styles.eyebrow}>DEVICE LOCK</Text>
           <Text style={styles.title}>Centraid is locked</Text>
@@ -155,7 +155,7 @@ export function AppLockProvider({
             </Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </TopSafeArea>
     );
   return (
     <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>

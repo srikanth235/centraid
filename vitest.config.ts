@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 
+import { mobileVitestProjects } from "./apps/mobile/vitest.projects";
 import coverageFloors from "./tests/coverage-floors.json";
 
 // Every package that participates in the repo-wide vitest run. `vitest.diff-
@@ -24,7 +25,7 @@ export const coverageProjects = [
   "packages/vault",
   "apps/desktop",
   "apps/extension",
-  "apps/mobile",
+  ...mobileVitestProjects,
   "apps/oauth-worker",
   "apps/web",
 ];

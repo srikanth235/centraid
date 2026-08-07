@@ -16,7 +16,7 @@ import {
   SLIDESHOW,
   SLIDESHOW_ACTION,
   SLIDESHOW_INTERVAL_MS,
-  captureLine,
+  captureStamp,
   isZoomed,
   slideshowMeta,
   slideshowPosition,
@@ -31,12 +31,17 @@ import {
   zoomOut,
   VIEWER_ACTION_TARGET,
   VIEWER_BOTTOM_ACTIONS,
-  VIEWER_TOP_BAR_HEIGHT,
+  VIEWER_BOTTOM_GROUPS,
+  VIEWER_CHROME_CHIP,
+  VIEWER_CHROME_INSET,
+  VIEWER_TOP_CHROME,
   vaultLine,
+  viewerAction,
+  viewerChromeHeight,
   zoomReadout,
 } from "./viewer-model";
 
-describe("the phone's bottom bar", () => {
+describe("the phone's bottom row", () => {
   test("carries the same five actions, in the desktop bar's order", () => {
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.id)).toStrictEqual([
       "sharing",
@@ -61,10 +66,11 @@ describe("the phone's bottom bar", () => {
     }
   });
 
-  test("the labels are the phone's short forms — they are DRAWN, not only spoken", () => {
-    // A fifth of a 390px screen carries `Sharing`, not `Copy to Sharing`; and
-    // because the drawn label and the accessible name are one field, they
-    // cannot drift into a WCAG 2.5.3 mismatch.
+  test("the labels are the phone's short forms — the accessible name of every target", () => {
+    // The row no longer DRAWS these (the chip/capsule arrangement has nowhere
+    // to put a word without turning a 44 target into a 70 one), but every
+    // target still takes its `accessibilityLabel` from this same field, so a
+    // screen reader hears exactly what it always heard.
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.label)).toStrictEqual([
       "Sharing",
       "Favorite",
@@ -74,14 +80,73 @@ describe("the phone's bottom bar", () => {
     ]);
   });
 
-  test("targets are 56, comfortably above the 44 floor", () => {
+  test("targets inside the capsule are 56, comfortably above the 44 floor", () => {
     expect(VIEWER_ACTION_TARGET).toBe(56);
     expect(VIEWER_ACTION_TARGET).toBeGreaterThanOrEqual(44);
   });
+});
 
-  test("the top bar is 52 and keeps only the exit and the overflow", () => {
-    // The five actions moved down; anything else up here would be a second bar.
-    expect(VIEWER_TOP_BAR_HEIGHT).toBe(52);
+describe("the bottom row's anatomy: chip · capsule · chip", () => {
+  test("is a lone leading chip, a capsule of three, and a lone trailing chip", () => {
+    expect(
+      VIEWER_BOTTOM_GROUPS.map((group) => [group.shape, ...group.actions])
+    ).toStrictEqual([
+      ["chip", "sharing"],
+      ["capsule", "favorite", "info", "edit"],
+      ["chip", "trash"],
+    ]);
+  });
+
+  test("the two ends are exactly the actions with consequences outside the photograph", () => {
+    // Share leaves the app; Trash is the only destructive one. Everything in
+    // the middle changes this photograph and nothing else — that is what the
+    // grouping is FOR, so it is asserted rather than left to the eye.
+    const ends = VIEWER_BOTTOM_GROUPS.filter(
+      (group) => group.shape === "chip"
+    ).flatMap((group) => [...group.actions]);
+    expect(ends).toStrictEqual(["sharing", "trash"]);
+  });
+
+  test("flattening the groups reproduces the desktop bar's five, in order", () => {
+    // The phone REARRANGES the viewer; it does not drop or reorder an action.
+    expect(
+      VIEWER_BOTTOM_GROUPS.flatMap((group) => [...group.actions])
+    ).toStrictEqual(VIEWER_BOTTOM_ACTIONS.map((action) => action.id));
+  });
+
+  test("every grouped id resolves to a real action, and an invented one throws", () => {
+    for (const group of VIEWER_BOTTOM_GROUPS)
+      for (const id of group.actions) expect(viewerAction(id).id).toBe(id);
+    // A group naming an id the list does not carry is a wiring bug, not a
+    // state to render an empty target for.
+    // @ts-expect-error — the point of the assertion is the unlisted id (#712).
+    expect(() => viewerAction("slideshow")).toThrow(
+      "No viewer action named slideshow"
+    );
+  });
+});
+
+describe("the floating chrome at the head of the stage", () => {
+  test("is three elements, not a bar — back, stamp, overflow", () => {
+    expect(VIEWER_TOP_CHROME).toStrictEqual(["back", "stamp", "overflow"]);
+  });
+
+  test("the stamp is the middle one, so the two controls are the reachable ends", () => {
+    expect(VIEWER_TOP_CHROME[1]).toBe("stamp");
+  });
+
+  test("a chip is 44 — the touch floor exactly, and not the bar's 56", () => {
+    expect(VIEWER_CHROME_CHIP).toBe(44);
+    expect(VIEWER_CHROME_CHIP).toBeLessThan(VIEWER_ACTION_TARGET);
+  });
+
+  test("the height it claims is its chip plus the inset above and below it", () => {
+    // Only the editor subtracts this; the stage runs under the chrome, which
+    // is the whole point of floating.
+    expect(viewerChromeHeight(0)).toBe(
+      VIEWER_CHROME_CHIP + VIEWER_CHROME_INSET * 2
+    );
+    expect(viewerChromeHeight(59)).toBe(59 + viewerChromeHeight(0));
   });
 });
 
@@ -393,7 +458,7 @@ describe("slideshow is a different mode", () => {
   });
 });
 
-describe("the viewer's top bar", () => {
+describe("the viewer's floating stamp", () => {
   test("says what the photograph IS, not what it is called", () => {
     expect(
       viewerTitle({
@@ -410,19 +475,35 @@ describe("the viewer's top bar", () => {
     expect(viewerTitle({})).toBe("Photograph");
   });
 
-  test("the second line is the capture line, never the position", () => {
-    const line = captureLine({
+  test("the date takes the first line and the clock the second, never the position", () => {
+    const stamp = captureStamp({
       capturedAt: "2026-07-30T17:42:00Z",
       placeName: "Lyme Regis",
     });
-    expect(line).toContain("2026");
-    expect(line.endsWith("· Lyme Regis")).toBe(true);
-    expect(line).not.toContain("of");
+    // The date is a date and nothing else — the clock has moved off it, which
+    // is the whole difference between this and the old one-line capture line.
+    expect(stamp.date).toContain("2026");
+    expect(stamp.date).not.toContain(":");
+    expect(stamp.date).not.toContain("Lyme Regis");
+    expect(stamp.time).toContain(":");
+    expect(stamp.time.endsWith("· Lyme Regis")).toBe(true);
+    expect(stamp.time).not.toContain("of");
+  });
+
+  test("a photograph with no place stops after the clock — no dangling separator", () => {
+    const stamp = captureStamp({ capturedAt: "2026-07-30T17:42:00Z" });
+    expect(stamp.time).not.toContain("·");
+    expect(stamp.time).toContain(":");
   });
 
   test("a photograph with no capture time invents nothing", () => {
-    expect(captureLine({})).toBe("");
-    expect(captureLine({ placeName: "Lyme Regis" })).toBe("Lyme Regis");
+    // Both lines come back empty, which is the caller's signal to show the
+    // photograph's NAME on the first line instead of an empty stamp.
+    expect(captureStamp({})).toStrictEqual({ date: "", time: "" });
+    expect(captureStamp({ placeName: "Lyme Regis" })).toStrictEqual({
+      date: "",
+      time: "Lyme Regis",
+    });
   });
 });
 

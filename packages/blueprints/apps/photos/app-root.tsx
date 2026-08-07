@@ -47,7 +47,6 @@ import type { ChromeSlots } from "./Chrome.tsx";
 import { AlbumBar } from "./components/AlbumBar.tsx";
 import { AlbumGridView } from "./components/AlbumGrid.tsx";
 import { EmptyTrash } from "./components/EmptyTrash.tsx";
-import { EnrichmentPanel } from "./components/Enrichment.tsx";
 import { FaceReview } from "./components/FaceReview.tsx";
 import { ImportPanels } from "./components/Import.tsx";
 import type { ImportResult } from "./components/Import.tsx";
@@ -69,6 +68,7 @@ import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 import { createCustody } from "./custody-store.ts";
 import { $ } from "./dom.ts";
 import { createDuplicates } from "./duplicates.tsx";
+import { createEnrichmentGate } from "./enrichment-gate.ts";
 import { filterByKind, scopeIsOn, writeScopeFor } from "./filters.ts";
 import type { KindFilter } from "./filters.ts";
 import { appBar, bandClaim, publishOutcome } from "./frame.tsx";
@@ -174,7 +174,6 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     lightbox: null,
     slideshow: null,
     picker: null,
-    enrichment: null,
     permission: null,
     moreSheet: null,
   });
@@ -951,10 +950,26 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         // face region, which is a bigger read than the bounded window.
         void people.ensureLoaded();
         const roster = people.list();
+        const proposalRoster = people.proposalList() ?? [];
+        // The consent gate (issue #712 C2) is the empty state's body only
+        // while there is truly nothing to browse — a roster with unconfirmed
+        // proposal cards has content the gate would hide, not an invitation
+        // to ask the question again.
+        const rosterEmpty =
+          roster !== null && roster.length === 0 && proposalRoster.length === 0;
+        if (rosterEmpty) enrichGate.ensurePolicyLoaded();
+        const gateProps = rosterEmpty
+          ? enrichGate.props(ownAssets.length)
+          : null;
         // A roster that has not answered is not an empty roster — the same
         // rule the timeline follows below, expressed through the same gate.
+        // The consent gate draws its own explanation of an empty shelf, so
+        // the generic empty block is suppressed while it is showing — the
+        // same treatment Sharing's own empty view gets, above.
         applyEmptyState(
-          emptyFor(roster?.length ?? 0, { suppressed: roster === null })
+          gateProps
+            ? NO_EMPTY_STATE
+            : emptyFor(roster?.length ?? 0, { suppressed: roster === null })
         );
         mainRoot.render(
           roster === null ? (
@@ -962,7 +977,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
           ) : (
             <PeopleShelf
               people={roster}
-              proposals={people.proposalList() ?? []}
+              proposals={proposalRoster}
               unmatchedCount={people.unmatchedTotal()}
               assets={ownAssets}
               onOpen={(partyId) => navigateTo(personShelf(partyId))}
@@ -976,6 +991,7 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
                 faceReviewFocusRegionId = regionId;
                 renderMain();
               }}
+              {...(gateProps ? { gate: gateProps } : {})}
             />
           )
         );
@@ -1393,12 +1409,6 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       renderMain();
     }
 
-    // ---- region factories (constructed once) ----
-    setSlot(
-      "enrichment",
-      <EnrichmentPanel photographCount={ownAssets.length} />
-    );
-
     // Selection owns its own mode, keys, busy latch and bar (selection.tsx);
     // this closure only tells it when the data moved and what to repaint.
     const selection = createSelection({
@@ -1423,6 +1433,16 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         if (disposed) return;
         renderMain();
         contributeAppBar();
+      },
+    });
+
+    // The face-detection consent gate (issue #712 C2), re-homed from a
+    // toolbar icon + dialog into the People shelf's own empty state — see
+    // enrichment-gate.ts and components/People.tsx's `gate` prop.
+    const enrichGate = createEnrichmentGate({
+      onData: () => {
+        if (disposed) return;
+        renderMain();
       },
     });
 

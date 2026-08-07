@@ -8,6 +8,11 @@ import { Text } from "../../kit/components/NativeText";
 import { t } from "../../kit/theme";
 import type { useTheme } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
+import {
+  DOCS_CUSTODY_ICON,
+  DOCS_CUSTODY_LABEL,
+  marksLocalOnly,
+} from "./docs-custody";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";
 
@@ -77,15 +82,35 @@ export function ListItem({
         >
           {item.document.title}
         </Text>
-        <Text style={[styles.meta, { color: colors.textSoft }]}>
-          {item.location ? `${item.location} · ` : ""}
-          {formatType(item.document.mediaType)} ·{" "}
-          <Text style={[t("mono"), { color: colors.textSoft }]}>
-            {formatBytes(item.document.byteSize)}
-          </Text>{" "}
-          · {item.document.custody ?? "local"} ·{" "}
-          {item.document.scopeLabels?.join(" + ") ?? "Vault"}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text
+            style={[styles.meta, { color: colors.textSoft, flexShrink: 1 }]}
+          >
+            {item.location ? `${item.location} · ` : ""}
+            {formatType(item.document.mediaType)} ·{" "}
+            <Text style={[t("mono"), { color: colors.textSoft }]}>
+              {formatBytes(item.document.byteSize)}
+            </Text>{" "}
+            · {item.document.scopeLabels?.join(" + ") ?? "Vault"}
+          </Text>
+          {/* The custody EXCEPTION only, as a mark — never a sentence
+              (docs/blueprint-seats.md "Byte custody vocabulary"). The two
+              normal states (`backed up`, `on the gateway`) say nothing here;
+              their full story is DocumentViewer's, on demand. */}
+          {marksLocalOnly(item.document.custody) ? (
+            <View
+              accessibilityLabel={DOCS_CUSTODY_LABEL}
+              accessibilityRole="image"
+              style={styles.custodyMark}
+            >
+              <Icon
+                name={DOCS_CUSTODY_ICON}
+                size={12}
+                color={colors.textSoft}
+              />
+            </View>
+          ) : null}
+        </View>
       </View>
       {item.document.starred ? (
         <Icon name="star" size={16} color="#d99b18" />
@@ -148,22 +173,34 @@ export function GridItem({
       >
         {item.kind === "folder" ? item.folder.name : item.document.title}
       </Text>
-      <Text style={[styles.meta, { color: colors.textSoft }]}>
-        {document ? (
-          <>
-            {item.kind === "document" && item.location
-              ? `${item.location} · `
-              : ""}
-            {formatType(document.mediaType)} ·{" "}
-            <Text style={[t("mono"), { color: colors.textSoft }]}>
-              {formatBytes(document.byteSize)}
-            </Text>{" "}
-            · {document.scopeLabels?.join(" + ") ?? "Vault"}
-          </>
-        ) : (
-          "Folder"
-        )}
-      </Text>
+      <View style={styles.metaRow}>
+        <Text style={[styles.meta, { color: colors.textSoft, flexShrink: 1 }]}>
+          {document ? (
+            <>
+              {item.kind === "document" && item.location
+                ? `${item.location} · `
+                : ""}
+              {formatType(document.mediaType)} ·{" "}
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {formatBytes(document.byteSize)}
+              </Text>{" "}
+              · {document.scopeLabels?.join(" + ") ?? "Vault"}
+            </>
+          ) : (
+            "Folder"
+          )}
+        </Text>
+        {/* Same row-scale exception mark as ListItem — see there for why. */}
+        {document && marksLocalOnly(document.custody) ? (
+          <View
+            accessibilityLabel={DOCS_CUSTODY_LABEL}
+            accessibilityRole="image"
+            style={styles.custodyMark}
+          >
+            <Icon name={DOCS_CUSTODY_ICON} size={12} color={colors.textSoft} />
+          </View>
+        ) : null}
+      </View>
     </Pressable>
   );
 }

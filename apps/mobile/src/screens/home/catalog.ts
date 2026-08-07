@@ -12,7 +12,7 @@
 import { apps as BUILTIN_APPS } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
-import { SPRINGBOARD_ORDER } from "./tile-model";
+import { SPRINGBOARD_ORDER } from "./springboard-policy";
 
 // Where a launcher tile goes when tapped. The three native kinds map onto the
 // nested cover navigators; `app` opens a remote app's WebView cover; `pair`

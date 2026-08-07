@@ -1,4 +1,5 @@
 // The structurally distinct tile bodies (issue #708 A, the Binding Layer brief).
+// governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
 //
 // The header above these is INVARIANT — icon, name, count — and is drawn once by
 // ./LauncherGrid. Everything below the header is deliberately NOT invariant:
@@ -27,13 +28,14 @@ import { identityFill, identityInk } from "@centraid/design";
 import { Text } from "../../kit/components/NativeText";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { borders, radii, t } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
+import { TILE_EMPTY_COPY } from "./springboard-policy";
 import {
   MOSAIC_CELL_HEIGHT,
   mosaicAwaitingBytes,
   mosaicCells,
-  TILE_EMPTY_COPY,
   TILE_PAD,
 } from "./tile-model";
 import type {
@@ -412,6 +414,42 @@ function Prose({
  * rules, so the geometry this tile depends on is asserted by a unit test rather
  * than only by looking at a phone.
  */
+/**
+ * ONE mosaic slot. A component rather than inline JSX because the cell needs
+ * the retry ladder, and a ladder needs state per cell — the thumb URL the
+ * mosaic builds 404s until the gateway's preview backstop has generated it,
+ * and this tile has no failure state at all: it simply sat on its skeleton
+ * ground for ever, so a vault full of photographs looked like a vault with no
+ * bytes. `use-image-fallback.ts` carries the full reasoning.
+ */
+function MosaicCell({
+  photo,
+  skel,
+}: {
+  photo: TilePhoto | undefined;
+  skel: string;
+}): React.JSX.Element {
+  const media = useImageFallback(
+    photo?.uri ?? "",
+    photo?.originalUri,
+    photo?.id ?? "empty"
+  );
+  return (
+    <View style={[styles.thumb, { backgroundColor: skel }]}>
+      {photo?.uri && !media.failed ? (
+        <Image
+          source={imageSource(media.source)}
+          style={styles.thumbImage}
+          {...gridImageProps(media.source)}
+          recyclingKey={media.recyclingKey}
+          onLoad={media.handleLoad}
+          onError={media.handleError}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 function PhotoMosaic({
   photos,
   colors,
@@ -427,20 +465,13 @@ function PhotoMosaic({
           negative margin would pull the grid over its own explanation. */}
       <View style={[styles.mosaic, !waiting && styles.mosaicBleed]}>
         {cells.map((photo, index) => (
-          <View
+          <MosaicCell
             // Positional: the slot exists whether or not a photograph has
             // arrived for it, so the slot — not the asset — is the identity.
             key={index}
-            style={[styles.thumb, { backgroundColor: colors.skel }]}
-          >
-            {photo?.uri ? (
-              <Image
-                source={imageSource(photo.uri)}
-                style={styles.thumbImage}
-                {...gridImageProps(photo.uri)}
-              />
-            ) : null}
-          </View>
+            photo={photo}
+            skel={colors.skel}
+          />
         ))}
       </View>
       {/* A grid of grey squares with no explanation reads as a failed render,

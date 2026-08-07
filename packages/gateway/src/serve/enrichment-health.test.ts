@@ -29,7 +29,7 @@ describe(createEnrichmentHealthProbe, () => {
         {
           vaultId: "v1",
           listAutomations: async () => [
-            row("photo-captioner", false),
+            row("doc-text-extractor", false),
             row("some-other-app", true),
           ],
           recentRuns: () => [],
@@ -75,7 +75,7 @@ describe(createEnrichmentHealthProbe, () => {
       vaults: () => [
         {
           vaultId: "vault-aaaaaaaa",
-          listAutomations: async () => [row("face-proposer", true)],
+          listAutomations: async () => [row("doc-text-extractor", true)],
           recentRuns: () => [{ ok: false }, { ok: true }, { ok: true }],
         },
       ],
@@ -84,7 +84,7 @@ describe(createEnrichmentHealthProbe, () => {
     const result = await probe();
     expect(result.status).toBe("degraded");
     expect(result.detail).toContain("recent failure");
-    expect(result.detail).toContain("vault-aa/face-proposer");
+    expect(result.detail).toContain("vault-aa/doc-text-extractor");
   });
 
   it("escalates to error when the last N runs (the streak) all failed", async () => {
@@ -92,7 +92,7 @@ describe(createEnrichmentHealthProbe, () => {
       vaults: () => [
         {
           vaultId: "vault-aaaaaaaa",
-          listAutomations: async () => [row("face-proposer", true)],
+          listAutomations: async () => [row("doc-text-extractor", true)],
           recentRuns: () => [{ ok: false }, { ok: false }, { ok: false }],
         },
       ],
@@ -101,7 +101,7 @@ describe(createEnrichmentHealthProbe, () => {
     const result = await probe();
     expect(result.status).toBe("error");
     expect(result.detail).toContain("persistently failing");
-    expect(result.detail).toContain("vault-aa/face-proposer");
+    expect(result.detail).toContain("vault-aa/doc-text-extractor");
   });
 
   it("flags a successful-but-stale enricher as degraded", async () => {
@@ -109,7 +109,7 @@ describe(createEnrichmentHealthProbe, () => {
       vaults: () => [
         {
           vaultId: "v1",
-          listAutomations: async () => [row("trip-albums", true)],
+          listAutomations: async () => [row("obligation-extractor", true)],
           recentRuns: () => [{ ok: true, endedAt: 0 }],
         },
       ],
@@ -151,7 +151,7 @@ describe(createEnrichmentHealthProbe, () => {
           vaultId: "vault-b",
           listAutomations: async () => [
             row("doc-filer", true),
-            row("trip-albums", false),
+            row("obligation-extractor", false),
           ],
           recentRuns: () => [],
         },

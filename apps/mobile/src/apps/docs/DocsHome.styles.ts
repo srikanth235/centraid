@@ -27,6 +27,9 @@ export const styles = StyleSheet.create({
     padding: 12,
   },
   createText: { fontFamily: family.sansMedium, fontSize: 13 },
+  // The custody exception mark (docs-custody.ts `marksLocalOnly`) — 6px after
+  // the meta line, matching Photos' bottom-slot custody chip gutter.
+  custodyMark: { marginLeft: 6 },
   dialog: {
     borderRadius: 18,
     left: 24,
@@ -119,6 +122,9 @@ export const styles = StyleSheet.create({
   libraryTitle: { fontFamily: family.sansMedium, fontSize: 17 },
   list: { paddingBottom: 48, paddingHorizontal: 18 },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
+  // Row wrapper so the custody mark sits beside the meta text instead of
+  // below it — the meta Text itself keeps its own marginTop.
+  metaRow: { alignItems: "center", flexDirection: "row" },
   newFolderLabel: {
     fontFamily: family.monoMedium,
     fontSize: 12.5,

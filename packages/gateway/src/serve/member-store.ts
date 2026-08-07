@@ -133,6 +133,38 @@ export class MemberStore {
     ).map((row) => ({ vaultId: row.vault_id, role: row.role }));
   }
 
+  /**
+   * Everyone holding a role in `vaultId`, name and role — the P7 grant
+   * roster (issue #712, folded into Engine A by default ruling). Before this,
+   * "who can see vault X" had no answer anywhere in the codebase: `grants`
+   * and `roleIn` both go person → vaults, and nothing went the other way.
+   * Bounded by the vault's own membership (a household, not a table that
+   * grows with vault contents), so this is a plain indexed join, not a scan.
+   */
+  membersOf(
+    vaultId: string
+  ): Array<{ memberId: string; name: string; role: GrantableRole }> {
+    return (
+      this.gatewayDatabase.db
+        .prepare(
+          `SELECT m.member_id AS member_id, m.label AS label, mr.role AS role
+             FROM member_roles mr
+             JOIN members m ON m.member_id = mr.member_id
+            WHERE mr.vault_id = ?
+            ORDER BY m.label, m.member_id`
+        )
+        .all(vaultId) as Array<{
+        member_id: string;
+        label: string;
+        role: GrantableRole;
+      }>
+    ).map((row) => ({
+      memberId: row.member_id,
+      name: row.label,
+      role: row.role,
+    }));
+  }
+
   roleIn(memberId: string, vaultId: string): GrantableRole | undefined {
     const row = this.gatewayDatabase.db
       .prepare(

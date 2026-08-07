@@ -17,8 +17,10 @@ await runFlow("home-loads", async (ctx) => {
     visible:
       text: "Connect your gateway."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- assertVisible: "Can't scan? Paste a code instead"
+- tapOn: "Can't scan? Paste a code instead"
 - assertVisible: "Paste the one-line ticket"
-- assertVisible: "Continue with pasted code"
+- assertVisible: "Connect"
 - takeScreenshot: ticket-only-onboarding
 `,
     "home-fresh"

@@ -1,8 +1,9 @@
 /*
  * Settings → Enrichment. The laws are about CONSENT, not layout: raising a
- * domain to the model tier is the moment photographs start leaving the
- * member's devices, so the question must be asked before the write and a
- * decline must leave the vault exactly as it was.
+ * domain to the gateway tier (issue #712 C5, renamed from `model`) is the
+ * moment photographs start leaving the member's devices, so the question
+ * must be asked before the write and a decline must leave the vault exactly
+ * as it was.
  */
 
 import { act } from "react";
@@ -24,12 +25,12 @@ function makeProps(
       .mockResolvedValue(true),
     loadPolicy: vi
       .fn<SettingsEnrichmentScreenProps["loadPolicy"]>()
-      .mockResolvedValue({ docs: "local", photos: "local" }),
+      .mockResolvedValue({ docs: "device", photos: "device" }),
     scopeLabel: "Shared",
     setTier: vi
       .fn<SettingsEnrichmentScreenProps["setTier"]>()
       .mockImplementation((domain, tier) =>
-        Promise.resolve({ docs: "local", photos: "local", [domain]: tier })
+        Promise.resolve({ docs: "device", photos: "device", [domain]: tier })
       ),
     showToast: vi.fn<SettingsEnrichmentScreenProps["showToast"]>(),
     ...over,
@@ -78,7 +79,7 @@ describe("Settings → Enrichment", () => {
     const props = makeProps({
       loadPolicy: vi
         .fn<SettingsEnrichmentScreenProps["loadPolicy"]>()
-        .mockResolvedValue({ docs: "off", photos: "model" }),
+        .mockResolvedValue({ docs: "off", photos: "gateway" }),
     });
     await render(props);
 
@@ -90,7 +91,7 @@ describe("Settings → Enrichment", () => {
     );
   });
 
-  it("law: raising a domain to the model tier asks BEFORE it writes", async () => {
+  it("law: raising a domain to the gateway tier asks BEFORE it writes", async () => {
     const props = makeProps();
     await render(props);
 
@@ -99,7 +100,7 @@ describe("Settings → Enrichment", () => {
     expect(props.confirmEgress).toHaveBeenCalledOnce();
     const asked = vi.mocked(props.confirmEgress).mock.calls[0]?.[0];
     expect(asked?.message).toContain("over the network");
-    expect(props.setTier).toHaveBeenCalledWith("photos", "model");
+    expect(props.setTier).toHaveBeenCalledWith("photos", "gateway");
     // The ask happened first: had the order been reversed, the write would
     // have landed even on a decline — which the next law pins.
     expect(
@@ -127,7 +128,7 @@ describe("Settings → Enrichment", () => {
     const props = makeProps({
       loadPolicy: vi
         .fn<SettingsEnrichmentScreenProps["loadPolicy"]>()
-        .mockResolvedValue({ docs: "local", photos: "model" }),
+        .mockResolvedValue({ docs: "device", photos: "gateway" }),
     });
     await render(props);
 
@@ -143,7 +144,7 @@ describe("Settings → Enrichment", () => {
     const props = makeProps({
       setTier: vi
         .fn<SettingsEnrichmentScreenProps["setTier"]>()
-        .mockResolvedValue({ docs: "local", photos: "local" }),
+        .mockResolvedValue({ docs: "device", photos: "device" }),
     });
     await render(props);
 
@@ -154,13 +155,17 @@ describe("Settings → Enrichment", () => {
     ).toBe("true");
   });
 
-  it("law: the `local` tier is never described as running a model locally", async () => {
+  it("law: the `device` tier is never described as running a model locally", async () => {
     await render(makeProps());
-    const local = host?.querySelector('[data-testid="enrich-photos-local"]');
+    const device = host?.querySelector('[data-testid="enrich-photos-device"]');
 
-    expect(local?.textContent).toContain("Centraid has no on-device model");
-    expect(local?.textContent).toContain("Nothing is sent to a model provider");
-    expect(local?.textContent).not.toMatch(/local model|on-device model runs/u);
+    expect(device?.textContent).toContain("Centraid has no on-device model");
+    expect(device?.textContent).toContain(
+      "Nothing is sent to a model provider"
+    );
+    expect(device?.textContent).not.toMatch(
+      /local model|on-device model runs/u
+    );
   });
 
   it("law: the consent question says the data leaves, in plain words", () => {
