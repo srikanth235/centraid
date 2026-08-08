@@ -80,8 +80,8 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 ### coverage-scope-reachability
 
-- **Directive**: Every first-party TypeScript source tree and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
-- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional `packages/*/src` and `apps/*/src` roots, but the issue #630 audit found the 41,821-line bundled blueprint runtime lived outside both the instrumentation globs and the reachability enumeration, so a large product surface could regress while every measurement remained green.
+- **Directive**: Every first-party TypeScript source tree under `packages/*/src`, `apps/*/src`, or `tools/*/src`, and the co-located executable `packages/blueprints/apps` / `packages/design/kit` runtime trees, must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
+- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional package/app roots, #630 added the 41,821-line bundled blueprint runtime, and #725 found the reference enrichment service under `tools/*` remained outside both enumeration and instrumentation ownership. The three source-tree classes now obey one reachability rule.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
 - **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
 
@@ -256,6 +256,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-07-29 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate the co-located blueprint app and kit runtime roots, require matching Vitest instrumentation, and restore the directive's missing constitutional policy record (#630).
 - 2026-07-31 — @srikanth235 — Add the performance principle: every user-facing interaction owns a perceived-latency budget, an unmeasured hot path is an incomplete feature, and nothing O(vault-size) runs synchronously on the request path or the event loop. Principle only, no new mechanical directive — the full-stack audit found the failures are shape-level (sync SQLite on the loop, per-subscriber recompute, ungated pollers) and not `grep`-decidable; the reviewable doctrine lives in [docs/coding-standards.md](docs/coding-standards.md) (#659).
 - 2026-08-01 — @srikanth235 — Add `no-hardcoded-colors`: blueprint app CSS may not introduce hex or `rgb()`/`hsl()` color literals, so the design package's token supply is matched by enforced consumption. Added-lines-only at commit time; the exhaustive gate (fonts, reserved custom-property namespaces, and a shrink-only per-file debt ledger) is `packages/blueprints/src/token-purity.test.ts` (#686).
+- 2026-08-08 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate `tools/*/src` executable TypeScript, require its Vitest instrumentation, and permit tool-scoped floor globs so the enrichment reference service and future first-party tools cannot land outside every coverage owner (#725).
 
 ## Escape hatches
 

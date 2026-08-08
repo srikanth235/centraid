@@ -1,15 +1,15 @@
 # coverage-scope-reachability
 
-Top-level `packages/*` / `apps/*` source trees and the co-located executable
+Top-level `packages/*` / `apps/*` / `tools/*` source trees and the co-located executable
 `packages/blueprints/apps` / `packages/design/kit` runtime trees must not
 fall outside every coverage floor, matrix owner, and intentional-ungated
 allowlist.
 
 Coverage floors only gate the globs listed in `tests/coverage-floors.json`.
-A new package under `packages/foo/src`, or executable code added to either
+A new package under `packages/foo/src`, a tool under `tools/foo/src`, or executable code added to either
 blueprint runtime root, with no floor, no matrix owner, and no allowlist entry
-is invisible to `bun run coverage` thresholds — the exact blind spots #532
-and #630 close.
+is invisible to `bun run coverage` thresholds — the exact blind spots #532,
+#630, and #725 close.
 
 **Fix:** add a floor scope for the runtime tree, add a matrix flow owner under
 that path, or (for deliberate journey-only surfaces) append the exact scope id
