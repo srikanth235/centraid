@@ -12,7 +12,7 @@
   "dependencies": {
     "@centraid/design": "workspace:*",
     "@centraid/protocol": "workspace:*",
-    "tldts": "7.4.9"
+    "tldts": "7.4.10"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
