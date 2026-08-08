@@ -89,7 +89,7 @@ Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while 
 - **Don't commit `runs/`.** It's gitignored — workspaces are tied to local sim UDIDs.
 - **Don't call `process.exit()` from a flow.** Throw or return `{ pass: false }` and let `runFlow` handle the verdict.
 - **Don't reach into `apps/mobile/ios/build/` or rebuild manually.** Run `bun run --filter=@centraid/mobile ios` once; the harness doesn't trigger builds (it errors loudly when the app isn't installed).
-- **Don't use `clearState: true` without acknowledging the cost.** It wipes the Expo dev client's Metro URL cache along with AsyncStorage. The next launch may need a deep-link relaunch via `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"` to recover.
+- **Don't use `clearState: true` without acknowledging the cost.** It wipes the Expo dev client's Metro URL cache along with AsyncStorage. The shared first-run helpers automatically deep-link iOS back to Metro and dismiss the first-use `Continue`/`Reload` developer overlays; use the same `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"` manually when debugging an ad-hoc flow.
 - **Don't trust the UI alone for persistence assertions.** Read the AsyncStorage manifest from disk for round-trip claims.
 
 ## Where to look

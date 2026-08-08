@@ -27,17 +27,65 @@ export const DISMISS_SYSTEM_ANR = `- runFlow:
 `;
 
 /**
+ * Expo's development build shows this first-use sheet on a fresh simulator.
+ * It is above the React Native hierarchy, so dismiss it before polling for
+ * onboarding. The exact Continue label is also used by iOS keyboard setup;
+ * handling it here makes both overlays safe during cold launch.
+ */
+export const DISMISS_FIRST_USE_CONTINUE = `- runFlow:
+    when:
+      visible: "^Continue$"
+    commands:
+      - tapOn: "^Continue$"
+`;
+
+/**
+ * After the first-use sheet is accepted, Expo leaves its developer menu open.
+ * Reload closes that menu and returns to the app with the Metro bundle loaded;
+ * the menu's "Go home" action would return to the dev-client launcher.
+ */
+export const DISMISS_EXPO_DEV_MENU = `- runFlow:
+    when:
+      visible: "^Reload$"
+    commands:
+      - tapOn: "^Reload$"
+`;
+
+// `launchApp: { clearState: true }` also clears the Expo development client's
+// cached Metro URL on iOS. Re-inject the URL through the app's development
+// client route before waiting for the React Native onboarding hierarchy; without
+// this, the simulator remains on the development-client launcher indefinitely.
+const IOS_METRO_DEV_CLIENT_LINK =
+  "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081";
+
+/**
+ * Reconnect a cleared iOS Expo development client to the already-running Metro
+ * server. Android's dev client does not use this iOS URL route.
+ */
+export function relaunchDevClientCommands(platform) {
+  if (platform !== "ios") return "";
+  return `- openLink: "${IOS_METRO_DEV_CLIENT_LINK}"
+- waitForAnimationToEnd:
+    timeout: 1000
+`;
+}
+
+/**
  * Poll for onboarding while dismissing a system ANR overlay between polls.
  * This keeps a transient OS dialog from consuming the whole launch budget.
  */
 export function waitForOnboardingConnectCommands(timeoutMs) {
   const pollMs = 5_000;
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
-  const dismissInside = DISMISS_SYSTEM_ANR.split("\n")
+  const dismissOverlays =
+    `${DISMISS_SYSTEM_ANR}${DISMISS_FIRST_USE_CONTINUE}` +
+    DISMISS_EXPO_DEV_MENU;
+  const dismissInside = dismissOverlays
+    .split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${DISMISS_SYSTEM_ANR}- repeat:
+  return `${dismissOverlays}- repeat:
     times: ${times}
     while:
       notVisible:

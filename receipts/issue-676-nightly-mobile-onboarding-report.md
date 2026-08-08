@@ -30,21 +30,26 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   is complete and exposes `replica-compatibility-retry` for bounded capability
   retries.
 - `tests/agent-e2e-mobile/lib/first-run.mjs` contains the reusable wait,
-  paste-path, pairing-recovery, Android system-ANR dismissal, and capability-wall
-  retry YAML; `tests/agent-e2e-mobile/lib/harness.mjs` uses it with a fresh
-  one-time ticket for each bounded iOS pairing attempt.
+  iOS Metro deep-link/development-overlay recovery, paste-path,
+  pairing-recovery, Android system-ANR dismissal, and capability-wall retry
+  YAML; `tests/agent-e2e-mobile/lib/harness.mjs` uses it with a fresh one-time
+  ticket for each bounded iOS pairing attempt.
 - `tests/agent-e2e-mobile/flows/home-loads.mjs` verifies the scan-first
   hierarchy, retries a lost fresh-launch control channel on iOS, and copies
   `scan-first-onboarding.png` to
   `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`.
 - `tests/agent-e2e-mobile/flows/home-loads.md` documents the current scan-first
   smoke contract and artifact names.
+- `tests/agent-e2e-mobile/README.md`, `tests/agent-e2e-mobile/AGENTS.md`, and
+  `tests/onboarding-scenarios.md` document the automatic clear-state recovery
+  and retain the manual deep-link fallback for ad-hoc simulator runs.
 
 ### Implementation coverage
 
 - The Expo iOS development client no longer exposes LogBox overlays over Maestro controls — `apps/mobile/index.ts`.
 - Scan-first onboarding controls and the pairing field are addressable by stable test IDs — `apps/mobile/src/screens/Onboarding.tsx`.
 - Native-input/React state desynchronization is recovered before submitting a pairing ticket — `apps/mobile/src/screens/Onboarding.tsx` and `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- A cleared iOS Expo development client is reconnected to Metro and its first-use `Continue`/`Reload` overlays are dismissed before onboarding assertions — `tests/agent-e2e-mobile/lib/first-run.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, and `tests/agent-e2e-mobile/flows/home-loads.mjs`.
 - The compatibility wall stays out of the pre-onboarding pairing surface — `apps/mobile/App.tsx`.
 - Transient iOS pairing and capability-wall interactions use bounded waits — `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/first-run.mjs`, and `tests/agent-e2e-mobile/flows/home-loads.mjs`.
 - The serialized iOS job backstop is above its cold-build and journey budget — `.github/workflows/e2e.yml`.
@@ -74,7 +79,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - `bun run lint:e2e-flows`
 - `bun run test:matrix`
 - `bun run test:accessibility`
-- Remote iOS verification: [Actions run 31269581074](https://github.com/srikanth235/centraid/actions/runs/31269581074)
+- Local iOS verification: `MAESTRO_PLATFORM=ios node tests/agent-e2e-mobile/flows/home-loads.mjs` (PASS; 2026-08-08).
+- Remote diagnostic: [Actions run 31272778141](https://github.com/srikanth235/centraid/actions/runs/31272778141) reproduced the clear-state Expo development-client launcher failure that this follow-up fixes.
 
 ```sh
 bun run format:check

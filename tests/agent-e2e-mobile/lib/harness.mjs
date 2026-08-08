@@ -27,6 +27,7 @@ import {
 import {
   completeOnboardingCommands,
   pasteAndConnectPairingTicketCommands,
+  relaunchDevClientCommands,
   waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
@@ -478,7 +479,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
+${relaunchDevClientCommands(state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
           "configure-gateway",
           {
             maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },

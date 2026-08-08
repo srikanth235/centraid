@@ -6,6 +6,7 @@ import path from "node:path";
 
 import {
   openPastePathCommands,
+  relaunchDevClientCommands,
   waitForOnboardingConnectCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -18,7 +19,7 @@ await runFlow("home-loads", async (ctx) => {
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
+${relaunchDevClientCommands(ctx.state.platform)}${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}- assertVisible: "Scan the QR code"
 - assertVisible: "Can't scan? Paste a code instead"
 ${openPastePathCommands()}- assertVisible: "PAIRING CODE"
 - assertVisible:

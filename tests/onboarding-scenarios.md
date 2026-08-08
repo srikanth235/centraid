@@ -74,7 +74,7 @@ Simulator constraints and traps:
 - **No camera on the sim** → the QR path cannot be exercised; **paste is the only sim-testable pairing route**. (On Android, `emulator -camera-back webcam0` can point at a QR on screen — untested here, treat as speculative.)
 - Cold JS bundle dominates first launch — allow ~120 s (`FIRST_LAUNCH_TIMEOUT_MS`).
 - First keystroke on a clean sim raises iOS's multilingual keyboard sheet; provoke and dismiss it with a throwaway character before the real input.
-- `clearState` wipes the dev client's cached Metro URL → `No script URL provided` redbox. Recover with `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`.
+- `clearState` wipes the dev client's cached Metro URL → `No script URL provided` redbox. The committed first-run helper re-injects the iOS Metro URL and dismisses Expo's first-use `Continue`/`Reload` developer overlays; recover manually with `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"` when driving the simulator outside the harness.
 - Never cache CocoaPods: a Pods cache hit makes Expo skip `pod install`, which is the only thing that runs the centraid-tunnel podspec's `prepare_command` fetching `Iroh.xcframework`. It fails on the _second_ native change, not the first.
 - iOS build needs **Xcode ≥ 26.4** (Expo SDK 57 / `swift-tools-version: 6.2`); verify with `bun run ci:xcode`.
 
