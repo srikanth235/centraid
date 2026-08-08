@@ -6,3 +6,98 @@ summary: No merge markers, oversized files, build artefacts, debug statements, o
 surface: repo-state
 hook: pre-commit
 always_install: true
+triggers: [pre-commit, schedule]
+config:
+  - name: MAX_FILE_SIZE_MB
+    type: scalar
+    doc: Largest committed file allowed, in megabytes.
+    default: 5
+    tunable: true
+  - name: FILE_SIZE_LIMIT
+    type: scalar
+    doc: Longest source file allowed, in lines.
+    default: 500
+    tunable: true
+  - name: ARTIFACT_PATTERNS
+    type: list
+    doc: Build-artifact glob and diagnostic-label pairs separated by a pipe.
+    default:
+      - "*.pyc|Python bytecode"
+      - "*.pyo|Python optimized bytecode"
+      - "__pycache__/**|Python cache dir"
+      - "*.class|Java class file"
+      - "*.o|compiled object file"
+      - "node_modules/**|node_modules committed"
+      - "dist/**|dist/ build output"
+      - "build/**|build/ output"
+      - "target/**|target/ (JVM / Rust) build output"
+      - "out/**|out/ build output"
+      - ".DS_Store|macOS metadata"
+      - "Thumbs.db|Windows metadata"
+      - "*.swp|editor swap file"
+      - "*.swo|editor swap file"
+    tunable: true
+  - name: DEBUG_PATTERNS
+    type: list
+    doc: Debug label, extended regular expression, and pathspec triples separated by pipes.
+    default:
+      - 'console.log|console\.log[[:space:]]*\(|*.js *.jsx *.ts *.tsx *.mjs *.cjs'
+      - "debugger statement|^[[:space:]]*debugger[[:space:]]*;?|*.js *.jsx *.ts *.tsx *.mjs *.cjs"
+      - 'Python breakpoint|^[[:space:]]*breakpoint[[:space:]]*\(|*.py'
+      - "pdb.set_trace|import pdb|*.py"
+      - 'Rust dbg! macro|(^|[^[:alnum:]_])dbg![[:space:]]*\(|*.rs'
+      - 'fmt.Println debug|^[[:space:]]*fmt\.Println[[:space:]]*\(|*.go'
+    tunable: true
+  - name: SOURCE_PATTERNS
+    type: list
+    doc: Source-file globs subject to the line-count ceiling.
+    default:
+      - "*.py"
+      - "*.js"
+      - "*.jsx"
+      - "*.ts"
+      - "*.tsx"
+      - "*.mjs"
+      - "*.cjs"
+      - "*.go"
+      - "*.rs"
+      - "*.rb"
+      - "*.java"
+      - "*.kt"
+      - "*.scala"
+      - "*.c"
+      - "*.cc"
+      - "*.cpp"
+      - "*.h"
+      - "*.hpp"
+      - "*.swift"
+      - "*.php"
+      - "*.cs"
+    tunable: true
+  - name: EXCLUDE_PATTERNS
+    type: list
+    doc: Source globs excluded from the line-count ceiling.
+    default:
+      - vendor/**
+      - "**/node_modules/**"
+      - "**/generated/**"
+      - "**/*_pb2.py"
+      - "**/*.pb.go"
+      - "**/migrations/**"
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "A `debug-statements` waiver's reason genuinely explains why the statement is intentional and safe to ship, not cover for a leftover debug print."
+    - "A `file-size-limit` waiver's reason genuinely explains why the file cannot reasonably be split, not routine cover for an unrefactored god-file."
+    - "Content excluded from a hygiene sub-check (vendor, generated, migrations) is actually vendor/generated content, not real source code relocated under an excluded path to dodge the check."

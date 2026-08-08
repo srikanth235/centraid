@@ -180,6 +180,107 @@ packages/vault/src/enrich/face-clusters.test.ts
 vitest.config.ts
 ```
 
+Governance-kit 0.14.0 migration paths (runtime and matching concern packs):
+
+```text
+.githooks/commit-msg
+.githooks/post-commit
+.githooks/pre-commit
+.githooks/pre-push
+.githooks/prepare-commit-msg
+.github/workflows/governance.yml
+.governance/conf/governance-kit/audit/agent-session-identity.conf
+.governance/conf/governance-kit/audit/agent-steering-accounting.conf
+.governance/conf/governance-kit/audit/agent-token-accounting.conf
+.governance/conf/governance-kit/audit/commit-issue-receipt-match.conf
+.governance/conf/governance-kit/audit/doc-integrity.conf
+.governance/conf/governance-kit/audit/issue-templates.conf
+.governance/conf/governance-kit/audit/issues-tracked.conf
+.governance/conf/governance-kit/audit/receipt-per-issue.conf
+.governance/conf/governance-kit/audit/toolchain-config-protection.conf
+.governance/install.yaml
+.governance/lib.sh
+.governance/packs.lock
+.governance/packs/governance-kit/audit/directives/agent-session-identity/README.md
+.governance/packs/governance-kit/audit/directives/agent-session-identity/check.sh
+.governance/packs/governance-kit/audit/directives/agent-session-identity/constitution.md
+.governance/packs/governance-kit/audit/directives/agent-session-identity/directive.yaml
+.governance/packs/governance-kit/audit/directives/agent-session-identity/hooks/pre-commit.sh
+.governance/packs/governance-kit/audit/directives/agent-session-identity/lib/receipt.sh
+.governance/packs/governance-kit/audit/directives/agent-session-identity/lib/runtime.sh
+.governance/packs/governance-kit/audit/directives/agent-session-identity/lib/validate.sh
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/README.md
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/check.sh
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/constitution.md
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/defaults.conf
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/directive.yaml
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/lib/ledger.py
+.governance/packs/governance-kit/audit/directives/agent-steering-accounting/lib/receipt_io.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/README.md
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/check.sh
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/constitution.md
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/defaults.conf
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/directive.yaml
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/hooks/pre-commit.sh
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/argv.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/endpoint.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/ledger.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/rates.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/receipt_io.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/reconcile.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/report.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/runtime.sh
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/lib/validate.py
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/runtimes/claude-code.sh
+.governance/packs/governance-kit/audit/directives/agent-token-accounting/runtimes/codex.sh
+.governance/packs/governance-kit/audit/directives/commit-issue-receipt-match/check.sh
+.governance/packs/governance-kit/audit/directives/commit-issue-receipt-match/directive.yaml
+.governance/packs/governance-kit/audit/directives/doc-integrity/check.sh
+.governance/packs/governance-kit/audit/directives/doc-integrity/constitution.md
+.governance/packs/governance-kit/audit/directives/doc-integrity/defaults.conf
+.governance/packs/governance-kit/audit/directives/doc-integrity/directive.yaml
+.governance/packs/governance-kit/audit/directives/issue-templates/check.sh
+.governance/packs/governance-kit/audit/directives/issue-templates/directive.yaml
+.governance/packs/governance-kit/audit/directives/issues-tracked/check.sh
+.governance/packs/governance-kit/audit/directives/issues-tracked/directive.yaml
+.governance/packs/governance-kit/audit/directives/receipt-per-issue/check.sh
+.governance/packs/governance-kit/audit/directives/receipt-per-issue/constitution.md
+.governance/packs/governance-kit/audit/directives/receipt-per-issue/defaults.conf
+.governance/packs/governance-kit/audit/directives/receipt-per-issue/directive.yaml
+.governance/packs/governance-kit/audit/directives/toolchain-config-protection/check.sh
+.governance/packs/governance-kit/audit/directives/toolchain-config-protection/constitution.md
+.governance/packs/governance-kit/audit/directives/toolchain-config-protection/defaults.conf
+.governance/packs/governance-kit/audit/directives/toolchain-config-protection/directive.yaml
+.governance/packs/governance-kit/commits/directives/commit-message-format/check.sh
+.governance/packs/governance-kit/commits/directives/commit-message-format/constitution.md
+.governance/packs/governance-kit/commits/directives/commit-message-format/defaults.conf
+.governance/packs/governance-kit/commits/directives/commit-message-format/directive.yaml
+.governance/packs/governance-kit/commits/directives/no-orphan-todos/check.sh
+.governance/packs/governance-kit/commits/directives/no-orphan-todos/directive.yaml
+.governance/packs/governance-kit/commits/directives/no-unjustified-suppressions/check.sh
+.governance/packs/governance-kit/commits/directives/no-unjustified-suppressions/directive.yaml
+.governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
+.governance/packs/governance-kit/foundation/directives/internal-doc-links/defaults.conf
+.governance/packs/governance-kit/foundation/directives/internal-doc-links/directive.yaml
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/check.sh
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/constitution.md
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/defaults.conf
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/directive.yaml
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/lib/digest.sh
+.governance/packs/governance-kit/foundation/directives/managed-tree-integrity/lib/integrity.py
+.governance/packs/governance-kit/foundation/directives/repo-hygiene/check.sh
+.governance/packs/governance-kit/foundation/directives/repo-hygiene/constitution.md
+.governance/packs/governance-kit/foundation/directives/repo-hygiene/defaults.conf
+.governance/packs/governance-kit/foundation/directives/repo-hygiene/directive.yaml
+.governance/packs/governance-kit/foundation/directives/required-docs/check.sh
+.governance/packs/governance-kit/foundation/directives/required-docs/constitution.md
+.governance/packs/governance-kit/foundation/directives/required-docs/defaults.conf
+.governance/packs/governance-kit/foundation/directives/required-docs/directive.yaml
+.governance/packs/srikanth235/centraid/directives/format-check/check.sh
+.governance/run.sh
+CONSTITUTION.md
+```
+
 ### Inherited #721/#724 paths covered by their receipts
 
 The governance file-coverage rule evaluates the cumulative branch because this
@@ -324,3 +425,13 @@ change was restored before audit completion.
 | codex-019fdd23-464-1786189980-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 677796 | 0 | 46504320 | 46499 | 724295 | 14.0181 | 3352450 | 0 | 164513152 | 264948 | fix(mobile): boot Expo iOS development client (#725) |
 | codex-019fdd23-464-1786190114-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 11807 | 0 | 2512640 | 1755 | 13562 | 0.6840 | 3364257 | 0 | 167025792 | 266703 | fix(mobile): boot Expo iOS development client (#725) |
 | codex-019fdd23-464-1786190226-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 14873 | 0 | 2018176 | 1487 | 16360 | 0.5640 | 3379130 | 0 | 169043968 | 268190 | fix(mobile): boot Expo iOS development client (#725) -m governance: allow-doc-in |
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-08 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 |

@@ -9,6 +9,10 @@ require_git
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
+MANIFEST="$(dirname "$0")/directive.yaml"
+QUALITY_PATH="$(conf_get issues-tracked QUALITY_PATH "$MANIFEST")"
+OPEN_SECTION="$(conf_get issues-tracked OPEN_SECTION "$MANIFEST")"
+RESOLVED_SECTION="$(conf_get issues-tracked RESOLVED_SECTION "$MANIFEST")"
 
 # Whole-directive waiver: `<!-- governance: allow-issues-tracked <reason> -->`
 # in CONSTITUTION.md exempts the directive from this commit's check. Reason
@@ -20,14 +24,14 @@ if [[ -f "$ROOT/CONSTITUTION.md" ]] && sed -E 's/<!--//g; s/-->//g' "$ROOT/CONST
     directive_end
 fi
 
-if [[ ! -f "$ROOT/QUALITY.md" ]]; then
-    violation "QUALITY.md not found at repo root"
+if [[ ! -f "$ROOT/$QUALITY_PATH" ]]; then
+    violation "$QUALITY_PATH not found at repo root"
     directive_end
     exit 0
 fi
 
-grep -qE '^# '          "$ROOT/QUALITY.md" || violation "QUALITY.md — missing top-level '# ' heading"
-grep -qE '^## Open'     "$ROOT/QUALITY.md" || violation "QUALITY.md — missing '## Open' section"
-grep -qE '^## Resolved' "$ROOT/QUALITY.md" || violation "QUALITY.md — missing '## Resolved' section"
+grep -qE '^# ' "$ROOT/$QUALITY_PATH" || violation "$QUALITY_PATH — missing top-level '# ' heading"
+grep -qE "^## ${OPEN_SECTION}([[:space:]]|$)" "$ROOT/$QUALITY_PATH" || violation "$QUALITY_PATH — missing '## $OPEN_SECTION' section"
+grep -qE "^## ${RESOLVED_SECTION}([[:space:]]|$)" "$ROOT/$QUALITY_PATH" || violation "$QUALITY_PATH — missing '## $RESOLVED_SECTION' section"
 
 directive_end

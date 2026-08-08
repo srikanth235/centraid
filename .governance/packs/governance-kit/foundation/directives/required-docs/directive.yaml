@@ -6,3 +6,56 @@ recommended: true
 summary: Baseline root-level docs and hook scaffolding exist.
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: REQUIRED_CHECKS
+    type: list
+    doc: Root documentation and scaffolding sub-checks required by this policy.
+    default:
+      - constitution
+      - agents
+      - readme
+      - license
+      - security
+      - architecture
+      - ci-workflow
+      - env-example
+      - hooks
+    tunable: true
+  - name: AGENTS_MD_MIN
+    type: scalar
+    doc: Minimum line count for AGENTS.md.
+    default: 30
+    tunable: true
+  - name: AGENTS_MD_MAX
+    type: scalar
+    doc: Maximum line count for AGENTS.md.
+    default: 250
+    tunable: true
+  - name: AGENTS_MD_MIN_LINKS
+    type: scalar
+    doc: Minimum number of internal links required in AGENTS.md.
+    default: 3
+    tunable: true
+  - name: ARCHITECTURE_MIN
+    type: scalar
+    doc: Minimum line count for ARCHITECTURE.md.
+    default: 20
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "AGENTS.md genuinely functions as a map into the repo's durable docs — its links point to docs that actually cover what their surrounding text claims."
+    - "README.md's heading and prose genuinely describe what the project is and does, not padding added only to clear the word-count floor."
+    - "SECURITY.md's contact or disclosure channel is a real, usable channel, not a placeholder address."
+    - "A per-sub-check waiver's reason genuinely explains why the repo doesn't need that document, not boilerplate to bypass required-docs wholesale."

@@ -4,3 +4,46 @@ recommended: false
 summary: "Every lint / type-checker suppression references an issue."
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: MARKERS
+    type: list
+    doc: Fixed-string lint and type-checker suppression markers.
+    default:
+      - eslint-disable
+      - "@ts-ignore"
+      - "@ts-expect-error"
+      - "# noqa"
+      - "# type: ignore"
+      - "# pylint: disable"
+      - "# pyright: ignore"
+      - "#[allow("
+      - nolint
+      - "@SuppressWarnings"
+    tunable: true
+  - name: TRACKER_REGEX
+    type: scalar
+    doc: Extended regular expression for an accepted issue or ticket reference.
+    default: "(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)"
+    tunable: true
+  - name: SCHEDULE_EVIDENCE
+    type: scalar
+    doc: Evidence grain used for scheduled suppression review.
+    default: range
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "The referenced issue plausibly concerns un-muting this specific suppression, not an arbitrary number copied to satisfy the format."
+    - "The suppression's scope is as narrow as the actual problem — a line/statement-level disable, not a whole-file or whole-rule-category mute for one localized issue."
+    - "A waiver's reason genuinely describes a permanent, justified suppression (a generated file, an upstream bug) rather than cover for muting a real defect the code should instead fix."

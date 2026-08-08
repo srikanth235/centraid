@@ -1,6 +1,29 @@
 # internal-doc-links — the internal markdown link graph is healthy: links resolve and docs are reachable.
 category: SystemOfRecord
 recommended: true
-summary: "Rolled-up doc-link health. resolve: every relative-path markdown link resolves to a real file (always on). reachable: every tracked doc is reachable by following internal links from a root declared in .governance/reachability.conf (no-op without the config)."
+summary: "Rolled-up doc-link health. resolve: every relative-path markdown link resolves to a real file (always on). reachable: every tracked doc is reachable from a root declared in its directive overlay (no-op without roots)."
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: RULES
+    type: list
+    doc: Reachability roots and exclude globs; an empty list disables reachability checks.
+    default: []
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "A link's visible text honestly describes what the target document actually contains, not a stale description left over from a moved or renamed doc."
+    - "A `reachable` waiver or `exclude` line genuinely applies to a doc that should stay unlinked (a changelog, a generated doc), not to a doc that should be discoverable but was simply never linked."
+    - "A `resolve` line-level waiver's reason genuinely describes a placeholder or syntax-demonstrating link, not a real broken reference left uncorrected."

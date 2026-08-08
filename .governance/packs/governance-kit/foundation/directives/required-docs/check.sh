@@ -7,20 +7,28 @@
 # To carve out a sub-check for your repo, use `governance directive modify` to
 # amend this script (or `governance directive remove` to drop the directive
 # entirely). Threshold tunables — AGENTS_MD_MIN / _MAX / _MIN_LINKS and
-# ARCHITECTURE_MIN — default in the pack-owned `defaults.conf` beside this
+# ARCHITECTURE_MIN — default in the pack-owned manifest beside this
 # script and are overridden per-repo in
 # `.governance/conf/governance-kit/foundation/required-docs.conf` (or the
-# matching GOVERNANCE_* env vars, which win); they are applied below.
+# matching overlay rows when declared tunable); they are applied below.
 set -u
 source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "required-docs"
 require_git
 
-DEFAULTS="$(dirname "$0")/defaults.conf"
-[[ -f "$DEFAULTS" ]] || { violation "broken install: $DEFAULTS missing (threshold defaults unavailable)"; directive_end; }
+MANIFEST="$(dirname "$0")/directive.yaml"
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
+
+required_checks=()
+while IFS= read -r check; do [[ -n "$check" ]] && required_checks+=("$check"); done \
+    < <(conf_list required-docs "$MANIFEST" REQUIRED_CHECKS)
+required_enabled() {
+    local wanted="$1" check
+    for check in "${required_checks[@]:-}"; do [[ "$check" == "$wanted" ]] && return 0; done
+    return 1
+}
 
 # Per-sub-check waiver: `<!-- governance: allow-required-docs <sub-check>
 # <reason> -->` in CONSTITUTION.md skips the named sub-check. Reason
@@ -35,7 +43,7 @@ sub_check_waived() {
 }
 
 # ── constitution ────────────────────────────────────────────────
-if ! sub_check_waived constitution; then
+if required_enabled constitution && ! sub_check_waived constitution; then
     FILE="$ROOT/CONSTITUTION.md"
     if [[ ! -f "$FILE" ]]; then
         violation "CONSTITUTION.md not found at repo root"
@@ -47,14 +55,14 @@ if ! sub_check_waived constitution; then
 fi
 
 # ── agents ──────────────────────────────────────────────────────
-if ! sub_check_waived agents; then
+if required_enabled agents && ! sub_check_waived agents; then
     FILE="$ROOT/AGENTS.md"
     if [[ ! -f "$FILE" ]]; then
         violation "AGENTS.md not found at repo root"
     else
         lines=$(wc -l < "$FILE" | tr -d ' ')
-        MIN_LINES="$(conf_get required-docs AGENTS_MD_MIN "$DEFAULTS")"
-        MAX_LINES="$(conf_get required-docs AGENTS_MD_MAX "$DEFAULTS")"
+        MIN_LINES="$(conf_get required-docs AGENTS_MD_MIN "$MANIFEST")"
+        MAX_LINES="$(conf_get required-docs AGENTS_MD_MAX "$MANIFEST")"
         if [[ $lines -lt $MIN_LINES ]]; then
             violation "AGENTS.md has $lines lines — looks like a stub (min: $MIN_LINES)"
         fi
@@ -64,7 +72,7 @@ if ! sub_check_waived agents; then
         link_count=$(grep -oE '\]\([^)]+\)' "$FILE" 2>/dev/null \
             | grep -cvE '\((https?://|mailto:|tel:|#)' 2>/dev/null || true)
         link_count="${link_count:-0}"
-        MIN_LINKS="$(conf_get required-docs AGENTS_MD_MIN_LINKS "$DEFAULTS")"
+        MIN_LINKS="$(conf_get required-docs AGENTS_MD_MIN_LINKS "$MANIFEST")"
         if [[ $link_count -lt $MIN_LINKS ]]; then
             violation "AGENTS.md has $link_count internal links — an index should link out (min: $MIN_LINKS)"
         fi
@@ -80,7 +88,7 @@ if ! sub_check_waived agents; then
 fi
 
 # ── readme ──────────────────────────────────────────────────────
-if ! sub_check_waived readme; then
+if required_enabled readme && ! sub_check_waived readme; then
     README=""
     for c in README.md README README.rst; do
         [[ -f "$ROOT/$c" ]] && { README="$ROOT/$c"; break; }
@@ -98,7 +106,7 @@ if ! sub_check_waived readme; then
 fi
 
 # ── license ─────────────────────────────────────────────────────
-if ! sub_check_waived license; then
+if required_enabled license && ! sub_check_waived license; then
     LICENSE=""
     for c in LICENSE LICENSE.md LICENSE.txt COPYING COPYING.md; do
         [[ -f "$ROOT/$c" ]] && { LICENSE="$c"; break; }
@@ -111,7 +119,7 @@ if ! sub_check_waived license; then
 fi
 
 # ── security ────────────────────────────────────────────────────
-if ! sub_check_waived security; then
+if required_enabled security && ! sub_check_waived security; then
     SECURITY=""
     for c in SECURITY.md docs/SECURITY.md .github/SECURITY.md; do
         [[ -f "$ROOT/$c" ]] && { SECURITY="$ROOT/$c"; break; }
@@ -126,7 +134,7 @@ if ! sub_check_waived security; then
 fi
 
 # ── architecture ────────────────────────────────────────────────
-if ! sub_check_waived architecture; then
+if required_enabled architecture && ! sub_check_waived architecture; then
     ARCH=""
     for c in ARCHITECTURE.md docs/ARCHITECTURE.md ARCHITECTURE.rst docs/architecture.md; do
         [[ -f "$ROOT/$c" ]] && { ARCH="$ROOT/$c"; break; }
@@ -137,7 +145,7 @@ if ! sub_check_waived architecture; then
         violation "$ARCH exists but is empty"
     else
         lines=$(wc -l < "$ARCH" | tr -d ' ')
-        MIN_LINES="$(conf_get required-docs ARCHITECTURE_MIN "$DEFAULTS")"
+        MIN_LINES="$(conf_get required-docs ARCHITECTURE_MIN "$MANIFEST")"
         if [[ $lines -lt $MIN_LINES ]]; then
             violation "$ARCH has $lines lines — looks like a stub (min: $MIN_LINES)"
         fi
@@ -145,7 +153,7 @@ if ! sub_check_waived architecture; then
 fi
 
 # ── ci-workflow ─────────────────────────────────────────────────
-if ! sub_check_waived ci-workflow; then
+if required_enabled ci-workflow && ! sub_check_waived ci-workflow; then
     WF_DIR="$ROOT/.github/workflows"
     if [[ ! -d "$WF_DIR" ]]; then
         violation "no .github/workflows/ directory"
@@ -165,7 +173,7 @@ if ! sub_check_waived ci-workflow; then
 fi
 
 # ── env-example ─────────────────────────────────────────────────
-if ! sub_check_waived env-example; then
+if required_enabled env-example && ! sub_check_waived env-example; then
     ENV_FILE="$ROOT/.env"
     EXAMPLE_FILE="$ROOT/.env.example"
     if [[ -f "$ENV_FILE" ]]; then
@@ -189,10 +197,6 @@ if ! sub_check_waived env-example; then
 fi
 
 # ── hooks ───────────────────────────────────────────────────────
-if sub_check_waived hooks; then
-    directive_end
-fi
-
 # The .githooks/ scaffolding is only meaningful when the installed hook
 # strategy is `githooks`. Skip transparently for husky / pre-commit.com
 # repos (the framework has its own tracked hook-config mechanism).
@@ -203,7 +207,7 @@ if [[ -f "$_manifest" ]]; then
     [[ -n "$_hs" ]] && _hook_strategy="$_hs"
 fi
 
-if [[ "$_hook_strategy" == "githooks" ]]; then
+if required_enabled hooks && ! sub_check_waived hooks && [[ "$_hook_strategy" == "githooks" ]]; then
     if ! git ls-files --error-unmatch .githooks/pre-commit >/dev/null 2>&1; then
         violation ".githooks/pre-commit is not tracked — bootstrap should ship it"
     elif [[ ! -x .githooks/pre-commit ]]; then

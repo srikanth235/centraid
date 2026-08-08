@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
-# governance-kit:managed kit-version=0.12.0
+# governance-kit:managed kit-version=0.14.0
 # Governance test runner. Discovers every directive under ./packs/<owner>/<name>/.
 # Directives are folder-shaped — each directive is `directives/<id>/check.sh`.
-# Anything the directive needs (lib/, hooks/, runtimes/) lives in the same folder.
+# Anything the directive needs (lib/, hooks/, directive-local runtimes/) lives in the same folder.
 # Exits 0 if all directive checks pass, 1 if any fails.
 #
 # Usage:
 #   bash .governance/run.sh              # run all directive checks
 #   bash .governance/run.sh required-docs   # run a single directive by id
+#   bash .governance/run.sh --scheduled --lane <name> \
+#       [--range A..B] [--dry-run] [--no-gh] <member>...
+#                                        # one scheduled lane, at rest
+#
+# `--scheduled` is the at-rest mode a generated schedule workflow invokes: the
+# generated cadence's members are re-run (mechanical `check.sh` members) and
+# re-adjudicated (judge members) over the commits since that lane's last run.
+# This file recognizes the flag and nothing more — every other option belongs
+# to the engine, `schedule.sh`, which it delegates to whole. run.sh stays the
+# one documented entry point; schedule.sh is no more meant to be invoked by
+# hand than lib.sh is.
 #
 # Environment:
 #   SKIP_GOVERNANCE=1   skip all directive checks (for emergency commits)
@@ -22,10 +33,21 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PACKS_DIR="$HERE/packs"
 
+# ── The scheduled mode. Recognized here, parsed nowhere here: every remaining
+#    argument is the engine's to validate, so there is exactly one place that
+#    knows the lane grammar. `exec` because this process has nothing left to do.
+if [[ "${1:-}" == "--scheduled" ]]; then
+    if [[ ! -f "$HERE/schedule.sh" ]]; then
+        echo "✗ governance: --scheduled needs $HERE/schedule.sh (run \`governance update\` to sync the kit runtime)"
+        exit 1
+    fi
+    exec bash "$HERE/schedule.sh" run "${@:2}"
+fi
+
 # Sub-agent attestation orchestration (issue #325). A directive that declares a
-# `subagent:` block registers any pending attestation into a shared ledger when
-# its check.sh runs; after the whole run we emit ONE grouped remediation
-# instruction (shared-batched + isolated). Sourcing lib.sh provides
+# `judge:` block registers any pending attestation into a shared ledger when
+# its check.sh runs; after the whole run we emit one independent remediation
+# instruction per pending section. Sourcing lib.sh provides
 # attestation_remediation; exporting the ledger path makes it visible to each
 # `bash "$check"` subprocess. Guarded so an older lib.sh (no helper) is a no-op.
 ATTEST_LEDGER=""
@@ -58,7 +80,7 @@ fi
 if [[ $# -gt 0 ]]; then
     filter="$1"
     filtered=()
-    for f in "${check_files[@]}"; do
+    for f in ${check_files[@]+"${check_files[@]}"}; do
         # $f = $PACKS_DIR/<owner>/<pack>/directives/<id>/check.sh
         dir="$(dirname "$f")"                       # .../directives/<id>
         id="$(basename "$dir")"
@@ -79,7 +101,7 @@ fi
 
 fail_count=0
 pass_count=0
-for check in "${check_files[@]}"; do
+for check in ${check_files[@]+"${check_files[@]}"}; do
     if bash "$check"; then
         pass_count=$((pass_count + 1))
     else
@@ -87,7 +109,7 @@ for check in "${check_files[@]}"; do
     fi
 done
 
-# Emit the single grouped sub-agent remediation instruction for whatever the
+# Emit independent sub-agent remediation instructions for whatever the
 # directive checks registered as pending (no-op when nothing did).
 [[ -n "$ATTEST_LEDGER" ]] && attestation_remediation "$ATTEST_LEDGER"
 

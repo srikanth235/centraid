@@ -2,6 +2,35 @@
 category: AgentDiscipline
 recommended: true
 always_install: true
-summary: "System-of-record documents are integrity-protected against the default-branch baseline: receipts are immutable once on the trunk (frozen-files), the legacy COSTS.md/STEERING.md ledgers are sealed in place (frozen-files), opted-in append-only files may only grow, and frozen sections (e.g. resolved issues, the evolution log) keep their baseline lines verbatim."
+summary: "System-of-record documents are integrity-protected against the default-branch baseline: receipts (including session identity rows) are immutable once on the trunk, historical ledgers are sealed in place, opted-in append-only files may only grow, and frozen sections keep their baseline lines verbatim."
 surface: change-set
 hook: commit-msg
+triggers: [commit-msg, schedule]
+config:
+  - name: RULES
+    type: list
+    doc: Integrity rules in mode-path-argument form.
+    default:
+      - "frozen-files receipts/*.md"
+      - "frozen-files COSTS.md"
+      - "frozen-files STEERING.md"
+      - "frozen-section QUALITY.md Resolved"
+      - "frozen-section CONSTITUTION.md Evolution Log"
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "No change rewrites the meaning of a frozen record through moves, encoding tricks, or surrounding-context edits that the byte rules cannot see."
+    - "A waiver's reason genuinely describes a coordinated, reviewed rewrite (a rename fixing a link, a ledger migration) rather than routine cover for editing history."
+    - "New content added around a frozen section does not contradict, retract, or quietly supersede the meaning of the frozen lines it now surrounds."
+    - "An append to an append-only file is a genuine addition of new information, not a duplicate or filler line inserted just to satisfy byte-prefix immutability while the real edit happens elsewhere."

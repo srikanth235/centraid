@@ -14,7 +14,7 @@
 # from edits, and the harness-tampering sibling of `secrets-hygiene` /
 # `doc-integrity` (same waiver shape, same commit-msg + CI plumbing).
 #
-# Protected paths come from the sibling `defaults.conf` (a built-in
+# Protected paths come from the sibling manifest config (a built-in
 # multi-ecosystem default list), layered with the user overlay
 # `.governance/conf/governance-kit/audit/toolchain-config-protection.conf` — a bare line adds a
 # pattern, `!<pattern>` removes a default. Match rules: a trailing `/` means
@@ -48,7 +48,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
 
 # ── Protected-path patterns ───────────────────────────────────
-# The multi-ecosystem default pattern list ships in the sibling `defaults.conf`
+# The multi-ecosystem default pattern list ships in directive.yaml config
 # (pack-owned, refreshed on update). The effective list layers the user overlay
 # `.governance/conf/governance-kit/audit/toolchain-config-protection.conf` on top: a bare line adds a
 # pattern, `!<pattern>` removes a default. If the user removes every pattern the
@@ -57,13 +57,13 @@ PATTERNS=()
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     PATTERNS+=("$line")
-done < <(conf_list toolchain-config-protection "$(dirname "$0")/defaults.conf")
+done < <(conf_list toolchain-config-protection "$(dirname "$0")/directive.yaml" PATTERNS)
 
 # is_protected <path> — true if the path matches any protected pattern.
 is_protected() {
     local f="$1" base p
     base="${f##*/}"
-    for p in "${PATTERNS[@]}"; do
+    for p in ${PATTERNS[@]+"${PATTERNS[@]}"}; do
         case "$p" in
             */)   [[ "$f" == "$p"* ]] && return 0 ;;   # directory prefix
             */*)  [[ "$f" == $p ]]   && return 0 ;;    # full-path glob

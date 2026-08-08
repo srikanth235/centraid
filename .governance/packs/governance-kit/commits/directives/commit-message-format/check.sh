@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Directive: Commit messages follow Conventional Commits and end with a GitHub issue suffix.
 #   <type>(<optional-scope>)!?: <subject> (#123)
-# Default allowed types ship in the sibling `defaults.conf` (feat, fix, chore,
+# Default allowed types ship in the sibling manifest config (feat, fix, chore,
 # docs, refactor, test, perf, build, ci, revert, style). Customize per repo via
 # the overlay `.governance/conf/governance-kit/commits/commit-message-format.conf`: add a type on its
 # own line, or `!<type>` to disallow a default.
@@ -17,12 +17,13 @@ source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "commit-message-format"
 require_git
 
-# Effective type list = defaults.conf layered with the user overlay.
-ALL_TYPES="$(conf_list commit-message-format "$(dirname "$0")/defaults.conf" | tr '\n' ' ')"
+# Effective type list = manifest TYPES default layered with the user overlay.
+ALL_TYPES="$(conf_list commit-message-format "$(dirname "$0")/directive.yaml" TYPES | tr '\n' ' ')"
 # Build an alternation for the regex.
 types_alt=$(echo "$ALL_TYPES" | tr -s ' ' '|' | sed 's/^|//;s/|$//')
+ISSUE_REF_REGEX="$(conf_get commit-message-format ISSUE_REF_REGEX "$(dirname "$0")/directive.yaml")"
 # Conventional Commits header regex (first line only) plus a required GitHub issue suffix.
-HEADER_RE="^(${types_alt})(\([^)]+\))?!?: .+ \(#[1-9][0-9]*\)$"
+HEADER_RE="^(${types_alt})(\([^)]+\))?!?: .+ ${ISSUE_REF_REGEX}$"
 
 validate_subject() {
     local subject="$1"

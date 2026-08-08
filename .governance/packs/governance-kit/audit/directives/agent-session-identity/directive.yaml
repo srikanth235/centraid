@@ -1,0 +1,23 @@
+# agent-session-identity — record the active agent session in each issue receipt.
+category: AgentDiscipline
+recommended: true
+always_install: true
+summary: Each agent-authored commit records its harness and session identifier in the issue receipt; no transcript, token, cost, or steering data is read.
+surface: change-set
+hook: commit-msg
+triggers: [commit-msg]
+config:
+  - name: RECEIPTS_DIR
+    type: scalar
+    doc: Fixed directory holding identity-bearing per-issue receipts.
+    default: receipts
+    tunable: false
+  - name: SESSION_MAX_AGE_HOURS
+    type: scalar
+    doc: Maximum age of the Git identity marker accepted when no live harness signal exists.
+    default: 24
+    tunable: true
+reads:
+  - receipts/*.md
+writes:
+  - receipts/*.md

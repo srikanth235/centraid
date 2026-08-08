@@ -40,6 +40,15 @@ staged=()
 while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     [[ -f "$file" ]] || continue
+    # Keep this candidate list aligned with oxfmt.config.ts. Governance-owned
+    # files, frozen receipts/ledgers, and constitution history are intentionally
+    # excluded there; passing only excluded paths makes oxfmt exit 2 ("expected
+    # at least one target") rather than report a formatting result.
+    case "$file" in
+    .governance/* | .github/workflows/governance.yml | receipts/* | CONSTITUTION.md | COSTS.md | STEERING.md | QUALITY.md)
+        continue
+        ;;
+    esac
     case "$file" in
     *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.mts | *.cts | *.json | *.jsonc | *.yml | *.yaml | *.css | *.scss | *.less | *.md | *.mdx | *.html | *.vue | *.svelte | *.astro | *.graphql | *.gql)
         staged+=("$file")

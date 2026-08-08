@@ -6,3 +6,26 @@ recommended: true
 summary: Vendored pack folders and kit-runtime files match the digests recorded at apply time.
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: WAIVED_UNITS
+    type: list
+    doc: Managed directive ids or runtime paths exempted during a migration.
+    default: []
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "An entry added to the exemption conf genuinely reflects a unit mid-migration, not a permanent way to keep a hand-edit that should instead go through the install/update verb."
+    - "No change under the managed tree looks like a hand-authored edit to a vendored directive's logic dressed up as a legitimate update-verb sync."
+    - "A change to the pack lock or install manifest's recorded digests corresponds to an actual pack-update / kit-update run, not a manually recomputed digest pasted in to match a hand-edited file."

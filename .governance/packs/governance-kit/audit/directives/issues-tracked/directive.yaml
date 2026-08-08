@@ -4,3 +4,36 @@ recommended: true
 summary: QUALITY.md exists at repo root with Open and Resolved sections.
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: QUALITY_PATH
+    type: scalar
+    doc: Path to the tracked quality system of record.
+    default: QUALITY.md
+    tunable: true
+  - name: OPEN_SECTION
+    type: scalar
+    doc: Second-level heading for unresolved quality issues.
+    default: Open
+    tunable: true
+  - name: RESOLVED_SECTION
+    type: scalar
+    doc: Second-level heading for resolved quality issues.
+    default: Resolved
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "Entries under `## Open` and `## Resolved` describe real, identifiable issues, not placeholder or templated boilerplate left unfilled."
+    - "An issue moved from Open to Resolved is actually resolved by the change set, not relocated to make the Open section look emptier than reality."
+    - "The file is being used as the system of record for bugs/quality observations discovered in this change, not left inert while issues are tracked elsewhere in undisclosed form."
