@@ -1,8 +1,16 @@
 // The selection bar's rules, asserted without a renderer (§6, proto:4946).
 import { describe, expect, it, vi } from "vitest";
 
-import { buildSelectionActions, selectionBarReason } from "./photos-selection";
-import type { BuildSelectionActionsInput } from "./photos-selection";
+import {
+  buildSelectionActions,
+  pruneSelection,
+  runSelectionBatch,
+  selectionBarReason,
+  toggleAllSelection,
+  toggleSelectionKey,
+  toggleSelectionRange,
+} from "./selection-engine.ts";
+import type { BuildSelectionActionsInput } from "./selection-engine.ts";
 
 const noop = (): void => {};
 
@@ -117,5 +125,38 @@ describe("the one line under the bar", () => {
 
   it("is absent when every target can fire", () => {
     expect(selectionBarReason(buildSelectionActions(input()))).toBeUndefined();
+  });
+});
+
+describe("selection state", () => {
+  it("shares toggle, range, all, and prune semantics across seats", () => {
+    const one = toggleSelectionKey(new Set(), "b");
+    expect([
+      ...toggleSelectionRange(one, ["a", "b", "c"], "b", "c"),
+    ]).toStrictEqual(["b", "c"]);
+    expect([...toggleAllSelection(new Set(), ["a", "b"])]).toStrictEqual([
+      "a",
+      "b",
+    ]);
+    expect(pruneSelection(new Set(["a", "gone"]), ["a"])).toStrictEqual(
+      new Set(["a"])
+    );
+  });
+});
+
+describe("selection batch isolation", () => {
+  it("SABOTAGE: a rejected middle item does not strand the final item", async () => {
+    const seen: number[] = [];
+    const results = await runSelectionBatch([1, 2, 3], async (target) => {
+      seen.push(target);
+      if (target === 2) throw new Error("seeded failure");
+      return target * 10;
+    });
+    expect(seen).toStrictEqual([1, 2, 3]);
+    expect(results.map((result) => result.status)).toStrictEqual([
+      "fulfilled",
+      "rejected",
+      "fulfilled",
+    ]);
   });
 });

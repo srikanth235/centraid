@@ -60,6 +60,7 @@ import {
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import { buildPeopleShelf } from "./people-model";
 import PhotosScreen from "./PhotosScreen";
 
 /** A party's identity colour, lowered to the solid tile finish — the same
@@ -68,12 +69,6 @@ import PhotosScreen from "./PhotosScreen";
  *  an unloaded album cover does not. */
 function tintFor(key: string): string {
   return tileFinish(identityColor(key), "solid").backgroundColor;
-}
-
-interface PersonCard {
-  id: string;
-  name: string;
-  count: number;
 }
 
 export default function PhotosPeopleView({
@@ -90,6 +85,10 @@ export default function PhotosPeopleView({
   const parties = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
+  );
+  const clusters = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "media.face_cluster" }), [])
   );
   // The tier comes from the replica's `enrich.policy` mirror, the same read
   // PhotosLibrary.tsx used before this gate moved — the shared
@@ -138,40 +137,37 @@ export default function PhotosPeopleView({
     postStatus(ENRICHMENT_DECLINED_NOTE);
   };
 
-  // Every party that owns at least one confirmed face is a card, in
-  // face-count order — unnamed people included, not filtered out.
-  const people = useMemo<PersonCard[]>(() => {
-    const counts = new Map<string, number>();
-    for (const face of faces.rows) {
-      const pid = face.confirmed_by_party_id ?? face.party_id;
-      if (!pid) continue;
-      const key = String(pid);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return parties.rows
-      .map((party) => ({
-        id: String(party.party_id),
-        name: String(party.display_name ?? party.name ?? "Unnamed"),
-        count: counts.get(String(party.party_id)) ?? 0,
-      }))
-      .filter((entry) => entry.count > 0)
-      .sort((a, b) => b.count - a.count);
-  }, [faces.rows, parties.rows]);
-
-  // Faces still waiting on an answer — the note below the grid (proto:4433),
-  // with the live count standing in for the mock's 54. `review_state`, not
-  // `confirmed_by_party_id` (issue #712): a rejected or deliberately-unnamed
-  // region is answered, so counting it here would tell the member they have a
-  // backlog they already worked through.
-  const unmatchedCount = useMemo(
-    () => faces.rows.filter((row) => row.review_state === "proposed").length,
-    [faces.rows]
+  const shelf = useMemo(
+    () =>
+      buildPeopleShelf({
+        faces: faces.rows.map((row) => ({
+          ...row,
+          region_id: String(row.region_id),
+        })),
+        parties: parties.rows.map((row) => ({
+          ...row,
+          party_id: String(row.party_id),
+          display_name:
+            row.display_name == null ? null : String(row.display_name),
+        })),
+        clusters: clusters.rows.map((row) => ({
+          region_id: String(row.region_id),
+          cluster_id: String(row.cluster_id),
+        })),
+        policies: policies.rows.map((row) => ({
+          domain: row.domain == null ? null : String(row.domain),
+          tier: row.tier == null ? null : String(row.tier),
+        })),
+        policiesLoading: policies.loading,
+      }),
+    [clusters.rows, faces.rows, parties.rows, policies.loading, policies.rows]
   );
 
   // The gate is the empty state's body only while the question is still open
   // — an empty roster the member has already answered (either way) falls
   // back to the plain copy below instead of re-asking.
-  const showGate = people.length === 0 && !enrichAnswered;
+  const showGate =
+    shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
 
   return (
     // The band, via the shell (issue #712). This screen used to be rendered
@@ -187,8 +183,8 @@ export default function PhotosPeopleView({
         <Text style={styles.title}>People</Text>
       </View>
       <FlatList
-        data={people}
-        keyExtractor={(item) => item.id}
+        data={shelf.people}
+        keyExtractor={(item) => item.partyId}
         numColumns={3}
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.row}
@@ -216,29 +212,54 @@ export default function PhotosPeopleView({
           )
         }
         ListFooterComponent={
-          <Text style={styles.note}>
-            {unmatchedCount} faces are not matched to anyone. Face review
-            proposes them one at a time, and nothing is named until you name it.
-          </Text>
+          <View>
+            {shelf.unnamed.length > 0 ? (
+              <View style={styles.unnamedSection}>
+                <Text style={styles.sectionTitle}>
+                  Groups waiting for a name
+                </Text>
+                {shelf.unnamed.map((group) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Unnamed group, ${group.count} photographs`}
+                    key={group.clusterId}
+                    style={styles.unnamedCard}
+                    onPress={() => navigation.navigate("FaceReview")}
+                  >
+                    <Text style={styles.name}>Unnamed group</Text>
+                    <Text style={styles.count}>{group.count} photographs</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            <Text style={styles.note}>
+              {shelf.pendingTotal} faces are not matched to anyone. Face review
+              proposes them one at a time, and nothing is named until you name
+              it.
+            </Text>
+          </View>
         }
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${item.name}, ${item.count} photographs`}
+            accessibilityLabel={`${item.name ?? "Unnamed"}, ${item.count} photographs`}
             style={styles.card}
             onPress={() =>
               navigation.navigate("PhotoStateView", {
                 mode: "person",
-                partyId: item.id,
-                personName: item.name,
+                partyId: item.partyId,
+                personName: item.name ?? "Unnamed",
               })
             }
           >
             <View
-              style={[styles.avatar, { backgroundColor: tintFor(item.id) }]}
+              style={[
+                styles.avatar,
+                { backgroundColor: tintFor(item.partyId) },
+              ]}
             />
             <Text numberOfLines={2} style={styles.name}>
-              {item.name}
+              {item.name ?? "Unnamed"}
             </Text>
             <Text style={styles.count}>{item.count}</Text>
           </Pressable>
@@ -285,5 +306,17 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
+    sectionTitle: { ...t("control"), color: colors.text },
     title: { ...t("title"), color: colors.text, flex: 1 },
+    unnamedCard: {
+      borderColor: colors.line,
+      borderWidth: 1,
+      gap: spacing[1],
+      padding: spacing[3],
+    },
+    unnamedSection: {
+      gap: spacing[2],
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[4],
+    },
   });

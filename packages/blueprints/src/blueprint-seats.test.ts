@@ -70,6 +70,7 @@ const CUSTODY_TERMS = ["local-only", "remote-only", "backupState"] as const;
 const TRANSFER_IMPORT_RE = /kit\/transfer/u;
 
 describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
+  // [law:custody-seat-exclusion] Record-only apps cannot import byte custody.
   const ids = appIds();
 
   it.each(ids.map((id) => [id] as const))(

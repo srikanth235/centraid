@@ -6,8 +6,7 @@
 // image every other tile uses and positions/scales it in CSS so the bbox
 // fills the square — no new blob variant, no server work.
 //
-// Pure and framework-free so it is trivially unit-testable and shared by
-// whatever mounts it (FaceReview.tsx today).
+// Pure and framework-free so web and native import one computation.
 export interface FaceBBox {
   x: number;
   y: number;

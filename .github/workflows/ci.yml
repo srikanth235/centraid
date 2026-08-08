@@ -401,7 +401,7 @@ jobs:
 
   # #532 — per-PR mutation on affected property-defended seeds only. Skips when
   # the diff touches none of the seed watch paths; enforces mutation floors on
-  # packages that ran. Full eight-package Stryker remains nightly (e2e.yml).
+  # packages that ran. The full 16-seed Stryker lane remains nightly (e2e.yml).
   mutation-pr:
     runs-on: ubuntu-latest
     timeout-minutes: 35

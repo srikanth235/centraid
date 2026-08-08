@@ -77,6 +77,10 @@ interface RawCollection {
   cover_content_id?: string | null;
 }
 
+interface RawMemory {
+  memory_id: string;
+}
+
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
@@ -93,35 +97,39 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     ...(before ? [{ column: "captured_at", op: "lt", value: before }] : []),
   ];
   try {
-    const [liveAssets, trashedAssets, albums, places] = await Promise.all([
-      // The live window, newest capture first. SQLite ORDER BY … DESC puts
-      // NULLs last, so camera-dated photos lead and undated imports trail
-      // the window — acceptable semantics for a recency slice.
-      ctx.vault.read({
-        entity: "media.media_asset",
-        // Live timeline excludes archived assets (issue #419): archive hides
-        // from the timeline without trashing, so an archived photo is neither
-        // here nor in the trash shelf. `liveWhere` also carries the optional
-        // keyset cursor (`input.before`).
-        where: liveWhere,
-        orderBy: { column: "captured_at", dir: "desc" },
-        limit: window,
-        purpose,
-      }),
-      // The trash window, newest-trashed first. Trash is a ~30-day shelf
-      // the lifecycle sweep keeps short, so a fixed cap of 200 covers any
-      // plausible shelf without a knob.
-      ctx.vault.read({
-        entity: "media.media_asset",
-        where: [{ column: "deleted_at", op: "not-null" }],
-        orderBy: { column: "deleted_at", dir: "desc" },
-        limit: 200,
-        purpose,
-      }),
-      // Albums are collections (issue #274) — the one curation mechanism.
-      ctx.vault.read({ entity: "core.collection", purpose }),
-      readPlaces({ ctx, purpose }),
-    ]);
+    const [liveAssets, trashedAssets, albums, places, memories] =
+      await Promise.all([
+        // The live window, newest capture first. SQLite ORDER BY … DESC puts
+        // NULLs last, so camera-dated photos lead and undated imports trail
+        // the window — acceptable semantics for a recency slice.
+        ctx.vault.read({
+          entity: "media.media_asset",
+          // Live timeline excludes archived assets (issue #419): archive hides
+          // from the timeline without trashing, so an archived photo is neither
+          // here nor in the trash shelf. `liveWhere` also carries the optional
+          // keyset cursor (`input.before`).
+          where: liveWhere,
+          orderBy: { column: "captured_at", dir: "desc" },
+          limit: window,
+          purpose,
+        }),
+        // The trash window, newest-trashed first. Trash is a ~30-day shelf
+        // the lifecycle sweep keeps short, so a fixed cap of 200 covers any
+        // plausible shelf without a knob.
+        ctx.vault.read({
+          entity: "media.media_asset",
+          where: [{ column: "deleted_at", op: "not-null" }],
+          orderBy: { column: "deleted_at", dir: "desc" },
+          limit: 200,
+          purpose,
+        }),
+        // Albums are collections (issue #274) — the one curation mechanism.
+        ctx.vault.read({ entity: "core.collection", purpose }),
+        readPlaces({ ctx, purpose }),
+        before
+          ? { rows: [] }
+          : ctx.vault.read({ entity: "media.memory", limit: 200, purpose }),
+      ]);
 
     // Joins are `in`-bounded by the windows — THIS is the point of the
     // exercise: only the windowed photos' bytes travel, and album entries
@@ -133,7 +141,9 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const contentIds = [...new Set(windowed.map((a) => a.content_id))].filter(
       Boolean
     );
-    const [entries, contents, joins] = await Promise.all([
+    const memoryRows = (memories.rows ?? []) as unknown as RawMemory[];
+    const memoryIds = memoryRows.map((memory) => memory.memory_id);
+    const [entries, contents, joins, memoryMembers] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
             entity: "core.collection_entry",
@@ -152,6 +162,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           })
         : { rows: [] },
       readAssetJoins({ ctx, purpose, assetIds, contentIds }),
+      memoryIds.length > 0
+        ? ctx.vault.read({
+            entity: "media.memory_member",
+            where: [{ column: "memory_id", op: "in", value: memoryIds }],
+            orderBy: { column: "ordinal", dir: "asc" },
+            limit: 4000,
+            purpose,
+          })
+        : { rows: [] },
     ]);
 
     const contentById = new Map(
@@ -255,12 +274,22 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       albums: albumRows,
       places: places.rows,
       trash,
+      memories: memoryRows,
+      memoryMembers: memoryMembers.rows ?? [],
       truncated,
       window,
       tail,
     };
   } catch (error) {
-    const empty = { assets: [], albums: [], places: [], trash: [], tail: null };
+    const empty = {
+      assets: [],
+      albums: [],
+      places: [],
+      trash: [],
+      memories: [],
+      memoryMembers: [],
+      tail: null,
+    };
     // Only a consent deny is "ask the owner for access". Every other failure
     // (VAULT_ERROR, VAULT_UNAVAILABLE, a protocol error from the replica
     // bridge) is ours, and saying "no vault access yet" about it sends the

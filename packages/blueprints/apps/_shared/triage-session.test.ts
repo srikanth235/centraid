@@ -17,6 +17,8 @@ import {
 const QUEUE = ["a", "b", "c"];
 
 describe("triage session", () => {
+  // [law:triage-session-progress] A frozen denominator and distinct skip
+  // semantics are the cross-seat contract for every proposal queue.
   it("walks one item at a time", () => {
     const session = openTriage(QUEUE);
     expect(triageCurrent(session)).toBe("a");

@@ -31,9 +31,10 @@ const MERGES_PATH = path.join(CLIP_DIR, "merges.txt");
 const CLIP_IMAGE_SIZE = 224;
 const CLIP_CONTEXT_LENGTH = 77;
 
-export function embedWeightsPresent(): boolean {
-  return [VISUAL_MODEL_PATH, TEXTUAL_MODEL_PATH, VOCAB_PATH, MERGES_PATH].every(
-    existsSync
+export function embedWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
+  const clipDir = path.join(modelsDir, "clip");
+  return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
+    (filename) => existsSync(path.join(clipDir, filename))
   );
 }
 
@@ -92,10 +93,9 @@ export function l2Normalize(vector: Float32Array): number[] {
  * Reads the first output tensor's data regardless of its exact name — ONNX
  * exports of CLIP name their pooled embedding output differently across
  * conversion tools, so anchoring to `session.outputNames[0]` (rather than a
- * guessed literal like `"image_embeds"`) is robust to that variance. NOTE
- * for the integrator: verify against the actual immich-app export once
- * `bun run setup` has downloaded it — this assumption is untested against a
- * real ONNX session in this environment (no onnxruntime-node install here).
+ * guessed literal like `"image_embeds"`) is robust to that variance. The
+ * pinned export and this first-output lookup are exercised by the weekly
+ * real-weight golden in `model-goldens.live.test.ts`.
  */
 function firstOutputAsFloat32(
   fetches: Record<string, { data: unknown }>,

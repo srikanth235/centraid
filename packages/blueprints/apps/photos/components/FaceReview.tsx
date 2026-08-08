@@ -41,8 +41,7 @@
 // in common.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { faceCropStyle } from "../face-crop.ts";
-import { act, narrate } from "../outcomes.ts";
+import { faceCropStyle } from "../../_shared/face-crop.ts";
 import {
   openTriage,
   triageAnswer,
@@ -50,8 +49,9 @@ import {
   triageProgress,
   triageRefill,
   triageSkip,
-} from "../triage-session.ts";
-import type { TriageSession } from "../triage-session.ts";
+} from "../../_shared/triage-session.ts";
+import type { TriageSession } from "../../_shared/triage-session.ts";
+import { act, narrate } from "../outcomes.ts";
 
 import styles from "./FaceReview.module.css";
 

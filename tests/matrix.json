@@ -625,7 +625,8 @@
     "apps/extension": "extension",
     "apps/mobile": "mobile",
     "apps/oauth-worker": "oauth-worker",
-    "apps/web": "web"
+    "apps/web": "web",
+    "tools/enrichment-service": "gateway"
   },
   "notes": {
     "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #656.",
@@ -1659,6 +1660,56 @@
     }
   ],
   "laws": {
+    "placement-registry-parity": {
+      "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
+      "owner": "packages/blueprints/src/placement-registry.test.ts",
+      "flow": "blueprint-placement-law"
+    },
+    "custody-seat-exclusion": {
+      "statement": "Record-only blueprint apps never import or render byte-custody machinery.",
+      "owner": "packages/blueprints/src/blueprint-seats.test.ts",
+      "flow": "blueprint-custody-law"
+    },
+    "consent-domain-parity": {
+      "statement": "Blueprint consent surfaces and automation scheduling recognize the same enrichment domains.",
+      "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
+      "flow": "blueprint-consent-law"
+    },
+    "triage-session-progress": {
+      "statement": "Proposal queues share frozen progress, distinct skip semantics, and reachable completion.",
+      "owner": "packages/blueprints/apps/_shared/triage-session.test.ts",
+      "flow": "blueprint-triage-law"
+    },
+    "search-scaffold-grouping": {
+      "statement": "Search entity configuration owns grouping, ordering, caps, and result-state truth.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
+    "enrichment-single-client": {
+      "statement": "Only the gateway owns the enrichment-service client; apps and automations cannot reach it directly.",
+      "owner": "packages/blueprints/src/no-inference-client.test.ts",
+      "flow": "blueprint-enrichment-law"
+    },
+    "one-computation": {
+      "statement": "A pure product-law computation is a projection or a shared module imported by every seat, never two seat-local implementations.",
+      "owner": "packages/blueprints/src/one-computation.test.ts",
+      "flow": "blueprint-one-computation-law"
+    },
+    "people-photograph-counts": {
+      "statement": "Every seat counts distinct confirmed photographs, not face regions or unconfirmed proposals, and keeps unnamed groups separate.",
+      "owner": "packages/blueprints/apps/_shared/people-counts.test.ts",
+      "flow": "blueprint-one-computation-law"
+    },
+    "enrichment-model-lock": {
+      "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
+      "owner": "tools/enrichment-service/src/models-lock.test.ts",
+      "flow": "enrichment-service-contract"
+    },
+    "enrichment-live": {
+      "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
+      "owner": "tools/enrichment-service/src/model-goldens.live.test.ts",
+      "flow": "enrichment-service-contract"
+    },
     "backup-round-trip": {
       "statement": "A restored snapshot reproduces the vault byte-identically \u2014 same files, same directory tree, plus the quarantine marker.",
       "owner": "packages/backup/src/engine.test.ts",
@@ -1685,7 +1736,296 @@
       "flow": "backup-round-trip"
     }
   },
+  "appEngines": {
+    "seatDoctrine": "docs/blueprint-seats.md#engine-contracts",
+    "engines": [
+      {
+        "id": "placement",
+        "label": "Placement",
+        "flow": "blueprint-placement-law"
+      },
+      { "id": "custody", "label": "Custody", "flow": "blueprint-custody-law" },
+      { "id": "consent", "label": "Consent", "flow": "blueprint-consent-law" },
+      { "id": "triage", "label": "Triage", "flow": "blueprint-triage-law" },
+      { "id": "search", "label": "Search", "flow": "blueprint-search-law" },
+      {
+        "id": "enrichment",
+        "label": "Enrichment boundary",
+        "flow": "blueprint-enrichment-law"
+      }
+    ],
+    "apps": [
+      {
+        "id": "agenda",
+        "engines": {
+          "placement": {
+            "status": "skip",
+            "reason": "Agenda has no placeable entity in the shared registry.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "custody": {
+            "status": "skip",
+            "reason": "Agenda is structurally record-only.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "consent": {
+            "status": "skip",
+            "reason": "Agenda is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "Agenda declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "Agenda does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "docs",
+        "engines": {
+          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
+          "triage": {
+            "status": "skip",
+            "reason": "Docs has no shipped correction-proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "Docs does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "locker",
+        "engines": {
+          "placement": {
+            "status": "skip",
+            "reason": "Locker is structurally excluded from placement.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "consent": {
+            "status": "skip",
+            "reason": "Locker is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "Locker declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "Locker does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "notes",
+        "engines": {
+          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "consent": {
+            "status": "skip",
+            "reason": "Notes is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "Notes declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "Notes does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "people",
+        "engines": {
+          "placement": {
+            "status": "skip",
+            "reason": "People has no placeable entity in the shared registry.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "custody": {
+            "status": "skip",
+            "reason": "People is structurally record-only.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "consent": {
+            "status": "skip",
+            "reason": "People is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "People declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "People does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "photos",
+        "engines": {
+          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "custody": { "status": "pass", "flow": "blueprint-custody-law" },
+          "consent": { "status": "pass", "flow": "blueprint-consent-law" },
+          "triage": { "status": "pass", "flow": "blueprint-triage-law" },
+          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "tally",
+        "engines": {
+          "placement": { "status": "pass", "flow": "blueprint-placement-law" },
+          "custody": {
+            "status": "skip",
+            "reason": "Tally is record-only; its receipt-photo origin edge does not import custody.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "consent": {
+            "status": "skip",
+            "reason": "Tally is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "Tally declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": { "status": "pass", "flow": "blueprint-search-law" },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      },
+      {
+        "id": "tasks",
+        "engines": {
+          "placement": {
+            "status": "skip",
+            "reason": "Tasks has no placeable entity in the shared registry.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "custody": {
+            "status": "skip",
+            "reason": "Tasks is structurally record-only.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "consent": {
+            "status": "skip",
+            "reason": "Tasks is outside the closed enrichment-domain union.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "triage": {
+            "status": "skip",
+            "reason": "Tasks declares no proposal queue.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "search": {
+            "status": "skip",
+            "reason": "Tasks does not consume the shared search scaffold.",
+            "citation": "docs/blueprint-seats.md#engine-contracts"
+          },
+          "enrichment": { "status": "pass", "flow": "blueprint-enrichment-law" }
+        }
+      }
+    ]
+  },
   "flows": [
+    {
+      "id": "blueprint-placement-law",
+      "name": "Blueprint placement registry parity and exclusions",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/placement-registry.test.ts",
+      "minimumTests": 8
+    },
+    {
+      "id": "blueprint-custody-law",
+      "name": "Blueprint custody seat exclusions",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/blueprint-seats.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "blueprint-consent-law",
+      "name": "Blueprint consent domain parity",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "blueprint-triage-law",
+      "name": "Blueprint triage progress and completion",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/apps/_shared/triage-session.test.ts",
+      "minimumTests": 9
+    },
+    {
+      "id": "blueprint-search-law",
+      "name": "Blueprint search scaffold grouping and states",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "blueprint-enrichment-law",
+      "name": "Only the gateway owns the enrichment-service client",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/no-inference-client.test.ts",
+      "minimumTests": 5
+    },
+    {
+      "id": "blueprint-one-computation-law",
+      "name": "Pure product law has one owner across seats",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/one-computation.test.ts",
+      "minimumTests": 3
+    },
+    {
+      "id": "enrichment-service-contract",
+      "name": "Enrichment service handshake, validation, and bounded requests",
+      "surface": "gateway",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "tools/enrichment-service/src/server.test.ts",
+      "minimumTests": 8
+    },
     {
       "id": "vault-consent-write",
       "name": "Consent gateway and journalled write path",

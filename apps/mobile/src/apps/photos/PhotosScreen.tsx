@@ -38,6 +38,16 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  SELECTION_ACTION_TARGET,
+  buildSelectionActions,
+  selectionBarReason,
+} from "@centraid/blueprints/apps/_shared/selection-engine";
+import type {
+  SelectionHandler,
+  SelectionShelfKind,
+} from "@centraid/blueprints/apps/_shared/selection-engine";
+
+import {
   BAND_BORDER,
   BAND_INSET,
   bandSurfaceStyle,
@@ -50,12 +60,6 @@ import type { ThemeColors } from "../../kit/theme";
 import type { PhotosShellNavigation } from "../../navigation";
 import { resolveMoreRowRoute } from "./photos-band";
 import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
-import {
-  SELECTION_ACTION_TARGET,
-  buildSelectionActions,
-  selectionBarReason,
-} from "./photos-selection";
-import type { SelectionHandler, SelectionShelfKind } from "./photos-selection";
 import PhotosBand from "./PhotosBand";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 

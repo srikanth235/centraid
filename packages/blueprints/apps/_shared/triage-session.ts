@@ -27,7 +27,7 @@
 //
 // Everything is a pure function over an immutable value: no React, no DOM, no
 // timers. That is what lets the native twin import it verbatim
-// (`@centraid/blueprints/apps/photos/triage-session`) rather than keeping a
+// (`@centraid/blueprints/apps/_shared/triage-session`) rather than keeping a
 // parallel copy that drifts — the same arrangement `enrichment-consent.ts`
 // already has with its own screen.
 //

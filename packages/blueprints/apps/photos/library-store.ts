@@ -20,7 +20,14 @@
 // lives in merge.ts and is deliberately not re-derived here.
 import { mergeScopePages } from "./merge.ts";
 import type { MergeAsset, MergeResult } from "./merge.ts";
-import type { Album, Asset, LibraryData, Place } from "./types.ts";
+import type {
+  Album,
+  Asset,
+  LibraryData,
+  MemoryMemberRow,
+  MemoryRow,
+  Place,
+} from "./types.ts";
 
 /** What one scope answered, or why it couldn't. Errors are data, never throws. */
 export type ScopeReadResult =
@@ -33,6 +40,8 @@ export interface ScopeLibrary {
   albums: Album[];
   places: Place[];
   trash: Asset[];
+  memories: MemoryRow[];
+  memoryMembers: MemoryMemberRow[];
   /** The oldest `taken_at` reached so far — the next `before` cursor. */
   tail: string | null;
   /** Older assets exist beyond what this scope has paged in. */
@@ -76,6 +85,8 @@ const emptyLibrary = (): ScopeLibrary => ({
   albums: [],
   places: [],
   trash: [],
+  memories: [],
+  memoryMembers: [],
   tail: null,
   truncated: false,
   denied: null,
@@ -89,6 +100,8 @@ function libraryFrom(data: LibraryData): ScopeLibrary {
     albums: data.albums ?? [],
     places: data.places ?? [],
     trash: data.trash ?? [],
+    memories: data.memories ?? [],
+    memoryMembers: data.memoryMembers ?? [],
     tail: data.tail ?? null,
     truncated: Boolean(data.truncated),
     denied: data.vaultDenied ?? null,
@@ -115,6 +128,9 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
     albums: next.albums.length > 0 ? next.albums : prev.albums,
     places: next.places.length > 0 ? next.places : prev.places,
     trash: next.trash.length > 0 ? next.trash : prev.trash,
+    memories: next.memories.length > 0 ? next.memories : prev.memories,
+    memoryMembers:
+      next.memoryMembers.length > 0 ? next.memoryMembers : prev.memoryMembers,
     // A page that came back empty says "nothing older", not "I forgot my tail".
     tail: next.tail ?? prev.tail,
   };

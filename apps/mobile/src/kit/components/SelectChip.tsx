@@ -1,12 +1,12 @@
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
-import { Text } from "../../kit/components/NativeText";
-import { t, useTheme } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
+import { t, useTheme } from "../theme";
+import type { ThemeColors } from "../theme";
+import { Text } from "./NativeText";
 
-/** The Library header's explicit mode-entry control. */
-export default function PhotosSelectChip({
+/** A compact, explicit entry into multi-select mode. */
+export default function SelectChip({
   disabled,
   onPress,
 }: {

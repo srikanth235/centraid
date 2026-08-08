@@ -15,7 +15,8 @@ import { getOrCreateSession, loadOnnxRuntime } from "../onnx.js";
 import {
   decodeImage,
   decodeImageResized,
-  normalizeImageNet,
+  toOpenCvBgrPlanar,
+  toOpenCvRgbPlanar,
 } from "../preprocess.js";
 import type {
   FaceDetection,
@@ -33,26 +34,28 @@ const FACES_DIR = path.join(MODELS_DIR, "faces");
 const YUNET_MODEL_PATH = path.join(FACES_DIR, "yunet.onnx");
 const SFACE_MODEL_PATH = path.join(FACES_DIR, "sface.onnx");
 
-const YUNET_INPUT_SIZE = 320;
+// The pinned OpenCV Zoo 2023mar export declares a fixed 640×640 input.
+// Keep this beside the session feed: changing it without changing weights is
+// an immediate ONNX dimension error, which the weekly real-weight lane pins.
+const YUNET_INPUT_SIZE = 640;
 const YUNET_STRIDES = [8, 16, 32] as const;
 const YUNET_SCORE_THRESHOLD = 0.6;
 const YUNET_NMS_IOU = 0.3;
 const SFACE_INPUT_SIZE = 112;
 
-export function facesWeightsPresent(): boolean {
-  return [YUNET_MODEL_PATH, SFACE_MODEL_PATH].every(existsSync);
+export function facesWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
+  const facesDir = path.join(modelsDir, "faces");
+  return ["yunet.onnx", "sface.onnx"].every((filename) =>
+    existsSync(path.join(facesDir, filename))
+  );
 }
 
 /**
  * Runs the YuNet detector over a fixed YUNET_INPUT_SIZE square input and
  * decodes its three stride levels (8/16/32) via decodeYuNetLevel, then
- * applies NMS across the concatenated detections. INTEGRATOR NOTE: the
- * per-level output tensor names/order and the exact score/box/landmark
- * tensor layout have not been validated against a real forward pass in
- * this environment (no onnxruntime-node install here) — this assumes
- * `session.outputNames` is ordered `[scores8, boxes8, landmarks8, scores16,
- * ...]` in stride order, which must be confirmed against the actual
- * downloaded face_detection_yunet_2023mar.onnx before trusting detections.
+ * applies NMS across the concatenated detections. Output lookup is by the
+ * pinned export's semantic names (`cls_8`, `obj_8`, `bbox_8`, `kps_8`, …),
+ * never by array position.
  */
 async function detectFaces(
   pixelData: Float32Array,
@@ -70,18 +73,18 @@ async function detectFaces(
     ]),
   });
 
-  const outputs = session.outputNames
-    .map((name) => fetches[name]?.data)
-    .filter(Boolean);
   const all: DecodedFace[] = [];
 
-  YUNET_STRIDES.forEach((stride, levelIndex) => {
+  for (const stride of YUNET_STRIDES) {
     const gridSize = imageSize / stride;
-    const scores = outputs[levelIndex * 3];
-    const boxes = outputs[levelIndex * 3 + 1];
-    const landmarks = outputs[levelIndex * 3 + 2];
-    if (!scores || !boxes) {
-      return;
+    const classScores = fetches[`cls_${stride}`]?.data;
+    const objectness = fetches[`obj_${stride}`]?.data;
+    const boxes = fetches[`bbox_${stride}`]?.data;
+    const landmarks = fetches[`kps_${stride}`]?.data;
+    if (!classScores || !objectness || !boxes || !landmarks) {
+      throw new Error(
+        `faces: YuNet output set is incomplete at stride ${stride}`
+      );
     }
     all.push(
       ...decodeYuNetLevel(
@@ -89,18 +92,19 @@ async function detectFaces(
           stride,
           gridWidth: gridSize,
           gridHeight: gridSize,
-          scores: scores as ArrayLike<number>,
+          classScores: classScores as ArrayLike<number>,
+          objectness: objectness as ArrayLike<number>,
           boxes: boxes as ArrayLike<number>,
-          landmarks: landmarks as ArrayLike<number> | undefined,
+          landmarks: landmarks as ArrayLike<number>,
         },
         YUNET_SCORE_THRESHOLD
       )
     );
-  });
+  }
 
   const suppressed = nonMaxSuppression(
     all.map((face) => ({ box: face.box, score: face.score })),
-    { iouThreshold: YUNET_NMS_IOU }
+    { iouThreshold: YUNET_NMS_IOU, topK: 20 }
   );
   const keptBoxes = new Set(suppressed.map((s) => s.box));
   return all.filter((face) => keptBoxes.has(face.box));
@@ -135,7 +139,7 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
       YUNET_INPUT_SIZE,
       YUNET_INPUT_SIZE
     );
-    const pixelData = normalizeImageNet(resized);
+    const pixelData = toOpenCvBgrPlanar(resized);
 
     const detections = await detectFaces(pixelData, YUNET_INPUT_SIZE);
 
@@ -170,7 +174,7 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
             SFACE_INPUT_SIZE,
             SFACE_INPUT_SIZE
           );
-          const alignedPixels = normalizeImageNet(aligned);
+          const alignedPixels = toOpenCvRgbPlanar(aligned);
           const embedding = await embedFace(alignedPixels);
 
           const boxInNative = {

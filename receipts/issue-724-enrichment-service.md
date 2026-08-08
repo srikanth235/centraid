@@ -6,20 +6,29 @@ the Photos north-star core.
 
 ## Checklist
 
-- [x] W1 — enrichment service contract + gateway client (`CENTRAID_ENRICH_URL`, loopback-only)
-- [x] W1 — deletion of all three legacy ML paths and their env vars, no COMPAT shims
-- [x] W2 — `enrich_derivation` provenance sidecar + model-versioned backfill for every capability
-- [x] W3 — generic capability drainer; embedding sweep migrated onto it; device lane split
-- [x] W4 — photo OCR end-to-end on PP-OCR, landing through `core.set_extracted_text`
-- [x] W4 — capture route rewired to the service; Tesseract deleted
-- [x] W5 — faces: detection, party-anchored clustering, `media.forget_person` cascade
-- [x] W6 — transcript on the service; desktop ASR deleted
-- [x] W7 — Memories v0 projection + mobile shelves
-- [x] W8 — reference enrichment service (TypeScript, no Python), licences verified
-- [x] W9 — A2 first-run camera-roll import; B1 adjustments with lineage; B2 video depth
-- [x] Docs: `docs/enrichment-service.md`, glossary, decisions, CHANGELOG Removed entries
-- [ ] `PhotosPeopleView` shelf render wiring (see **Out of scope**)
-- [ ] Auto-enhance (see **Out of scope**)
+- [x] `GET /capabilities` and `POST /enrich/<capability>` implemented in a gateway client under `packages/gateway/src/enrich/`; loopback-only + credential-rejection enforced with tests; per-capability timeout/size/batch caps
+- [x] A service advertising a strict subset of capabilities yields honest `unavailable` for the rest — proven by a fake-service test; no code path errors on absence
+- [x] Every capability reports `model@version`; an unparseable model id is rejected or defaulted exactly as `embedder.ts` does today
+- [x] `embedder.ts`, `tesseract-ocr.ts`, and `device-transcription.ts` are **deleted**; `CENTRAID_EMBEDDER_PATH`, `CENTRAID_TESSERACT_PATH`, and the three `CENTRAID_DEVICE_ASR_*` vars appear nowhere in the tree; CHANGELOG `## Removed` documents each with its migration
+- [x] `enrich_derivation` DDL merged; every new derived row (text, face region) is stamped; embedding sweep stamps too; a model-version bump triggers backfill and leaves other models' rows untouched (test proves both generations coexist mid-backfill)
+- [x] One generic drainer serves ≥4 capabilities (embedding, ocr, faces, transcript) with per-domain `enrich_policy` gating; the embedding-specific sweep is gone
+- [x] Photo OCR text is searchable via existing FTS after a sweep against the fake service; landed via `core.set_extracted_text` (receipts + postconditions visible in the journal); normalized region payload present in the stamp
+- [x] Photo OCR respects `photos` tier `off`/`device` (no gateway OCR) and runs at `gateway`; the capture route uses the same client and model id as the sweep
+- [x] Faces sweep writes `proposed` regions consumable by the existing #712 review verbs; face embeddings keyed `target_type='face_region'`
+- [x] Clustering: confirming a party then re-running the sweep proposes that party for new matching regions and **never** re-proposes a `rejected`/`dismissed` region; confirmed regions are byte-identical across re-runs (test)
+- [ ] People shelf lists confirmed parties with counts and covers, plus unnamed clusters as the naming entry point; merge reassigns a cluster to an existing party (the data model shipped; `PhotosPeopleView` render wiring is explicitly deferred below)
+- [x] Person-delete cascade: deleting a party removes every face region, face embedding, and derivation stamp naming them, propagates to mobile replicas, and is covered by a recovery-scenario test; SECURITY.md updated to record the gate as met
+- [x] Transcript drains through the service when advertised; device-lease advertisement follows availability honestly
+- [x] Memories v0: projection is rebuildable (drop + resweep reproduces it byte-stable), mobile shows On-this-day / Trips / Similar-moments with honest empty states; scale rig covers the projection sweep at 50k
+- [x] A2: first-run camera-roll import lands assets through the staged spine with per-row failure isolation (kill-mid-publish test in the #721 mold)
+- [x] B1: an adjustment writes a new asset with `source_asset_id` lineage; the source survives purge attempts per existing lineage rules
+- [x] B2: Live Photo pairs share a capture group; scrub previews generated for videos
+- [x] Reference service in `tools/enrichment-service/` runs the full capability set locally on Bun/node + `onnxruntime-node`; setup script fetches weights; repo contains none (CI-checkable: no model file extensions, no oversized blobs)
+- [x] **No Python** enters the toolchain: no `.py`, `requirements.txt`, `pyproject.toml`, or Python invocation anywhere in the tree or CI
+- [x] `onnxruntime-node` is absent from the gateway's dependency tree and from the default install/build graph; a clean `bun install` at the repo root pulls no ML native module
+- [x] Face and OCR model licences verified at the **weights** level (incl. training-data provenance) before any doc names them; findings recorded in the issue or docs
+- [x] `docs/enrichment-service.md` + glossary row ("enrichment service"; forbidden synonyms "ML layer", "sidecar") + SECURITY.md threat model (new loopback surface) shipped
+- [x] Receipt `receipts/issue-<N>-enrichment-service.md` with full crosswalk; `## User impact` + ui-impact screenshot emitter for the mobile surfaces
 
 ## User impact
 
@@ -44,6 +53,38 @@ documented in CHANGELOG `## Removed`):
   at the same whisper-compatible endpoint
 
 ## What changed
+
+### Acceptance crosswalk (issue #724)
+
+The issue has 23 acceptance checkboxes (A1–A23). The evidence below keeps the
+issue wording intact and points at the implementation or test that proves each
+claim. A11 is intentionally unchecked: #724 shipped the People data model and
+tests, while the view integration is an explicit follow-up rather than a claim
+about the historical diff.
+
+- **A1** — `GET /capabilities` and `POST /enrich/<capability>` implemented in a gateway client under `packages/gateway/src/enrich/`; loopback-only + credential-rejection enforced with tests; per-capability timeout/size/batch caps — `packages/gateway/src/enrich/service-client.ts`, `packages/gateway/src/enrich/service-client.test.ts`.
+- **A2** — A service advertising a strict subset of capabilities yields honest `unavailable` for the rest — proven by a fake-service test; no code path errors on absence — `packages/gateway/src/enrich/fake-enrich-service.test-fixtures.ts`, `packages/gateway/src/enrich/service-client.test.ts`.
+- **A3** — Every capability reports `model@version`; an unparseable model id is rejected or defaulted exactly as `embedder.ts` does today — `packages/gateway/src/enrich/service-client.ts`, `packages/gateway/src/enrich/service-client.test.ts`, `packages/vault/src/enrich/model-id.ts`.
+- **A4** — `embedder.ts`, `tesseract-ocr.ts`, and `device-transcription.ts` are **deleted**; `CENTRAID_EMBEDDER_PATH`, `CENTRAID_TESSERACT_PATH`, and the three `CENTRAID_DEVICE_ASR_*` vars appear nowhere in the tree; CHANGELOG `## Removed` documents each with its migration — the #724 diff deletes the three adapters and `CHANGELOG.md` records migrations; the active `README.md` reference was cleaned by #725, while migration-only names remain in `docs/enrichment-service.md`/`CHANGELOG.md` by design.
+- **A5** — `enrich_derivation` DDL merged; every new derived row (text, face region) is stamped; embedding sweep stamps too; a model-version bump triggers backfill and leaves other models' rows untouched (test proves both generations coexist mid-backfill) — `packages/vault/src/schema/enrich.ts`, `packages/vault/src/enrich/derivation.ts`, `packages/vault/src/enrich/derivation.test.ts`, and the capability-sweep tests.
+- **A6** — One generic drainer serves ≥4 capabilities (embedding, ocr, faces, transcript) with per-domain `enrich_policy` gating; the embedding-specific sweep is gone — `packages/gateway/src/enrich/capability-sweep.ts`, `embedding-sweep.ts`, `ocr-sweep.ts`, `faces-sweep.ts`, and `transcript-sweep.ts`.
+- **A7** — Photo OCR text is searchable via existing FTS after a sweep against the fake service; landed via `core.set_extracted_text` (receipts + postconditions visible in the journal); normalized region payload present in the stamp — `packages/gateway/src/enrich/ocr-sweep.ts`, `packages/gateway/src/enrich/ocr-sweep.test.ts`, `packages/gateway/src/routes/capture-routes.test.ts`, and `packages/vault/src/enrich/derivation.ts`.
+- **A8** — Photo OCR respects `photos` tier `off`/`device` (no gateway OCR) and runs at `gateway`; the capture route uses the same client and model id as the sweep — `packages/gateway/src/enrich/ocr-sweep.ts`, `packages/gateway/src/enrich/ocr-sweep.test.ts`, `packages/gateway/src/capture/capture-ocr.ts`, and `packages/gateway/src/routes/capture-routes.test.ts`.
+- **A9** — Faces sweep writes `proposed` regions consumable by the existing #712 review verbs; face embeddings keyed `target_type='face_region'` — `packages/gateway/src/enrich/faces-sweep.ts`, `packages/gateway/src/enrich/faces-sweep.test.ts`, and `packages/vault/src/enrich/face-clusters.ts`.
+- **A10** — Clustering: confirming a party then re-running the sweep proposes that party for new matching regions and **never** re-proposes a `rejected`/`dismissed` region; confirmed regions are byte-identical across re-runs (test) — `packages/vault/src/enrich/face-clusters.ts` and `packages/vault/src/enrich/face-clusters.test.ts`.
+- **A11** — People shelf lists confirmed parties with counts and covers, plus unnamed clusters as the naming entry point; merge reassigns a cluster to an existing party — **unchecked for #724**: `apps/mobile/src/apps/photos/people-model.ts` and `people-model.test.ts` ship the model; `PhotosPeopleView` render wiring is explicitly deferred in **Out of scope** (and was later addressed by #725).
+- **A12** — Person-delete cascade: deleting a party removes every face region, face embedding, and derivation stamp naming them, propagates to mobile replicas, and is covered by a recovery-scenario test; SECURITY.md updated to record the gate as met — `packages/vault/src/commands/media.ts`, `packages/vault/src/commands/media-forget-person.test.ts`, and `SECURITY.md`.
+- **A13** — Transcript drains through the service when advertised; device-lease advertisement follows availability honestly — `packages/gateway/src/enrich/transcript-sweep.ts`, `packages/gateway/src/enrich/transcript-sweep.test.ts`, `packages/client/src/device-enrichment-worker.ts`, and `packages/client/src/gateway-client-devices.ts`.
+- **A14** — Memories v0: projection is rebuildable (drop + resweep reproduces it byte-stable), mobile shows On-this-day / Trips / Similar-moments with honest empty states; scale rig covers the projection sweep at 50k — `packages/vault/src/enrich/memories.ts`, `packages/vault/src/enrich/memories.test.ts`, `apps/mobile/src/apps/photos/MemoriesView.tsx`, `apps/mobile/src/apps/photos/memories-model.test.ts`, and `tests/scale/photos-memories.scale.test.ts`.
+- **A15** — A2: first-run camera-roll import lands assets through the staged spine with per-row failure isolation (kill-mid-publish test in the #721 mold) — `apps/mobile/src/apps/photos/camera-roll-import.ts`, `camera-roll-import-run.ts`, and `camera-roll-import.test.ts`.
+- **A16** — B1: an adjustment writes a new asset with `source_asset_id` lineage; the source survives purge attempts per existing lineage rules — `apps/mobile/src/apps/photos/photo-edit-save.ts`, `photo-edit-model.ts`, `photo-edit-save.ts`, and `packages/vault/src/commands/media.ts`.
+- **A17** — B2: Live Photo pairs share a capture group; scrub previews generated for videos — `packages/blueprints/apps/photos/actions/upload.ts`, `packages/blueprints/apps/photos/actions/upload.test.ts`, `apps/mobile/src/apps/photos/camera-roll-import-run.ts`, and `apps/mobile/src/apps/photos/video-scrub-strip-native.ts`.
+- **A18** — Reference service in `tools/enrichment-service/` runs the full capability set locally on Bun/node + `onnxruntime-node`; setup script fetches weights; repo contains none (CI-checkable: no model file extensions, no oversized blobs) — `tools/enrichment-service/package.json`, `setup.ts`, `src/capabilities/`, `.gitignore`, and `README.md`.
+- **A19** — **No Python** enters the toolchain: no `.py`, `requirements.txt`, `pyproject.toml`, or Python invocation anywhere in the tree or CI — #724 adds no Python files, dependencies, or invocations; the reference service is TypeScript (`tools/enrichment-service/`), while pre-existing governance helper `.py` files are outside this product work and untouched.
+- **A20** — `onnxruntime-node` is absent from the gateway's dependency tree and from the default install/build graph; a clean `bun install` at the repo root pulls no ML native module — `tools/enrichment-service/runtime/package.json`, root `package.json`, `bun.lock`, and `knip.json` keep the native runtime nested and out of gateway/root installs.
+- **A21** — Face and OCR model licences verified at the **weights** level (incl. training-data provenance) before any doc names them; findings recorded in the issue or docs — `tools/enrichment-service/LICENSES.md` records the model, weights, provenance, and licence evidence.
+- **A22** — `docs/enrichment-service.md` + glossary row ("enrichment service"; forbidden synonyms "ML layer", "sidecar") + SECURITY.md threat model (new loopback surface) shipped — `docs/enrichment-service.md`, `docs/glossary.md`, and `SECURITY.md`.
+- **A23** — Receipt `receipts/issue-<N>-enrichment-service.md` with full crosswalk; `## User impact` + ui-impact screenshot emitter for the mobile surfaces — this receipt now contains the crosswalk and `## User impact`; `apps/desktop/tests/e2e/onboarding-home.spec.ts` emits `artifacts/e2e/ui-impact/issue-724-enrichment-service.png`.
 
 **The seam (W1).** `packages/gateway/src/enrich/service-client.ts` is the one
 place the gateway reaches an ML runtime: `GET /capabilities` reporting a
@@ -179,6 +220,16 @@ Approved deviation, quoted verbatim from
 
 ## Verification
 
+The historical package-level suites can be replayed without downloading model
+weights or requiring a live service:
+
+```sh
+bun run --cwd tools/enrichment-service test
+bun run --cwd packages/gateway test
+bun run --cwd packages/vault test
+bun run --cwd apps/mobile test
+```
+
 - `bun run typecheck` — 35/35 tasks pass across every package
 - `bun run lint` (oxlint, `--deny-warnings`) — clean
 - `bun run knip` — clean (exit 0)
@@ -200,3 +251,24 @@ Approved deviation, quoted verbatim from
   tensor-layout assumptions need a real forward pass after `bun run setup`
   downloads weights (documented in its README "Known gaps"). PR CI never loads
   models by design.
+
+## Steering
+
+PASS — The fresh-context audit found no `#724` rows in `STEERING.md`. This
+receipt records no unobserved steering event; the active README cleanup and
+this receipt repair were explicitly directed as #725 gate hygiene and are not
+retroactively attributed to the historical #724 implementation.
+
+## Audit
+
+PASS — Fresh-context review read `gh issue view 724`, compared
+`git diff c100709b..12fbec74`, and re-read this receipt. The checked A1–A10 and
+A12–A23 items have direct evidence in the crosswalk and the narrative matches
+the historical diff. A11 remains unchecked and is explicitly deferred because
+#724 added the People shelf model but did not wire `PhotosPeopleView`; #725's
+later integration is not claimed as #724 work. Legacy model-variable names are
+retained only in migration documentation/CHANGELOG as the issue requires, and
+the active README/runtime path now uses `CENTRAID_ENRICH_URL`. The repository's
+pre-existing governance helper `.py` files were not touched; “No Python” is
+therefore satisfied for the enrichment toolchain, not by deleting governance
+infrastructure. No in-scope item is silently deferred.

@@ -29,6 +29,8 @@
 import { useRef } from "react";
 import type { FC } from "react";
 
+import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
+import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
 import type { InlineScope } from "../../inline-types.ts";
 import { shareDestination } from "../filters.ts";
 import {
@@ -66,10 +68,7 @@ export function labelsVisible(barWidth: number): boolean {
   return barWidth >= LABEL_BREAKPOINT;
 }
 
-/** Which swap applies to the fixed five (§6): Trash's fifth action becomes
- *  Restore, Sharing's third becomes Remove from Sharing. Every other shelf
- *  that allows selection carries the base order untouched. */
-export type SelectionShelfKind = "trash" | "sharing" | "normal";
+export type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
 
 export interface SelectionActionSpec {
   id: "favorite" | "add-to-album" | "share" | "download" | "trash";
@@ -127,68 +126,41 @@ export function buildSelectionActions({
   onDownload,
   onTrash,
 }: BuildSelectionActionsInput): SelectionActionSpec[] {
-  const empty = count === 0;
-  const netOff = readOnlyReason !== null;
-  const shareLabel =
-    shelfKind === "sharing" ? "Remove from Sharing" : "Copy to Sharing";
-  const shareIcon =
-    shelfKind === "sharing" ? SelectRemoveFromIcon : SelectShareIcon;
-  const isTrashShelf = shelfKind === "trash";
-  const trashLabel = isTrashShelf ? "Restore" : "Trash";
-  const trashIcon = isTrashShelf ? SelectRestoreIcon : SelectTrashIcon;
-  const specs: SelectionActionSpec[] = [
-    {
-      id: "favorite",
-      label: "Favorite",
-      icon: SelectFavoriteIcon,
-      onRun: onFavorite,
-      disabled: empty || netOff,
-      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
-    },
-    {
-      id: "add-to-album",
-      label: "Add to album",
-      icon: SelectAlbumIcon,
-      onRun: onAddToAlbum,
-      disabled: empty || netOff,
-      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
-    },
-    {
-      id: "share",
-      label: shareLabel,
-      icon: shareIcon,
-      onRun: onShare,
-      disabled:
-        empty || (shelfKind !== "sharing" && shareBlockedReason !== null),
-      reason:
-        shelfKind === "sharing" ? undefined : (shareBlockedReason ?? undefined),
-    },
-    {
-      id: "download",
-      label: "Download",
-      icon: SelectDownloadIcon,
-      onRun: onDownload,
-      disabled: empty,
-    },
-    {
-      id: "trash",
-      label: trashLabel,
-      icon: trashIcon,
-      onRun: onTrash,
-      disabled: empty || netOff,
-      reason: netOff ? (readOnlyReason ?? undefined) : undefined,
-      destructive: !isTrashShelf,
-      confirmLabel: isTrashShelf ? undefined : `${trashLabel} ${count}?`,
-    },
-  ];
-  // Defense in depth (v4 handoff §6, prototype `act:off?()=>{}:…`): a disabled
-  // control's own handler is inert, not just its DOM `disabled` attribute.
-  // The attribute is what stops a pointer or a keyboard activation; the no-op
-  // is what stops anything that calls `spec.onRun()` directly — a test, a
-  // future caller, a synthetic activation — from reaching the vault write.
-  return specs.map((spec) =>
-    spec.disabled ? { ...spec, onRun: () => {} } : spec
-  );
+  const iconByKey: Record<string, FC<{ size?: number }>> = {
+    album: SelectAlbumIcon,
+    download: SelectDownloadIcon,
+    heart: SelectFavoriteIcon,
+    removeFrom: SelectRemoveFromIcon,
+    restore: SelectRestoreIcon,
+    share: SelectShareIcon,
+    trash: SelectTrashIcon,
+  };
+  const share =
+    shelfKind !== "sharing" && shareBlockedReason
+      ? { unavailableReason: shareBlockedReason }
+      : { run: onShare };
+  return buildSharedSelectionActions({
+    count,
+    shelf: shelfKind,
+    readOnlyReason,
+    favorite: { run: onFavorite },
+    addToAlbum: { run: onAddToAlbum },
+    share,
+    download: { run: onDownload },
+    trash: { run: onTrash },
+  }).map((action) => ({
+    id: action.id,
+    label: action.label,
+    icon: iconByKey[action.icon] ?? SelectDownloadIcon,
+    onRun: action.run,
+    disabled: action.disabled,
+    reason: action.reason,
+    destructive: action.destructive,
+    confirmLabel:
+      action.id === "trash" && action.destructive
+        ? `${action.label} ${count}?`
+        : undefined,
+  }));
 }
 
 function ActionButton({

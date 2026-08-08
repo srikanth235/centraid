@@ -49,6 +49,9 @@ export function shelfCopy(id: ShelfId): ShelfCopy {
   if (typeof id === "string" && id.startsWith("tag:")) {
     return { title: `#${id.slice(4)}`, unit: "photographs" };
   }
+  if (typeof id === "string" && id.startsWith("memory:")) {
+    return { title: "Memory", unit: "photographs" };
+  }
   return SHELF_COPY[id] ?? LIBRARY_COPY;
 }
 

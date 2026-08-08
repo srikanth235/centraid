@@ -1,12 +1,13 @@
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ServiceConfig } from "./config.js";
 import { createServer } from "./server.js";
 
-// No onnxruntime-node/sharp install and no model weights on disk in this
-// environment (issue #724 W8's whole point), so every capability's
+// An explicitly absent model root makes this suite hermetic even when a
+// developer has installed the optional live runtime locally, so every capability's
 // isAvailable() naturally resolves false here — which is exactly the
 // "honest absence" behavior under test: /capabilities must advertise
 // nothing rather than a fake result, and /enrich/<any-capability> must 404
@@ -18,6 +19,7 @@ function baseConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     authToken: undefined,
     transcriptUrl: undefined,
     maxBodyBytes: 64 * 1024 * 1024,
+    modelsDir: path.join(import.meta.dirname, "fixtures", "absent-models"),
     ...overrides,
   };
 }

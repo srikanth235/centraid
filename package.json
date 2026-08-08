@@ -94,6 +94,7 @@
     "test:affected": "turbo run test --filter='[origin/main]' --concurrency=6",
     "test:affected:full": "turbo run test --filter='...[origin/main]' --concurrency=6",
     "test:diff-coverage": "node scripts/test-report/diff-coverage.mjs",
+    "test:enrich:live": "node scripts/test-report/enrichment-live-run.mjs",
     "test:governance-shell": "bash scripts/test.sh",
     "test:interop:backup": "bun run --cwd packages/backup test:interop",
     "test:matrix": "node scripts/test-report/validate-matrix.mjs && node scripts/test-report/validate-nightly-wiring.mjs && node scripts/test-report/validate-release-wiring.mjs",

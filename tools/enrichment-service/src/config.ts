@@ -32,6 +32,8 @@ export interface ServiceConfig {
   transcriptUrl: string | undefined;
   /** Request body cap in bytes — keeps a single oversized upload from exhausting memory. */
   maxBodyBytes: number;
+  /** Model root used for honest capability discovery; injectable so tests do not depend on a developer's optional live runtime. */
+  modelsDir: string;
 }
 
 export function loadConfig(
@@ -46,5 +48,6 @@ export function loadConfig(
       "ENRICH_SERVICE_MAX_BODY_BYTES",
       64 * 1024 * 1024
     ),
+    modelsDir: MODELS_DIR,
   };
 }

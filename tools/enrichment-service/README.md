@@ -61,11 +61,13 @@ bun run --cwd tools/enrichment-service typecheck
 
 The vitest suite passes with **no** `bun run setup` having ever run — every test either exercises pure math (BPE tokenizer, CTC greedy decode, NMS, DB detection postprocess, YuNet decode, SFace alignment) or route/config logic that only needs the filesystem to confirm weights are _absent_ (the "honest absence" behavior above). Nothing in the suite imports onnxruntime-node or sharp directly — both are always behind the lazy loaders in `src/onnx.ts` / `src/preprocess.ts`.
 
-## Known gaps for whoever wires this up against real weights
+## Real-weight evidence
 
-`bun run setup` was not executed in the environment this reference implementation was built in (no outbound package install / model download during that pass), so the following assumptions are documented in code but **not** verified against a real forward pass. Confirm each one with the actual downloaded model + a real image/audio sample before trusting output:
+The formerly unverified tensor-layout assumptions are closed by the weekly/manual live lane. `models.lock.json` pins every weight and auxiliary file by SHA-256 and licence; `src/model-goldens.live.test.ts` runs the actual CLIP, PP-OCRv4, YuNet, and SFace exports over committed fixtures and asserts the exact capability/model handshake, OCR text and box tolerance, embedding cosine tolerance, and face count/geometry. Run it after model or preprocessing changes and before a release:
 
-- **embed** (`src/capabilities/embed.ts`): assumes the CLIP ONNX export's first output tensor (`session.outputNames[0]`) is the pooled embedding.
-- **ocr** (`src/capabilities/ocr.ts`): assumes the detector outputs a single-channel `[1,1,H,W]` probability map at the same resolution as its input, and that the recognizer's class layout is PaddleOCR's `[blank, ...chars, space]` convention with `chars.length + 2` classes. Detection boxes are axis-aligned (a documented simplification vs. PaddleOCR's rotated `minAreaRect` — see the header comment in `src/ocr-postprocess.ts`), so this pass does not recover angled or curved text lines.
-- **faces** (`src/capabilities/faces.ts`, `src/face-geometry.ts`): assumes YuNet's 2023mar export produces exactly 9 outputs — `[scores, boxes, landmarks]` per stride, in stride order `8, 16, 32` — and that its box regression is the anchor-free `(cellCenter + delta*stride, exp(whDelta)*stride)` parametrization. Both need confirming against `opencv_zoo`'s own `yunet.py` and the real ONNX output metadata.
-- All three ONNX-backed capabilities' input tensor **names** are read from `session.inputNames[0]` defensively rather than hardcoded, which should make them robust to naming even if the above shape assumptions need adjusting.
+```sh
+bun run --cwd tools/enrichment-service setup
+bun run test:enrich:live
+```
+
+The scheduled workflow is `.github/workflows/enrichment-live-weekly.yml`. Its evidence appears in the test-health report with an eight-day freshness window; absence is grey, never green. The deterministic default suite remains weight-free. Detection boxes remain intentionally axis-aligned (see `src/ocr-postprocess.ts`), so angled/curved OCR quality is dogfood judgement rather than a CI law.

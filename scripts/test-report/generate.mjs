@@ -91,6 +91,13 @@ const perf = await readLane(
 const scale = await readLane(
   path.resolve(flags.scale ?? path.join(root, "artifacts/scale"))
 );
+const enrichmentLiveResult = await readJson(
+  path.resolve(
+    flags["enrichment-live"] ??
+      path.join(root, "artifacts/enrichment-live/result.json")
+  ),
+  null
+);
 // #532 mutation scores (nightly Stryker) — grey when absent, same path as perf/scale.
 const mutationScores = await readJson(
   path.resolve(
@@ -123,6 +130,14 @@ const evidence = collectEvidence(vitest, playwright, e2e, perf, scale, {
   registeredOwners: collectRegisteredOwners(matrix),
   runUrl,
 });
+const enrichmentLive = buildEnrichmentLive(enrichmentLiveResult, {
+  laneMarkers,
+  maxEvidenceAgeMs,
+  maxEvidenceAgeMsByLane: { "enrichment-live": 8 * 24 * 60 * 60 * 1_000 },
+  nowMs: Date.now(),
+  runUrl,
+});
+const appEngineGrid = buildAppEngineGrid(matrix, evidence);
 const cells = buildCells(matrix, evidence, validation.errors, {
   laneMarkers,
   reportScope,
@@ -247,6 +262,8 @@ summary.flakeRates = calculateFlakeRates(evidence, durableHistory);
 const model = {
   generatedAt: new Date().toISOString(),
   matrix,
+  appEngineGrid,
+  enrichmentLive,
   cells,
   qualities,
   coverageRows,
@@ -612,8 +629,41 @@ function evidenceStatus(status, lane, lastAt, freshness) {
   const laneStartedMs = Date.parse(freshness.laneMarkers[lane] ?? "");
   if (Number.isFinite(laneStartedMs) && capturedMs < laneStartedMs)
     return "stale";
-  if (freshness.nowMs - capturedMs > freshness.maxEvidenceAgeMs) return "stale";
+  const maxAge =
+    freshness.maxEvidenceAgeMsByLane?.[lane] ?? freshness.maxEvidenceAgeMs;
+  if (freshness.nowMs - capturedMs > maxAge) return "stale";
   return normalized;
+}
+
+function buildEnrichmentLive(result, freshness) {
+  if (!result) {
+    return {
+      owner: "tools/enrichment-service/src/model-goldens.live.test.ts",
+      lane: "enrichment-live",
+      status: "missing",
+      lastAt: null,
+      detail: "No weekly real-weight artifact is available.",
+    };
+  }
+  const lastAt = isoAt(result.capturedAt);
+  const status = evidenceStatus(
+    result.status,
+    "enrichment-live",
+    lastAt,
+    freshness
+  );
+  return {
+    owner: normalizeFile(result.owner),
+    lane: "enrichment-live",
+    status,
+    lastAt,
+    detail:
+      status === "stale"
+        ? "The last real-weight run is older than eight days."
+        : (result.error ??
+          "Capability handshake, embedding, OCR, and face goldens."),
+    runUrl: freshness.runUrl,
+  };
 }
 
 function normalizeStatus(status) {
@@ -624,6 +674,38 @@ function normalizeStatus(status) {
     return "failed";
   if (["skipped", "pending", "todo"].includes(status)) return "skipped";
   return "missing";
+}
+
+function buildAppEngineGrid(manifest, evidenceItems) {
+  const flows = new Map((manifest.flows ?? []).map((flow) => [flow.id, flow]));
+  const evidenceByOwner = new Map(
+    evidenceItems.map((item) => [normalizeFile(item.owner), item])
+  );
+  return {
+    engines: manifest.appEngines?.engines ?? [],
+    apps: (manifest.appEngines?.apps ?? []).map((app) => ({
+      id: app.id,
+      cells: (manifest.appEngines?.engines ?? []).map((engine) => {
+        const declared = app.engines?.[engine.id];
+        if (declared?.status === "skip") {
+          return {
+            engine: engine.id,
+            state: "skipped",
+            detail: `${declared.reason} (${declared.citation})`,
+          };
+        }
+        const flow = flows.get(declared?.flow);
+        const result = flow
+          ? evidenceByOwner.get(normalizeFile(flow.owner))
+          : undefined;
+        return {
+          engine: engine.id,
+          state: result?.status ?? "missing",
+          detail: flow?.owner ?? "missing conformance gate",
+        };
+      }),
+    })),
+  };
 }
 
 function buildCells(
@@ -1017,6 +1099,20 @@ function render(modelLocal) {
         .join("")}</tr>`;
     })
     .join("");
+  const appEngineHeaders = modelLocal.appEngineGrid.engines
+    .map((engine) => `<th scope="col">${escapeHtml(engine.label)}</th>`)
+    .join("");
+  const appEngineRows = modelLocal.appEngineGrid.apps
+    .map(
+      (app) =>
+        `<tr><th scope="row">${escapeHtml(app.id)}</th>${app.cells
+          .map(
+            (cell) =>
+              `<td class="metric ${escapeHtml(cell.state)}" title="${escapeHtml(cell.detail)}">${symbol(cell.state)}</td>`
+          )
+          .join("")}</tr>`
+    )
+    .join("");
   const coverageRowsLocal = modelLocal.coverageRows
     .map((row) => {
       const lineState =
@@ -1047,6 +1143,11 @@ function render(modelLocal) {
         })
         .join("")
     : '<tr><td colspan="3" class="muted">No mutation scores (nightly Stryker lane)</td></tr>';
+  const live = modelLocal.enrichmentLive;
+  const liveMetricState = ["missing", "stale"].includes(live.status)
+    ? "missing"
+    : live.status;
+  const enrichmentLiveRow = `<tr><td class="path">${escapeHtml(live.owner)}</td><td class="metric ${escapeHtml(liveMetricState)}">${symbol(live.status)} ${escapeHtml(live.status)}</td><td>${escapeHtml(live.lastAt ?? "—")}</td><td>${escapeHtml(live.detail)}</td></tr>`;
   const runtimeRows = modelLocal.packageRuntime.length
     ? modelLocal.packageRuntime
         .map(
@@ -1153,8 +1254,9 @@ function render(modelLocal) {
       : ""
   }</div><div class="summary"><div class="stat"><b>${modelLocal.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${modelLocal.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${modelLocal.summary.cellsSolid ?? 0}</b><small>solid</small></div><div class="stat"><b>${modelLocal.summary.cellsPartial ?? 0}</b><small>partial</small></div><div class="stat"><b>${modelLocal.summary.cellsGap ?? 0}</b><small>declared gaps</small></div><div class="stat"><b>${modelLocal.summary.cellsNotApplicable ?? 0}</b><small>n/a by design</small></div><div class="stat"><b>${modelLocal.summary.cellsMissing ?? 0}</b><small>unproven cells</small></div><div class="stat"><b>${modelLocal.summary.cellsFlaky ?? 0}</b><small>flaky cells</small></div><div class="stat"><b>${modelLocal.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div></div></header>
 <section class="qualities-shell"><h2>User-facing qualities</h2>${qualityRows}<p class="quality-debt">${existingQualityGates} of ${totalQualityGates} gates exist.</p></section>
+<section class="card wide"><h2>Blueprint app × shared engine</h2><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appEngineHeaders}</tr></thead><tbody>${appEngineRows}</tbody></table></div></section>
 <section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>solid passed</span><span><i class="dot partial"></i>partial passed</span><span><i class="dot failed"></i>product failed</span><span><i class="dot flaky"></i>flaky</span><span><i class="dot gap"></i>tracked gap</span><span><i class="dot skipped"></i>n/a by design</span><span><i class="dot missing"></i>missing (PR-only)</span><span><i class="dot evidence-unmatched"></i>evidence unmatched</span><span><i class="dot owner-silent"></i>owner silent</span><span><i class="dot lane-did-not-run"></i>lane did not run / stale</span><span><i class="dot infra-mismatch"></i>infra mismatch</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div></section>
-<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
+<section class="grid"><article class="card wide"><h2>Weekly real-model evidence · eight-day freshness</h2><table class="data"><thead><tr><th>Owner</th><th>Status</th><th>Captured</th><th>Evidence</th></tr></thead><tbody>${enrichmentLiveRow}</tbody></table></article><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
     (modelLocal.summary.envGatedOwners ?? []).length
       ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
           modelLocal.summary.envGatedOwners ?? []

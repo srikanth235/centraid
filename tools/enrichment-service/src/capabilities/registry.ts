@@ -62,7 +62,8 @@ function isEmbedTextItem(value: unknown): value is EmbedTextItem {
 const embedImageCapability: CapabilityDefinition = {
   name: "embed-image",
   modelId: () => EMBED_MODEL_ID,
-  isAvailable: () => Promise.resolve(embedWeightsPresent()),
+  isAvailable: (config) =>
+    Promise.resolve(embedWeightsPresent(config.modelsDir)),
   handle: async (items) =>
     Promise.all(
       items.map((item) =>
@@ -79,7 +80,8 @@ const embedImageCapability: CapabilityDefinition = {
 const embedTextCapability: CapabilityDefinition = {
   name: "embed-text",
   modelId: () => EMBED_MODEL_ID,
-  isAvailable: () => Promise.resolve(embedWeightsPresent()),
+  isAvailable: (config) =>
+    Promise.resolve(embedWeightsPresent(config.modelsDir)),
   handle: async (items) =>
     Promise.all(
       items.map((item) =>
@@ -106,7 +108,7 @@ function isMediaItem(value: unknown): value is OcrItem {
 const ocrCapability: CapabilityDefinition = {
   name: "ocr",
   modelId: () => OCR_MODEL_ID,
-  isAvailable: () => Promise.resolve(ocrWeightsPresent()),
+  isAvailable: (config) => Promise.resolve(ocrWeightsPresent(config.modelsDir)),
   handle: async (items) =>
     Promise.all(
       items.map((item) =>
@@ -123,7 +125,8 @@ const ocrCapability: CapabilityDefinition = {
 const facesCapability: CapabilityDefinition = {
   name: "faces",
   modelId: () => FACES_MODEL_ID,
-  isAvailable: () => Promise.resolve(facesWeightsPresent()),
+  isAvailable: (config) =>
+    Promise.resolve(facesWeightsPresent(config.modelsDir)),
   handle: async (items) =>
     Promise.all(
       items.map((item) =>

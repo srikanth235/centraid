@@ -12,6 +12,8 @@
 // member's own order. This is the same rule `PhotosHome`'s add-to-album loop
 // and `PhotoStateView`'s restore loop already followed.
 
+import { runSelectionBatch } from "@centraid/blueprints/apps/_shared/selection-engine";
+
 import type { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
 import type {
   MobileReplicaSession,
@@ -44,9 +46,17 @@ async function runSerially(
   write: (asset: VaultAsset) => Promise<NativeWriteResult>,
   emit: Emit
 ): Promise<void> {
-  for (const asset of targets) {
-    // oxlint-disable-next-line no-await-in-loop -- serial by contract, see head
-    emit(await write(asset));
+  const results = await runSelectionBatch(targets, write);
+  const failures: unknown[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") emit(result.value);
+    else failures.push(result.reason);
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      `${failures.length} selection write${failures.length === 1 ? "" : "s"} failed`
+    );
   }
 }
 
@@ -250,19 +260,30 @@ export async function batchCopyToSharing(
     queued: 0,
     refused: [],
   };
-  for (const asset of targets) {
+  const results = await runSelectionBatch(targets, async (asset) => {
     const sourceVaultId = asset.sourceVaultId ?? fallbackSourceVaultId;
     // A row with no vault provenance cannot be placed FROM anywhere, and
     // guessing one would file the photograph out of a vault it never sat in.
-    if (!sourceVaultId || sourceVaultId === targetVaultId) continue;
-    // oxlint-disable-next-line no-await-in-loop -- serial by contract, see head
-    const record = await session.place({
+    if (!sourceVaultId || sourceVaultId === targetVaultId) return null;
+    return session.place({
       kind: "add",
       itemType: "media.media_asset",
       itemId: asset.assetId,
       sourceVaultId,
       targetVaultId,
     });
+  });
+  for (const result of results) {
+    if (result.status === "rejected") {
+      outcome.refused.push(
+        result.reason instanceof Error
+          ? result.reason.message
+          : "the share failed before the gateway answered"
+      );
+      continue;
+    }
+    const record = result.value;
+    if (!record) continue;
     if (record.status === "executed") outcome.placed += 1;
     else if (record.status === "denied" || record.status === "failed")
       outcome.refused.push(record.reason ?? "the gateway refused the share");

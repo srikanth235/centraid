@@ -42,8 +42,11 @@ const DET_STRIDE_MULTIPLE = 32;
 const REC_HEIGHT = 48;
 const REC_MAX_WIDTH = 320;
 
-export function ocrWeightsPresent(): boolean {
-  return [DET_MODEL_PATH, REC_MODEL_PATH, DICT_PATH].every(existsSync);
+export function ocrWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
+  const ocrDir = path.join(modelsDir, "ocr");
+  return ["det.onnx", "rec.onnx", "dict.txt"].every((filename) =>
+    existsSync(path.join(ocrDir, filename))
+  );
 }
 
 /**
@@ -51,12 +54,9 @@ export function ocrWeightsPresent(): boolean {
  * header) into the full CTC class list: index 0 is the blank symbol
  * (PaddleOCR's `CTCLabelDecode` convention), indices 1..N are the file's
  * characters in order, and a trailing space class is appended — matching
- * PaddleOCR's own `character_str.append(" ")` step. INTEGRATOR NOTE: this
- * class layout (blank-first, space-appended) is PaddleOCR's documented
- * convention but has not been verified against the specific SWHL/RapidOCR
- * rec.onnx export's actual output channel count in this environment (no
- * onnxruntime-node install here) — confirm `fetches[...].dims` matches
- * `chars.length + 2` once `bun run setup` has downloaded the real model.
+ * PaddleOCR's own `character_str.append(" ")` step. The pinned recognition
+ * export's channel layout and decoding are exercised by the weekly
+ * real-weight golden in `model-goldens.live.test.ts`.
  */
 export function buildRecognitionDictionary(chars: readonly string[]): string[] {
   return ["", ...chars, " "];
@@ -85,13 +85,6 @@ async function loadDictionary(): Promise<string[]> {
   const contents = await readFile(DICT_PATH, "utf8");
   cachedDictionary = buildRecognitionDictionary(parseDictFile(contents));
   return cachedDictionary;
-}
-
-function softmaxRow(row: readonly number[]): number[] {
-  const max = Math.max(...row);
-  const exps = row.map((v) => Math.exp(v - max));
-  const sum = exps.reduce((a, b) => a + b, 0);
-  return sum === 0 ? exps : exps.map((v) => v / sum);
 }
 
 async function detectBoxes(bytes: Uint8Array): Promise<{
@@ -174,7 +167,10 @@ async function recognizeCrop(cropBytes: {
     const row = Array.from(
       output.data.subarray(t * numClasses, (t + 1) * numClasses)
     );
-    rows.push(softmaxRow(row));
+    // The pinned RapidOCR export ends in Softmax and emits probabilities.
+    // Applying another softmax preserves argmax text while collapsing every
+    // confidence to roughly 1/numClasses; the live golden guards this seam.
+    rows.push(row);
   }
 
   return ctcGreedyDecode(rows, dictionary);

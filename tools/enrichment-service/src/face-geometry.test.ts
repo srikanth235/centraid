@@ -30,14 +30,20 @@ describe(decodeYuNetLevel, () => {
         stride: 8,
         gridWidth: 1,
         gridHeight: 1,
-        scores: [0], // sigmoid(0) = 0.5
+        classScores: [0.5],
+        objectness: [0.5],
         boxes: [0, 0, 0, 0],
       },
       0.4
     );
     expect(results).toHaveLength(1);
     expect(results[0]?.score).toBeCloseTo(0.5, 10);
-    expect(results[0]?.box).toStrictEqual({ x: 0, y: 0, width: 8, height: 8 });
+    expect(results[0]?.box).toStrictEqual({
+      x: -4,
+      y: -4,
+      width: 8,
+      height: 8,
+    });
   });
 
   it("filters out cells below the score threshold", () => {
@@ -46,7 +52,8 @@ describe(decodeYuNetLevel, () => {
         stride: 8,
         gridWidth: 1,
         gridHeight: 1,
-        scores: [-20], // sigmoid(-20) ~ 0
+        classScores: [0],
+        objectness: [1],
         boxes: [0, 0, 0, 0],
       },
       0.4
@@ -60,18 +67,19 @@ describe(decodeYuNetLevel, () => {
         stride: 8,
         gridWidth: 1,
         gridHeight: 1,
-        scores: [0],
+        classScores: [0.5],
+        objectness: [0.5],
         boxes: [0, 0, 0, 0],
         landmarks: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       },
       0.4
     );
     expect(results[0]?.landmarks).toStrictEqual([
-      { x: 4, y: 4 },
-      { x: 4, y: 4 },
-      { x: 4, y: 4 },
-      { x: 4, y: 4 },
-      { x: 4, y: 4 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
     ]);
   });
 
@@ -81,14 +89,15 @@ describe(decodeYuNetLevel, () => {
         stride: 8,
         gridWidth: 2,
         gridHeight: 2,
-        scores: [-20, -20, 20, -20],
+        classScores: [0, 0, 1, 0],
+        objectness: [1, 1, 1, 1],
         boxes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       },
       0.5
     );
     expect(results).toHaveLength(1);
-    // cell index 2 -> row=1, col=0 -> center=(0.5*8, 1.5*8)=(4,12)
-    expect(results[0]?.box).toStrictEqual({ x: 0, y: 8, width: 8, height: 8 });
+    // cell index 2 -> row=1, col=0 -> center=(0,8)
+    expect(results[0]?.box).toStrictEqual({ x: -4, y: 4, width: 8, height: 8 });
   });
 });
 

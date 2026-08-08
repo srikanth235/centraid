@@ -197,6 +197,36 @@ export function normalizeImageNet(image: DecodedImage): Float32Array {
 }
 
 /**
+ * OpenCV `blobFromImage(image)` parity for YuNet: interleaved RGB bytes become
+ * planar BGR float32 with no scale or mean. YuNet's pinned export performs its
+ * own normalization and is materially wrong when fed ImageNet-normalized RGB.
+ */
+export function toOpenCvBgrPlanar(image: DecodedImage): Float32Array {
+  const { width, height, data } = image;
+  const planeSize = width * height;
+  const out = new Float32Array(planeSize * 3);
+  for (let pixel = 0; pixel < planeSize; pixel++) {
+    out[pixel] = data[pixel * 3 + 2] ?? 0;
+    out[planeSize + pixel] = data[pixel * 3 + 1] ?? 0;
+    out[planeSize * 2 + pixel] = data[pixel * 3] ?? 0;
+  }
+  return out;
+}
+
+/** Unscaled planar RGB used by OpenCV SFace's `blobFromImage(..., swapRB=true)`. */
+export function toOpenCvRgbPlanar(image: DecodedImage): Float32Array {
+  const { width, height, data } = image;
+  const planeSize = width * height;
+  const out = new Float32Array(planeSize * 3);
+  for (let pixel = 0; pixel < planeSize; pixel++) {
+    out[pixel] = data[pixel * 3] ?? 0;
+    out[planeSize + pixel] = data[pixel * 3 + 1] ?? 0;
+    out[planeSize * 2 + pixel] = data[pixel * 3 + 2] ?? 0;
+  }
+  return out;
+}
+
+/**
  * CLIP normalization: interleaved uint8 RGB -> planar float32 CHW, scaled to
  * [0,1] then normalized with the published OpenAI CLIP per-channel
  * mean/std (see clip.py's `_transform`, MIT-licensed, same source as the

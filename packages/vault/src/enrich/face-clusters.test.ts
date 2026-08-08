@@ -267,7 +267,11 @@ describe("face grouping", () => {
       byCluster.set(row.cluster_id, members);
     }
     // Cluster ids are the lowest member id — deterministic, never a mint.
-    expect([...byCluster.entries()].sort()).toStrictEqual([
+    expect(
+      [...byCluster.entries()].sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    ).toStrictEqual([
       ["r-a1", ["r-a1", "r-a2"]],
       ["r-b1", ["r-b1", "r-b2"]],
     ]);

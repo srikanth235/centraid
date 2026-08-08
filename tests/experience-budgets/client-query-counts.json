@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "#711 Atlas first-paint budget rebase: registering blob_custody_rollup adds one deterministic countRows query; the measured 124-statement baseline is approved.",
+  "approvedDeviation": "#725 app-axis rebase: Photos now consumes seven bounded face-cluster and memory reads on first paint; Atlas counts the four newly registered media tables. Measured baselines are approved without adding an HTTP request.",
   "screens": {
-    "photos-grid": { "sqlStatements": 61, "httpRequests": 1 },
+    "photos-grid": { "sqlStatements": 68, "httpRequests": 1 },
     "notifications": { "sqlStatements": 8, "httpRequests": 3 },
-    "atlas": { "sqlStatements": 124, "httpRequests": 2 },
+    "atlas": { "sqlStatements": 128, "httpRequests": 2 },
     "assistant": { "sqlStatements": 22, "httpRequests": 1 }
   }
 }

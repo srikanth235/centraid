@@ -249,4 +249,21 @@ export const MUTATION_SEEDS = [
       "apps/oauth-worker/vitest.mutation.config.ts",
     ],
   },
+  {
+    id: "tools/enrichment-service",
+    label: "enrichment-service",
+    cwd: "tools/enrichment-service",
+    config: "stryker.config.mjs",
+    report: "artifacts/mutation/enrichment-service-report.json",
+    watch: [
+      "tools/enrichment-service/src/tokenizer.ts",
+      "tools/enrichment-service/src/ctc.ts",
+      "tools/enrichment-service/src/nms.ts",
+      "tools/enrichment-service/src/tokenizer.test.ts",
+      "tools/enrichment-service/src/ctc.test.ts",
+      "tools/enrichment-service/src/nms.test.ts",
+      "tools/enrichment-service/stryker.config.mjs",
+      "tools/enrichment-service/vitest.mutation.config.ts",
+    ],
+  },
 ];

@@ -16,7 +16,7 @@
 // resolvable from here. It is intentionally NOT a full port of
 // onnxruntime-node's .d.ts: extend it only when a new capability needs a
 // field this subset doesn't cover yet.
-/* eslint-disable max-classes-per-file -- Tensor + InferenceSession are the two classes onnxruntime-node's real API actually exports; this ambient module mirrors that shape 1:1, so splitting them into two files would just fragment one module declaration for no reason. */
+/* eslint-disable max-classes-per-file -- #724: Tensor + InferenceSession are the two classes onnxruntime-node's real API actually exports; this ambient module mirrors that shape 1:1, so splitting them into two files would just fragment one module declaration for no reason. */
 declare module "onnxruntime-node" {
   export type TypedTensorData =
     | Float32Array

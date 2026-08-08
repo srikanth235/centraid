@@ -57,10 +57,11 @@ Run this motion:
    - [ ] Check the Memories shelves (on-this-day, trip, similar) render with real dates and groupings, and show nothing rather than a wrong grouping when your library has none for a kind.
 
 10. **Check for four specific stuck states** (from prior regressions):
-   - [ ] **Stuck sync bar:** a sync-in-progress indicator that never clears. Check mobile background sync — a hung upload queue or unreachable-gateway loop makes this visible. `docs/logs.md` → gateway and mobile logs should show steady progress or a clear "offline" message, never silent hangs.
-   - [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. Mobile's `kit/replica/mount-plan.ts` prevents waiting for the network before opening local data — if the offline line repeats, the banner logic has drifted.
-   - [ ] **Undiscoverable grain control:** the slider exists but scrolls past the bottom of the screen. Check mobile portrait orientation; the Media Viewer must keep the slider in the safe area. Desktop may scroll; phone must not.
-   - [ ] **Cold start hangs on 528-row local DB:** on a launch with no reachable gateway, the timeline never opens even though 528 rows are on the device. This was the mount-plan regression; the fix was phase A disk-only planning. If this recurs, the replica mount is waiting on the network again.
+
+- [ ] **Stuck sync bar:** a sync-in-progress indicator that never clears. Check mobile background sync — a hung upload queue or unreachable-gateway loop makes this visible. `docs/logs.md` → gateway and mobile logs should show steady progress or a clear "offline" message, never silent hangs.
+- [ ] **Quadruple offline announcements:** the offline banner appeared four times in one session. Check system notifications; background push should deliver once, not repeated. Mobile's `kit/replica/mount-plan.ts` prevents waiting for the network before opening local data — if the offline line repeats, the banner logic has drifted.
+- [ ] **Undiscoverable grain control:** the slider exists but scrolls past the bottom of the screen. Check mobile portrait orientation; the Media Viewer must keep the slider in the safe area. Desktop may scroll; phone must not.
+- [ ] **Cold start hangs on 528-row local DB:** on a launch with no reachable gateway, the timeline never opens even though 528 rows are on the device. This was the mount-plan regression; the fix was phase A disk-only planning. If this recurs, the replica mount is waiting on the network again.
 
 ## Cadence and filing
 

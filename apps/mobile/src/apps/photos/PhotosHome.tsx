@@ -35,6 +35,7 @@ import { useBandOwner } from "../../kit/band/band-owner";
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -77,7 +78,6 @@ import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import { makeStyles } from "./PhotosHome.styles";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import { PhotosSearchView } from "./PhotosSearch";
-import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import {
   pinnedThumbnailCandidates,
@@ -764,7 +764,7 @@ export default function PhotosHome({
                 elsewhere, so Select gets the same scoping rather than a
                 second control that appears to do nothing. */}
             {destination === "library" ? (
-              <PhotosSelectChip
+              <SelectChip
                 disabled={timeline.assets.length === 0}
                 onPress={() => {
                   const first = timeline.assets[0];

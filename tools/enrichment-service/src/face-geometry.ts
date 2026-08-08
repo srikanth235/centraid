@@ -18,8 +18,10 @@ export interface YuNetLevelInput {
   /** Feature map width/height in grid cells. */
   gridWidth: number;
   gridHeight: number;
-  /** Row-major per-cell raw score logit (pre-sigmoid), length gridWidth*gridHeight. */
-  scores: ArrayLike<number>;
+  /** Row-major per-cell class logits, length gridWidth*gridHeight. */
+  classScores: ArrayLike<number>;
+  /** Row-major per-cell objectness logits, length gridWidth*gridHeight. */
+  objectness: ArrayLike<number>;
   /** Row-major per-cell [dx, dy, dw, dh] box regression, length gridWidth*gridHeight*4. */
   boxes: ArrayLike<number>;
   /** Row-major per-cell 5-point landmark regression [x0,y0,...,x4,y4] relative to cell center, in stride units. Length gridWidth*gridHeight*10. */
@@ -34,33 +36,37 @@ export interface DecodedFace {
 
 /**
  * Decodes one YuNet feature-map level (one of its three strides) into
- * image-space boxes: `sigmoid(score)` for confidence, and box center/size
- * decoded as `(cellCenter + [dx,dy] * stride, exp([dw,dh]) * stride)` — the
- * standard anchor-free single-stage decode used by FCOS-family detectors,
- * which YuNet's 2023mar export follows. INTEGRATOR NOTE: this exact
- * parametrization (particularly whether width/height uses `exp(dw)*stride`
- * verbatim, matching opencv_zoo's `yunet.py`) has not been validated against
- * a real forward pass in this environment (no onnxruntime-node install
- * here) — confirm against a downloaded face_detection_yunet_2023mar.onnx
- * output before treating detections as trustworthy.
+ * image-space boxes. The pinned 2023mar export exposes separate class and
+ * objectness logits, combined as `sqrt(sigmoid(cls) * sigmoid(obj))`; box and
+ * landmark regressions are offsets from the grid origin in stride units.
+ * This matches OpenCV Zoo's YuNet post-processing and is exercised against
+ * the actual pinned ONNX weights in the weekly live lane.
  */
 export function decodeYuNetLevel(
   input: YuNetLevelInput,
   scoreThreshold: number
 ): DecodedFace[] {
-  const { stride, gridWidth, gridHeight, scores, boxes, landmarks } = input;
+  const {
+    stride,
+    gridWidth,
+    gridHeight,
+    classScores,
+    objectness,
+    boxes,
+    landmarks,
+  } = input;
   const results: DecodedFace[] = [];
 
   for (let row = 0; row < gridHeight; row++) {
     for (let col = 0; col < gridWidth; col++) {
       const cellIndex = row * gridWidth + col;
-      const score = sigmoid(scores[cellIndex] ?? 0);
+      const classScore = Math.max(0, Math.min(1, classScores[cellIndex] ?? 0));
+      const objectScore = Math.max(0, Math.min(1, objectness[cellIndex] ?? 0));
+      const score = Math.sqrt(classScore * objectScore);
       if (score < scoreThreshold) {
         continue;
       }
 
-      const cx = (col + 0.5) * stride;
-      const cy = (row + 0.5) * stride;
       const dx = boxes[cellIndex * 4] ?? 0;
       const dy = boxes[cellIndex * 4 + 1] ?? 0;
       const dw = boxes[cellIndex * 4 + 2] ?? 0;
@@ -68,8 +74,8 @@ export function decodeYuNetLevel(
 
       const width = Math.exp(dw) * stride;
       const height = Math.exp(dh) * stride;
-      const centerX = cx + dx * stride;
-      const centerY = cy + dy * stride;
+      const centerX = (col + dx) * stride;
+      const centerY = (row + dy) * stride;
 
       let points: Point[] | undefined;
       if (landmarks) {
@@ -77,7 +83,7 @@ export function decodeYuNetLevel(
         for (let p = 0; p < 5; p++) {
           const lx = landmarks[cellIndex * 10 + p * 2] ?? 0;
           const ly = landmarks[cellIndex * 10 + p * 2 + 1] ?? 0;
-          points.push({ x: cx + lx * stride, y: cy + ly * stride });
+          points.push({ x: (col + lx) * stride, y: (row + ly) * stride });
         }
       }
 

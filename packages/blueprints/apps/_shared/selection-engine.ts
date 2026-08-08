@@ -1,4 +1,4 @@
-// The selection bottom bar, as a model (Photos v4 handoff §6, proto:4946).
+// Cross-seat selection, as a pure model (Photos v4 handoff §6, proto:4946).
 //
 // While a selection is live the band is REPLACED by this bar — proto:4953's
 // `appBandOn: …&&!sel` is exactly that rule — and the bar carries five 56px
@@ -9,7 +9,9 @@
 // (`packages/blueprints/apps/photos/components/SelectionBar.tsx`,
 // `buildSelectionActions`) states them in one place too. Two surfaces, one
 // table, so the fifth target cannot mean `Trash` on the phone and `Download`
-// on the desktop.
+// on the desktop. The set transitions and failure-isolated serial runner are
+// here too: a batch is one member act, but one bad item must not strand every
+// later item in that act.
 //
 // SHARING ON THE PHONE. The third target's shelf swap is modelled here even
 // though no Sharing shelf exists on the phone yet (see `photos-band.ts` for
@@ -180,4 +182,84 @@ export function selectionBarReason(
       seen.push(action.reason);
   }
   return seen.length ? seen.join(" · ") : undefined;
+}
+
+/** Return the next selection without mutating the caller's set. */
+export function toggleSelectionKey(
+  selected: ReadonlySet<string>,
+  key: string
+): Set<string> {
+  const next = new Set(selected);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
+/** Apply one contiguous shift-range using the target key's next state. */
+export function toggleSelectionRange(
+  selected: ReadonlySet<string>,
+  orderedKeys: readonly string[],
+  anchor: string,
+  target: string
+): Set<string> {
+  const from = orderedKeys.indexOf(anchor);
+  const to = orderedKeys.indexOf(target);
+  if (from < 0 || to < 0) return toggleSelectionKey(selected, target);
+  const next = new Set(selected);
+  const on = !next.has(target);
+  for (
+    let index = Math.min(from, to);
+    index <= Math.max(from, to);
+    index += 1
+  ) {
+    const key = orderedKeys[index]!;
+    if (on) next.add(key);
+    else next.delete(key);
+  }
+  return next;
+}
+
+/** Select every visible key when empty; otherwise clear the selection. */
+export function toggleAllSelection(
+  selected: ReadonlySet<string>,
+  visibleKeys: readonly string[]
+): Set<string> {
+  return selected.size > 0 ? new Set() : new Set(visibleKeys);
+}
+
+/** Drop selection keys that are no longer present in the rendered shelf. */
+export function pruneSelection(
+  selected: ReadonlySet<string>,
+  presentKeys: readonly string[]
+): Set<string> {
+  const present = new Set(presentKeys);
+  return new Set([...selected].filter((key) => present.has(key)));
+}
+
+export type SelectionBatchResult<Target, Value> =
+  | { target: Target; status: "fulfilled"; value: Value }
+  | { target: Target; status: "rejected"; reason: unknown };
+
+/**
+ * Run in member order and isolate each failure. Serial ordering is required
+ * by the replica ledger; catching per target is required by the batch law.
+ */
+export async function runSelectionBatch<Target, Value>(
+  targets: readonly Target[],
+  run: (target: Target, index: number) => Promise<Value>
+): Promise<Array<SelectionBatchResult<Target, Value>>> {
+  const results: Array<SelectionBatchResult<Target, Value>> = [];
+  for (const [index, target] of targets.entries()) {
+    try {
+      results.push({
+        target,
+        status: "fulfilled",
+        // oxlint-disable-next-line no-await-in-loop -- ledger order is the contract
+        value: await run(target, index),
+      });
+    } catch (error) {
+      results.push({ target, status: "rejected", reason: error });
+    }
+  }
+  return results;
 }

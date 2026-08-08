@@ -44,12 +44,15 @@ export class RuntimeNotInstalledError extends Error {
  * RuntimeNotInstalledError (with a "run setup first" message) when the
  * runtime dependency tree or the named package isn't there yet.
  */
-export function resolveRuntimeModule(specifier: string): string {
-  if (!existsSync(path.join(RUNTIME_DIR, "node_modules"))) {
+export function resolveRuntimeModule(
+  specifier: string,
+  runtimeDir: string = RUNTIME_DIR
+): string {
+  if (!existsSync(path.join(runtimeDir, "node_modules"))) {
     throw new RuntimeNotInstalledError(specifier);
   }
   const requireFromRuntime = createRequire(
-    path.join(RUNTIME_DIR, "package.json")
+    path.join(runtimeDir, "package.json")
   );
   try {
     return requireFromRuntime.resolve(specifier);
@@ -75,7 +78,7 @@ export function resetOnnxRuntimeCacheForTests(): void {
 }
 
 let cachedSessions:
-  | Map<string, InstanceType<OrtModule["InferenceSession"]>>
+  | Map<string, Promise<InstanceType<OrtModule["InferenceSession"]>>>
   | undefined;
 
 /**
@@ -95,10 +98,16 @@ export async function getOrCreateSession(
   if (!existsSync(modelPath)) {
     throw new RuntimeNotInstalledError(modelPath);
   }
-  const ort = await loadOnnxRuntime();
-  const session = await ort.InferenceSession.create(modelPath);
-  cachedSessions.set(modelPath, session);
-  return session;
+  const pending = loadOnnxRuntime().then((ort) =>
+    ort.InferenceSession.create(modelPath)
+  );
+  cachedSessions.set(modelPath, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    cachedSessions.delete(modelPath);
+    throw error;
+  }
 }
 
 /** Test-only seam. @public */

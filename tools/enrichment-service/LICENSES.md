@@ -17,3 +17,7 @@ The issue's brief named MobileCLIP as the preferred OpenCLIP-family model. Check
 ## Runtime dependencies (not models, but also worth recording here)
 
 `tools/enrichment-service/runtime/package.json` pins `onnxruntime-node` (MIT, Microsoft) and `sharp` (Apache-2.0) — both already used elsewhere in this monorepo (`packages/gateway`, `apps/extension` for sharp). Neither is a dependency of this workspace package itself; see `runtime/package.json` and `src/onnx.ts` for why.
+
+## Live-test fixture
+
+The face golden uses OpenCV's `samples/data/lena.jpg` pinned at commit `77dfa297d08fdecdc509fc01ad92a2e9ec776a57` (Apache-2.0). Its source SHA-256 and storage rationale are recorded in `fixtures/README.md`.

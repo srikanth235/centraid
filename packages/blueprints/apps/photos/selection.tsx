@@ -29,6 +29,12 @@
 // tick both and send a batch to the wrong one (issue #599).
 import type { ReactNode } from "react";
 
+import {
+  pruneSelection,
+  toggleAllSelection,
+  toggleSelectionKey,
+  toggleSelectionRange,
+} from "../_shared/selection-engine.ts";
 import { assetKey, parseAssetKey } from "./asset-key.ts";
 import type { SelectionShelfKind } from "./components/SelectionBar.tsx";
 import {
@@ -115,6 +121,11 @@ export function createSelection({
   const keys = new Set<string>();
   const shelfKind = getShelfKind ?? (() => "normal" as const);
   const narrow = isNarrow ?? (() => false);
+
+  function replaceKeys(next: ReadonlySet<string>): void {
+    keys.clear();
+    for (const key of next) keys.add(key);
+  }
 
   function onAway(e: globalThis.MouseEvent): void {
     // Queried against the whole document, not one region: the menu this
@@ -311,11 +322,12 @@ export function createSelection({
 
   function toggleAll(): void {
     if (busy) return;
-    if (keys.size > 0) {
-      keys.clear();
-    } else {
-      for (const asset of getVisible()) keys.add(assetKey(asset));
-    }
+    replaceKeys(
+      toggleAllSelection(
+        keys,
+        getVisible().map((asset) => assetKey(asset))
+      )
+    );
     anchor = null;
     repaint();
     renderBar();
@@ -328,20 +340,21 @@ export function createSelection({
       const from = list.findIndex((x) => assetKey(x) === anchor);
       const to = list.findIndex((x) => assetKey(x) === key);
       if (from >= 0 && to >= 0) {
-        const on = !keys.has(key);
-        for (let i = Math.min(from, to); i <= Math.max(from, to); i += 1) {
-          const inRange = assetKey(list[i]!);
-          if (on) keys.add(inRange);
-          else keys.delete(inRange);
-        }
+        replaceKeys(
+          toggleSelectionRange(
+            keys,
+            list.map((asset) => assetKey(asset)),
+            anchor,
+            key
+          )
+        );
         anchor = key;
         repaint();
         renderBar();
         return;
       }
     }
-    if (keys.has(key)) keys.delete(key);
-    else keys.add(key);
+    replaceKeys(toggleSelectionKey(keys, key));
     anchor = key;
     repaint();
     renderBar();
@@ -356,9 +369,12 @@ export function createSelection({
     toggle,
     toggleAll,
     prune: (present) => {
-      for (const key of keys) {
-        if (!present.some((a) => assetKey(a) === key)) keys.delete(key);
-      }
+      replaceKeys(
+        pruneSelection(
+          keys,
+          present.map((asset) => assetKey(asset))
+        )
+      );
     },
     renderBar,
     dispose: () => {

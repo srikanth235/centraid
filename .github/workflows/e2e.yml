@@ -838,6 +838,13 @@ jobs:
           pattern: nightly-evidence-*
           path: artifacts
           merge-multiple: true
+      - name: Restore latest weekly real-model evidence
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/enrichment-live/
+          key: enrichment-live-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: enrichment-live-${{ runner.os }}-
       - run: bun run build
       # #545 A1 — keep continue-on-error so the report still generates when a
       # quality lane fails; a post-step re-reads outcomes and fails the job.

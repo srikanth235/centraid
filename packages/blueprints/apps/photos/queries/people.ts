@@ -50,6 +50,7 @@
  *
  * @type {import('@centraid/app-engine').QueryHandler}
  */
+import { groupPeopleFaces } from "../../_shared/people-counts.ts";
 import { srcOf } from "./_shared.ts";
 
 interface RawRegion {
@@ -66,6 +67,11 @@ interface RawParty {
   party_id: string;
   kind?: string;
   display_name?: string | null;
+}
+
+interface RawCluster {
+  region_id: string;
+  cluster_id: string;
 }
 
 interface RawAsset {
@@ -105,7 +111,7 @@ interface ProposalGroup {
 export default async function people({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   try {
-    const [regionsResult, partiesResult] = await Promise.all([
+    const [regionsResult, partiesResult, clustersResult] = await Promise.all([
       ctx.vault.read({
         entity: "media.face_region",
         limit: REGION_LIMIT,
@@ -117,71 +123,50 @@ export default async function people({ ctx }: HandlerArgs) {
         limit: 500,
         purpose,
       }),
+      ctx.vault.read({
+        entity: "media.face_cluster",
+        limit: REGION_LIMIT,
+        purpose,
+      }),
     ]);
     const regions = (regionsResult.rows ?? []) as unknown as RawRegion[];
+    const clusters = (clustersResult.rows ?? []) as unknown as RawCluster[];
     const nameOf = new Map(
       ((partiesResult.rows ?? []) as unknown as RawParty[])
         .filter((party) => party.kind === "person")
         .map((party) => [party.party_id, party.display_name] as const)
     );
 
-    // ── confirmed roster (unchanged behaviour) ──────────────────────────
-    // One entry per confirmed party, in first-seen order; the caller sorts by
-    // whatever the shelf is ordered on, so no order is asserted here.
-    const byParty = new Map<
-      string,
-      { asset_ids: string[]; seen: Set<string>; confirmers: Set<string> }
-    >();
-    for (const region of regions) {
-      if (region.confirmed_by_party_id == null) continue;
-      const partyId = region.party_id;
-      const assetId = region.asset_id;
-      if (!partyId || !assetId || !nameOf.has(partyId)) continue;
-      let entry = byParty.get(partyId);
-      if (!entry) {
-        entry = { asset_ids: [], seen: new Set(), confirmers: new Set() };
-        byParty.set(partyId, entry);
-      }
-      // WHO SAID SO (issue #712 P6b). A group is keyed by the party the faces
-      // ARE (`party_id`); `confirmed_by_party_id` is a different axis — the
-      // party who answered the proposal — and the DDL pins it to exist on
-      // exactly the confirmed rows. Collecting it here is what lets one
-      // person's group span two members' confirmations WITHOUT merging them:
-      // the confirmers stay a set beside the group, never folded into the
-      // subject, so "Ana, confirmed by you and by Sam" is expressible and
-      // "Ana and Sam are the same person" is not. Every confirmed region is
-      // counted here, including the second one in a photograph the count
-      // above deliberately skips — the question is who answered, not how
-      // many photographs.
-      entry.confirmers.add(region.confirmed_by_party_id);
-      // Two confirmed regions of one person in one photograph is one
-      // photograph, not two — a count that double-counted them would disagree
-      // with the tiles the shelf then shows.
-      if (entry.seen.has(assetId)) continue;
-      entry.seen.add(assetId);
-      entry.asset_ids.push(assetId);
-    }
+    const grouped = groupPeopleFaces(regions, clusters);
+    const regionById = new Map(
+      regions.map((region) => [region.region_id, region] as const)
+    );
 
     // ── unconfirmed proposals — grouped, never named (see file header) ──
     // Still-open proposals only: a rejected or dismissed region has been
     // answered, so it is neither a person's face nor anybody's backlog.
-    const unconfirmed = regions.filter((r) => r.review_state === "proposed");
     const proposalGroups = new Map<string, ProposalGroup>();
-    for (const region of unconfirmed) {
-      if (!region.asset_id) continue; // no photograph, nothing to show
-      const key = region.party_id ?? `region:${region.region_id}`;
-      let group = proposalGroups.get(key);
-      if (!group) {
-        group = {
-          partyId: region.party_id ?? null,
-          assetIds: new Set(),
-          coverRegion: region,
-        };
-        proposalGroups.set(key, group);
-      } else if (region.region_id < group.coverRegion.region_id) {
-        group.coverRegion = region; // earliest region_id stays the cover
-      }
-      group.assetIds.add(region.asset_id);
+    for (const group of grouped.pendingByParty) {
+      const coverRegion = group.coverRegionId
+        ? regionById.get(group.coverRegionId)
+        : undefined;
+      if (!coverRegion) continue;
+      proposalGroups.set(`party:${group.id}`, {
+        partyId: group.id,
+        assetIds: new Set(group.assetIds),
+        coverRegion,
+      });
+    }
+    for (const group of grouped.unnamed) {
+      const coverRegion = group.coverRegionId
+        ? regionById.get(group.coverRegionId)
+        : undefined;
+      if (!coverRegion) continue;
+      proposalGroups.set(`cluster:${group.id}`, {
+        partyId: null,
+        assetIds: new Set(group.assetIds),
+        coverRegion,
+      });
     }
     const orderedGroups = [...proposalGroups.entries()].sort(([a], [b]) =>
       a < b ? -1 : 1
@@ -253,26 +238,28 @@ export default async function people({ ctx }: HandlerArgs) {
     });
 
     return {
-      people: [...byParty.entries()].map(([partyId, entry]) => ({
-        party_id: partyId,
-        name: nameOf.get(partyId) ?? null,
-        count: entry.asset_ids.length,
-        asset_ids: entry.asset_ids,
-        // The distinct parties who answered, each carrying whatever name
-        // `core.party` holds for them — `null` where the confirmer is not a
-        // `kind = 'person'` party this read named (a device or a service that
-        // acted for the owner), which the view renders as "someone else on
-        // this library" rather than as an invented name.
-        confirmed_by: [...entry.confirmers].sort().map((confirmerId) => ({
-          party_id: confirmerId,
-          name: nameOf.get(confirmerId) ?? null,
+      people: grouped.confirmed
+        .filter((entry) => nameOf.has(entry.id))
+        .map((entry) => ({
+          party_id: entry.id,
+          name: nameOf.get(entry.id) ?? null,
+          count: entry.assetIds.length,
+          asset_ids: entry.assetIds,
+          // The distinct parties who answered, each carrying whatever name
+          // `core.party` holds for them — `null` where the confirmer is not a
+          // `kind = 'person'` party this read named (a device or a service that
+          // acted for the owner), which the view renders as "someone else on
+          // this library" rather than as an invented name.
+          confirmed_by: entry.confirmerIds.map((confirmerId) => ({
+            party_id: confirmerId,
+            name: nameOf.get(confirmerId) ?? null,
+          })),
         })),
-      })),
       proposals,
       // Same derivation as face-queue.ts's `unmatchedTotal` — the pending
       // note's live count, not the (usually smaller) number of proposal
       // GROUPS rendered above.
-      unmatchedTotal: unconfirmed.length,
+      unmatchedTotal: grouped.pendingTotal,
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };

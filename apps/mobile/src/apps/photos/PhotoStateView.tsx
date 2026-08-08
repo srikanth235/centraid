@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -36,7 +37,6 @@ import {
   emptyTrashSummary,
 } from "./photos-trash";
 import PhotosScreen from "./PhotosScreen";
-import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -353,7 +353,7 @@ export default function PhotoStateView({
                 </Text>
               </Pressable>
             ) : null}
-            <PhotosSelectChip
+            <SelectChip
               disabled={false}
               onPress={() => {
                 const first = assets[0];

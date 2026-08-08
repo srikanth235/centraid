@@ -29,6 +29,8 @@
 // photograph is one photograph. A count that said two would disagree with the
 // tiles the shelf then shows, which is the version of dishonesty a member
 // actually notices.
+
+import { groupPeopleFaces } from "@centraid/blueprints/apps/_shared/people-counts";
 //
 // "DETECT FACES" IS GATED ON THE GATEWAY RUNG, NOT THE DEVICE ONE. The pass
 // that answers this ask is the gateway's own faces sweep, so the tier that
@@ -206,26 +208,6 @@ function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
   };
 }
 
-/** Distinct photographs behind a set of regions — see the header on counts. */
-function photographCount(regions: readonly FaceRegionRow[]): number {
-  return new Set(regions.map((region) => region.asset_id).filter(Boolean)).size;
-}
-
-function groupBy<T>(
-  rows: readonly T[],
-  key: (row: T) => string | null
-): Map<string, T[]> {
-  const groups = new Map<string, T[]>();
-  for (const row of rows) {
-    const id = key(row);
-    if (id === null) continue;
-    const bucket = groups.get(id);
-    if (bucket) bucket.push(row);
-    else groups.set(id, [row]);
-  }
-  return groups;
-}
-
 /**
  * Build the whole shelf from the four replica reads it needs. Deterministic:
  * people are ordered by name (nameless last, then by party id), pending
@@ -239,21 +221,20 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
       .map((party) => [party.party_id, party.display_name ?? null] as const)
   );
 
-  const confirmed = facts.faces.filter(
-    (face) => face.review_state === "confirmed"
-  );
-  const proposed = facts.faces.filter(
-    (face) => face.review_state === "proposed"
-  );
+  const grouped = groupPeopleFaces(facts.faces, facts.clusters);
+  const faceById = new Map(facts.faces.map((face) => [face.region_id, face]));
 
-  const people: PersonEntry[] = [
-    ...groupBy(confirmed, (face) => face.party_id ?? null),
-  ]
-    .map(([partyId, regions]) => ({
-      partyId,
-      name: nameOf.get(partyId) ?? null,
-      count: photographCount(regions),
-      cover: coverOf(regions),
+  const people: PersonEntry[] = [...grouped.confirmed]
+    .map((group) => ({
+      partyId: group.id,
+      name: nameOf.get(group.id) ?? null,
+      count: group.assetIds.length,
+      cover: coverOf(
+        group.regionIds.flatMap((regionId) => {
+          const region = faceById.get(regionId);
+          return region ? [region] : [];
+        })
+      ),
     }))
     .sort((a, b) => {
       // A named person before an unnamed one; then by name; then by id. The
@@ -265,13 +246,16 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
       return a.partyId < b.partyId ? -1 : 1;
     });
 
-  const pendingByParty: PendingEntry[] = [
-    ...groupBy(proposed, (face) => face.party_id ?? null),
-  ]
-    .map(([partyId, regions]) => ({
-      partyId,
-      count: photographCount(regions),
-      cover: coverOf(regions),
+  const pendingByParty: PendingEntry[] = [...grouped.pendingByParty]
+    .map((group) => ({
+      partyId: group.id,
+      count: group.assetIds.length,
+      cover: coverOf(
+        group.regionIds.flatMap((regionId) => {
+          const region = faceById.get(regionId);
+          return region ? [region] : [];
+        })
+      ),
     }))
     .sort((a, b) =>
       a.count === b.count ? (a.partyId < b.partyId ? -1 : 1) : b.count - a.count
@@ -281,21 +265,17 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
   // read actually carries: a cluster row whose region is not in `faces` (it was
   // answered, or the read was windowed) contributes nothing rather than a card
   // with a count the member cannot open.
-  const proposedById = new Map(proposed.map((face) => [face.region_id, face]));
-  const byCluster = new Map<string, FaceRegionRow[]>();
-  for (const row of facts.clusters) {
-    const region = proposedById.get(row.region_id);
-    if (!region || region.party_id) continue;
-    const bucket = byCluster.get(row.cluster_id);
-    if (bucket) bucket.push(region);
-    else byCluster.set(row.cluster_id, [region]);
-  }
-  const unnamed: UnnamedGroupEntry[] = [...byCluster]
-    .map(([clusterId, regions]) => ({
-      clusterId,
-      count: photographCount(regions),
-      regionIds: regions.map((region) => region.region_id).sort(),
-      cover: coverOf(regions),
+  const unnamed: UnnamedGroupEntry[] = grouped.unnamed
+    .map((group) => ({
+      clusterId: group.id,
+      count: group.assetIds.length,
+      regionIds: group.regionIds,
+      cover: coverOf(
+        group.regionIds.flatMap((regionId) => {
+          const region = faceById.get(regionId);
+          return region ? [region] : [];
+        })
+      ),
     }))
     .sort((a, b) =>
       a.count === b.count
@@ -313,7 +293,7 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
     people,
     pendingByParty,
     unnamed,
-    pendingTotal: proposed.length,
+    pendingTotal: grouped.pendingTotal,
     // Which sentence is honest depends on whether anything is in flight: a
     // member who already asked is owed "it has not finished", not a second
     // invitation to ask.
