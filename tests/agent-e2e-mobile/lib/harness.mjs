@@ -26,6 +26,7 @@ import {
 } from "../../agent-e2e-shared/harness.mjs";
 import {
   completeOnboardingCommands,
+  DISMISS_DEV_CLIENT_OVERLAYS,
   pasteAndConnectPairingTicketCommands,
   relaunchDevClientCommands,
   waitForOnboardingConnectCommands,
@@ -458,7 +459,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: false
-- extendedWaitUntil:
+${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 `,

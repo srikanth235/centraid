@@ -27,6 +27,18 @@ export const DISMISS_SYSTEM_ANR = `- runFlow:
 `;
 
 /**
+ * iOS asks for confirmation when Maestro opens the Expo development-client
+ * URL scheme. The prompt sits above the native hierarchy, so accept it before
+ * looking for either Expo's first-use sheet or Centraid's onboarding screen.
+ */
+export const DISMISS_OPEN_LINK_CONFIRMATION = `- runFlow:
+    when:
+      visible: "^Open$"
+    commands:
+      - tapOn: "^Open$"
+`;
+
+/**
  * Expo's development build shows this first-use sheet on a fresh simulator.
  * It is above the React Native hierarchy, so dismiss it before polling for
  * onboarding. The exact Continue label is also used by iOS keyboard setup;
@@ -51,6 +63,10 @@ export const DISMISS_EXPO_DEV_MENU = `- runFlow:
       - tapOn: "^Reload$"
 `;
 
+export const DISMISS_DEV_CLIENT_OVERLAYS =
+  `${DISMISS_SYSTEM_ANR}${DISMISS_OPEN_LINK_CONFIRMATION}` +
+  `${DISMISS_FIRST_USE_CONTINUE}${DISMISS_EXPO_DEV_MENU}`;
+
 // `launchApp: { clearState: true }` also clears the Expo development client's
 // cached Metro URL on iOS. Re-inject the URL through the app's development
 // client route before waiting for the React Native onboarding hierarchy; without
@@ -71,21 +87,17 @@ export function relaunchDevClientCommands(platform) {
 }
 
 /**
- * Poll for onboarding while dismissing a system ANR overlay between polls.
- * This keeps a transient OS dialog from consuming the whole launch budget.
+ * Poll for onboarding while dismissing native/Expo overlays between polls.
+ * This keeps transient OS dialogs from consuming the whole launch budget.
  */
 export function waitForOnboardingConnectCommands(timeoutMs) {
   const pollMs = 5_000;
   const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
-  const dismissOverlays =
-    `${DISMISS_SYSTEM_ANR}${DISMISS_FIRST_USE_CONTINUE}` +
-    DISMISS_EXPO_DEV_MENU;
-  const dismissInside = dismissOverlays
-    .split("\n")
+  const dismissInside = DISMISS_DEV_CLIENT_OVERLAYS.split("\n")
     .filter((line) => line.length > 0)
     .map((line) => `      ${line}`)
     .join("\n");
-  return `${dismissOverlays}- repeat:
+  return `${DISMISS_DEV_CLIENT_OVERLAYS}- repeat:
     times: ${times}
     while:
       notVisible:

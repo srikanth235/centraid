@@ -30,7 +30,7 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   is complete and exposes `replica-compatibility-retry` for bounded capability
   retries.
 - `tests/agent-e2e-mobile/lib/first-run.mjs` contains the reusable wait,
-  iOS Metro deep-link/development-overlay recovery, paste-path,
+  iOS Metro deep-link/native-confirmation/development-overlay recovery, paste-path,
   pairing-recovery, Android system-ANR dismissal, and capability-wall retry
   YAML; `tests/agent-e2e-mobile/lib/harness.mjs` uses it with a fresh one-time
   ticket for each bounded iOS pairing attempt.
@@ -50,6 +50,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - Scan-first onboarding controls and the pairing field are addressable by stable test IDs — `apps/mobile/src/screens/Onboarding.tsx`.
 - Native-input/React state desynchronization is recovered before submitting a pairing ticket — `apps/mobile/src/screens/Onboarding.tsx` and `tests/agent-e2e-mobile/lib/first-run.mjs`.
 - A cleared iOS Expo development client is reconnected to Metro and its first-use `Continue`/`Reload` overlays are dismissed before onboarding assertions — `tests/agent-e2e-mobile/lib/first-run.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, and `tests/agent-e2e-mobile/flows/home-loads.mjs`.
+- The iOS native `Open in “Centraid”?` confirmation raised by that deep link is accepted before the Expo overlays are polled — `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- Reused paired-state journeys also clear any leftover native/Expo launch overlay before asserting `Home ready` — `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The compatibility wall stays out of the pre-onboarding pairing surface — `apps/mobile/App.tsx`.
 - Transient iOS pairing and capability-wall interactions use bounded waits — `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/first-run.mjs`, and `tests/agent-e2e-mobile/flows/home-loads.mjs`.
 - The serialized iOS job backstop is above its cold-build and journey budget — `.github/workflows/e2e.yml`.
