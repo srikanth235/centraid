@@ -96,9 +96,11 @@ export default function createExpoConfig({
         backgroundColor: "#3EC8B4",
       },
     },
-    runtimeVersion: {
-      policy: "appVersion",
-    },
+    // The native projects are checked in (bare workflow), where Expo
+    // requires a concrete runtime version rather than the managed-workflow
+    // `appVersion` policy. VERSION is the same value that policy would
+    // resolve to and keeps OTA compatibility tied to the store version.
+    runtimeVersion: VERSION,
     // J7 / #501 — routine updates are store-only. The emergency OTA lane is
     // explicitly disabled until the real Expo project id is enrolled; no
     // placeholder endpoint or dormant native updater ships.

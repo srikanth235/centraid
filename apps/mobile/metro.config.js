@@ -13,6 +13,13 @@ const config = getDefaultConfig(projectRoot);
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
+  // Expo/RN's HMR client is compiled against pretty-format 29.7.0. The
+  // workspace also contains the testing-library copy (30.x), whose ESM
+  // export Metro selects first and which makes HMRClient's compatibility
+  // unwrap dereference an undefined default. Prefer RN's own dependency
+  // tree before the hoisted workspace modules so development builds use the
+  // version the native runtime expects.
+  path.resolve(workspaceRoot, "node_modules/react-native/node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
 config.resolver.disableHierarchicalLookup = true;

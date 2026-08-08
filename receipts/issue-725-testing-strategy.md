@@ -40,6 +40,13 @@ Coverage is measured from the complete 2026-08-08 run (1,065 files, 11,719 passi
 
 The Photos implementation hoists triage, selection batching/failure isolation, face-crop geometry, and people-count grouping into `_shared`; deletes the mobile/web duplicate modules; makes web Memories consume `media.memory` / `memory_member`; adds the `media.face_cluster` read scope; wires strict distinct-photograph counts into the native People shelf; and records the one-computation rule in `docs/blueprint-seats.md`. The Photos selection contract keeps all five targets present, swaps Trash/Restore and Sharing/Remove from Sharing by shelf, and uses inert handlers for unavailable writes. The enrichment service is now the only model seam, with pinned runtime/model manifests, license verification, golden fixtures, hermetic tests, live-weight tests, and the gateway-only reachability law.
 
+The iOS development-build path is also bootable end to end: `expo-dev-client`
+is pinned to SDK 57, Metro prefers React Native's compatible `pretty-format`
+tree for its HMR client, and the bare native config uses the concrete app
+version for its runtime version. The checked-in pod/project state and native
+fingerprints were refreshed after review; a rebuilt iPhone 17 simulator opens
+the Centraid onboarding screen from Metro without a redbox.
+
 Checklist evidence: H1 — Triage session model → `_shared/`; H2 — Selection engine → `_shared`; H3 — De-duplicate face-crop math; H4 — Codify the pure-model-beside-the-view convention; V1 — Web memories consume the vault projection; V2 — People counts use one shared strict rule; V3 — The one-computation rule is written into the seat doctrine; D1 — `media.face_cluster` has a read scope; D2 — `PhotosPeopleView` uses the strict photograph-count shelf model; and Receipt records any knowingly deferred item in **Out of scope**.
 
 Changed files (the receipt names every changed path for file-coverage auditing):
@@ -55,6 +62,12 @@ CONSTITUTION.md
 Dockerfile
 README.md
 TESTING.md
+apps/mobile/app.config.ts
+apps/mobile/ios/Centraid.xcodeproj/project.pbxproj
+apps/mobile/ios/Podfile.lock
+apps/mobile/metro.config.js
+apps/mobile/native-fingerprints.json
+apps/mobile/package.json
 apps/mobile/src/apps/photos/FaceReview.tsx
 apps/mobile/src/apps/photos/PhotoStateView.tsx
 apps/mobile/src/apps/photos/PhotosHome.test.tsx
@@ -72,6 +85,7 @@ apps/mobile/src/apps/photos/photos-selection.ts
 apps/mobile/src/apps/photos/use-copy-to-sharing.ts
 apps/mobile/src/kit/components/SelectChip.tsx
 docs/blueprint-seats.md
+docs/decisions.md
 docs/enrichment-service.md
 docs/glossary.md
 docs/photos-dogfood.md
@@ -114,6 +128,7 @@ packages/blueprints/src/no-inference-client.test.ts
 packages/blueprints/src/one-computation.test.ts
 packages/blueprints/src/photos-asset-key.test.ts
 packages/blueprints/src/placement-registry.test.ts
+bun.lock
 scripts/mutation/seeds.mjs
 scripts/mutation/run.test.mjs
 scripts/test-report/diff-coverage-run.mjs
@@ -266,6 +281,15 @@ bun run format:check
 bun run typecheck
 bun run lint
 bun run knip
+bun install --frozen-lockfile
+bun run --cwd apps/mobile test
+bun run --cwd apps/mobile typecheck
+bun run --cwd apps/mobile lint
+bun run --cwd apps/mobile ci:native-state
+bun run --cwd apps/mobile ci:xcode
+# iOS simulator smoke: expo run:ios --device <iPhone 17 UDID>
+# Result: native build succeeded; dev client opened the Metro URL and the
+# simulator rendered the Centraid "Connect your gateway" onboarding screen.
 ```
 
 ## Steering
@@ -297,3 +321,6 @@ change was restored before audit completion.
 | codex-019fdd23-464-1786178430-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 37735 | 0 | 2335488 | 1979 | 39714 | 0.7079 | 2551067 | 0 | 113328896 | 205783 | feat(testing): complete app-axis and ML evidence strategy (#725) -m Implement th |
 | codex-019fdd23-464-1786178596-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 19697 | 0 | 830208 | 2243 | 21940 | 0.2904 | 2570764 | 0 | 114159104 | 208026 |  |
 | codex-019fdd23-464-1786179141-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 103890 | 0 | 3849728 | 10423 | 114313 | 1.3785 | 2674654 | 0 | 118008832 | 218449 | fix(gateway): include tool workspace manifest in image build (#725) -m The root  |
+| codex-019fdd23-464-1786189980-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 677796 | 0 | 46504320 | 46499 | 724295 | 14.0181 | 3352450 | 0 | 164513152 | 264948 | fix(mobile): boot Expo iOS development client (#725) |
+| codex-019fdd23-464-1786190114-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 11807 | 0 | 2512640 | 1755 | 13562 | 0.6840 | 3364257 | 0 | 167025792 | 266703 | fix(mobile): boot Expo iOS development client (#725) |
+| codex-019fdd23-464-1786190226-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 14873 | 0 | 2018176 | 1487 | 16360 | 0.5640 | 3379130 | 0 | 169043968 | 268190 | fix(mobile): boot Expo iOS development client (#725) -m governance: allow-doc-in |
