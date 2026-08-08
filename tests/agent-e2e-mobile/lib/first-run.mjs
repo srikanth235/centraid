@@ -1,18 +1,12 @@
-// Reusable Maestro snippets for dismissing first-run interstitials that stand
-// between a fresh launch and the screen a flow actually wants to assert on.
-// Split out of harness.mjs, which sits against the 500-line repo cap; these are
-// plain YAML-string constants with no edge back to the harness (same reason
-// metro.mjs was extracted). Interpolated into a flow's `ctx.run(...)` YAML.
+// Reusable Maestro snippets for first-run interstitials and onboarding recovery.
+// Keep the generated YAML beside the harness so iOS/Android accessibility
+// workarounds remain auditable instead of being hidden in a large flow string.
 
 /**
  * The first keystroke on a freshly-booted simulator raises iOS's multilingual
- * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
- * bottom of the screen — including the tab bar — so every subsequent tap silently
- * lands on the sheet instead, and any keystrokes typed while it animates in are
- * swallowed (that is what corrupts text fields — see configureGateway). CI boots
- * a clean simulator each run, so it hits this every time. Dismiss it if it showed
- * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
- * appearance is deterministic rather than racing the real input.
+ * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers
+ * the bottom of the screen and swallows later taps, so provoke and dismiss it
+ * before entering the real ticket.
  */
 export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
     when:
@@ -22,15 +16,46 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
 `;
 
 /**
+ * Cold Android emulators occasionally raise a system ANR sheet above Centraid.
+ * Keep the app running by tapping Wait; never close the app underneath.
+ */
+export const DISMISS_SYSTEM_ANR = `- runFlow:
+    when:
+      visible: ".*isn't responding.*"
+    commands:
+      - tapOn: "Wait"
+`;
+
+/**
+ * Poll for onboarding while dismissing a system ANR overlay between polls.
+ * This keeps a transient OS dialog from consuming the whole launch budget.
+ */
+export function waitForOnboardingConnectCommands(timeoutMs) {
+  const pollMs = 5_000;
+  const times = Math.max(1, Math.ceil(timeoutMs / pollMs));
+  const dismissInside = DISMISS_SYSTEM_ANR.split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => `      ${line}`)
+    .join("\n");
+  return `${DISMISS_SYSTEM_ANR}- repeat:
+    times: ${times}
+    while:
+      notVisible:
+        text: "Connect your gateway."
+    commands:
+${dismissInside}
+      - waitForAnimationToEnd:
+          timeout: ${pollMs}
+${DISMISS_SYSTEM_ANR}- extendedWaitUntil:
+    visible:
+      text: "Connect your gateway."
+    timeout: ${pollMs}
+`;
+}
+
+/**
  * Tap an animated React Native control without treating its press animation as
- * proof that navigation happened.
- *
- * Maestro's built-in retry covers a completely unchanged hierarchy. A
- * Pressable scale animation changes that hierarchy even when iOS ignores the
- * accessibility action, so retry a bounded two more times only while the
- * source control remains visible. Callers must still assert a destination
- * marker after this snippet; these retries never turn a missing navigation
- * into a pass.
+ * proof that navigation happened. Callers must still assert the destination.
  */
 export function retryableTapCommands(selector, sourceSelector = selector) {
   const conditionalRetry = `- runFlow:
@@ -45,4 +70,164 @@ export function retryableTapCommands(selector, sourceSelector = selector) {
     retryTapIfNoChange: true
 ${conditionalRetry}
 ${conditionalRetry}`;
+}
+
+/**
+ * Open the scan-first paste path by testID and wait for the native field.
+ * Text/lede matches can complete without flipping the React state on iOS.
+ */
+export function openPastePathCommands() {
+  return `# Text taps can complete while the hierarchy settles without opening paste.
+- tapOn:
+    id: "onboarding-paste"
+    retryTapIfNoChange: true
+- repeat:
+    times: 6
+    while:
+      visible:
+        id: "onboarding-paste"
+    commands:
+      - tapOn:
+          id: "onboarding-paste"
+          retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 1000
+- extendedWaitUntil:
+    visible:
+      id: "pairing-code-input"
+    timeout: 15000
+`;
+}
+
+/**
+ * Enter the live pairing ticket, submit it, and recover once if the native
+ * field accepted the text without React receiving the update. The final wait
+ * is intentionally broad: it accepts either profile, Done, Home, or a real
+ * pairing error so a bad path fails at the point of cause.
+ */
+export function pasteAndConnectPairingTicketCommands(
+  homeReadyMarker,
+  dismissKeyboardOnboarding = DISMISS_KEYBOARD_ONBOARDING
+) {
+  const progressOrError =
+    "Connecting.?|Who.?s using.*|Enter Centraid|" +
+    homeReadyMarker +
+    "|Paste a pairing ticket first.?|not a Centraid pairing|expired|Could not reach";
+  const remountBody = [
+    `- tapOn:`,
+    `    id: "onboarding-scan-instead"`,
+    `    retryTapIfNoChange: true`,
+    ...openPastePathCommands()
+      .split("\n")
+      .filter((line) => line.length > 0),
+    `- tapOn:`,
+    `    id: "pairing-code-input"`,
+    `# e2e-lint-allow: unasserted-input — retype after remount; redemption is the check.`,
+    `- inputText: \${MAESTRO_PAIRING_TICKET}`,
+    `- hideKeyboard`,
+    `- waitForAnimationToEnd:`,
+    `    timeout: 2000`,
+    `- scrollUntilVisible:`,
+    `      element:`,
+    `        id: "onboarding-connect"`,
+    `      direction: DOWN`,
+    `      visibilityPercentage: 100`,
+    `- tapOn:`,
+    `    id: "onboarding-connect"`,
+    `    retryTapIfNoChange: true`,
+    `- waitForAnimationToEnd:`,
+    `    timeout: 3000`,
+  ]
+    .map((line) => `            ${line}`)
+    .join("\n");
+
+  return `${openPastePathCommands()}# Focus the pairing TextInput by testID.
+- tapOn:
+    id: "pairing-code-input"
+# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
+# onboarding and is erased before the pairing ticket is entered.
+- inputText: "x"
+${dismissKeyboardOnboarding}- eraseText: 50
+# e2e-lint-allow: unasserted-input — successful redemption below is the check.
+- inputText: \${MAESTRO_PAIRING_TICKET}
+- hideKeyboard
+- waitForAnimationToEnd:
+    timeout: 2000
+# A long ticket can push Connect below the viewport; scroll it fully into view.
+- scrollUntilVisible:
+    element:
+      id: "onboarding-connect"
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: "onboarding-connect"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd:
+    timeout: 3000
+# If the native field is still idle, remount the paste field and re-drive it.
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-scan-instead"
+    commands:
+      - runFlow:
+          when:
+            notVisible: "${progressOrError}"
+          commands:
+${remountBody}
+- extendedWaitUntil:
+    visible: "Who.?s using.*|Enter Centraid|${homeReadyMarker}|not a Centraid pairing|expired|Could not reach|Paste a pairing ticket first.?"
+    timeout: 180000
+`;
+}
+
+/**
+ * Finish the profile/Done steps, then give the shell capability probe time to
+ * reach Home. Retry is sparse because the in-product probe itself takes about
+ * 18 seconds; remounting on every wall flicker starves that probe forever.
+ */
+export function completeOnboardingCommands(homeReadyMarker) {
+  const enterCentraid = retryableTapCommands("Enter Centraid")
+    .split("\n")
+    .map((line) => (line ? `      ${line}` : line))
+    .join("\n");
+  return `- runFlow:
+    when:
+      visible: "Who.?s using.*"
+    commands:
+      - tapOn: "Your name"
+# e2e-lint-allow: unasserted-input — the personalized Done heading proves the
+# profile submission end to end.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Enter Centraid"
+    commands:
+${enterCentraid}
+- extendedWaitUntil:
+    visible: "${homeReadyMarker}"
+    timeout: 25000
+    optional: true
+- repeat:
+    times: 8
+    while:
+      notVisible: "${homeReadyMarker}"
+    commands:
+      - runFlow:
+          when:
+            visible: "Reconnect once"
+          commands:
+            - tapOn:
+                id: "replica-compatibility-retry"
+                retryTapIfNoChange: true
+            - extendedWaitUntil:
+                visible: "${homeReadyMarker}"
+                timeout: 25000
+                optional: true
+- extendedWaitUntil:
+    visible: "${homeReadyMarker}"
+    timeout: 60000
+`;
 }

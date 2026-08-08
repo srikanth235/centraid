@@ -146,7 +146,11 @@ jobs:
     # JSI xcframework step exits 65 with an empty "Could not resolve package
     # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    timeout-minutes: 60
+    # Native build + the serialized mobile journeys can exceed one hour on a
+    # cold macOS runner. Keep the outer cap above the suite's own evidence and
+    # flow budgets so Actions does not cancel a healthy run before artifacts
+    # flush; this is the backstop used by the recovered #676 lane.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup

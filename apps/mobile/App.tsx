@@ -314,13 +314,17 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
 }
 
 function ReplicaCompatibilityGate({
+  active,
   children,
 }: {
+  // Pairing must be allowed to finish before the post-onboarding shell can
+  // cover the screen with a compatibility wall.
+  active: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { compatibility, refresh } = useReplica();
-  if (!compatibility) return <>{children}</>;
+  if (!active || !compatibility) return <>{children}</>;
   const copy = MOBILE_COMPATIBILITY_WALL_COPY[compatibility];
   return (
     <SafeAreaView
@@ -362,6 +366,8 @@ function ReplicaCompatibilityGate({
           {copy.body}
         </Text>
         <Pressable
+          testID="replica-compatibility-retry"
+          accessibilityLabel="Retry connection"
           accessibilityRole="button"
           onPress={() => void refresh?.()}
           style={{
@@ -462,7 +468,7 @@ export default function App(): React.JSX.Element | null {
             >
               <AppLockProvider>
                 <ReplicaProvider>
-                  <ReplicaCompatibilityGate>
+                  <ReplicaCompatibilityGate active={onboarded === true}>
                     <UploadReconciliation />
                     <ShareIntentIngest />
                     <NotificationCoordinator />

@@ -25,8 +25,9 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  DISMISS_KEYBOARD_ONBOARDING,
-  retryableTapCommands,
+  completeOnboardingCommands,
+  pasteAndConnectPairingTicketCommands,
+  waitForOnboardingConnectCommands,
 } from "./first-run.mjs";
 import {
   METRO_ORIGIN,
@@ -465,92 +466,45 @@ export async function runFlow(slug, fn) {
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
-    const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
-
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // a named roster member goes straight to Done, while an unnamed member is
-    // asked for a profile. The gateway URL is used only by the host-side
-    // harness to mint that ticket; the phone reaches the gateway through the
-    // ticket's iroh endpoint.
-    await ctx.run(
-      `appId: ${state.appId}
+    // A cold iOS simulator can lose the first iroh redemption after the
+    // onboarding UI has rendered. Each retry mints a fresh one-time ticket and
+    // clears app state, so a failed redemption cannot poison the next attempt.
+    const maxPairingAttempts = process.env.MAESTRO_PLATFORM === "ios" ? 2 : 1;
+    const pairAttempt = async (attempt) => {
+      try {
+        const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      text: "Connect your gateway."
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Can't scan? Paste a code instead"
-- extendedWaitUntil:
-    visible: "Paste the one-line ticket"
-    timeout: 10000
-- tapOn: "Paste the one-line ticket"
-# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
-# onboarding and is erased before the pairing ticket is entered.
-- inputText: "x"
-${DISMISS_KEYBOARD_ONBOARDING}- eraseText
-# e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
-# long React Native TextInput values; successful redemption below is the
-# end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
-# resolved by Maestro without persisting the live capability in this YAML.
-- inputText: \${MAESTRO_PAIRING_TICKET}
-- hideKeyboard
-# The ticket is deliberately a one-line field, so its stable native Pressable
-# remains in the viewport even while the iOS keyboard is still visible.
-- tapOn:
-    id: "onboarding-connect"
-# Redemption dials the gateway over iroh; on a cold simulator that handshake is
-# the slowest step in the journey, so budget for the network, not the render.
-- extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
-    timeout: 90000
-`,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
+${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
+          "configure-gateway",
+          {
+            maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+            sensitive: true,
+          }
+        );
 
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
-    // Tickets minted above deliberately name their member "Mobile E2E …", so
-    // the normal branch skips the form and greets "Mobile"; the conditional
-    // form path remains covered for gateways that return no roster name.
-    await ctx.run(
-      `appId: ${state.appId}
+        // Keep the ticket out of retained diagnostics while proving both
+        // legitimate identity paths and waiting for the shell capability wall
+        // to settle before downstream journeys start.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
-- runFlow:
-    when:
-      visible: "Who's using this phone[?]"
-    commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
-      - inputText: "Nightly"
-      - hideKeyboard
-      - tapOn: "Continue"
-- extendedWaitUntil:
-    visible: "You're all set, (Nightly|Mobile)[.]"
-    timeout: 60000
-# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
-# The button's press animation changes the hierarchy even if navigation was
-# ignored, so retry only while the source control remains visible. The Home
-# marker below remains mandatory and prevents a vacuous pass.
-${retryableTapCommands("Enter Centraid")}
-# The rail remains visible while Home loads, and the async Daily Brief can move
-# every tile when it arrives. Wait for its explicit settled accessibility label
-# so the next tap never uses coordinates captured before that layout shift.
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: 30000
-`,
-      "complete-onboarding"
-    );
-    ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+${completeOnboardingCommands(HOME_READY_MARKER)}`,
+          "complete-onboarding"
+        );
+        ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+      } catch (error) {
+        if (attempt === maxPairingAttempts) throw error;
+        ctx.note(
+          `iOS pairing attempt ${attempt} did not complete; retrying with a fresh ticket`
+        );
+        await pairAttempt(attempt + 1);
+      }
+    };
+    await pairAttempt(1);
   };
 
   /**

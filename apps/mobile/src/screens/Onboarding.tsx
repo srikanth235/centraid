@@ -182,11 +182,42 @@ function ConnectionStep({
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
-  const [code, setCode] = useState("");
+  // Keep the pairing field uncontrolled. Maestro can populate the native
+  // TextInput without delivering every React onChangeText event, which would
+  // otherwise leave the visible ticket and submitted value out of sync.
+  const codeRef = useRef("");
+  const codeInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
+
+  const rememberCode = (text: string): void => {
+    codeRef.current = text;
+  };
+
+  const openPaste = (): void => {
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(true);
+  };
+
+  const closePaste = (): void => {
+    if (pairing) return;
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(false);
+  };
+
+  const submitPaste = (): void => {
+    if (pairing) return;
+    if (codeRef.current.trim()) {
+      submit(codeRef.current);
+      return;
+    }
+    codeInputRef.current?.blur();
+    requestAnimationFrame(() => submit(codeRef.current));
+  };
 
   /**
    * Open the scanner, asking for the camera if we may. Resolving permission
@@ -214,7 +245,11 @@ function ConnectionStep({
   };
 
   const submit = (payload: string): void => {
-    if (scannedRef.current || !payload.trim()) return;
+    if (scannedRef.current) return;
+    if (!payload.trim()) {
+      setError("Paste a pairing ticket first.");
+      return;
+    }
     scannedRef.current = true;
     setScanning(false);
     setPairing(true);
@@ -256,7 +291,12 @@ function ConnectionStep({
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
-        <Pressable onPress={() => setScanning(false)} style={styles.textBtn}>
+        <Pressable
+          accessibilityLabel="Cancel"
+          accessibilityRole="button"
+          onPress={() => setScanning(false)}
+          style={styles.textBtn}
+        >
           <Text style={styles.textBtnLabel}>Cancel</Text>
         </Pressable>
       </View>
@@ -293,8 +333,13 @@ function ConnectionStep({
         <>
           <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
           <TextInput
-            value={code}
-            onChangeText={setCode}
+            ref={codeInputRef}
+            testID="pairing-code-input"
+            accessibilityLabel="Paste the one-line ticket"
+            defaultValue=""
+            onChangeText={rememberCode}
+            onChange={(event) => rememberCode(event.nativeEvent.text)}
+            onEndEditing={(event) => rememberCode(event.nativeEvent.text)}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
             style={styles.phrase}
@@ -326,10 +371,13 @@ function ConnectionStep({
               // never fired submit — ticket stayed on screen for the full wait).
               testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
-              onPress={() => (pairing ? undefined : submit(code))}
+              onPress={submitPaste}
             />
             <Pressable
-              onPress={() => (pairing ? undefined : setShowPaste(false))}
+              testID="onboarding-scan-instead"
+              accessibilityLabel="Scan the QR code instead"
+              accessibilityRole="button"
+              onPress={closePaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>Scan the QR code instead</Text>
@@ -352,7 +400,10 @@ function ConnectionStep({
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => setShowPaste(true)}
+              testID="onboarding-paste"
+              accessibilityLabel="Can't scan? Paste a code instead"
+              accessibilityRole="button"
+              onPress={openPaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>
