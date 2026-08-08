@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AgentCapturePreview } from "@centraid/app-engine";
 
-import type { OcrExtraction } from "../capture/tesseract-ocr.js";
+import type { OcrExtraction } from "../capture/capture-ocr.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import { readBody, readJson, sendJson } from "./route-helpers.js";
 
@@ -12,7 +12,7 @@ const MAX_OCR_BYTES = 25 * 1024 * 1024;
 
 export interface CaptureRouteOptions {
   classify: (text: string) => Promise<AgentCapturePreview | undefined>;
-  recognizeOcr?: (input: Buffer) => Promise<OcrExtraction>;
+  recognizeOcr?: (input: Buffer, mediaType: string) => Promise<OcrExtraction>;
 }
 
 /** Agent fallback for ambiguous quick-capture text; deterministic cases stay local. */
@@ -34,11 +34,13 @@ export function makeCaptureRouteHandler(
     if (url.pathname === CAPTURE_OCR_PATH) {
       if (!options.recognizeOcr)
         return sendJson(res, 503, { error: "ocr_unavailable" });
-      if (!String(req.headers["content-type"] ?? "").startsWith("image/"))
+      const mediaType = String(req.headers["content-type"] ?? "");
+      if (!mediaType.startsWith("image/"))
         return sendJson(res, 415, { error: "image_required" });
       try {
         const result = await options.recognizeOcr(
-          await readBody(req, MAX_OCR_BYTES)
+          await readBody(req, MAX_OCR_BYTES),
+          mediaType
         );
         return sendJson(res, 200, { extraction: result });
       } catch (error) {

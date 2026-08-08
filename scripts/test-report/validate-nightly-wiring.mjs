@@ -12,6 +12,10 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "../..");
 const e2ePath = path.join(root, ".github/workflows/e2e.yml");
 const removedPath = path.join(root, ".github/workflows/pairing-relay-e2e.yml");
+const enrichmentLivePath = path.join(
+  root,
+  ".github/workflows/enrichment-live-weekly.yml"
+);
 
 const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
@@ -132,6 +136,39 @@ for (const ban of shellBans) {
       `e2e.yml must not retain cross-workflow pairing fetch (${ban})`
     );
   }
+}
+
+// #725 — real model weights are deliberately weekly/manual, but their latest
+// artifact must be restored into the health report and failures must page via
+// the same deduplicating issue helper as the existing weekly lanes.
+const enrichmentLive = await readFile(enrichmentLivePath, "utf8").catch(
+  () => ""
+);
+for (const required of [
+  "schedule:",
+  "workflow_dispatch:",
+  "tools/enrichment-service/models.lock.json",
+  "bun run --cwd tools/enrichment-service setup",
+  "bun run test:enrich:live",
+  "artifacts/enrichment-live/",
+  "scripts/ci/file-tracking-issue.mjs",
+  "[enrichment-live] real-model goldens red",
+  "within 24 hours or before the next scheduled run",
+  "eight-day freshness window",
+]) {
+  if (!enrichmentLive.includes(required))
+    errors.push(`enrichment-live-weekly.yml missing ${required}`);
+}
+for (const required of [
+  "Restore latest weekly real-model evidence",
+  [
+    "restore-keys: enrichment-live-",
+    String.fromCharCode(36),
+    "{{ runner.os }}-",
+  ].join(""),
+]) {
+  if (!e2eCode.includes(required))
+    errors.push(`e2e.yml report job missing ${required}`);
 }
 
 try {

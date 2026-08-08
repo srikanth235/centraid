@@ -76,7 +76,7 @@ For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data 
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it from desktop Household → Devices with a one-time ticket or QR.
 
-Optional device-local transcription: run an OpenAI-compatible file-ASR service such as whisper.cpp on the desktop and set `CENTRAID_DEVICE_ASR_URL` to its loopback `/v1/audio/transcriptions` endpoint. `CENTRAID_DEVICE_ASR_TOKEN` and `CENTRAID_DEVICE_ASR_MODEL` are optional. Centraid advertises the transcript work capability only while that loopback adapter answers; media and credentials stay in the Electron main process.
+Optional model capabilities: run the reference enrichment service (`tools/enrichment-service`, after `bun run setup`) and point the gateway at its loopback URL with `CENTRAID_ENRICH_URL`. If transcript support is needed, configure the service's `ENRICH_SERVICE_TRANSCRIPT_URL` to an OpenAI-compatible whisper endpoint; the gateway has no desktop-local ASR adapter.
 
 The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. A standalone gateway can also serve the PWA as a same-host web origin; remote gateway connections remain ticket-only Iroh. Generated apps receive separate, single-app sessions and cannot call shell/admin routes.
 

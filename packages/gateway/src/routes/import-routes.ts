@@ -15,7 +15,11 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { importPortableVault, writeZipEntries } from "@centraid/vault";
+import {
+  importPortableVault,
+  isMediaPath,
+  writeZipEntries,
+} from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
@@ -31,8 +35,18 @@ const TARGET_FIELDS: Readonly<Record<string, string>> = {
   "core.transaction": "Finance transaction",
   "knowledge.note": "Note + notebook path",
   "locker.item": "Locker login",
+  "media.media_asset": "Photo or video + capture time, place, album",
   "social.message": "Message + attachments",
 };
+
+/**
+ * Which base64 bodies are BINARY (issue #721). A zip always was; a dropped
+ * photo or video is too, and forcing it through the UTF-8 decode below would
+ * refuse every JPEG on the grounds that it is not text.
+ */
+function isBinaryUpload(filename: string): boolean {
+  return filename.toLowerCase().endsWith(".zip") || isMediaPath(filename);
+}
 
 function decodeImportBody(
   body: Record<string, unknown>,
@@ -56,7 +70,7 @@ function decodeImportBody(
     throw new Error("base64 is malformed");
   }
   const data = Buffer.from(compact, "base64");
-  if (!filename.toLowerCase().endsWith(".zip")) {
+  if (!isBinaryUpload(filename)) {
     if (
       (data[0] === 0xff && data[1] === 0xfe) ||
       (data[0] === 0xfe && data[1] === 0xff)
@@ -148,6 +162,12 @@ export function makeImportRouteHandler(
             : {}),
           ...(typeof body.currency === "string"
             ? { currency: body.currency }
+            : {}),
+          // Live Photo pairing for a single dropped photo/video (issue #724
+          // A2) — see `StageFileOptions.captureGroupId`. Absent for anything
+          // that is not the mobile camera-roll importer's own convention.
+          ...(typeof body.captureGroupId === "string"
+            ? { captureGroupId: body.captureGroupId }
             : {}),
         });
         return sendJson(res, 200, result);

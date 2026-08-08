@@ -118,3 +118,73 @@ describe("the Library header menu's model has no Sort section", () => {
     }
   });
 });
+
+describe("the Library header menu's Detect faces row (issue #724 W5)", () => {
+  function row(groups: ReturnType<typeof libraryMenuGroups>) {
+    const found = groups
+      .flatMap((group) => group.rows)
+      .find((candidate) => candidate.key === "detect-faces");
+    if (found && !("onSelect" in found))
+      throw new Error("detect-faces must be an action row, never a submenu");
+    return found;
+  }
+
+  it("is absent when the caller offers no handler — a row with nothing behind it is left out", () => {
+    expect(row(libraryMenuGroups(baseInput({ grain: "all" })))).toBeUndefined();
+  });
+
+  it("is offered plainly when the library's enrichment may run on the gateway", () => {
+    const onDetectFaces = vi.fn<() => void>();
+    const found = row(
+      libraryMenuGroups(
+        baseInput({
+          grain: "all",
+          detectFaces: { availability: { available: true }, onDetectFaces },
+        })
+      )
+    );
+    expect(found).toMatchObject({ label: "Detect faces", disabled: false });
+    found!.onSelect!();
+    // The row OPENS the question. That the handler is the consent gate rather
+    // than the enrichment write is the consumer's contract; what this model
+    // guarantees is that it fires the caller's handler and nothing else.
+    expect(onDetectFaces).toHaveBeenCalledOnce();
+  });
+
+  it("says WHY it cannot run rather than sitting there silently disabled", () => {
+    const found = row(
+      libraryMenuGroups(
+        baseInput({
+          grain: "all",
+          detectFaces: {
+            availability: {
+              available: false,
+              reason: "Enrichment is switched off for photographs.",
+            },
+            onDetectFaces: vi.fn<() => void>(),
+          },
+        })
+      )
+    );
+    expect(found).toMatchObject({
+      disabled: true,
+      label: "Detect faces — Enrichment is switched off for photographs.",
+    });
+  });
+
+  it("sits in its own group, above the view options — it is an act, not a preference", () => {
+    const groups = libraryMenuGroups(
+      baseInput({
+        grain: "all",
+        detectFaces: {
+          availability: { available: true },
+          onDetectFaces: vi.fn<() => void>(),
+        },
+      })
+    );
+    expect(groups.map((group) => group.key)).toStrictEqual([
+      "enrichment",
+      "library",
+    ]);
+  });
+});

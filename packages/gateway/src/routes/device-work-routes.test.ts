@@ -36,15 +36,21 @@ describe("device-work-routes", () => {
   });
 
   async function fixture(
-    options: { capability?: "poster" | "transcript" } = {}
+    options: { capability?: "poster" | "pdfText" } = {}
   ): Promise<{
     base: string;
     vaultId: string;
     deviceKey: string;
     contribute: () => Promise<Response>;
-    searchContentIds: (query: string) => string[];
+    derivativeText: (variant: string) => string | null;
   }> {
     const capability = options.capability ?? "poster";
+    // The two rungs the DEVICE lane still leases after issue #724's split: a
+    // poster frame off a video, and text out of a PDF. Both are format
+    // conversion, which is why they stayed on the device.
+    const variant = capability === "poster" ? "poster" : "text";
+    const sourceMediaType =
+      capability === "poster" ? "video/mp4" : "application/pdf";
     const dir = await tempDir(`device-work-${crypto.randomUUID()}-`);
     cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
     const plane = openVaultPlane({
@@ -70,7 +76,7 @@ describe("device-work-routes", () => {
         pdfText: true,
         ocr: false,
         embedding: false,
-        transcript: capability === "transcript",
+        transcript: false,
         edgeSeal: true,
         backgroundTransfer: false,
       },
@@ -80,9 +86,9 @@ describe("device-work-routes", () => {
       .prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('content-1', 'video/mp4', 'blob:video', ?, 10, '2026-07-15T00:00:00.000Z')`
+       VALUES ('content-1', ?, 'blob:source', ?, 10, '2026-07-15T00:00:00.000Z')`
       )
-      .run(sourceSha);
+      .run(sourceMediaType, sourceSha);
     queueDeviceEnrichmentRequest(plane.db.vault, {
       requestId: `${capability}-job`,
       entityType: "core.content_item",
@@ -90,10 +96,10 @@ describe("device-work-routes", () => {
       detail: JSON.stringify({
         contentId: "content-1",
         sha256: sourceSha,
-        mediaType: "video/mp4",
+        mediaType: sourceMediaType,
       }),
       capability,
-      contributionVariant: capability,
+      contributionVariant: variant,
     });
     const vaults = {
       get: (id: string) => (id === vaultId ? plane : undefined),
@@ -125,7 +131,7 @@ describe("device-work-routes", () => {
       deviceKey,
       contribute: () =>
         fetch(
-          `${base}/centraid/_vault/blobs?variant=${capability}&variant_of=${sourceSha}&media_type=${capability === "poster" ? "image/png" : "text/plain"}`,
+          `${base}/centraid/_vault/blobs?variant=${variant}&variant_of=${sourceSha}&media_type=${capability === "poster" ? "image/png" : "text/plain"}`,
           {
             method: "POST",
             headers: {
@@ -138,14 +144,15 @@ describe("device-work-routes", () => {
                 : "the speaker confirms the starlight rendezvous",
           }
         ),
-      searchContentIds: (query) =>
-        plane.gateway
-          .search(plane.ownerCredential, {
-            entity: "core.content_item",
-            query,
-            purpose: "dpv:ServiceProvision",
-          })
-          .rows.map((row) => row.content_id as string),
+      derivativeText: (wanted) =>
+        (
+          plane.db.vault
+            .prepare(
+              `SELECT text_content FROM core_content_derivative
+                WHERE content_id = 'content-1' AND variant = ?`
+            )
+            .get(wanted) as { text_content: string } | undefined
+        )?.text_content ?? null,
     };
   }
 
@@ -250,11 +257,13 @@ describe("device-work-routes", () => {
     ).toBe(2);
   });
 
-  test("simulated speech-capable device contributes a searchable transcript before completion", async () => {
-    const f = await fixture({ capability: "transcript" });
+  test("a device contributing extracted PDF text makes it searchable before completion", async () => {
+    const f = await fixture({ capability: "pdfText" });
     const leased = await post(f.base, "lease", f.deviceKey, {
       vaultId: f.vaultId,
-      capabilities: ["transcript"],
+      // `transcript` is asked for and ignored: it left the device lane in
+      // issue #724, so a client that still advertises it leases only pdfText.
+      capabilities: ["pdfText", "transcript"],
       charging: true,
       unmetered: true,
     });
@@ -263,8 +272,8 @@ describe("device-work-routes", () => {
       lease: { requestId: string; token: string; capability: string };
     };
     expect(lease).toMatchObject({
-      requestId: "transcript-job",
-      capability: "transcript",
+      requestId: "pdfText-job",
+      capability: "pdfText",
     });
 
     expect((await f.contribute()).status).toBe(200);
@@ -275,6 +284,7 @@ describe("device-work-routes", () => {
     });
     expect(completed.status).toBe(200);
     await expect(completed.json()).resolves.toStrictEqual({ completed: true });
-    expect(f.searchContentIds("starlight")).toContain("content-1");
+    // The rung the member actually gets: the PDF's text layer, on the item.
+    expect(f.derivativeText("text")).toContain("starlight");
   });
 });

@@ -23,6 +23,15 @@ export interface DeviceMediaInput {
   capturedAt?: string;
   tzOffsetMin?: number;
   captureGroupId?: string;
+  /**
+   * Edit lineage (issue #711/#724 B1): the asset these bytes were derived
+   * FROM. Set by the phone editor's `Save as a new photograph` commit
+   * (`photo-edit-save.ts`) and forwarded straight through to
+   * `media.add_asset`'s own `source_asset_id` — the vault command, the
+   * `photos / upload` action schema and its handler have carried this field
+   * since issue #711; this producer was the missing link between them.
+   */
+  sourceAssetId?: string;
   width?: number;
   height?: number;
   durationS?: number;
@@ -191,6 +200,9 @@ export async function backupDeviceMedia(
                 : { tz_offset_min: input.tzOffsetMin }),
               ...(input.captureGroupId
                 ? { capture_group_id: input.captureGroupId }
+                : {}),
+              ...(input.sourceAssetId
+                ? { source_asset_id: input.sourceAssetId }
                 : {}),
               ...(input.filename ? { title: input.filename } : {}),
               ...(input.width ? { width: input.width } : {}),

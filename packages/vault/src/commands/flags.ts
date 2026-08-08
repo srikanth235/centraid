@@ -11,6 +11,8 @@
 // (documents, social, media) write through, the way knowledge.ts borrows
 // releaseContentIfUnreferenced from media.ts.
 
+import type { DatabaseSync } from "node:sqlite";
+
 import type { HandlerCtx } from "../gateway/types.js";
 
 // An https URI, not a urn: one — flag SQL fragments interpolate into
@@ -31,14 +33,29 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
+/**
+ * What flagging needs when it runs OUTSIDE the command pipeline (issue #721):
+ * the import spine's publishers hold a raw `DatabaseSync` and a provenance
+ * collector, never a `HandlerCtx`. `actorPartyId` is a thunk on purpose — a
+ * vault with no owner must still be able to CLEAR a flag, so the party is
+ * resolved only on the path that actually writes one.
+ */
+export interface FlagWriteDeps {
+  vault: DatabaseSync;
+  now: string;
+  newId: () => string;
+  wrote: (entityType: string, entityId: string) => void;
+  actorPartyId: () => string;
+}
+
 /** The flags scheme, created on first use. */
-function flagsSchemeId(ctx: HandlerCtx): string {
-  const existing = ctx.db
+function flagsSchemeIdTx(deps: FlagWriteDeps): string {
+  const existing = deps.vault
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
     .get(FLAGS_SCHEME_URI) as { scheme_id: string } | undefined;
   if (existing) return existing.scheme_id;
-  const schemeId = ctx.newId();
-  ctx.db
+  const schemeId = deps.newId();
+  deps.vault
     .prepare(
       `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
        VALUES (?, ?, 'Flags', 'centraid', '1')`
@@ -48,16 +65,16 @@ function flagsSchemeId(ctx: HandlerCtx): string {
 }
 
 /** The `starred` concept, created on first use. */
-export function starredConceptId(ctx: HandlerCtx): string {
-  const schemeId = flagsSchemeId(ctx);
-  const existing = ctx.db
+function starredConceptIdTx(deps: FlagWriteDeps): string {
+  const schemeId = flagsSchemeIdTx(deps);
+  const existing = deps.vault
     .prepare(
       "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?"
     )
     .get(schemeId, STARRED_NOTATION) as { concept_id: string } | undefined;
   if (existing) return existing.concept_id;
-  const conceptId = ctx.newId();
-  ctx.db
+  const conceptId = deps.newId();
+  deps.vault
     .prepare(
       `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
        VALUES (?, ?, ?, 'Starred', '["Favorite"]', NULL, 'Owner attention: one star across every surface')`
@@ -70,27 +87,49 @@ export function starredConceptId(ctx: HandlerCtx): string {
  * Set or clear the starred flag on a canonical entity. Delete-then-insert:
  * idempotent, and re-starring refreshes who starred and when.
  */
+export function setStarredTx(
+  deps: FlagWriteDeps,
+  targetType: string,
+  targetId: string,
+  starred: boolean
+): void {
+  const conceptId = starredConceptIdTx(deps);
+  deps.vault
+    .prepare(
+      "DELETE FROM core_tag WHERE target_type = ? AND target_id = ? AND concept_id = ?"
+    )
+    .run(targetType, targetId, conceptId);
+  if (!starred) return;
+  const tagId = deps.newId();
+  deps.vault
+    .prepare(
+      `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
+       VALUES (?, ?, ?, ?, ?, NULL, ?)`
+    )
+    .run(tagId, targetType, targetId, conceptId, deps.actorPartyId(), deps.now);
+  deps.wrote("core.tag", tagId);
+}
+
+function flagDepsOf(ctx: HandlerCtx): FlagWriteDeps {
+  return {
+    vault: ctx.db,
+    now: ctx.now,
+    newId: () => ctx.newId(),
+    wrote: (entityType, entityId) => {
+      ctx.wrote(entityType, entityId);
+    },
+    actorPartyId: () => actorPartyId(ctx),
+  };
+}
+
+/** `setStarredTx` for a command handler. */
 export function setStarred(
   ctx: HandlerCtx,
   targetType: string,
   targetId: string,
   starred: boolean
 ): void {
-  const conceptId = starredConceptId(ctx);
-  ctx.db
-    .prepare(
-      "DELETE FROM core_tag WHERE target_type = ? AND target_id = ? AND concept_id = ?"
-    )
-    .run(targetType, targetId, conceptId);
-  if (!starred) return;
-  const tagId = ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?)`
-    )
-    .run(tagId, targetType, targetId, conceptId, actorPartyId(ctx), ctx.now);
-  ctx.wrote("core.tag", tagId);
+  setStarredTx(flagDepsOf(ctx), targetType, targetId, starred);
 }
 
 /**

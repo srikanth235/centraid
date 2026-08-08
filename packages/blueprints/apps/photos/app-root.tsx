@@ -542,6 +542,16 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
         const label = shelf.slice(4);
         return assets.filter((a) => a.tags?.some((t) => t.label === label));
       }
+      if (typeof shelf === "string" && shelf.startsWith("memory:")) {
+        const memoryId = shelf.slice("memory:".length);
+        const memberIds = new Set(
+          store
+            .own()
+            .memoryMembers.filter((member) => member.memory_id === memoryId)
+            .map((member) => member.asset_id)
+        );
+        return ownAssets.filter((asset) => memberIds.has(asset.asset_id));
+      }
       // PLACES is one flat list in section order (see `sections()`), so the
       // lightbox steps through it exactly as it is drawn — a viewer that
       // stepped in a different order than the grid would be a second answer to
@@ -573,9 +583,9 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
     function memories(): MemoryCard[] {
       if (rootElRef.current?.dataset.showMemories === "hide") return [];
       return buildMemories({
-        assets,
         ownAssets,
-        albums,
+        memories: store.own().memories,
+        memoryMembers: store.own().memoryMembers,
         onOpen: (id) => navigateTo(id),
       });
     }
@@ -640,6 +650,14 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
       const copy = shelfCopy(shelf);
       const personId = personIdFrom(shelf);
       const person = personId ? people.find(personId) : undefined;
+      const memory =
+        typeof shelf === "string" && shelf.startsWith("memory:")
+          ? store
+              .own()
+              .memories.find(
+                (entry) => entry.memory_id === shelf!.slice("memory:".length)
+              )
+          : undefined;
       const target = photoWriteTarget(
         "new",
         writeScopeFor(prefs.read().vaultsOn),
@@ -672,7 +690,12 @@ export function Root({ rootRef, frame }: InlineAppProps): ReactElement {
             ? "Duplicate review"
             : album
               ? (album.title ?? "Album")
-              : (person?.name ?? (personId ? "Someone" : copy.title)),
+              : (memory?.title_hint ??
+                (memory?.kind === "on-this-day"
+                  ? "On this day"
+                  : memory?.kind === "similar"
+                    ? "Similar photographs"
+                    : (person?.name ?? (personId ? "Someone" : copy.title)))),
         count,
         unit: album || personId ? "photographs" : copy.unit,
         showSelect: allowsSelection(shelf) || Boolean(album),

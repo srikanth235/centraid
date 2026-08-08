@@ -100,6 +100,24 @@ export interface MemoryCard {
   onOpen: () => void;
 }
 
+/** Vault-derived memory projection rows; clients render but never recompute. */
+export interface MemoryRow {
+  memory_id: string;
+  kind: "on-this-day" | "trip" | "similar";
+  title_hint?: string | null;
+  day_key?: string | null;
+  place_id?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  computed_at?: string | null;
+}
+
+export interface MemoryMemberRow {
+  memory_id: string;
+  asset_id: string;
+  ordinal: number;
+}
+
 /** One row of the lightbox Details grid (format.js `exifRows`). */
 export interface ExifRow {
   label: string;
@@ -125,6 +143,8 @@ export interface LibraryData {
   albums?: Album[];
   places?: Place[];
   trash?: Asset[];
+  memories?: MemoryRow[];
+  memoryMembers?: MemoryMemberRow[];
   truncated?: boolean;
   /** The page's oldest `taken_at` — the next `before` cursor (issue #599). */
   tail?: string | null;

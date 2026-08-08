@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
+import SelectChip from "../../kit/components/SelectChip";
 import { resolveTheme } from "../../kit/theme";
 import CollectionShelfBody from "./CollectionShelfBody";
 import PhotoAccessPanel from "./PhotoAccessPanel";
@@ -17,7 +18,6 @@ import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import PhotosHome from "./PhotosHome";
 import PhotosSearchEmptyState from "./PhotosSearchEmptyState";
 import PhotosSearchRestingState from "./PhotosSearchRestingState";
-import PhotosSelectChip from "./PhotosSelectChip";
 import ScrubRail from "./ScrubRail";
 import TimelineGrainControl from "./TimelineGrainControl";
 
@@ -377,11 +377,8 @@ describe("Photos native component coverage", () => {
   });
 
   it("publishes Select as a worded button with honest disabled state", () => {
-    const onPress =
-      vi.fn<React.ComponentProps<typeof PhotosSelectChip>["onPress"]>();
-    const screen = render(
-      <PhotosSelectChip disabled={false} onPress={onPress} />
-    );
+    const onPress = vi.fn<React.ComponentProps<typeof SelectChip>["onPress"]>();
+    const screen = render(<SelectChip disabled={false} onPress={onPress} />);
     const chip = screen.getByRole("button", { name: "Select" });
     expect(chip.props).toMatchObject({
       accessibilityState: { disabled: false },
@@ -389,7 +386,7 @@ describe("Photos native component coverage", () => {
     expect(screen.getByText("Select")).toBeTruthy();
     fireEvent.press(chip);
     expect(onPress).toHaveBeenCalledOnce();
-    screen.rerender(<PhotosSelectChip disabled onPress={onPress} />);
+    screen.rerender(<SelectChip disabled onPress={onPress} />);
     expect(screen.getByRole("button", { name: "Select" }).props).toMatchObject({
       accessibilityState: { disabled: true },
     });

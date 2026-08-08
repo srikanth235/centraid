@@ -46,7 +46,11 @@ type ConsentGateModule = typeof import("../../kit/components/ConsentGate");
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  colors: { text: "#mock-text", textFaint: "#mock-text-faint" },
+  colors: {
+    line: "#mock-line",
+    text: "#mock-text",
+    textFaint: "#mock-text-faint",
+  },
   postStatus: vi.fn<(message: string) => void>(),
   // `enrich.policy`'s photos row — `device` so the gate's on-device answer is
   // offered by default; individual tests override this array's contents.
@@ -65,12 +69,14 @@ const mocks = vi.hoisted(() => ({
     {
       region_id: "f1",
       asset_id: "a1",
+      party_id: "p1",
       confirmed_by_party_id: "p1",
       review_state: "confirmed",
     },
     {
       region_id: "f2",
       asset_id: "a2",
+      party_id: "p2",
       confirmed_by_party_id: "p2",
       review_state: "confirmed",
     },
@@ -96,6 +102,10 @@ const mocks = vi.hoisted(() => ({
       confirmed_by_party_id: undefined,
       review_state: "dismissed",
     },
+  ],
+  clusters: [
+    { region_id: "f3", cluster_id: "cluster-1" },
+    { region_id: "f4", cluster_id: "cluster-1" },
   ],
   parties: [{ party_id: "p1", display_name: "Ana" }, { party_id: "p2" }],
 }));
@@ -186,9 +196,11 @@ vi.mock(
         rows:
           query.entity === "media.face_region"
             ? mocks.faces
-            : query.entity === "core.party"
-              ? mocks.parties
-              : mocks.policies,
+            : query.entity === "media.face_cluster"
+              ? mocks.clusters
+              : query.entity === "core.party"
+                ? mocks.parties
+                : mocks.policies,
       }),
     }) as unknown as Partial<UseReplicaQueryModule>
 );
@@ -334,6 +346,17 @@ describe("the people roster's grid and card behaviour", () => {
     expect(container!.textContent).toContain(
       "2 faces are not matched to anyone. Face review proposes them one at a time, and nothing is named until you name it."
     );
+  });
+
+  it("renders clustered proposals as unnamed groups and opens Face review", () => {
+    renderView();
+    const group = Array.from(container!.querySelectorAll("button")).find(
+      (button) =>
+        button.getAttribute("aria-label") === "Unnamed group, 2 photographs"
+    );
+    expect(group).toBeTruthy();
+    act(() => group!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(navigate).toHaveBeenCalledWith("FaceReview");
   });
 });
 

@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#712 shared-engines manifest classification rebase: the governed automation manifest changed with the enrich lane rename (off|device|gateway axis, C5); the reviewed fingerprint is intentionally updated.",
+  "approvedDeviation": "#724 enrichment service: quality-knob and classification fingerprints re-pinned for issue #724 — the schema gained enrich_derivation, media_face_cluster, media_memory, and media_memory_member, and tests/matrix.json gains the memories scale rig alongside #721's photos.scale-50k flow. No budget was widened and no gate was removed; reviewed with the umbrella receipt.",
   "matrixGovernanceFingerprint": "8a83d43679ec6c4dc88d0ac13fe5b76e938b24f0301595e67db8b063aaa4545a",
   "fingerprints": {
     "packages/agent-runtime/src/backends/acp/vault-mcp-server.ts": "e3db462d8e9ea69238ef35b240d45239afd5354530adb5c286f8e98945ce29bb",
     "packages/automation/src/manifest/manifest.ts": "78dffb03838e8c84f93a092d6cce473f2a3b58238ad0cc619c4d92ebf98a456d",
-    "packages/gateway/src/routes/route-security.ts": "26008724a88da1af21fa416f8b4fc0e62d196fddd6d9618e295b4ab8743e8cb3",
+    "packages/gateway/src/routes/route-security.ts": "77f0b7d1bd286b21fead527bd502995c00d3b71656de0b2597d2785764a18173",
     "packages/gateway/src/serve/health-registry.ts": "3c910652729684b84809cd486888151a86139205d07e146a44c2450154081430",
     "packages/vault/src/schema/sealed.ts": "064b112ba05240dbac2a1360f0f5b79b452273577e1ddf7844e2a23a27551248",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "24f08bff0400004218516abc64040878b9dc5a88342e5e0f250a8b56f20beac6"
+    "tests/matrix.json": "b57ea9262c6d1c95d317e967a63184c894ffdaa49182e7dcbcb13dae0d5e8aff"
   }
 }

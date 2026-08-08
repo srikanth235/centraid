@@ -39,9 +39,12 @@ describe("parseUnifiedDiffAddedLines", () => {
 });
 
 describe("isInstrumentableSource", () => {
-  test("accepts package/app and blueprint runtime source, rejects tests and docs", () => {
+  test("accepts package/app/tool and blueprint runtime source, rejects tests and docs", () => {
     expect(isInstrumentableSource("packages/vault/src/foo.ts")).toBe(true);
     expect(isInstrumentableSource("apps/web/src/main.tsx")).toBe(true);
+    expect(
+      isInstrumentableSource("tools/enrichment-service/src/server.ts")
+    ).toBe(true);
     expect(
       isInstrumentableSource(
         "packages/blueprints/apps/tasks/handlers/create.ts"

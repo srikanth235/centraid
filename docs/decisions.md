@@ -11,7 +11,7 @@ Full issue: [#468](https://github.com/srikanth235/centraid/issues/468).
 | **H1** | **The gateway runs detached.** The desktop launches it as a child that outlives the app window. The always-on premise is load-bearing for pairing, the browser extension ([#462](https://github.com/srikanth235/centraid/issues/462)), and mobile. H2–H7 are implemented; the in-process path remains only for tests and explicit `CENTRAID_EMBEDDED_GATEWAY=1`. Rationale: [H1 rationale](#h1-detached-gateway). |
 | **C1** | **No fallback paths, confirmed.** Hard capability gating with an "update the host" wall, no degraded modes. With both ends under one maintainer's control and no compatibility promise before 1.0, every fallback branch is code that gets written defensively and reviewed forever. The protocol-contract half (never break parsing) keeps the wall graceful rather than a crash. See [protocol.md](protocol.md). |
 | **Signing** | **Enroll in all three now.** Apple Developer Program for notarization; **Azure Trusted Signing** for Windows rather than an OV/EV certificate (cheaper, faster to obtain, and the key never exists as a file in CI); **Play App Signing** for Android, so Google holds the release key and we hold only a recoverable upload key. Wall-clock lead time — start before pipeline work. Checklist: [enrollment.md](enrollment.md). |
-| **J7** | **Store-only releases, with a dormant hotfix lane.** Install and configure `expo-updates` with `runtimeVersion: { policy: "appVersion" }` and production/development channels, but add **no `eas update` step to CI**. Store releases stay the only routine path. OTA is a configured hotfix lane for one already-shipped version only (`checkAutomatically: "ON_ERROR_RECOVERY"`). |
+| **J7** | **Store-only releases, with a dormant hotfix lane.** Install and configure `expo-updates` with the concrete product `VERSION` as `runtimeVersion` (the equivalent of the managed-workflow `appVersion` policy for this checked-in bare project) and production/development channels, but add **no `eas update` step to CI**. Store releases stay the only routine path. OTA is a configured hotfix lane for one already-shipped version only (`checkAutomatically: "ON_ERROR_RECOVERY"`). |
 
 ## Policy table
 
@@ -351,6 +351,20 @@ Settled in the Photos v4 design session; the full model lives in [blueprint-seat
 | **S7** | **The viewer's info panel sits on paper, not stage ground**, and keeps its Albums row and Activity log — both are honest provenance beyond the prototype. It carries **no destructive control**: `Move to trash` is removed, because the viewer bar already offers it and a second destructive path inside a facts panel is a misfire waiting to happen. |
 | **S8** | **Edit lineage is a real column, not copy.** `source_asset_id` is added to the photos asset record and written by the editor's save path, so "recorded as its source" is true. Weakening honest copy to match a missing field is backwards; the north star tracks lineage too. Pre-1.0 epoch rules (F1) mean no migration burden. |
 | **S9** | **Enrichment consent is per capability.** A consent that names faces must not also enable every other enricher on the queue — a consent that enables more than it names is not consent. The policy is read on the execution path and fails closed. |
+
+## Enrichment service (2026-08-07)
+
+Settled in issue #724, replacing the per-capability mechanisms issue #721 shipped. Full detail in [docs/enrichment-service.md](enrichment-service.md).
+
+| Id | Decision |
+| --- | --- |
+| **724-1** | **Gateway-only ML; E6 (device-side indexing) is dead by decision, not deferred.** Every model-derived capability runs on the gateway's enrichment service; no device advertises or leases ML work. The device lease lane is narrowed to non-ML device-codec work (`poster`, `pdfText`). |
+| **724-2** | **One enrichment service, and the queue is the app API.** A single HTTP seam (`packages/gateway/src/enrich/service-client.ts`) serves embeddings, OCR, faces, and transcripts. Apps never call it directly — they enqueue `enrich_request` rows or read the vault tables a sweep populated, the same posture #721 E2 established for embeddings alone. |
+| **724-3** | **PP-OCR only; no Tesseract.** The reference service's OCR capability is PP-OCRv4 (Apache-2.0), replacing the deleted `CENTRAID_TESSERACT_PATH` spawn path. No second OCR engine is carried. |
+| **724-4** | **No Python in the toolchain.** `tools/enrichment-service` is pure TypeScript on Bun/Node; ONNX Runtime and sharp are the only native dependencies, isolated to a non-workspace `runtime/` directory so a root `bun install` never pulls them in. |
+| **724-5** | **Provenance before producers.** `enrich_derivation` (the model-versioned stamp) shipped as a generic mechanism before faces or OCR needed it, so every capability's backfill answers the same query shape from day one rather than bolting provenance onto embeddings alone. |
+| **724-6** | **Faces carries its own consent posture.** Detection is gated on a `capability='faces'` tag on `enrich_request`, separate from the domain-tier gate (`enrich_policy`) every pixels-only capability answers to alone — a face asserts an identity, and a consent that enables more than it names is not consent (see S9 in Blueprint seats above). `media.forget_person`'s proven delete cascade was a precondition SECURITY.md set before faces could ship at all. |
+| **724-7** | **No-COMPAT deletions.** `CENTRAID_EMBEDDER_PATH`/`_MODEL`, `CENTRAID_TESSERACT_PATH`, and `CENTRAID_DEVICE_ASR_URL`/`_TOKEN`/`_MODEL` are removed outright, with no compatibility shim or migration period — this repo carries no release tags, so every one of these config surfaces has zero released users. |
 
 ## Related docs
 

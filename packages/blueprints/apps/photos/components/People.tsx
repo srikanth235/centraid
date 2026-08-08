@@ -30,7 +30,7 @@
 // of the grid/note — the empty shelf IS the gate's body. `app-root.tsx`
 // decides when that is true (`enrichment-gate.ts`); this component stays a
 // pure view either way, same as `EnrichmentConsent` itself.
-import { faceCropStyle } from "../face-crop.ts";
+import { faceCropStyle } from "../../_shared/face-crop.ts";
 import { mountMedia } from "../media.ts";
 import type { FaceProposal, Person } from "../people.ts";
 import type { Asset } from "../types.ts";

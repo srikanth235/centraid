@@ -1,13 +1,10 @@
 /*
  * docs/blueprint-seats.md "Enrichment doctrine" (issue #712 C5), checked
  * mechanically: a blueprint app or automation reaches a model through
- * exactly TWO roads — `ctx.agent` (the ACP runner registry, dispatcher-gated
- * for provider egress at #567) or the device work-lease lane
- * (`enrich_request.required_capability`). Neither road is a package a
- * blueprint imports; both are handed to handler code through `ctx`/the host.
- * So no blueprint source file may import a third-party inference/provider
- * SDK — doing so would be a THIRD road, invented per-app, invisible to the
- * dispatcher's egress gate and to the enrichment tier gate alike.
+ * through host-owned seams only. Provider model calls use `ctx.agent`; local
+ * model-derived features use the gateway's one enrichment-service client.
+ * A blueprint app, automation, or mobile seat may import neither a provider
+ * SDK nor the enrichment client/service package directly.
  *
  * This is a TRIPWIRE, not a proof (same caveat as
  * `blueprint-seats.test.ts`'s S1/S2/S5 check): it greps import specifiers
@@ -51,6 +48,7 @@ const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 // one check for one rule beats two that drift.
 const EXTRA_ROOTS = [
   path.resolve(PACKAGE_ROOT, "../../apps/mobile/src"),
+  path.resolve(PACKAGE_ROOT, "../automation/src"),
 ] as const;
 
 // Known third-party inference/provider SDK package names (and their scoped
@@ -80,6 +78,12 @@ const PROVIDER_PACKAGES = [
 const IMPORT_SPECIFIER_RE =
   /(?:from\s+|require\(|import\()\s*["'](?<specifier>[^"']+)["']/gu;
 
+const ENRICHMENT_CLIENT_TERMS = [
+  "@centraid/enrichment-service",
+  "CENTRAID_ENRICH_URL",
+  "enrich/service-client",
+] as const;
+
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -105,6 +109,10 @@ function importedProviderPackages(text: string): string[] {
     if (provider) hits.push(specifier);
   }
   return hits;
+}
+
+function enrichmentClientReferences(text: string): string[] {
+  return ENRICHMENT_CLIENT_TERMS.filter((term) => text.includes(term));
 }
 
 const allFiles = [
@@ -157,5 +165,25 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     const text = readFileSync(file, "utf8");
     expect(text).toContain("anthropic/claude-3-5-sonnet");
     expect(importedProviderPackages(text)).toStrictEqual([]);
+  });
+
+  it.each(
+    allFiles
+      .filter((file) => file !== import.meta.filename)
+      .map((file) => [path.relative(PACKAGE_ROOT, file), file] as const)
+  )("%s does not own the enrichment-service client", (_label, file) => {
+    const hits = enrichmentClientReferences(readFileSync(file, "utf8"));
+    expect(
+      hits,
+      `${path.relative(PACKAGE_ROOT, file)} reaches the enrichment service directly; only packages/gateway/src/enrich/service-client.ts may do that`
+    ).toStrictEqual([]);
+  });
+
+  it("[law:enrichment-single-client] SABOTAGE: detects a direct service client", () => {
+    expect(
+      enrichmentClientReferences(
+        'import { createEnrichmentClient } from "@centraid/enrichment-service";'
+      )
+    ).toStrictEqual(["@centraid/enrichment-service"]);
   });
 });

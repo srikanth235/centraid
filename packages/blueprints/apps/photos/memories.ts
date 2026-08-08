@@ -6,7 +6,13 @@
 // minted in one scope means nothing in another, and matching it over the
 // merged list would let a colliding id pull a stranger's photograph into the
 // member's album (issue #599).
-import type { Album, Asset, MemoryCard } from "./types.ts";
+import type {
+  Album,
+  Asset,
+  MemoryCard,
+  MemoryMemberRow,
+  MemoryRow,
+} from "./types.ts";
 
 /** At most six cards — the strip is a head, not a second timeline. */
 const LIMIT = 6;
@@ -39,55 +45,51 @@ export function enrichAlbums(
 }
 
 export function buildMemories({
-  assets,
   ownAssets,
-  albums,
+  memories,
+  memoryMembers,
   onOpen,
 }: {
-  /** The merged, filtered timeline the member is looking at. */
-  assets: readonly Asset[];
-  /** The member's own photographs, for album membership. */
+  /** The member's own photographs, used only to resolve projected members. */
   ownAssets: readonly Asset[];
-  albums: readonly Album[];
+  memories: readonly MemoryRow[];
+  memoryMembers: readonly MemoryMemberRow[];
   onOpen: (shelf: string) => void;
 }): MemoryCard[] {
-  const cards: MemoryCard[] = [];
-  const favorites = assets.filter((a) => a.favorite);
-  if (favorites.length > 0) {
-    const first = favorites[0]!;
-    cards.push({
-      key: "built-in:favorites",
-      title: "Favorites",
-      sub: `${favorites.length} photograph${favorites.length === 1 ? "" : "s"}`,
-      coverUri: first.thumb_uri ?? first.content_uri ?? null,
-      // The cover is one real asset's bytes; the card carries the scope they
-      // must be fetched in (issue #599).
-      coverScopeId: first.scope_id,
-      newestAt: first.taken_at ?? "",
-      onOpen: () => onOpen("built-in:favorites"),
-    });
+  const assetById = new Map(ownAssets.map((asset) => [asset.asset_id, asset]));
+  const membersByMemory = new Map<string, MemoryMemberRow[]>();
+  for (const member of memoryMembers) {
+    const list = membersByMemory.get(member.memory_id);
+    if (list) list.push(member);
+    else membersByMemory.set(member.memory_id, [member]);
   }
-  const albumCards = albums
-    .map((album): MemoryCard | null => {
-      const members = ownAssets.filter((a) =>
-        (a.album_ids ?? []).includes(album.album_id)
-      );
-      if (members.length === 0) return null;
-      const newest = members.reduce(
-        (a, b) => (String(a.taken_at ?? "") > String(b.taken_at ?? "") ? a : b),
-        members[0]!
-      );
+  return memories
+    .map((memory): MemoryCard | null => {
+      const members = [...(membersByMemory.get(memory.memory_id) ?? [])]
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .flatMap((member) => {
+          const asset = assetById.get(member.asset_id);
+          return asset ? [asset] : [];
+        });
+      const cover = members[0];
+      if (!cover) return null;
+      const title =
+        memory.kind === "on-this-day"
+          ? "On this day"
+          : (memory.title_hint ??
+            (memory.kind === "trip" ? "A trip" : "Similar photographs"));
       return {
-        key: album.album_id,
-        title: album.title ?? "Album",
+        key: memory.memory_id,
+        title,
         sub: `${members.length} photograph${members.length === 1 ? "" : "s"}`,
-        coverUri: newest.thumb_uri ?? newest.content_uri ?? null,
-        coverScopeId: newest.scope_id,
-        newestAt: newest.taken_at ?? "",
-        onOpen: () => onOpen(album.album_id),
+        coverUri: cover.thumb_uri ?? cover.content_uri ?? null,
+        coverScopeId: cover.scope_id,
+        newestAt:
+          memory.ended_at ?? memory.started_at ?? memory.computed_at ?? "",
+        onOpen: () => onOpen(`memory:${memory.memory_id}`),
       };
     })
     .filter((c): c is MemoryCard => c !== null)
-    .sort((a, b) => String(b.newestAt).localeCompare(String(a.newestAt)));
-  return [...cards, ...albumCards].slice(0, LIMIT);
+    .sort((a, b) => String(b.newestAt).localeCompare(String(a.newestAt)))
+    .slice(0, LIMIT);
 }

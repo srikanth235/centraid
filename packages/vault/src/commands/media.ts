@@ -13,6 +13,8 @@
 // the owner's way to end that grace window early — see PURGE_ASSET for what
 // it destroys, what it refuses, and why the bytes go to the sweep.
 
+import type { DatabaseSync } from "node:sqlite";
+
 import { validateDerivativeContribution } from "../blob/derivatives.js";
 import {
   MAX_INLINE_DATA_URI_CHARS,
@@ -64,7 +66,33 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-function assetKindFor(mediaType: string): string {
+/**
+ * What a media write needs when it runs OUTSIDE the command pipeline (issue
+ * #721). The import spine's publishers hold a raw `DatabaseSync` and a
+ * provenance collector instead of a `HandlerCtx`, but a photograph arriving
+ * from a Takeout archive must become the SAME row, by the same rules, as one
+ * arriving through `media.add_asset`. So every primitive below takes these
+ * four things; the command handlers pass `ctx`, the publisher passes its own.
+ */
+export interface MediaWriteDeps {
+  vault: DatabaseSync;
+  now: string;
+  newId: () => string;
+  wrote: (entityType: string, entityId: string) => void;
+}
+
+function depsOf(ctx: HandlerCtx): MediaWriteDeps {
+  return {
+    vault: ctx.db,
+    now: ctx.now,
+    newId: () => ctx.newId(),
+    wrote: (entityType, entityId) => {
+      ctx.wrote(entityType, entityId);
+    },
+  };
+}
+
+export function assetKindFor(mediaType: string): string {
   if (mediaType.startsWith("video/")) return "video";
   if (mediaType.startsWith("audio/")) return "audio";
   if (mediaType.startsWith("image/")) return "photo";
@@ -94,10 +122,14 @@ function roundCoord(v: number): number {
  * out of scope here (no network egress from a command handler); the owner or
  * a future enrichment pass may rename it later like any other core.place.
  */
-function findOrCreatePlace(ctx: HandlerCtx, lat: number, lng: number): string {
+export function findOrCreatePlaceTx(
+  deps: MediaWriteDeps,
+  lat: number,
+  lng: number
+): string {
   const rLat = roundCoord(lat);
   const rLng = roundCoord(lng);
-  const existing = ctx.db
+  const existing = deps.vault
     .prepare(
       `SELECT place_id FROM core_place
         WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL
@@ -106,15 +138,122 @@ function findOrCreatePlace(ctx: HandlerCtx, lat: number, lng: number): string {
     )
     .get(rLat, rLng) as { place_id: string } | undefined;
   if (existing) return existing.place_id;
-  const placeId = ctx.newId();
-  ctx.db
+  const placeId = deps.newId();
+  deps.vault
     .prepare(
       `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, geohash, address_json, tz, parent_place_id, created_at)
        VALUES (?, ?, NULL, ?, ?, NULL, NULL, NULL, NULL, ?)`
     )
-    .run(placeId, `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, ctx.now);
-  ctx.wrote("core.place", placeId);
+    .run(placeId, `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, deps.now);
+  deps.wrote("core.place", placeId);
   return placeId;
+}
+
+/**
+ * The columns the spool learned from the bytes, minus the raw text feed —
+ * the camera's testimony, kept whole on the asset row. Shared so an import
+ * and an upload record the same testimony in the same shape.
+ */
+export function exifJsonForMeta(meta: Record<string, unknown>): string | null {
+  const exif = Object.fromEntries(
+    Object.entries(meta).filter(([k, v]) => k !== "text" && v !== undefined)
+  );
+  return Object.keys(exif).length > 0 ? JSON.stringify(exif) : null;
+}
+
+/** One row of `media_media_asset` — the shape both writers fill in. */
+export interface MediaAssetRow {
+  assetId: string;
+  contentId: string;
+  kind: string;
+  capturedAt: string | null;
+  tzOffsetMin: number | null;
+  captureGroupId: string | null;
+  sourceAssetId: string | null;
+  placeId: string | null;
+  width: number | null;
+  height: number | null;
+  durationS: number | null;
+  exifJson: string | null;
+}
+
+/**
+ * The ONE insert into `media_media_asset`. Both doors into the library —
+ * `media.add_asset` and the import spine's publisher — write through here, so
+ * a column added to the table can never land on one path and not the other.
+ */
+export function insertMediaAssetTx(
+  vault: DatabaseSync,
+  row: MediaAssetRow
+): void {
+  vault
+    .prepare(
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
+    )
+    .run(
+      row.assetId,
+      row.contentId,
+      row.kind,
+      row.capturedAt,
+      row.tzOffsetMin,
+      row.captureGroupId,
+      row.sourceAssetId,
+      row.placeId,
+      row.width,
+      row.height,
+      row.durationS,
+      row.exifJson
+    );
+}
+
+/**
+ * `media_media_asset.content_id` is UNIQUE — the same bytes are one asset. If
+ * an asset already owns this content item, adopt it instead of minting a
+ * second: a trashed one comes back to life (re-upload = restore), and a
+ * capture group learned later COALESCE-merges onto it, which is how a Live
+ * Photo whose video half arrives in a second import completes its pair.
+ *
+ * Deliberately does NOT stamp `source_asset_id` (issue #711): these bytes
+ * already ARE that asset, so this call created nothing to have a lineage.
+ * Overwriting an existing asset's provenance from a later arrival would
+ * rewrite history, and the honest record of a dedupe is that it deduped.
+ *
+ * Returns the adopted asset id, or null when these bytes are new here.
+ */
+export function adoptAssetForContentTx(
+  deps: MediaWriteDeps,
+  contentId: string,
+  captureGroupId: string | null
+): string | null {
+  const existing = deps.vault
+    .prepare(
+      "SELECT asset_id, deleted_at, capture_group_id FROM media_media_asset WHERE content_id = ?"
+    )
+    .get(contentId) as
+    | {
+        asset_id: string;
+        deleted_at: string | null;
+        capture_group_id: string | null;
+      }
+    | undefined;
+  if (!existing) return null;
+  if (
+    existing.deleted_at !== null ||
+    (!existing.capture_group_id && captureGroupId)
+  ) {
+    deps.vault
+      .prepare(
+        `UPDATE media_media_asset
+            SET deleted_at = NULL,
+                purge_at = NULL,
+                capture_group_id = COALESCE(capture_group_id, ?)
+          WHERE asset_id = ?`
+      )
+      .run(captureGroupId, existing.asset_id);
+    deps.wrote("media.media_asset", existing.asset_id);
+  }
+  return existing.asset_id;
 }
 
 /**
@@ -350,44 +489,14 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
     : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
   const contentId = minted.contentId;
-  // media_media_asset.content_id is UNIQUE — the same bytes are one asset.
-  // A trashed asset over these bytes comes back to life: re-upload = restore.
-  const existingAsset = ctx.db
-    .prepare(
-      "SELECT asset_id, deleted_at, capture_group_id FROM media_media_asset WHERE content_id = ?"
-    )
-    .get(contentId) as
-    | {
-        asset_id: string;
-        deleted_at: string | null;
-        capture_group_id: string | null;
-      }
-    | undefined;
-  if (existingAsset) {
-    if (
-      existingAsset.deleted_at !== null ||
-      (!existingAsset.capture_group_id && input.capture_group_id)
-    ) {
-      ctx.db
-        .prepare(
-          `UPDATE media_media_asset
-              SET deleted_at = NULL,
-                  purge_at = NULL,
-                  capture_group_id = COALESCE(capture_group_id, ?)
-            WHERE asset_id = ?`
-        )
-        .run(input.capture_group_id ?? null, existingAsset.asset_id);
-      ctx.wrote("media.media_asset", existingAsset.asset_id);
-    }
-    // Deliberately does NOT stamp `source_asset_id` (issue #711): these bytes
-    // already are that asset, so this call created nothing to have a lineage.
-    // Overwriting an existing asset's provenance from a later upload would
-    // rewrite history, and the honest record of a dedupe is that it deduped.
-    return {
-      asset_id: existingAsset.asset_id,
-      content_id: contentId,
-      deduped: 1,
-    };
+  const deps = depsOf(ctx);
+  const adopted = adoptAssetForContentTx(
+    deps,
+    contentId,
+    input.capture_group_id ?? null
+  );
+  if (adopted) {
+    return { asset_id: adopted, content_id: contentId, deduped: 1 };
   }
   const meta = spoolMeta as {
     width?: number;
@@ -398,43 +507,33 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     latitude?: number;
     longitude?: number;
   };
-  // Spool EXIF (minus the raw text feed) is worth keeping whole — it is the
-  // camera's testimony about the bytes, and GPS already passed the
-  // media.location policy gate at staging time.
-  const exif = Object.fromEntries(
-    Object.entries(meta).filter(([k, v]) => k !== "text" && v !== undefined)
-  );
   const assetId = ctx.newId();
   // GPS already passed the media.location policy gate at staging time
   // (pipeline.ts) — coordinates only ride here when the owner kept them.
   const placeId =
     meta.latitude !== undefined && meta.longitude !== undefined
-      ? findOrCreatePlace(ctx, meta.latitude, meta.longitude)
+      ? findOrCreatePlaceTx(deps, meta.latitude, meta.longitude)
       : null;
-  ctx.db
-    .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`
-    )
-    .run(
-      assetId,
-      contentId,
-      input.kind ?? assetKindFor(minted.mediaType),
-      input.captured_at ?? meta.captured_at ?? null,
+  insertMediaAssetTx(ctx.db, {
+    assetId,
+    contentId,
+    kind: input.kind ?? assetKindFor(minted.mediaType),
+    capturedAt: input.captured_at ?? meta.captured_at ?? null,
+    tzOffsetMin:
       input.tz_offset_min ??
-        (meta as { tz_offset_min?: number }).tz_offset_min ??
-        null,
-      input.capture_group_id ?? null,
-      // Edit lineage (issue #711). Only the caller knows it — nothing in the
-      // bytes or the EXIF says "I was cropped out of that one" — so there is
-      // no spool fallback here on purpose.
-      input.source_asset_id ?? null,
-      placeId,
-      input.width ?? meta.width ?? null,
-      input.height ?? meta.height ?? null,
-      input.duration_s ?? meta.duration_s ?? null,
-      Object.keys(exif).length > 0 ? JSON.stringify(exif) : null
-    );
+      (meta as { tz_offset_min?: number }).tz_offset_min ??
+      null,
+    captureGroupId: input.capture_group_id ?? null,
+    // Edit lineage (issue #711). Only the caller knows it — nothing in the
+    // bytes or the EXIF says "I was cropped out of that one" — so there is
+    // no spool fallback here on purpose.
+    sourceAssetId: input.source_asset_id ?? null,
+    placeId,
+    width: input.width ?? meta.width ?? null,
+    height: input.height ?? meta.height ?? null,
+    durationS: input.duration_s ?? meta.duration_s ?? null,
+    exifJson: exifJsonForMeta(meta),
+  });
   // Perceptual hash (issue #299 §2, Tier 0): producer-agnostic like thumbs —
   // the client canvas computes a dHash beside its thumbnail today. Derived
   // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
@@ -998,7 +1097,14 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
     ctx.wrote("core.collection", collection.collection_id);
   }
   // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they
-  // go by hand — the same pair the lifecycle sweep deletes in duties.ts.
+  // go by hand — the same pair the lifecycle sweep deletes in duties.ts, with
+  // the same face-region poly sweep (issue #724 W5) so no orphan face vector
+  // outlives the photograph it was cut from.
+  const faceRegions = ctx.db
+    .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
+    .all(input.asset_id) as { region_id: string }[];
+  for (const region of faceRegions)
+    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
   ctx.db
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(input.asset_id);
@@ -1642,6 +1748,152 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
   return { album_id: input.album_id, asset_id: input.asset_id };
 }
 
+/**
+ * THE FACE-DELETE GATE (issue #724 W5; SECURITY.md, "Derived data and
+ * sensitive enrichments"). Face data is the most sensitive derived class this
+ * product holds, and the condition for shipping face detection at all was that
+ * "delete this person" provably cascades through every derived row keyed to
+ * that identity — not soft-deletes, not hides, not leaves a vector behind that
+ * a later search can resurface.
+ *
+ * WHAT IT FORGETS, AND WHY THAT IS FOUR TABLES AND NOT ONE. A person's face
+ * data is spread across four mechanisms, each of which is enough on its own to
+ * reconstruct the fact this command destroys:
+ *
+ *   - `media_face_region` — the boxes. Both party columns are matched, not
+ *     just `party_id`: a row the member CONFIRMED carries their identity in
+ *     `confirmed_by_party_id` too, and a cascade that cleared one column would
+ *     leave the other saying the person is in the photograph.
+ *   - `enrich_embedding` (`media.face_region` targets) — the vectors. An
+ *     orphan face vector is the worst leftover of the four: it is the thing
+ *     that lets a NEW photograph of the same person be matched back to them
+ *     after they were forgotten.
+ *   - `enrich_derivation` — the stamps. Left behind, they tell the next sweep
+ *     those regions are current, so the faces are never re-derived and the
+ *     member's own library disagrees with itself about whether it looked.
+ *   - `media_face_cluster` — the grouping projection. Rebuildable, but a stale
+ *     row names a deleted region as a group member.
+ *
+ * WHAT IT DOES NOT DO. It does not delete the `core_party`. Forgetting who is
+ * in your photographs and deleting a person from your address book are two
+ * different acts, and conflating them would make the destructive one a side
+ * effect of the reversible one. `people.trash_person` owns the other.
+ *
+ * WHY `high` AND WHY A `once`-SHAPED POSTCONDITION. There is no undo: the
+ * vectors are gone and the boxes with them. An agent proposing it parks for
+ * the owner, structurally, exactly as `sync.set_connection_trust` does. The
+ * postcondition asserts ZERO rows across all four tables — the same
+ * "nothing may still point at the row" shape `media.purge_asset` uses, so a
+ * fifth mechanism added later without a clause here fails at the gate rather
+ * than in a member's library six months on.
+ */
+const FORGET_PERSON: CommandDefinition = {
+  name: "media.forget_person",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["party_id"],
+    additionalProperties: false,
+    properties: { party_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["party_id", "regions_forgotten"],
+    properties: {
+      party_id: { type: "string" },
+      regions_forgotten: { type: "integer" },
+      embeddings_forgotten: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "party_exists",
+      sql: `SELECT count(*) AS n FROM core_party WHERE party_id = :party_id`,
+      column: "n",
+      op: "eq",
+      value: 1,
+      message:
+        "That person is not in this library, so there is no face data to forget.",
+    },
+  ],
+  postconditions: [
+    {
+      // The gate, in one predicate. Every table that can name the party
+      // through a face, counted together: a non-zero total is an incomplete
+      // cascade and the command refuses to commit.
+      name: "no_face_data_names_the_party",
+      sql: `SELECT (
+              (SELECT count(*) FROM media_face_region
+                WHERE party_id = :party_id OR confirmed_by_party_id = :party_id)
+            + (SELECT count(*) FROM enrich_embedding
+                WHERE target_type = 'media.face_region'
+                  AND target_id NOT IN (SELECT region_id FROM media_face_region))
+            + (SELECT count(*) FROM enrich_derivation
+                WHERE target_type = 'media.face_region'
+                  AND target_id NOT IN (SELECT region_id FROM media_face_region))
+            + (SELECT count(*) FROM media_face_cluster
+                WHERE region_id NOT IN (SELECT region_id FROM media_face_region))
+            ) AS n`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  // Retry-safe rather than `once`: a second call finds nothing left and says
+  // so with a zero count. Refusing it as a replay would leave a member who is
+  // unsure whether the first one landed with no way to make sure.
+  idempotency: "retry-safe",
+  risk: "high",
+  confirm: true,
+  handler: forgetPerson,
+};
+
+function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { party_id: string };
+  const regions = ctx.db
+    .prepare(
+      `SELECT region_id FROM media_face_region
+        WHERE party_id = ? OR confirmed_by_party_id = ?
+        ORDER BY region_id`
+    )
+    .all(input.party_id, input.party_id) as { region_id: string }[];
+
+  const countVectors = ctx.db.prepare(
+    `SELECT count(*) AS n FROM enrich_embedding
+      WHERE target_type = 'media.face_region' AND target_id = ?`
+  );
+  let embeddings = 0;
+  for (const region of regions) {
+    embeddings += Number(
+      (countVectors.get(region.region_id) as { n: number }).n
+    );
+    // The projection first (it FKs the region), then the region, then the
+    // registry sweep for every polymorphic pointer at it — which is what
+    // carries the vectors and the stamps away, through the one registry that
+    // is complete by construction rather than by a remembered clause here.
+    ctx.db
+      .prepare("DELETE FROM media_face_cluster WHERE region_id = ?")
+      .run(region.region_id);
+    ctx.db
+      .prepare("DELETE FROM media_face_region WHERE region_id = ?")
+      .run(region.region_id);
+    cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
+    // One provenance entry per forgotten region — the audit trail of a
+    // destructive act is the one thing that must survive it.
+    ctx.wrote("media.face_region", region.region_id);
+  }
+  ctx.cite({
+    claim: `every face naming party ${input.party_id} was forgotten: ${regions.length} region(s), their vectors, their derivation stamps and their grouping`,
+    entityType: "core.party",
+    entityId: input.party_id,
+  });
+  return {
+    party_id: input.party_id,
+    regions_forgotten: regions.length,
+    embeddings_forgotten: embeddings,
+  };
+}
+
 /** Register the media domain's commands on a gateway. */
 export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
@@ -1659,4 +1911,5 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(RESTORE_ALBUM);
   gateway.registerCommand(ADD_TO_ALBUM);
   gateway.registerCommand(REMOVE_FROM_ALBUM);
+  gateway.registerCommand(FORGET_PERSON);
 }

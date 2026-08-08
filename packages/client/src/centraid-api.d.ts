@@ -714,17 +714,16 @@ interface CentraidApi {
       pdfText: boolean;
       ocr: boolean;
       embedding: boolean;
+      // Permanently false (issue #724 W6): desktop's on-device file-ASR
+      // adapter is deleted — transcription runs on the gateway's
+      // enrichment service now, never on a member's device. The key stays
+      // in this wire shape (`DeviceComputeCapabilities` in
+      // `gateway-client-devices.ts` mirrors it) rather than being dropped.
       transcript: boolean;
       edgeSeal: boolean;
       backgroundTransfer: boolean;
     };
   }>;
-  /** Desktop-only device-local file ASR; present only on a host with an adapter seam. */
-  transcribeMedia?: (input: {
-    bytes: ArrayBuffer;
-    mediaType: string;
-    filename?: string;
-  }) => Promise<string>;
   getSettings: () => Promise<CentraidSettings>;
   saveSettings: (patch: Partial<CentraidSettings>) => Promise<CentraidSettings>;
   /** Desktop protocol courier. Values are delivered in-memory and never logged. */

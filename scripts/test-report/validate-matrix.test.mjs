@@ -5,6 +5,23 @@ import { describe, expect, test } from "vitest";
 import { fireRevisitTrigger, validateMatrix } from "./validate-matrix.mjs";
 
 function baseMatrix(overrides = {}) {
+  const appEngines = {
+    seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
+    engines: [{ id: "core", label: "Core", flow: "vault-core-flow" }],
+    apps: [
+      "agenda",
+      "docs",
+      "locker",
+      "notes",
+      "people",
+      "photos",
+      "tally",
+      "tasks",
+    ].map((id) => ({
+      id,
+      engines: { core: { status: "pass", flow: "vault-core-flow" } },
+    })),
+  };
   return {
     version: 1,
     legend: { solid: "s", partial: "p", gap: "g", skip: "k" },
@@ -40,6 +57,7 @@ function baseMatrix(overrides = {}) {
         minimumTests: 0,
       },
     ],
+    appEngines,
     ...overrides,
   };
 }
@@ -95,6 +113,40 @@ describe("validateMatrix", () => {
     });
     expect(
       errors.some((e) => e.includes("invalid or missing assessment"))
+    ).toBe(true);
+  });
+
+  test("SABOTAGE: rejects an app-engine pass that does not point at its canonical gate", async () => {
+    const matrix = baseMatrix();
+    matrix.appEngines.apps[0].engines.core.flow = "not-the-engine-gate";
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      errors.some((error) =>
+        error.includes("agenda.core must reference real gate vault-core-flow")
+      )
+    ).toBe(true);
+  });
+
+  test("SABOTAGE: rejects a structural exclusion without the seat-doctrine citation", async () => {
+    const matrix = baseMatrix();
+    matrix.appEngines.apps[0].engines.core = {
+      status: "skip",
+      reason: "Structurally unavailable.",
+      citation: "README.md",
+    };
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      errors.some((error) =>
+        error.includes(
+          "agenda.core skip must cite docs/blueprint-seats.md#engine-contracts"
+        )
+      )
     ).toBe(true);
   });
 

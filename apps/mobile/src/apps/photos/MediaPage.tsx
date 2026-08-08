@@ -31,6 +31,8 @@ import { useTheme } from "../../kit/theme";
 import { applyZoom, buildZoomGesture } from "./lightbox-gestures";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
+import type { ScrubFrame } from "./video-scrub-strip";
+import { generateScrubStrip } from "./video-scrub-strip-native";
 import {
   assetAspectRatio,
   fitMedia,
@@ -135,10 +137,16 @@ function Transport({
   variantLabel,
   durationS,
   onPlay,
+  scrubFrames,
 }: {
   variantLabel: string;
   durationS: number;
   onPlay: () => void;
+  /** Real poster frames down this clip (issue #724 B2b), or empty wherever
+   *  `expo-video-thumbnails` cannot honestly produce one — see
+   *  `video-scrub-strip-native.ts`. An empty strip renders NOTHING here
+   *  rather than a placeholder box; the track below is unchanged either way. */
+  scrubFrames?: readonly ScrubFrame[];
 }): React.JSX.Element {
   const { colors } = useTheme();
   // Determinate from the first frame: the record carries the duration, so the
@@ -146,35 +154,52 @@ function Transport({
   const elapsed = 0;
   const fraction = durationS > 0 ? elapsed / durationS : 0;
   return (
-    <View style={[styles.transport, { borderTopColor: colors.stageLine }]}>
-      <Pressable
-        accessibilityLabel="Play"
-        accessibilityRole="button"
-        hitSlop={12}
-        onPress={onPlay}
-      >
-        <Icon name="play" size={20} color={colors.onStage} />
-      </Pressable>
-      <Text style={[styles.transportClock, { color: colors.onStage }]}>
-        {formatMediaClock(elapsed)}
-      </Text>
-      <View style={[styles.track, { backgroundColor: colors.stageSunken }]}>
-        <View
-          style={[
-            styles.trackFill,
-            {
-              backgroundColor: colors.onStage,
-              width: `${Math.round(fraction * 100)}%`,
-            },
-          ]}
-        />
+    <View>
+      {scrubFrames && scrubFrames.length > 0 ? (
+        <View style={styles.scrubStrip}>
+          {scrubFrames.map((frame) => (
+            <Image
+              key={frame.atMs}
+              source={{ uri: frame.uri }}
+              contentFit="cover"
+              style={[
+                styles.scrubStripFrame,
+                { backgroundColor: colors.stageSunken },
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+      <View style={[styles.transport, { borderTopColor: colors.stageLine }]}>
+        <Pressable
+          accessibilityLabel="Play"
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={onPlay}
+        >
+          <Icon name="play" size={20} color={colors.onStage} />
+        </Pressable>
+        <Text style={[styles.transportClock, { color: colors.onStage }]}>
+          {formatMediaClock(elapsed)}
+        </Text>
+        <View style={[styles.track, { backgroundColor: colors.stageSunken }]}>
+          <View
+            style={[
+              styles.trackFill,
+              {
+                backgroundColor: colors.onStage,
+                width: `${Math.round(fraction * 100)}%`,
+              },
+            ]}
+          />
+        </View>
+        <Text style={[styles.transportClock, { color: colors.onStage }]}>
+          {formatMediaClock(durationS)}
+        </Text>
+        <Text style={[styles.liveText, { color: colors.onStageSoft }]}>
+          {variantLabel}
+        </Text>
       </View>
-      <Text style={[styles.transportClock, { color: colors.onStage }]}>
-        {formatMediaClock(durationS)}
-      </Text>
-      <Text style={[styles.liveText, { color: colors.onStageSoft }]}>
-        {variantLabel}
-      </Text>
     </View>
   );
 }
@@ -241,6 +266,34 @@ export function MediaPage({
     fullQualityUnlocked || originalRequested
   );
   const unlockFullQuality = (): void => setFullQualityUnlocked(true);
+  // The scrub-preview strip (issue #724 B2b) — generated once per Live Photo
+  // companion, before playback starts, and never for an ordinary video (see
+  // `video-scrub-strip.ts`'s header for why the platform's own `VideoView`
+  // scrubber is left alone). The async generator resolves into a `.then`
+  // callback rather than a synchronous effect-body `setState`, the same
+  // pattern `PhotosHome.tsx`'s `backupConsent` hydration already uses.
+  const [scrubFrames, setScrubFrames] = useState<ScrubFrame[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    // The reset and the (re)generation both happen in scheduled callbacks —
+    // the compiler's EffectSetState rule forbids a synchronous effect-body
+    // setState, and the empty-strip reset genuinely belongs to the same
+    // "companion changed" transition as the fetch it precedes.
+    const reset = setTimeout(() => {
+      if (!cancelled) setScrubFrames([]);
+      if (!companionUri || cancelled) return;
+      void generateScrubStrip(
+        companionUri,
+        (asset.durationS ?? 0) * 1_000
+      ).then((frames) => {
+        if (!cancelled) setScrubFrames(frames);
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(reset);
+    };
+  }, [companionUri, asset.durationS]);
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
   const panX = useSharedValue(0);
@@ -416,6 +469,7 @@ export function MediaPage({
         <Transport
           durationS={asset.durationS ?? 0}
           onPlay={() => setPlayingLive(true)}
+          scrubFrames={scrubFrames}
           variantLabel={transport?.kindLabel ?? "live photo"}
         />
       ) : null}

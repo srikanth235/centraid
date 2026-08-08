@@ -87,7 +87,29 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "message",
   ],
   knowledge: ["note", "annotation"],
-  media: ["media_asset", "face_region", "asset_phash"],
+  media: [
+    "media_asset",
+    "face_region",
+    "asset_phash",
+    // Memories v0 (issue #724 W7): a rebuildable projection over signals the
+    // vault already carries — see schema/enrich.ts's header for the shape and
+    // enrich/memories.ts for the sweep that (re)derives it. Registered here
+    // (not a new column on media_media_asset) for the same reason
+    // media_asset_phash is a sidecar: this is app-reachable derived data, and
+    // registering it under the existing `{schema:'media', verbs:'read'}`
+    // grant scope (packages/blueprints/apps/photos/app.json) means no app
+    // manifest or mobile consent change is needed to read it.
+    "memory",
+    "memory_member",
+    // Faces (issue #724 W5): the unnamed-face grouping projection — see
+    // schema/enrich.ts's header for why identity is NOT in it. Registered for
+    // the same two reasons `memory` is: it is app-reachable derived data, so
+    // the existing `{schema:'media', verbs:'read'}` grant scope covers it with
+    // no manifest change, and registration is what installs the replica
+    // change-log triggers, so a rebuild (or a person-forget cascade) reaches an
+    // offline phone like any other row change.
+    "face_cluster",
+  ],
   home: [
     "asset_item",
     "warranty",
@@ -120,7 +142,15 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "settlement",
     "obligation",
   ],
-  enrich: ["embedding", "request", "policy"],
+  // `derivation` (issue #724 W2's provenance stamp) is registered here for the
+  // reason `portable-export.ts`'s own audit note already assumes it is: the
+  // canonical table walk IS this list, so an unregistered table is silently
+  // absent from every export AND gets no replica change-log trigger. Both
+  // matter for the face-delete gate (#724 W5): a stamp left behind after
+  // `media.forget_person` would survive a restore and would never reach an
+  // offline phone, and it is the row that tells the next sweep those faces
+  // are current.
+  enrich: ["embedding", "request", "policy", "derivation"],
   outbox: ["item", "grant"],
   notifications: ["notice"],
   // Read-only custody projections, both rebuilt on the standing sweep:

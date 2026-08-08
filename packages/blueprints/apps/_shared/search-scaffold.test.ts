@@ -46,6 +46,7 @@ const ENTITIES: readonly SearchEntity<Source, SearchGroupRow>[] = [
 ];
 
 describe(groupSearchHits, () => {
+  // [law:search-scaffold-grouping] Configured entities own grouping and caps.
   it("is empty for an empty or whitespace-only query — resting has no hits to group", () => {
     const source: Source = { people: ["Ana"], places: ["Lyme"] };
     expect(groupSearchHits("", source, ENTITIES)).toStrictEqual([]);

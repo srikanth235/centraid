@@ -35,6 +35,7 @@ import { useBandOwner } from "../../kit/band/band-owner";
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -55,6 +56,8 @@ import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
+import CameraRollImportOffer from "./CameraRollImportOffer";
+import { detectFacesFor } from "./people-model";
 import { photoAccessTakesOverTimeline } from "./photo-access";
 import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
 import PhotoGrainView from "./PhotoGrainView";
@@ -75,7 +78,6 @@ import PhotosGridSkeleton from "./PhotosGridSkeleton";
 import { makeStyles } from "./PhotosHome.styles";
 import PhotosMoreSheet from "./PhotosMoreSheet";
 import { PhotosSearchView } from "./PhotosSearch";
-import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import {
   pinnedThumbnailCandidates,
@@ -332,6 +334,22 @@ export default function PhotosHome({
   // because it claims capability the screen does not have. Search has no
   // honest menu of its own (verified: the file wires no AnchoredMenu today),
   // so the chip is simply absent there rather than opening onto an empty card.
+  // Face detection (issue #724 W5). The tier comes from the same
+  // `enrich.policy` mirror `PhotosPeopleView` reads; `detectFacesFor` asks it
+  // the GATEWAY question (can the faces sweep run at all?), which is a
+  // different question from `deviceAnswerFor`'s on-device promise.
+  const enrichPolicies = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "enrich.policy" }), [])
+  );
+  const detectFacesAvailability = detectFacesFor(
+    enrichPolicies.loading
+      ? null
+      : ((enrichPolicies.rows.find((row) => row.domain === "photos")?.tier as
+          | string
+          | undefined) ?? "off")
+  );
+
   const menuGroups = useMemo(() => {
     if (destination === "library") {
       return libraryMenuGroups({
@@ -340,6 +358,13 @@ export default function PhotosHome({
         onRung: setRung,
         rung,
         grain,
+        detectFaces: {
+          availability: detectFacesAvailability,
+          // The row leads to the CONSENT GATE, which lives in the People
+          // roster's empty state (issue #712 C2) — never straight to the
+          // enrichment write. See photos-library-menu.ts's header.
+          onDetectFaces: () => navigation.navigate("PhotosPeople"),
+        },
       });
     }
     if (destination === "collections") {
@@ -354,7 +379,15 @@ export default function PhotosHome({
       });
     }
     return [];
-  }, [destination, grain, libraryFilter, rung, setRung]);
+  }, [
+    destination,
+    detectFacesAvailability,
+    grain,
+    libraryFilter,
+    navigation,
+    rung,
+    setRung,
+  ]);
 
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
@@ -731,7 +764,7 @@ export default function PhotosHome({
                 elsewhere, so Select gets the same scoping rather than a
                 second control that appears to do nothing. */}
             {destination === "library" ? (
-              <PhotosSelectChip
+              <SelectChip
                 disabled={timeline.assets.length === 0}
                 onPress={() => {
                   const first = timeline.assets[0];
@@ -744,6 +777,19 @@ export default function PhotosHome({
       )}
 
       <ReplicaStatusBar />
+
+      {/* THE FIRST-RUN OFFER (issue #724 A2) — the staged-import alternative
+          to the silent automatic sweep above. A self-contained banner: it
+          reads nothing from this screen's own state and returns null once
+          there is nothing local-only left to offer, so it costs this file
+          one import and one conditional render rather than a state slice of
+          its own. */}
+      {accessTakeover ? null : (
+        <CameraRollImportOffer
+          assets={timeline.assets}
+          gatewayBase={gatewayBase}
+        />
+      )}
 
       {backingUp && uploadProgress ? (
         // Determinate, with exact counts. Never a spinner (§18).

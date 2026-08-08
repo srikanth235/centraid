@@ -84,6 +84,12 @@ export type PhotosStackParamList = {
   // primary control is the way into the review.
   DuplicatesShelf: undefined;
   DuplicateReview: undefined;
+  // The full Memories surface (issue #724 W7) — On this day, Trips, and
+  // Similar moments, read off the vault's `media.memory` projection. Reached
+  // from Collections' own Memories section heading
+  // (`PhotosCollectionsView.tsx`'s `open()`), which used to have nowhere to
+  // send that tap because no "all memories" screen existed.
+  PhotosMemories: undefined;
   AlbumDetail: { albumId: string };
   // The picker (§10) — full screen on the phone. Its picked set is its own,
   // so the album it commits to is a route param rather than shared state.
@@ -98,9 +104,12 @@ export type PhotosStackParamList = {
   // id it did not already have on hand). `archive` has no client affordance
   // that ever sets it (nothing writes `archived`/`archived_at` true), but
   // `PhotosLibrary.tsx` still reads it back out — left in place until that
-  // caller is retired, not deleted blind.
+  // caller is retired, not deleted blind. `videos` is Collections' Videos
+  // shelf (issue #721 B3) — the same "filter over the one shared timeline"
+  // shape as `favorites`, so it grew this union rather than a screen of
+  // its own.
   PhotoStateView:
-    | { mode: "favorites" | "archive" | "trash" }
+    | { mode: "favorites" | "archive" | "trash" | "videos" }
     | { mode: "person"; partyId: string; personName: string };
 };
 

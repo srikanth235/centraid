@@ -4,3 +4,36 @@ recommended: false
 summary: "Every TODO / FIXME references an issue."
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: MARKER_REGEX
+    type: scalar
+    doc: Extended regular expression identifying deferred-work markers.
+    default: "(TODO|FIXME)"
+    tunable: true
+  - name: TRACKER_REGEX
+    type: scalar
+    doc: Extended regular expression for an accepted issue or ticket reference.
+    default: "(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)"
+    tunable: true
+  - name: SCHEDULE_EVIDENCE
+    type: scalar
+    doc: Evidence grain used for scheduled deferred-work review.
+    default: range
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "The issue or ticket referenced by a TODO/FIXME plausibly exists and concerns the deferred work described, not an arbitrary or fabricated-looking number."
+    - "A TODO that describes work already completed in this change set is removed rather than left with a satisfied tracker reference."
+    - "A waiver's reason genuinely explains why the TODO is a rare, intentional, permanent exception rather than routine cover for deferring real work."

@@ -118,6 +118,12 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
     note: "Never cleaned before (issue #441 A1): an orphan vector lets deleted content resurface in vector search — the worst-feeling class of vault bug.",
   },
   {
+    table: "enrich_derivation",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "A stamp for a purged target claims that target's variant is derived and current (issue #724 W2). Left behind, an id reused by a later row inherits it, and the sweep skips work that was never done for the new content.",
+  },
+  {
     table: "enrich_request",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     policy: "delete",

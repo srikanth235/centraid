@@ -47,7 +47,12 @@ export function shelfAfterRead(
 ): ShelfId {
   if (shelf === null) return null;
   if (typeof shelf !== "string") return shelf;
-  if (shelf.startsWith("built-in:") || shelf.startsWith("tag:")) return shelf;
+  if (
+    shelf.startsWith("built-in:") ||
+    shelf.startsWith("tag:") ||
+    shelf.startsWith("memory:")
+  )
+    return shelf;
   return albumIds.includes(shelf) ? shelf : null;
 }
 

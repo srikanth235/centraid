@@ -20,6 +20,31 @@
 // promising what the vault could not keep, and nothing here reintroduces one.
 // If a section is empty, that is a fact about the member's library, never a
 // placeholder for a feature.
+//
+// VIDEOS (issue #721 B3) joined this list because `PhotoAsset.kind ===
+// "video"` is an honest fact this device already carries — no different from
+// Favorites' `asset.favorite`. Screenshots and Panoramas did NOT, and Selfies
+// still has not, and the three are deferred for two different reasons worth
+// keeping straight:
+//
+//   Selfies has no signal at all — front-camera capture is not recorded
+//   anywhere this app reads.
+//
+//   Screenshots and Panoramas DO exist as a real, named iOS concept
+//   (`PHAssetMediaSubtype.screenshot` / `.panorama`, surfaced by
+//   expo-media-library as `Asset#getMediaSubtypes()`), but that getter is
+//   PER-ASSET and iOS-only — there is no bulk field for it on the
+//   `AssetField`/`AssetMetadata` shape the device walk actually queries
+//   (`timeline-engine.ts`'s `Query#exeForMetadata()`). Calling it once per
+//   photograph across a fifty-thousand-photo library is the exact regression
+//   that walk's own header comment already rejected for ordinary EXIF fields
+//   ("350k round-trips instead of ~50"), and Android has no subtype concept
+//   to report even if the round-trip cost were paid. Until the platform
+//   offers a bulk answer (or this product accepts eating that cost for a
+//   bounded slice, e.g. only newly-imported assets), a Screenshots or
+//   Panoramas shelf here would be exactly the "sometimes comes back empty by
+//   construction" shelf this file's own argument above rejects — so, like
+//   Selfies, they stay out rather than ship dishonest.
 
 import { sharedAssets } from "./photos-sharing";
 import type { PhotoAsset } from "./timeline-model";
@@ -32,12 +57,13 @@ export type CollectionSectionKey =
   | "people"
   | "places"
   | "favorites"
+  | "videos"
   | "sharing"
   | "duplicates"
   | "trash";
 
 /** The fixed, argued order (see the file header) as a value rather than only
- *  a type — `buildCollectionSections` always returns exactly these eight
+ *  a type — `buildCollectionSections` always returns exactly these nine
  *  sections ("AN EMPTY SECTION STILL RENDERS", above), so this is the whole
  *  set Collapse All needs to fold every shelf at once. It lives here, next to
  *  the union it enumerates, rather than in `PhotosHome.tsx` (issue #712: the
@@ -51,6 +77,7 @@ export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
   "people",
   "places",
   "favorites",
+  "videos",
   "sharing",
   "duplicates",
   "trash",
@@ -100,6 +127,14 @@ export interface AlbumRow {
   name: string;
   /** Members, resolved by the caller from `core.collection_entry`. */
   assetIds: readonly string[];
+  /**
+   * `core.collection.cover_content_id` — the member's own choice of key photo
+   * (issue #721 B5, `set-album-cover`), resolved by the caller straight off
+   * the collection row. `undefined` when nobody has chosen one, which is NOT
+   * the same as "use the newest" being wrong — it is the fact that no choice
+   * has been made yet, and `chosenCover` below reads it exactly that way.
+   */
+  coverContentId?: string;
 }
 
 export interface PlaceRow {
@@ -165,6 +200,29 @@ function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
   return newest;
 }
 
+/**
+ * An album's cover tile (issue #721 B5): the member's OWN choice when they
+ * have made one, the newest member otherwise — never the reverse. This is
+ * the fix for the defect this section used to carry: every rail tile called
+ * `cover()` unconditionally and so a member's "Make cover"/"Make key photo"
+ * write was honored by `AlbumDetail`'s own header but silently ignored by
+ * every OTHER surface that draws this album, including this one. A chosen
+ * cover that is no longer a live member of the album (removed, trashed) is
+ * read exactly as "no choice" — `members` here is already the LIVE set
+ * (`assetsOf`, in the caller below), so a stale id simply fails to match and
+ * falls through to `cover()` honestly, rather than pinning a tile to a
+ * photograph the rail cannot show.
+ */
+function chosenCover(
+  members: readonly PhotoAsset[],
+  coverContentId: string | undefined
+): PhotoAsset | undefined {
+  const chosen = coverContentId
+    ? members.find((asset) => asset.contentId === coverContentId)
+    : undefined;
+  return chosen ?? cover(members);
+}
+
 /** Duplicate CLUSTERS: assets grouped by perceptual hash, keeping the groups
  *  with more than one member. The same grouping the More sheet's meta reports,
  *  so the two cannot disagree about how many there are. */
@@ -205,9 +263,10 @@ function memoriesByYear(
  * Order is an argument: Memories first because it is the only section that
  * changes on its own and is therefore the only one worth looking at without
  * being asked for; then the member's own filing (Albums, People, Places);
- * then the standing shelves (Favorites, Sharing); then the two that are
- * housekeeping rather than browsing (Duplicates, Trash), last because a
- * library is for looking at, not for tidying.
+ * then the standing shelves — filters over the same library rather than
+ * things the member named (Favorites, Videos); then Sharing; then the two
+ * that are housekeeping rather than browsing (Duplicates, Trash), last
+ * because a library is for looking at, not for tidying.
  */
 export function buildCollectionSections(
   facts: CollectionFacts
@@ -229,6 +288,9 @@ export function buildCollectionSections(
     });
 
   const favorites = live.filter((asset) => asset.favorite);
+  // Newest-first already, inherited from `live`'s own order
+  // (`mergePhotoAssets`' sort) — the same free ride Favorites takes below.
+  const videos = live.filter((asset) => asset.kind === "video");
   const trashed = facts.assets.filter((asset) => asset.deleted);
   const clusters = duplicateClusters(facts.assets);
   const shared = facts.shareTargetId
@@ -254,7 +316,10 @@ export function buildCollectionSections(
       count: facts.albums.length,
       action: "Create",
       tiles: facts.albums.slice(0, RAIL_LIMIT).map((album) => {
-        const front = cover(assetsOf(album.assetIds));
+        const front = chosenCover(
+          assetsOf(album.assetIds),
+          album.coverContentId
+        );
         return {
           id: album.collectionId,
           label: album.name,
@@ -307,6 +372,20 @@ export function buildCollectionSections(
         originalUri: asset.originalUri,
       })),
       empty: "Photographs you mark with a heart collect here.",
+    },
+    {
+      // Issue #721 B3. `PhotoAsset.kind === "video"` is the one media-type
+      // fact this device already carries honestly — see the file header for
+      // why Screenshots and Panoramas are not here beside it.
+      key: "videos",
+      title: "Videos",
+      count: videos.length,
+      tiles: videos.slice(0, RAIL_LIMIT).map((asset) => ({
+        id: asset.id,
+        uri: asset.uri,
+        originalUri: asset.originalUri,
+      })),
+      empty: "Videos you capture or import collect here.",
     },
     {
       key: "sharing",

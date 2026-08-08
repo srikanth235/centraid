@@ -566,6 +566,22 @@ export {
   type AgentContentVariant,
 } from "./enrich/content.js";
 export {
+  FACE_CLUSTER_MAX_DISTANCE,
+  FACE_MIN_CLUSTER_SIZE,
+  FACE_PARTY_MAX_DISTANCE,
+  FACE_REGION_TARGET_TYPE,
+  rebuildFaceClusters,
+  type FaceClusterResult,
+} from "./enrich/face-clusters.js";
+export {
+  stampDerivation,
+  stampedModel,
+  supersededTargets,
+  type DerivationStamp,
+  type SupersededQuery,
+  type SupersededTarget,
+} from "./enrich/derivation.js";
+export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
   ENRICHMENT_CAPABILITIES,
   MAX_ENRICHMENT_LEASE_TTL_MS,
@@ -589,6 +605,13 @@ export {
   readEnrichPolicyTier,
   type EnrichDomain,
 } from "./enrich/policy.js";
+export {
+  compareModelIds,
+  isSupersededBy,
+  makeModelId,
+  parseModelId,
+  type ModelId,
+} from "./enrich/model-id.js";
 export {
   hexHamming,
   registerHammingFn,
@@ -619,6 +642,14 @@ export {
   type StageFileOptions,
   type StageFileResult,
 } from "./ingest/stage-file.js";
+export {
+  isMediaPath,
+  parseTakeoutSidecar,
+  planTakeout,
+  type SidecarFacts,
+  type TakeoutMediaEntry,
+  type TakeoutPlan,
+} from "./ingest/takeout-sidecar.js";
 export {
   parseMbox,
   threadKey,

@@ -219,7 +219,9 @@ const ROUTES: Record<string, Responder> = {
 
   // ── capture ──
   "POST /centraid/_gateway/capture/ocr": () =>
-    json({ extraction: { text: "hi", confidence: 0.9, engine: "tesseract" } }),
+    json({
+      extraction: { text: "hi", confidence: 0.9, engine: "enrichment-service" },
+    }),
   "POST /centraid/_gateway/capture/classify": () =>
     json({ preview: { kind: "task", title: "Buy milk" } }),
   "POST /centraid/_vault/blobs": () => json({ sha256: "a".repeat(64) }),

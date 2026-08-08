@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -36,7 +37,6 @@ import {
   emptyTrashSummary,
 } from "./photos-trash";
 import PhotosScreen from "./PhotosScreen";
-import PhotosSelectChip from "./PhotosSelectChip";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
@@ -114,6 +114,9 @@ export default function PhotoStateView({
       timeline.assets.filter((asset) => {
         if (mode === "favorites") return asset.favorite && !asset.deleted;
         if (mode === "archive") return asset.archived && !asset.deleted;
+        // Issue #721 B3 — Collections' Videos shelf, opened here: the same
+        // `PhotoAsset.kind` fact `photos-collections.ts` filters on.
+        if (mode === "videos") return asset.kind === "video" && !asset.deleted;
         if (mode === "person")
           return (
             !asset.deleted &&
@@ -128,9 +131,11 @@ export default function PhotoStateView({
       ? "Favorites"
       : mode === "archive"
         ? "Archive"
-        : mode === "person"
-          ? params.personName
-          : "Trash";
+        : mode === "videos"
+          ? "Videos"
+          : mode === "person"
+            ? params.personName
+            : "Trash";
   const noun = assets.length === 1 ? "photograph" : "photographs";
   // Trash's meta is the fuller status sentence (proto:3945) — count PLUS the
   // purge window — because that window is the one fact a member needs before
@@ -146,9 +151,11 @@ export default function PhotoStateView({
         "No favorites yet — tap the heart on any photograph."
       : mode === "archive"
         ? "Archive is empty."
-        : mode === "person"
-          ? `No photographs of ${params.personName} yet.`
-          : "Trash is empty.";
+        : mode === "videos"
+          ? "Videos you capture or import collect here."
+          : mode === "person"
+            ? `No photographs of ${params.personName} yet.`
+            : "Trash is empty.";
   const emit = (result: NativeWriteResult): void => {
     surfaceWriteOutcome(result);
   };
@@ -346,7 +353,7 @@ export default function PhotoStateView({
                 </Text>
               </Pressable>
             ) : null}
-            <PhotosSelectChip
+            <SelectChip
               disabled={false}
               onPress={() => {
                 const first = assets[0];

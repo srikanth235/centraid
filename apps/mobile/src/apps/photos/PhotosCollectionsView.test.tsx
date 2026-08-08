@@ -312,4 +312,18 @@ describe("Collections' per-section collapse", () => {
     press("Open People, 0");
     expect(navigate).toHaveBeenCalledWith("PhotosPeople");
   });
+
+  // Issue #721 B3 — Videos joined the shelf list; its heading opens the same
+  // `PhotoStateView` filter door Favorites already uses, not a bespoke grid.
+  it("the Videos heading opens the shared filtered shelf, exactly like Favorites", () => {
+    const navigate = vi.fn<(...args: unknown[]) => void>();
+    act(() => {
+      root = createRoot(container!);
+      root.render(<Harness navigate={navigate} />);
+    });
+    press("Open Videos, 0");
+    expect(navigate).toHaveBeenCalledWith("PhotoStateView", {
+      mode: "videos",
+    });
+  });
 });

@@ -48,6 +48,7 @@ import {
 } from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
+import { optimisticValues } from "../../lib/replica/optimistic";
 import type { PhotosScreenProps } from "../../navigation";
 import { InCloudOriginalError } from "./device-media";
 import { buildDismissGesture } from "./lightbox-gestures";
@@ -349,6 +350,55 @@ export default function PhotoLightbox({
             surfaceWriteFailure(error, "Photo not added")
           );
         },
+      })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
+  /**
+   * The overflow menu's "Make key photo" (issue #721 B5) — the same
+   * `set-album-cover` write `AlbumDetail.tsx`'s selection-bar "Make cover"
+   * fires, reached here without leaving the viewer. `tags` (built above for
+   * the info sheet's Albums chips) already IS this photograph's album
+   * membership, so it doubles as `viewer-menu.ts`'s `albums` input — the row
+   * only renders when it is non-empty (see that module's header for why).
+   * One album fires directly; more than one asks which, the same `Alert.alert`
+   * idiom `addToAlbum` above already uses for the same kind of choice.
+   */
+  const makeKeyPhoto = (): void => {
+    if (!session || !current?.assetId || !current.contentId) return;
+    const contentId = current.contentId;
+    const setCoverFor = (albumId: string): void => {
+      const album = collections.rows.find(
+        (row) => String(row.collection_id) === albumId
+      );
+      if (!album) return;
+      void session
+        .write("photos", {
+          action: "set-album-cover",
+          input: { album_id: albumId, asset_id: current.assetId! },
+          optimistic: [
+            {
+              op: "upsert",
+              entity: "core.collection",
+              rowId: albumId,
+              values: optimisticValues(album, { cover_content_id: contentId }),
+            },
+          ],
+        })
+        .then(surfaceWriteOutcome)
+        .catch((error: unknown) =>
+          surfaceWriteFailure(error, "Album cover not changed")
+        );
+    };
+    if (tags.length === 1) {
+      setCoverFor(tags[0]!.id);
+      return;
+    }
+    Alert.alert("Make key photo", photographName, [
+      ...tags.map((tag) => ({
+        text: tag.label,
+        onPress: () => setCoverFor(tag.id),
       })),
       { text: "Cancel", style: "cancel" as const },
     ]);
@@ -733,6 +783,7 @@ export default function PhotoLightbox({
           visible={overflowOpen}
           anchor={overflowAnchor}
           groups={viewerOverflowMenuGroups({
+            albums: tags,
             archived: current.archived,
             hasVaultAsset: Boolean(current.assetId),
             writable: current.canWrite === true,
@@ -741,6 +792,7 @@ export default function PhotoLightbox({
             onDelete: trashAsset,
             onDownload: () => runExport(true),
             onHide: hideAsset,
+            onMakeKeyPhoto: makeKeyPhoto,
             onSendCopy: () => runExport(false),
             onSlideshow: () => setSlideshow(true),
           })}

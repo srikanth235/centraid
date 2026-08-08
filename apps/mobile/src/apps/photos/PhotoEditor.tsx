@@ -41,8 +41,10 @@ import {
   FULL_CROP,
   clampCrop,
   editorStatus,
+  flipLabel,
   isEdited,
   moveCrop,
+  nextFlip,
   nextStraighten,
   ratioValue,
   rotatedBox,
@@ -53,7 +55,7 @@ import {
   straightenLabel,
   totalRotation,
 } from "./photo-edit-model";
-import type { CropRect, EditorRatio } from "./photo-edit-model";
+import type { CropRect, EditorRatio, FlipAxis } from "./photo-edit-model";
 import { EDITOR_MEDIA_HEIGHT, styles } from "./PhotoEditor.styles";
 import type { PhotoAsset } from "./timeline-model";
 import { assetAspectRatio, fitMedia } from "./viewer-model";
@@ -86,6 +88,7 @@ export interface PhotoEditorProps {
     quarters: number;
     straighten: number;
     crop: CropRect;
+    flip?: FlipAxis;
   }) => Promise<void>;
 }
 
@@ -102,6 +105,7 @@ export function PhotoEditor({
   const [straighten, setStraighten] = useState(0);
   const [ratio, setRatio] = useState<EditorRatio>("Original");
   const [crop, setCrop] = useState<CropRect>(FULL_CROP);
+  const [flip, setFlip] = useState<FlipAxis>(undefined);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
 
@@ -119,12 +123,14 @@ export function PhotoEditor({
   const unrotated = rotatedBox(sourceRatio, 1, rotation);
   const scale = unrotated.width > 0 ? frame.width / unrotated.width : 0;
 
-  const status = busy ? SAVING : editorStatus({ quarters, ratio, straighten });
+  const status = busy
+    ? SAVING
+    : editorStatus({ flip, quarters, ratio, straighten });
   useEffect(() => {
     onStatus(status);
   }, [onStatus, status]);
 
-  const edited = isEdited({ crop, quarters, ratio, straighten });
+  const edited = isEdited({ crop, flip, quarters, ratio, straighten });
   const gesture = buildCropGesture(
     frame,
     (dx, dy) => setCrop((box) => moveCrop(box, dx, dy)),
@@ -151,6 +157,7 @@ export function PhotoEditor({
     setStraighten(0);
     setRatio("Original");
     setCrop(FULL_CROP);
+    setFlip(undefined);
     setFailure(undefined);
   }
 
@@ -159,7 +166,7 @@ export function PhotoEditor({
     setBusy(true);
     setFailure(undefined);
     try {
-      await onSave({ crop: clampCrop(crop), quarters, straighten });
+      await onSave({ crop: clampCrop(crop), flip, quarters, straighten });
     } catch (error) {
       setFailure(
         `The new photograph was not saved: ${error instanceof Error ? error.message : String(error)}`
@@ -191,6 +198,12 @@ export function PhotoEditor({
       label: straightenLabel(straighten),
       onPress: () => setStraighten(nextStraighten),
     },
+    {
+      key: "flip",
+      label: flipLabel(flip),
+      selected: flip !== undefined,
+      onPress: () => setFlip(nextFlip),
+    },
     ...EDITOR_RATIOS.map((name) => ({
       key: `ratio-${name}`,
       label: name,
@@ -219,7 +232,15 @@ export function PhotoEditor({
                 left: (frame.width - sourceRatio * scale) / 2,
                 position: "absolute",
                 top: (frame.height - scale) / 2,
-                transform: [{ rotate: `${rotation}deg` }],
+                // Flip is a pure mirror of the CONTENT, not the frame — it
+                // changes no dimension the crop box's fractions depend on, so
+                // it commutes freely with the rotation beside it (same order
+                // `renderEdit` applies the two transforms in).
+                transform: [
+                  { scaleX: flip === "horizontal" ? -1 : 1 },
+                  { scaleY: flip === "vertical" ? -1 : 1 },
+                  { rotate: `${rotation}deg` },
+                ],
                 width: sourceRatio * scale,
               }}
             />

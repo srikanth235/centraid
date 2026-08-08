@@ -79,6 +79,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("placement registry (A4) mirrors vault's ShareableItemType minus locker.item", () => {
+  // [law:placement-registry-parity] Every placeable entity is enumerated once.
   const vaultTypes = vaultShareableItemTypes();
 
   it("vault's own list still contains locker.item — else this tripwire is stale", () => {

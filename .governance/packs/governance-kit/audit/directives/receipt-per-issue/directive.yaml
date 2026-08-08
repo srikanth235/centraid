@@ -4,16 +4,74 @@ recommended: true
 summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification. Receipts added in the change set must also include ## Decisions, ## Audit (a fresh-context sub-agent's PASS/REFUTED verdict against the diff and the issue), and at least one fenced code block in ## Verification; every file changed in that change set must be named in some added receipt (scope-creep guard); pre-existing receipts are grandfathered.
 surface: repo-state
 hook: pre-commit
+triggers: [pre-commit, schedule]
+config:
+  - name: RECEIPTS_DIR
+    type: scalar
+    doc: Fixed directory holding identity-bearing per-issue receipts.
+    default: receipts
+    tunable: false
+  - name: RECEIPT_FILENAME_REGEX
+    type: scalar
+    doc: Fixed filename convention for existing issue receipts.
+    default: '^issue-([0-9]+)(-[a-z0-9]+(-[a-z0-9]+)*)?\.md$'
+    tunable: false
+  - name: NEW_RECEIPT_FILENAME_REGEX
+    type: scalar
+    doc: Fixed slug-bearing filename convention for newly added receipts.
+    default: '^issue-([0-9]+)-[a-z0-9]+(-[a-z0-9]+)*\.md$'
+    tunable: false
+  - name: REQUIRED_SECTIONS
+    type: list
+    doc: Fixed receipt sections required for every substantive receipt.
+    default:
+      - Checklist
+      - What changed
+      - Out of scope
+      - Verification
+    tunable: false
+  - name: NEW_RECEIPT_SECTIONS
+    type: list
+    doc: Fixed additional sections required on receipts added in the change set.
+    default:
+      - Decisions
+      - Audit
+    tunable: false
+  - name: ATTEST_SECTION
+    type: scalar
+    doc: Receipt section where the correspondence audit verdict is recorded.
+    default: Audit
+    tunable: false
+  - name: ATTEST_CMD
+    type: scalar
+    doc: Judge command for live attestation; harness uses the current session sub-agent.
+    default: harness
+    tunable: false
+  - name: JUDGE_ROUNDS
+    type: scalar
+    doc: Maximum adjudication rounds before the verdict gate stops retrying.
+    default: 3
+    tunable: true
+  - name: SCHEDULE_EVIDENCE
+    type: scalar
+    doc: Evidence grain for scheduled re-adjudication; receipts require per-commit intent.
+    default: commits
+    tunable: false
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
 # Sub-agent judgment (issue #325): the `## Audit` section is a fresh-context
-# sub-agent attestation. Declared once here; check.sh gates it via subagent_attest
-# and the shared orchestrator batches it with any other `isolation: shared`
-# attestation pending on the same commit.
-subagent:
+# sub-agent attestation. Declared once here; check.sh gates it via judge_attest.
+judge:
   inputs:  [diff, receipt, issue]
   checks:
     - "'## What changed' faithfully describes the diff (no misrepresentation, no omission)"
     - "each '- [x]' item is realized in the diff"
     - "the '## Checklist' mirrors the issue's checklist"
-  isolation: shared
-  section: Audit
-  tiers: { attest: low, sweep: high }

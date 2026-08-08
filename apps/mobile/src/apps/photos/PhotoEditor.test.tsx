@@ -211,6 +211,7 @@ describe("the phone's photo editor", () => {
       "Crop",
       "Rotate 90°",
       "Straighten 0°",
+      "Flip",
       "Original",
       "Square",
       "3 : 2",

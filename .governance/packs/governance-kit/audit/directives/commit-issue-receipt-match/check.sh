@@ -39,6 +39,9 @@ require_git
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
+MANIFEST="$(dirname "$0")/directive.yaml"
+RECEIPTS_DIR="$(conf_get commit-issue-receipt-match RECEIPTS_DIR "$MANIFEST")"
+ISSUE_RECEIPT_GLOB="$(conf_get commit-issue-receipt-match ISSUE_RECEIPT_GLOB "$MANIFEST")"
 
 # Returns 0 if the commit body carries a valid waiver line.
 msg_has_waiver() {
@@ -65,11 +68,11 @@ validate() {
     local f
     for f in "$@"; do
         case "$f" in
-            receipts/*.md) return 0 ;;
+            "$RECEIPTS_DIR"/$ISSUE_RECEIPT_GLOB) return 0 ;;
         esac
     done
 
-    violation "$label — commit touches no receipts/*.md (every commit must add or update its issue's receipt; use 'governance: allow-commit-issue-receipt-match <reason>' in the body for a deliberate exception such as a release commit)"
+    violation "$label — commit touches no $RECEIPTS_DIR/$ISSUE_RECEIPT_GLOB (every commit must add or update its issue's receipt; use 'governance: allow-commit-issue-receipt-match <reason>' in the body for a deliberate exception such as a release commit)"
 }
 
 # ──────────────────────────────────────────────────────────────

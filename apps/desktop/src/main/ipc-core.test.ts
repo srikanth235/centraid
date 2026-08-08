@@ -87,9 +87,8 @@ describe("gatewayChangedPayload / vaultChangedPayload", () => {
 });
 
 describe(hostCapabilities, () => {
-  it("always reports desktop platform and wires the transcript probe result", () => {
-    expect(hostCapabilities(true).compute.transcript).toBe(true);
-    expect(hostCapabilities(false)).toMatchObject({
+  it("always reports desktop platform, with transcript permanently false (issue #724 W6)", () => {
+    expect(hostCapabilities()).toMatchObject({
       platform: "desktop",
       appSessions: false,
       compute: {

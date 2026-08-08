@@ -121,6 +121,7 @@ const DuplicatesShelf = lazyScreen(
   () => import("./src/apps/photos/DuplicatesShelf")
 );
 const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
+const MemoriesView = lazyScreen(() => import("./src/apps/photos/MemoriesView"));
 const PhotosPeopleView = lazyScreen(
   () => import("./src/apps/photos/PhotosPeopleView")
 );
@@ -224,6 +225,7 @@ function PhotosNavigator(): React.JSX.Element {
       <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
       <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
       <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
+      <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
       <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
       <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
       <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />

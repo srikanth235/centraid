@@ -47,6 +47,7 @@
     "expo-camera": "~57.0.3",
     "expo-clipboard": "~57.0.1",
     "expo-crypto": "~57.0.1",
+    "expo-dev-client": "~57.0.10",
     "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.1",
     "expo-font": "*",
@@ -99,6 +100,7 @@
     "typescript": "catalog:"
   },
   "op-sqlite": {
-    "fts5": true
+    "fts5": true,
+    "sqliteVec": true
   }
 }

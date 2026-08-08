@@ -119,9 +119,19 @@ const EXPECTED_API_KEYS = [
   "setActiveVault",
   "setGatewayRememberDevice",
   "testGatewayConnection",
-  "transcribeMedia",
   "updateProfileMetadata",
 ];
+
+/**
+ * Members that reach no bridge channel at all — `getHostCapabilities` was
+ * the last member on this surface with a channel-backed device probe
+ * (`DEVICE_TRANSCRIPT_AVAILABLE`); with desktop's on-device file-ASR adapter
+ * deleted (issue #724 W6) it is a pure synchronous snapshot instead, so it
+ * moved out of `REQUEST_SURFACE` (which asserts every entry reaches exactly
+ * its declared channel) into this list instead of being dropped from the
+ * coverage check below.
+ */
+const PURE_SURFACE = ["getHostCapabilities"];
 
 const EXPECTED_TOKEN_KEYS = [
   "apps",
@@ -143,8 +153,6 @@ const EXPECTED_TOKEN_KEYS = [
  * nothing may be forwarded).
  */
 const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
-  ["getHostCapabilities", Channel.DEVICE_TRANSCRIPT_AVAILABLE, undefined],
-  ["transcribeMedia", Channel.DEVICE_TRANSCRIBE, { mediaType: "audio/wav" }],
   ["getSettings", Channel.SETTINGS_GET, undefined],
   ["saveSettings", Channel.SETTINGS_SAVE, { launchAtLogin: true }],
   ["openAppFolder", Channel.APPS_OPEN, { id: "notes" }],
@@ -228,6 +236,7 @@ describe("CentraidApi exposed surface", () => {
     const declared = [
       ...REQUEST_SURFACE.map(([name]) => name),
       ...EVENT_SURFACE.map(([name]) => name),
+      ...PURE_SURFACE,
       "onDeepLink",
     ].sort();
     expect(declared).toStrictEqual(EXPECTED_API_KEYS);
@@ -336,26 +345,14 @@ describe("CentraidApi event subscriptions", () => {
 });
 
 describe("CentraidApi host capabilities", () => {
-  it("reports transcript support when the device probe answers true", async () => {
+  it("reports transcript as permanently false — desktop's on-device ASR adapter is gone (issue #724 W6)", async () => {
     const { api, fake } = makeApi();
-    fake.results.set(Channel.DEVICE_TRANSCRIPT_AVAILABLE, true);
-    const caps = (await api.getHostCapabilities!()) as {
-      compute: { transcript: boolean };
-    };
-    expect(caps.compute.transcript).toBe(true);
-  });
-
-  it("falls back to no transcript support when the probe rejects", async () => {
-    const fake = fakeBridge();
-    const bridge: PreloadBridge = {
-      ...fake.bridge,
-      invoke: () => Promise.reject(new Error("no adapter")),
-    };
-    const api = createCentraidApi(bridge) as LooseApi;
     const caps = (await api.getHostCapabilities!()) as {
       compute: { transcript: boolean };
     };
     expect(caps.compute.transcript).toBe(false);
+    // No bridge channel is reached at all: this is a pure snapshot now.
+    expect(fake.invokes).toStrictEqual([]);
   });
 });
 

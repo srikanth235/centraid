@@ -26,12 +26,13 @@
 
 import { useCallback, useState } from "react";
 
+import type { SelectionHandler } from "@centraid/blueprints/apps/_shared/selection-engine";
+
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { surfaceWriteFailure } from "../../kit/replica/write-outcome";
 import { useShareTarget } from "../../kit/share/use-share-target";
 import type { ShareTargetCandidate } from "../../kit/share/use-share-target";
-import type { SelectionHandler } from "./photos-selection";
 import {
   batchCopyToSharing,
   sharingOutcomeMessage,

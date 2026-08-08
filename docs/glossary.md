@@ -55,6 +55,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
+| **enrichment service** | The one HTTP seam between the gateway and every model that derives something from a member's bytes (embeddings, OCR, faces, transcripts) — loopback-only, configured via `CENTRAID_ENRICH_URL`. Apps never call it directly; they enqueue `enrich_request` rows or read the vault tables a sweep populated. | `packages/gateway/src/enrich/service-client.ts`; `packages/gateway/src/enrich/capability-sweep.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway preferences in `gateway.db` — runner, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
@@ -110,6 +111,7 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 
 | Avoid | Prefer |
 | --- | --- |
+| "ML layer" / "sidecar" for the enrichment service | **enrichment service** — one seam, one config, one wire contract |
 | "database" for the personal ontology | **vault** (`vault.db` is the file) |
 | "server" for the product backend | **gateway** |
 | "template app" after install | **app** (blueprint is the shipped source) |
@@ -127,7 +129,7 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 | "found a vault" as something a **user** does | the user **creates** a vault (an admin act on a running gateway); only the **gateway** founds — itself, once, on a fresh data dir |
 | "Approvals" or "Inbox" for the unified owner surface | **Notifications** (#665) — "Inbox" reads as mail, and this stream is news plus things needing action. Use **decision** when referring specifically to an item waiting on the owner, and **notice** for a durable non-decision update. |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
-| "confirm / reject" as the pair of things a member does to a **proposal** | **answer** — one verb with three members: `confirm`, `reject`, `dismiss` ("reviewed, deliberately left unnamed"). A pair could not finish a review queue: a member with no way to say "I looked and I am not naming this" only ever has Skip, and a skipped proposal returns for ever. See [`media.answer_face_proposal`](../packages/vault/src/commands/enrich.ts) and the shared queue model [`triage-session.ts`](../packages/blueprints/apps/photos/triage-session.ts) (#712). |
+| "confirm / reject" as the pair of things a member does to a **proposal** | **answer** — one verb with three members: `confirm`, `reject`, `dismiss` ("reviewed, deliberately left unnamed"). A pair could not finish a review queue: a member with no way to say "I looked and I am not naming this" only ever has Skip, and a skipped proposal returns for ever. See [`media.answer_face_proposal`](../packages/vault/src/commands/enrich.ts) and the shared queue model [`triage-session.ts`](../packages/blueprints/apps/_shared/triage-session.ts) (#712, #725). |
 | **deleting** a rejected proposal row | a rejection is a **state** (`review_state`), never a `DELETE` — a deleted row remembers nothing, so the enricher's next run proposes the same thing again and the member answers it for ever. Suppression is one `WHERE review_state = 'proposed'` in [`enrich-publishers.ts`](../packages/vault/src/ingest/enrich-publishers.ts) (#712). |
 
 ## Inconsistencies (known dual vocabulary)

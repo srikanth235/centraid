@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -40,12 +40,18 @@ const changed = new Set(
 function approved(config) {
   const note = config.approvedDeviation;
   if (typeof note !== "string" || !/#\d+/u.test(note)) return false;
-  return [...changed]
-    .filter((file) => /^receipts\/issue-\d+-.*\.md$/u.test(file))
-    .some((file) => {
-      const receipt = readFileSync(path.join(root, file), "utf8");
-      return /^## Decisions\s*$/mu.test(receipt) && receipt.includes(note);
-    });
+  return (
+    [...changed]
+      .filter((file) => /^receipts\/issue-\d+-.*\.md$/u.test(file))
+      // `changed` includes deletions — a receipt renamed away under a
+      // doc-integrity waiver must not crash the gate; the surviving receipt
+      // is the one that can carry the deviation note.
+      .filter((file) => existsSync(path.join(root, file)))
+      .some((file) => {
+        const receipt = readFileSync(path.join(root, file), "utf8");
+        return /^## Decisions\s*$/mu.test(receipt) && receipt.includes(note);
+      })
+  );
 }
 const queryFile = "tests/experience-budgets/client-query-counts.json";
 const queryBase = baseJson(queryFile);

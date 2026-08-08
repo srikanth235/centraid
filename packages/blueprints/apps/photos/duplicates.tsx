@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
 
+import {
+  openTriage,
+  triageAnswer,
+  triageCurrent,
+} from "../_shared/triage-session.ts";
+import type { TriageSession } from "../_shared/triage-session.ts";
 // The duplicates surfaces' render orchestrator (issue #352 phase 3) — same
 // shape as toolbar.jsx: owns its own private state (the loaded clusters, which
 // asset ids are checked, where the review has got to) and renders into the
@@ -18,8 +24,6 @@ import { DuplicateReviewView } from "./components/DuplicateReview.tsx";
 import { DuplicatesView } from "./components/Duplicates.tsx";
 import { trashDuplicateAssets } from "./duplicates-actions.ts";
 import type { Rung } from "./layout.ts";
-import { openTriage, triageAnswer, triageCurrent } from "./triage-session.ts";
-import type { TriageSession } from "./triage-session.ts";
 import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
@@ -57,7 +61,7 @@ export function createDuplicates({
   // they agreed to walk.
   //
   // That snapshot-plus-frozen-denominator dance is exactly what the Face
-  // review was also doing by hand, so it lives in `triage-session.ts` now and
+  // review was also doing by hand, so it lives in `_shared/triage-session.ts`
   // both flows read it from there. What stays different — and what that
   // module deliberately does NOT unify — is durability: a face answer is a
   // vault write, whereas resolving a cluster persists nothing but the trash

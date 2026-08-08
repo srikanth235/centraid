@@ -12,6 +12,26 @@
 // rather than retyped. A member who crops on the desktop and crops on the phone
 // must be given the same promise, word for word; two string literals in two
 // packages is exactly how that stops being true.
+//
+// FLIP joined crop/rotate/straighten in the same tool row (issue #724 B1) for
+// the same reason rotate did: `expo-image-manipulator`'s manipulator context
+// exposes it directly (`.flip('horizontal')`), so it costs nothing beyond a
+// toggle here and a chained call in `photo-edit-save.ts`.
+//
+// AUTO-ENHANCE IS DELIBERATELY ABSENT. A curve/levels heuristic needs the
+// photograph's own pixel buffer to compute a histogram over, and neither
+// `expo-image-manipulator` (crop/rotate/flip/resize/extent only — see its own
+// `Action` union) nor anything else already in this app's dependency tree
+// hands React Native a decoded RGBA buffer without adding a native module.
+// `generateDeviceDerivatives` (`lib/upload/derivatives-native.ts`) DOES decode
+// pixels — through `jpeg-js`, for the thumbhash/phash pipeline — but only for
+// its own small thumbnail rung, and reusing that decode for a full-resolution
+// "enhance" would mean re-implementing curve stretching over raw bytes on the
+// JS thread for a 12MP photograph, which is not what "reuse what already
+// exists" means. So this editor ships the adjustments it can make honestly
+// (crop, rotate, straighten, flip) and stops there rather than shipping a
+// fake "Enhance" button that silently does nothing, or a real one that would
+// require the native dependency this issue's brief forbids adding.
 
 // The commit and its explanation, WORD FOR WORD as the web editor renders them
 // (`packages/blueprints/apps/photos/viewer.ts`). They are re-declared here
@@ -217,6 +237,30 @@ export function cropPixels(
 // What the editor is about to do, in one sentence
 // ---------------------------------------------------------------------------
 
+/** Horizontal is the mirror a member actually wants (a selfie shot the way it
+ *  faced the lens); vertical is offered for parity with the manipulator's own
+ *  two-axis support rather than because it is commonly asked for. `undefined`
+ *  is "no flip" — the third state a boolean cannot hold on its own, and the
+ *  one an untouched editor must be in. */
+export type FlipAxis = "horizontal" | "vertical" | undefined;
+
+/** One press: no flip → horizontal → vertical → no flip. Only one axis at a
+ *  time (the manipulator's own constraint — "one flip per transformation"),
+ *  so this is a three-way cycle, not two independent toggles. */
+export function nextFlip(current: FlipAxis): FlipAxis {
+  if (current === undefined) return "horizontal";
+  if (current === "horizontal") return "vertical";
+  return undefined;
+}
+
+/** The flip tool's own label, carrying the live axis so the row reads the
+ *  same way `straightenLabel` does. */
+export function flipLabel(flip: FlipAxis): string {
+  if (flip === "horizontal") return "Flip ↔";
+  if (flip === "vertical") return "Flip ↕";
+  return "Flip";
+}
+
 /**
  * The stage's status line while editing (proto 4632–4645):
  * `Crop 3 : 2 · rotation −2° · nothing written yet`.
@@ -230,9 +274,13 @@ export function editorStatus(input: {
   ratio: EditorRatio;
   quarters: number;
   straighten: number;
+  flip?: FlipAxis;
 }): string {
   const rotation = totalRotation(input.quarters, input.straighten);
-  return `Crop ${input.ratio} · rotation ${signedDegrees(rotation)} · nothing written yet`;
+  const flipClause = input.flip
+    ? ` · ${flipLabel(input.flip).toLowerCase()}`
+    : "";
+  return `Crop ${input.ratio} · rotation ${signedDegrees(rotation)}${flipClause} · nothing written yet`;
 }
 
 /** Whether anything would actually change — `Reset` and the commit both need
@@ -242,6 +290,7 @@ export function isEdited(input: {
   quarters: number;
   straighten: number;
   crop: CropRect;
+  flip?: FlipAxis;
 }): boolean {
   return (
     input.ratio !== "Original" ||
@@ -249,7 +298,8 @@ export function isEdited(input: {
     input.crop.x !== FULL_CROP.x ||
     input.crop.y !== FULL_CROP.y ||
     input.crop.w !== FULL_CROP.w ||
-    input.crop.h !== FULL_CROP.h
+    input.crop.h !== FULL_CROP.h ||
+    input.flip !== undefined
   );
 }
 

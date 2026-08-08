@@ -34,6 +34,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Workspace manifests only — invalidates install only when deps change.
 COPY package.json bun.lock turbo.json tsconfig.base.json tsconfig.electron.json tsconfig.expo.json ./
 COPY --parents packages/*/package.json apps/*/package.json ./
+COPY --parents tools/*/package.json ./
 
 RUN bun install --frozen-lockfile
 

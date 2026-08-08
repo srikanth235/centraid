@@ -98,7 +98,9 @@ export function changedFiles(baseRef) {
  * @returns {string | null} e.g. "packages/gateway", or null.
  */
 export function workspaceDirOf(filePath) {
-  const m = /^(?<workspaceDir>(?:packages|apps)\/[^/]+)\//u.exec(filePath);
+  const m = /^(?<workspaceDir>(?:packages|apps|tools)\/[^/]+)\//u.exec(
+    filePath
+  );
   return m?.groups?.workspaceDir ?? null;
 }
 

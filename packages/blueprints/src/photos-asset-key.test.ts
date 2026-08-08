@@ -12,9 +12,10 @@
 // app-boot-harness.ts reproduces that with symlinks into a mirrored tree.
 // These modules are unit-testable without a booted app, so the same trick is
 // applied in miniature: the real sources are copied into a temp dir beside two
-// stubs (`kit.ts`, `outcomes.ts`) and imported from there. The modules UNDER
-// TEST are byte-identical copies, so this is still testing the real code — only
-// the two effect boundaries are replaced.
+// stubs (`kit.ts`, `outcomes.ts`) and imported from there. Shared pure helpers
+// keep their production-relative path under `_shared/`. The modules UNDER TEST
+// are byte-identical copies, so this is still testing the real code — only the
+// two effect boundaries are replaced.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -87,10 +88,16 @@ const COPIED = [
   "selection-actions.ts",
 ];
 
-const dir = tempDirSync("photos-asset-key-");
+const root = tempDirSync("photos-asset-key-");
+const dir = path.join(root, "photos");
 mkdirSync(dir, { recursive: true });
 for (const file of COPIED)
   copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
+mkdirSync(path.join(root, "_shared"), { recursive: true });
+copyFileSync(
+  path.resolve(PHOTOS, "../_shared/selection-engine.ts"),
+  path.join(root, "_shared/selection-engine.ts")
+);
 
 // The kit surface these two modules actually touch. `format.ts` wants three
 // formatting helpers; `selection-actions.ts` wants `statusLine`.

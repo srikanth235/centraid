@@ -128,6 +128,11 @@
         "scripts/*.{js,mjs}"
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
+    },
+    "tools/enrichment-service": {
+      "entry": ["src/server.ts", "setup.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["onnxruntime-node"]
     }
   }
 }

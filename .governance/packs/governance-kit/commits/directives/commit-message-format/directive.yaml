@@ -4,3 +4,43 @@ recommended: true
 summary: "Commit messages match Conventional Commits with a trailing GitHub issue reference."
 surface: change-set
 hook: commit-msg
+triggers: [commit-msg, schedule]
+config:
+  - name: TYPES
+    type: list
+    doc: Allowed Conventional Commit types.
+    default:
+      - feat
+      - fix
+      - chore
+      - docs
+      - refactor
+      - test
+      - perf
+      - build
+      - ci
+      - revert
+      - style
+    tunable: true
+  - name: ISSUE_REF_REGEX
+    type: scalar
+    doc: Extended regular expression required at the end of a commit subject.
+    default: '\(#[1-9][0-9]*\)'
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "The subject honestly names what the change does; it is not a generic label attached to a substantive change."
+    - "The declared type (`feat`, `fix`, `chore`, etc.) matches the actual nature of the change, not a milder type chosen to slip past scrutiny."
+    - "The optional scope, when present, matches the area of the repo the diff actually touches."
+    - "The referenced issue `(#123)` is the issue this commit's content actually belongs to, not an arbitrary number copied to satisfy the format."

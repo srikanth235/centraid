@@ -12,6 +12,36 @@
 // answered a face proposal (a rejection stopped being a row deletion). A
 // restore that dropped it would hand the member back a review queue they had
 // already worked through.
+// Schema/export audit #721: the schema fingerprint moved on comment-only edits
+// to schema/enrich.ts (the model-versioning convention is documented in its
+// header; no table, column, or CHECK changed). `enrich_embedding` and its
+// sibling tables were already carried by the canonical table walk, so export
+// completeness is unchanged — derived rows restore exactly like any other row.
+
+// Schema/export audit #724: `enrich_derivation` is a NEW TABLE — the
+// provenance stamp naming which capability, under which model, produced a
+// target's variant. It is carried by the canonical table walk like every other
+// row, and it must be, because a restore that dropped it would hand the member
+// back a library whose derived rows have no producer: the next sweep could not
+// tell an up-to-date caption from one an obsolete model wrote, so it would
+// either re-derive the whole library or trust stale output forever. It needs
+// no adapter — it is machine bookkeeping, not something a human reads outside
+// this system — and it carries no content bytes.
+
+// Schema/export audit #724 W5: `media_face_cluster` is a NEW TABLE and
+// `enrich.derivation` is a newly REGISTERED one. The canonical table walk is
+// `listVaultEntities` (schema/tables.ts) — not "every table in the file" — so
+// the stamp table added by W2 was in fact absent from every export until it was
+// registered here; it is now, and so is the face-grouping projection.
+// Both must be carried, for opposite reasons. The stamp must survive a restore
+// because without it the next sweep cannot tell derived output that is current
+// from output an obsolete model wrote. The cluster projection is rebuildable
+// and could in principle be dropped — it is carried anyway because a restore
+// that silently re-derived it would present the member with a People shelf
+// whose unnamed groups had shuffled, and because `media.forget_person`'s
+// recovery test asserts on the artifact directly: a table outside the walk
+// cannot be proven empty by inspecting an export. Neither needs an adapter
+// (machine bookkeeping, not something a human reads) and neither carries bytes.
 
 import { createHash } from "node:crypto";
 

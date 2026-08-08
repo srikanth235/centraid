@@ -16,10 +16,12 @@ import {
   editedFilename,
   editorMeta,
   editorStatus,
+  flipLabel,
   FULL_CROP,
   isEdited,
   MIN_CROP,
   moveCrop,
+  nextFlip,
   nextStraighten,
   ratioValue,
   rotatedFrameRatio,
@@ -60,6 +62,18 @@ describe("the tool row", () => {
     expect(totalRotation(0, 0)).toBe(0);
     expect(totalRotation(1, -2)).toBe(88);
     expect(totalRotation(4, 0)).toBe(0);
+  });
+
+  test("flip is a three-way cycle: none, horizontal, vertical, none", () => {
+    expect(nextFlip(undefined)).toBe("horizontal");
+    expect(nextFlip("horizontal")).toBe("vertical");
+    expect(nextFlip("vertical")).toBeUndefined();
+  });
+
+  test("the flip label carries the live axis", () => {
+    expect(flipLabel(undefined)).toBe("Flip");
+    expect(flipLabel("horizontal")).toBe("Flip ↔");
+    expect(flipLabel("vertical")).toBe("Flip ↕");
   });
 });
 
@@ -185,6 +199,32 @@ describe("what the editor promises", () => {
         straighten: 0,
       })
     ).toBe(true);
+  });
+
+  test("a flip alone is still something to save", () => {
+    expect(
+      isEdited({
+        crop: FULL_CROP,
+        flip: "horizontal",
+        quarters: 0,
+        ratio: "Original",
+        straighten: 0,
+      })
+    ).toBe(true);
+  });
+
+  test("the status line names the flip when one is set", () => {
+    expect(
+      editorStatus({
+        flip: "horizontal",
+        quarters: 0,
+        ratio: "Original",
+        straighten: 0,
+      })
+    ).toBe("Crop Original · rotation 0° · flip ↔ · nothing written yet");
+    expect(
+      editorStatus({ quarters: 0, ratio: "Original", straighten: 0 })
+    ).toBe("Crop Original · rotation 0° · nothing written yet");
   });
 
   test("the new photograph is findable by name", () => {

@@ -64,11 +64,12 @@ import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
 
+import { faceCropStyle } from "@centraid/blueprints/apps/_shared/face-crop";
 import {
   triageCurrent,
   triageProgress,
   triageSkip,
-} from "@centraid/blueprints/apps/photos/triage-session";
+} from "@centraid/blueprints/apps/_shared/triage-session";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
@@ -86,7 +87,6 @@ import {
 } from "../../kit/replica/write-outcome";
 import { borders, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
-import { faceCropStyle } from "./face-crop";
 import {
   ANSWER_FAILURE,
   ANSWERED_STATE,

@@ -249,3 +249,105 @@ describe("the photographs a hit reaches", () => {
     ).toBe(0);
   });
 });
+
+// Semantic search (issue #721 B4): one aggregate row standing for the
+// gateway's whole ranked set, appended after the other four and never
+// gating them — see `search-hits.ts`'s own header for the argument.
+describe("the semantic row", () => {
+  it("is absent when the network has answered nothing yet", () => {
+    const hits = groupedSearchHits(sources({ query: "beach" }));
+    expect(hits.some((hit) => hit.kind === "semantic")).toBe(false);
+  });
+
+  it('is absent when semanticHits is an empty array ("unavailable", or nothing resolved)', () => {
+    const hits = groupedSearchHits(
+      sources({ query: "beach", semanticHits: [] })
+    );
+    expect(hits.some((hit) => hit.kind === "semantic")).toBe(false);
+  });
+
+  it("names the group, ranked by score, and opens the strongest match", () => {
+    const hits = groupedSearchHits(
+      sources({
+        query: "beach",
+        semanticHits: [
+          { assetId: "asset-4", contentId: "content-4", score: 0.4 },
+          { assetId: "asset-1", contentId: "content-1", score: 0.9 },
+        ],
+      })
+    );
+    const semantic = hits.find((hit) => hit.kind === "semantic");
+    expect(semantic).toMatchObject({
+      label: "Photos that look like “beach”",
+      meta: "",
+      sub: "semantic · 2 photographs",
+      target: { params: { assetId: "1" }, screen: "PhotoLightbox" },
+    });
+  });
+
+  it("carries every resolved hit's asset id into the grid, in no particular order requirement", () => {
+    const hits = groupedSearchHits(
+      sources({
+        query: "beach",
+        semanticHits: [
+          { assetId: "asset-1", contentId: "content-1", score: 0.5 },
+          { assetId: "asset-4", contentId: "content-4", score: 0.9 },
+        ],
+      })
+    );
+    const semantic = hits.find((hit) => hit.kind === "semantic");
+    expect([...(semantic?.assetIds ?? [])].sort()).toStrictEqual([
+      "asset-1",
+      "asset-4",
+    ]);
+  });
+
+  it("drops a hit the timeline has not loaded, rather than reaching the grid with a dangling id", () => {
+    const hits = groupedSearchHits(
+      sources({
+        query: "beach",
+        semanticHits: [
+          { assetId: "asset-unloaded", contentId: "content-x", score: 0.9 },
+        ],
+      })
+    );
+    expect(hits.some((hit) => hit.kind === "semantic")).toBe(false);
+  });
+
+  it("sits last — broadest of the five", () => {
+    const hits = groupedSearchHits(
+      sources({
+        query: "ana lyme coast",
+        matches: [LIBRARY[0]!],
+        semanticHits: [
+          { assetId: "asset-4", contentId: "content-4", score: 0.7 },
+        ],
+      })
+    );
+    expect(hits.map((hit) => hit.kind)).toStrictEqual([
+      "person",
+      "place",
+      "album",
+      "caption",
+      "semantic",
+    ]);
+  });
+
+  it("unions into the grid alongside the other four groups' reaches", () => {
+    const hits = groupedSearchHits(
+      sources({
+        query: "ana",
+        semanticHits: [
+          { assetId: "asset-4", contentId: "content-4", score: 0.7 },
+        ],
+      })
+    );
+    // Ana (person) reaches 1, 2, 5; the semantic row adds 4.
+    expect([...reachableAssetIds(hits)].sort()).toStrictEqual([
+      "asset-1",
+      "asset-2",
+      "asset-4",
+      "asset-5",
+    ]);
+  });
+});

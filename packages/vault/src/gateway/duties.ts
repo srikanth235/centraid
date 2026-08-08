@@ -424,6 +424,16 @@ function deleteAssetRow(
     assetId,
     "sweep.purge"
   );
+  // A face region is itself a polymorphic TARGET now (issue #724 W5): its
+  // vector lives in enrich_embedding and its producer in enrich_derivation,
+  // both keyed `media.face_region`. Deleting the region without sweeping those
+  // leaves an orphan FACE vector — the one leftover that could match a new
+  // photograph back to a person whose photographs are gone.
+  const regions = db.vault
+    .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
+    .all(assetId) as { region_id: string }[];
+  for (const region of regions)
+    cleanupPolyRefs(db.vault, now, "media.face_region", region.region_id);
   db.vault
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(assetId);

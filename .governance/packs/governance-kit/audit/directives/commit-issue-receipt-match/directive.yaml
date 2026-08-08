@@ -4,3 +4,32 @@ recommended: true
 summary: "Every non-merge, non-revert commit adds or updates a receipts/issue-<N>.md — the touched receipt path is the commit's issue anchor."
 surface: change-set
 hook: commit-msg
+triggers: [commit-msg, schedule]
+config:
+  - name: RECEIPTS_DIR
+    type: scalar
+    doc: Fixed directory holding identity-bearing per-issue receipts.
+    default: receipts
+    tunable: false
+  - name: ISSUE_RECEIPT_GLOB
+    type: scalar
+    doc: Fixed identity-bearing receipt filename glob within RECEIPTS_DIR.
+    default: issue-*.md
+    tunable: false
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "The touched receipt's content plausibly corresponds to the actual commit — not a trivial whitespace edit made only to satisfy the check."
+    - "The receipt named by the commit is genuinely the issue the change belongs to, not an arbitrary unrelated receipt touched to pass the gate."
+    - "When a commit's diff spans work for more than one issue, only one receipt's issue is the one this commit's substance actually belongs to."
+    - "A commit that legitimately touches no receipt (a release, an unusual cross-cutting refactor) carries a waiver whose reason genuinely explains the exception, not a boilerplate string."

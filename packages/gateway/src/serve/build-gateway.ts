@@ -115,7 +115,8 @@ import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
-import { recognizeWithTesseract } from "../capture/tesseract-ocr.js";
+import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { readEnrichServiceConfig } from "../enrich/service-client.js";
 import {
   closeJournalConversationStores,
   journalConversationStore,
@@ -166,6 +167,10 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
+import {
+  SEMANTIC_SEARCH_PATH,
+  makeEnrichSearchRouteHandler,
+} from "../routes/enrich-search-routes.js";
 import { makeGatewayInfoRouteHandler } from "../routes/gateway-info-routes.js";
 import { makeHealthRouteHandler } from "../routes/health-routes.js";
 import { makeImportRouteHandler } from "../routes/import-routes.js";
@@ -4083,7 +4088,7 @@ export async function buildGateway(
       "/centraid/_gateway/capture",
       makeCaptureRouteHandler({
         classify: classifyCapture,
-        recognizeOcr: recognizeWithTesseract,
+        recognizeOcr: makeCaptureOcrRecognizer(readEnrichServiceConfig()),
       })
     ),
     // A single JSON document a user can save + hand to support: version,
@@ -4178,6 +4183,14 @@ export async function buildGateway(
     forRoutePrefixes(
       "/centraid/_vault/imports",
       makeImportRouteHandler(vaultRegistry)
+    ),
+    // Semantic photo search (issue #721 E3). Mounted BEFORE the generic
+    // `_vault` handler — and deeper than the owner's enrichment-settings
+    // surface at `/centraid/_vault/enrich`, which the generic handler still
+    // owns.
+    forRoutePrefixes(
+      SEMANTIC_SEARCH_PATH,
+      makeEnrichSearchRouteHandler(vaultRegistry)
     ),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`

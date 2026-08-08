@@ -281,6 +281,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     name: "Fingerprints",
     blurb: "Hashes for spotting duplicate photos.",
   },
+  "media.face_cluster": {
+    name: "Face groups",
+    blurb: "Faces that look like each other, waiting for a name.",
+  },
   // home
   "home.asset_item": {
     name: "Belongings",

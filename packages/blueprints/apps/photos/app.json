@@ -3,7 +3,7 @@
   "id": "photos",
   "name": "Photos",
   "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "iconKey": "Camera",
   "colorKey": "amber",
   "vault": {
@@ -31,6 +31,9 @@
       { "schema": "media", "table": "add_to_album", "verbs": "act" },
       { "schema": "media", "table": "remove_from_album", "verbs": "act" },
       { "schema": "media", "table": "face_region", "verbs": "read" },
+      { "schema": "media", "table": "face_cluster", "verbs": "read" },
+      { "schema": "media", "table": "memory", "verbs": "read" },
+      { "schema": "media", "table": "memory_member", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
       { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },

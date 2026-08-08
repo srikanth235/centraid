@@ -2,6 +2,9 @@ import { createServer } from "node:http";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { makeCaptureOcrRecognizer } from "../capture/capture-ocr.js";
+import { startFakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
+import type { FakeEnrichService } from "../enrich/fake-enrich-service.test-fixtures.js";
 import {
   CAPTURE_CLASSIFY_PATH,
   CAPTURE_OCR_PATH,
@@ -53,16 +56,19 @@ describe("capture classify route", () => {
     expect(response.status).toBe(503);
   });
 
-  it("accepts only bounded image bytes for the private OCR backstop", async () => {
+  it("accepts only bounded image bytes for the enrichment-service OCR backstop", async () => {
     const recognizeOcr = vi.fn<
-      (input: Buffer) => Promise<{
+      (
+        input: Buffer,
+        mediaType: string
+      ) => Promise<{
         confidence: number;
-        engine: "tesseract";
+        engine: "enrichment-service";
         text: string;
       }>
     >(async (input) => ({
       confidence: 0.9,
-      engine: "tesseract",
+      engine: "enrichment-service",
       text: input.toString("utf8"),
     }));
     const handler = makeCaptureRouteHandler({
@@ -79,7 +85,10 @@ describe("capture classify route", () => {
       status: 200,
       body: { extraction: { text: "receipt" } },
     });
-    expect(recognizeOcr).toHaveBeenCalledOnce();
+    expect(recognizeOcr).toHaveBeenCalledWith(
+      Buffer.from("receipt"),
+      "image/jpeg"
+    );
     await expect(
       requestRaw(
         handler,
@@ -88,6 +97,84 @@ describe("capture classify route", () => {
         "text/plain"
       )
     ).resolves.toMatchObject({ status: 415 });
+  });
+
+  describe("recognizeOcr wired to the real enrichment service", () => {
+    const services: FakeEnrichService[] = [];
+    afterEach(
+      async () =>
+        void (await Promise.all(services.splice(0).map((s) => s.close())))
+    );
+
+    it("returns the service's regions, joined in reading order", async () => {
+      const service = await startFakeEnrichService({
+        capabilities: {
+          ocr: {
+            result: () => ({
+              regions: [
+                { text: "world", confidence: 0.5, box: [0, 10, 1, 1] },
+                { text: "hello", confidence: 0.9, box: [0, 0, 1, 1] },
+              ],
+            }),
+          },
+        },
+      });
+      services.push(service);
+      const handler = makeCaptureRouteHandler({
+        classify: async () => undefined,
+        recognizeOcr: makeCaptureOcrRecognizer(service.config, {
+          timeoutMs: 2_000,
+        }),
+      });
+      const response = await requestRaw(
+        handler,
+        CAPTURE_OCR_PATH,
+        Buffer.from("receipt"),
+        "image/jpeg"
+      );
+      expect(response).toMatchObject({
+        status: 200,
+        body: {
+          extraction: {
+            text: "hello\nworld",
+            engine: "enrichment-service",
+          },
+        },
+      });
+    });
+
+    it("answers 503 when no enrichment service is configured — never uploads to a third party", async () => {
+      const handler = makeCaptureRouteHandler({
+        classify: async () => undefined,
+        recognizeOcr: makeCaptureOcrRecognizer(null),
+      });
+      const response = await requestRaw(
+        handler,
+        CAPTURE_OCR_PATH,
+        Buffer.from("receipt"),
+        "image/jpeg"
+      );
+      expect(response.status).toBe(503);
+      expect(response.body).toStrictEqual({ error: "ocr_unavailable" });
+    });
+
+    it("answers 503 when the service does not offer ocr", async () => {
+      const service = await startFakeEnrichService({ capabilities: {} });
+      services.push(service);
+      const handler = makeCaptureRouteHandler({
+        classify: async () => undefined,
+        recognizeOcr: makeCaptureOcrRecognizer(service.config, {
+          timeoutMs: 2_000,
+        }),
+      });
+      const response = await requestRaw(
+        handler,
+        CAPTURE_OCR_PATH,
+        Buffer.from("receipt"),
+        "image/jpeg"
+      );
+      expect(response.status).toBe(503);
+    });
   });
 });
 

@@ -16,6 +16,12 @@ require_git
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
+MANIFEST="$(dirname "$0")/directive.yaml"
+TRACKER_REGEX="$(conf_get no-unjustified-suppressions TRACKER_REGEX "$MANIFEST")"
+grep_args=()
+while IFS= read -r marker; do
+    [[ -n "$marker" ]] && grep_args+=(-e "$marker")
+done < <(conf_list no-unjustified-suppressions "$MANIFEST" MARKERS)
 
 # Fixed-string suppression markers across the common ecosystems. `git grep -F`
 # treats these literally, so the regex-special characters (`[`, `(`, `@`, `#`)
@@ -30,21 +36,11 @@ while IFS=: read -r file line_no match; do
     # Accept waiver: `# governance: allow-no-unjustified-suppressions <reason>`
     has_waiver "$file" "$line_no" "no-unjustified-suppressions" && continue
     # Accept a tracker reference on the same line.
-    if echo "$match" | grep -qE '(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)'; then
+    if echo "$match" | grep -qE "$TRACKER_REGEX"; then
         continue
     fi
     violation "$file:$line_no — $(echo "$match" | sed 's/^[[:space:]]*//' | cut -c1-80)"
-done < <(git grep -nF \
-    -e 'eslint-disable' \
-    -e '@ts-ignore' \
-    -e '@ts-expect-error' \
-    -e '# noqa' \
-    -e '# type: ignore' \
-    -e '# pylint: disable' \
-    -e '# pyright: ignore' \
-    -e '#[allow(' \
-    -e 'nolint' \
-    -e '@SuppressWarnings' \
+done < <(git grep -nF "${grep_args[@]}" \
     -- \
     ':!**/directives/no-unjustified-suppressions/**' \
     ':!*.md' \

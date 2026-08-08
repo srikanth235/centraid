@@ -39,6 +39,7 @@ function automationEnrichDomains(): string[] {
 }
 
 describe("EnrichDomain mirrors automation's ENRICH_DOMAINS (issue #712 C4)", () => {
+  // [law:consent-domain-parity] The UI and scheduler gate the same domains.
   it("blueprints' restated union matches automation's source array exactly", () => {
     expect([...ENRICH_DOMAINS].toSorted()).toStrictEqual(
       automationEnrichDomains().toSorted()
