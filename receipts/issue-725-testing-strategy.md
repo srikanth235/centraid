@@ -52,6 +52,7 @@ Changed files (the receipt names every changed path for file-coverage auditing):
 .governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/constitution.md
 .governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/directive.yaml
 CONSTITUTION.md
+Dockerfile
 README.md
 TESTING.md
 apps/mobile/src/apps/photos/FaceReview.tsx
@@ -295,3 +296,4 @@ change was restored before audit completion.
 | codex-019fdd23-464-1786178225-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 9624 | 0 | 2448640 | 1563 | 11187 | 0.6597 | 2513332 | 0 | 110993408 | 203804 | feat(testing): complete app-axis and ML evidence strategy (#725) -m Implement th |
 | codex-019fdd23-464-1786178430-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 37735 | 0 | 2335488 | 1979 | 39714 | 0.7079 | 2551067 | 0 | 113328896 | 205783 | feat(testing): complete app-axis and ML evidence strategy (#725) -m Implement th |
 | codex-019fdd23-464-1786178596-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 19697 | 0 | 830208 | 2243 | 21940 | 0.2904 | 2570764 | 0 | 114159104 | 208026 |  |
+| codex-019fdd23-464-1786179141-1 | codex | 019fdd23-4641-7621-a55c-7d00e0199116 | #725 | gpt-5.6-luna | 103890 | 0 | 3849728 | 10423 | 114313 | 1.3785 | 2674654 | 0 | 118008832 | 218449 | fix(gateway): include tool workspace manifest in image build (#725) -m The root  |
