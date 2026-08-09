@@ -17,8 +17,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 
 ## What changed
 
-- `.github/workflows/e2e.yml` raises the serialized `mobile-e2e-ios` timeout to
-  90 minutes so a cold native build and the journey evidence can flush.
+- `.github/workflows/e2e.yml` reuses PR #683's one-time iOS native build
+  producer and isolated macOS journey matrix, with a manual `ios_suite`
+  selector for focused diagnosis.
 - `apps/mobile/index.ts` suppresses development LogBox overlays so the Expo iOS
   development client does not expose LogBox overlays over Maestro controls.
 - `apps/mobile/src/screens/Onboarding.tsx` adds stable IDs and roles for the
@@ -89,11 +90,16 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/lib/first-run.mjs`,
   `tests/agent-e2e-mobile/lib/harness.mjs`, and
   `tests/agent-e2e-mobile/run-photos-suite.mjs`.
-- Manual `e2e.yml` dispatches can target the affected iOS journey (`native`,
-  `volume`, `cold-start`, `scroll`, or `photos`) through `mobile-flow`; the
-  scheduled lane still runs the complete committed set. This keeps diagnosis
-  evidence-focused instead of spending the 90-minute serialized budget on
-  unrelated green flows.
+- The CI orchestration sources are `.github/workflows/e2e.yml`,
+  `apps/mobile/scripts/select-ci-xcode.sh`, and
+  `apps/mobile/scripts/boot-ci-ios-simulator.sh`.
+- `TESTING.md` records the isolated iOS matrix as the nightly mobile contract
+  and points to the producer/matrix workflow ownership.
+- The iOS lane now builds the native app once and runs isolated macOS matrix
+  cells; manual `e2e.yml` dispatches can target one cell (`native-v0-resilience`,
+  `volume-proof`, `cold-start`, `scroll-frames`, or `photos`) through
+  `ios_suite`. The scheduled lane still runs the complete committed set, so
+  diagnosis does not spend a serialized budget on unrelated green flows.
 
 ### Implementation coverage
 
@@ -105,7 +111,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - Reused paired-state journeys also clear any leftover native/Expo launch overlay before asserting `Home ready` — `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The compatibility wall stays out of the pre-onboarding pairing surface — `apps/mobile/App.tsx`.
 - Transient iOS pairing and capability-wall interactions use bounded waits — `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/first-run.mjs`, and `tests/agent-e2e-mobile/flows/home-loads.mjs`.
-- The serialized iOS job backstop is above its cold-build and journey budget — `.github/workflows/e2e.yml`.
+- The iOS producer and each matrix cell have bounded backstops above their
+  native-build or journey budgets — `.github/workflows/e2e.yml`.
 
 ## Out of scope
 
@@ -116,12 +123,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 
 ## Decisions
 
-- Retain the current serial workflow and current Photos/replica journey set
-  instead of copying PR #683's older six-cell matrix wholesale. This keeps the
-  newer evidence surface intact at the cost of a longer single iOS job.
-- Add a manual flow selector to the serial job so a known failing journey can
-  be isolated on the same macOS/Xcode/Maestro stack without weakening the
-  scheduled full-lane contract.
+- Retain the current Photos/replica journey set while reusing PR #683's
+  producer/matrix workflow shape instead of copying its older six-cell list
+  wholesale. The current suite therefore has a dedicated Photos cell.
+- Reuse PR #683's native-build producer plus isolated iOS matrix, adapted with
+  the current Photos suite as its own cell. A manual `ios_suite` selector keeps
+  diagnosis on the same macOS/Xcode/Maestro stack without weakening scheduled
+  full coverage.
 - Keep the issue checklist statement explicit because issue #676 is a tracking
   issue without checkbox items; implementation coverage is written as evidence
   rather than a fabricated local checklist.
@@ -165,9 +173,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   2026-08-09).
 - After restoring the literal volume assertion used by the matrix contract,
   `bun run test:matrix` and `bun run test:report:smoke` also pass (2026-08-09).
-- The targeted dispatch selector is statically covered by workflow parsing and
-  the existing mobile flow/report contracts; targeted remote runs are used for
-  failing iOS journeys rather than repeating unrelated passing flows.
+- The matrix workflow parses as YAML and the existing mobile flow/report
+  contracts pass; targeted remote dispatches are used for failing iOS cells
+  rather than repeating unrelated passing flows.
 
 ```sh
 bun run format:check
@@ -192,7 +200,7 @@ bun run test:accessibility
 ## Audit
 
 1. **REFUTED** — `## What changed` covers the main iOS/UI, retry-helper, smoke-flow, and 90-minute timeout edits, but omits material staged behavior: Android system-ANR dismissal, the fresh-launch control-channel retry in `home-loads.mjs`, and copying `scan-first-onboarding.png` to the UI-impact artifact path.
-2. **PASS** — Each checked item is realized in the staged diff: `LogBox.ignoreAllLogs`, stable onboarding IDs, `codeRef`/blur/remount recovery, `active={onboarded === true}`, bounded retry/wait helpers with iOS fresh-ticket retry, and `timeout-minutes: 90`.
+2. **PASS** — Each checked item is realized in the staged diff: `LogBox.ignoreAllLogs`, stable onboarding IDs, `codeRef`/blur/remount recovery, `active={onboarded === true}`, bounded retry/wait helpers with iOS fresh-ticket retry, and bounded producer/matrix workflow timeouts.
 3. **REFUTED** — The `gh issue view 676` output contains no checklist items, while this receipt contains six checked and one unchecked items; the receipt checklist therefore does not mirror that issue output.
 
 ## Audit round

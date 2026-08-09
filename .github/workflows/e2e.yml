@@ -1,5 +1,6 @@
 # governance: allow-toolchain-config issue #637 — turbo-cache on build-bearing
-# nightly jobs; mobile-e2e-ios intentionally excluded (macOS native binary risk).
+# nightly jobs; iOS native build and Maestro journeys run as isolated macOS
+# producer/matrix jobs so a slow cell cannot hide evidence from its siblings.
 name: e2e
 
 # Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
@@ -25,20 +26,22 @@ on:
           - pairing
           - report
           - mutation
-      # #676 — target only the iOS journey under investigation. The scheduled
-      # lane keeps the default `all` value; manual diagnosis should not spend
-      # the 90-minute serialized budget re-running unrelated green flows.
-      mobile-flow:
-        description: "Optional iOS mobile flow (all | native | volume | cold-start | scroll | photos)"
+      # #676 / PR #683 — target only the iOS matrix cell under investigation.
+      # The scheduled lane keeps the default `all` value; manual diagnosis
+      # should not spend the matrix budget re-running unrelated green flows.
+      ios_suite:
+        description: "For mobile: run one iOS suite (all | home-loads | template-gate | native-v0-resilience | volume-proof | cold-start | scroll-frames | photos)"
         required: false
         default: "all"
         type: choice
         options:
           - all
-          - native
-          - volume
+          - home-loads
+          - template-gate
+          - native-v0-resilience
+          - volume-proof
           - cold-start
-          - scroll
+          - scroll-frames
           - photos
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
@@ -153,109 +156,139 @@ jobs:
           path: artifacts/
           retention-days: 7
 
-  mobile-e2e-ios:
+  mobile-e2e-ios-build:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
-    # macos-15 defaults to Xcode 16.4 and only ships up to 26.3. Expo SDK 57's
-    # expo-modules-jsi needs Swift tools 6.2 / Xcode 26.4+ (#620); on 16.4 the
-    # JSI xcframework step exits 65 with an empty "Could not resolve package
-    # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
+    # Build once, publish the simulator bundle, and let isolated matrix cells
+    # spend their time driving Maestro. This is the recovered PR #683 shape:
+    # Photos privacy state and XCTest windows cannot leak between journeys.
     runs-on: macos-26
-    # Native build + the serialized mobile journeys can exceed one hour on a
-    # cold macOS runner. Keep the outer cap above the suite's own evidence and
-    # flow budgets so Actions does not cancel a healthy run before artifacts
-    # flush; this is the backstop used by the recovered #676 lane.
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-        # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
-        # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
+        # #637 — deliberately no turbo-cache: macOS native artifacts must not
+        # cross-pollute a Linux build even when RUNNER_OS is in the hash.
       - name: Select Xcode 26.4 or newer
-        run: |
-          set -euo pipefail
-          # Prefer the newest installed ≥26.4 so image rolls stay green without
-          # pinning a patch. Fail loud if the image dropped below Expo's floor.
-          selected=""
-          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
-            version="${app#/Applications/Xcode_}"
-            version="${version%.app}"
-            major="${version%%.*}"
-            rest="${version#*.}"
-            minor="${rest%%.*}"
-            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
-              selected="$app"
-              break
-            fi
-          done
-          test -n "$selected" || {
-            echo "::error::no Xcode ≥26.4 under /Applications (ExpoModulesJSI floor)"
-            ls -d /Applications/Xcode*.app || true
-            exit 1
-          }
-          echo "selecting $selected"
-          sudo xcode-select -s "$selected"
-          xcodebuild -version
-          swift --version
-      # The iOS dev build is cached and reused whenever nothing that changes the
-      # *native binary* changed. A JS/TS commit is served live by Metro, so it
-      # must not pay the ~32-minute compile; a config-plugin, native-module,
-      # bundle-id, or autolinked-pod change must. The cache key (built below) has
-      # two independent parts:
-      #
-      #   fp<hash>  @expo/fingerprint over the native inputs ONLY — config
-      #             plugins, autolinked native modules (read from node_modules,
-      #             so the install MUST run first), the bare apps/mobile/ios
-      #             project, the resolved Expo config, and the RN version. It
-      #             deliberately ignores apps/mobile/src/** (Metro-served JS) and
-      #             THIS workflow file, so editing either no longer forces a
-      #             rebuild — the exact over-hashing the old hand-rolled
-      #             `git ls-files | shasum` key suffered (it mixed in the whole
-      #             e2e.yml and all of ios/, including gitignored build products,
-      #             so any workflow edit or leftover build dir busted the cache).
-      #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
-      #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
-      #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
-      #             binary built by a newer Xcode after a macos image roll must
-      #             still not be reused; this component forces that rebuild. It
-      #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
-      #             the part of the image that actually matters here).
-      #
-      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
-      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
-      # per-repo budget with LRU eviction, the natural victim is the .app entry
-      # below — which is only ever read, never re-saved on a hit.
+        run: bash apps/mobile/scripts/select-ci-xcode.sh
       - name: Fingerprint the iOS native build inputs
         id: native
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          # @expo/fingerprint reads node_modules for the autolinked native tree,
-          # so this runs after `bun install` above. The script prints the bare
-          # hash and hard-fails on an empty digest (no constant false-hit key).
           fp="$(node scripts/native-fingerprint.mjs ios)"
           test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
-          # Toolchain captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's
-          # exit status, so a broken xcodebuild would silently weaken the key
-          # instead of failing the step.
           xcode="$(xcodebuild -version)"
           sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
-          xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          xc="$(printf '%s\\n%s\\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=xc${xc:0:12}-fp$fp" >> "$GITHUB_OUTPUT"
           echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
-      - name: Build and start the tokenless mobile test gateway
-        # Scoped to the gateway's dependency subgraph instead of a full
-        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
-        # packages/gateway/dist, and turbo pulls every workspace dependency
-        # (vault, app-engine, agent-runtime, automation, backup, blueprints,
-        # tunnel, client, web, design) in transitively — nothing
-        # the mobile job needs is dropped. The saving is narrow but real, and
-        # comes almost entirely from dropping @centraid/desktop (skills and
-        # data-plane folded into gateway/tunnel in #495).
+      - name: Boot an iOS simulator
+        run: bash apps/mobile/scripts/boot-ci-ios-simulator.sh
+      # The native app cache is content-addressed by the native fingerprint and
+      # host Xcode/SDK. JS/TS changes stay Metro-served and do not rebuild it.
+      - name: Restore the built iOS app
+        id: ios_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      - name: Build and install the mobile development app
+        id: ios_build
+        if: steps.ios_app.outputs.cache-hit != 'true'
+        working-directory: apps/mobile
         run: |
+          set -euo pipefail
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
+            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
+          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
+          rm -rf ~/.cache/centraid-mobile-e2e
+          mkdir -p ~/.cache/centraid-mobile-e2e
+          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
+          echo 'built=true' >> "$GITHUB_OUTPUT"
+      - name: Save the built iOS app
+        if: always() && steps.ios_build.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      - name: Verify the iOS app bundle
+        run: |
+          set -euo pipefail
+          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
+          test -d "$app" || { echo "::error::iOS app cache missing"; exit 1; }
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test "$bundle_id" = 'dev.centraid.mobile' || {
+            echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"
+            exit 1
+          }
+          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
+      - name: Package the built iOS app
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/centraid-mobile-ios-app.tar.gz" \
+            -C "$HOME/.cache/centraid-mobile-e2e" Centraid.app
+      - name: Publish the built iOS app
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-mobile-ios-app
+          path: ${{ runner.temp }}/centraid-mobile-ios-app.tar.gz
+          retention-days: 7
+
+  mobile-e2e-ios:
+    needs: mobile-e2e-ios-build
+    if: >
+      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile')
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON((github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all') && '["home-loads","template-gate","native-v0-resilience","volume-proof","cold-start","scroll-frames","photos"]' || format('["{0}"]', github.event.inputs.ios_suite)) }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Select Xcode 26.4 or newer
+        run: bash apps/mobile/scripts/select-ci-xcode.sh
+      - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
+        working-directory: apps/mobile
+        run: bun run ci:xcode
+      - name: Download the built iOS app
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-mobile-ios-app
+          path: ${{ runner.temp }}/centraid-mobile-ios-app
+      - name: Unpack the built iOS app
+        run: |
+          set -euo pipefail
+          rm -rf "$HOME/.cache/centraid-mobile-e2e"
+          mkdir -p "$HOME/.cache/centraid-mobile-e2e"
+          tar -xzf "$RUNNER_TEMP/centraid-mobile-ios-app/centraid-mobile-ios-app.tar.gz" \
+            -C "$HOME/.cache/centraid-mobile-e2e"
+      - name: Boot an iOS simulator
+        run: bash apps/mobile/scripts/boot-ci-ios-simulator.sh
+      - name: Install the built iOS app
+        run: |
+          set -euo pipefail
+          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
+          test -d "$app" || { echo "::error::iOS app artifact missing"; exit 1; }
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test "$bundle_id" = 'dev.centraid.mobile' || {
+            echo "::error::iOS app bundle id is '$bundle_id', expected dev.centraid.mobile"
+            exit 1
+          }
+          test -x "$app/Centraid" || { echo "::error::iOS app has no executable"; exit 1; }
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          set -euo pipefail
           bun run turbo run build --filter=@centraid/gateway
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
@@ -268,110 +301,11 @@ jobs:
           cat /tmp/centraid-mobile-gateway.log
           exit 1
       - name: Install Maestro CLI
-        # The mobile agent-e2e flows drive the installed app through Maestro
-        # (tests/agent-e2e-mobile/lib/harness.mjs → `maestro --udid … test`).
-        # Pin the CLI: the install script honors MAESTRO_VERSION and otherwise
-        # pulls whatever is at `releases/latest`, so an upstream release could
-        # silently change device-driving behavior mid-nightly. cli-2.6.1 is the
-        # current stable release (github.com/mobile-dev-inc/maestro/releases).
         env:
           MAESTRO_VERSION: 2.6.1
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-      - name: Boot an iOS simulator
-        run: |
-          udid="$(xcrun simctl list devices available --json | node -e '
-            let input="";
-            process.stdin.on("data", chunk => input += chunk);
-            process.stdin.on("end", () => {
-              const devices = Object.values(JSON.parse(input).devices).flat();
-              const phone = devices.find(device => device.isAvailable && /iPhone/.test(device.name));
-              if (!phone) process.exit(1);
-              process.stdout.write(phone.udid);
-            });
-          ')"
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
-          xcrun simctl boot "$udid" || true
-          xcrun simctl bootstatus "$udid" -b
-      # The built .app for the simulator. This is the single biggest win in the
-      # job (~32m of the 51m). Keyed on the native fingerprint above, so a commit
-      # that touches only JS reuses the binary while ANY native-input or Xcode
-      # change forces a rebuild. No `restore-keys`: a partial-match fallback is
-      # exactly the stale-binary false-pass this must never allow — the key is
-      # all-or-nothing.
-      #
-      # restore + save are SPLIT rather than the one-step `actions/cache`, because
-      # that action declares `post-if: success()` — it saves only when the whole
-      # job succeeded. On a lane that is currently red that means the cache never
-      # populates, so the 32-minute build is paid on every run and the warm path
-      # is unreachable until the very greenness the cache is meant to help
-      # deliver. Observed exactly that in runs 29762312605 and 29765712825: the
-      # post step reported `skipped` and the native build ran full-length both
-      # times. The save below runs `if: always()`, so a red run still banks the
-      # binary it built. That is safe because the key is content-addressed: the
-      # artifact is the product of those inputs whether or not a later Maestro
-      # flow passed.
-      - name: Restore the built iOS app
-        id: ios_app
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
-      # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
-      # `pod install` entirely — and `pod install` is the ONLY thing that runs
-      # the centraid-tunnel podspec's prepare_command, which downloads the
-      # git-ignored Iroh.xcframework and IrohLib.swift. Those are a vendored
-      # framework and a compiled source of that pod, so skipping the fetch breaks
-      # the native build outright. It would not even fail on the first run: the
-      # cache is empty then. It would fail on the second native change, which is
-      # exactly the path a pods cache exists to serve.
-      - name: Build and install the mobile development app
-        id: ios_build
-        if: steps.ios_app.outputs.cache-hit != 'true'
-        working-directory: apps/mobile
-        run: |
-          set -euo pipefail
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
-          # Copy the product out of derived data into the cached location. Fail
-          # hard if it cannot be found: caching an empty directory would turn
-          # every later run into a silent no-install.
-          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
-            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
-          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
-          rm -rf ~/.cache/centraid-mobile-e2e
-          mkdir -p ~/.cache/centraid-mobile-e2e
-          # -R preserves the bundle's symlinks/permissions.
-          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
-          # Signals the save step below that there is a real bundle to bank.
-          echo 'built=true' >> "$GITHUB_OUTPUT"
-      # Banked even when a later step fails — see the note on the restore step.
-      # Guarded on the build having actually run and produced a bundle, so a
-      # cache-hit run does not re-save what it just restored, and a run that
-      # died before the build cannot cache an empty directory.
-      - name: Save the built iOS app
-        if: always() && steps.ios_build.outputs.built == 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      - name: Install the cached mobile development app
-        if: steps.ios_app.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
-          test -d "$app" || { echo "::error::cached Centraid.app missing"; exit 1; }
-          # Prove the cached bundle is the app the flows actually drive. The
-          # Maestro harness launches by bundle id, so a mismatch here would fail
-          # obscurely at flow time instead of loudly right now.
-          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
-          test "$bundle_id" = 'dev.centraid.mobile' \
-            || { echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
-          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
-          xcrun simctl install "$SIMULATOR_UDID" "$app"
-          # Confirm the simulator agrees the app is installed and resolvable.
-          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
       - name: Start Metro
         run: |
           CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
@@ -383,49 +317,27 @@ jobs:
           exit 1
         working-directory: apps/mobile
       - run: node scripts/test-report/prepare.mjs
-      # Non-short-circuit: each flow always runs and writes evidence; aggregate
-      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
-      - name: Run all committed mobile journeys
+      - name: Run iOS suite — ${{ matrix.suite }}
         env:
           MAESTRO_PLATFORM: ios
         run: |
-          set +e
-          ec=0
-          mobile_flow="${{ github.event.inputs['mobile-flow'] || 'all' }}"
-          case "$mobile_flow" in
-            all)
-              node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-              node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
-              node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-              node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-              # #659 R3c — per-launch cold start (volume-proof times 20 launches as
-              # one sum, which is unreadable as an experience) and the Photos
-              # scroll-settle proxy.
-              node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-              node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-              node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
-              ;;
-            native)
-              node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-              ;;
-            volume)
-              node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-              ;;
-            cold-start)
-              node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-              ;;
-            scroll)
-              node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-              ;;
+          set -euo pipefail
+          case "${{ matrix.suite }}" in
             photos)
-              node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+              node tests/agent-e2e-mobile/run-photos-suite.mjs
               ;;
             *)
-              echo "::error::unsupported mobile-flow '$mobile_flow'"
-              ec=2
+              node "tests/agent-e2e-mobile/flows/${{ matrix.suite }}.mjs"
               ;;
           esac
-          exit "$ec"
+      - name: Dump mobile gateway request log
+        if: always()
+        run: |
+          if [ -f /tmp/centraid-mobile-gateway.log ]; then
+            tail -n 2000 /tmp/centraid-mobile-gateway.log
+          else
+            echo "mobile gateway log was not created"
+          fi
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -434,19 +346,16 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
-      # Single-root evidence upload only — dual path (artifacts/ + runs/) made
-      # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
-      # download, which generate.mjs never reads (#535 F1).
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-mobile
+          name: nightly-evidence-mobile-ios-${{ matrix.suite }}
           path: artifacts/
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-mobile-runs
+          name: nightly-debug-mobile-ios-${{ matrix.suite }}-runs
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -852,6 +761,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
+        mobile-e2e-ios-build,
         mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
@@ -1100,6 +1010,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
+        mobile-e2e-ios-build,
         mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
@@ -1170,6 +1081,7 @@ jobs:
           ### Job results
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
           - web-e2e: \`${{ needs.web-e2e.result }}\`
+          - mobile-e2e-ios-build: \`${{ needs.mobile-e2e-ios-build.result }}\`
           - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
