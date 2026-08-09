@@ -1,6 +1,4 @@
 import {
-  DOCS_HOME_ENTRY,
-  PHOTOS_HOME_ENTRY,
   openAppFromAllAppsCommands,
   relaunchDevClientCommands,
   retryableTapCommands,
@@ -21,9 +19,10 @@ import {
 // Covers dismiss with a native swipe-down gesture that Maestro cannot drive
 // reliably, so each surface is entered from a fresh launch of the app rather
 // than by navigating back — React Navigation state is not persisted, so every
-// launch lands on Home. The empty-vault Home is intentionally a day-one page
-// and exposes the Photos/Docs first moves; the remaining covers are reached
-// through the searchable All-apps sheet, which is the visible launcher path.
+// launch lands on Home. Every cover is reached through the searchable All-apps
+// sheet, which is the visible launcher path. The empty-vault
+// "Bring in photographs/documents" copy is an import offer, not an app
+// selector.
 const SURFACES = [
   // Maestro anchors a text selector to the WHOLE node text, so the marker has
   // to cover all of it: the Photos search field publishes
@@ -35,12 +34,10 @@ const SURFACES = [
     // opened, while the Home screen has neither string (issue #676).
     marker: "Bring 6 camera-roll photographs.*|Search photos.*",
     openCommands: [
-      // The public Photos deep link intentionally lands on Collections, but
-      // it can race the native permission walk on a fresh iOS process. The
-      // same product route is available from Home; use that stable entry for
-      // the empty-vault cover and use the visible All-apps sheet below for the
-      // covers without a day-one move.
-      retryableTapCommands(PHOTOS_HOME_ENTRY),
+      // The empty-vault "Bring in photographs" CTA is an import offer, not
+      // the Photos cover. Search the same visible launcher sheet used by the
+      // other covers so the selector cannot accidentally enter that takeover.
+      openAppFromAllAppsCommands("Photos"),
       `- extendedWaitUntil:\n    visible: "Collections"\n    timeout: 30000`,
     ].join("\n"),
     name: "photos",
@@ -48,7 +45,9 @@ const SURFACES = [
   {
     marker: "Add document or folder",
     openCommands: [
-      retryableTapCommands(DOCS_HOME_ENTRY),
+      // "Bring in documents" has the same import-vs-app ambiguity as Photos;
+      // selecting the named row from All apps is the real launcher contract.
+      openAppFromAllAppsCommands("Docs"),
       `- extendedWaitUntil:\n    visible: "Add document or folder"\n    timeout: 20000`,
     ].join("\n"),
     name: "docs",

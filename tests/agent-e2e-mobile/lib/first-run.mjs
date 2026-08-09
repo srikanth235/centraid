@@ -113,16 +113,6 @@ export function indentMaestroCommands(commands, spaces) {
     .join("\n");
 }
 
-// The empty-vault Home page calls this first move "Bring in photographs";
-// populated replicas publish the launcher accessibility name "Open Photos, …".
-// Keep both in the journey contract while the shell transitions between those
-// two honest Home states.
-export const PHOTOS_HOME_ENTRY = "Bring in photographs|Open Photos.*";
-// Docs has the same day-one/launcher transition as Photos. Keeping this
-// selector beside the Photos contract prevents the native matrix from relying
-// on a URL handoff when the visible Home move is available.
-export const DOCS_HOME_ENTRY = "Bring in documents|Open Docs.*";
-
 // `launchApp: { clearState: true }` also clears the Expo development client's
 // cached Metro URL on iOS. Re-inject the URL through the app's development
 // client route before waiting for the React Native onboarding hierarchy; without

@@ -1,4 +1,7 @@
-import { PHOTOS_HOME_ENTRY, retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openAppFromAllAppsCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("photos-search", async (ctx) => {
@@ -7,7 +10,7 @@ await runFlow("photos-search", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands(PHOTOS_HOME_ENTRY)}
+${openAppFromAllAppsCommands("Photos")}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

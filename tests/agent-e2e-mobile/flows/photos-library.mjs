@@ -1,4 +1,7 @@
-import { PHOTOS_HOME_ENTRY, retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openAppFromAllAppsCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 const now = new Date();
@@ -21,7 +24,7 @@ await runFlow("photos-library", async (ctx) => {
 - extendedWaitUntil:
     visible: "Home ready"
     timeout: 30000
-${retryableTapCommands(PHOTOS_HOME_ENTRY)}
+${openAppFromAllAppsCommands("Photos")}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

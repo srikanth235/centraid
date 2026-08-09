@@ -6,7 +6,6 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  PHOTOS_HOME_ENTRY,
   openAppFromAllAppsCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
@@ -169,7 +168,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands(PHOTOS_HOME_ENTRY)}
+${openAppFromAllAppsCommands("Photos")}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: 30000

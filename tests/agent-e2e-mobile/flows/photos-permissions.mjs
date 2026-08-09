@@ -1,7 +1,6 @@
 import {
-  PHOTOS_HOME_ENTRY,
+  openAppFromAllAppsCommands,
   relaunchDevClientCommands,
-  retryableTapCommands,
   waitForHomeReadyCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -20,7 +19,7 @@ await runFlow("photos-permissions", async (ctx) => {
     permissions:
       all: deny
 ${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}
-${retryableTapCommands(PHOTOS_HOME_ENTRY)}
+${openAppFromAllAppsCommands("Photos")}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

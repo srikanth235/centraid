@@ -47,16 +47,18 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - `tests/agent-e2e-mobile/README.md`, `tests/agent-e2e-mobile/AGENTS.md`, and
   `tests/onboarding-scenarios.md` document the automatic clear-state recovery
   and retain the manual deep-link fallback for ad-hoc simulator runs.
-- The post-Photos Home contract accepts both the current empty-vault
-  `Bring in photographs` move and the populated `Open Photos, …` launcher
-  label; the native and frame journeys use the stable Home moves and searchable
-  All-apps sheet for visible cover navigation when the day-one page has no
-  corresponding tile — `tests/agent-e2e-mobile/lib/first-run.mjs`,
-  `flows/native-v0-resilience.mjs`, and `flows/scroll-frames.mjs`.
-- The Photos permission journey uses the visible Home move before asserting the
-  refusal state, and all post-launch Home waits now poll through delayed
-  Expo/iOS overlays — `flows/photos-permissions.mjs`, `lib/first-run.mjs`, and
-  `tests/agent-e2e-mobile/lib/harness.mjs`.
+- The native cover and Photos journeys use the searchable All-apps sheet for
+  visible app navigation. This avoids confusing the empty-vault
+  `Bring in photographs` / `Bring in documents` import offers with the actual
+  Photos / Docs launcher rows — `tests/agent-e2e-mobile/lib/first-run.mjs`,
+  `flows/native-v0-resilience.mjs`, `flows/photos-permissions.mjs`,
+  `flows/photos-library.mjs`, `flows/photos-search.mjs`,
+  `flows/photos-select-write.mjs`, `flows/photos-viewer.mjs`, and
+  `flows/scroll-frames.mjs`.
+- The Photos permission journey opens the actual Photos launcher row before
+  asserting the refusal state, and all post-launch Home waits now poll through
+  delayed Expo/iOS overlays — `flows/photos-permissions.mjs`,
+  `lib/first-run.mjs`, and `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The scroll-frame rig seeds deterministic Photos and People scenarios before
   pairing so its grid and directory probes cannot silently run against the
   empty CI gateway — `flows/scroll-frames.mjs`,
@@ -66,12 +68,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   generic 12-minute Maestro chunk budget — `flows/cold-start.mjs` and
   `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The native matrix accepts the empty-vault Photos takeover marker as well as
-  the populated search marker; the native Photos cover uses the stable Home
-  entry on a fresh iOS process; the frame probe grants simulator permissions
-  and switches from Collections to Library before measuring its seeded grid;
-  and every rapid volume relaunch reconnects Metro before asserting Home —
-  `flows/native-v0-resilience.mjs`, `flows/scroll-frames.mjs`,
-  `flows/volume-proof.mjs`, and `lib/first-run.mjs`.
+  the populated search marker; the native Photos cover uses the actual All-apps
+  launcher row on a fresh iOS process; the frame probe grants simulator
+  permissions and switches from Collections to Library before measuring its
+  seeded grid; and every rapid volume relaunch reconnects Metro before
+  asserting Home — `flows/native-v0-resilience.mjs`,
+  `flows/scroll-frames.mjs`, `flows/volume-proof.mjs`, and `lib/first-run.mjs`.
 - The Photos suite now freshly pairs the seeded replica for the library journey,
   grants simulator photo permission before drilling into the seeded library,
   waits for seeded Photos rows, and reuses that paired state with a polled
@@ -201,6 +203,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   Photos cover. It then exposed that `centraid://docs` returned to a settled
   Home screen after the iOS confirmation; the uploaded screenshot and
   hierarchy drove the visible Home/All-apps navigation change above.
+- Remote targeted follow-up: [Actions run 31308443933](https://github.com/srikanth235/centraid/actions/runs/31308443933)
+  passed the producer and all setup, and the launcher route reached the Photos
+  journey. Its hierarchy showed the selector had matched the empty-vault
+  `Bring in photographs` import CTA, leaving the import surface blank instead
+  of opening Photos; the screenshot drove the follow-up to select the named
+  Photos/Docs rows from All apps for every affected journey.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;
