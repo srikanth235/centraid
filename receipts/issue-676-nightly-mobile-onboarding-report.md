@@ -209,6 +209,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `Bring in photographs` import CTA, leaving the import surface blank instead
   of opening Photos; the screenshot drove the follow-up to select the named
   Photos/Docs rows from All apps for every affected journey.
+- Remote targeted follow-up: [Actions run 31309798178](https://github.com/srikanth235/centraid/actions/runs/31309798178)
+  passed the producer and isolated setup, and the All-apps sheet plus `Photos`
+  search field worked. The iOS `hideKeyboard` step then dismissed the sheet's
+  transparent scrim before the filtered row could be selected; the debug
+  screenshot and command timeline drove removal of that step and the duplicate
+  title tap from the launcher helper.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

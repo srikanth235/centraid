@@ -219,7 +219,12 @@ ${conditionalRetry}`;
  */
 export function openAppFromAllAppsCommands(appName) {
   return [
-    retryableTapCommands("All apps and places"),
+    // The bottom-band button and the sheet title share an accessibility label.
+    // A generic retry helper would tap the non-interactive title after the
+    // sheet opens, so keep the retry on the first, visible button only.
+    `- tapOn:
+    text: "All apps and places"
+    retryTapIfNoChange: true`,
     `- extendedWaitUntil:
     visible:
       text: "Search all apps and places"
@@ -228,7 +233,9 @@ export function openAppFromAllAppsCommands(appName) {
     text: "Search all apps and places"
     retryTapIfNoChange: true`,
     `- inputText: "${appName}"`,
-    "- hideKeyboard",
+    // Maestro's iOS hideKeyboard taps the transparent Modal scrim here and
+    // closes the sheet. The filtered row is above the keyboard, so select it
+    // while the search field remains focused.
     `- extendedWaitUntil:
     visible:
       text: "Open ${appName}.*"
