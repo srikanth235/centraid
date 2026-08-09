@@ -107,6 +107,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   as recoverable, waits for the launcher to settle, and taps its cached Metro
   server card during the bounded Home/onboarding polls —
   `tests/agent-e2e-mobile/lib/first-run.mjs` and its call sites.
+- The same relaunch helper explicitly foregrounds the app after the optional
+  deep link; iOS can report `simctl openurl` complete while SpringBoard remains
+  foreground, leaving the cached Metro card unreachable —
+  `tests/agent-e2e-mobile/lib/first-run.mjs`.
 
 ### Implementation coverage
 

@@ -144,11 +144,17 @@ const IOS_METRO_RECENT_SERVER_TAP = `- runFlow:
  */
 export function relaunchDevClientCommands(platform) {
   if (platform !== "ios") return "";
+  // `simctl openurl` can return after the dev client hands control back to
+  // SpringBoard; launch again so the cached Metro card is reachable.
   return `- openLink:
     link: "${IOS_METRO_DEV_CLIENT_LINK}"
     optional: true
 - waitForAnimationToEnd:
     timeout: 3000
+- launchApp:
+    clearState: false
+- waitForAnimationToEnd:
+    timeout: 1000
 ${IOS_METRO_RECENT_SERVER_TAP}
 - waitForAnimationToEnd:
     timeout: 1000
