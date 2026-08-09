@@ -140,6 +140,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   recovery tap from landing on the Modal's non-interactive title —
   `apps/mobile/src/screens/home/HomeBand.tsx` and
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- The Settings leg now follows current `main`'s vault-sharing accessibility
+  contract (`<vault> on <gateway>. Switch vault`) instead of the pre-#726
+  `Open vault menu` label, while retaining the durable `APPEARANCE` destination
+  marker — `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 
 ### Implementation coverage
 
@@ -273,6 +277,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   More tap reported a hierarchy change but the All-apps Modal never appeared;
   the final screenshot was still Home. The shared launcher retry now targets a
   stable button ID and repeats only while that source remains visible.
+- Remote targeted follow-up: [Actions run 31320863733](https://github.com/srikanth235/centraid/actions/runs/31320863733)
+  passed producer/setup, onboarding, and all eight native covers through
+  Locker. Settings alone failed because current `main` exposes the vault header
+  as `Personal on Personal. Switch vault`, while the flow still selected the
+  removed `Open vault menu` label; the failure screenshot remained on Home with
+  the vault header visible. The selector now matches the stable `Switch vault`
+  suffix.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

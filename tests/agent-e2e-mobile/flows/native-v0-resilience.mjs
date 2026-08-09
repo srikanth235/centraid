@@ -97,10 +97,13 @@ const SURFACES = [
   // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
   // the first section heading it publishes and nothing else in the app renders
   // it, so it proves arrival without a scroll.
+  // The vault identity control changed with the #726 vault-sharing merge: its
+  // accessible name is now `<vault> on <gateway>. Switch vault`. Match the
+  // stable suffix rather than a gateway/vault value that varies per CI run.
   {
     marker: "APPEARANCE",
     openCommands: [
-      retryableTapCommands("Open vault menu"),
+      retryableTapCommands(".*Switch vault"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
