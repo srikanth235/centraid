@@ -172,6 +172,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   floating development-tools button occupies the upper-right gutter in CI, so
   the previous right-edge arm target opened the Expo menu instead of delivering
   `Pressable.onPress` — `apps/mobile/src/kit/perf/FrameProbe.tsx`.
+- The scroll-frame flow now exits the Photos full-screen cover through its
+  stable `Home` capsule before asking the Home launcher to open People; this
+  preserves the launcher helper's Home-screen precondition without relying on
+  iOS's flaky native swipe-down gesture —
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -391,6 +396,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   captured Expo's floating developer menu after the right-edge tap at
   `[386,72][398,84]`; the sampler itself was never armed. The arm target now
   uses the left gutter and the report has its own explicit accessible wrapper.
+- Focused rerun [Actions run 31339333718](https://github.com/srikanth235/centraid/actions/runs/31339333718)
+  validated the probe fix end to end for Photos: Maestro found and tapped the
+  arm target, the report became visible, and the report text was copied. It
+  then exposed a separate flow precondition: People was requested while the
+  Photos full-screen cover was still presented, so `home-all-apps` was absent.
+  The debug [artifact](https://github.com/srikanth235/centraid/actions/runs/31339333718/artifacts/9045618135)
+  drove the explicit Photos `Home`-capsule exit above.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

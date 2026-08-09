@@ -196,6 +196,23 @@ ${retryableTapCommands("Library")}
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);
 
+  // Photos is a native full-screen cover. Its own Home capsule is the
+  // reliable in-product exit; the All-apps launcher does not exist until the
+  // cover has returned to Home, and the native swipe-down gesture is not a
+  // stable Maestro dismissal path on iOS.
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+- tapOn:
+    text: "^Home$"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: "Home ready"
+    timeout: 30000
+`,
+    "leave-photos"
+  );
+
   // ---- People directory ----------------------------------------------------
   const peopleStartedAt = Date.now();
   await ctx.run(
