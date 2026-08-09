@@ -11,9 +11,9 @@ import type { ListRenderItemInfo } from "react-native";
 
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
-import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import {
   combineReplicaQueryStates,
@@ -27,6 +27,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import ShareSheet from "../../kit/share/ShareSheet";
 import { useTheme } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
 import TallyExpenseRow from "./TallyExpenseRow";
@@ -530,10 +531,9 @@ export default function TallyHome({
           </View>
         </View>
       </Modal>
-      <AudiencePlacementSheet
+      <ShareSheet
         visible={shareOpen}
-        itemType="tally.group"
-        itemId={activeGroupId}
+        onClose={() => setShareOpen(false)}
         sourceVaultId={asString(
           groups.rows.find((row) => row.group_id === activeGroupId)
             ?.__centraidScopeId ??
@@ -541,7 +541,10 @@ export default function TallyHome({
             ""
         )}
         noun="Tally group"
-        onClose={() => setShareOpen(false)}
+        verbs={["give"]}
+        itemType="tally.group"
+        itemIds={[activeGroupId]}
+        onDone={(outcome) => postStatus(outcome.message)}
       />
     </TopSafeArea>
   );

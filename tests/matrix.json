@@ -1685,6 +1685,16 @@
       "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
       "flow": "blueprint-search-law"
     },
+    "per-scope-reach": {
+      "statement": "Every mounted scope reports whether search reached it, was offline, or refused the query instead of collapsing those states into no matches.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
+    "mask-refuses-not-no-matches": {
+      "statement": "A field-masked search refusal remains a typed refusal through the replica and search-scaffold boundary and is never rendered as an honest empty result.",
+      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
+      "flow": "blueprint-search-law"
+    },
     "enrichment-single-client": {
       "statement": "Only the gateway owns the enrichment-service client; apps and automations cannot reach it directly.",
       "owner": "packages/blueprints/src/no-inference-client.test.ts",

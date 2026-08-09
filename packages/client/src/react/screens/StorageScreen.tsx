@@ -6,6 +6,7 @@ import type {
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
 } from "../../gateway-client-local-storage.js";
+import type { GatewayOwner } from "../../gateway-client-owners.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import LocalFootprintCard from "./LocalFootprintCard.js";
 import StorageLimitsPanel from "./StorageLimitsPanel.js";
@@ -29,6 +30,13 @@ export interface StorageScreenProps {
   saveStorageLimits: (
     patch: StorageLimitsPatchDTO
   ) => Promise<StorageLimitsDTO>;
+  /**
+   * `GET _gateway/owners` (issue #726 P1) — joined client-side onto the
+   * footprint's per-vault rows so the gateway owner sees what hosting each
+   * vault costs, and for whom. Optional so a host with no owner surface (or
+   * a test) still renders the footprint, unlabeled.
+   */
+  loadOwners?: () => Promise<GatewayOwner[]>;
 }
 
 /** Footprint refresh cadence. Deliberately slower than the backup card's 10s:
@@ -38,11 +46,14 @@ export interface StorageScreenProps {
 const FOOTPRINT_POLL_MS = 60_000;
 
 export default function StorageScreen(props: StorageScreenProps): JSX.Element {
-  const { loadLocalUsage, saveStorageLimits } = props;
+  const { loadLocalUsage, saveStorageLimits, loadOwners } = props;
   const [report, setReport] = useState<LocalUsageReportDTO | null>(null);
   const [limits, setLimits] = useState<StorageLimitsDTO | null>(null);
   const [footprintError, setFootprintError] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
+  const [ownerLabels, setOwnerLabels] = useState<ReadonlyMap<string, string>>(
+    () => new Map()
+  );
   const mountedRef = useRef(true);
 
   // The local report carries the limits with it, so ONE fetch keeps the
@@ -62,8 +73,24 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
           error instanceof Error ? error.message : String(error)
         );
       }
+      // A roster the gateway won't serve is not fatal: the footprint still
+      // renders, just without the "(owner)" suffix on each vault line.
+      void loadOwners?.()
+        .then((owners) => {
+          if (!mountedRef.current) return;
+          setOwnerLabels(
+            new Map(
+              owners.flatMap((owner) =>
+                owner.vaults.map(
+                  (vault) => [vault.vaultId, owner.label] as const
+                )
+              )
+            )
+          );
+        })
+        .catch(() => undefined);
     },
-    [loadLocalUsage]
+    [loadLocalUsage, loadOwners]
   );
 
   useEffect(() => {
@@ -100,6 +127,7 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         loadError={footprintError}
         onRescan={onRescan}
         rescanning={rescanning}
+        ownerLabels={ownerLabels}
       />
 
       <StorageLimitsPanel

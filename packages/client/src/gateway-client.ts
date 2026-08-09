@@ -862,8 +862,7 @@ export {
   releaseGatewayDeviceWork,
   stageGatewayDeviceWorkDerivative,
   type CentraidGatewayDevice,
-  type GatewayDeviceRole,
-  type GatewayVaultGrant,
+  type GatewayDeviceVault,
   type DeviceComputeCapabilities,
   type DeviceComputeProfile,
   type GatewayDeviceWorkDepth,
@@ -876,12 +875,41 @@ export {
 // row revoked?" without importing the HTTP client (see the module header).
 export { isRevokedDevice } from "./device-roster.js";
 
-// The household roster (issue #599 L2) — the people devices act as. Same
-// card, same barrel; see `gateway-client-members.ts` for the two-verb split.
+// The caller's own person (issue #726) — the device roster's own-owner
+// header. Same card, same barrel; see `gateway-client-owners.ts`.
 export {
-  listGatewayMembers,
-  createGatewayMember,
-  renameGatewayMember,
-  removeGatewayMember,
-  type GatewayMember,
-} from "./gateway-client-members.js";
+  listGatewayOwners,
+  renameGatewayOwner,
+  type GatewayOwner,
+  type GatewayOwnerVault,
+} from "./gateway-client-owners.js";
+
+// The link ceremony + D9 receive setting (#726 P2/P3) and the edge/ask
+// surface (#726 P2/P4) — the People panel's own data plane. Same barrel so
+// `SharingCard.tsx` reads it beside the devices/owners surfaces above.
+export {
+  listGatewayLinks,
+  proposeGatewayLink,
+  approveGatewayLink,
+  getReceiveSetting,
+  setReceiveSetting,
+  getBorrowBudget,
+  setBorrowBudget,
+  type GatewayLink,
+  type ReceiveSetting,
+  type BorrowBudget,
+} from "./gateway-client-links.js";
+export {
+  listGatewayEdges,
+  giveEdge,
+  lendEdge,
+  listPendingEdges,
+  answerPendingEdge,
+  closeGatewayEdge,
+  type GatewayEdge,
+  type EdgeMode,
+  type EdgeKind,
+  type EdgeStatus,
+  type LendScopeInput,
+  type PendingEdge,
+} from "./gateway-client-edges.js";

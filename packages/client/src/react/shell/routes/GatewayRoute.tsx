@@ -7,6 +7,7 @@ import {
   getUserPrefs,
   getLocalStorageUsage,
   listGatewayDevices,
+  listGatewayOwners,
   pauseBackgroundWork,
   resumeBackgroundWork,
   runGatewayBackupNow,
@@ -246,6 +247,7 @@ export default function GatewayRoute({
         initialTab={initialTab}
         loadLocalUsage={getLocalStorageUsage}
         saveStorageLimits={updateStorageLimits}
+        loadOwners={listGatewayOwners}
       />
     </PageScroll>
   );

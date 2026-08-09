@@ -20,7 +20,7 @@ import { isMeteredConnection } from "../../kit/fetch-gate/gate";
 /** The tone a control takes. Resolved to `colors.onStage` / `colors.net`. */
 export type ViewerTone = "ink" | "net";
 
-export type ViewerActionId = "sharing" | "favorite" | "info" | "edit" | "trash";
+export type ViewerActionId = "copy" | "favorite" | "info" | "edit" | "trash";
 
 export interface ViewerAction {
   id: ViewerActionId;
@@ -38,12 +38,15 @@ export interface ViewerAction {
  * surface (§18).
  */
 export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
-  // `Sharing`, not `Copy to Sharing` (proto 4490). The phone bar DRAWS this
-  // label under the mark at 11px across a fifth of a 390px screen, so the verb
-  // is dropped and the destination kept — and because the visible label and the
-  // spoken one are read from this same field, they cannot disagree (a control
-  // whose accessible name is not its visible label is a WCAG 2.5.3 failure).
-  { id: "sharing", label: "Sharing", icon: "share", tone: "ink" },
+  // `Copy to another place`, since issue #726 retired the Photos "Sharing"
+  // place: the action puts this photograph into another vault the member
+  // names, so the label names a DESTINATION, never the verb `Share` with an
+  // invisible effect — the same resting caption the web viewer's
+  // `ACTION_LABELS.copy` carries (blueprints `viewer.ts`), so the two clients
+  // cannot name one action differently. The visible label and the spoken one
+  // are read from this same field, so they cannot disagree (a control whose
+  // accessible name is not its visible label is a WCAG 2.5.3 failure).
+  { id: "copy", label: "Copy to another place", icon: "share", tone: "ink" },
   { id: "favorite", label: "Favorite", icon: "heart", tone: "ink" },
   { id: "info", label: "Info", icon: "info", tone: "ink" },
   { id: "edit", label: "Edit", icon: "edit-2", tone: "ink" },
@@ -58,11 +61,12 @@ export const VIEWER_ACTION_TARGET = 56;
  *
  * The five actions did not change — this is where they SIT. A single bar of
  * five equal cells gives the destructive action the same weight as Info, and
- * puts the one control a member reaches for by reflex (Share) in the same
- * undifferentiated queue as the rest. Grouping separates them by consequence:
- * the two ends are chips carrying one action each — Share, which leaves the
- * app, and Trash, which is the only destructive one — and the middle capsule
- * carries the three that change nothing outside this photograph.
+ * puts the one control a member reaches for by reflex (Copy to vault) in the
+ * same undifferentiated queue as the rest. Grouping separates them by
+ * consequence: the two ends are chips carrying one action each — Copy to
+ * vault, which reaches outside this vault, and Trash, which is the only
+ * destructive one — and the middle capsule carries the three that change
+ * nothing outside this photograph.
  *
  * The ORDER is untouched: flattening these groups reproduces
  * `VIEWER_BOTTOM_ACTIONS` exactly, which is what keeps the phone's arrangement
@@ -77,7 +81,7 @@ export interface ViewerActionGroup {
 }
 
 export const VIEWER_BOTTOM_GROUPS: readonly ViewerActionGroup[] = [
-  { actions: ["sharing"], shape: "chip" },
+  { actions: ["copy"], shape: "chip" },
   { actions: ["favorite", "info", "edit"], shape: "capsule" },
   { actions: ["trash"], shape: "chip" },
 ] as const;
@@ -304,8 +308,8 @@ export function captureStamp(input: {
  * the only fact on the vault record is whether it is the member's OWN
  * (CHANGELOG §H). A vault a member happened to call "Sharing" is still their
  * own, and must still read as reachable by nothing. There is no third kind of
- * place: where a share GOES is a pointer the member owns, so a photograph
- * sitting in the destination reads like one in any other shared vault.
+ * place: the place a copy lands is the recipient's vault, so a photograph
+ * copied somewhere reads like one in any other shared vault.
  */
 export interface VaultLine {
   /** What the vault CALLS itself — the whole answer to "where is it". */

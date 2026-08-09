@@ -5,11 +5,11 @@ export interface ReplicaIntentContext {
   appId: string;
   deviceId: string;
   /**
-   * The member the intent's device is bound to (issue #599 L4). Carried
+   * The owner the intent's device is bound to (issue #599 L4). Carried
    * beside the device id so an offline write replayed from a phone is
    * attributable to the person, not just the hardware.
    */
-  memberId?: string;
+  ownerId?: string;
 }
 
 const storage = new AsyncLocalStorage<ReplicaIntentContext>();

@@ -20,6 +20,12 @@
 // lands on the FRAME's one status line via `notice`.
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  canWriteScope,
+  mountedScopes,
+  scopeAttr,
+} from "../../_shared/scope-kit.ts";
+import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { toggleFavorite } from "../assets-actions.ts";
 import { isVideoAsset } from "../format.ts";
@@ -36,8 +42,7 @@ import {
 } from "../icons.tsx";
 import { gridSrc, isRenderableUri } from "../media.ts";
 import { act, narrate, notice } from "../outcomes.ts";
-import { canWriteScope, mountedScopes, scopeAttr } from "../scopes.ts";
-import { copyToSharing, sharingBlockedReason } from "../sharing.ts";
+import { photosScopeDeclaration } from "../scope-declaration.ts";
 import type { Album, Asset, Place } from "../types.ts";
 import {
   captureLine,
@@ -143,7 +148,12 @@ export function LightboxShell({
   const downloadHref = safeMediaUrl(asset.content_uri);
   const editable =
     isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite;
-  const sharingReason = sharingBlockedReason(asset, mountedScopes());
+  // Share (issue #726 P6): opens the unified give/lend sheet rather than
+  // firing a sole-destination shortcut. Give copies this ONE photograph;
+  // lend opens a live window over the whole library (the sheet's own note
+  // says so) — see `_shared/ShareSheet.tsx`'s header for why lend has no
+  // per-item granularity.
+  const [shareOpen, setShareOpen] = useState(false);
 
   async function trash(): Promise<void> {
     const outcome = await act(
@@ -194,12 +204,14 @@ export function LightboxShell({
       pressed: infoOpen,
       onRun: () => setInfoOpen((v) => !v),
     },
-    sharing: {
-      id: "sharing",
+    copy: {
+      id: "copy",
       icon: ShareIcon,
-      disabled: sharingReason !== null,
-      reason: sharingReason ?? undefined,
-      onRun: () => void copyToSharing(asset, refresh),
+      label: "Share",
+      // The sheet resolves the true empty state (own vaults sync, linked
+      // people async) itself — this control never disables on a guess.
+      disabled: false,
+      onRun: () => setShareOpen(true),
     },
     download: {
       id: "download",
@@ -223,12 +235,12 @@ export function LightboxShell({
     specs.favorite!,
     specs.edit!,
     specs.info!,
-    specs.sharing!,
+    specs.copy!,
     specs.download!,
     specs.slideshow!,
   ];
   const phoneSpecs = [
-    specs.sharing!,
+    specs.copy!,
     specs.favorite!,
     specs.info!,
     specs.edit!,
@@ -237,6 +249,21 @@ export function LightboxShell({
 
   return (
     <div className={styles.lightbox} ref={rootRef}>
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        sourceScopeId={asset.scope_id ?? mountedScopes()[0]?.id ?? ""}
+        scopes={mountedScopes()}
+        verbs={["give", "lend"]}
+        itemType="media.media_asset"
+        itemIds={[asset.asset_id]}
+        mintedIdFamilies={photosScopeDeclaration.mintedIdFamilies}
+        appLabel="Photos"
+        onDone={(outcome) => {
+          notice(outcome.message);
+          if (outcome.ok && outcome.verb === "give") void refresh();
+        }}
+      />
       <div className={styles.topbar} ref={barRef}>
         <button
           type="button"

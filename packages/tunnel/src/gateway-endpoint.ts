@@ -3,7 +3,7 @@
  *
  * The gateway daemon binds one iroh endpoint whose EndpointId is the
  * gateway's PERMANENT identity — no domain, no TLS cert, no exposed HTTP
- * port. Two ALPNs:
+ * port. Three ALPNs:
  *
  *  - `centraid/tunnel/1`: the same HTTP-over-bi-stream protocol the phone
  *    tunnel speaks (see protocol.ts). Connections are admitted only when
@@ -16,6 +16,12 @@
  *    present a one-time pairing ticket (id + secret, minted by
  *    `centraid-gateway pair` over SSH); the injected `pair` callback
  *    verifies + burns the ticket and enrolls the caller's device key.
+ *
+ *  - `centraid/gw-link/1`: the PEER plane (#726 P3). Another gateway, acting
+ *    for its own vault, reaches `/centraid/_peer/*` and nothing else. It has
+ *    its own admission decision and its own identity headers; sharing either
+ *    with the device lane would make a link indistinguishable from a paired
+ *    owner device.
  *
  * Policy stays with the caller: this module knows framing, ALPNs, and
  * forwarding — never vaults or tickets.
@@ -33,12 +39,20 @@ import type {
   SendStream,
 } from "./iroh.js";
 import { iroh } from "./iroh.js";
+import { createTokenBucket, PEER_PLANE_BUDGET } from "./peer-budget.js";
+import { servePeerConnection } from "./peer-connection.js";
 import type { TunnelRequestHeader, TunnelResponseHeader } from "./protocol.js";
 import {
   alpnBytes,
   CLOSE_UNAUTHORIZED,
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
   encodeHeaderFrame,
+  isPeerPlaneTarget,
   MAX_REQUEST_BODY_BYTES,
+  PEER_ENDPOINT_HEADER,
+  PEER_LINK_ALPN,
+  PEER_PROOF_HEADER,
   readBody,
   readHeaderFrame,
   sanitizeHeaders,
@@ -46,9 +60,26 @@ import {
   TUNNEL_AUTH_WEB_SESSION,
   TUNNEL_ALPN,
 } from "./protocol.js";
+import {
+  bytesToArray,
+  respondError,
+  respondPeerState,
+} from "./response-frames.js";
 
 export const GW_PAIR_ALPN = "centraid/gw-pair/1";
 const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
+
+/**
+ * Every name a forwarder may stamp, on either plane. A client copy of ANY of
+ * them is dropped before the forwarder stamps its own, so the device lane and
+ * the peer lane cannot be crossed from the wire.
+ */
+const IDENTITY_HEADER_NAMES: readonly string[] = [
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  PEER_ENDPOINT_HEADER,
+  PEER_PROOF_HEADER,
+];
 
 /** Ticket redemption over `centraid/gw-pair/1` — one frame each way. */
 export interface GatewayPairRequest {
@@ -60,11 +91,11 @@ export interface GatewayPairRequest {
   platform: string;
   rememberDevice?: boolean;
   /*
-   * There is deliberately NO role OR member field here. Both are baked into
+   * There is deliberately NO owner OR vault field here. Both are baked into
    * the server-minted invitation and read back from `tickets` at redemption;
-   * a joining device never gets to name its own principal or its own
-   * authority. A `trust?` field used to sit here — never read by the host,
-   * but it read as if the client could pick.
+   * a joining device never gets to name its own principal or its own reach.
+   * A `trust?` field used to sit here — never read by the host, but it read
+   * as if the client could pick.
    */
   /** Optional module capability profile for a constrained companion device. */
   grantProfile?: string[];
@@ -79,9 +110,9 @@ export interface GatewayPairResponse {
   gatewayId?: string;
   /** Owner-facing gateway name. */
   gatewayName?: string;
-  /** The member this device is now bound to, and their display label (#599). */
-  memberId?: string;
-  memberLabel?: string;
+  /** The owner this device is now bound to, and their display label (#726). */
+  ownerId?: string;
+  ownerLabel?: string;
   /** The first vault the redeemed invitation enrolled the device into. */
   vaultId?: string;
   vaultName?: string;
@@ -103,7 +134,6 @@ export interface GatewayPairVault {
   vaultId: string;
   enrollmentId?: string;
   vaultName?: string;
-  role?: "admin" | "write" | "read";
 }
 
 export interface GatewayEndpointOptions {
@@ -130,6 +160,20 @@ export interface GatewayEndpointOptions {
    * the same name is dropped first — a device cannot impersonate another.
    */
   requestHeaders?: (endpointId: string) => Record<string, string>;
+  /**
+   * Admit a PEER (gateway↔gateway) connection from this endpoint? Separate
+   * from `authorize` on purpose (#726 P3): the device predicate answers "is
+   * this one of my owner's devices", which a linked gateway must never be
+   * able to answer yes to. Omitting it means this endpoint does not speak
+   * the peer plane at all — the ALPN is not even advertised.
+   */
+  authorizePeer?: (endpointId: string) => boolean;
+  /**
+   * Peer identity headers, the mirror of `requestHeaders` for the peer plane.
+   * Must stamp names DISJOINT from the device ones so the HTTP layer cannot
+   * resolve a peer into a device.
+   */
+  peerRequestHeaders?: (endpointId: string) => Record<string, string>;
   /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
   relays?: "n0" | "disabled";
   /** Authenticated loopback metadata route used by the Rust-owned relay. */
@@ -172,7 +216,13 @@ export async function startGatewayEndpoint(
   if (options.relays === "disabled")
     builder.relayMode(iroh.RelayMode.disabled());
   if (options.secretKey) builder.secretKey(Array.from(options.secretKey));
-  builder.alpns([alpnBytes(TUNNEL_ALPN), alpnBytes(GW_PAIR_ALPN)]);
+  builder.alpns([
+    alpnBytes(TUNNEL_ALPN),
+    alpnBytes(GW_PAIR_ALPN),
+    // Advertised only when the host supplied a peer decision: a gateway with
+    // no link policy must not negotiate the plane at all.
+    ...(options.authorizePeer ? [alpnBytes(PEER_LINK_ALPN)] : []),
+  ]);
   const endpoint = await builder.bind();
 
   const server = new GatewayEndpoint(endpoint, options);
@@ -183,6 +233,7 @@ export async function startGatewayEndpoint(
 class GatewayEndpoint {
   private closed = false;
   private readonly liveConnections = new Map<string, Set<Connection>>();
+  private readonly peerBudget = createTokenBucket(PEER_PLANE_BUDGET);
 
   constructor(
     private readonly endpoint: Endpoint,
@@ -236,7 +287,43 @@ class GatewayEndpoint {
       await this.handlePairConnection(connection);
       return;
     }
+    if (alpn === PEER_LINK_ALPN) {
+      await this.handlePeerConnection(connection);
+      return;
+    }
     await this.handleTunnelConnection(connection);
+  }
+
+  private async handlePeerConnection(connection: Connection): Promise<void> {
+    const authorize = this.options.authorizePeer;
+    if (!authorize) {
+      // Fail closed: a negotiated peer ALPN with no peer policy is a bug, and
+      // the safe reading of a bug on this plane is "no link exists".
+      connection.close(CLOSE_UNAUTHORIZED, alpnBytes("not_found"));
+      return;
+    }
+    await servePeerConnection(connection, {
+      authorize,
+      budget: this.peerBudget,
+      serve: (endpointId, send, recv) =>
+        this.serveStream(endpointId, send, recv, "peer"),
+      refuse: (send, status, state) => respondPeerState(send, status, state),
+      track: (endpointId, live) => this.trackConnection(endpointId, live),
+      untrack: (endpointId, live) => this.untrackConnection(endpointId, live),
+    });
+  }
+
+  private trackConnection(endpointId: string, connection: Connection): void {
+    const live = this.liveConnections.get(endpointId) ?? new Set<Connection>();
+    live.add(connection);
+    this.liveConnections.set(endpointId, live);
+  }
+
+  private untrackConnection(endpointId: string, connection: Connection): void {
+    const live = this.liveConnections.get(endpointId);
+    if (!live) return;
+    live.delete(connection);
+    if (live.size === 0) this.liveConnections.delete(endpointId);
   }
 
   private async handlePairConnection(connection: Connection): Promise<void> {
@@ -264,9 +351,7 @@ class GatewayEndpoint {
       connection.close(CLOSE_UNAUTHORIZED, alpnBytes("unauthorized"));
       return;
     }
-    const live = this.liveConnections.get(endpointId) ?? new Set<Connection>();
-    live.add(connection);
-    this.liveConnections.set(endpointId, live);
+    this.trackConnection(endpointId, connection);
     try {
       const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
@@ -285,34 +370,41 @@ class GatewayEndpoint {
     } catch {
       // Connection closed (by peer, revocation, or shutdown).
     } finally {
-      live.delete(connection);
-      if (live.size === 0 && this.liveConnections.get(endpointId) === live) {
-        this.liveConnections.delete(endpointId);
-      }
+      this.untrackConnection(endpointId, connection);
     }
   }
 
   private async serveStream(
     endpointId: string,
     send: SendStream,
-    recv: RecvStream
+    recv: RecvStream,
+    plane: "device" | "peer" = "device"
   ): Promise<void> {
     let header: TunnelRequestHeader;
     try {
       header = await readHeaderFrame<TunnelRequestHeader>(recv);
     } catch {
-      await this.respondError(send, 400, "bad_request");
+      await respondError(send, 400, "bad_request");
+      return;
+    }
+    // Trap 1, JS half (#726 P3). `target` is peer-supplied and is pasted onto
+    // the loopback base URL below, so on the peer plane it must be proved
+    // confined to `/centraid/_peer/` BEFORE anything else — including before
+    // the upstream lookup, so the refusal cannot vary with gateway state. The
+    // Rust relay enforces the identical rule; neither is the only guard.
+    if (plane === "peer" && !isPeerPlaneTarget(header.target)) {
+      await respondPeerState(send, 404, "not_found");
       return;
     }
     const upstream = await Promise.resolve(this.options.upstream()).catch(
       () => undefined
     );
     if (!upstream) {
-      await this.respondError(send, 503, "gateway_unavailable");
+      await respondError(send, 503, "gateway_unavailable");
       return;
     }
     if (typeof header.target !== "string" || !header.target.startsWith("/")) {
-      await this.respondError(send, 400, "bad_target");
+      await respondError(send, 400, "bad_target");
       return;
     }
     const base = new URL(upstream.baseUrl);
@@ -320,9 +412,15 @@ class GatewayEndpoint {
     const authMode = headers[TUNNEL_AUTH_MODE_HEADER];
     delete headers[TUNNEL_AUTH_MODE_HEADER];
     // Identity injection: strip any client-supplied copy FIRST, then stamp
-    // the connection's cryptographic identity — the device key is what the
-    // QUIC handshake proved, never what the client claims.
-    const injected = this.options.requestHeaders?.(endpointId) ?? {};
+    // the connection's cryptographic identity — the key is what the QUIC
+    // handshake proved, never what the caller claims. Both planes' header
+    // names are stripped regardless of plane, so a peer can never smuggle a
+    // device identity (nor a device a peer one) past the HTTP layer.
+    const injected =
+      plane === "peer"
+        ? (this.options.peerRequestHeaders?.(endpointId) ?? {})
+        : (this.options.requestHeaders?.(endpointId) ?? {});
+    for (const name of IDENTITY_HEADER_NAMES) delete headers[name];
     for (const name of Object.keys(injected))
       delete headers[name.toLowerCase()];
     Object.assign(headers, injected);
@@ -372,7 +470,7 @@ class GatewayEndpoint {
         }
       );
       request.on("error", () => {
-        void this.respondError(
+        void respondError(
           send,
           bodyFailed ? 400 : 502,
           bodyFailed ? "bad_request" : "upstream_unreachable"
@@ -392,43 +490,4 @@ class GatewayEndpoint {
         });
     });
   }
-
-  private async respondError(
-    send: SendStream,
-    status: number,
-    error: string
-  ): Promise<void> {
-    try {
-      const body = Buffer.from(JSON.stringify({ error }), "utf8");
-      await send.writeAll(
-        encodeHeaderFrame({
-          status,
-          headers: {
-            "content-type": "application/json",
-            "content-length": String(body.length),
-          },
-        } satisfies TunnelResponseHeader)
-      );
-      await send.writeAll(bytesToArray(body));
-      await send.finish();
-    } catch {
-      // Stream already gone.
-    }
-  }
-}
-
-/**
- * Convert response bytes to the `Array<number>` the iroh `SendStream.writeAll`
- * binding requires. The native `Vec<u8>` parameter rejects a `Buffer` /
- * `Uint8Array` at runtime ("Failed to get Array length" — it validates
- * `Array.isArray`), so a copy-free write of the Buffer itself is not possible
- * through this binding; the conversion is an unavoidable single copy. A
- * preallocated loop is used over `Array.from(buf)` to skip the iterator
- * protocol on this per-chunk hot path. Compression (issue #404) is what
- * actually shrinks the byte volume crossing here.
- */
-function bytesToArray(buf: Buffer, out: number[] = []): Array<number> {
-  out.length = buf.length;
-  for (let i = 0; i < buf.length; i++) out[i] = buf[i]!;
-  return out;
 }

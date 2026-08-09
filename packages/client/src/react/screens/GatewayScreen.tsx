@@ -1,3 +1,8 @@
+// governance: allow-repo-hygiene file-size-limit one instrument-panel screen
+// (runtime + backup + storage + components + logs + alerts tabs) threading
+// bridge props to each tab's own screen component — #726 P1 added one more
+// (`loadOwners`, for the Storage tab's per-vault owner labels) and crossed
+// the line count by two.
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 
@@ -102,6 +107,7 @@ export interface GatewayScreenProps {
   initialTab?: TabId;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
   saveStorageLimits?: StorageScreenProps["saveStorageLimits"];
+  loadOwners?: StorageScreenProps["loadOwners"];
 }
 
 type TabId = "overview" | "storage" | "components" | "logs" | "alerts";
@@ -467,6 +473,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <StorageScreen
             loadLocalUsage={props.loadLocalUsage}
             saveStorageLimits={props.saveStorageLimits}
+            {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
           />
         </div>
       ) : null}

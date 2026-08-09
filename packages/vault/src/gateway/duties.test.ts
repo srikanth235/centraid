@@ -342,28 +342,20 @@ describe("duties", () => {
 
   /**
    * Seed one of every registered polymorphic dependent pointing at (type, id):
-   * a revocable share, a vector embedding, a sync-map row, a margin annotation,
-   * and an attachment. The attachment carries its OWN bytes (a second content
+   * a vector embedding, a sync-map row, a margin annotation, and an
+   * attachment. The attachment carries its OWN bytes (a second content
    * item) so it never blocks the target's deletion. Returns the ids to assert on.
    */
   function seedPolyDependents(
     type: string,
     id: string
   ): {
-    shareId: string;
     embeddingId: string;
     mapId: string;
     annotationId: string;
     attachmentId: string;
   } {
     const now = new Date().toISOString();
-    const shareId = uuidv7();
-    db.vault
-      .prepare(
-        `INSERT INTO consent_share (share_id, owner_party_id, audience, target_type, target_id, mode, created_at)
-       VALUES (?, ?, 'public_link', ?, ?, 'view', ?)`
-      )
-      .run(shareId, boot.ownerPartyId, type, id, now);
     const embeddingId = uuidv7();
     db.vault
       .prepare(
@@ -413,7 +405,7 @@ describe("duties", () => {
        VALUES (?, ?, ?, ?, 'other', 0, ?)`
       )
       .run(attachmentId, type, id, attachBytes, now);
-    return { shareId, embeddingId, mapId, annotationId, attachmentId };
+    return { embeddingId, mapId, annotationId, attachmentId };
   }
 
   function expectPolyDependentsCleaned(
@@ -421,13 +413,6 @@ describe("duties", () => {
     type: string,
     id: string
   ): void {
-    const share = db.vault
-      .prepare("SELECT revoked_at FROM consent_share WHERE share_id = ?")
-      .get(deps.shareId) as { revoked_at: string | null } | undefined;
-    expect(
-      share?.revoked_at,
-      "share of a purged row must be revoked"
-    ).toBeTruthy();
     expect(
       db.vault
         .prepare("SELECT 1 FROM enrich_embedding WHERE embedding_id = ?")

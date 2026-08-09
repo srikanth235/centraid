@@ -5,7 +5,10 @@ import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { installInlineCentraid } from "./centraid-inline.js";
-import type { InstallInlineCentraidOptions } from "./centraid-inline.js";
+import type {
+  InlineCentraidClient,
+  InstallInlineCentraidOptions,
+} from "./centraid-inline.js";
 
 const { doFetch, readJson } = vi.hoisted(() => ({
   doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
@@ -218,6 +221,75 @@ describe(installInlineCentraid, () => {
     ]);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.tables).toStrictEqual(["schedule.task"]);
+  });
+
+  it("place() posts to the edges route with a single-item scope and folds the reply back into the old placement wire shape", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "photos",
+      queries: noQueries,
+      target,
+      scopes: [
+        {
+          scope: { id: "vault-a", label: "Personal", canWrite: true },
+          session,
+        },
+        { scope: { id: "vault-b", label: "Family", canWrite: true }, session },
+      ],
+    });
+    doFetch.mockResolvedValue(new Response("{}"));
+    readJson.mockResolvedValue({
+      edgeId: "link-1",
+      status: "completed",
+      itemIds: ["asset-1"],
+      accessReceiptId: "receipt-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+    });
+
+    const inlineClient = target.centraid as InlineCentraidClient;
+    const result = await inlineClient.place({
+      linkToken: "link-1",
+      kind: "add",
+      itemType: "media.media_asset",
+      itemId: "asset-1",
+      sourceVaultId: "vault-a",
+      targetVaultId: "vault-b",
+    });
+
+    expect(doFetch).toHaveBeenCalledWith(
+      "https://gw.test",
+      "/centraid/_gateway/edges",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          edgeId: "link-1",
+          originVaultId: "vault-a",
+          audienceVaultId: "vault-b",
+          mode: "snapshot",
+          kind: "add",
+          itemType: "media.media_asset",
+          itemIds: ["asset-1"],
+          verbs: "read",
+        }),
+      })
+    );
+    // The signature and result shape every caller (photos' copyToVault,
+    // AudiencePlacement, the mobile outbox) reads are unchanged: one item in,
+    // one item out, and the edge's terminal 'completed' reads as 'executed'.
+    expect(result).toStrictEqual({
+      linkToken: "link-1",
+      kind: "add",
+      itemType: "media.media_asset",
+      itemId: "asset-1",
+      sourceVaultId: "vault-a",
+      targetVaultId: "vault-b",
+      status: "executed",
+      accessReceiptId: "receipt-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+    });
   });
 
   it("restores the previous window.centraid on teardown", () => {

@@ -1,10 +1,10 @@
 // The More sheet (Photos v4 handoff §3.1, §H).
 //
 // The band is capped at five destinations, so the shelves that do not fit live
-// here: Sharing, Favorites, Places, Duplicates, Trash, Backup. Import is the
-// one handoff row this sheet still does NOT carry — see the comment on
-// `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one,
-// and why Sharing came back in issue #712 while Import did not.
+// here: today that is Backup alone — every browsing shelf (Favorites, Places,
+// Duplicates, Trash) is a section of Collections instead. Import is the one
+// handoff row this sheet still does NOT carry — see the comment on
+// `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one.
 //
 // It no longer carries **Tile size**. That stepper passed through here on its
 // way from a permanent toolbar row (44 points over the timeline, for a

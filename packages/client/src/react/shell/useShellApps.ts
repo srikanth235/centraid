@@ -21,14 +21,14 @@ const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
 // Pins are per-vault state: the reconcile below prunes them against the
 // active vault's listing, so pins carried across a vault switch would all
 // look orphaned and be destroyed (then persisted). Resolve which vault the
-// client currently addresses the same way useMemberScopes does — the auth
+// client currently addresses the same way useOwnerScopes does — the auth
 // pointer, falling back to the registry's first (the gateway's default) so
 // the implicit-default and explicit-id spellings of the same vault agree.
 //
 // `null` means UNKNOWN, and unknown is not a vault. It used to be `""`, which
 // compares unequal to every real vault id — so an offline boot, where both
 // reads fail, looked exactly like a switch to a vault named "": the branch
-// below parked the member's real pins under the last vault and installed
+// below parked the owner's real pins under the last vault and installed
 // `byVault[""] ?? []`, emptying the persisted pin list on a launch that never
 // reached the gateway at all.
 async function activeVaultKey(): Promise<string | null> {
@@ -57,7 +57,7 @@ function lastKnownVaultKey(): string | null {
 /**
  * The installed set, remembered per vault, READ-ONLY.
  *
- * Distinct from the pin store on purpose. Pins are a member's decisions and the
+ * Distinct from the pin store on purpose. Pins are an owner's decisions and the
  * reconcile is allowed to rewrite them; this is a cache of an ANSWER the
  * gateway gave, kept solely so a launch that cannot reach the gateway still
  * paints the apps this vault has instead of the day-one empty state. Nothing

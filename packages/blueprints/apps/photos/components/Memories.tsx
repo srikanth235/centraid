@@ -1,8 +1,8 @@
+import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { displayText, safeBackgroundImage } from "../../_shared/untrusted.ts";
 // The memories strip (main Photos view only, per the build prompt — never in
 // search/select). Pure view; `memories` is already the fully-derived list
 // (see buildMemories() in app.tsx) of `{ key, title, sub, coverUri, onOpen }`.
-import { scopeAttr } from "../scopes.ts";
 import type { MemoryCard } from "../types.ts";
 
 import styles from "./Memories.module.css";

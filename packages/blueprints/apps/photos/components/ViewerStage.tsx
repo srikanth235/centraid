@@ -15,10 +15,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
+import { scopeAttr } from "../../_shared/scope-kit.ts";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { isAudioAsset, isVideoAsset } from "../format.ts";
 import { ChevronLeftIcon, ChevronRightIcon, PlayIcon } from "../icons.tsx";
-import { scopeAttr } from "../scopes.ts";
 import type { Asset } from "../types.ts";
 import type { OriginStatus } from "../viewer.ts";
 import {

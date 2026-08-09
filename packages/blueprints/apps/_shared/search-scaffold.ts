@@ -132,6 +132,91 @@ export function deriveSearchStatus(input: {
 }
 
 /**
+ * Per-scope reach for a multi-scope fan-out (`window.centraid.readAll`):
+ * THREE honest states, never two collapsed into "no matches" (issue #726
+ * D11/item 7):
+ *
+ *   - 'reached'   the scope answered; its rows are trustworthy.
+ *   - 'unreached' the scope could not be asked at all (offline peer, dropped
+ *                 edge, timeout) — a STATE, never zero hits.
+ *   - 'refused'   the scope answered but named columns it will not search —
+ *                 a field mask excluded an indexed column
+ *                 (`BorrowedStore.search()`'s `refusedEntities`, D10) — so it
+ *                 REFUSES rather than pretending a narrower index was the
+ *                 whole one.
+ *
+ * A row filter is deliberately NOT a fourth state here: `row_filter_json`
+ * compiles into the origin's projection before any row crosses the wire
+ * (`lend-origin.ts`), so a filtered-out row was never in the borrowed store
+ * to page past in the first place — there is no client-side fact left to
+ * report about it. Enforcement lives entirely at the gateway; this scaffold
+ * has nothing to add there and nothing to get wrong.
+ */
+export interface ScopeSearchReach {
+  scope: string;
+  state: "reached" | "unreached" | "refused";
+  /** Present for 'unreached' (what the transport said) or 'refused' (which
+   *  column/entity the mask excluded) — omitted for 'reached'. */
+  detail?: string;
+}
+
+/**
+ * Build the per-scope reach list from a multi-scope fan-out's own results
+ * (`window.centraid.readAll`'s `InlineScopeRead<T>[]` shape: `{scope, ok,
+ * error?}`) plus which scopes are KNOWN to refuse before any query even runs
+ * — the mask-selection-time half of D10 (`searchReachFor` on the gateway
+ * names these when a live edge is lent; a caller threads that answer through
+ * to `refusedScopes` here rather than discovering it query by query).
+ *
+ * `refused` wins over `unreached` for a scope that is BOTH: a scope whose
+ * mask already refuses does not need reachability to explain why it has
+ * nothing — naming the mask is the more useful, more specific truth.
+ */
+export function perScopeReach(
+  results: readonly {
+    scope: string;
+    ok: boolean;
+    error?: { code?: string; message?: string };
+  }[],
+  refusedScopes?: ReadonlyMap<string, string>
+): ScopeSearchReach[] {
+  return results.map((result) => {
+    const refusedReason =
+      refusedScopes?.get(result.scope) ??
+      (result.error?.code === "REPLICA_SEARCH_REFUSED"
+        ? result.error.message
+        : undefined);
+    if (refusedReason !== undefined) {
+      return { scope: result.scope, state: "refused", detail: refusedReason };
+    }
+    if (result.ok) return { scope: result.scope, state: "reached" };
+    return {
+      scope: result.scope,
+      state: "unreached",
+      ...(result.error?.message ? { detail: result.error.message } : {}),
+    };
+  });
+}
+
+/** Per-scope reach, shaped for `SearchStateCopy.unreachable.facts` — so the
+ *  SAME renderable list the four-state copy contract already expects can
+ *  name which scopes are short and why, not just that the search overall
+ *  is `unreachable`. */
+export function scopeReachFacts(
+  reach: readonly ScopeSearchReach[]
+): Array<{ label: string; value: string }> {
+  return reach
+    .filter((row) => row.state !== "reached")
+    .map((row) => ({
+      label: row.scope,
+      value:
+        row.state === "refused"
+          ? (row.detail ?? "search refused here")
+          : (row.detail ?? "could not be reached"),
+    }));
+}
+
+/**
  * The one-line footer every populated result view carries (Photos' §9
  * honesty line): an exact count plus the seat-honest scope the caller
  * supplies. Viewer seats say "the live library" (or an app-appropriate noun

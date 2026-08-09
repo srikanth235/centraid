@@ -1078,4 +1078,10 @@ export interface RecoveryKitTarget {
   label: string;
   /** Per-vault DEK, base64. Present only in a wrapped owner-held kit. */
   sealKey?: string;
+  /**
+   * The vault's Ed25519 identity seed, base64 (issue #726 P1). Present only
+   * in a wrapped owner-held kit, alongside `sealKey` — same custody, same
+   * recovery path. `recover()` restores both.
+   */
+  identitySeed?: string;
 }

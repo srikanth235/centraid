@@ -392,10 +392,6 @@ export async function runFlow(slug, fn) {
           "--data-dir",
           dataDir,
           ...(port ? ["--port", port] : []),
-          "--new-member",
-          `Mobile E2E ${state.runId}`,
-          "--role",
-          "write",
           "--ttl-minutes",
           "30",
           "--json",
@@ -422,9 +418,7 @@ export async function runFlow(slug, fn) {
           ...(gatewayToken ? { authorization: `Bearer ${gatewayToken}` } : {}),
         },
         body: JSON.stringify({
-          role: "write",
           ttlMinutes: 15,
-          newMemberLabel: `Mobile E2E ${state.runId}`,
         }),
       }
     );
@@ -469,10 +463,10 @@ export async function runFlow(slug, fn) {
 
     // #603 removed the local/manual-URL bypass: every fresh client must redeem
     // a real one-time pairing ticket. #634 made the profile step conditional:
-    // a named roster member goes straight to Done, while an unnamed member is
-    // asked for a profile. The gateway URL is used only by the host-side
-    // harness to mint that ticket; the phone reaches the gateway through the
-    // ticket's iroh endpoint.
+    // an owner who already has a name goes straight to Done, while one still
+    // carrying the placeholder label is asked for a profile. The gateway URL
+    // is used only by the host-side harness to mint that ticket; the phone
+    // reaches the gateway through the ticket's iroh endpoint.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -504,7 +498,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # Redemption dials the gateway over iroh; on a cold simulator that handshake is
 # the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
+    visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
     timeout: 90000
 `,
       "configure-gateway",
@@ -516,9 +510,13 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 
     // A second, non-sensitive Maestro chunk keeps the pairing capability out
     // of retained diagnostics while proving both legitimate identity paths.
-    // Tickets minted above deliberately name their member "Mobile E2E …", so
-    // the normal branch skips the form and greets "Mobile"; the conditional
-    // form path remains covered for gateways that return no roster name.
+    // Ownership (#726) killed the pre-named-invite mint: a ticket can no
+    // longer carry a chosen label, so the FIRST pairing against a fresh
+    // gateway always lands the placeholder owner "You" (not a set name) and
+    // shows the form. A later flow that reuses the same nightly gateway
+    // process finds that owner already renamed "Nightly" by the run below
+    // and skips straight to Done — both are real product paths, so the
+    // pattern above accepts either.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -534,7 +532,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
       - hideKeyboard
       - tapOn: "Continue"
 - extendedWaitUntil:
-    visible: "You're all set, (Nightly|Mobile)[.]"
+    visible: "You're all set, [^.]+[.]"
     timeout: 60000
 # iOS can acknowledge an accessibility tap before the RN Pressable is ready.
 # The button's press animation changes the hierarchy even if navigation was

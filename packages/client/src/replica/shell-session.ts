@@ -17,6 +17,7 @@ import { createReplicaCoordinator } from "./coordinator-web.js";
 import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
 import { ReplicaProtocolError } from "./errors.js";
 import {
+  borrowedReplicaFetcher,
   fetchReplicaBootstrap,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
@@ -151,6 +152,10 @@ export interface ReplicaShellSessionOptions {
   /** Test seam for the authoritative global durable-scope inventory. */
   inventory?: ReplicaIdentityInventory;
   onAuthorizationRevoked?: (session: ReplicaShellSession) => void;
+  /** Edge-scoped borrowed sessions use the borrowed device plane and catalog. */
+  borrowedEdgeId?: string;
+  /** Visibility-safe sweep fallback for transports without an SSE feed. */
+  pollIntervalMs?: number;
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
@@ -174,6 +179,9 @@ export class ReplicaShellSession {
   readonly #onAuthorizationRevoked:
     | ((session: ReplicaShellSession) => void)
     | undefined;
+  readonly #borrowed: boolean;
+  readonly #pollIntervalMs: number | undefined;
+  #pollTimer: ReturnType<typeof setInterval> | undefined;
   #catalog: ReplicaShape[] = [];
   #bootstrapPromise: Promise<void> | undefined;
   #bootstrapAbort: AbortController | undefined;
@@ -210,6 +218,8 @@ export class ReplicaShellSession {
     this.#rememberStorage = options.rememberStorage === true;
     this.#inventory = options.inventory;
     this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
+    this.#borrowed = Boolean(options.borrowedEdgeId);
+    this.#pollIntervalMs = options.pollIntervalMs;
   }
 
   async start(status: ReplicaStatus): Promise<this> {
@@ -229,6 +239,13 @@ export class ReplicaShellSession {
       else this.#catalog = await this.coordinator.catalog();
     }
     void this.flushIntents();
+    if (this.#pollIntervalMs) {
+      this.#pollTimer = setInterval(
+        () => void this.sync().catch(() => undefined),
+        this.#pollIntervalMs
+      );
+      (this.#pollTimer as unknown as { unref?: () => void }).unref?.();
+    }
     return this;
   }
 
@@ -271,7 +288,8 @@ export class ReplicaShellSession {
       appId,
       input.optimistic,
       this.#catalog,
-      this.resolveShapeId.bind(this)
+      this.resolveShapeId.bind(this),
+      this.#borrowed
     );
     this.beginAdmissionRegistration();
     try {
@@ -330,7 +348,9 @@ export class ReplicaShellSession {
     );
     return this.coordinator.subscribeInvalidations((invalidations) => {
       const appShapes = new Set(
-        this.#catalog.filter((shape) => shape.appId === appId).map(shapeId)
+        this.#catalog
+          .filter((shape) => this.#borrowed || shape.appId === appId)
+          .map(shapeId)
       );
       const relevant = invalidations.filter(
         (invalidation) =>
@@ -650,7 +670,7 @@ export class ReplicaShellSession {
       purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
     const candidates = this.#catalog.filter(
       (shape) =>
-        shape.appId === appId &&
+        (this.#borrowed || shape.appId === appId) &&
         (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
         shape.entities.some((item) => item.entity === entity)
     );
@@ -769,6 +789,8 @@ export class ReplicaShellSession {
 
   private detach(): void {
     this.#eventTarget.removeEventListener("online", this.onOnline);
+    if (this.#pollTimer) clearInterval(this.#pollTimer);
+    this.#pollTimer = undefined;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
@@ -813,7 +835,10 @@ export async function openReplicaShellSession(
   let session: ReplicaShellSession | undefined = undefined;
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
-  const fetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);
+  const ordinaryFetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);
+  const fetcher = options.borrowedEdgeId
+    ? borrowedReplicaFetcher(options.borrowedEdgeId, ordinaryFetcher)
+    : ordinaryFetcher;
   const { replica, status } = await createReplicaCoordinator(
     identity,
     remember,
@@ -829,14 +854,20 @@ export async function openReplicaShellSession(
       // Every feed call names THIS session's scope explicitly (issue #599). The
       // ambient overloads would bind all N mounted sessions to whichever vault is
       // focused, so the non-focused scopes would silently stop seeing changes.
-      changeFeed: {
-        subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
-        setShapeIds: async (shapeIds) => {
-          persistedShapeIds = [...shapeIds];
-          await setVaultChangeShapeIds(persistedShapeIds, gatewayAuth);
-        },
-        resume: (cursor) => resumeVaultChanges(cursor, gatewayAuth),
-      },
+      ...(options.borrowedEdgeId
+        ? {}
+        : {
+            changeFeed: {
+              subscribe: (listener) =>
+                subscribeVaultChanges(listener, gatewayAuth),
+              setShapeIds: async (shapeIds: readonly string[]) => {
+                persistedShapeIds = [...shapeIds];
+                await setVaultChangeShapeIds(persistedShapeIds, gatewayAuth);
+              },
+              resume: (cursor: ReplicaCursor) =>
+                resumeVaultChanges(cursor, gatewayAuth),
+            },
+          }),
       pullChanges: async (cursor, signal) => {
         try {
           return await fetchReplicaChanges(
@@ -887,6 +918,9 @@ export async function openReplicaShellSession(
   session = new ReplicaShellSession(gatewayAuth, replica, {
     ...options,
     fetcher,
+    ...(options.borrowedEdgeId && options.pollIntervalMs === undefined
+      ? { pollIntervalMs: 30_000 }
+      : {}),
     rememberStorage,
     onAuthorizationRevoked: options.onAuthorizationRevoked ?? forgetSession,
   });
@@ -931,7 +965,10 @@ let lifecycleInstalled = false;
 let lifecyclePurge = Promise.resolve();
 const terminalPurgeRetryLoop = new TerminalReplicaPurgeRetryLoop();
 
-function entryFor(gatewayAuth: GatewayAuth): SessionEntry {
+function entryFor(
+  gatewayAuth: GatewayAuth,
+  borrowedEdgeId?: string
+): SessionEntry {
   installReplicaStorageLifecycle();
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
   const key = identityKey(identity);
@@ -941,7 +978,9 @@ function entryFor(gatewayAuth: GatewayAuth): SessionEntry {
     existing.idleTimer = undefined;
     return existing;
   }
-  const promise = openReplicaShellSession(gatewayAuth);
+  const promise = borrowedEdgeId
+    ? openReplicaShellSession(gatewayAuth, { borrowedEdgeId })
+    : openReplicaShellSession(gatewayAuth);
   const entry: SessionEntry = { key, identity, promise, refs: 0 };
   sessions.set(key, entry);
   promise.catch(() => {
@@ -1004,9 +1043,13 @@ export async function getReplicaShellSessionFor(
 
 /** Hold one scope open for as long as a mount needs it (issue #599). */
 export async function acquireReplicaShellSession(
-  identity: ReplicaIdentity
+  identity: ReplicaIdentity,
+  borrowedEdgeId?: string
 ): Promise<ReplicaScopeLease> {
-  const entry = entryFor(await gatewayAuthForIdentity(identity));
+  const entry = entryFor(
+    await gatewayAuthForIdentity(identity),
+    borrowedEdgeId
+  );
   entry.refs += 1;
   let released = false;
   const release = (): void => {

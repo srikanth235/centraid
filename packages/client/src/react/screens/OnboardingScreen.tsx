@@ -41,10 +41,10 @@ export interface OnboardingCompleteInput {
   /** True only when `vaultId` is the auto-founded "Personal" vault, i.e. safe
    *  to rename to the display name (issue #603 C10). */
   ownerVault?: boolean;
-  /** The roster member this device acts as. Present only when onboarding
-   *  actually asked for a name, i.e. the member was still the placeholder —
-   *  the host renames it so the household sees a person, not "You". */
-  memberId?: string;
+  /** The roster owner this device acts as. Present only when onboarding
+   *  actually asked for a name, i.e. the owner was still the placeholder —
+   *  the host renames it so Household sees a person, not "You". */
+  ownerId?: string;
   path: OnboardingPath;
 }
 export interface OnboardingScreenProps {
@@ -58,7 +58,7 @@ export interface OnboardingScreenProps {
 /**
  * First-run onboarding — connect → (local only) H5 OS service offer →
  * identity, and only when the household doesn't already know this person.
- * Identity now lands on the roster member (`profileData.ts`), so returning
+ * Identity now lands on the roster owner (`profileData.ts`), so returning
  * devices no longer re-introduce someone the household already knows.
  */
 export default function OnboardingScreen({
@@ -77,7 +77,7 @@ export default function OnboardingScreen({
   // Bumped by Retry to re-run the fresh dial effect.
   const [dialAttempt, setDialAttempt] = useState(0);
   const [displayName, setDisplayName] = useState("");
-  const [selfMemberId, setSelfMemberId] = useState<string | null>(null);
+  const [selfOwnerId, setSelfOwnerId] = useState<string | null>(null);
   const [avatarColor, setAvatarColor] = useState<string>(
     () =>
       AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ??
@@ -133,7 +133,7 @@ export default function OnboardingScreen({
           ...(result.ownerVault === undefined
             ? {}
             : { ownerVault: result.ownerVault }),
-          ...(selfMemberId ? { memberId: selfMemberId } : {}),
+          ...(selfOwnerId ? { ownerId: selfOwnerId } : {}),
           vaultId: result.vaultId,
           path,
         });
@@ -158,8 +158,8 @@ export default function OnboardingScreen({
   };
 
   /**
-   * Last gate before the shell: ask the roster who this device acts as. A
-   * member that already has a name needs no introduction, so onboarding ends
+   * Last gate before the shell: ask the roster who this device acts as. An
+   * owner that already has a name needs no introduction, so onboarding ends
    * here; anyone else gets the identity step.
    *
    * An unreadable roster also asks: one extra screen is safe, while skipping
@@ -177,7 +177,7 @@ export default function OnboardingScreen({
           return;
         }
         if (profile) {
-          setSelfMemberId(profile.memberId);
+          setSelfOwnerId(profile.ownerId);
           setAvatarColor(profile.avatarColor);
         }
         setPendingResult(result);
@@ -247,7 +247,7 @@ export default function OnboardingScreen({
   }, [path, dialAttempt]);
 
   // Where this run is in the threshold (moment M15 carries `step-indicator`).
-  // The total is two until the member says they have data to bring, because
+  // The total is two until the owner says they have data to bring, because
   // promising a third step to everyone and then not showing it is the kind of
   // small lie a first run cannot afford.
   const stepTotal = wantsImport ? 3 : 2;
@@ -342,7 +342,7 @@ export default function OnboardingScreen({
           />
         ) : step === "connect" ? (
           // No `data-theme="dark"` any more: the screen is themed like every
-          // other surface now, so the panel inherits the member's own ramp.
+          // other surface now, so the panel inherits the owner's own ramp.
           <div className={styles.connectPanel}>
             <ConnectTicketPanel
               context="onboarding"

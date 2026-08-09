@@ -75,7 +75,6 @@ export const RenameIcon = make("Pencil");
 export const SelectFavoriteIcon = make("heart");
 export const SelectAlbumIcon = make("album");
 export const SelectShareIcon = make("share");
-export const SelectRemoveFromIcon = make("removeFrom");
 export const SelectDownloadIcon = make("download");
 export const SelectTrashIcon = make("trash");
 export const SelectRestoreIcon = make("restore");

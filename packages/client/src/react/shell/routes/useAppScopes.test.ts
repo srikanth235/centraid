@@ -1,4 +1,4 @@
-// Scope-set resolution for an inline app mount (issue #599).
+// Scope-set resolution for an inline app mount (issue #599, ownership #726).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
@@ -43,21 +43,17 @@ vi.mock(
 const { MAX_MOUNTED_SCOPES, resolveAppScopes, scopeSetKey } =
   await import("./useAppScopes.js");
 
-function entry(vaultId: string, label: string, role: string): AppScopeEntry {
-  return { vaultId, label, role, installed: true };
+function entry(
+  vaultId: string,
+  label: string,
+  canWrite: boolean
+): AppScopeEntry {
+  return { vaultId, label, canWrite, installed: true };
 }
 
-/** The plane as the gateway answers it: rows, plus the member's pointer. */
-function plane(
-  scopes: AppScopeEntry[],
-  defaultShareTargetVaultId?: string
-): TypeImport_lhrfvk.AppScopePlane {
-  return {
-    scopes,
-    ...(defaultShareTargetVaultId === undefined
-      ? {}
-      : { defaultShareTargetVaultId }),
-  };
+/** The plane as the gateway answers it: the mountable rows. */
+function plane(scopes: AppScopeEntry[]): TypeImport_lhrfvk.AppScopePlane {
+  return { scopes };
 }
 
 describe("resolveAppScopes", () => {
@@ -67,12 +63,12 @@ describe("resolveAppScopes", () => {
     readAppScopePlane.mockReset();
   });
 
-  it("maps roles to write capability — read cannot add", async () => {
+  it("carries canWrite straight through — sourced from the gateway, never derived", async () => {
     readAppScopePlane.mockResolvedValue(
       plane([
-        entry("vault-own", "Library", "admin"),
-        entry("vault-family", "Family", "write"),
-        entry("vault-grandma", "Grandma", "read"),
+        entry("vault-own", "Library", true),
+        entry("vault-family", "Family", true),
+        entry("vault-grandma", "Grandma", false),
       ])
     );
     const { scopes } = await resolveAppScopes("photos");
@@ -90,8 +86,8 @@ describe("resolveAppScopes", () => {
   it("drops a scope the app is not installed in — it would have no shapes to read", async () => {
     readAppScopePlane.mockResolvedValue(
       plane([
-        entry("vault-own", "Library", "admin"),
-        { ...entry("vault-family", "Family", "write"), installed: false },
+        entry("vault-own", "Library", true),
+        { ...entry("vault-family", "Family", true), installed: false },
       ])
     );
     const { scopes } = await resolveAppScopes("photos");
@@ -102,7 +98,7 @@ describe("resolveAppScopes", () => {
     readAppScopePlane.mockResolvedValue(
       plane(
         Array.from({ length: MAX_MOUNTED_SCOPES + 3 }, (_, i) =>
-          entry(`vault-${i}`, `Scope ${i}`, "write")
+          entry(`vault-${i}`, `Scope ${i}`, true)
         )
       )
     );
@@ -114,14 +110,13 @@ describe("resolveAppScopes", () => {
 
   it("degrades to the single ambient scope when the gateway has no scopes plane", async () => {
     readAppScopePlane.mockResolvedValue(undefined);
-    const { scopes, shareTargetVaultId } = await resolveAppScopes("photos");
+    const { scopes } = await resolveAppScopes("photos");
     expect(scopes).toHaveLength(1);
     expect(scopes[0]!.identity.vaultId).toBe("vault-ambient");
     expect(scopes[0]!.scope.canWrite).toBe(true);
     // The solo mount IS the member's own library, so nothing in it is marked
-    // as somewhere else, and there is nowhere to share to (issue #711 item H).
+    // as somewhere else.
     expect(scopes[0]!.scope.personal).toBe(true);
-    expect(shareTargetVaultId).toBeUndefined();
   });
 
   it("degrades rather than failing the mount when the call throws", async () => {
@@ -134,20 +129,14 @@ describe("resolveAppScopes", () => {
     );
   });
 
-  // Issue #711 item H: the share destination is a POINTER the member owns,
-  // carried beside the rows because it is not a property of any of them.
-  it("carries the member's share destination, and the founding marker per row", async () => {
+  it("carries the founding marker per row", async () => {
     readAppScopePlane.mockResolvedValue(
-      plane(
-        [
-          { ...entry("vault-own", "Library", "admin"), personal: true },
-          { ...entry("vault-shared", "Shared", "write"), personal: false },
-        ],
-        "vault-shared"
-      )
+      plane([
+        { ...entry("vault-own", "Library", true), personal: true },
+        { ...entry("vault-shared", "Shared", true), personal: false },
+      ])
     );
     const resolvedScopes = await resolveAppScopes("photos");
-    expect(resolvedScopes.shareTargetVaultId).toBe("vault-shared");
     expect(
       resolvedScopes.scopes.map((s) => [s.scope.id, s.scope.personal])
     ).toStrictEqual([
@@ -156,59 +145,68 @@ describe("resolveAppScopes", () => {
     ]);
   });
 
-  it("passes a pointer this mount cannot reach straight through", async () => {
-    // Not resolved away here: the app renders the share action disabled WITH
-    // the reason rather than silently doing nothing.
-    readAppScopePlane.mockResolvedValue(
-      plane(
-        [{ ...entry("vault-own", "Library", "admin"), personal: true }],
-        "vault-gone"
-      )
-    );
-    const resolvedScopes = await resolveAppScopes("photos");
-    expect(resolvedScopes.shareTargetVaultId).toBe("vault-gone");
-    expect(resolvedScopes.scopes.map((s) => s.scope.id)).toStrictEqual([
-      "vault-own",
-    ]);
-  });
-
-  // Issue #712, P7 — the grant roster rides through exactly as the gateway
-  // answered it: present when named, absent (not `[]`) when not.
-  it("carries a scope's audience through untouched", async () => {
-    readAppScopePlane.mockResolvedValue(
-      plane([
-        {
-          ...entry("vault-family", "Family", "write"),
-          audience: [
-            { memberId: "m-priya", name: "Priya", role: "admin" },
-            { memberId: "m-sid", name: "Sid", role: "read" },
-          ],
-        },
-      ])
-    );
-    const { scopes } = await resolveAppScopes("photos");
-    expect(scopes[0]!.scope.audience).toStrictEqual([
-      { memberId: "m-priya", name: "Priya", role: "admin" },
-      { memberId: "m-sid", name: "Sid", role: "read" },
-    ]);
-  });
-
-  it("leaves audience absent when the gateway did not answer it", async () => {
-    readAppScopePlane.mockResolvedValue(
-      plane([entry("vault-family", "Family", "write")])
-    );
-    const { scopes } = await resolveAppScopes("photos");
-    expect(scopes[0]!.scope).not.toHaveProperty("audience");
-  });
-
   it("leaves a scope UNMARKED when the gateway did not answer the marker", async () => {
     // An older gateway omits `personal`; marking every tile would say
     // something untrue, so unknown reads as the member's own.
     readAppScopePlane.mockResolvedValue(
-      plane([entry("vault-own", "Library", "admin")])
+      plane([entry("vault-own", "Library", true)])
     );
     const resolvedScopes = await resolveAppScopes("photos");
     expect(resolvedScopes.scopes[0]!.scope.personal).toBeUndefined();
+  });
+
+  it("mounts a borrowed scope through its edge-scoped replica transport", async () => {
+    readAppScopePlane.mockResolvedValue(
+      plane([
+        entry("vault-own", "Library", true),
+        {
+          ...entry("borrowed:edge-1", "Ada", true),
+          borrowed: {
+            edgeId: "edge-1",
+            originVaultId: "vault-ada",
+            holderLabel: "Ada",
+            itemType: "core.collection",
+            reachState: "established",
+            reason: null,
+            mounted: true,
+          },
+        },
+      ])
+    );
+
+    const { scopes } = await resolveAppScopes("tasks");
+    expect(scopes[1]).toMatchObject({
+      identity: { vaultId: "borrowed:edge-1" },
+      borrowedEdgeId: "edge-1",
+      scope: {
+        id: "borrowed:edge-1",
+        canWrite: true,
+        borrowed: { originVaultId: "vault-ada" },
+      },
+    });
+  });
+
+  it("does not mount a borrowed scope denied a replica slot", async () => {
+    readAppScopePlane.mockResolvedValue(
+      plane([
+        entry("vault-own", "Library", true),
+        {
+          ...entry("borrowed:edge-1", "Ada", false),
+          borrowed: {
+            edgeId: "edge-1",
+            originVaultId: "vault-ada",
+            holderLabel: "Ada",
+            itemType: "core.collection",
+            reachState: "parked",
+            reason: "mount budget",
+            mounted: false,
+          },
+        },
+      ])
+    );
+    await expect(resolveAppScopes("tasks")).resolves.toMatchObject({
+      scopes: [{ identity: { vaultId: "vault-own" } }],
+    });
   });
 });
 

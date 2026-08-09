@@ -62,9 +62,8 @@ export function replicaEnvelope(
       [REPLICA_SCOPE_LABEL]: scope.label,
       [REPLICA_SCOPE_IDS]: [scope.vaultId],
       [REPLICA_SCOPE_LABELS]: [scope.label],
-      [REPLICA_WRITABLE_SCOPE_IDS]:
-        scope.role === "read" ? [] : [scope.vaultId],
-      [REPLICA_CAN_WRITE]: scope.role !== "read",
+      [REPLICA_WRITABLE_SCOPE_IDS]: scope.canWrite ? [scope.vaultId] : [],
+      [REPLICA_CAN_WRITE]: scope.canWrite,
     },
     oversizedFields: parseStringArray(row.oversized_json),
     hasUnavailableFields: row.has_unavailable_fields === 1,

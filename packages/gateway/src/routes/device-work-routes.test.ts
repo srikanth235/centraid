@@ -65,7 +65,7 @@ describe("device-work-routes", () => {
     const enrollments = EnrollmentStore.open(path.join(dir, "gateway.db"));
     const enrolled = enrollments.enroll({
       endpointId: deviceKey,
-      vaultId,
+      vaultIds: [vaultId],
       label: "Worker",
     });
     enrollments.setCompute(enrolled.enrollmentId, {
@@ -284,7 +284,7 @@ describe("device-work-routes", () => {
     });
     expect(completed.status).toBe(200);
     await expect(completed.json()).resolves.toStrictEqual({ completed: true });
-    // The rung the member actually gets: the PDF's text layer, on the item.
+    // The rung the owner actually gets: the PDF's text layer, on the item.
     expect(f.derivativeText("text")).toContain("starlight");
   });
 });

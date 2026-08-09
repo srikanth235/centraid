@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/protocol";
+
 import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
 
@@ -7,10 +12,12 @@ vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
 }));
 
+// Stated against the shared constants: a literal floor here would assert that
+// a current gateway needs updating the next time the floor moves.
 const supportedInfo = {
   version: "0.1.0",
-  protocolVersion: 2,
-  minSupportedProtocol: 2,
+  protocolVersion: GATEWAY_PROTOCOL_VERSION,
+  minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
   capabilities: {
     webSessions: true,
     devicePairing: true,
@@ -77,8 +84,8 @@ describe("mobile gateway compatibility handshake", () => {
       name: "a newer protocol window means the store app is old",
       response: Response.json({
         ...supportedInfo,
-        protocolVersion: 3,
-        minSupportedProtocol: 3,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
+        minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
       }),
       disposition: "update-app",
     },

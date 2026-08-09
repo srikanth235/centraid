@@ -44,7 +44,7 @@ import {
 describe("the phone's bottom row", () => {
   test("carries the same five actions, in the desktop bar's order", () => {
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.id)).toStrictEqual([
-      "sharing",
+      "copy",
       "favorite",
       "info",
       "edit",
@@ -72,7 +72,7 @@ describe("the phone's bottom row", () => {
     // target still takes its `accessibilityLabel` from this same field, so a
     // screen reader hears exactly what it always heard.
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.label)).toStrictEqual([
-      "Sharing",
+      "Copy to another place",
       "Favorite",
       "Info",
       "Edit",
@@ -91,20 +91,20 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
     expect(
       VIEWER_BOTTOM_GROUPS.map((group) => [group.shape, ...group.actions])
     ).toStrictEqual([
-      ["chip", "sharing"],
+      ["chip", "copy"],
       ["capsule", "favorite", "info", "edit"],
       ["chip", "trash"],
     ]);
   });
 
   test("the two ends are exactly the actions with consequences outside the photograph", () => {
-    // Share leaves the app; Trash is the only destructive one. Everything in
-    // the middle changes this photograph and nothing else — that is what the
-    // grouping is FOR, so it is asserted rather than left to the eye.
+    // Copy to vault reaches outside this vault; Trash is the only destructive
+    // one. Everything in the middle changes this photograph and nothing else —
+    // that is what the grouping is FOR, so it is asserted, not left to the eye.
     const ends = VIEWER_BOTTOM_GROUPS.filter(
       (group) => group.shape === "chip"
     ).flatMap((group) => [...group.actions]);
-    expect(ends).toStrictEqual(["sharing", "trash"]);
+    expect(ends).toStrictEqual(["copy", "trash"]);
   });
 
   test("flattening the groups reproduces the desktop bar's five, in order", () => {
@@ -194,9 +194,9 @@ describe("the vault a photograph is in", () => {
   });
 
   test("a shared vault is a place, so leaving it stops the sharing", () => {
-    // One sentence for EVERY shared vault: where a share goes is a pointer the
-    // member owns, not a third kind of place, so the destination reads exactly
-    // like any other audience they belong to (§H).
+    // One sentence for EVERY shared vault: the place a copy lands is the
+    // recipient's vault, not a third kind of place, so a destination reads
+    // exactly like any other shared vault the member can reach (§H).
     const line = vaultLine(false, "Ana + Sam");
     expect(line.value).toBe("Ana + Sam");
     expect(line.meaning).toContain("Ana + Sam");

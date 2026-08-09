@@ -70,27 +70,41 @@ export interface InlineScope {
    * that reads as UNMARKED: withholding a hint is harmless, while marking
    * everything says something untrue.
    *
-   * There is no vault "kind" and no `sharing` scope: sharing is a
-   * DESTINATION somebody chose, carried beside the scope list as
-   * `window.centraid.shareTargetVaultId`, because a member may want to share
-   * into several vaults.
+   * There is no vault "kind" and no `sharing` scope (issue #726): a share's
+   * place is the recipient's vault, so "shared" is only ever a fact about
+   * where a thing sits — any mounted scope other than the member's own.
    */
   personal?: boolean;
   color?: string;
   icon?: string;
   canWrite: boolean;
   /**
-   * Everyone who holds a role here, name and role — the P7 grant roster
-   * (issue #712, folded into Engine A by default ruling). Before this an app
-   * had `InlineScope` and nothing else, so "who else can see this" had no
-   * answer anywhere in an app's reach (see `packages/blueprints/apps/photos
-   * /components/Sharing.tsx`'s former header, which documented the gap by
-   * name). Absent — never `[]` — on a host that does not answer the
-   * question: an empty roster and an unasked one are different facts, and an
-   * app must not render "nobody else can see this" when the truth is "this
-   * host did not say".
+   * Present only for a scope LENT to this member by someone else (#726 P4/P6)
+   * — absent for an owned vault, which never carries this fact. Mirrors the
+   * gateway's `ScopeRow.borrowed` (`scopes-routes.ts`) verbatim: an app renders
+   * these as states, never guesses at them from `personal`/`canWrite` alone.
    */
-  audience?: readonly { memberId: string; name: string; role: string }[];
+  borrowed?: InlineScopeBorrowed;
+}
+
+/** The lend-specific facts a borrowed scope carries (#726 P4 item 6, wire
+ *  contract `ScopeBorrowedInfo`). */
+export interface InlineScopeBorrowed {
+  edgeId: string;
+  originVaultId: string;
+  /** Who lent it — the origin vault's label at link time. */
+  holderLabel: string;
+  itemType: string;
+  /** Mirrors `borrowed_edges.state`, minus `'dropped'` (a dropped edge is not
+   *  a scope any more). `'parked'` is an HONEST STATE, never an error — a
+   *  scope currently unreachable is still a scope the member knows about. */
+  reachState: "offered" | "established" | "parked";
+  /** Set only when `reachState` is `'parked'` — says WHY. */
+  reason: string | null;
+  /** Whether the gateway's mount policy gave this scope a device replica
+   *  slot. `false` is a state a tile/section still renders, never a silent
+   *  absence. */
+  mounted: boolean;
 }
 
 /**

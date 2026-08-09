@@ -152,7 +152,6 @@ import { readEnrichServiceConfig } from "../enrich/service-client.js";
 import type { EnrichServiceConfig } from "../enrich/service-client.js";
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
 import { createTranscriptSweepSpec } from "../enrich/transcript-sweep.js";
-import { canWrite } from "./enrollment-store.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -514,10 +513,10 @@ const LOCAL_ORPHAN_SWEEP_MAX_ENTRIES = 2_000;
 /**
  * Strip the two caller-supplied identity fields from an invoke payload (issue
  * #599 decision 8). Both are HOST-resolved from the authenticated request —
- * `actingMemberId` from the device's member binding, `intentDeviceId` from the
+ * `actingOwnerId` from the device's owner binding, `intentDeviceId` from the
  * request's device key — and both are dropped here and re-set by the caller.
  *
- * `intentDeviceId` matters as much as the member: it is the ONLY thing the
+ * `intentDeviceId` matters as much as the owner: it is the ONLY thing the
  * vault checks when an app claims a replica intent (`gateway.ts` — "is not
  * owned by this device and app"). If the app could supply it, it could name
  * another device's queued offline write and settle it as its own. Stripping
@@ -525,7 +524,7 @@ const LOCAL_ORPHAN_SWEEP_MAX_ENTRIES = 2_000;
  * the request the field stays absent and the claim fails closed.
  */
 function withoutForgedIdentity(payload: InvokeRequest): InvokeRequest {
-  const { actingMemberId: _member, intentDeviceId: _device, ...rest } = payload;
+  const { actingOwnerId: _owner, intentDeviceId: _device, ...rest } = payload;
   return rest;
 }
 
@@ -2201,11 +2200,11 @@ export class VaultPlane {
     // Capture it here so worker-message scheduling cannot lose the binding.
     const replicaIntent = replicaIntentContext();
     const requestDeviceId = vaultContext()?.deviceKey;
-    // L4 attribution (issue #599 decision 8): the acting member, host-resolved
+    // L4 attribution (issue #599 decision 8): the acting owner, host-resolved
     // from the device binding exactly like the device id beside it. An offline
     // intent carries its own — the person who made the write on the phone,
     // which is not necessarily whoever's request replayed it.
-    const actingMemberId = replicaIntent?.memberId ?? vaultContext()?.memberId;
+    const actingOwnerId = replicaIntent?.ownerId ?? vaultContext()?.ownerId;
     return async (call): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
       if (!app) {
@@ -2262,7 +2261,7 @@ export class VaultPlane {
             : requestDeviceId
               ? { intentDeviceId: requestDeviceId }
               : {}),
-          ...(actingMemberId === undefined ? {} : { actingMemberId }),
+          ...(actingOwnerId === undefined ? {} : { actingOwnerId }),
         });
       }
       return asVaultCallResult(() => {
@@ -2346,15 +2345,16 @@ export class VaultPlane {
   agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     // The on-behalf-of principal (issue #599 decision 7), captured at bridge
     // construction like the intent binding above. Present when the turn rides
-    // a member's request scope; absent for a scheduler-fired automation, which
-    // has no human behind it to be capped at.
+    // an owner's request scope; absent for a scheduler-fired automation, which
+    // has no human behind it to be capped at. `mayAct` is ownership (#726):
+    // the acting owner owns this vault.
     const scope = vaultContext();
-    const onBehalfOfMember =
-      scope?.memberId === undefined
+    const onBehalfOfOwner =
+      scope?.ownerId === undefined
         ? undefined
         : {
-            memberId: scope.memberId,
-            mayAct: canWrite(scope.memberRole ?? "revoked"),
+            ownerId: scope.ownerId,
+            mayAct: scope.ownsVault === true,
           };
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
@@ -2387,7 +2387,7 @@ export class VaultPlane {
               })),
             }
           : {}),
-        ...(onBehalfOfMember ? { onBehalfOfMember } : {}),
+        ...(onBehalfOfOwner ? { onBehalfOfOwner } : {}),
       };
       if (call.op === "content") {
         // The enricher's byte primitive (issue #299 §2): thumb/preview/text
@@ -2405,8 +2405,8 @@ export class VaultPlane {
           ...withoutAgentIntent(
             withoutForgedIdentity(call.payload as unknown as InvokeRequest)
           ),
-          ...(onBehalfOfMember
-            ? { actingMemberId: onBehalfOfMember.memberId }
+          ...(onBehalfOfOwner
+            ? { actingOwnerId: onBehalfOfOwner.ownerId }
             : {}),
         });
       }
@@ -2673,7 +2673,6 @@ export class VaultPlane {
       const result = this.sweep();
       const touched =
         result.grantsExpired +
-        result.sharesExpired +
         result.contentPurged +
         result.notesPurged +
         result.documentsPurged +
@@ -2691,7 +2690,7 @@ export class VaultPlane {
         result.contentBlockedByLineage.length;
       if (touched > 0 || blockedByLineage > 0) {
         this.logger.info(
-          `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
+          `vault plane: sweep grantsExpired=${result.grantsExpired} ` +
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
             `documentsPurged=${result.documentsPurged} domainRowsPurged=${result.domainRowsPurged} ` +
             `retentionDeleted=${result.retentionDeleted} ` +

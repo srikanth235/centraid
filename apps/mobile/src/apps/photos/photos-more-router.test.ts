@@ -10,13 +10,14 @@
 //
 // WHAT THIS SUITE IS ABOUT NOW (issue #712). The sheet used to carry six rows;
 // it carries one. Collections is the landing surface and holds every shelf —
-// Sharing, Favorites, Places, Duplicates, Trash — as a named section with a
-// live count, on screen. A row here for any of them would be a second, hidden
-// door to a shelf the member can already see, and a second place to keep its
-// label and its count honest. So most of the assertions this file used to make
-// are now made by `photos-collections.test.ts` against the sections instead,
-// and what is pinned HERE is what stayed and, more importantly, what must not
-// come back.
+// Favorites, Places, Duplicates, Trash — as a named section with a live
+// count, on screen. (Sharing was a sixth shelf until issue #726 retired the
+// Photos "Sharing" place outright.) A row here for any of them would be a
+// second, hidden door to a shelf the member can already see, and a second
+// place to keep its label and its count honest. So most of the assertions
+// this file used to make are now made by `photos-collections.test.ts` against
+// the sections instead, and what is pinned HERE is what stayed and, more
+// importantly, what must not come back.
 //
 // Kept in its own file and importing only from `photos-band.ts`, which stays
 // free of react-native/replica imports — so this suite needs no RN mocking to
@@ -29,7 +30,6 @@ import type { PhotosMoreRowKey } from "./photos-band";
 /** Every shelf that is a SECTION of Collections now. None of them may be a
  *  row here as well — that is the duplication this pass removed. */
 const SHELVES_ON_COLLECTIONS = [
-  "sharing",
   "favorites",
   "places",
   "duplicates",

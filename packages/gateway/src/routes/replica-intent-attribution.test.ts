@@ -4,7 +4,7 @@ import crypto from "node:crypto";
  *
  * A write replayed from a phone must name the PERSON who made it, not only
  * the hardware that carried it — and it must name them by id, so a rename on
- * the gateway cannot fork or strand their history. The member travels with
+ * the gateway cannot fork or strand their history. The owner travels with
  * the intent (`replica-intent-context.ts`), lands on the invoke request in
  * `VaultPlane.bridgeFor`, and is written into the invocation's journal
  * receipt.
@@ -87,7 +87,7 @@ describe("replica-intent-attribution suite", () => {
 
   async function replayOfflineWrite(
     vault: VaultPlane,
-    access: { deviceId: string; memberId?: string }
+    access: { deviceId: string; ownerId?: string }
   ): Promise<string> {
     vault.approveGrant("planner", {
       purpose: "dpv:ServiceProvision",
@@ -107,11 +107,11 @@ describe("replica-intent-attribution suite", () => {
     await handleReplicaIntent(request(body), response(), {
       plane: vault,
       access: {
-        role: "write",
+        canWrite: true,
         rememberDevice: true,
         deviceId: access.deviceId,
         appId: "planner",
-        ...(access.memberId === undefined ? {} : { memberId: access.memberId }),
+        ...(access.ownerId === undefined ? {} : { ownerId: access.ownerId }),
       },
       // The real bridge — this is the seam under test, so it is not stubbed.
       dispatch: async () => {
@@ -126,16 +126,16 @@ describe("replica-intent-attribution suite", () => {
     return body.intentId;
   }
 
-  test("a replayed offline write journals the acting member id", async () => {
+  test("a replayed offline write journals the acting owner id", async () => {
     const vault = await plane();
 
     await replayOfflineWrite(vault, {
       deviceId: "sid-phone",
-      memberId: "member-sid-01",
+      ownerId: "owner-sid-01",
     });
 
     expect(receiptDetail(vault)).toMatchObject({
-      actingMember: "member-sid-01",
+      actingOwner: "owner-sid-01",
     });
     expect(
       plainSqliteRow(
@@ -157,24 +157,23 @@ describe("replica-intent-attribution suite", () => {
     const enrollments = EnrollmentStore.open(database);
     const sid = enrollments.enroll({
       endpointId: "sid-phone",
-      vaultId: "vault-family",
-      role: "write",
+      vaultIds: ["vault-family"],
       label: "Sid phone",
-      memberLabel: "Sid",
+      ownerLabel: "Sid",
     });
 
     await replayOfflineWrite(vault, {
       deviceId: "sid-phone",
-      memberId: sid.memberId,
+      ownerId: sid.ownerId,
     });
     const before = receiptDetail(vault);
-    enrollments.members.rename(sid.memberId, "Siddharth");
+    enrollments.owners.rename(sid.ownerId, "Siddharth");
 
     // The journal is append-only and keys on the id — the row is untouched, and
     // it still resolves to the (renamed) person.
     expect(receiptDetail(vault)).toStrictEqual(before);
-    expect(before).toMatchObject({ actingMember: sid.memberId });
-    expect(enrollments.members.get(sid.memberId)?.label).toBe("Siddharth");
+    expect(before).toMatchObject({ actingOwner: sid.ownerId });
+    expect(enrollments.owners.get(sid.ownerId)?.label).toBe("Siddharth");
   });
 
   test("an app cannot name another device to claim that device intent", async () => {
@@ -211,11 +210,11 @@ describe("replica-intent-attribution suite", () => {
     });
   });
 
-  test("a write with no resolvable member journals none rather than guessing", async () => {
+  test("a write with no resolvable owner journals none rather than guessing", async () => {
     const vault = await plane();
 
     await replayOfflineWrite(vault, { deviceId: "anonymous-host" });
 
-    expect(receiptDetail(vault)).not.toHaveProperty("actingMember");
+    expect(receiptDetail(vault)).not.toHaveProperty("actingOwner");
   });
 });

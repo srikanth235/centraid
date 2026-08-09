@@ -29,6 +29,11 @@ export default nodeProject({
   ],
   test: {
     name: "@centraid/blueprints",
-    include: ["src/**/*.test.ts", "apps/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "apps/**/*.test.ts",
+      "apps/**/*.test.tsx",
+    ],
   },
 });

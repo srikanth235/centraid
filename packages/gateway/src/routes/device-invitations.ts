@@ -1,28 +1,33 @@
 /*
- * Who may invite whom, at what authority (issue #599 Decision 5).
+ * Who may mint a pairing ticket, for whom (issues #599 Decision 5, #726 P0/P1).
  *
- * Minting splits by TARGET, not by role:
+ * Minting splits by TARGET:
  *
- *   self-pair — any enrolled member may mint a ticket for THEMSELVES, at
- *               roles they already hold. "Ask your spouse for a QR to pair
- *               your own new phone" fails the family test.
- *   invite    — minting for another person is an ownership act, so the
- *               caller must be `admin` in EVERY vault the ticket grants.
+ *   self-pair — any enrolled owner may mint a ticket for THEMSELVES, landing
+ *               a new device in the vaults they already own. "Ask your
+ *               spouse for a QR to pair your own phone" fails the family
+ *               test, so no second party is ever required.
+ *   a NEW person — the *Add someone* mint (`body.forPerson`, #726 P1): create
+ *               the person, mint them a vault of their own (identity keypair
+ *               included), claim it, then mint a ticket bound to THAT owner.
+ *               Mutually exclusive with `ownerId`/`vaultIds` — it names no
+ *               existing owner or vault, because there is none yet. Any
+ *               enrolled owner may run this ceremony (it costs disk on THIS
+ *               machine, not access to anyone's vault); so may host custody.
+ *   another EXISTING person — refused (`owner_vaults_only`): access is
+ *               ownership, so a ticket cannot land someone in YOUR vaults,
+ *               and minting for a DIFFERENT existing owner from a non-host
+ *               caller is not a grant this module hands out.
  *
- * The host-custody lane (landlord bearer on the loopback socket) is L0 root
- * and may mint anything; it is the local recovery path and the only way back
- * in after every device is lost.
+ * The host-custody lane (landlord bearer on the loopback socket) is L0 root:
+ * it may mint for any EXISTING owner — the local recovery path, and the only
+ * way back in after every device is lost.
  *
- * A joining device never names its own member or roles — this module decides
+ * A joining device never names its own owner or vaults — this module decides
  * both, and `PairingTicketStore.mint` burns the decision into the ticket.
  */
 
-import type {
-  EnrollmentStore,
-  GrantableRole,
-} from "../serve/enrollment-store.js";
-import { roleWithin } from "../serve/enrollment-store.js";
-import type { MemberGrant } from "../serve/member-store.js";
+import type { EnrollmentStore } from "../serve/enrollment-store.js";
 
 export interface InvitationRefusal {
   error: string;
@@ -31,32 +36,45 @@ export interface InvitationRefusal {
 }
 
 export interface Invitation {
-  memberId: string;
-  memberLabel: string;
-  grants: MemberGrant[];
+  ownerId: string;
+  ownerLabel: string;
+  vaultIds: string[];
 }
 
 export type InvitationDecision = Invitation | InvitationRefusal;
 
-/** `null` = malformed; `[]` = the caller named no explicit grant list. */
-export function parseGrants(raw: unknown): MemberGrant[] | null {
+/** The *Add someone* request shape: `body.forPerson`. */
+export interface ForPerson {
+  label: string;
+  vaultName?: string;
+}
+
+/** `undefined` = not present (ordinary lane); `null` = malformed. */
+export function parseForPerson(raw: unknown): ForPerson | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    return null;
+  const body = raw as Record<string, unknown>;
+  const label = typeof body.label === "string" ? body.label.trim() : "";
+  if (!label) return null;
+  if (body.vaultName !== undefined && typeof body.vaultName !== "string")
+    return null;
+  const vaultName =
+    typeof body.vaultName === "string" ? body.vaultName.trim() : undefined;
+  if (vaultName !== undefined && vaultName.length === 0) return null;
+  return vaultName ? { label, vaultName } : { label };
+}
+
+/** `null` = malformed; `[]` = the caller named no explicit vault list. */
+export function parseVaultIds(raw: unknown): string[] | null {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) return null;
-  const grants: MemberGrant[] = [];
+  const vaultIds: string[] = [];
   for (const entry of raw) {
-    const grant = entry as { vaultId?: unknown; role?: unknown };
-    if (
-      typeof grant.vaultId !== "string" ||
-      grant.vaultId.length === 0 ||
-      (grant.role !== "admin" &&
-        grant.role !== "write" &&
-        grant.role !== "read")
-    ) {
-      return null;
-    }
-    grants.push({ vaultId: grant.vaultId, role: grant.role });
+    if (typeof entry !== "string" || entry.length === 0) return null;
+    vaultIds.push(entry);
   }
-  return grants;
+  return vaultIds;
 }
 
 export interface ResolveInvitationInput {
@@ -64,150 +82,200 @@ export interface ResolveInvitationInput {
   vaultName: (vaultId: string) => string | undefined;
   callerKey: string | undefined;
   hostCustody: boolean;
-  hostVaults: readonly string[];
-  /** Fallback single-grant vault when the caller named no grant list. */
+  /** Landing vault when the caller named no explicit vault list. */
   target: string;
-  role: GrantableRole;
   body: Record<string, unknown>;
-  grants: MemberGrant[];
+  vaultIds: string[];
+  /** Parsed `body.forPerson` — the *Add someone* ceremony (#726 P1). */
+  forPerson?: ForPerson;
+  /**
+   * Create + mount a fresh vault for a newly minted person, identity keypair
+   * included (the registry mints it at creation — see `vault-identity.ts`).
+   * Wired to `VaultRegistry.create` by the route.
+   */
+  mintVaultForPerson: (name: string) => { vaultId: string };
 }
 
 function orderTargetFirst(
-  grants: readonly MemberGrant[],
-  input: ResolveInvitationInput
-): MemberGrant[] {
+  vaultIds: readonly string[],
+  target: string
+): string[] {
   // Reorder for defaulted targets too: `target` is the personal vault when
-  // the caller named none, and grants[0] decides the ticket's landing vault.
-  const index = grants.findIndex((grant) => grant.vaultId === input.target);
-  if (index <= 0) return [...grants];
-  const picked = grants[index]!;
-  return [picked, ...grants.filter((_, at) => at !== index)];
+  // the caller named none, and vaultIds[0] decides the ticket's landing vault.
+  const index = vaultIds.indexOf(target);
+  if (index <= 0) return [...vaultIds];
+  const picked = vaultIds[index]!;
+  return [picked, ...vaultIds.filter((_, at) => at !== index)];
 }
 
 export function resolveInvitation(
   input: ResolveInvitationInput
 ): InvitationDecision {
-  const members = input.enrollments.members;
-  const callerMember = input.callerKey
-    ? input.enrollments.memberFor(input.callerKey)
+  const owners = input.enrollments.owners;
+  const callerOwner = input.callerKey
+    ? input.enrollments.ownerFor(input.callerKey)
     : undefined;
 
-  const requestedMember =
-    typeof input.body.memberId === "string" ? input.body.memberId : undefined;
-  const rawNewLabel =
-    typeof input.body.newMemberLabel === "string"
-      ? input.body.newMemberLabel.trim()
-      : undefined;
-  const newMemberLabel =
-    rawNewLabel !== undefined && rawNewLabel.length > 0
-      ? rawNewLabel
-      : undefined;
-  if (requestedMember !== undefined && newMemberLabel !== undefined) {
-    return {
-      status: 400,
-      error: "ambiguous_member",
-      message: "name an existing memberId or a newMemberLabel, never both",
-    };
-  }
-  if (rawNewLabel !== undefined && newMemberLabel === undefined) {
-    return {
-      status: 400,
-      error: "invalid_member_label",
-      message: "newMemberLabel must not be blank",
-    };
-  }
-
-  // The picker never sends free text for an existing person: `memberId`
-  // resolves an id (or an exact label, for the CLI's `--member`) and 404s
-  // otherwise, so a typo can never mint a phantom member with live access.
-  const hostDefaultOwner =
-    input.hostCustody &&
-    requestedMember === undefined &&
-    newMemberLabel === undefined
-      ? members.adminsOf(input.target).map((id) => members.get(id))[0]
-      : undefined;
-  const existing =
-    requestedMember === undefined
-      ? newMemberLabel
-        ? undefined
-        : (callerMember ?? hostDefaultOwner)
-      : members.find(requestedMember);
-  if (requestedMember !== undefined && !existing) {
-    return {
-      status: 404,
-      error: "member_not_found",
-      message: `no member matches "${requestedMember}"`,
-    };
-  }
-  const isSelfPair =
-    existing !== undefined && existing.memberId === callerMember?.memberId;
-
-  const grants =
-    input.grants.length > 0
-      ? input.grants
-      : (isSelfPair && callerMember) || hostDefaultOwner
-        ? // A self-pair carries EVERY vault the member holds, but grants[0] is
-          // what the redeeming device lands in. When the caller named a vault
-          // (`--vault Personal`), that vault must be primary — otherwise the
-          // request is silently ignored and the device lands in the default.
-          orderTargetFirst(members.grants(existing!.memberId), input)
-        : [{ vaultId: input.target, role: input.role }];
-  if (grants.length === 0) {
-    return {
-      status: 400,
-      error: "grants_required",
-      message: "an invitation must grant at least one vault role",
-    };
-  }
-  for (const grant of grants) {
-    if (input.vaultName(grant.vaultId) === undefined) {
-      return {
-        status: 404,
-        error: "not_found",
-        message: "unknown vault in grants",
-      };
-    }
-  }
-
-  if (!input.hostCustody) {
-    if (!callerMember) {
+  if (input.forPerson !== undefined) {
+    // *Add someone* (#726 P1): create the person, mint them a vault (identity
+    // keypair included), claim it, then mint a ticket bound to that NEW
+    // owner. Any enrolled owner may run this — it costs disk on this
+    // machine, never access to anyone else's vault — and so may host
+    // custody. Mutually exclusive with the self-pair `ownerId`/`vaultIds`
+    // lane: there is no existing owner or vault to name yet.
+    if (!callerOwner && !input.hostCustody) {
       return {
         status: 403,
         error: "device_identity_required",
         message:
-          "pairing tickets require an enrolled device or direct host custody",
+          "minting a vault for a new person requires an enrolled owner device or direct host custody",
       };
     }
-    for (const grant of grants) {
-      const own = members.roleIn(callerMember.memberId, grant.vaultId);
-      if (isSelfPair) {
-        // Self-pair is bounded by what you already hold — a `write` member
-        // cannot promote themselves by pairing a second phone.
-        if (!own || !roleWithin(grant.role, own)) {
-          return {
-            status: 403,
-            error: "role_above_own",
-            message:
-              "a self-pairing ticket cannot grant more than the member already holds",
-          };
-        }
-      } else if (own !== "admin") {
-        return {
-          status: 403,
-          error: "not_admin",
-          message:
-            "inviting another person requires admin in every granted vault",
-        };
-      }
+    if (typeof input.body.ownerId === "string" || input.vaultIds.length > 0) {
+      return {
+        status: 400,
+        error: "invalid_body",
+        message: "forPerson cannot be combined with ownerId or vaultIds",
+      };
     }
+    const forPerson = input.forPerson;
+    const created = owners.gatewayDatabase.transaction(() =>
+      owners.createWithinTransaction(forPerson.label)
+    );
+    const minted = input.mintVaultForPerson(
+      forPerson.vaultName ?? `${forPerson.label}'s vault`
+    );
+    // Claim happens right after mount (same ordering `enrollWithinTransaction`
+    // uses for founding/`vault create`): the vault exists on disk first, then
+    // the ownership row lands in one write.
+    owners.setOwner(minted.vaultId, created.ownerId);
+    return {
+      ownerId: created.ownerId,
+      ownerLabel: created.label,
+      vaultIds: [minted.vaultId],
+    };
   }
 
-  const member =
-    existing ?? members.create(newMemberLabel ?? defaultMemberLabel(input));
-  return { memberId: member.memberId, memberLabel: member.label, grants };
-}
+  const requestedOwner =
+    typeof input.body.ownerId === "string" ? input.body.ownerId : undefined;
+  if (typeof input.body.newOwnerLabel === "string") {
+    // Creating a person here would land them in the minter's vaults, which
+    // ownership forbids. P1 ships the mint that gives them their own vault.
+    return {
+      status: 403,
+      error: "owner_vaults_only",
+      message:
+        "a ticket enrolls another of your own devices; adding a person mints them a vault of their own (arriving in a later release)",
+    };
+  }
 
-function defaultMemberLabel(input: ResolveInvitationInput): string {
-  const vaultName = input.vaultName(input.target);
-  return vaultName ? `New member (${vaultName})` : "New member";
+  // The picker never sends free text: `ownerId` resolves an id (or an exact
+  // label, for the CLI's `--owner`) and 404s otherwise, so a typo can never
+  // mint a phantom owner with live access.
+  const targetOwnerId = owners.ownerOf(input.target);
+  const hostDefaultOwner =
+    input.hostCustody && requestedOwner === undefined && targetOwnerId
+      ? owners.get(targetOwnerId)
+      : undefined;
+  // An UNOWNED target on the host lane is founding-completion, not an
+  // invitation into someone's vault: the owner is minted below, and
+  // redemption claims the vault (issue #603's headless first-enroll, kept).
+  const hostFounding =
+    input.hostCustody &&
+    requestedOwner === undefined &&
+    callerOwner === undefined &&
+    targetOwnerId === undefined;
+  const existing =
+    requestedOwner === undefined
+      ? (callerOwner ?? hostDefaultOwner)
+      : owners.find(requestedOwner);
+  if (!existing && !hostFounding) {
+    return requestedOwner === undefined
+      ? {
+          status: 403,
+          error: "device_identity_required",
+          message:
+            "pairing tickets require an enrolled device or direct host custody",
+        }
+      : {
+          status: 404,
+          error: "owner_not_found",
+          message: `no owner matches "${requestedOwner}"`,
+        };
+  }
+  if (
+    existing &&
+    !input.hostCustody &&
+    existing.ownerId !== callerOwner?.ownerId
+  ) {
+    // Ownership admits no cross-person grant: the only ticket a device may
+    // mint is for its own owner. Host custody (L0 recovery) is the exception.
+    return {
+      status: 403,
+      error: "owner_vaults_only",
+      message:
+        "a ticket enrolls another of your own devices; adding a person mints them a vault of their own (arriving in a later release)",
+    };
+  }
+
+  const owned = existing ? owners.vaultsOwnedBy(existing.ownerId) : [];
+  const vaultIds =
+    input.vaultIds.length > 0
+      ? input.vaultIds
+      : owned.length > 0
+        ? orderTargetFirst(owned, input.target)
+        : [input.target];
+  if (vaultIds.length === 0) {
+    return {
+      status: 400,
+      error: "vaults_required",
+      message: "an invitation must land the device in at least one vault",
+    };
+  }
+  for (const vaultId of vaultIds) {
+    // Topology hiding: a vault this owner does not own is indistinguishable
+    // from one that does not exist — `not_found`, never `forbidden`. An
+    // UNOWNED vault passes only on the host lane, where redemption claims it.
+    const vaultOwner = owners.ownerOf(vaultId);
+    const reachable =
+      (existing !== undefined && vaultOwner === existing.ownerId) ||
+      (vaultOwner === undefined && input.hostCustody);
+    if (reachable && input.vaultName(vaultId) !== undefined) continue;
+    // Host custody can SEE this vault (it can read the disk) — an honest
+    // `owner_only` naming the real owner, never a fake `not_found` (#726
+    // P1). Only when the vault genuinely has a DIFFERENT owner: an unknown
+    // vault id still 404s below, even for host custody.
+    if (
+      input.hostCustody &&
+      vaultOwner !== undefined &&
+      input.vaultName(vaultId) !== undefined
+    ) {
+      const ownerLabel = owners.get(vaultOwner)?.label;
+      return {
+        status: 403,
+        error: "owner_only",
+        message: `${ownerLabel ?? "this vault's owner"} owns "${input.vaultName(vaultId)}" — minting a pairing ticket for it takes their own device or ownership`,
+      };
+    }
+    return {
+      status: 404,
+      error: "not_found",
+      message: "unknown vault in vaultIds",
+    };
+  }
+
+  const owner = existing ?? owners.create("You");
+  if (!existing) {
+    // Founding-completion claims the unowned vaults NOW, so a re-mint before
+    // redemption converges on this owner instead of inventing another.
+    for (const vaultId of vaultIds) {
+      if (owners.ownerOf(vaultId) === undefined)
+        owners.setOwner(vaultId, owner.ownerId);
+    }
+  }
+  return {
+    ownerId: owner.ownerId,
+    ownerLabel: owner.label,
+    vaultIds,
+  };
 }

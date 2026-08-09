@@ -161,7 +161,6 @@ export function revokeGrantCascade(
 
 export interface SweepResult {
   grantsExpired: number;
-  sharesExpired: number;
   contentPurged: number;
   assetsPurged: number;
   /** Trashed notes whose grace window lapsed (issue #308 A6). */
@@ -407,8 +406,8 @@ function isLineageSource(db: VaultDb, assetId: string): boolean {
  * Hard-delete one media asset row and the derived data hanging off it. Face
  * regions have no `ON DELETE CASCADE` (the phash sidecar does), so they go by
  * hand; then the A1 registry cleans every polymorphic pointer — album
- * membership, tags, annotations, attachments, embeddings, sync-map rows,
- * shares. Callers must have established that nothing names this asset as its
+ * membership, tags, annotations, attachments, embeddings, sync-map rows.
+ * Callers must have established that nothing names this asset as its
  * lineage source; this function does not re-check.
  */
 function deleteAssetRow(
@@ -478,7 +477,7 @@ function purgeContentItem(
     // Edit lineage (issue #711 S8). Another asset names this one as its
     // source, and both ways through are dishonest: NULLing the child's column
     // forges "camera original" (the schema says NULL means exactly that), and
-    // cascading destroys a photograph the member never trashed. The
+    // cascading destroys a photograph the owner never trashed. The
     // interactive path already refused for these reasons — media.purge_asset's
     // `no_derived_assets` precondition. A sweep has nobody to ask, so it makes
     // the SAME refusal and keeps going rather than dying on the FK and taking
@@ -536,7 +535,7 @@ function purgeContentItem(
   }
   // Every polymorphic pointer at the content item (issue #441 A1): end-date
   // links, drop tags/entries/annotations/attachments/embeddings/sync-map/seed
-  // rows, revoke shares. cover_content_id above is a plain FK, not a poly ref.
+  // rows. cover_content_id above is a plain FK, not a poly ref.
   cleanupPolyRefs(db.vault, now, "core.content_item", contentId);
   return { reclaimed, blockedByAssetId: null };
 }
@@ -616,7 +615,7 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
  * later duty (retention, staging TTL, the receipt itself) never running. So
  * this pass never hands SQLite a delete it knows will be refused.
  *
- * ORDER solves the case the member actually creates: they trash a photograph
+ * ORDER solves the case the owner actually creates: they trash a photograph
  * and its edit together, both grace windows lapse together, and peeling
  * leaves-first empties both in this one pass. The loop re-asks the table
  * instead of sorting once because each delete can free the next generation up
@@ -627,7 +626,7 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
  * SKIP handles the rest: a lapsed asset whose derived copy is NOT lapsed —
  * still live, or trashed with a later window. That row survives this pass
  * rather than being force-deleted, which is the same call media.purge_asset's
- * `no_derived_assets` precondition makes for the member. It keeps its
+ * `no_derived_assets` precondition makes for the owner. It keeps its
  * `purge_at`, so the next sweep retries it once the copy goes, and its id is
  * returned for the pass receipt so a skip is visible rather than silent.
  */
@@ -661,9 +660,9 @@ function purgeLapsedAssets(
 }
 
 /**
- * Lifecycle sweep: lapse grants and shares at expires_at, execute purge_at
- * deletions (GDPR storage limitation), enforce retention policy. Run on a
- * schedule or after unlock.
+ * Lifecycle sweep: lapse grants at expires_at, execute purge_at deletions
+ * (GDPR storage limitation), enforce retention policy. Run on a schedule or
+ * after unlock.
  */
 export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const now = nowIso();
@@ -677,12 +676,6 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         WHERE status='active' AND expires_at IS NOT NULL AND expires_at <= ?`
     )
     .run(now);
-  const shares = db.vault
-    .prepare(
-      `UPDATE consent_share SET revoked_at=?
-        WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`
-    )
-    .run(now, now);
   const purgeable = db.vault
     .prepare(
       `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`
@@ -691,9 +684,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // Purges are the one hard delete outside the command pipeline, so the
   // polymorphic-cleanup duty runs here too: links onto a purged row end-date
   // (issue #272), tags/entries/annotations/attachments/embeddings/sync-map/seed
-  // rows drop and shares revoke (issues #274, #441 A1). The registry in
-  // schema/poly-refs.ts is the single, complete enumeration — cleanupPolyRefs
-  // walks it so no purge path re-derives a partial list by hand.
+  // rows drop (issues #274, #441 A1). The registry in schema/poly-refs.ts is
+  // the single, complete enumeration — cleanupPolyRefs walks it so no purge
+  // path re-derives a partial list by hand.
   // Lapsed trashed notes purge FIRST (issue #308 A6): the note row rents its
   // body content (NOT NULL FK), so the row and its edges must go before the
   // content purge below can delete the body's bytes in the same pass.
@@ -803,7 +796,6 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     decision: "allow",
     detail: {
       grantsExpired: Number(grants.changes),
-      sharesExpired: Number(shares.changes),
       contentPurged,
       assetsPurged: lapsedAssets.purged,
       notesPurged: lapsedNotes.length,
@@ -822,7 +814,6 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   });
   return {
     grantsExpired: Number(grants.changes),
-    sharesExpired: Number(shares.changes),
     contentPurged,
     assetsPurged: lapsedAssets.purged,
     notesPurged: lapsedNotes.length,

@@ -66,13 +66,14 @@ export function makeMultiplexReplicaRouteHandler(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // A still-valid device may reconnect with a scope whose member grant was
-    // removed while the phone was offline. Keep that formerly-known mount in
+    // A still-valid device may reconnect with a scope whose vault changed
+    // hands or vanished while the phone was offline. Keep that
+    // formerly-known mount in
     // the stream long enough to deliver its scoped tombstone; rejecting the
     // whole request would strand the local projection forever. A tombstoned
     // device, unknown device, or unknown vault still fails closed.
     if (
-      !enrollments.memberFor(deviceId) ||
+      !enrollments.ownerFor(deviceId) ||
       mounts.some(
         (mount) =>
           vaults.get(mount.vaultId) === undefined ||
@@ -119,7 +120,7 @@ export function makeMultiplexReplicaRouteHandler(
           if (state.terminal) continue;
           const enrollment = enrollments.get(deviceId, state.vaultId);
           const plane = vaults.get(state.vaultId);
-          if (!plane || !enrollment || enrollment.role === "revoked") {
+          if (!plane || !enrollment || enrollment.revoked) {
             writeScope(res, state.vaultId, "revoked", {
               reason: "device-access-changed",
             });
@@ -129,7 +130,7 @@ export function makeMultiplexReplicaRouteHandler(
           const page = projectReplicaPage(
             plane.db.vault,
             {
-              role: enrollment.role,
+              canWrite: !enrollment.revoked,
               rememberDevice: enrollment.rememberDevice,
             },
             state.cursor,

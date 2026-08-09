@@ -15,9 +15,7 @@ const ticket = await fetch(`${baseUrl}/centraid/_gateway/devices/ticket`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
-    role: "write",
     ttlMinutes: 1,
-    newMemberLabel: "Mobile E2E readiness probe",
   }),
 });
 const result = await ticket.json().catch(() => ({}));

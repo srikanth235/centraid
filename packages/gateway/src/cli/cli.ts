@@ -25,7 +25,7 @@
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
  *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (offline maintenance)
  *   centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] …
- *   centraid-gateway members <list|add|rename|remove> --data-dir <path> …
+ *   centraid-gateway owners <list|add|rename|remove> --data-dir <path> …
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
  *   centraid-gateway service <install|uninstall|status> …                    (OS service unit, #351)
@@ -60,7 +60,7 @@ import { commandKey } from "./key-admin.js";
 import { daemonKeyStore } from "./key-store.js";
 import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
 import { commandLockStatus } from "./lock-admin.js";
-import { commandMembers } from "./member-admin.js";
+import { commandOwners } from "./owner-admin.js";
 import { daemonLayoutFor } from "./paths.js";
 import { commandRecover } from "./recover-admin.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
@@ -101,13 +101,13 @@ function usage(): never {
       "  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]",
       "  centraid-gateway vault rename --data-dir <path> <vaultId> <name>",
       "  centraid-gateway vault delete --data-dir <path> <vaultId>",
-      "  centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] [--member <id-or-label> | --new-member <label>] [--grant <vault>:<role>]… [--ttl-minutes <n>] [--role admin|write|read] [--qr] [--json]",
-      "  centraid-gateway members list --data-dir <path>",
-      "  centraid-gateway members add --data-dir <path> <label>",
-      "  centraid-gateway members rename --data-dir <path> <member-id-or-label> --label <new-label>",
-      "  centraid-gateway members remove --data-dir <path> <member-id-or-label> [--confirm-last-admin <vault-id>]",
+      "  centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] [--owner <id-or-label>] [--ttl-minutes <n>] [--qr] [--json]",
+      "  centraid-gateway owners list --data-dir <path>",
+      "  centraid-gateway owners add --data-dir <path> <label>",
+      "  centraid-gateway owners rename --data-dir <path> <owner-id-or-label> --label <new-label>",
+      "  centraid-gateway owners remove --data-dir <path> <owner-id-or-label>",
       "  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]",
-      "  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>] [--role admin|write|read]",
+      "  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>] [--owner <id-or-label> | --new-owner <label>]",
       "  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>",
       "  centraid-gateway key status  --data-dir <path> --vault <name-or-id>",
       "  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>",
@@ -126,14 +126,14 @@ function usage(): never {
       "  centraid-gateway --version",
       "  centraid-gateway --help",
       "",
-      "vault/members/devices/key are stopped-daemon maintenance commands:",
+      "vault/owners/devices/key are stopped-daemon maintenance commands:",
       "mutations take gateway.db's exclusive lock and refuse while the",
       "daemon is running. Recovery uses only a password-wrapped recovery kit;",
       "no command emits a raw vault key.",
       "",
       "pair talks to the live loopback daemon using its host-custody bearer.",
-      "Without --member/--new-member it pairs another device to the existing owner.",
-      "Admin capability is a per-device, revocable enrollment role.",
+      "It pairs another device to an existing owner (default: the vault's).",
+      "Access is ownership: a device reaches the vaults its owner owns.",
       "`pair --qr` prints a UTF-8 block QR of the one-line iroh ticket for",
       "phone cameras; redemption proves the joining device EndpointId.",
       "",
@@ -283,6 +283,7 @@ async function commandServe(args: string[]): Promise<void> {
           },
         }
       : {}),
+    peerPlane: devicePlane.peerPlane,
     devicePairing: {
       ...devicePlane.pairing,
       endpointId: () => endpoint?.endpointId,
@@ -352,6 +353,7 @@ async function commandServe(args: string[]): Promise<void> {
       `[centraid-gateway] ${signal} received — shutting down\n`
     );
     await endpoint?.close().catch(() => undefined);
+    await devicePlane.closePeerDial().catch(() => undefined);
     await handle.close().catch((error) => {
       process.stderr.write(
         `[centraid-gateway] close error: ${error instanceof Error ? error.message : String(error)}\n`
@@ -381,8 +383,8 @@ async function main(): Promise<void> {
     case "pair":
       await commandPair(rest, fail);
       return;
-    case "members":
-      commandMembers(rest, fail);
+    case "owners":
+      commandOwners(rest, fail);
       break;
     case "devices":
       await commandDevices(rest, fail);

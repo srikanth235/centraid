@@ -61,12 +61,27 @@ interface ReplicaSourceState {
 export interface MountedReplicaScope {
   vaultId: string;
   label: string;
-  role: "admin" | "write" | "read";
+  canWrite: boolean;
   databaseName: string;
   /** Whether this is the member's OWN vault — the founding marker, straight
    *  from the vault record (issue #711 item H). Undefined only for a scope
    *  mounted before the gateway answered, which reads as their own. */
   personal?: boolean;
+  /** Present only for a scope LENT to this member by someone else (#726
+   *  P4/P6) — absent for an owned vault. Mirrors the gateway's
+   *  `ScopeBorrowedInfo` (`scopes-routes.ts`) verbatim. */
+  borrowed?: MountedScopeBorrowed;
+}
+
+/** The lend-specific facts a borrowed scope carries (#726 P4 item 6). */
+export interface MountedScopeBorrowed {
+  edgeId: string;
+  originVaultId: string;
+  holderLabel: string;
+  itemType: string;
+  reachState: "offered" | "established" | "parked";
+  reason: string | null;
+  mounted: boolean;
 }
 
 export interface PlacementIntent {

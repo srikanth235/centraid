@@ -13,8 +13,8 @@
 // silently folded in as empty (storage-model.ts's `unread`). The fan-out door
 // is `readAll` where the host has one; a single-scope host keeps the plain
 // `read` it always had.
+import { mountedScopes } from "../_shared/scope-kit.ts";
 import type { StorageRollup } from "./queries/storage.ts";
-import { mountedScopes } from "./scopes.ts";
 import { custodyFacts } from "./storage-model.ts";
 import type { CustodyFacts, ScopeRollup } from "./storage-model.ts";
 

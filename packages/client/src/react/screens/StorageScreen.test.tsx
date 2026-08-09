@@ -4,6 +4,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
+import type { GatewayOwner } from "../../gateway-client-owners.js";
 import StorageScreen from "./StorageScreen.js";
 import type { StorageScreenProps } from "./StorageScreen.js";
 
@@ -80,6 +81,58 @@ describe(StorageScreen, () => {
     const el = await mount({ loadLocalUsage });
     expect(loadLocalUsage).toHaveBeenCalledWith({});
     expect(el.textContent).not.toContain("Listening for the gateway heartbeat");
+  });
+
+  it("adds the owner label beside each vault line when a roster is available (#726 P1)", async () => {
+    const withVaults: LocalUsageReportDTO = {
+      ...report(),
+      vaults: [
+        {
+          vaultId: "v-priya",
+          name: "Priya's vault",
+          bytes: 2 * GB,
+          components: [{ component: "attachments", bytes: 2 * GB, files: 3 }],
+        },
+      ],
+    };
+    const owners: GatewayOwner[] = [
+      {
+        ownerId: "o-priya",
+        label: "Priya",
+        createdAt: "2026-07-25T00:00:00.000Z",
+        vaults: [{ vaultId: "v-priya", vaultName: "Priya's vault" }],
+        deviceCount: 1,
+      },
+    ];
+    const el = await mount({
+      loadLocalUsage: () => Promise.resolve(withVaults),
+      loadOwners: vi
+        .fn<NonNullable<StorageScreenProps["loadOwners"]>>()
+        .mockResolvedValue(owners),
+    });
+    const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
+    expect(byVault?.textContent).toContain("Priya's vault");
+    expect(byVault?.textContent).toContain("(Priya)");
+  });
+
+  it("renders the vault line unlabeled when there is no owner roster to join", async () => {
+    const withVaults: LocalUsageReportDTO = {
+      ...report(),
+      vaults: [
+        {
+          vaultId: "v-priya",
+          name: "Priya's vault",
+          bytes: 2 * GB,
+          components: [{ component: "attachments", bytes: 2 * GB, files: 3 }],
+        },
+      ],
+    };
+    const el = await mount({
+      loadLocalUsage: () => Promise.resolve(withVaults),
+    });
+    const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
+    expect(byVault?.textContent).toContain("Priya's vault");
+    expect(byVault?.textContent).not.toContain("(Priya)");
   });
 
   it("round-trips a limit change through the gateway", async () => {

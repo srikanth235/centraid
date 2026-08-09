@@ -1,5 +1,5 @@
 // The enrichment service client (issue #724 W1): the ONE seam between this
-// gateway and every model that derives something from a member's bytes.
+// gateway and every model that derives something from an owner's bytes.
 //
 // WHY ONE SEAM. Before this module the gateway had a different mechanism per
 // capability — a spawned embedder program, an OCR child process, a desktop ASR
@@ -8,14 +8,14 @@
 // answer to "is this switched on here?". Three mechanisms is three sets of
 // operator instructions and three places a privacy claim can quietly stop
 // being true. One HTTP service is one thing to configure, one place to point
-// at a machine the member controls, and one contract to test against.
+// at a machine the owner controls, and one contract to test against.
 //
 // LOOPBACK ONLY, AND WHY THAT IS THE WHOLE PRIVACY ARGUMENT. The endpoint must
 // resolve to this machine (localhost, ::1, 127.x.x.x) — the same validation
 // desktop's now-deleted on-device file-ASR adapter carried since issue #414
 // D13 (removed in #724 W6; transcription moved to this seam), promoted here
 // because it is the reason the design is acceptable at all:
-// the gateway hands a member's photographs and recordings to a process, and
+// the gateway hands an owner's photographs and recordings to a process, and
 // the only version of that which needs no trust argument is one where the
 // bytes cannot leave the host. A hostname that is not loopback is not a
 // misconfiguration to warn about; it is a config this module REFUSES to read,
@@ -95,7 +95,7 @@ export const ENRICH_CAPABILITIES = [
 ] as const;
 export type EnrichCapability = (typeof ENRICH_CAPABILITIES)[number];
 
-/** Why nothing is available, in a sentence a surface can show a member. */
+/** Why nothing is available, in a sentence a surface can show an owner. */
 export const ENRICH_UNCONFIGURED_REASON =
   "no enrichment service is configured on this gateway — set CENTRAID_ENRICH_URL to enable model-derived features";
 
@@ -119,7 +119,7 @@ function loopback(hostname: string): boolean {
  * Read the explicitly configured, loopback-only enrichment service, or `null`
  * when this host has none. `null` is the shipped default and an ordinary
  * state — see the header on why a non-loopback URL yields `null` rather than
- * an error: there must be no code path that uploads a member's bytes.
+ * an error: there must be no code path that uploads an owner's bytes.
  */
 export function readEnrichServiceConfig(
   env: NodeJS.ProcessEnv = process.env
@@ -168,7 +168,7 @@ export type EnrichCapabilityStatus =
 export interface EnrichImageItem {
   id: string;
   mediaType: string;
-  /** Base64 of the DERIVATIVE bytes — never a member's original (see the sweep). */
+  /** Base64 of the DERIVATIVE bytes — never an owner's original (see the sweep). */
   bytes: string;
 }
 
@@ -374,7 +374,7 @@ export async function getEnrichCapabilities(
     return { status: "ok", capabilities };
   } catch (error) {
     // The process boundary: a foreign program's every failure mode becomes one
-    // sentence a member could be shown, and no exception crosses this line.
+    // sentence an owner could be shown, and no exception crosses this line.
     return {
       status: "unavailable",
       reason: `the enrichment service is not answering: ${reason(error)}`,
@@ -427,7 +427,7 @@ function confidenceOf(raw: unknown): number {
 /**
  * Validate one box against the item's declared dimensions. A box outside the
  * photograph it claims to describe is worse than no box: a surface would draw
- * a face marker over empty canvas and the member would be told the model saw
+ * a face marker over empty canvas and the owner would be told the model saw
  * something it did not.
  */
 function boxOf(raw: unknown, item: EnrichRegionItem): EnrichBox {
@@ -509,7 +509,7 @@ const READERS: { [C in EnrichCapability]: ResultReader<C> } = {
       id,
       // Truncation rather than refusal, the same trade desktop's deleted
       // on-device ASR adapter made: an hour of speech is still a usable
-      // transcript at a million characters, and a member gets the
+      // transcript at a million characters, and an owner gets the
       // recording's words either way.
       text: text.slice(0, MAX_TRANSCRIPT_CHARS),
       ...(confidence === undefined

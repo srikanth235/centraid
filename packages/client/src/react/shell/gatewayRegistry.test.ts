@@ -8,7 +8,7 @@ import {
 } from "./gatewayRegistry.js";
 import type {
   GatewayProbeCache,
-  MemberVaultScope,
+  OwnerVaultScope,
   RegistryGateway,
   RegistryVault,
 } from "./gatewayRegistry.js";
@@ -126,9 +126,9 @@ describe(buildGatewayRows, () => {
 });
 
 describe(buildVaultRows, () => {
-  const scopes: MemberVaultScope[] = [
-    { id: "shared", label: "Shared", role: "admin", isActive: true },
-    { id: "personal", label: "Personal", role: "member", isActive: false },
+  const scopes: OwnerVaultScope[] = [
+    { id: "shared", label: "Shared", isActive: true },
+    { id: "personal", label: "Personal", isActive: false },
   ];
 
   it("flattens the vaults of every gateway into ONE list", () => {
@@ -167,16 +167,19 @@ describe(buildVaultRows, () => {
       scopes,
       "local"
     );
-    expect(alone[0]!.subtitle).toBe("admin vault");
+    expect(alone[0]!.subtitle).toBe("Vault");
     const withPeer = buildVaultRows(
       buildGatewayRows(gateways.slice(0, 2), cache, "local"),
       scopes,
       "local"
     );
-    expect(withPeer[0]!.subtitle).toBe("admin vault · This Mac");
+    // With ownership (#726) there is no per-vault role lead left to say, so a
+    // peer'd gateway's own vaults name just the gateway — the same bare
+    // context every non-active gateway's rows already carried.
+    expect(withPeer[0]!.subtitle).toBe("This Mac");
   });
 
-  it("keeps the role wording for the active gateway and falls back for the rest", () => {
+  it("names the gateway for a vault off a non-active one, and nothing else", () => {
     const cache = applyProbeOutcome({}, "office", {
       status: "ready",
       vaults: [{ name: "Studio", vaultId: "studio" }],
@@ -187,8 +190,6 @@ describe(buildVaultRows, () => {
       "local"
     );
     const studio = rows.find((r) => r.vaultId === "studio")!;
-    // No role is knowable off the active gateway — say where it lives instead
-    // of inventing an entitlement.
     expect(studio.subtitle).toBe("Office");
     expect(studio.selectable).toBe(true);
   });
@@ -210,8 +211,8 @@ describe(buildVaultRows, () => {
 
   it("treats a lone gateway as the active one even when the ids disagree (web host)", () => {
     // The web host reports `activeGatewayId: 'web'` but lists its single
-    // connection under its EndpointId — the roles and the check mark must
-    // survive that mismatch.
+    // connection under its EndpointId — the check mark must survive that
+    // mismatch.
     const cache = applyProbeOutcome({}, "endpoint-1", {
       status: "ready",
       vaults: [{ name: "Shared", vaultId: "shared" }],
@@ -231,7 +232,7 @@ describe(buildVaultRows, () => {
       scopes,
       "web"
     );
-    expect(rows[0]).toMatchObject({ subtitle: "admin vault", isActive: true });
+    expect(rows[0]).toMatchObject({ subtitle: "Vault", isActive: true });
   });
 
   it("still lists the connected vaults when the host exposes no gateway registry", () => {
@@ -241,7 +242,7 @@ describe(buildVaultRows, () => {
       gatewayId: "local",
       isActive: true,
       selectable: true,
-      subtitle: "admin vault",
+      subtitle: "Vault",
     });
   });
 

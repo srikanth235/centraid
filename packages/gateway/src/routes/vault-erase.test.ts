@@ -82,9 +82,8 @@ describe("vault-erase scenarios", () => {
     const enrollments = EnrollmentStore.open(database);
     enrollments.enroll({
       endpointId: "owner-device",
-      vaultId: vault.vaultId,
+      vaultIds: [vault.vaultId],
       label: "Owner laptop",
-      role: "admin",
     });
     WebControlSessionStore.open(database).establish({
       tokenHash: "session-hash",
@@ -92,15 +91,15 @@ describe("vault-erase scenarios", () => {
       deviceKey: "owner-device",
       shellOrigin: "http://127.0.0.1:4173",
     });
-    const invitedMember = enrollments.members.create("Invited");
+    const invitedOwner = enrollments.owners.create("Invited");
     database.run(
       `INSERT INTO tickets (
-      ticket_id, secret_hash, member_id, grants_json, created_at, expires_at
+      ticket_id, secret_hash, owner_id, grants_json, created_at, expires_at
     ) VALUES (?, ?, ?, ?, ?, ?)`,
       "pending-pair",
       "secret-hash",
-      invitedMember.memberId,
-      JSON.stringify([{ vaultId: vault.vaultId, role: "write" }]),
+      invitedOwner.ownerId,
+      JSON.stringify([vault.vaultId]),
       new Date(0).toISOString(),
       Date.now() + 60_000
     );
@@ -229,9 +228,8 @@ describe("vault-erase scenarios", () => {
     const enrollments = EnrollmentStore.open(database);
     enrollments.enroll({
       endpointId: "owner-device",
-      vaultId: vault.vaultId,
+      vaultIds: [vault.vaultId],
       label: "Owner laptop",
-      role: "admin",
     });
     const recoveryKit = new RecoveryKitStateStore(database);
     await markKitVerified(recoveryKit);
@@ -320,7 +318,7 @@ describe("vault-erase scenarios", () => {
    * between a mistaken click and a destroyed vault.
    */
   async function eraseFixture(
-    options: { role?: "admin" | "write"; custody?: boolean } = {}
+    options: { owner?: boolean; custody?: boolean } = {}
   ): Promise<{
     base: string;
     vaultName: string;
@@ -348,11 +346,12 @@ describe("vault-erase scenarios", () => {
     cleanups.push(() => registry.stop());
     const vault = registry.create("Family");
     const enrollments = EnrollmentStore.open(database);
+    // `owner: false` models a device whose owner does NOT own this vault —
+    // the enrollment view then simply has no row for (device, vault).
     enrollments.enroll({
       endpointId: "caller-device",
-      vaultId: vault.vaultId,
+      vaultIds: options.owner === false ? ["vault-elsewhere"] : [vault.vaultId],
       label: "Caller",
-      role: options.role ?? "admin",
     });
     const recoveryKit = new RecoveryKitStateStore(database);
     const handler = makeVaultRouteHandler(registry, {
@@ -405,11 +404,11 @@ describe("vault-erase scenarios", () => {
   }
 
   test("erase refuses a non-owner caller", async () => {
-    const fixture = await eraseFixture({ role: "write" });
+    const fixture = await eraseFixture({ owner: false });
     const response = await fixture.erase({ name: fixture.vaultName });
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
-      error: "admin_required",
+      error: "owner_required",
     });
   });
 

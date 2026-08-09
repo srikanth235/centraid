@@ -15,7 +15,10 @@ import type {
 } from "@centraid/client/replica/native";
 
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
-import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
+import type {
+  MountedReplicaScope,
+  MountedScopeBorrowed,
+} from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
 import { nativeReplicaDatabasePath } from "../../lib/replica/op-sqlite-driver";
@@ -41,7 +44,7 @@ const MANUAL_GATEWAY_FALLBACK = "manual";
 interface ScopeWire {
   vaultId: string;
   label: string;
-  role: "admin" | "write" | "read";
+  canWrite: boolean;
   /**
    * Whether this is the member's OWN vault — what the vault *is*, which is not
    * what it is called. Apps derive the "somewhere other than my own vault"
@@ -54,6 +57,10 @@ interface ScopeWire {
    * fallback below, genuinely does not know.
    */
   personal?: boolean;
+  /** Present only for a LENT scope (#726 P4/P6) — mirrors
+   *  `MountedScopeBorrowed`. Carried through to `MountedReplicaScope`
+   *  verbatim by the object spread below; nothing here reads it. */
+  borrowed?: MountedScopeBorrowed;
 }
 
 export function fetcher(vaultId?: string): ReplicaFetcher {
@@ -191,11 +198,15 @@ export async function mountedScopes(
   }
   const active = identity.auth.vaultId!;
   const ordered = [
-    ...(scopes ?? []).filter((scope) => scope.vaultId === active),
-    ...(scopes ?? []).filter((scope) => scope.vaultId !== active),
+    ...(scopes ?? []).filter(
+      (scope) => scope.vaultId === active && scope.borrowed?.mounted !== false
+    ),
+    ...(scopes ?? []).filter(
+      (scope) => scope.vaultId !== active && scope.borrowed?.mounted !== false
+    ),
   ];
   if (!ordered.some((scope) => scope.vaultId === active)) {
-    ordered.unshift({ vaultId: active, label: "Current", role: "write" });
+    ordered.unshift({ vaultId: active, label: "Current", canWrite: true });
   }
   return Promise.all(
     ordered.slice(0, MAX_MOUNTED_NATIVE_SCOPES).map(async (scope) => ({

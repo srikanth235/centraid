@@ -68,6 +68,7 @@ export function SearchShelf({
   onClear,
   onRetry,
   onOpenGroup,
+  reachFacts,
   children,
 }: {
   query: string;
@@ -85,6 +86,10 @@ export function SearchShelf({
    *  only control. */
   onRetry?: () => void;
   onOpenGroup?: (shelf: ShelfId) => void;
+  /** Per-scope reach for the current answer (issue #726 D10/D11,
+   *  `search.ts`'s `createSearch`) — a scope that did not answer, named
+   *  BESIDE whatever other scopes' hits are still on screen. */
+  reachFacts?: readonly { label: string; value: string }[];
   /** The hits, once there are any. */
   children?: React.ReactNode;
 }) {
@@ -144,6 +149,7 @@ export function SearchShelf({
         onClear={onClear}
         onRetry={onRetry}
         onOpenGroup={(target) => onOpenGroup?.(target as ShelfId)}
+        reachFacts={reachFacts}
       >
         {children}
       </SearchScaffold>

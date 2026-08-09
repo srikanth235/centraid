@@ -6,13 +6,28 @@ import { readJson, sendJson } from "./route-helpers.js";
 
 export const DATA_PLANE_AUTHORIZE_PATH = "/centraid/_gateway/tunnel/authorize";
 export const DATA_PLANE_PAIR_PATH = "/centraid/_gateway/tunnel/pair";
+/**
+ * Peer-plane admission for the Rust relay (issue #726 P3). A SEPARATE route
+ * from `DATA_PLANE_AUTHORIZE_PATH` on purpose: that one answers device
+ * enrollment, and answering it for a linked gateway would make a peer
+ * indistinguishable from a paired owner device.
+ */
+export const DATA_PLANE_PEER_AUTHORIZE_PATH =
+  "/centraid/_gateway/tunnel/peer-authorize";
+
+export interface DataPlaneAuthorization {
+  allowed: boolean;
+  headers?: Record<string, string>;
+}
 
 export interface DataPlaneControlOptions {
   secret: string;
-  authorize: (endpointId: string) => {
-    allowed: boolean;
-    headers?: Record<string, string>;
-  };
+  authorize: (endpointId: string) => DataPlaneAuthorization;
+  /**
+   * Peer admission. Absent means this gateway does not speak the peer plane —
+   * every peer stream is then refused, which is the fail-closed reading.
+   */
+  authorizePeer?: (endpointId: string) => DataPlaneAuthorization;
   pair: (request: unknown, endpointId: string) => unknown | Promise<unknown>;
 }
 
@@ -35,8 +50,9 @@ export function makeDataPlaneControlHandler(
   ): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
     const authorize = url.pathname === DATA_PLANE_AUTHORIZE_PATH;
+    const authorizePeer = url.pathname === DATA_PLANE_PEER_AUTHORIZE_PATH;
     const pair = url.pathname === DATA_PLANE_PAIR_PATH;
-    if (!authorize && !pair) return false;
+    if (!authorize && !authorizePeer && !pair) return false;
     const supplied = req.headers["x-centraid-data-plane-secret"];
     const candidate = Array.isArray(supplied) ? supplied[0] : supplied;
     if (!matchesSecret(candidate, options.secret)) {
@@ -46,10 +62,17 @@ export function makeDataPlaneControlHandler(
     if (!endpointId)
       return sendJson(res, 400, { error: "endpointId_required" });
     const method = (req.method ?? "GET").toUpperCase();
-    if (authorize) {
+    if (authorize || authorizePeer) {
       if (method !== "GET")
         return sendJson(res, 405, { error: "method_not_allowed" });
-      return sendJson(res, 200, options.authorize(endpointId));
+      if (!authorizePeer)
+        return sendJson(res, 200, options.authorize(endpointId));
+      const decide = options.authorizePeer;
+      return sendJson(
+        res,
+        200,
+        decide ? decide(endpointId) : { allowed: false }
+      );
     }
     if (method !== "POST")
       return sendJson(res, 405, { error: "method_not_allowed" });

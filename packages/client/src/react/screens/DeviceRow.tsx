@@ -6,31 +6,30 @@ import type { IconName } from "@centraid/design";
 import { formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import { lastDeviceVault } from "./device-errors.js";
 import type { GroupedDevice } from "./device-groups.js";
-import { lastAdminVault } from "./device-roles.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./DevicesCard.module.css";
 
 /*
- * One hardware binding inside a person's group (issue #599).
+ * One hardware binding inside a person's group (issue #726).
  *
  * "Revoke device" is the narrow verb — this phone was lost, the person keeps
- * their access and their other devices. The wide verb ("Remove <person>")
- * lives on the group header, never here, so the two can't be confused at the
- * moment of clicking.
+ * their access and their other devices. Removing the PERSON is a
+ * host-custody act on this machine (`owners-routes.ts`), never a verb this
+ * card offers.
  */
 
 export interface DeviceRowProps {
   device: GroupedDevice;
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
-  /** Absent for a viewer looking at someone else's device: the gateway would
-   *  refuse the revoke, so the affordance is not offered at all. */
+  /** Absent when the host cannot revoke devices at all. */
   onRevoke?: (
     device: GroupedDevice,
-    confirmLastAdmin?: string
+    confirmLastDevice?: string
   ) => Promise<void>;
   onRename?: (device: GroupedDevice, label: string) => Promise<void>;
   onUpdateCompute?: (device: GroupedDevice, enabled: boolean) => Promise<void>;
@@ -74,16 +73,16 @@ export default function DeviceRow({
     : undefined;
   const paired = ageLabel(device.addedAt, now);
 
-  const revoke = async (confirmLastAdmin?: string): Promise<void> => {
+  const revoke = async (confirmLastDevice?: string): Promise<void> => {
     if (!onRevoke) return;
     setBusy(true);
     setError(null);
     try {
-      await onRevoke(device, confirmLastAdmin);
+      await onRevoke(device, confirmLastDevice);
       // On success the parent drops the row; nothing more to do here.
     } catch (caughtError) {
-      const stranded = lastAdminVault(caughtError);
-      if (stranded !== undefined && confirmLastAdmin === undefined) {
+      const stranded = lastDeviceVault(caughtError);
+      if (stranded !== undefined && confirmLastDevice === undefined) {
         setStrandedVault(stranded);
       } else {
         setError(

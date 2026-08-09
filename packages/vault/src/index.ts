@@ -63,21 +63,50 @@ export {
 // plane calls these; they sit outside the per-vault handler path by design.
 export {
   shareToVault,
+  shareItemsToVault,
   unshareFromVault,
   moveOutOfVault,
   readShareOrigin,
   type ShareVaultRef,
   type ShareToVaultInput,
   type ShareToVaultResult,
+  type ShareItemsToVaultInput,
+  type ShareItemsToVaultResult,
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
   type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
+// The two halves of a share (issue #726). `readShareClosure` is origin-side
+// and read-only; `projectShareClosure` is audience-side and opens the single
+// transaction. `WireClosure` between them is plain JSON — the shape P3 puts a
+// tunnel under.
 export {
   isShareableItemType,
+  CLOSURE_FORMAT_VERSION,
   type ShareableItemType,
+  type WireClosure,
+  type WireItem,
+  type WireRows,
+  type BlobManifestEntry,
+  type ProjectedItem,
+  type ProjectResult,
 } from "./share/closure.js";
+export {
+  readShareClosure,
+  type ReadShareClosureInput,
+} from "./share/read-closure.js";
+export {
+  projectShareClosure,
+  type ProjectShareClosureOptions,
+} from "./share/project-closure.js";
+// Projection is ingest (D11): the audience's own door, keyed by entity type so
+// vault core never learns an app name.
+export {
+  declareProjectionIngest,
+  type ProjectionIngestHook,
+  type ProjectionIngestContext,
+} from "./share/projection-ingest.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -420,6 +449,14 @@ export {
   scrubSealedText,
   writeSealKeyFile,
 } from "./schema/sealed.js";
+export {
+  identityKeyFileFor,
+  ephemeralVaultIdentitySeed,
+  loadOrCreateVaultIdentitySeed,
+  vaultIdentityPublicKey,
+  signWithVaultIdentity,
+  verifyVaultIdentitySignature,
+} from "./schema/vault-identity.js";
 export {
   KeyStore,
   KeyStoreError,

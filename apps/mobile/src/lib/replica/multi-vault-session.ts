@@ -18,6 +18,7 @@ import type {
   NativeWriteInput,
   NativeWriteResult,
 } from "./native-session";
+import type { LendIntent, LendRecord } from "./placement-transport";
 
 export interface MultiVaultSessionOptions {
   reader: MultiVaultReplicaReader;
@@ -26,6 +27,12 @@ export interface MultiVaultSessionOptions {
   focusedVaultId: () => string | undefined;
   createId: () => string;
   sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
+  /**
+   * Open a live edge (#726 P6). Optional — a host that never wires a lend
+   * transport gets `MultiVaultReplicaSession.lend()` throwing a typed
+   * refusal rather than a silent no-op (fail-closed).
+   */
+  sendLend?: (input: LendIntent) => Promise<LendRecord>;
   isConnected: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
   onScopePulled?: (vaultId: string) => void;
@@ -39,6 +46,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
   readonly #focusedVaultId: () => string | undefined;
   readonly #createId: () => string;
   readonly #sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
+  readonly #sendLend: (input: LendIntent) => Promise<LendRecord>;
   readonly #isConnected: () => boolean;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #onScopePulled: ((vaultId: string) => void) | undefined;
@@ -51,6 +59,12 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#focusedVaultId = options.focusedVaultId;
     this.#createId = options.createId;
     this.#sendPlacement = options.sendPlacement;
+    this.#sendLend =
+      options.sendLend ??
+      (() =>
+        Promise.reject(
+          new Error("this build cannot lend a scope — no lend transport wired")
+        ));
     this.#isConnected = options.isConnected;
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
@@ -75,11 +89,9 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     const focused = this.#focusedVaultId();
     const target =
       (focused &&
-      this.#scopes.some(
-        (scope) => scope.vaultId === focused && scope.role !== "read"
-      )
+      this.#scopes.some((scope) => scope.vaultId === focused && scope.canWrite)
         ? focused
-        : this.#scopes.find((scope) => scope.role !== "read")?.vaultId) ??
+        : this.#scopes.find((scope) => scope.canWrite)?.vaultId) ??
       this.#scopes[0]?.vaultId;
     if (!target) throw new Error("No mounted replica scope accepts writes");
     return this.writeTo(target, appId, input);
@@ -94,7 +106,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       (candidate) => candidate.vaultId === vaultId
     );
     if (!scope) throw new Error(`Vault ${vaultId} is not mounted`);
-    if (scope.role === "read")
+    if (!scope.canWrite)
       throw new Error(`${scope.label} is read-only for this member`);
     const session = this.#sessions.get(vaultId);
     if (!session) throw new Error(`Vault ${vaultId} has no write session`);
@@ -223,6 +235,23 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     });
     if (this.#isConnected()) await this.flushPlacements();
     return this.#reader.placement(record.linkToken) ?? record;
+  }
+
+  /**
+   * Open a live window over a scope (#726 P6) — a LEND, as opposed to
+   * `place()`'s GIVE. NOT queued through the durable placement outbox: a
+   * live edge is a real-time round trip, not bytes to replay, so an offline
+   * caller gets an honest rejection instead of a silent queue entry.
+   */
+  lend(input: LendIntent): Promise<LendRecord> {
+    if (!this.#isConnected()) {
+      return Promise.reject(
+        new Error(
+          "Lending needs a gateway connection; queuing it offline isn't supported."
+        )
+      );
+    }
+    return this.#sendLend(input);
   }
 
   placements(): PlacementRecord[] {

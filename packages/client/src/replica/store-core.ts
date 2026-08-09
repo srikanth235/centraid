@@ -3,6 +3,7 @@ import {
   OnlineOnlyError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
+  ReplicaSearchRefusedError,
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations, evaluateReplicaRead } from "./query.js";
@@ -428,6 +429,11 @@ export class ReplicaSqliteStore {
     if (!schema) {
       throw new ReplicaProtocolError(
         `Shape does not contain entity ${request.shapeId}/${request.entity}`
+      );
+    }
+    if (schema.hasUnavailableFields) {
+      throw new ReplicaSearchRefusedError(
+        `${request.entity} has fields withheld by the lend mask`
       );
     }
     const spec = replicaLocalSearchSpec(request.entity);

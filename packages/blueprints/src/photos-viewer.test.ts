@@ -56,6 +56,7 @@ interface Asset {
 interface ActionSpec {
   id: string;
   icon: FC<{ size?: number; filled?: boolean }>;
+  label?: string;
   onRun?: () => void;
   disabled?: boolean;
   reason?: string;
@@ -235,9 +236,11 @@ describe("the top bar's flexible title", () => {
 });
 
 describe("labels are a function of bar width, not of surface", () => {
+  // The copy action's caption is per-destination (issue #726): the caller
+  // resolves the sole other writable scope and hands `Copy to ⟨label⟩` in.
   const specs: ActionSpec[] = [
     { id: "favorite", icon: Mark },
-    { id: "sharing", icon: Mark },
+    { id: "copy", icon: Mark, label: "Copy to Family" },
   ];
   const bar = (labelled: boolean): string =>
     renderToStaticMarkup(createElement(ViewerBarActions, { specs, labelled }));
@@ -256,16 +259,16 @@ describe("labels are a function of bar width, not of surface", () => {
   it("carries the label as text above the breakpoint", () => {
     const html = bar(true);
     expect(html).toContain(ACTION_LABELS.favorite);
-    expect(html).toContain("Copy to Sharing");
+    expect(html).toContain("Copy to Family");
   });
 
   it("keeps every icon-only control named below it", () => {
     const html = bar(false);
     // No visible text at all…
-    expect(html).not.toContain(">Copy to Sharing<");
+    expect(html).not.toContain(">Copy to Family<");
     // …but both names still reach a screen reader AND a hovering pointer.
-    expect(html).toContain('aria-label="Copy to Sharing"');
-    expect(html).toContain('title="Copy to Sharing"');
+    expect(html).toContain('aria-label="Copy to Family"');
+    expect(html).toContain('title="Copy to Family"');
     expect([...html.matchAll(/aria-label="/gu)]).toHaveLength(2);
     expect([...html.matchAll(/title="/gu)]).toHaveLength(2);
   });
@@ -288,18 +291,20 @@ describe("labels are a function of bar width, not of surface", () => {
     expect(html).toContain("disabled");
   });
 
-  it("names Copy to Sharing as a destination, never as a bare verb", () => {
-    expect(ACTION_LABELS.sharing).toBe("Copy to Sharing");
+  it("names the copy action as a destination, never as a bare verb (#726)", () => {
+    // The resting caption; Lightbox overrides it with `Copy to ⟨label⟩` when
+    // exactly one other writable scope is mounted (sharing.ts).
+    expect(ACTION_LABELS.copy).toBe("Copy to another place");
     expect(VIEWER_ACTIONS).toStrictEqual([
       "favorite",
       "edit",
       "info",
-      "sharing",
+      "copy",
       "download",
       "slideshow",
     ]);
     expect(PHONE_ACTIONS).toStrictEqual([
-      "sharing",
+      "copy",
       "favorite",
       "info",
       "edit",

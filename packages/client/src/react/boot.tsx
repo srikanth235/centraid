@@ -20,7 +20,7 @@ import {
   installDesktopAssistHandoff,
 } from "../assist-oauth-handoff.js";
 import { resetGatewayAuthCache } from "../gateway-client-core.js";
-import { renameGatewayMember } from "../gateway-client-members.js";
+import { renameGatewayOwner } from "../gateway-client-owners.js";
 import { updateVault } from "../gateway-client-vault.js";
 import { isWebHost } from "./host-platform.js";
 import FirstRunGate from "./screens/FirstRunGate.js";
@@ -171,7 +171,7 @@ void (async (): Promise<void> => {
             gatewayId,
             vaultId,
             ownerVault,
-            memberId,
+            ownerId,
             path,
           }) => {
             // Write metadata to the gateway this run actually connected.
@@ -182,17 +182,14 @@ void (async (): Promise<void> => {
             });
             // The name belongs to the PERSON: without this it lived only in
             // device-local settings, invisible to every surface, and Household
-            // kept showing the placeholder "You". `memberId` is set only when
+            // kept showing the placeholder "You". `ownerId` is set only when
             // onboarding actually asked, so a returning device never renames
             // someone who already has a name. Non-fatal for the same reason the
             // vault rename below is: the user is already in.
-            if (memberId && displayName) {
-              await renameGatewayMember(memberId, displayName).catch(
+            if (ownerId && displayName) {
+              await renameGatewayOwner(ownerId, displayName).catch(
                 (error: unknown) => {
-                  console.error(
-                    "[first-run] naming the household member failed",
-                    error
-                  );
+                  console.error("[first-run] naming the owner failed", error);
                 }
               );
             }

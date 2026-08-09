@@ -4,10 +4,9 @@
 // that used to be called "Albums". Two things were wrong with that name: it
 // described one section of what the screen showed, and the screen it named was
 // a two-column grid of album tiles with a Favorites row bolted above it, while
-// every other shelf this product has — People, Places, Duplicates, Sharing,
-// Trash — was reachable only from the bottom row of a sheet behind a **More**
-// tab. A member could use Photos for a month without learning that Places
-// existed.
+// every other shelf this product has — People, Places, Duplicates, Trash —
+// was reachable only from the bottom row of a sheet behind a **More** tab. A
+// member could use Photos for a month without learning that Places existed.
 //
 // So the page is the shelves, all of them, each one a named section over a
 // horizontal rail of covers. The section model — including what each section
@@ -37,7 +36,6 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
-import { useShareTarget } from "../../kit/share/use-share-target";
 import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
@@ -239,7 +237,6 @@ export default function PhotosCollectionsView({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { assets } = usePhotoTimeline();
-  const shareTargetId = useShareTarget().target?.vaultId;
 
   const collections = useReplicaQuery(
     "photos",
@@ -318,7 +315,6 @@ export default function PhotosCollectionsView({
         ...entry,
       })),
       memories: onThisDay(assets),
-      ...(shareTargetId ? { shareTargetId } : {}),
     });
   }, [
     assets,
@@ -327,7 +323,6 @@ export default function PhotosCollectionsView({
     faces.rows,
     parties.rows,
     places.rows,
-    shareTargetId,
   ]);
 
   /**
@@ -380,9 +375,6 @@ export default function PhotosCollectionsView({
         // shelf screen, not a bespoke grid — `PhotoStateView` already knows
         // how to be "the timeline, filtered", and Videos is nothing else.
         navigation.navigate("PhotoStateView", { mode: "videos" });
-        break;
-      case "sharing":
-        navigation.navigate("SharingShelf");
         break;
       case "duplicates":
         navigation.navigate("DuplicatesShelf");

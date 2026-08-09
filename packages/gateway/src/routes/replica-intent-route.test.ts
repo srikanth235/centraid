@@ -194,7 +194,7 @@ describe("replica-intent-route suite", () => {
       context: {
         plane: vault,
         access: {
-          role: "write" as const,
+          canWrite: true,
           rememberDevice: true,
           deviceId: "device-bridge-finalization",
           appId: "planner",
@@ -243,7 +243,7 @@ describe("replica-intent-route suite", () => {
     await handleReplicaIntent(request(body), first.res, {
       plane: vault,
       access: {
-        role: "write",
+        canWrite: true,
         rememberDevice: true,
         deviceId: identity.deviceId,
         appId: "planner",
@@ -264,7 +264,7 @@ describe("replica-intent-route suite", () => {
     await handleReplicaIntent(request(body), retry.res, {
       plane: vault,
       access: {
-        role: "write",
+        canWrite: true,
         rememberDevice: true,
         deviceId: identity.deviceId,
         appId: "planner",
@@ -309,7 +309,7 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          role: "write",
+          canWrite: true,
           rememberDevice: true,
           deviceId: "device-prober",
           appId: "planner",
@@ -363,7 +363,7 @@ describe("replica-intent-route suite", () => {
     const context = {
       plane: vault,
       access: {
-        role: "write" as const,
+        canWrite: true,
         rememberDevice: true,
         deviceId: "device-ambiguous",
         appId: "planner",
@@ -519,7 +519,7 @@ describe("replica-intent-route suite", () => {
     const context = {
       plane: vault,
       access: {
-        role: "write" as const,
+        canWrite: true,
         rememberDevice: true,
         deviceId: "device-bridge-finalization",
         appId: "planner",
@@ -933,7 +933,9 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          role: "read",
+          // A read-only caller (a lent scope in later phases) is denied as a
+          // durable outcome, never a revocation-shaped 403.
+          canWrite: false,
           rememberDevice: true,
           deviceId: "device-readonly",
           appId: "planner",
@@ -968,7 +970,7 @@ describe("replica-intent-route suite", () => {
       )
       .run(vault.boot.ownerPartyId);
     const access = {
-      role: "write" as const,
+      canWrite: true,
       rememberDevice: true,
       deviceId: "device-opaque-conflict",
       appId: "planner",
@@ -1070,7 +1072,7 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          role: "admin",
+          canWrite: true,
           rememberDevice: false,
           deviceId: "device-owner",
           appId: "planner",
@@ -1114,7 +1116,7 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          role: "write",
+          canWrite: true,
           rememberDevice: false,
           deviceId: "device-act-only",
           appId: "planner",

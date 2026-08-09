@@ -17,7 +17,7 @@ import { endpointIdForSecret } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.ts";
-import { MemberStore } from "../serve/member-store.ts";
+import { OwnerStore } from "../serve/owner-store.ts";
 import {
   encodePairingTicket,
   PairingTicketStore,
@@ -99,8 +99,6 @@ describe("admin scenarios", () => {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
         vaultId?: string;
         ttlMinutes?: number;
-        newMemberLabel?: string;
-        role?: "admin" | "write" | "read";
       };
       const registry = openVaultRegistry({
         rootDir: layout.vaultDir,
@@ -126,35 +124,29 @@ describe("admin scenarios", () => {
             { status: 409 }
           );
         }
-        if (body.role === "admin") {
-          return Response.json(
-            {
-              error: "invalid_role",
-              message:
-                "ordinary pairing grants write or read role, never admin",
-            },
-            { status: 400 }
-          );
-        }
-        const role = body.role ?? "write";
         const tickets = PairingTicketStore.open(layout.gatewayDbFile);
-        // The daemon owns the invitation: it names the member and the grant
-        // list; the CLI only carries the token (#599 Decision 5).
-        const label =
-          typeof body.newMemberLabel === "string"
-            ? body.newMemberLabel
-            : "New member";
-        const member = MemberStore.open(tickets.gatewayDatabase).create(label);
-        const grants = [
-          { vaultId: vault.vaultId, vaultName: vault.name, role },
-        ];
+        // The daemon owns the invitation: it names the owner and the vault
+        // list; the CLI only carries the token (#599 Decision 5, #726).
+        const owners = OwnerStore.open(tickets.gatewayDatabase);
+        const ownerId = owners.ownerOf(vault.vaultId);
+        const owner =
+          ownerId === undefined
+            ? (() => {
+                const created = owners.create("The owner");
+                owners.setOwner(vault.vaultId, created.ownerId);
+                return created;
+              })()
+            : owners.get(ownerId)!;
         const ttl = (body.ttlMinutes ?? 15) * 60_000;
-        const minted = tickets.mint({ memberId: member.memberId, grants }, ttl);
+        const minted = tickets.mint(
+          { ownerId: owner.ownerId, vaultIds: [vault.vaultId] },
+          ttl
+        );
         return Response.json({
           ok: true,
-          memberId: member.memberId,
-          memberLabel: member.label,
-          grants,
+          ownerId: owner.ownerId,
+          ownerLabel: owner.label,
+          vaults: [{ vaultId: vault.vaultId, vaultName: vault.name }],
           ticket: encodePairingTicket({
             v: 1,
             kind: "centraid-gw-pair",
@@ -167,7 +159,6 @@ describe("admin scenarios", () => {
           vaultId: vault.vaultId,
           vaultName: vault.name,
           expiresAt: new Date(minted.expiresAt).toISOString(),
-          role,
         });
       } finally {
         registry.stop();
@@ -226,7 +217,17 @@ describe("admin scenarios", () => {
 
     const revoked = lastJson(
       await capture(() =>
-        commandDevices(["revoke", "--data-dir", dataDir, "ep-laptop"], fail)
+        commandDevices(
+          [
+            "revoke",
+            "--data-dir",
+            dataDir,
+            "ep-laptop",
+            "--confirm-last-device",
+            "Family",
+          ],
+          fail
+        )
       )
     );
     expect(revoked).toHaveProperty("revoked");
@@ -238,23 +239,14 @@ describe("admin scenarios", () => {
     ).rejects.toThrow(/no enrollment/u);
   });
 
-  test("last-admin revoke requires the vault name and SSH can restore an admin", async () => {
+  test("last-device revoke requires the vault name and SSH can restore a device", async () => {
     await capture(() =>
       commandVault(["create", "--data-dir", dataDir, "--name", "Family"], fail)
     );
     const owner = lastJson(
       await capture(() =>
         commandDevices(
-          [
-            "add",
-            "--data-dir",
-            dataDir,
-            "ep-owner",
-            "--vault",
-            "Family",
-            "--role",
-            "admin",
-          ],
+          ["add", "--data-dir", dataDir, "ep-owner", "--vault", "Family"],
           fail
         )
       )
@@ -265,7 +257,7 @@ describe("admin scenarios", () => {
       capture(() =>
         commandDevices(["revoke", "--data-dir", dataDir, enrollmentId], fail)
       )
-    ).rejects.toThrow(/last admin.*--confirm-last-admin "Family"/iu);
+    ).rejects.toThrow(/last device.*--confirm-last-device "Family"/iu);
 
     await capture(() =>
       commandDevices(
@@ -274,33 +266,26 @@ describe("admin scenarios", () => {
           "--data-dir",
           dataDir,
           enrollmentId,
-          "--confirm-last-admin",
+          "--confirm-last-device",
           "Family",
         ],
         fail
       )
     );
 
+    // The owner and their vault_owners row survive the tombstone, so the
+    // host lane can bring a replacement device in for the SAME owner.
     const recovered = lastJson(
       await capture(() =>
         commandDevices(
-          [
-            "add",
-            "--data-dir",
-            dataDir,
-            "ep-recovery",
-            "--vault",
-            "Family",
-            "--role",
-            "admin",
-          ],
+          ["add", "--data-dir", dataDir, "ep-recovery", "--vault", "Family"],
           fail
         )
       )
     );
     expect(recovered).toMatchObject({
       endpointId: "ep-recovery",
-      role: "admin",
+      ownerId: owner.ownerId,
     });
   });
 
@@ -353,22 +338,13 @@ describe("admin scenarios", () => {
 
     const text = await capture(() =>
       commandPair(
-        [
-          "--data-dir",
-          dataDir,
-          "--vault",
-          "Family",
-          "--ttl-minutes",
-          "5",
-          "--role",
-          "read",
-        ],
+        ["--data-dir", dataDir, "--vault", "Family", "--ttl-minutes", "5"],
         fail,
         daemon
       )
     );
-    expect(text).toMatch(/Pairing ticket for New member/u);
-    expect(text).toMatch(/Family \(.*\): read/u);
+    expect(text).toMatch(/Pairing ticket for The owner/u);
+    expect(text).toMatch(/Family \(.*\)/u);
     // The pasteable token is the sole base64url line in the human block.
     const token = text
       .split("\n")
@@ -392,9 +368,8 @@ describe("admin scenarios", () => {
     expect(
       PairingTicketStore.open(layout.gatewayDbFile).redeem(payload.t, payload.s)
     ).toMatchObject({
-      grants: [
-        { vaultId: expect.any(String) as unknown as string, role: "read" },
-      ],
+      ownerId: expect.any(String) as unknown as string,
+      vaultIds: [expect.any(String) as unknown as string],
     });
   });
 
@@ -411,7 +386,7 @@ describe("admin scenarios", () => {
         daemon
       )
     );
-    expect(text).toMatch(/Pairing ticket for New member/u);
+    expect(text).toMatch(/Pairing ticket for The owner/u);
     expect(text).toMatch(/Phone: scan this QR/u);
     // Token still present and decodable.
     const token = text
@@ -459,7 +434,7 @@ describe("admin scenarios", () => {
     });
   });
 
-  test("ordinary pair grants write even for the first device and refuses admin escalation", async () => {
+  test("pair mints for the vault's owner and the retired role flag is refused", async () => {
     await capture(() =>
       commandVault(["create", "--data-dir", dataDir, "--name", "Family"], fail)
     );
@@ -476,7 +451,7 @@ describe("admin scenarios", () => {
         )
       )
     );
-    expect(first.role).toBe("write");
+    expect(first.ownerId).toBeTypeOf("string");
 
     // Enroll a device so the vault is no longer empty.
     await capture(() =>
@@ -486,7 +461,7 @@ describe("admin scenarios", () => {
       )
     );
 
-    // A later pairing also defaults to full.
+    // A later pairing mints for the same owner — access is ownership.
     const second = lastJson(
       await capture(() =>
         commandPair(
@@ -496,23 +471,16 @@ describe("admin scenarios", () => {
         )
       )
     );
-    expect(second.role).toBe("write");
+    expect(second.ownerId).toBe(first.ownerId);
 
+    // Role flags died with the role lattice (#726).
     await expect(
       commandPair(
-        [
-          "--data-dir",
-          dataDir,
-          "--vault",
-          "Family",
-          "--role",
-          "admin",
-          "--json",
-        ],
+        ["--data-dir", dataDir, "--vault", "Family", "--role", "admin"],
         fail,
         daemon
       )
-    ).rejects.toThrow(/ordinary pairing grants write or read/iu);
+    ).rejects.toThrow(/unknown flag/u);
   });
 
   test("pair --json failure emits {ok:false,error,message} on stdout, then still fails the process", async () => {
@@ -554,7 +522,7 @@ describe("admin scenarios", () => {
     const vaultId = registry.defaultVaultId();
     EnrollmentStore.open(layout.gatewayDbFile).enroll({
       endpointId: "ep-known",
-      vaultId,
+      vaultIds: [vaultId],
       label: "known",
     });
     const plane = makeDaemonDevicePlane({

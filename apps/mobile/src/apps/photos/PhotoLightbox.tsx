@@ -805,8 +805,7 @@ export default function PhotoLightbox({
           options={scopes
             .filter(
               (scope) =>
-                scope.role !== "read" &&
-                !current.scopeIds?.includes(scope.vaultId)
+                scope.canWrite && !current.scopeIds?.includes(scope.vaultId)
             )
             .map((scope) => ({
               id: scope.vaultId,

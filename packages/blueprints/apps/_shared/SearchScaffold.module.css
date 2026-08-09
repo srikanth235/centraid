@@ -93,6 +93,23 @@
   color: var(--text);
 }
 
+/* A named per-scope reach gap beside otherwise-good results (issue #726
+   D10/D11): the scope that could not be reached is a fact next to the
+   results it did not stop from rendering — a lighter treatment than
+   `.unreachable`, since here the search itself DID answer. */
+.partial {
+  max-inline-size: 520px;
+  padding: var(--sp-4);
+  margin-block-end: var(--sp-4);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+}
+.partialTitle {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+
 /* The results footer and the grouped-hit rows above the caller's own list:
    a ruled row per entity hit, with its own "Open →", in the mono register
    because the counts on it are real numbers. */

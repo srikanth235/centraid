@@ -10,6 +10,11 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/protocol";
+
 const resolveGatewayBase = vi.hoisted(() =>
   vi.fn<() => Promise<string | undefined>>()
 );
@@ -61,8 +66,8 @@ const ENDPOINT_ID =
 
 const info = {
   version: "0.1.0",
-  protocolVersion: 2,
-  minSupportedProtocol: 2,
+  protocolVersion: GATEWAY_PROTOCOL_VERSION,
+  minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
   endpointId: ENDPOINT_ID,
   capabilities: {
     webSessions: true,

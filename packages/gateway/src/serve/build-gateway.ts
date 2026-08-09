@@ -32,6 +32,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -99,6 +100,11 @@ import { bundledAppDir, listBundledAppTemplates } from "@centraid/blueprints";
 import { KIT_DIR } from "@centraid/design/kit";
 import { ROUTES } from "@centraid/protocol";
 import {
+  createTokenBucket,
+  PEER_ENDPOINT_HEADER,
+  PEER_PLANE_BUDGET,
+} from "@centraid/tunnel";
+import {
   KeyStore,
   readBlobStoreSettings,
   readEnrichPolicyTier,
@@ -159,6 +165,7 @@ import {
 } from "../routes/automations-routes.js";
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
+import { makeBorrowedReplicaRouteHandler } from "../routes/borrowed-replica-routes.js";
 import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
@@ -167,6 +174,9 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
+import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
+import { makeEdgeCloseRouteHandler } from "../routes/edges-close-routes.js";
+import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   SEMANTIC_SEARCH_PATH,
   makeEnrichSearchRouteHandler,
@@ -179,15 +189,12 @@ import {
   logsEventsSubscriberCount,
   makeLogsRouteHandler,
 } from "../routes/logs-routes.js";
-import { makeMembersRouteHandler } from "../routes/members-routes.js";
 import {
   makeMultiplexReplicaRouteHandler,
   MULTIPLEX_REPLICA_CHANGES_PATH,
 } from "../routes/multiplex-replica-routes.js";
-import {
-  makePlacementRouteHandler,
-  PLACEMENTS_PATH,
-} from "../routes/placement-routes.js";
+import { makeOwnersRouteHandler } from "../routes/owners-routes.js";
+import { makePeerPlaneHandler } from "../routes/peer-plane.js";
 import {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
@@ -207,9 +214,9 @@ import {
   makeScopesRouteHandler,
   SCOPES_PATH,
 } from "../routes/scopes-routes.js";
-import { makeShareRouteHandler, SHARE_PATH } from "../routes/share-routes.js";
 import { makeStorageRouteHandler } from "../routes/storage-routes.js";
 import { makeTemplatesRouteHandler } from "../routes/templates-routes.js";
+import { makeVaultLinksRouteHandler } from "../routes/vault-links-routes.js";
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import {
   assistantCwd,
@@ -224,6 +231,8 @@ import { isExpectedPrewarmSkip } from "./app-prewarm-errors.js";
 import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
+import { borrowedRoot } from "./borrowed-paths.js";
+import { BorrowedSlots } from "./borrowed-slots.js";
 import { createBrokerHealthProbe } from "./broker-health.js";
 import { companionRequestAllowed } from "./companion-access.js";
 import { ConnectionBroker } from "./connection-broker.js";
@@ -245,6 +254,7 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
+import { borrowedEdgesForVaults } from "./lend-audience.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
   enrichRefusalNotice,
@@ -260,6 +270,8 @@ import {
 } from "./notifications-events.js";
 import { OutboxExecutor } from "./outbox-executor.js";
 import type { PairingTicketStore } from "./pairing-store.js";
+import type { PeerDial } from "./peer-edge-give-client.js";
+import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { PowerContextMonitor } from "./power-context.js";
 import { PricingWarmer } from "./pricing-warmer.js";
 import { ResourceAccounting } from "./resource-accounting.js";
@@ -280,10 +292,6 @@ import {
 } from "./runner-prefs.js";
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 import { findSequentially, forEachSequentially } from "./sequential.js";
-import {
-  readDefaultShareTarget,
-  writeDefaultShareTarget,
-} from "./share-target.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
@@ -295,6 +303,7 @@ import {
 import { runWithVaultContext, VAULT_HEADER } from "./vault-context.js";
 import type { DeviceAccess } from "./vault-context.js";
 import { createVaultIntegrityHealthProbe } from "./vault-integrity-health.js";
+import { VaultLinksStore } from "./vault-links-store.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
 import { openVaultRegistry } from "./vault-registry.js";
 import type { VaultRegistry } from "./vault-registry.js";
@@ -357,15 +366,15 @@ export interface BuildGatewayOptions {
   keyStore?: KeyStore;
   /**
    * A host device EndpointId whose loopback requests are resolved by the
-   * supplied deviceAccess seam. It is enrolled as `admin` on the vaults a
+   * supplied deviceAccess seam. It is enrolled as the owner of the vaults a
    * fresh data dir auto-creates at construction (issue #603).
    */
   hostDeviceEndpointId?: string;
   /**
    * Direct host-custody check — an authenticated caller on this box that is
    * NOT an iroh-forwarded request (whose upstream socket is loopback too).
-   * Gates the host-only lanes: pairing-ticket mint, member administration,
-   * the share plane, and the cross-vault scopes listing.
+   * Gates the host-only lanes: pairing-ticket mint, owner administration,
+   * and the cross-vault scopes listing.
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
   /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
@@ -391,6 +400,35 @@ export interface BuildGatewayOptions {
     endpointId?: () => string | undefined;
     /** Close Rust-owned iroh transports after a device loses its final enrollment. */
     onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
+  };
+  /**
+   * The gateway↔gateway peer lane (#726 P3 decision 6). Supplied by the host
+   * that owns the peer forwarder; absent means this build serves no peer
+   * plane at all, and every peer-marked request is `not_found`.
+   *
+   * `proof` is the per-boot secret ONLY the forwarder and the peer route
+   * layer know. Nothing else in this file may read it.
+   */
+  peerPlane?: {
+    proof: string;
+    localRoute: () => { endpointId?: string; relayHints: string[] };
+    /**
+     * Outbound peer-plane dialing (#726 P3 decision 7): what lets THIS
+     * gateway push a remote give, pull a closure back after a D9 'ask', and
+     * background-pull original bytes. Absent means this build can receive
+     * peer requests but never initiate one — a remote edge or a D9 accept
+     * parks rather than reaching for a dial capability that isn't wired.
+     * Production wiring of a real transport is a `packages/tunnel` concern,
+     * mirroring how `redeemLinkTicket`/`pushRouteAssertion` are unwired here
+     * too; tests inject the same in-process transport the link ceremony does.
+     */
+    dial?: PeerDial;
+    /**
+     * Peer-plane background sweep cadence override (tests only; production
+     * uses the sweep's own default). Mirrors `notificationsDoorbellWindowMs`
+     * below — tests shorten it, hosts leave it alone.
+     */
+    blobPullIntervalMs?: number;
   };
   /**
    * Durable PWA control sessions (issue #376). When `controlsFile` is set,
@@ -598,34 +636,6 @@ export function replicaDispatchOutcome(
 // `startRuntimeHttpServer` does.
 const CONVERSATIONS_PREFIX = "/_centraid-conversations";
 const USER_STORE_PREFIX = "/_centraid-user";
-
-/** Shared device-role gate, before any owner/app/action route can dispatch. */
-function readRoleRequestAllowed(req: IncomingMessage): boolean {
-  const method = (req.method ?? "GET").toUpperCase();
-  let url = new URL(req.url ?? "/", "http://gateway.local");
-  if (url.pathname === "/centraid/_web/control") {
-    const target = url.searchParams.get("path");
-    if (target?.startsWith("/")) url = new URL(target, "http://gateway.local");
-  }
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS")
-    return true;
-  if (method !== "POST") return false;
-  // A query invocation is a read; an action invocation is a write. The
-  // app-scoped RPC routes carry the kind in the path (issue #505), so a
-  // read-role device may POST to `queries/<name>` but not `actions/<name>`.
-  // `_describe` moved to GET and is covered by the read-method branch above.
-  if (
-    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/u.test(url.pathname) ||
-    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/u.test(
-      url.pathname
-    )
-  ) {
-    return true;
-  }
-  // Checkpoints record only how far this device has durably consumed the
-  // read protocol; they grant no write authority over app/vault data.
-  return url.pathname === "/centraid/_vault/replica/checkpoint";
-}
 
 /** The per-vault host bundle — one per vault, built lazily, cached by id. */
 interface VaultHost {
@@ -1117,16 +1127,16 @@ export async function buildGateway(
    * FAILED to mount — so corruption never re-founds over existing data. A
    * non-fresh data dir is left exactly as it was found.
    *
-   * The members guard covers the other resurrection path: erasing every
-   * vault leaves the filesystem fresh but keeps `members`/`devices` rows in
-   * gateway.db (only that vault's `member_roles` go). A data dir that has
-   * EVER enrolled a member is an inhabited gateway awaiting restore, not a
-   * new household — auto-founding over it would silently bury
+   * The owners guard covers the other resurrection path: erasing every
+   * vault leaves the filesystem fresh but keeps `owners`/`devices` rows in
+   * gateway.db (only that vault's `vault_owners` row goes). A data dir that
+   * has EVER enrolled an owner is an inhabited gateway awaiting restore, not
+   * a fresh install — auto-founding over it would silently bury
    * restore-after-erase under a brand-new Shared + Personal.
    */
   const neverInhabited = (): boolean => {
     const row = gatewayDatabase.db
-      .prepare("SELECT COUNT(*) AS n FROM members")
+      .prepare("SELECT COUNT(*) AS n FROM owners")
       .get() as {
       n: number;
     };
@@ -1140,13 +1150,9 @@ export async function buildGateway(
         ]
       : [];
   // "Shared" is an ORDINARY vault — nothing on its record says "sharing"
-  // (issue #711 item H). What makes it the place shares land is the ACCOUNT'S
-  // POINTER at it, aimed here, once, at founding: a member may later re-aim
-  // their own (share-target.ts), and renaming this vault — or naming some
-  // other vault "Sharing" — changes nothing, because the pointer holds an id.
-  if (autoFoundedVaults.length > 0) {
-    writeDefaultShareTarget(gatewayDatabase, autoFoundedVaults[0]!.vaultId);
-  }
+  // (issue #711 item H). Both founded vaults belong to the founding owner
+  // (`vault_owners`, written by the enrollment below); there is no default
+  // share destination any more (#726) — a destination is a vault you own.
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -1240,6 +1246,9 @@ export async function buildGateway(
       cache: paths.cacheDir,
       logs: paths.logsDir,
       templates: paths.templatesCacheDir,
+      // Borrowed bytes are outside every vault directory BY DESIGN (#726 P4),
+      // which is exactly why they would otherwise be invisible here.
+      borrowed: borrowedRoot(dataDir),
     }),
   });
 
@@ -1521,10 +1530,22 @@ export async function buildGateway(
       resourceAccounting.recordBackupDrain(info);
       resourceAccounting.recordBackgroundTimerFire();
     },
+    // Owner-held backup (#726 P1): skip + report a vault this machine's
+    // backup configuration is not authorized for, instead of silently
+    // shipping someone else's data. `enrollmentStore`/`hostOwnerEndpointId`
+    // are declared below — safe, since these closures only run once a
+    // backup actually fires, well after boot completes.
+    ownerOf: (vaultId) => enrollmentStore.owners.ownerOf(vaultId),
+    authorizedOwnerId: () =>
+      hostOwnerEndpointId
+        ? enrollmentStore.ownerFor(hostOwnerEndpointId)?.ownerId
+        : undefined,
   });
 
   const enrollmentStore =
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
+  // The same-machine link ceremony a cross-owner edge needs (#726 P2 §3).
+  const vaultLinksStore = new VaultLinksStore(gatewayDatabase);
   /*
    * The host's own device identity. A gateway the owner runs on their own
    * box is reachable over loopback with no iroh pairing, so it needs a
@@ -1544,8 +1565,17 @@ export async function buildGateway(
         // and has no device key of its own, so tightening this would sever
         // phone-link entirely. Host-ONLY capabilities use the stricter gate
         // (`isHostCustody` below); ordinary vault access does not.
+        //
+        // The peer lane is the one exception that must be excluded here: a
+        // peer forwarder also delivers to loopback, so without this check a
+        // linked gateway would resolve to the HOST's device key and inherit
+        // owner-tier reach. A link's reach is the peer plane or nothing —
+        // the same refusal the daemon's `deviceKeyFor` makes (#726 P3).
         deviceKeyFor: (req) =>
-          isLoopbackRequest(req) ? embeddedEndpointId : undefined,
+          isLoopbackRequest(req) &&
+          req.headers[PEER_ENDPOINT_HEADER] === undefined
+            ? embeddedEndpointId
+            : undefined,
         vaultsFor: (endpointId) => enrollmentStore.vaultsFor(endpointId),
       }
     : undefined;
@@ -1553,21 +1583,36 @@ export async function buildGateway(
   const hostOwnerEndpointId =
     options.hostDeviceEndpointId ?? embeddedEndpointId;
   if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
-    // One owner member, admin of BOTH auto-founded vaults, in ONE transaction
-    // (issue #603): the host that just founded them is their owner, and a
-    // fresh install has exactly one member with zero unassigned bindings.
+    // One founding owner, owner of BOTH auto-founded vaults, in ONE
+    // transaction (issue #603): the host that just founded them is their
+    // owner, and a fresh install has exactly one owner with zero unassigned
+    // bindings.
     gatewayDatabase.transaction(() =>
       enrollmentStore.enrollWithinTransaction({
         endpointId: hostOwnerEndpointId,
-        memberLabel: "You",
-        grants: autoFoundedVaults.map((vault) => ({
-          vaultId: vault.vaultId,
-          role: "admin",
-        })),
+        ownerLabel: "You",
+        vaultIds: autoFoundedVaults.map((vault) => vault.vaultId),
         label: options.hostDeviceEndpointId ? "desktop host" : "gateway host",
         platform: "loopback",
       })
     );
+  }
+
+  /*
+   * Household migration (#726 P1): every owner who owns NO vault gets
+   * "<label>'s vault" minted on THIS machine, once. Naturally idempotent —
+   * an owner who already owns a vault (including one just minted above, or
+   * one this loop minted on a prior boot) is skipped, so a fresh boot after
+   * migration mints nothing extra. Covers ownerless rows left by P0's
+   * admin-fallback migration and by the host-custody `POST /owners` lane
+   * (which creates the person but not a vault). Devices stay enrolled to
+   * their owner; content stays exactly where it is.
+   */
+  for (const owner of enrollmentStore.owners.list()) {
+    if (enrollmentStore.owners.vaultsOwnedBy(owner.ownerId).length > 0)
+      continue;
+    const minted = vaultRegistry.create(`${owner.label}'s vault`);
+    enrollmentStore.owners.setOwner(minted.vaultId, owner.ownerId);
   }
 
   const currentWorkspace = (): VaultWorkspace =>
@@ -2134,7 +2179,7 @@ export async function buildGateway(
     /**
      * The one skip that is NOT silent (decision S9). Every other skip rests on
      * state the owner already sees — a paused connection carries its own
-     * decision row. A tier refusal rests on a setting the member may not know
+     * decision row. A tier refusal rests on a setting the owner may not know
      * exists, so it gets a card that names the domain and points at the
      * control, written ONCE per (domain, tier): re-putting an unchanged
      * refusal would clear `read_at` on every enrichment tick and turn the
@@ -2406,7 +2451,7 @@ export async function buildGateway(
 
   /**
    * Install a BUNDLED app into an EXPLICIT vault (issue #599 Phase 4) — the
-   * auto-mount seam behind `/centraid/_vault/scopes`: an app a member already
+   * auto-mount seam behind `/centraid/_vault/scopes`: an app an owner already
    * uses follows them into an audience vault they were added to.
    *
    * Same machinery as the `installBundledApp` lifecycle seam, with one
@@ -4033,6 +4078,9 @@ export async function buildGateway(
                 vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
+              // *Add someone* (#726 P1): mints the new vault (identity
+              // keypair included — `VaultRegistry.create` mints it).
+              mintVaultForPerson: (name) => vaultRegistry.create(name),
               onRevoked: (rows) => {
                 for (const row of rows) {
                   const plane = vaultRegistry.get(row.vaultId);
@@ -4042,11 +4090,11 @@ export async function buildGateway(
               },
             })
           ),
-          // Household roster (issue #599): members are the principals roles
-          // are authored on; the devices route above only binds hardware.
+          // The people on this gateway (#726): owners are the principals
+          // vaults belong to; the devices route above only binds hardware.
           forRoutePrefixes(
-            "/centraid/_gateway/members",
-            makeMembersRouteHandler({
+            "/centraid/_gateway/owners",
+            makeOwnersRouteHandler({
               enrollments: options.devicePairing.enrollments,
               vaultName: (id) => vaultRegistry.get(id)?.name,
               ...(options.isHostCustody
@@ -4067,6 +4115,32 @@ export async function buildGateway(
             makeDeviceWorkRouteHandler({
               vaults: vaultRegistry,
               enrollments: options.devicePairing.enrollments,
+            })
+          ),
+          // The same-machine link ceremony a cross-owner edge needs (#726
+          // P2 §3): propose a link from a vault you own, the other owner's
+          // device approves. Same-owner edges never touch this surface.
+          // `peer` (audit #726 finding 1) is the SAME `peerPlane.dial` every
+          // other outbound peer capability in this file already gates on —
+          // absent, `ticket`/`redeem` answer a typed refusal instead of
+          // reaching for a transport that isn't wired.
+          forRoutePrefixes(
+            "/centraid/_gateway/links",
+            makeVaultLinksRouteHandler({
+              enrollments: options.devicePairing.enrollments,
+              store: vaultLinksStore,
+              gatewayDatabase,
+              vaultPublicKey: (vaultId) =>
+                vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+              vaultName: (vaultId) => vaultRegistry.get(vaultId)?.name,
+              ...(options.peerPlane?.dial
+                ? {
+                    peer: {
+                      localRoute: options.peerPlane.localRoute,
+                      dial: options.peerPlane.dial,
+                    },
+                  }
+                : {}),
             })
           ),
         ]
@@ -4111,6 +4185,9 @@ export async function buildGateway(
         enrollments: enrollmentStore,
         recoveryKitStore: recoveryKit,
         backupService,
+        ...(options.isHostCustody
+          ? { isHostCustody: options.isHostCustody }
+          : {}),
       })
     ),
     // Gateway-level storage connections (issue #367 §C1): CRUD + real
@@ -4249,6 +4326,9 @@ export async function buildGateway(
         enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
+        ...(options.isHostCustody
+          ? { isHostCustody: options.isHostCustody }
+          : {}),
         notificationsEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
@@ -4453,37 +4533,123 @@ export async function buildGateway(
     return true;
   };
 
-  // Deliberately NOT in `routeEntries`: the share plane is dispatched from
-  // `composedHandler` outside the per-vault scope (see its call site), so it
-  // must not also be reachable through the in-scope chain.
-  const shareHandler = makeShareRouteHandler({
-    enrollments: enrollmentStore,
-    gatewayDatabase,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
-  });
-
-  // Deliberately NOT in `routeEntries` either, for the same reason as the
-  // share plane: the scopes listing spans every vault the caller holds a role
-  // in, so it is dispatched outside the per-vault scope (see its call site).
+  // Deliberately NOT in `routeEntries`: the scopes listing spans every vault
+  // the caller owns, so it is dispatched outside the per-vault scope (see
+  // its call site).
   const scopesHandler = makeScopesRouteHandler({
     enrollments: enrollmentStore,
     listVaults: () => vaultRegistry.list(),
-    defaultShareTarget: (memberId) =>
-      readDefaultShareTarget(gatewayDatabase, memberId),
-    membersOf: (vaultId) => enrollmentStore.members.membersOf(vaultId),
     installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
     ensureAppInstalled: ensureBundledAppInstalled,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
+    // Borrowed scopes (#726 P4 item 6) — the lend plane's own bookkeeping,
+    // not the borrowed slots themselves: the listing needs to know an edge
+    // exists and how it's reaching, never its rows or bytes.
+    borrowedScopes: (audienceVaultIds) =>
+      borrowedEdgesForVaults(gatewayDatabase, audienceVaultIds),
   });
   const multiplexReplicaHandler = makeMultiplexReplicaRouteHandler(
     vaultRegistry,
     enrollmentStore
   );
-  const placementHandler = makePlacementRouteHandler({
+  // The borrowed slots (#726 P4). One per counterparty vault, lazily opened,
+  // deliberately under `<dataDir>/borrowed/` — outside every vault directory,
+  // so no backup source, vault walk, or hosted copy can reach them.
+  const borrowedSlots = new BorrowedSlots(gatewayDatabase, dataDir);
+  // The device-facing door onto a borrowed shape (#726 P5 device route) —
+  // ownership-authorized, same posture as the scopes listing below.
+  const borrowedReplicaHandler = makeBorrowedReplicaRouteHandler({
     gatewayDatabase,
     enrollments: enrollmentStore,
+    storeFor: borrowedSlots.storeFor,
+  });
+  const edgesHandler = makeEdgesRouteHandler({
+    gatewayDatabase,
+    enrollments: enrollmentStore,
+    links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
+    signAsVault: (vaultId, bytes) => vaultRegistry.signAsVault(vaultId, bytes),
+    borrowed: borrowedSlots,
+    vaultPublicKey: (vaultId) =>
+      vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+  });
+  // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
+  // surface, mounted like any other route, distinct from the peer plane.
+  const edgeAnswerHandler = makeEdgeAnswerRouteHandler({
+    gatewayDatabase,
+    enrollments: enrollmentStore,
+    links: vaultLinksStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
+  });
+  // The owner-facing revoke route (#726 P6 gap 1): the ORIGIN owner stops
+  // lending an edge, the AUDIENCE owner drops one lent to them — same door,
+  // disambiguated by which side's row the caller owns.
+  const edgeCloseHandler = makeEdgeCloseRouteHandler({
+    gatewayDatabase,
+    enrollments: enrollmentStore,
+    links: vaultLinksStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
+    borrowed: borrowedSlots,
+  });
+  /*
+   * The peer plane (#726 P3 decision 6). Mounted OUTSIDE the prefix registry
+   * on purpose: every route in there resolves a proved DEVICE first, and a
+   * peer is not a device. It reads the same `vault_links` rows an edge is
+   * judged against — one table, one answerer (D3).
+   */
+  const peerPlaneHandler = options.peerPlane
+    ? makePeerPlaneHandler({
+        links: vaultLinksStore,
+        peerProof: options.peerPlane.proof,
+        vaultPublicKey: (vaultId) =>
+          vaultRegistry.vaultIdentity(vaultId)?.publicKey,
+        localRoute: options.peerPlane.localRoute,
+        localLabel: () => os.hostname().replace(/\.local$/u, ""),
+        budget: createTokenBucket(PEER_PLANE_BUDGET),
+        // The remote-give frames (#726 P3 decision 7) — same vault resolver
+        // and gateway.db the same-machine edge plane already uses.
+        vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+        gatewayDatabase,
+        // The live-edge frames (#726 P4, P5).
+        lend: {
+          signAsVault: (vaultId, bytes) =>
+            vaultRegistry.signAsVault(vaultId, bytes),
+          borrowed: borrowedSlots,
+          // Write-back (#726 P5): the mounted origin's own `Gateway`, so a
+          // lend/intent frame runs through the SAME instance a local action
+          // does — Gateway.invokeAsIdentity, not a second execution path.
+          gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+        },
+      })
+    : undefined;
+  /*
+   * Peer-plane background delivery (#726 P3 gaps 2 & 3): drains
+   * `peer_blob_pulls` (a give's ORIGINAL bytes) and `peer_pending_refusals`
+   * (a D9 'refuse' the origin has not heard yet) on the gateway's own clock
+   * rather than never — same posture as the outbox sweep below (bounded rows
+   * per tick, backs off on failure, never throws out of the timer). `dial`
+   * is read LIVE so a build that wires it after this point (or never) still
+   * behaves correctly — the sweep simply idles until one exists.
+   */
+  const peerPlaneSweep = createPeerPlaneSweep({
+    db: gatewayDatabase,
+    links: vaultLinksStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    dial: () => options.peerPlane?.dial,
+    borrowed: borrowedSlots,
+    signAsVault: (vaultId, bytes) => vaultRegistry.signAsVault(vaultId, bytes),
+    // Write-back drain (#726 P5) — same co-hosted door the peer plane's
+    // lend/intent frame uses, so a co-hosted edge's queued writes tail on
+    // this gateway's own clock exactly like its rows do.
+    gatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
+    ...(options.peerPlane?.blobPullIntervalMs === undefined
+      ? {}
+      : { idleIntervalMs: options.peerPlane.blobPullIntervalMs }),
+    shouldDefer: () => health.shouldDeferBackgroundWork(),
+    logger,
   });
   const pushRegistrationHandler =
     makePushRegistrationRouteHandler(gatewayDatabase);
@@ -4506,6 +4672,28 @@ export async function buildGateway(
     res.once("close", () =>
       routeLatency.record(url.pathname, performance.now() - startedAt)
     );
+    /*
+     * The peer lane, before anything else can look at this request (#726 P3).
+     *
+     * TWO steps, and they are not the same guard. The handler matches on the
+     * RAW `req.url`, so `/centraid/_peer/../_gateway/devices` still reaches
+     * it — `url.pathname` above already resolved that `..` away — and its own
+     * confinement check refuses it. The second step is what closes the
+     * owner-tier hole: a peer-marked request that is not a peer-plane request
+     * at all cannot fall through to a bearer-authenticated route, where the
+     * forwarder's own upstream bearer would otherwise satisfy the gate. A
+     * peer must never satisfy an owner-tier check by ANY route, so the answer
+     * is the plane's own `not_found` rather than a 403 that would confirm the
+     * route exists.
+     *
+     * Path confinement itself lives in the FORWARDERS (`peer_target_allowed`
+     * in the Rust relay, `isPeerPlaneTarget` in the TS endpoint). Registering
+     * this route confines nothing on its own; it is the backstop for a future
+     * forwarder that forgets.
+     */
+    if (peerPlaneHandler && (await peerPlaneHandler(req, res))) return true;
+    if (req.headers[PEER_ENDPOINT_HEADER] !== undefined)
+      return sendJson(res, 404, { state: "not_found" });
     // The Rust-owned iroh relay calls this metadata-only control surface
     // before it can inject the remote EndpointId into an upstream request.
     // Requiring that not-yet-injected identity here is circular. The route's
@@ -4580,26 +4768,37 @@ export async function buildGateway(
         message: "this device is not enrolled in any vault on this gateway",
       });
     }
-    // The cross-vault share plane (issue #599 decision 11) is dispatched HERE
-    // — after the device identity is proved, and BEFORE the single-vault
-    // `runWithVaultContext` scope below. A share spans two vaults, so running
-    // it inside a scope that names one would be a lie; and the `x-centraid-vault`
-    // header is irrelevant to it, so the per-vault resolution that follows must
-    // not get a chance to refuse the request over a vault it never uses. The
-    // route resolves and authorizes both vaults itself, from `member_roles`.
-    if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res)))
-      return true;
-    // Same placement, same reason (issue #599 Phase 4): the scopes listing
-    // answers "which vaults may I work in", which is by definition not one
-    // vault, so it must run before the `x-centraid-vault` resolution below.
+    // The scopes listing answers "which vaults may I work in", which is by
+    // definition not one vault, so it is dispatched HERE — after the device
+    // identity is proved, and BEFORE the single-vault `runWithVaultContext`
+    // scope below; the `x-centraid-vault` header is irrelevant to it.
     if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res)))
       return true;
+    // Same posture: spans no single vault (a borrowed shape has no mounted
+    // vault behind it on THIS gateway at all), so it is dispatched here too.
+    if (await borrowedReplicaHandler(req, res)) return true;
     if (
       url.pathname === MULTIPLEX_REPLICA_CHANGES_PATH &&
       (await multiplexReplicaHandler(req, res))
     )
       return true;
-    if (url.pathname === PLACEMENTS_PATH && (await placementHandler(req, res)))
+    if (url.pathname === EDGES_PATH && (await edgesHandler(req, res)))
+      return true;
+    // The D9 answer surface (#726 P3 decision 9): `/centraid/_gateway/edges/pending`
+    // and `/centraid/_gateway/edges/:edgeId/answer` — sub-paths `edgesHandler`
+    // itself never matches (it checks exact equality against `EDGES_PATH`).
+    if (
+      url.pathname.startsWith(`${EDGES_PATH}/`) &&
+      (await edgeAnswerHandler(req, res))
+    )
+      return true;
+    // The owner-facing revoke route (#726 P6 gap 1) — `DELETE
+    // /centraid/_gateway/edges/:edgeId`, a sibling sub-path `edgeAnswerHandler`
+    // itself never matches (it only answers `pending` and `:edgeId/answer`).
+    if (
+      url.pathname.startsWith(`${EDGES_PATH}/`) &&
+      (await edgeCloseHandler(req, res))
+    )
       return true;
     if (
       url.pathname === PUSH_REGISTRATIONS_PATH &&
@@ -4633,13 +4832,6 @@ export async function buildGateway(
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.role === "read" && !readRoleRequestAllowed(req)) {
-      return sendJson(res, 403, {
-        error: "read_role_device",
-        message:
-          "this device is enrolled at the read role and cannot mutate the gateway",
-      });
-    }
     if (enrollment?.grantProfile !== undefined) {
       if (
         !companionRequestAllowed(
@@ -4660,11 +4852,14 @@ export async function buildGateway(
       {
         vaultId,
         deviceKey,
-        // L4 attribution (#599): resolve the ACTING MEMBER once, here, from
+        // L4 attribution (#599): resolve the ACTING OWNER once, here, from
         // the device binding, so everything downstream reads "who did this"
         // off the request scope instead of re-deriving it from hardware.
+        // `ownsVault` is the one write predicate (#726): the enrollment view
+        // only yields vaults the device's owner owns, so an un-revoked row
+        // IS ownership.
         ...(enrollment
-          ? { memberId: enrollment.memberId, memberRole: enrollment.role }
+          ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
         ...(enrollment?.grantProfile === undefined
           ? {}
@@ -4710,6 +4905,8 @@ export async function buildGateway(
     // Web/control session expiry reclamation on the gateway clock instead of
     // on every HTTP request (issue #659 G3).
     webAppSessions.startSweeping();
+    // Peer-plane background delivery (#726 P3 gaps 2 & 3) on the gateway clock.
+    peerPlaneSweep.start();
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
@@ -4775,6 +4972,8 @@ export async function buildGateway(
     unsubscribeLateMount();
     pushWakeRelay.stop();
     webAppSessions.stopSweeping();
+    peerPlaneSweep.stop();
+    borrowedSlots.close();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
     // roots; otherwise shutdown races git/SQLite initialization.

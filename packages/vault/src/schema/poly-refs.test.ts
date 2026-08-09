@@ -2,8 +2,8 @@
 //
 // The A1 bug was an UNKNOWN UNKNOWN: each polymorphic `(type, id)` mechanism
 // was added by a different issue, each purge clause written for the case in
-// front of its author, and nothing enumerated the set — so `consent_share`,
-// `enrich_embedding` and `sync_external_entity` were simply never cleaned.
+// front of its author, and nothing enumerated the set — so `enrich_embedding`
+// and `sync_external_entity` were simply never cleaned.
 // This test closes the CLASS instead of the instances: it scans the live DDL
 // of BOTH files for every `(X_type, X_id)` sibling pair and asserts each is
 // either registered in POLY_REF_REGISTRY (with a cleanup policy) or listed in

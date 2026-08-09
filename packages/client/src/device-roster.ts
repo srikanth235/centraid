@@ -11,10 +11,11 @@ import type { CentraidGatewayDevice } from "./gateway-client-devices.js";
 
 /**
  * Is this row a tombstone rather than a live binding? Revoking a device no
- * longer deletes its row — it survives at the `revoked` pseudo-role so past
- * attribution still resolves to the device that made the write. Every live
- * count, grouping, and action has to skip these.
+ * longer deletes its row — it survives at `revoked: true` (a device
+ * tombstone, never a role, #726) so past attribution still resolves to the
+ * device that made the write. Every live count, grouping, and action has to
+ * skip these.
  */
 export function isRevokedDevice(device: CentraidGatewayDevice): boolean {
-  return device.role === "revoked";
+  return device.revoked;
 }

@@ -60,3 +60,43 @@
   color: var(--text-soft);
   font: var(--t-small);
 }
+
+/* A named per-scope reach gap beside otherwise-good board sections (issue
+   #726 D10/D11): a lent scope that could not be reached is a fact next to
+   whatever other scope's tasks still rendered — same treatment as
+   `_shared/SearchScaffold.module.css`'s `.partial`, kept as its own copy
+   since this module has no dependency on that one. */
+.partial {
+  max-width: 520px;
+  padding: var(--sp-4);
+  margin-bottom: 20px;
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+}
+.partialTitle {
+  margin: 0 0 8px;
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.facts {
+  margin: 0;
+}
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-block-size: var(--h-row);
+  padding-block: 6px;
+  border-block-end: 1px solid var(--line);
+}
+.factLabel {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text);
+}

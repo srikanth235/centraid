@@ -1,7 +1,8 @@
 // Details drawer (#detailsRoot root).
 import { useRef, useState } from "react";
 
-import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
+import { mountedScopes } from "../../_shared/scope-kit.ts";
+import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import {
   custodyMeta,
   extOf,
@@ -117,6 +118,11 @@ export function Details({
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Share (issue #726 P6): opens the unified give sheet. Docs has no
+  // scope declaration (no `mintedIdFamilies` — a document isn't a live
+  // entity family this app lends), so only "give" is offered.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
   // The blob custody projection (issue #352 phase 4) — null for an inline
   // document or one the standing sweep hasn't reached yet, rendered as
   // nothing rather than a guess.
@@ -229,11 +235,31 @@ export function Details({
             )}
           </div>
           {trashed ? null : (
-            <AudiencePlacement
-              itemType="core.document"
-              itemId={doc.document_id}
-              label="Share document"
-            />
+            <>
+              <button
+                type="button"
+                className={`kit-btn quiet ${shared.detailBtn}`}
+                onClick={() => setShareOpen(true)}
+              >
+                Share document
+              </button>
+              <ShareSheet
+                open={shareOpen}
+                onClose={() => setShareOpen(false)}
+                sourceScopeId={mountedScopes()[0]?.id ?? ""}
+                scopes={mountedScopes()}
+                verbs={["give"]}
+                itemType="core.document"
+                itemIds={[doc.document_id]}
+                appLabel="Docs"
+                onDone={(outcome) => setShareStatus(outcome.message)}
+              />
+              {shareStatus ? (
+                <output className={styles.shareStatus} aria-live="polite">
+                  {shareStatus}
+                </output>
+              ) : null}
+            </>
           )}
           <div className={styles.detailLabel}>Properties</div>
           <dl className={styles.detailGrid}>

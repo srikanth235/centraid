@@ -46,6 +46,10 @@ import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
+import {
+  scopeKitToRequestingOwner,
+  vaultOwnerRefusal,
+} from "./backup-owner-scope.js";
 import { readJson, sendError, sendJson } from "./route-helpers.js";
 
 const BACKUP_PATH = "/centraid/_gateway/backup";
@@ -99,6 +103,12 @@ export interface BackupRouteDeps {
   recoveryKitStore?: RecoveryKitStateStore;
   /** Real per-vault enrollments used to keep live key export owner-only. */
   enrollments?: EnrollmentStore;
+  /**
+   * Direct host-custody request (authenticated bearer, never iroh-forwarded).
+   * It can see every vault, so refusals it hits are `owner_only` (naming the
+   * real owner) rather than `not_found` topology hiding (#726 P1).
+   */
+  isHostCustody?: (req: IncomingMessage) => boolean;
   vaults: VaultRegistry;
 }
 
@@ -110,15 +120,15 @@ function ownerRequired(
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const endpointId = Array.isArray(raw) ? raw[0] : raw;
   const vaultId = deps.vaults.current().boot.vaultId;
-  if (
-    typeof endpointId !== "string" ||
-    !deps.enrollments ||
-    deps.enrollments.get(endpointId, vaultId)?.role !== "admin"
-  ) {
+  const enrollment =
+    typeof endpointId === "string" && deps.enrollments
+      ? deps.enrollments.get(endpointId, vaultId)
+      : undefined;
+  if (!enrollment || enrollment.revoked) {
     sendJson(res, 403, {
-      error: "admin_required",
+      error: "owner_required",
       message:
-        "only an admin device can export or verify live recovery key material",
+        "only the vault owner's device can export or verify live recovery key material",
     });
     return false;
   }
@@ -294,6 +304,18 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           message: "GET, PUT only",
         });
       }
+      // Configuring a vault's backup target is an owner act (#726 P1):
+      // `backup_targets` rows key by vault_id, but hosting a vault confers
+      // no authority over ITS destination/policy.
+      const configRefusal = vaultOwnerRefusal(
+        req,
+        deps,
+        vaultId,
+        "configure backup for this vault"
+      );
+      if (configRefusal) {
+        return sendJson(res, configRefusal.status, configRefusal.body);
+      }
       try {
         const body = await readJson(req);
         const patch: BackupPolicyPatch = {};
@@ -460,14 +482,15 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             message: "a recovery-kit password is required",
           });
         }
-        return sendJson(
-          res,
-          200,
-          wrapRecoveryKit(
-            await deps.backupService.recoveryKitDocument(),
-            body.password
-          )
+        // Owner-held (#726 P1): a kit carries only the vaults the REQUESTING
+        // owner owns — hosting someone else's vault does not entitle you to
+        // their recovery material.
+        const document = scopeKitToRequestingOwner(
+          await deps.backupService.recoveryKitDocument(),
+          req,
+          deps
         );
+        return sendJson(res, 200, wrapRecoveryKit(document, body.password));
       } catch (error) {
         return sendError(res, error);
       }

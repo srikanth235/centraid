@@ -3,7 +3,7 @@
  * surface for vault lifecycle (issue #289).
  *
  * Vault create/delete left the HTTP surface: they are landlord acts,
- * guarded by having shell access to the box — a family member's device can
+ * guarded by having shell access to the box — a family owner's device can
  * never delete a sibling's vault because no unauthenticated route exists.
  * Mutations take gateway.db's exclusive lock and therefore refuse while the
  * daemon is running.

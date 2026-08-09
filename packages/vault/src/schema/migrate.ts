@@ -1,7 +1,7 @@
 // The forward-only schema ladder for vault.db and journal.db. Pre-release v0
-// keeps the vault at one base rung: all current owner tables are composed in
-// dependency order and there are no released files that need compatibility
-// upgrades. Later rungs are reserved for post-release data migrations.
+// began with one composed base rung: all owner tables are composed in dependency
+// order. Once a schema has been used outside a fresh database its rung is
+// immutable; issue #726 therefore adds a real forward rename as rung two.
 // Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
 
 import type { DatabaseSync } from "node:sqlite";
@@ -10,7 +10,12 @@ import { AGENT_DDL } from "./agent.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from "./consent.js";
-import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
+import {
+  CORE_DDL,
+  LINK_ANCHOR_DDL,
+  SHARE_ORIGIN_ATTRIBUTION_DDL,
+  SHARE_ORIGIN_DDL,
+} from "./core.js";
 import {
   HEALTH_DDL,
   FINANCE_DDL,
@@ -104,6 +109,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     // part of the composed base rather than a compatibility rung.
     RENAME_INBOX_NOTICE_DDL,
   ].join("\n"),
+  SHARE_ORIGIN_ATTRIBUTION_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

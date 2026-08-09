@@ -19,7 +19,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareTargetPicker from "../../kit/share/ShareTargetPicker";
+import ShareSheet from "../../kit/share/ShareSheet";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
@@ -40,7 +40,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToSharing } from "./use-copy-to-sharing";
+import { useCopyToVault } from "./use-copy-to-vault";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
@@ -161,9 +161,9 @@ export default function PhotoStateView({
   };
   const selected = vaultAssets(assets, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-sharing.ts`) so the picker moment and the refusal grammar
+  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
   // cannot drift between them.
-  const sharing = useCopyToSharing(
+  const copyToVault = useCopyToVault(
     () => selected,
     () => setSelection(new Set())
   );
@@ -242,6 +242,7 @@ export default function PhotoStateView({
     // Trash swaps the fifth target for Restore (§6). Every other shelf here
     // carries the base five untouched.
     shelf: mode === "trash" ? ("trash" as const) : ("normal" as const),
+    copyLabel: copyToVault.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: canWrite
       ? {
@@ -263,10 +264,10 @@ export default function PhotoStateView({
         ? "Add to album from the library, where the albums are."
         : writeBlockedReason!,
     },
-    // The real thing since issue #712 A5: a live control that places
-    // `media.media_asset` into the member's share target — or, when they
-    // have not chosen one yet, asks at the moment of intent (A3).
-    share: sharing.handler,
+    // Share (issue #726 P6): opens the unified give/lend sheet — the
+    // destination list holds both the member's own other vaults and every
+    // linked person, never a sole-destination shortcut.
+    share: copyToVault.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canWrite
       ? {
@@ -407,11 +408,10 @@ export default function PhotoStateView({
           </Text>
         </View>
       )}
-      <ShareTargetPicker
-        visible={sharing.picking}
-        candidates={sharing.candidates}
-        onChoose={(vaultId) => sharing.choose(vaultId)}
-        onClose={() => sharing.dismiss()}
+      <ShareSheet
+        visible={copyToVault.picking}
+        onClose={() => copyToVault.dismiss()}
+        {...copyToVault.sheetProps}
       />
     </PhotosScreen>
   );

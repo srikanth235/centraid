@@ -4,9 +4,10 @@
 //
 // ANATOMY: chip · capsule · chip, not one bar of five equal cells. The grouping
 // is `VIEWER_BOTTOM_GROUPS` and the argument for it is stated there: the two
-// ends carry the actions with consequences outside this photograph (Share, which
-// leaves the app; Trash, the only destructive one), and the capsule carries the
-// three that do not. Flattening the groups still reproduces the desktop order.
+// ends carry the actions with consequences outside this photograph (Copy to
+// vault, which reaches outside this vault; Trash, the only destructive one),
+// and the capsule carries the three that do not. Flattening the groups still
+// reproduces the desktop order.
 //
 // THE LABELS ARE GONE FROM THE SCREEN, AND THAT IS THE ONE THING THIS COSTS.
 // Five drawn words under five marks is what the v4 handoff asked for; the iOS
@@ -72,26 +73,27 @@ export function PhotoLightboxToolbar({
   // not pretend to offer one.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
+    copy: Boolean(asset.assetId && asset.scopeIds?.length),
     edit: writable && editable && onEdit !== undefined,
     favorite: writable,
     info: true,
-    sharing: Boolean(asset.assetId && asset.scopeIds?.length),
     trash: writable,
   };
   // A read-only vault does not hide a control; it shows why it cannot fire.
   const reason: Partial<Record<ViewerActionId, string>> = {
+    copy: asset.scopeIds?.length
+      ? undefined
+      : "No other vault to copy this into",
     edit: writable
       ? editable
         ? undefined
         : "Crop and rotate work on photographs, not on this kind of media"
       : READ_ONLY_VAULT_REASON,
     favorite: writable ? undefined : READ_ONLY_VAULT_REASON,
-    sharing: asset.scopeIds?.length
-      ? undefined
-      : "No other vault to copy this into",
     trash: writable ? undefined : READ_ONLY_VAULT_REASON,
   };
   const run: Record<ViewerActionId, () => void> = {
+    copy: () => onPlacement("add"),
     edit: () => onEdit?.(),
     favorite: () => {
       void Haptics.selectionAsync();
@@ -109,7 +111,6 @@ export function PhotoLightboxToolbar({
       );
     },
     info: onInfo,
-    sharing: () => onPlacement("add"),
     trash: () =>
       Alert.alert(
         "Move to trash?",

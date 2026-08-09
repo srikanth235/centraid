@@ -19,7 +19,7 @@
 //
 // THE ONE DELIBERATE DEPARTURE FROM THE PHOTO SWEEPS: ORIGINAL BYTES. Every
 // photo-domain spec (`embedding-sweep.ts`, `ocr-sweep.ts`) reads a PREVIEW or
-// THUMB derivative and refuses to touch a member's full-resolution original —
+// THUMB derivative and refuses to touch an owner's full-resolution original —
 // that rule exists because a photograph's preview already carries everything
 // a vision model needs, so there is no reason to ever hand over the original.
 // Audio has no such stand-in: a "preview" of a recording is not a smaller

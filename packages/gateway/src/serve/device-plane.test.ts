@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 /*
- * Device enrollment + pairing tickets (issue #289 phase 2).
+ * Device enrollment + pairing tickets (issues #289 phase 2, #726).
  *
- * The enrollment store is the whole ACL (device key ↔ vault, one bit) and
- * the ticket store is the SSH-bootstrap ceremony; both are cross-process
+ * The enrollment store is the whole ACL (device key ↔ owner ↔ owned vault)
+ * and the ticket store is the SSH-bootstrap ceremony; both are cross-process
  * gateway.db rows (admin CLI and daemon share one control plane), so
  * cross-handle visibility and burn-on-first-attempt are load-bearing.
  */
@@ -15,9 +15,9 @@ import { describe, afterEach, expect, test } from "vitest";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { EnrollmentStore } from "./enrollment-store.js";
+import { EnrollmentStore, VaultOwnedError } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import { MemberStore } from "./member-store.js";
+import { OwnerRemovalError, OwnerStore } from "./owner-store.js";
 import {
   PairingTicketStore,
   encodePairingTicket,
@@ -38,55 +38,59 @@ describe("device-plane scenarios", () => {
     return path.join(dir, name);
   }
 
-  test("enrollment: a device inherits its member's grants; revoke kills the binding", async () => {
+  test("enrollment: a device reaches its owner's vaults; revoke kills the binding", async () => {
     const file = await tempFile("gateway.db");
     const store = EnrollmentStore.open(file);
 
-    // Authority is authored on the member (#599); the device is a binding, so
-    // enrolling it into a second vault is a second GRANT on the same person.
+    // Authority is ownership (#726); the device is a binding, so enrolling
+    // it toward a second vault claims that vault for the same person.
     const laptop = store.enroll({
       endpointId: "ep-laptop",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "laptop",
-      memberLabel: "Priya",
+      ownerLabel: "Priya",
     });
     store.enroll({
       endpointId: "ep-laptop",
-      vaultId: "v2",
+      vaultIds: ["v2"],
       label: "laptop",
-      memberId: laptop.memberId,
+      ownerId: laptop.ownerId,
     });
     store.enroll({
       endpointId: "ep-phone",
-      vaultId: "v2",
+      vaultIds: ["v3"],
       label: "phone",
       platform: "android",
-      memberLabel: "Sid",
+      ownerLabel: "Sid",
     });
 
     expect(store.vaultsFor("ep-laptop")).toStrictEqual(["v1", "v2"]);
-    expect(store.vaultsFor("ep-phone")).toStrictEqual(["v2"]);
-    expect(
-      store
-        .listByVault("v2")
-        .map((e) => e.endpointId)
-        .sort()
-    ).toStrictEqual(["ep-laptop", "ep-phone"]);
+    expect(store.vaultsFor("ep-phone")).toStrictEqual(["v3"]);
     expect(store.isEnrolled("ep-nobody")).toBe(false);
 
-    // A second device for the SAME member inherits every grant with no
+    // A vault has exactly one owner: enrolling another person toward it is a
+    // typed refusal, never a transfer.
+    expect(() =>
+      store.enroll({
+        endpointId: "ep-phone",
+        vaultIds: ["v1"],
+        label: "phone",
+      })
+    ).toThrow(VaultOwnedError);
+
+    // A second device for the SAME owner reaches every owned vault with no
     // per-device authoring — this is the self-pair story.
     store.enroll({
       endpointId: "ep-tablet",
       label: "tablet",
-      memberId: laptop.memberId,
+      ownerId: laptop.ownerId,
     });
     expect(store.vaultsFor("ep-tablet")).toStrictEqual(["v1", "v2"]);
 
     // Re-enrolling the same device refreshes, never duplicates.
     store.enroll({
       endpointId: "ep-laptop",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "renamed laptop",
     });
     expect(store.vaultsFor("ep-laptop")).toStrictEqual(["v1", "v2"]);
@@ -95,22 +99,23 @@ describe("device-plane scenarios", () => {
     ).toBe("renamed laptop");
 
     // Revoke a DEVICE ("lost laptop"): every vault it reached dies with it,
-    // and the member's other device is untouched.
+    // and the owner's other device is untouched.
     const removed = store.revoke("ep-laptop");
     expect(removed).toHaveLength(2);
     expect(store.isEnrolled("ep-laptop")).toBe(false);
     expect(store.vaultsFor("ep-tablet")).toStrictEqual(["v1", "v2"]);
 
-    // Remove the PERSON: their remaining bindings and grants go together.
-    const orphaned = store.removeMember(laptop.memberId);
-    expect(
-      [...new Set(orphaned.map((row) => row.vaultId))].sort()
-    ).toStrictEqual(["v1", "v2"]);
-    expect(
-      [...new Set(orphaned.map((row) => row.endpointId))].sort()
-    ).toStrictEqual(["ep-laptop", "ep-tablet"]);
+    // Removing the PERSON is refused while they still own vaults — the
+    // ownership analogue of the old last-admin guard.
+    expect(() => store.removeOwner(laptop.ownerId)).toThrow(OwnerRemovalError);
+    store.removeVault("v1");
+    store.removeVault("v2");
+    const orphaned = store.removeOwner(laptop.ownerId);
+    // Ownership already gone, so no derived rows remain to report; the
+    // person's bindings die with the owner row.
+    expect(orphaned).toStrictEqual([]);
     expect(store.isEnrolled("ep-tablet")).toBe(false);
-    expect(store.listByVault("v2").map((row) => row.endpointId)).toStrictEqual([
+    expect(store.listByVault("v3").map((row) => row.endpointId)).toStrictEqual([
       "ep-phone",
     ]);
   });
@@ -120,14 +125,14 @@ describe("device-plane scenarios", () => {
     const store = EnrollmentStore.open(file);
     const first = store.enroll({
       endpointId: "browser-one",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "Web browser · ABCD",
-      memberLabel: "Priya",
+      ownerLabel: "Priya",
     });
     const second = store.enroll({
       endpointId: "browser-two",
       label: "Web browser · ABCD",
-      memberId: first.memberId,
+      ownerId: first.ownerId,
     });
 
     expect(first.label).toBe("Web browser · ABCD");
@@ -144,7 +149,7 @@ describe("device-plane scenarios", () => {
 
     // The admin CLI (separate process = separate store instance) enrolls.
     const cli = EnrollmentStore.open(file);
-    cli.enroll({ endpointId: "ep-new", vaultId: "v1", label: "new device" });
+    cli.enroll({ endpointId: "ep-new", vaultIds: ["v1"], label: "new device" });
 
     expect(daemon.vaultsFor("ep-new")).toStrictEqual(["v1"]);
     expect((await fs.stat(file)).isFile()).toBe(true);
@@ -155,7 +160,7 @@ describe("device-plane scenarios", () => {
     const store = EnrollmentStore.open(file);
     store.enroll({
       endpointId: "ep-device",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "laptop",
       rememberDevice: true,
     });
@@ -200,7 +205,7 @@ describe("device-plane scenarios", () => {
     const daemon = EnrollmentStore.open(file);
     const row = daemon.enroll({
       endpointId: "ep-lost",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "lost laptop",
       rememberDevice: true,
     });
@@ -220,10 +225,8 @@ describe("device-plane scenarios", () => {
       })
     ).toThrow(/not enrolled/u);
     // Revocation is a device-level TOMBSTONE, not a delete: the binding is
-    // still visible and its effective role is `revoked` in every vault.
-    expect(EnrollmentStore.open(file).get("ep-lost", "v1")?.role).toBe(
-      "revoked"
-    );
+    // still visible and reaches nothing in practice.
+    expect(EnrollmentStore.open(file).get("ep-lost", "v1")?.revoked).toBe(true);
     expect(EnrollmentStore.open(file).isEnrolled("ep-lost")).toBe(false);
     await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({
       code: "ENOENT",
@@ -233,32 +236,30 @@ describe("device-plane scenarios", () => {
   test("enrollment: gateway.db replaces the old lock directory", async () => {
     const file = await tempFile("gateway.db");
     const store = EnrollmentStore.open(file);
-    store.enroll({ endpointId: "device", vaultId: "v1", label: "Laptop" });
+    store.enroll({ endpointId: "device", vaultIds: ["v1"], label: "Laptop" });
     await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(path.basename(store.gatewayDatabase.file)).toBe("gateway.db");
   });
 
-  test("enrollment: remember, role, and Companion grants persist across re-pair", async () => {
+  test("enrollment: remember and Companion grants persist across re-pair", async () => {
     const file = await tempFile("gateway.db");
     const store = EnrollmentStore.open(file);
     store.enroll({
       endpointId: "ep-session",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "borrowed tablet",
-      role: "read",
       rememberDevice: false,
       grantProfile: ["locker", "notes"],
     });
     expect(EnrollmentStore.open(file).get("ep-session", "v1")).toMatchObject({
-      role: "read",
       rememberDevice: false,
       grantProfile: ["locker", "notes"],
     });
     store.enroll({
       endpointId: "ep-session",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "borrowed tablet",
       grantProfile: ["tasks"],
     });
@@ -268,7 +269,7 @@ describe("device-plane scenarios", () => {
     expect(
       store.enroll({
         endpointId: "ep-default",
-        vaultId: "v1",
+        vaultIds: ["v2"],
         label: "default device",
       })
     ).toMatchObject({ rememberDevice: false });
@@ -277,7 +278,7 @@ describe("device-plane scenarios", () => {
     // companion allow-list (omit grantProfile must not leave the old clamp).
     store.enroll({
       endpointId: "ep-session",
-      vaultId: "v1",
+      vaultIds: ["v1"],
       label: "full desktop",
       platform: "desktop",
     });
@@ -314,43 +315,33 @@ describe("device-plane scenarios", () => {
     const file = await tempFile("gateway.db");
     const store = PairingTicketStore.open(file);
 
-    const members = MemberStore.open(store.gatewayDatabase);
-    const priya = members.create("Priya");
-    const invite = (
-      grants: Array<{ vaultId: string; role: "admin" | "write" | "read" }>
-    ) => ({
-      memberId: priya.memberId,
-      grants,
+    const owners = OwnerStore.open(store.gatewayDatabase);
+    const priya = owners.create("Priya");
+    const invite = (vaultIds: string[]) => ({
+      ownerId: priya.ownerId,
+      vaultIds,
     });
-    const minted = store.mint(invite([{ vaultId: "v1", role: "write" }]));
+    const minted = store.mint(invite(["v1"]));
     expect(store.listActive()).toHaveLength(1);
 
     // A guessed secret must not burn the ticket before the secret is verified.
     expect(store.redeem(minted.ticketId, "guessed")).toBeUndefined();
     expect(store.redeem(minted.ticketId, minted.secret)).toStrictEqual({
-      memberId: priya.memberId,
-      grants: [{ vaultId: "v1", role: "write" }],
+      ownerId: priya.ownerId,
+      vaultIds: ["v1"],
     });
 
-    // One invitation may carry several vaults at distinct roles — one scan.
-    const second = store.mint(
-      invite([
-        { vaultId: "v2", role: "write" },
-        { vaultId: "v3", role: "read" },
-      ])
-    );
+    // One invitation may carry several vaults — one scan.
+    const second = store.mint(invite(["v2", "v3"]));
     expect(store.redeem(second.ticketId, second.secret)).toStrictEqual({
-      memberId: priya.memberId,
-      grants: [
-        { vaultId: "v2", role: "write" },
-        { vaultId: "v3", role: "read" },
-      ],
+      ownerId: priya.ownerId,
+      vaultIds: ["v2", "v3"],
     });
     // …and it burned on success.
     expect(store.redeem(second.ticketId, second.secret)).toBeUndefined();
 
     // Expiry: a stale ticket never redeems.
-    const brief = store.mint(invite([{ vaultId: "v3", role: "write" }]), 1);
+    const brief = store.mint(invite(["v3"]), 1);
     await new Promise((resolve) => {
       setTimeout(resolve, 5);
     });
@@ -363,14 +354,11 @@ describe("device-plane scenarios", () => {
     cleanups.push(() => gateway.close());
     const tickets = PairingTicketStore.open(gateway);
     const enrollments = EnrollmentStore.open(gateway);
-    const members = MemberStore.open(gateway);
-    const priya = members.create("Priya");
+    const owners = OwnerStore.open(gateway);
+    const priya = owners.create("Priya");
     const first = tickets.mint({
-      memberId: priya.memberId,
-      grants: [
-        { vaultId: "v1", role: "write" },
-        { vaultId: "v2", role: "read" },
-      ],
+      ownerId: priya.ownerId,
+      vaultIds: ["v1", "v2"],
     });
 
     expect(() =>
@@ -388,7 +376,7 @@ describe("device-plane scenarios", () => {
     // A partial redemption leaves NO enrollment at all — never half-paired.
     expect(enrollments.get("phone", "v1")).toBeUndefined();
     expect(enrollments.get("phone", "v2")).toBeUndefined();
-    expect(members.grants(priya.memberId)).toStrictEqual([]);
+    expect(owners.vaultsOwnedBy(priya.ownerId)).toStrictEqual([]);
 
     const enrolled = tickets.redeemAndEnroll(
       first.ticketId,
@@ -399,20 +387,14 @@ describe("device-plane scenarios", () => {
         label: "Phone",
       }
     );
-    // One scan, both vaults, at the distinct roles the invitation named.
-    expect(
-      enrolled?.map((row) => ({ vaultId: row.vaultId, role: row.role }))
-    ).toStrictEqual([
-      { vaultId: "v1", role: "write" },
-      { vaultId: "v2", role: "read" },
-    ]);
-    expect(enrolled?.every((row) => row.memberId === priya.memberId)).toBe(
-      true
-    );
+    // One scan, both vaults, in the invitation's order.
+    expect(enrolled?.map((row) => row.vaultId)).toStrictEqual(["v1", "v2"]);
+    expect(enrolled?.every((row) => row.ownerId === priya.ownerId)).toBe(true);
+    expect(owners.vaultsOwnedBy(priya.ownerId)).toStrictEqual(["v1", "v2"]);
 
     const raced = tickets.mint({
-      memberId: priya.memberId,
-      grants: [{ vaultId: "v1", role: "write" }],
+      ownerId: priya.ownerId,
+      vaultIds: ["v1"],
     });
     const results = await Promise.all([
       Promise.resolve().then(() =>

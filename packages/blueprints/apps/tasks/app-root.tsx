@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement } from "react";
 
+import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Board } from "./components/Board.tsx";
@@ -25,6 +26,7 @@ import {
   sidebarCounts,
   todayProgress,
 } from "./logic.ts";
+import { readBoard } from "./scope-fanout.ts";
 import type {
   AppState,
   BoardData,
@@ -77,6 +79,7 @@ function makeState(view: View): AppState {
     searchSnippets: null,
     boardWindow: 500,
     boardTruncated: false,
+    boardReach: [],
     detailId: null,
     narrow: false,
     pendingIds: new Set(),
@@ -123,6 +126,9 @@ interface BoardPayload {
   counts?: BoardData["counts"];
   window?: number;
   truncated?: boolean;
+  /** Per-scope reach for this fan-out (issue #726 D10/D11,
+   *  `scope-fanout.ts`'s `readBoard`) — undefined for a single-scope mount. */
+  reach?: ScopeSearchReach[];
   vaultDenied?: { code?: string; message?: string };
 }
 
@@ -152,10 +158,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const logic = logicRef.current;
     let res: BoardPayload;
     try {
-      res = await window.centraid.read<BoardPayload>({
-        query: "board",
-        input: { limit: state.boardWindow },
-      });
+      // Fans across every mounted scope when this app is installed in more
+      // than one (issue #726 D11 task 3) — a single-scope host reads exactly
+      // as before.
+      res = await readBoard({ limit: state.boardWindow });
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
@@ -175,6 +181,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data.sections = [];
       data.counts = {};
       state.detailId = null;
+      state.boardReach = [];
       setLoaded(true);
       bump();
       return;
@@ -186,6 +193,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     data.counts = res?.counts ?? {};
     data.window = res?.window ?? state.boardWindow;
     state.boardTruncated = Boolean(res?.truncated);
+    state.boardReach = res?.reach ?? [];
     if (state.detailId && !logic?.findTask(state.detailId))
       state.detailId = null;
     setLoaded(true);
@@ -420,6 +428,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             projects={data.projects}
             projectSections={data.sections}
             footer={footer}
+            reach={state.boardReach}
             onShowMore={showMore}
             onEmptyAction={() => {
               if (state.search) {

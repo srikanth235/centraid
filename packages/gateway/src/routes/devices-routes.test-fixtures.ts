@@ -51,6 +51,7 @@ export async function harness(
       | "vaultName"
       | "canMintPairingTicket"
       | "vaultIds"
+      | "mintVaultForPerson"
     >
   > = {}
 ): Promise<DevicesHarness> {
