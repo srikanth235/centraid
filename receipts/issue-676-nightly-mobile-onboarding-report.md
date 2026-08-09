@@ -133,6 +133,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   flow waits up to 45 seconds for `Collections` rather than treating React's
   blank lazy-import fallback as a bad source-row tap —
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
+- The Home All-apps control now has a dedicated `home-all-apps` test ID, and
+  the shared iOS launcher helper retries that control up to three times while
+  it remains visible. This prevents a transient press-animation hierarchy
+  change from being mistaken for the native Modal opening, and prevents a
+  recovery tap from landing on the Modal's non-interactive title —
+  `apps/mobile/src/screens/home/HomeBand.tsx` and
+  `tests/agent-e2e-mobile/lib/first-run.mjs`.
 
 ### Implementation coverage
 
@@ -260,6 +267,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   Photos launcher row. The row tap completed, but the iOS screenshot remained
   on the blank Expo/React lazy-cover fallback and `Collections` timed out at
   30 seconds; the Photos destination budget is now bounded at 45 seconds.
+- Remote targeted follow-up: [Actions run 31318973123](https://github.com/srikanth235/centraid/actions/runs/31318973123)
+  passed producer/setup, onboarding, Photos, Docs, Agenda, Tasks, People, and
+  Notes. It then exposed a separate intermittent launcher race at Tally: the
+  More tap reported a hierarchy change but the All-apps Modal never appeared;
+  the final screenshot was still Home. The shared launcher retry now targets a
+  stable button ID and repeats only while that source remains visible.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

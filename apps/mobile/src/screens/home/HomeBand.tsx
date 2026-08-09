@@ -90,6 +90,7 @@ export default function HomeBand({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="All apps and places"
+        testID="home-all-apps"
         onPress={() => {
           void Haptics.selectionAsync();
           onSelect("more");

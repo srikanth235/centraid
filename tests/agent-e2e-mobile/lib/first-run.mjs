@@ -221,11 +221,22 @@ ${conditionalRetry}`;
 export function openAppFromAllAppsCommands(appName) {
   return [
     // The bottom-band button and the sheet title share an accessibility label.
-    // A generic retry helper would tap the non-interactive title after the
-    // sheet opens, so keep the retry on the first, visible button only.
-    `- tapOn:
-    text: "All apps and places"
-    retryTapIfNoChange: true`,
+    // Target the button's test ID so a recovery tap can never hit the
+    // non-interactive title after the sheet opens. The iOS native Modal can
+    // report a pressed hierarchy change without committing the React state;
+    // repeat only while the button is still present, then assert the sheet's
+    // search field as the destination.
+    `- repeat:
+    times: 3
+    while:
+      visible:
+        id: "home-all-apps"
+    commands:
+      - tapOn:
+          id: "home-all-apps"
+          retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 1000`,
     `- extendedWaitUntil:
     visible:
       text: "Search all apps and places"
