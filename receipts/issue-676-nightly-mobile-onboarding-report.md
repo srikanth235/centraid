@@ -325,6 +325,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   it: the new explanatory lines were emitted as JavaScript `//` comments, while
   Maestro requires YAML `#` comments. The generated-flow comments are corrected
   and the same cell will be rerun.
+- The valid-YAML rerun, [Actions run 31330876204](https://github.com/srikanth235/centraid/actions/runs/31330876204),
+  reached the warm permission preflight but the newly added deep-link recovery
+  aborted on iOS `NSPOSIXErrorDomain` code 60 while opening the Expo URL; the
+  command's `optional: true` did not suppress Maestro's `openLink` timeout. The
+  scroll flow now keeps the shared bounded Home-ready poll but skips that
+  unnecessary deep link because pairing has already left it on Home; cold/native
+  journeys retain the relaunch helper where they genuinely need Metro recovery.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
