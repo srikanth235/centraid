@@ -38,6 +38,7 @@ import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import FrameProbe from "../../kit/perf/FrameProbe";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -1047,6 +1048,12 @@ export default function PhotosHome({
         groups={menuGroups}
         onClose={() => setViewOptionsOpen(false)}
       />
+
+      {/* PhotosHome is the native-stack route used by the Library and
+          Collections tabs; the shared PhotosScreen wrapper only covers
+          pushed destinations. Keep the DEV sampler inside this actual route
+          so Maestro can see and press it while the lazy cover is presented. */}
+      <FrameProbe />
     </View>
   );
 }
