@@ -1,5 +1,5 @@
 import {
-  DISMISS_OPEN_LINK_CONFIRMATION,
+  PHOTOS_HOME_ENTRY,
   relaunchDevClientCommands,
   retryableTapCommands,
   waitForHomeReadyCommands,
@@ -20,9 +20,7 @@ await runFlow("photos-permissions", async (ctx) => {
     permissions:
       all: deny
 ${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}
-- openLink: "centraid://photos"
-${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
-    timeout: 1000
+${retryableTapCommands(PHOTOS_HOME_ENTRY)}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

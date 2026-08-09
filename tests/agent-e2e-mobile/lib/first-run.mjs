@@ -118,6 +118,10 @@ export function indentMaestroCommands(commands, spaces) {
 // Keep both in the journey contract while the shell transitions between those
 // two honest Home states.
 export const PHOTOS_HOME_ENTRY = "Bring in photographs|Open Photos.*";
+// Docs has the same day-one/launcher transition as Photos. Keeping this
+// selector beside the Photos contract prevents the native matrix from relying
+// on a URL handoff when the visible Home move is available.
+export const DOCS_HOME_ENTRY = "Bring in documents|Open Docs.*";
 
 // `launchApp: { clearState: true }` also clears the Expo development client's
 // cached Metro URL on iOS. Re-inject the URL through the app's development
@@ -213,6 +217,34 @@ export function retryableTapCommands(selector, sourceSelector = selector) {
     retryTapIfNoChange: true
 ${conditionalRetry}
 ${conditionalRetry}`;
+}
+
+/**
+ * Open a bundled native cover through the visible All-apps sheet.
+ *
+ * This is intentionally a UI route rather than a `centraid://` shortcut: an
+ * iOS simulator can accept the system URL confirmation and still deliver the
+ * app back to Home after a development-client relaunch. Searching first also
+ * avoids relying on the sheet's scroll position as the catalog grows.
+ */
+export function openAppFromAllAppsCommands(appName) {
+  return [
+    retryableTapCommands("All apps and places"),
+    `- extendedWaitUntil:
+    visible:
+      text: "Search all apps and places"
+    timeout: 15000`,
+    `- tapOn:
+    text: "Search all apps and places"
+    retryTapIfNoChange: true`,
+    `- inputText: "${appName}"`,
+    "- hideKeyboard",
+    `- extendedWaitUntil:
+    visible:
+      text: "Open ${appName}.*"
+    timeout: 15000`,
+    retryableTapCommands(`Open ${appName}.*`),
+  ].join("\n");
 }
 
 /**

@@ -6,7 +6,8 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  DISMISS_OPEN_LINK_CONFIRMATION,
+  PHOTOS_HOME_ENTRY,
+  openAppFromAllAppsCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
@@ -168,9 +169,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- openLink: "centraid://photos"
-${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
-    timeout: 1000
+${retryableTapCommands(PHOTOS_HOME_ENTRY)}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: 30000
@@ -192,8 +191,8 @@ ${retryableTapCommands("Library")}
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- openLink: "centraid://apps/people"
-${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
+${openAppFromAllAppsCommands("People")}
+- waitForAnimationToEnd:
     timeout: 1000
 `,
     "open-people"

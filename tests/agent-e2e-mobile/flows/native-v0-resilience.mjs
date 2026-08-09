@@ -1,6 +1,7 @@
 import {
-  DISMISS_OPEN_LINK_CONFIRMATION,
+  DOCS_HOME_ENTRY,
   PHOTOS_HOME_ENTRY,
+  openAppFromAllAppsCommands,
   relaunchDevClientCommands,
   retryableTapCommands,
   waitForHomeReadyCommands,
@@ -21,8 +22,8 @@ import {
 // reliably, so each surface is entered from a fresh launch of the app rather
 // than by navigating back — React Navigation state is not persisted, so every
 // launch lands on Home. The empty-vault Home is intentionally a day-one page
-// and only exposes the Photos/Docs first moves, so the complete native matrix
-// uses the app's public deep links for the remaining covers.
+// and exposes the Photos/Docs first moves; the remaining covers are reached
+// through the searchable All-apps sheet, which is the visible launcher path.
 const SURFACES = [
   // Maestro anchors a text selector to the WHOLE node text, so the marker has
   // to cover all of it: the Photos search field publishes
@@ -37,8 +38,8 @@ const SURFACES = [
       // The public Photos deep link intentionally lands on Collections, but
       // it can race the native permission walk on a fresh iOS process. The
       // same product route is available from Home; use that stable entry for
-      // the empty-vault cover and keep the deep-link matrix for the remaining
-      // covers below.
+      // the empty-vault cover and use the visible All-apps sheet below for the
+      // covers without a day-one move.
       retryableTapCommands(PHOTOS_HOME_ENTRY),
       `- extendedWaitUntil:\n    visible: "Collections"\n    timeout: 30000`,
     ].join("\n"),
@@ -46,33 +47,40 @@ const SURFACES = [
   },
   {
     marker: "Add document or folder",
-    link: "centraid://docs",
+    openCommands: [
+      retryableTapCommands(DOCS_HOME_ENTRY),
+      `- extendedWaitUntil:\n    visible: "Add document or folder"\n    timeout: 20000`,
+    ].join("\n"),
     name: "docs",
   },
-  { marker: "Create event", link: "centraid://agenda", name: "agenda" },
+  {
+    marker: "Create event",
+    openCommands: openAppFromAllAppsCommands("Agenda"),
+    name: "agenda",
+  },
   {
     marker: "New task title",
-    link: "centraid://apps/tasks",
+    openCommands: openAppFromAllAppsCommands("Tasks"),
     name: "tasks",
   },
   {
     marker: "Person name",
-    link: "centraid://apps/people",
+    openCommands: openAppFromAllAppsCommands("People"),
     name: "people",
   },
   {
     marker: "Search notes",
-    link: "centraid://apps/notes",
+    openCommands: openAppFromAllAppsCommands("Notes"),
     name: "notes",
   },
   {
     marker: "Fixed-point multi-currency ledger, available offline",
-    link: "centraid://apps/tally",
+    openCommands: openAppFromAllAppsCommands("Tally"),
     name: "tally",
   },
   {
     marker: "Secrets stay online-only",
-    link: "centraid://locker",
+    openCommands: openAppFromAllAppsCommands("Locker"),
     name: "locker",
   },
   // Settings is opened from the Vault drawer, not the dock. The dock sits at
@@ -109,11 +117,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
   const visitNext = async (index) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
-    const openCommands =
-      surface.openCommands ??
-      `- openLink: "${surface.link}"
-${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
-    timeout: 1000`;
+    const openCommands = surface.openCommands;
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---

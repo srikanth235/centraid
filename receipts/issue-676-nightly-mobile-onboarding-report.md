@@ -49,14 +49,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   and retain the manual deep-link fallback for ad-hoc simulator runs.
 - The post-Photos Home contract accepts both the current empty-vault
   `Bring in photographs` move and the populated `Open Photos, …` launcher
-  label, while the native and frame journeys use the public Photos/People deep
-  links when the day-one page has no corresponding tile —
-  `tests/agent-e2e-mobile/lib/first-run.mjs`, `flows/native-v0-resilience.mjs`,
-  and `flows/scroll-frames.mjs`.
-- The Photos permission journey accepts the iOS native link-confirmation sheet
-  before asserting the refusal state, and all post-launch Home waits now poll
-  through delayed Expo/iOS overlays — `flows/photos-permissions.mjs`,
-  `lib/first-run.mjs`, and `tests/agent-e2e-mobile/lib/harness.mjs`.
+  label; the native and frame journeys use the stable Home moves and searchable
+  All-apps sheet for visible cover navigation when the day-one page has no
+  corresponding tile — `tests/agent-e2e-mobile/lib/first-run.mjs`,
+  `flows/native-v0-resilience.mjs`, and `flows/scroll-frames.mjs`.
+- The Photos permission journey uses the visible Home move before asserting the
+  refusal state, and all post-launch Home waits now poll through delayed
+  Expo/iOS overlays — `flows/photos-permissions.mjs`, `lib/first-run.mjs`, and
+  `tests/agent-e2e-mobile/lib/harness.mjs`.
 - The scroll-frame rig seeds deterministic Photos and People scenarios before
   pairing so its grid and directory probes cannot silently run against the
   empty CI gateway — `flows/scroll-frames.mjs`,
@@ -111,6 +111,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   deep link; iOS can report `simctl openurl` complete while SpringBoard remains
   foreground, leaving the cached Metro card unreachable —
   `tests/agent-e2e-mobile/lib/first-run.mjs`.
+- The native cover matrix and permission/frame journeys avoid the flaky
+  post-relaunch product URL handoff by opening Photos/Docs from Home and the
+  remaining bundled covers through the searchable All-apps sheet —
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
+  `flows/photos-permissions.mjs`, and `flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -191,6 +196,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   passed the producer and all isolated setup, then reached the bounded iOS
   fresh-ticket retry. Its evidence found a missing `retryableTapCommands`
   import in the post-#726 profile completion path; the import is restored here.
+- Remote targeted follow-up: [Actions run 31306962706](https://github.com/srikanth235/centraid/actions/runs/31306962706)
+  passed the producer and all setup, and the repaired relaunch reached the
+  Photos cover. It then exposed that `centraid://docs` returned to a settled
+  Home screen after the iOS confirmation; the uploaded screenshot and
+  hierarchy drove the visible Home/All-apps navigation change above.
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;
