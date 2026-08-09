@@ -115,13 +115,14 @@ export default function FrameProbe(): React.JSX.Element | null {
   }
   if (report) {
     return (
-      <View style={styles.readout}>
-        <Text
-          accessible
-          accessibilityLabel={report}
-          testID={FRAME_PROBE_REPORT_ID}
-          style={styles.text}
-        >
+      <View
+        accessible
+        accessibilityLabel={report}
+        collapsable={false}
+        testID={FRAME_PROBE_REPORT_ID}
+        style={styles.readout}
+      >
+        <Text accessible={false} style={styles.text}>
           {report}
         </Text>
       </View>
@@ -150,7 +151,12 @@ const styles = StyleSheet.create({
     // probe visually inert without making the native target low-opacity.
     opacity: 1,
     position: "absolute",
-    right: 4,
+    // Expo's development client keeps its floating Tools button near the
+    // upper-right corner. A right-edge probe can hit that native control and
+    // open the developer menu instead of delivering Pressable.onPress
+    // (31338132931), so stay in the empty left gutter shared by Photos and
+    // People.
+    left: 4,
     // Keep Maestro's tap target below the iOS status bar. At top: 52 the
     // hierarchy still exposed [386,52][398,64], whose center was system
     // status chrome, so XCTest tapped the status area and onPress never armed
@@ -165,7 +171,7 @@ const styles = StyleSheet.create({
     padding: 4,
     position: "absolute",
     right: 0,
-    top: 0,
+    top: 72,
     zIndex: 9999,
   },
   text: { color: "#0f0", fontSize: 11 },

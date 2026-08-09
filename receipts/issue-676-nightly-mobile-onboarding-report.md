@@ -167,6 +167,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   explicit, non-collapsible accessibility targets —
   `apps/mobile/src/kit/perf/FrameProbe.tsx` and
   `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
+- The DEV probe now lives in the left safe-area gutter and publishes its report
+  through a non-collapsible accessible wrapper below the status bar. Expo's
+  floating development-tools button occupies the upper-right gutter in CI, so
+  the previous right-edge arm target opened the Expo menu instead of delivering
+  `Pressable.onPress` — `apps/mobile/src/kit/perf/FrameProbe.tsx`.
 
 ### Implementation coverage
 
@@ -380,6 +385,12 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   showed the grid was presented as a native root-stack cover; the root-level
   probe was consequently behind it. The probe now lives inside Photos and
   People cover hierarchies, matching PR #683's native-stack placement.
+- Focused cover-local rerun [Actions run 31338132931](https://github.com/srikanth235/centraid/actions/runs/31338132931)
+  confirmed that Maestro could find and tap `perf-frame-arm`, then failed while
+  waiting for the report. The debug [artifact](https://github.com/srikanth235/centraid/actions/runs/31338132931/artifacts/9045204926)
+  captured Expo's floating developer menu after the right-edge tap at
+  `[386,72][398,84]`; the sampler itself was never armed. The arm target now
+  uses the left gutter and the report has its own explicit accessible wrapper.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
