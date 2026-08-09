@@ -457,6 +457,7 @@ export async function runFlow(slug, fn) {
       await ctx.run(
         `appId: ${state.appId}
 ---
+- stopApp
 - launchApp:
     clearState: false
 ${relaunchDevClientCommands(state.platform)}${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:

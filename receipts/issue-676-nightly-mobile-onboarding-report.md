@@ -66,6 +66,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   before opening its seeded grid; and the rapid volume batch retries once after
   an iOS app-stop driver hiccup — `flows/native-v0-resilience.mjs`,
   `flows/scroll-frames.mjs`, and `flows/volume-proof.mjs`.
+- The Photos suite now freshly pairs the seeded replica for the library journey,
+  stops and reconnects the iOS app before reused journeys, and waits for seeded
+  Photos rows before measuring or drilling into the library. The permission flow
+  also reconnects the cleared Expo client before asserting Home —
+  `run-photos-suite.mjs`, `lib/harness.mjs`,
+  `flows/photos-permissions.mjs`, `flows/photos-library.mjs`, and
+  `flows/scroll-frames.mjs`.
 - The affected journey sources are
   `tests/agent-e2e-mobile/flows/cold-start.mjs`,
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
@@ -76,7 +83,9 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/flows/photos-select-write.mjs`,
   `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, and
   `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, and
-  `tests/agent-e2e-mobile/flows/volume-proof.mjs`.
+  `tests/agent-e2e-mobile/flows/volume-proof.mjs`,
+  `tests/agent-e2e-mobile/lib/harness.mjs`, and
+  `tests/agent-e2e-mobile/run-photos-suite.mjs`.
 
 ### Implementation coverage
 
@@ -125,8 +134,16 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   90-minute backstop. Uploaded evidence isolated the empty Photos marker,
   simulator Photo Library prompt, and transient volume app-stop addressed by
   this follow-up.
+- Remote diagnostic: [Actions run 31288854362](https://github.com/srikanth235/centraid/actions/runs/31288854362)
+  reached the serialized journey step with setup green. Its uploaded evidence
+  showed that the Photos suite reused an empty replica before seeding, later
+  launches could remain on the Expo launcher or SpringBoard, and the scroll
+  probe could open the empty Photos takeover; the suite patch above addresses
+  those lifecycle and seed-order causes.
 - Static verification of this follow-up: `bun run format:check`,
-  `bun run lint:e2e-flows`, and `git diff --check` (PASS; 2026-08-09).
+  `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
+  `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;
+  2026-08-09).
 
 ```sh
 bun run format:check

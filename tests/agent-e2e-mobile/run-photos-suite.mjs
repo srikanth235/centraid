@@ -29,7 +29,10 @@ const startedAt = Date.now();
 async function runRemainingFlows(index = 0, exitCode = 0) {
   const flow = FLOWS[index];
   if (!flow) return exitCode;
-  const code = await runFlow(flow, index > 0);
+  // The denied-permission journey deliberately pairs an empty replica. Seed
+  // before the library journey's fresh pairing so its first pull contains the
+  // deterministic Photos corpus; only the three journeys after that reuse it.
+  const code = await runFlow(flow, index > 1);
   return runRemainingFlows(index + 1, code === 0 ? exitCode : 1);
 }
 let exitCode = await runRemainingFlows();

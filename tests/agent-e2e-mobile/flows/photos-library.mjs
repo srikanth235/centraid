@@ -22,6 +22,9 @@ ${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible: "Select"
     timeout: 30000
+- extendedWaitUntil:
+    visible: ".*Last light in the backyard.*|.*backyard-last-light.*"
+    timeout: 120000
 - assertVisible: "${currentMonth}"
 - assertVisible: ".*(Sun|Mon|Tue|Wed|Thu|Fri|Sat),.*"
 - scroll

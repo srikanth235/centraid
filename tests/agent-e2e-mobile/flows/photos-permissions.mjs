@@ -1,5 +1,7 @@
 import {
+  DISMISS_DEV_CLIENT_OVERLAYS,
   DISMISS_OPEN_LINK_CONFIRMATION,
+  relaunchDevClientCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -13,11 +15,12 @@ await runFlow("photos-permissions", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
+- stopApp
 - launchApp:
     clearState: false
     permissions:
       all: deny
-- extendedWaitUntil:
+${relaunchDevClientCommands(ctx.state.platform)}${DISMISS_DEV_CLIENT_OVERLAYS}- extendedWaitUntil:
     visible: "Home ready"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - openLink: "centraid://photos"

@@ -168,6 +168,9 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 - openLink: "centraid://photos"
 ${DISMISS_OPEN_LINK_CONFIRMATION}- waitForAnimationToEnd:
     timeout: 1000
+- extendedWaitUntil:
+    visible: "${PHOTOS_MARKER}"
+    timeout: 120000
 `,
     "open-photos"
   );
