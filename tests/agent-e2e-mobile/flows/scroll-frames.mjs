@@ -158,10 +158,10 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
     clearState: false
     permissions:
       all: allow
-// A warm permission relaunch can show Home while the paired replica is still
-// hydrating. Reuse the iOS dev-client recovery and bounded Home poll used by
-// the other mobile journeys instead of treating one 30-second snapshot as a
-// readiness contract.
+# A warm permission relaunch can show Home while the paired replica is still
+# hydrating. Reuse the iOS dev-client recovery and bounded Home poll used by
+# the other mobile journeys instead of treating one 30-second snapshot as a
+# readiness contract.
 ${relaunchDevClientCommands(ctx.state.platform)}${waitForHomeReadyCommands(FIRST_LAUNCH_TIMEOUT_MS, ctx.state.platform)}`,
     "allow-device-permissions"
   );

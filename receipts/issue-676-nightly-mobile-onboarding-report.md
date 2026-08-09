@@ -320,6 +320,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   after the flow's raw 30-second wait. The frame flow now uses the shared iOS
   dev-client recovery and bounded Home-ready poll for that preflight, matching
   the canonical recovery used by the native-cover and Photos journeys.
+- The next focused dispatch, [Actions run 31329844899](https://github.com/srikanth235/centraid/actions/runs/31329844899),
+  reached the preflight but Maestro rejected the generated YAML before running
+  it: the new explanatory lines were emitted as JavaScript `//` comments, while
+  Maestro requires YAML `#` comments. The generated-flow comments are corrected
+  and the same cell will be rerun.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
