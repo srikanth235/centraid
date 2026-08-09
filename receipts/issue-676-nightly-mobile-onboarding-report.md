@@ -312,6 +312,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   shows the Photos Library timeline with its `Search` band tab, so the flow now
   waits on a `photos-library-grid` marker attached to the actual timeline and
   will be rerun in isolation.
+- Focused rerun: [Actions run 31328260027](https://github.com/srikanth235/centraid/actions/runs/31328260027)
+  passed producer setup and moved past the stale Photos marker, then exposed a
+  warm-launch race in `allow-device-permissions`: the screenshot in the
+  [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31328260027/artifacts/9042509827)
+  showed Home with the paired vault still counting and no `Home ready` marker
+  after the flow's raw 30-second wait. The frame flow now uses the shared iOS
+  dev-client recovery and bounded Home-ready poll for that preflight, matching
+  the canonical recovery used by the native-cover and Photos journeys.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
