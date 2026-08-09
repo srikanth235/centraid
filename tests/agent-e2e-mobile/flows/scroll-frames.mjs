@@ -6,6 +6,7 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
+  DISMISS_OPEN_LINK_CONFIRMATION,
   openAppFromAllAppsCommands,
   retryableTapCommands,
   waitForHomeReadyCommands,
@@ -103,6 +104,9 @@ ${settle}
 # Arm one sample window. Nothing is drawn while it runs, so the readout can
 # never become part of what it measures.
 - openLink: "centraid://perf-frames?ms=${SAMPLE_WINDOW_MS}"
+# iOS presents its native Open confirmation for the custom scheme; dismiss it
+# before checking the sampler marker or the alert masks the app hierarchy.
+${DISMISS_OPEN_LINK_CONFIRMATION}
 # Prove the arm took BEFORE flinging — a fling against an unarmed sampler
 # produces no report at all, and that failure would surface later and elsewhere.
 - extendedWaitUntil:

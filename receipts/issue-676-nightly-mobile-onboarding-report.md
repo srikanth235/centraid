@@ -152,6 +152,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `tests/agent-e2e-mobile/lib/first-run.mjs`,
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`, and
   `.github/workflows/e2e.yml`.
+- The frame sampler now dismisses iOS's native `Open in “Centraid”?`
+  confirmation immediately after arming its custom-scheme probe, reusing the
+  shared confirmation helper instead of letting the alert mask the
+  `perf-frame-sampling` marker — `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -332,6 +336,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   scroll flow now keeps the shared bounded Home-ready poll but skips that
   unnecessary deep link because pairing has already left it on Home; cold/native
   journeys retain the relaunch helper where they genuinely need Metro recovery.
+- Focused rerun [Actions run 31332177873](https://github.com/srikanth235/centraid/actions/runs/31332177873)
+  passed the warm permission preflight, current Photos Library marker, and
+  launcher route, then failed only when the `perf-frames` custom scheme raised
+  iOS's native `Open in “Centraid”?` alert over the Photos grid. The debug
+  [artifact](https://github.com/srikanth235/centraid/actions/runs/31332177873/artifacts/9043570725)
+  shows the app was healthy beneath the alert; the sampler arm now reuses the
+  shared `^Open$` dismissal before asserting `perf-frame-sampling`.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
