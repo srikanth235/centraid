@@ -172,6 +172,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   floating development-tools button occupies the upper-right gutter in CI, so
   the previous right-edge arm target opened the Expo menu instead of delivering
   `Pressable.onPress` — `apps/mobile/src/kit/perf/FrameProbe.tsx`.
+- The DEV probe is now rendered by `PhotosScreen`, inside the native-stack
+  screen that owns the Photos grid, rather than beside the navigator. Its
+  transparent arm target uses a normal 44x44 touch surface, and its manual
+  deep-link parser uses React Native Linking with a guarded `IS_DEV` check so
+  importing the probe does not pull native-only Expo Linking into Vitest —
+  `apps/mobile/src/apps/photos/PhotosScreen.tsx`,
+  `apps/mobile/src/kit/perf/FrameProbe.tsx`, and `apps/mobile/App.tsx`.
 - The scroll-frame flow now exits the Photos full-screen cover through its
   stable `Home` capsule before asking the Home launcher to open People; this
   preserves the launcher helper's Home-screen precondition without relying on
@@ -403,9 +410,22 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   Photos full-screen cover was still presented, so `home-all-apps` was absent.
   The debug [artifact](https://github.com/srikanth235/centraid/actions/runs/31339333718/artifacts/9045618135)
   drove the explicit Photos `Home`-capsule exit above.
+- Focused rerun [Actions run 31340503864](https://github.com/srikanth235/centraid/actions/runs/31340503864)
+  reproduced an intermittent version of the arm race: Maestro found
+  `[4,72][16,84]`, tapped `perf-frame-arm`, and completed all eight flings, but
+  no `perf-frame-report` appeared. The failure screenshot in [debug artifact
+  9045978442](https://github.com/srikanth235/centraid/actions/runs/31340503864/artifacts/9045978442)
+  showed a healthy Photos grid, so the issue was the tiny sibling hit target's
+  native-stack responder path rather than the grid or sampler budget. The
+  probe is now owned by `PhotosScreen`, uses a 44x44 transparent target, and
+  keeps the test import-safe; the focused lane will verify this targeted fix.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
+- Local verification of the probe relocation: `bun run format:check`,
+  `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
+  `bun run lint:type-floor`, `bun run --cwd apps/mobile typecheck`, and
+  `bun run --cwd apps/mobile test` (PASS; 133 files, 1,086 tests; 2026-08-10).
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

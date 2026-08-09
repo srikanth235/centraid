@@ -55,6 +55,7 @@ import {
 import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import FrameProbe from "../../kit/perf/FrameProbe";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosShellNavigation } from "../../navigation";
@@ -183,6 +184,10 @@ export default function PhotosScreen({
         onClose={() => setMoreOpen(false)}
         onSelect={onMoreRow}
       />
+
+      {/* The native-stack screen owns this frame, so the DEV sampler's tap
+          target participates in the same hit-test tree as the grid and band. */}
+      <FrameProbe />
     </View>
   );
 }

@@ -15,9 +15,8 @@
 // - The readout renders only after sampling stops, so drawing it cannot be part
 //   of what it measured.
 
-import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
 import { Text } from "../components/NativeText";
@@ -42,14 +41,22 @@ const MAX_WINDOW_MS = 30_000;
 const FRAME_PROBE_ARM_ID = "perf-frame-arm";
 const FRAME_PROBE_SAMPLING_ID = "perf-frame-sampling";
 const FRAME_PROBE_REPORT_ID = "perf-frame-report";
+const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 
 function windowMsFrom(url: string): number | undefined {
-  const parsed = Linking.parse(url);
-  // expo-linking may put `perf-frames` in `path` or `hostname` depending on
-  // whether the open came as centraid://perf-frames vs centraid:///perf-frames.
-  const route = `${parsed.path ?? ""}/${parsed.hostname ?? ""}`;
+  // URL puts `perf-frames` in `pathname` or `hostname` depending on whether
+  // the open came as centraid://perf-frames vs centraid:///perf-frames. Keep
+  // this parser local so importing the probe in Vitest does not evaluate the
+  // native-only Expo Linking module.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+  const route = `${parsed.pathname}/${parsed.hostname}`;
   if (!route.includes(PROBE_PATH)) return undefined;
-  const requested = Number(parsed.queryParams?.ms);
+  const requested = Number(parsed.searchParams.get("ms"));
   if (!Number.isFinite(requested) || requested <= 0) return DEFAULT_WINDOW_MS;
   return Math.min(requested, MAX_WINDOW_MS);
 }
@@ -77,7 +84,7 @@ export default function FrameProbe(): React.JSX.Element | null {
   };
 
   useEffect(() => {
-    if (!__DEV__) return undefined;
+    if (!IS_DEV) return undefined;
     let mounted = true;
     const armFromUrl = (url: string): void => {
       const windowMs = windowMsFrom(url);
@@ -96,7 +103,7 @@ export default function FrameProbe(): React.JSX.Element | null {
     };
   }, []);
 
-  if (!__DEV__) return null;
+  if (!IS_DEV) return null;
   if (sampling) {
     // Non-zero hit target so XCUITest/Maestro can see the testID (1×1 views
     // were invisible to the hierarchy on iOS 30752843689).
@@ -144,7 +151,11 @@ export default function FrameProbe(): React.JSX.Element | null {
 const styles = StyleSheet.create({
   marker: {
     backgroundColor: "transparent",
-    height: 12,
+    // Keep a normal native touch target. A 12×12 transparent Pressable is
+    // visible to XCTest but can lose the responder race to a native-stack
+    // screen while its scroll view is settling (31340503864); this remains
+    // visually inert while giving Maestro a stable 44×44 tap surface.
+    height: 44,
     // Keep the DEV arm physically hit-testable on iOS. The previous 0.01
     // opacity exposed the node to XCTest but let the tap complete without
     // delivering Pressable.onPress (run 30831790904). Transparency keeps the
@@ -162,7 +173,7 @@ const styles = StyleSheet.create({
     // status chrome, so XCTest tapped the status area and onPress never armed
     // the sampler (run 30827282637). The first app content row begins at y=68.
     top: 72,
-    width: 12,
+    width: 44,
     zIndex: 9999,
   },
   readout: {

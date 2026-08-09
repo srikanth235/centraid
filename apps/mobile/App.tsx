@@ -35,7 +35,6 @@ import ErrorBoundary from "./src/ErrorBoundary";
 import { Text } from "./src/kit/components/NativeText";
 import StatusLine from "./src/kit/components/StatusLine";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
-import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
   REPLICA_UNPAIRED_MESSAGE,
   ReplicaProvider,
@@ -236,10 +235,6 @@ function PhotosNavigator(): React.JSX.Element {
         <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
         <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
       </PhotosStack.Navigator>
-      {/* A native-stack cover sits above the root shell, so the root probe is
-        hidden while Photos is presented. Keep the DEV probe in this cover's
-        own hierarchy for Maestro and manual frame sampling. */}
-      <FrameProbe />
     </View>
   );
 }
