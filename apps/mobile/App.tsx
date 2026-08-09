@@ -203,32 +203,44 @@ function UploadReconciliation(): null {
 function PhotosNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <PhotosStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
-      <PhotosStack.Screen
-        name="PhotoLightbox"
-        component={PhotoLightbox}
-        options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-      />
-      <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-      <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="PlacesView" component={PlacesView} />
-      <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
-      <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
-      <PhotosStack.Screen name="FaceReview" component={FaceReview} />
-      <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
-      <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
-      <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
-      <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
-      <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
-      <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
-      <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
-    </PhotosStack.Navigator>
+    <View style={{ flex: 1 }}>
+      <PhotosStack.Navigator
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.bg },
+          headerShown: false,
+        }}
+      >
+        <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
+        <PhotosStack.Screen
+          name="PhotoLightbox"
+          component={PhotoLightbox}
+          options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+        />
+        <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
+        <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
+        <PhotosStack.Screen name="PlacesView" component={PlacesView} />
+        <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
+        <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
+        <PhotosStack.Screen name="FaceReview" component={FaceReview} />
+        <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
+        <PhotosStack.Screen
+          name="DuplicatesShelf"
+          component={DuplicatesShelf}
+        />
+        <PhotosStack.Screen
+          name="DuplicateReview"
+          component={DuplicateReview}
+        />
+        <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
+        <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
+        <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
+        <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
+      </PhotosStack.Navigator>
+      {/* A native-stack cover sits above the root shell, so the root probe is
+        hidden while Photos is presented. Keep the DEV probe in this cover's
+        own hierarchy for Maestro and manual frame sampling. */}
+      <FrameProbe />
+    </View>
   );
 }
 
@@ -601,11 +613,6 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            {/* Last child so its absolute readout sits above the navigator.
-              Renders nothing, installs nothing and schedules nothing outside a
-              `__DEV__` build that a probe has explicitly armed — see
-              src/kit/perf/FrameProbe.tsx. */}
-            <FrameProbe />
             <StatusLine />
           </View>
         </SafeAreaProvider>

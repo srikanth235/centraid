@@ -373,6 +373,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   checks. The first pre-push pass caught the repository's 11px native type
   floor on the sampler readout; `fontSize` is now 11px and the gate will be
   rerun before publishing.
+- Focused arm rerun [Actions run 31336883074](https://github.com/srikanth235/centraid/actions/runs/31336883074)
+  reached the current Photos grid but failed immediately because
+  `perf-frame-arm` was absent from the XCUITest hierarchy. The debug
+  [artifact](https://github.com/srikanth235/centraid/actions/runs/31336883074/artifacts/9044880464)
+  showed the grid was presented as a native root-stack cover; the root-level
+  probe was consequently behind it. The probe now lives inside Photos and
+  People cover hierarchies, matching PR #683's native-stack placement.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

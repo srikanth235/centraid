@@ -20,6 +20,7 @@ import {
   combineReplicaQueryStates,
   useReplicaQuery,
 } from "../../kit/hooks/useReplicaQuery";
+import FrameProbe from "../../kit/perf/FrameProbe";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -498,6 +499,9 @@ export default function PeopleHome({
         onClose={closeMerge}
         onPick={merge}
       />
+      {/* People is a root native-stack cover too; keep the DEV sampler inside
+        the presented hierarchy so iOS Maestro can see its arm/report nodes. */}
+      <FrameProbe />
     </TopSafeArea>
   );
 }
