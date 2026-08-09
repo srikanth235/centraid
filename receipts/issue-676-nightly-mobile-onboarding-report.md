@@ -304,6 +304,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   onboarding, opened the Notes cover with `Search notes`, and passed the
   process-restart `Home ready` check. The focused lane completed green in
   21m49s without replaying the other native covers.
+- Full iOS matrix verification: [Actions run 31326960216](https://github.com/srikanth235/centraid/actions/runs/31326960216)
+  passed the producer and `template-gate`, then exposed a stale scroll-flow
+  contract after the current-main Photos redesign: `scroll-frames` waited for
+  the removed `Search photos and moments` label even though the Library grid
+  was fully rendered. The [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31326960216/artifacts/9042059466)
+  shows the Photos Library timeline with its `Search` band tab, so the flow now
+  waits on a `photos-library-grid` marker attached to the actual timeline and
+  will be rerun in isolation.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

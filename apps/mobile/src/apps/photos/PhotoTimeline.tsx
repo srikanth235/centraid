@@ -334,7 +334,13 @@ export default function PhotoTimeline({
       onTap={tapAsset}
       onDrag={dragSelect}
     >
-      <View style={styles.fill}>
+      <View
+        // The e2e frame probe needs a marker for the loaded Library timeline.
+        // Search is a separate band destination now, so its old copy is not
+        // a valid readiness signal for this grid.
+        testID="photos-library-grid"
+        style={styles.fill}
+      >
         <FlashList
           initialScrollIndex={initialLanding}
           ref={list}

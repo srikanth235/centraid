@@ -75,10 +75,10 @@ const FLINGS = 8;
 const SAMPLE_WINDOW_MS = 6_000;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
-// A durable accessibilityLabel published by PhotosHome's search control
-// (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
-// tab label, which the tab bar draws on every screen.
-const PHOTOS_MARKER = "Search photos and moments";
+// A stable marker on the loaded Library timeline. Search is a separate band
+// destination now, so its old copy is not a valid readiness signal for this
+// grid; the marker must prove the timeline itself mounted.
+const PHOTOS_MARKER = "photos-library-grid";
 // People's list handle (apps/mobile/src/apps/people/PeopleHome.tsx). Positional
 // row ids exist whatever the fixture seeded, and `people-directory-row-0` is
 // People-specific so it cannot pass on another screen.
@@ -170,17 +170,19 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 ---
 ${openAppFromAllAppsCommands("Photos")}
 - extendedWaitUntil:
-    visible: "Collections"
+    visible:
+      text: "Collections"
     timeout: 30000
 ${retryableTapCommands("Library")}
 - extendedWaitUntil:
-    visible: "${PHOTOS_MARKER}"
+    visible:
+      id: "${PHOTOS_MARKER}"
     timeout: 120000
 `,
     "open-photos"
   );
   await ctx.run(
-    flingYaml(ctx.state.appId, PHOTOS_MARKER, "text", "photos"),
+    flingYaml(ctx.state.appId, PHOTOS_MARKER, "id", "photos"),
     "fling-photos"
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);
