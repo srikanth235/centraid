@@ -6,7 +6,6 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  DISMISS_OPEN_LINK_CONFIRMATION,
   openAppFromAllAppsCommands,
   retryableTapCommands,
   waitForHomeReadyCommands,
@@ -28,9 +27,10 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  *
  * ── The contract (owned by apps/mobile, pinned by frame-sampler.test.ts) ────
  *
- *   arm     `openLink: centraid://perf-frames?ms=<window>`  (default 4000,
- *           capped 30000; arming is idempotent while a sample runs)
- *   armed   a 1x1 view with `testID: perf-frame-sampling` exists for the window
+ *   arm     tap DEV-only `testID: perf-frame-arm` (6s window); the deep link
+ *           remains available for manual use (default 4000, capped 30000)
+ *   armed   a visible marker with `testID: perf-frame-sampling` exists for the
+ *           window when the platform exposes the transient state
  *   report  on close, `testID: perf-frame-report` renders EXACTLY:
  *           `frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%`
  *
@@ -103,16 +103,15 @@ function flingYaml(appId, marker, markerKind, surface) {
 ${settle}
 # Arm one sample window. Nothing is drawn while it runs, so the readout can
 # never become part of what it measures.
-- openLink: "centraid://perf-frames?ms=${SAMPLE_WINDOW_MS}"
-# iOS presents its native Open confirmation for the custom scheme; dismiss it
-# before checking the sampler marker or the alert masks the app hierarchy.
-${DISMISS_OPEN_LINK_CONFIRMATION}
-# Prove the arm took BEFORE flinging — a fling against an unarmed sampler
-# produces no report at all, and that failure would surface later and elsewhere.
-- extendedWaitUntil:
-    visible:
-      id: "perf-frame-sampling"
-    timeout: 10000
+# Arm one sample window via the DEV testID — openLink triggers an iOS
+# "Open in Centraid?" alert and often never delivers the URL to Linking
+# (30752843689). The arm control lives in FrameProbe (__DEV__ only).
+- tapOn:
+    id: "perf-frame-arm"
+    retryTapIfNoChange: true
+# The sampling marker is intentionally transient: the six-second window can
+# finish before XCTest observes it. The report assertion below is the durable
+# proof that the arm took; an unarmed sampler cannot publish one.
 - repeat:
     times: ${FLINGS}
     commands:
@@ -129,6 +128,7 @@ ${DISMISS_OPEN_LINK_CONFIRMATION}
     timeout: ${SAMPLE_WINDOW_MS + 15_000}
 - copyTextFrom:
     id: "perf-frame-report"
+- evalScript: \${console.log("centraid-frame-report " + maestro.copiedText)}
 - takeScreenshot: frame-report-${surface}
 `;
 }

@@ -160,6 +160,13 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   destination budget as the native-cover matrix, so a completed launcher tap
   is not mistaken for a loaded grid while React is still leaving its blank
   fallback — `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
+- The frame sampler keeps its deep-link hook for manual use but exposes a
+  visible DEV-only `perf-frame-arm` control for Maestro. The iOS simulator can
+  accept a custom-scheme URL while never delivering it to Expo Linking; the
+  arm control avoids that system handoff, and its sampling/report nodes are
+  explicit, non-collapsible accessibility targets —
+  `apps/mobile/src/kit/perf/FrameProbe.tsx` and
+  `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
 
 ### Implementation coverage
 
@@ -353,6 +360,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   in [artifact 9044114079](https://github.com/srikanth235/centraid/actions/runs/31333688363/artifacts/9044114079)
   remained on the blank fallback and `Collections` timed out at 30 seconds.
   The scroll flow now uses the native matrix's 45-second destination budget.
+- Focused rerun [Actions run 31335420164](https://github.com/srikanth235/centraid/actions/runs/31335420164)
+  passed the warm preflight, current Photos Library marker, lazy-cover wait, and
+  the native `Open` confirmation dismissal, but the `perf-frame-sampling` marker
+  never appeared. The [debug artifact](https://github.com/srikanth235/centraid/actions/runs/31335420164/artifacts/9044415535)
+  showed the healthy Photos grid beneath the handoff: iOS accepted the
+  `centraid://perf-frames` URL without delivering it to Expo Linking. The
+  sampler now uses PR #683's DEV arm control and iOS-visible marker contract;
+  the targeted scroll lane will verify it before the full matrix is dispatched.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
