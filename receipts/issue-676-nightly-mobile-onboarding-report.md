@@ -368,6 +368,11 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `centraid://perf-frames` URL without delivering it to Expo Linking. The
   sampler now uses PR #683's DEV arm control and iOS-visible marker contract;
   the targeted scroll lane will verify it before the full matrix is dispatched.
+- Local verification of the PR-derived arm path passes the mobile unit suite
+  (133 files, 1,086 tests), flow lint, formatting, TypeScript, and syntax
+  checks. The first pre-push pass caught the repository's 11px native type
+  floor on the sampler readout; `fontSize` is now 11px and the gate will be
+  rerun before publishing.
 - Local verification of the queued launcher transition:
   `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
   `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).

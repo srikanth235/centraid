@@ -168,5 +168,5 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 9999,
   },
-  text: { color: "#0f0", fontSize: 10 },
+  text: { color: "#0f0", fontSize: 11 },
 });
