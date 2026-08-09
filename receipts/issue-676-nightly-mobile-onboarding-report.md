@@ -120,6 +120,10 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   remaining bundled covers through the searchable All-apps sheet —
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
   `flows/photos-permissions.mjs`, and `flows/scroll-frames.mjs`.
+- `apps/mobile/src/screens/home/AllAppsSheet.tsx` queues app/place navigation
+  until the native Modal interaction settles. This keeps a lazy cover such as
+  People from losing its root-stack transition while the iOS launcher sheet is
+  dismissing.
 
 ### Implementation coverage
 
@@ -139,7 +143,8 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
 - The PR's older Photos-era workflow matrix and unrelated Android/tunnel
   rewrites are not copied wholesale; current `main` has newer Photos and
   replica architecture that need to remain intact.
-- No product behavior or pairing protocol changes are introduced.
+- No pairing protocol changes are introduced; the launcher transition hardening
+  is limited to dismissing its native sheet before routing.
 
 ## Decisions
 
@@ -231,6 +236,14 @@ Evidence: `artifacts/e2e/ui-impact/issue-676-mobile-onboarding.png`, emitted by
   `onOpen`; the screenshot showed the Home scrim plus keyboard and the flow
   timed out on `Collections`. The helper now submits the search field to blur
   it without closing the Modal, then uses one bounded row tap.
+- Remote targeted follow-up: [Actions run 31313771140](https://github.com/srikanth235/centraid/actions/runs/31313771140)
+  passed producer/setup, fresh profile onboarding, and the Photos, Docs,
+  Agenda, and Tasks covers. It then showed the filtered People row closing the
+  launcher while the app remained on Home; the queued Modal-dismissal
+  transition above is the focused fix for that late lazy-cover race.
+- Local verification of the queued launcher transition:
+  `bun run --cwd apps/mobile typecheck`, `bun run --cwd apps/mobile test`, and
+  `bun run --cwd apps/mobile ci:bundle` (PASS; 2026-08-09).
 - Static verification of this follow-up: `bun run format:check`,
   `bun run lint:e2e-flows`, `bun run check:ui-receipt`,
   `bun run --cwd apps/mobile typecheck`, and `git diff --check` (PASS;

@@ -33,6 +33,7 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  InteractionManager,
   Keyboard,
   Modal,
   Pressable,
@@ -180,7 +181,11 @@ export default function AllAppsSheet({
               pinned={pinnedSet.has(item.meta.id)}
               onOpen={() => {
                 onClose();
-                onOpenApp(item);
+                // The row lives inside a native Modal. Dispatching a lazy
+                // cover in the same press event can be swallowed on iOS while
+                // the Modal is dismissing; queue the destination after that
+                // interaction settles so the cover owns the transition.
+                InteractionManager.runAfterInteractions(() => onOpenApp(item));
               }}
               onTogglePin={(next) => onTogglePin(item.meta.id, next)}
             />
@@ -199,7 +204,9 @@ export default function AllAppsSheet({
               pinned={isPlacePinned(placePins, place.id)}
               onOpen={() => {
                 onClose();
-                onOpenPlace(place.id);
+                InteractionManager.runAfterInteractions(() =>
+                  onOpenPlace(place.id)
+                );
               }}
               onTogglePin={(next) => togglePlacePin(place.id, next)}
             />
